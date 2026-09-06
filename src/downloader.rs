@@ -1,5 +1,5 @@
 use crate::youtube_api::Video;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::io;
 use std::path::Path;
 use std::process::Command;
