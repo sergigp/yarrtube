@@ -1,6 +1,9 @@
 mod cli;
+mod domain;
 mod download_command;
 mod downloader;
+mod http;
+mod infra;
 mod serve;
 mod youtube_api;
 mod ytdlp_update;
@@ -15,9 +18,9 @@ fn main() -> ExitCode {
 
     match cli.command {
         Commands::Download {
-            playlist_url,
+            playlist_id,
             output_path,
-        } => download_command::run(&playlist_url, &output_path),
+        } => download_command::run(&playlist_id, &output_path),
         Commands::Serve => serve::run(),
         Commands::UpdateYtdlp => ytdlp_update::run(),
     }

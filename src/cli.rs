@@ -1,3 +1,4 @@
+use crate::domain::playlist::YoutubePlaylistId;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
@@ -12,8 +13,8 @@ pub struct Cli {
 pub enum Commands {
     /// Download every video in a YouTube playlist
     Download {
-        /// URL of the YouTube playlist to download
-        playlist_url: String,
+        /// YouTube playlist ID to download
+        playlist_id: YoutubePlaylistId,
 
         /// Local directory to download videos into
         output_path: String,

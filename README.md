@@ -108,7 +108,7 @@ curl http://<nas-ip>:8080/status   # expect: 200 OK
 Run a download or a manual yt-dlp update against the live container:
 
 ```bash
-docker exec yarrtube yarrtube download "<playlist_url>" /videos
+docker exec yarrtube yarrtube download "<playlist_id>" /videos
 docker exec yarrtube yarrtube update-ytdlp
 ```
 
@@ -125,10 +125,10 @@ The image runs `serve` by default. The other subcommands are meant to be run
 ad hoc against the already-running container with `docker exec`, without
 restarting it:
 
-- `download <playlist_url> <output_path>` - downloads every video in a
+- `download <playlist_id> <output_path>` - downloads every video in a
   YouTube playlist into `output_path`:
   ```bash
-  docker exec yarrtube yarrtube download "<playlist_url>" /videos
+  docker exec yarrtube yarrtube download "<playlist_id>" /videos
   ```
 - `update-ytdlp` - downloads the latest yt-dlp standalone Linux release and
   replaces the binary the `download` task uses. Runs automatically once each
@@ -160,7 +160,7 @@ Environment variables read by `serve`:
 3. Build and run:
    ```bash
    cargo build --release
-   ./target/release/yarrtube download <playlist_url> <output_path>
+   ./target/release/yarrtube download <playlist_id> <output_path>
    ./target/release/yarrtube serve
    ./target/release/yarrtube update-ytdlp
    ```

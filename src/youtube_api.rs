@@ -3,15 +3,6 @@ use serde::Deserialize;
 
 const PLAYLIST_ITEMS_URL: &str = "https://www.googleapis.com/youtube/v3/playlistItems";
 
-pub fn extract_playlist_id(url: &str) -> Result<String> {
-    let parsed = reqwest::Url::parse(url).map_err(|_| anyhow!("Invalid playlist URL: {url}"))?;
-    parsed
-        .query_pairs()
-        .find(|(key, _)| key == "list")
-        .map(|(_, value)| value.into_owned())
-        .ok_or_else(|| anyhow!("URL does not contain a 'list' query parameter: {url}"))
-}
-
 #[derive(Debug, Deserialize)]
 struct PlaylistItemsResponse {
     items: Vec<PlaylistItem>,
@@ -106,24 +97,6 @@ pub fn resolve_playlist(playlist_id: &str, api_key: &str) -> Result<Vec<Video>> 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn extracts_playlist_id_from_playlist_url() {
-        let url = "https://www.youtube.com/playlist?list=PLabc123";
-        assert_eq!(extract_playlist_id(url).unwrap(), "PLabc123");
-    }
-
-    #[test]
-    fn extracts_playlist_id_from_watch_url_with_list_param() {
-        let url = "https://www.youtube.com/watch?v=xyz789&list=PLabc123";
-        assert_eq!(extract_playlist_id(url).unwrap(), "PLabc123");
-    }
-
-    #[test]
-    fn errors_when_no_list_param_present() {
-        let url = "https://www.youtube.com/watch?v=xyz789";
-        assert!(extract_playlist_id(url).is_err());
-    }
 
     #[test]
     fn combines_multiple_pages_in_order() {

@@ -1,3 +1,7 @@
+use crate::http::{self, AppState};
+use crate::infra::sqlite_playlist_repository::SqlitePlaylistRepository;
+use crate::infra::system_clock::SystemClock;
+use crate::infra::youtube_playlist_lookup::YoutubeApiPlaylistLookup;
 use crate::ytdlp_update;
 use anyhow::{Context, Result};
 use axum::Router;
@@ -5,6 +9,7 @@ use axum::http::StatusCode;
 use axum::routing::get;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::time::Duration;
 
 const DEFAULT_PORT: u16 = 8080;
@@ -46,6 +51,31 @@ fn run_startup_database_check() {
     }
 }
 
+fn youtube_api_key() -> String {
+    std::env::var("YOUTUBE_API_KEY").unwrap_or_default()
+}
+
+fn run_startup_youtube_api_key_check() {
+    if youtube_api_key().is_empty() {
+        eprintln!(
+            "[startup] warning: YOUTUBE_API_KEY is not set; POST /playlists will fail its YouTube lookup"
+        );
+    }
+}
+
+fn build_app_state() -> Result<AppState> {
+    let conn = rusqlite::Connection::open(db_path())
+        .with_context(|| format!("failed to open database at {:?}", db_path()))?;
+    let repository = SqlitePlaylistRepository::new(conn)
+        .map_err(|e| anyhow::anyhow!("failed to initialize playlist repository: {e}"))?;
+
+    Ok(AppState {
+        repository: Arc::new(repository),
+        lookup: Arc::new(YoutubeApiPlaylistLookup::new(youtube_api_key())),
+        clock: Arc::new(SystemClock),
+    })
+}
+
 async fn status() -> StatusCode {
     StatusCode::OK
 }
@@ -58,8 +88,10 @@ async fn heartbeat_loop() {
     }
 }
 
-async fn serve_http(port: u16) -> Result<()> {
-    let app = Router::new().route("/status", get(status));
+async fn serve_http(port: u16, state: AppState) -> Result<()> {
+    let app = Router::new()
+        .route("/status", get(status))
+        .merge(http::playlists_router(state));
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
         .await
         .with_context(|| format!("failed to bind HTTP server on port {port}"))?;
@@ -70,10 +102,10 @@ async fn serve_http(port: u16) -> Result<()> {
     Ok(())
 }
 
-async fn run_async() -> ExitCode {
+async fn run_async(state: AppState) -> ExitCode {
     tokio::spawn(heartbeat_loop());
 
-    if let Err(e) = serve_http(port()).await {
+    if let Err(e) = serve_http(port(), state).await {
         eprintln!("Error: {e}");
         return ExitCode::FAILURE;
     }
@@ -87,6 +119,15 @@ pub fn run() -> ExitCode {
     // worker thread).
     run_startup_ytdlp_update();
     run_startup_database_check();
+    run_startup_youtube_api_key_check();
+
+    let state = match build_app_state() {
+        Ok(state) => state,
+        Err(e) => {
+            eprintln!("Error: failed to initialize application state: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -99,5 +140,5 @@ pub fn run() -> ExitCode {
         }
     };
 
-    runtime.block_on(run_async())
+    runtime.block_on(run_async(state))
 }

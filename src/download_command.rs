@@ -1,9 +1,10 @@
+use crate::domain::playlist::YoutubePlaylistId;
 use crate::downloader;
 use crate::youtube_api;
 use std::path::Path;
 use std::process::ExitCode;
 
-pub fn run(playlist_url: &str, output_path: &str) -> ExitCode {
+pub fn run(playlist_id: &YoutubePlaylistId, output_path: &str) -> ExitCode {
     let api_key = match std::env::var("YOUTUBE_API_KEY") {
         Ok(key) if !key.is_empty() => key,
         _ => {
@@ -14,15 +15,9 @@ pub fn run(playlist_url: &str, output_path: &str) -> ExitCode {
         }
     };
 
-    let playlist_id = match youtube_api::extract_playlist_id(playlist_url) {
-        Ok(id) => id,
-        Err(e) => {
-            eprintln!("Error: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
+    println!("Resolving playlist: {}", playlist_id.to_url());
 
-    let videos = match youtube_api::resolve_playlist(&playlist_id, &api_key) {
+    let videos = match youtube_api::resolve_playlist(playlist_id.as_str(), &api_key) {
         Ok(videos) => videos,
         Err(e) => {
             eprintln!("Error: {e}");
