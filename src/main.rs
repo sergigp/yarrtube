@@ -1,9 +1,8 @@
 mod cli;
-mod download_command;
-mod downloader;
+mod domain;
+mod http;
+mod infrastructure;
 mod serve;
-mod youtube_api;
-mod ytdlp_update;
 
 use clap::Parser;
 use cli::{Cli, Commands};
@@ -15,10 +14,10 @@ fn main() -> ExitCode {
 
     match cli.command {
         Commands::Download {
-            playlist_url,
+            playlist_id,
             output_path,
-        } => download_command::run(&playlist_url, &output_path),
+        } => cli::download_command::run(&playlist_id, &output_path),
         Commands::Serve => serve::run(),
-        Commands::UpdateYtdlp => ytdlp_update::run(),
+        Commands::UpdateYtdlp => cli::ytdlp_update::run(),
     }
 }

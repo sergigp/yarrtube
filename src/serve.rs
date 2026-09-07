@@ -1,10 +1,16 @@
-use crate::ytdlp_update;
+use crate::cli::ytdlp_update;
+use crate::domain::playlist::PlaylistService;
+use crate::http::{self, AppState};
+use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
+use crate::infrastructure::repositories::system_clock::SystemClock;
+use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
 use anyhow::{Context, Result};
 use axum::Router;
 use axum::http::StatusCode;
 use axum::routing::get;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::time::Duration;
 
 const DEFAULT_PORT: u16 = 8080;
@@ -46,6 +52,33 @@ fn run_startup_database_check() {
     }
 }
 
+fn youtube_api_key() -> String {
+    std::env::var("YOUTUBE_API_KEY").unwrap_or_default()
+}
+
+fn run_startup_youtube_api_key_check() {
+    if youtube_api_key().is_empty() {
+        eprintln!(
+            "[startup] warning: YOUTUBE_API_KEY is not set; POST /playlists will fail its YouTube lookup"
+        );
+    }
+}
+
+fn build_app_state() -> Result<AppState> {
+    let conn = rusqlite::Connection::open(db_path())
+        .with_context(|| format!("failed to open database at {:?}", db_path()))?;
+    let repository =
+        SqlitePlaylistRepository::new(conn).context("failed to initialize playlist repository")?;
+
+    Ok(AppState {
+        playlist_service: PlaylistService::new(
+            Arc::new(repository),
+            Arc::new(YoutubeApiPlaylistRepository::new(youtube_api_key())),
+            Arc::new(SystemClock),
+        ),
+    })
+}
+
 async fn status() -> StatusCode {
     StatusCode::OK
 }
@@ -58,8 +91,10 @@ async fn heartbeat_loop() {
     }
 }
 
-async fn serve_http(port: u16) -> Result<()> {
-    let app = Router::new().route("/status", get(status));
+async fn serve_http(port: u16, state: AppState) -> Result<()> {
+    let app = Router::new()
+        .route("/status", get(status))
+        .merge(http::playlists_router(state));
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
         .await
         .with_context(|| format!("failed to bind HTTP server on port {port}"))?;
@@ -70,10 +105,10 @@ async fn serve_http(port: u16) -> Result<()> {
     Ok(())
 }
 
-async fn run_async() -> ExitCode {
+async fn run_async(state: AppState) -> ExitCode {
     tokio::spawn(heartbeat_loop());
 
-    if let Err(e) = serve_http(port()).await {
+    if let Err(e) = serve_http(port(), state).await {
         eprintln!("Error: {e}");
         return ExitCode::FAILURE;
     }
@@ -87,6 +122,15 @@ pub fn run() -> ExitCode {
     // worker thread).
     run_startup_ytdlp_update();
     run_startup_database_check();
+    run_startup_youtube_api_key_check();
+
+    let state = match build_app_state() {
+        Ok(state) => state,
+        Err(e) => {
+            eprintln!("Error: failed to initialize application state: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -99,5 +143,5 @@ pub fn run() -> ExitCode {
         }
     };
 
-    runtime.block_on(run_async())
+    runtime.block_on(run_async(state))
 }

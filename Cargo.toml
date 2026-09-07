@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.104"
 axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.6.6", features = ["derive"] }
 dotenvy = "0.15.7"
 reqwest = { version = "0.13.4", features = ["blocking", "json", "query"] }
@@ -13,3 +14,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net"] }
+
+[dev-dependencies]
+mockito = "1.7"
+tower = { version = "0.5", features = ["util"] }
