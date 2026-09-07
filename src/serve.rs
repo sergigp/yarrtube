@@ -1,8 +1,9 @@
+use crate::cli::ytdlp_update;
+use crate::domain::playlist::PlaylistService;
 use crate::http::{self, AppState};
-use crate::infra::sqlite_playlist_repository::SqlitePlaylistRepository;
-use crate::infra::system_clock::SystemClock;
-use crate::infra::youtube_playlist_lookup::YoutubeApiPlaylistLookup;
-use crate::ytdlp_update;
+use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
+use crate::infrastructure::repositories::system_clock::SystemClock;
+use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
 use anyhow::{Context, Result};
 use axum::Router;
 use axum::http::StatusCode;
@@ -66,13 +67,15 @@ fn run_startup_youtube_api_key_check() {
 fn build_app_state() -> Result<AppState> {
     let conn = rusqlite::Connection::open(db_path())
         .with_context(|| format!("failed to open database at {:?}", db_path()))?;
-    let repository = SqlitePlaylistRepository::new(conn)
-        .map_err(|e| anyhow::anyhow!("failed to initialize playlist repository: {e}"))?;
+    let repository =
+        SqlitePlaylistRepository::new(conn).context("failed to initialize playlist repository")?;
 
     Ok(AppState {
-        repository: Arc::new(repository),
-        lookup: Arc::new(YoutubeApiPlaylistLookup::new(youtube_api_key())),
-        clock: Arc::new(SystemClock),
+        playlist_service: PlaylistService::new(
+            Arc::new(repository),
+            Arc::new(YoutubeApiPlaylistRepository::new(youtube_api_key())),
+            Arc::new(SystemClock),
+        ),
     })
 }
 

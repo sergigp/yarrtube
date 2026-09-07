@@ -99,7 +99,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn combines_multiple_pages_in_order() {
+    fn it_should_combine_multiple_pages_in_order() {
         fn fake_page(page_token: Option<&str>) -> (Vec<Video>, Option<String>) {
             match page_token {
                 None => (

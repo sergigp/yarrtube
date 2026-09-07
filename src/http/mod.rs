@@ -1,15 +1,13 @@
+pub mod error;
 pub mod playlists;
 
-use crate::domain::ports::{Clock, PlaylistRepository, YoutubePlaylistLookup};
+use crate::domain::playlist::PlaylistService;
 use axum::Router;
 use axum::routing::post;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub repository: Arc<dyn PlaylistRepository>,
-    pub lookup: Arc<dyn YoutubePlaylistLookup>,
-    pub clock: Arc<dyn Clock>,
+    pub playlist_service: PlaylistService,
 }
 
 pub fn playlists_router(state: AppState) -> Router {

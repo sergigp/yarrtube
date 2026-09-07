@@ -1,5 +1,8 @@
-use crate::domain::ports::Clock;
 use chrono::{DateTime, Utc};
+
+pub trait Clock: Send + Sync {
+    fn now(&self) -> DateTime<Utc>;
+}
 
 pub struct SystemClock;
 
@@ -24,7 +27,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fixed_clock_returns_configured_value() {
+    fn it_should_return_the_configured_value() {
         let fixed = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         let clock = FixedClock(fixed);
 

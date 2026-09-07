@@ -1,6 +1,8 @@
 use crate::domain::playlist::YoutubePlaylistId;
-use crate::downloader;
-use crate::youtube_api;
+use crate::infrastructure::client::youtube_downloader_client::{
+    YoutubeDownloaderClient, YtDlpDownloaderClient,
+};
+use crate::infrastructure::shared::youtube_api;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -31,7 +33,8 @@ pub fn run(playlist_id: &YoutubePlaylistId, output_path: &str) -> ExitCode {
     }
 
     let output_path = Path::new(output_path);
-    let summary = match downloader::download_all(&videos, output_path) {
+    let downloader = YtDlpDownloaderClient;
+    let summary = match downloader.download_all(&videos, output_path) {
         Ok(summary) => summary,
         Err(e) => {
             eprintln!("Error: {e}");

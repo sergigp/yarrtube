@@ -1,3 +1,6 @@
+pub mod download_command;
+pub mod ytdlp_update;
+
 use crate::domain::playlist::YoutubePlaylistId;
 use clap::{Parser, Subcommand};
 

@@ -1,103 +1,60 @@
+pub mod dto;
+
 use super::AppState;
-use crate::domain::playlist::{Playlist, PlaylistName, YoutubePlaylistId};
-use crate::domain::ports::SaveOutcome;
+use super::error::error_response;
+use crate::domain::playlist::{CreatePlaylistError, CreatePlaylistOutcome, DeletePlaylistError};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Deserialize)]
-pub struct CreatePlaylistRequest {
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-pub struct PlaylistResponse {
-    pub id: String,
-    pub name: String,
-    pub created_at: DateTime<Utc>,
-}
-
-impl From<Playlist> for PlaylistResponse {
-    fn from(playlist: Playlist) -> Self {
-        Self {
-            id: playlist.id.as_str().to_string(),
-            name: playlist.name.as_str().to_string(),
-            created_at: playlist.created_at,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct ErrorResponse {
-    error: String,
-}
-
-fn error_response(status: StatusCode, message: impl Into<String>) -> Response {
-    (
-        status,
-        Json(ErrorResponse {
-            error: message.into(),
-        }),
-    )
-        .into_response()
-}
+use dto::{CreatePlaylistRequest, PlaylistResponse};
 
 pub async fn create_playlist(
     State(state): State<AppState>,
     Json(request): Json<CreatePlaylistRequest>,
 ) -> Response {
-    let id = match YoutubePlaylistId::new(request.id) {
-        Ok(id) => id,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
-    let name = match PlaylistName::new(request.name) {
-        Ok(name) => name,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
-
-    match state.lookup.exists(&id) {
-        Ok(true) => {}
-        Ok(false) => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                format!("YouTube playlist {id} does not exist or is not accessible"),
-            );
-        }
-        Err(e) => return error_response(StatusCode::BAD_GATEWAY, e.to_string()),
-    }
-
-    let playlist = Playlist::create(id, name, state.clock.now());
-
-    match state.repository.save(&playlist) {
-        Ok(SaveOutcome::Created(playlist)) => {
+    match state
+        .playlist_service
+        .create_playlist(request.id, request.name)
+    {
+        Ok(CreatePlaylistOutcome::Created(playlist)) => {
             (StatusCode::CREATED, Json(PlaylistResponse::from(playlist))).into_response()
         }
-        Ok(SaveOutcome::AlreadyExisted(playlist)) => {
+        Ok(CreatePlaylistOutcome::AlreadyExisted(playlist)) => {
             (StatusCode::OK, Json(PlaylistResponse::from(playlist))).into_response()
         }
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e @ CreatePlaylistError::InvalidInput(_)) => {
+            error_response(StatusCode::BAD_REQUEST, e.to_string())
+        }
+        Err(e @ CreatePlaylistError::YoutubePlaylistNotFound(_)) => {
+            error_response(StatusCode::BAD_REQUEST, e.to_string())
+        }
+        Err(e @ CreatePlaylistError::Lookup(_)) => {
+            error_response(StatusCode::BAD_GATEWAY, e.to_string())
+        }
+        Err(e @ CreatePlaylistError::Repository(_)) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        }
     }
 }
 
 pub async fn delete_playlist(State(state): State<AppState>, Path(id): Path<String>) -> Response {
-    let id = match YoutubePlaylistId::new(id) {
-        Ok(id) => id,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
-
-    match state.repository.delete(&id) {
-        Ok(true) => StatusCode::NO_CONTENT.into_response(),
-        Ok(false) => error_response(StatusCode::BAD_REQUEST, format!("playlist {id} not found")),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    match state.playlist_service.delete_playlist(id) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e @ DeletePlaylistError::NotFound(_)) => {
+            error_response(StatusCode::BAD_REQUEST, e.to_string())
+        }
+        Err(e @ DeletePlaylistError::InvalidId(_)) => {
+            error_response(StatusCode::BAD_REQUEST, e.to_string())
+        }
+        Err(e @ DeletePlaylistError::Repository(_)) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        }
     }
 }
 
 pub async fn list_playlists(State(state): State<AppState>) -> Response {
-    match state.repository.list() {
+    match state.playlist_service.list_playlists() {
         Ok(playlists) => {
             let response: Vec<PlaylistResponse> =
                 playlists.into_iter().map(PlaylistResponse::from).collect();
@@ -110,13 +67,14 @@ pub async fn list_playlists(State(state): State<AppState>) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::ports::{
-        LookupError, PlaylistRepository, RepositoryError, YoutubePlaylistLookup,
-    };
+    use crate::domain::playlist::{Playlist, YoutubePlaylistId};
     use crate::http::playlists_router;
-    use crate::infra::system_clock::FixedClock;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+    use crate::infrastructure::repositories::system_clock::Clock;
+    use crate::infrastructure::repositories::youtube_playlist_repository::YoutubePlaylistRepository;
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
+    use chrono::{DateTime, Utc};
     use std::sync::{Arc, Mutex};
     use tower::ServiceExt;
 
@@ -126,34 +84,46 @@ mod tests {
     }
 
     impl PlaylistRepository for FakePlaylistRepository {
-        fn save(&self, playlist: &Playlist) -> Result<SaveOutcome, RepositoryError> {
-            let mut playlists = self.playlists.lock().unwrap();
-            if let Some(existing) = playlists.iter().find(|p| p.id == playlist.id) {
-                return Ok(SaveOutcome::AlreadyExisted(existing.clone()));
-            }
-            playlists.push(playlist.clone());
-            Ok(SaveOutcome::Created(playlist.clone()))
+        fn find(&self, id: &YoutubePlaylistId) -> anyhow::Result<Option<Playlist>> {
+            Ok(self
+                .playlists
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|p| p.id == *id)
+                .cloned())
         }
 
-        fn delete(&self, id: &YoutubePlaylistId) -> Result<bool, RepositoryError> {
-            let mut playlists = self.playlists.lock().unwrap();
-            let len_before = playlists.len();
-            playlists.retain(|p| p.id != *id);
-            Ok(playlists.len() != len_before)
+        fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
+            self.playlists.lock().unwrap().push(playlist.clone());
+            Ok(())
         }
 
-        fn list(&self) -> Result<Vec<Playlist>, RepositoryError> {
+        fn delete(&self, id: &YoutubePlaylistId) -> anyhow::Result<()> {
+            self.playlists.lock().unwrap().retain(|p| p.id != *id);
+            Ok(())
+        }
+
+        fn list(&self) -> anyhow::Result<Vec<Playlist>> {
             Ok(self.playlists.lock().unwrap().clone())
         }
     }
 
-    struct FakeYoutubePlaylistLookup {
+    struct FakeYoutubePlaylistRepository {
         exists: bool,
     }
 
-    impl YoutubePlaylistLookup for FakeYoutubePlaylistLookup {
-        fn exists(&self, _id: &YoutubePlaylistId) -> Result<bool, LookupError> {
+    impl YoutubePlaylistRepository for FakeYoutubePlaylistRepository {
+        fn exists(&self, _id: &YoutubePlaylistId) -> anyhow::Result<bool> {
             Ok(self.exists)
+        }
+    }
+
+    struct FixedClock(DateTime<Utc>);
+
+    impl Clock for FixedClock {
+        fn now(&self) -> DateTime<Utc> {
+            self.0
         }
     }
 
@@ -163,11 +133,13 @@ mod tests {
 
     fn test_router(repository: FakePlaylistRepository, youtube_exists: bool) -> axum::Router {
         let state = AppState {
-            repository: Arc::new(repository),
-            lookup: Arc::new(FakeYoutubePlaylistLookup {
-                exists: youtube_exists,
-            }),
-            clock: Arc::new(FixedClock(fixed_timestamp())),
+            playlist_service: crate::domain::playlist::PlaylistService::new(
+                Arc::new(repository),
+                Arc::new(FakeYoutubePlaylistRepository {
+                    exists: youtube_exists,
+                }),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ),
         };
         playlists_router(state)
     }
@@ -189,7 +161,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_playlist_succeeds() {
+    async fn it_should_return_201_when_creating_a_new_playlist() {
         let router = test_router(FakePlaylistRepository::default(), true);
 
         let response = router
@@ -208,7 +180,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_playlist_is_idempotent_on_duplicate_id() {
+    async fn it_should_return_200_when_creating_a_playlist_that_already_exists() {
         let router = test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
@@ -227,7 +199,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_playlist_rejects_invalid_name() {
+    async fn it_should_return_400_when_the_name_is_invalid() {
         let router = test_router(FakePlaylistRepository::default(), true);
 
         let response = router.oneshot(create_request("PL1", "")).await.unwrap();
@@ -236,7 +208,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_playlist_rejects_nonexistent_youtube_id() {
+    async fn it_should_return_400_when_the_youtube_playlist_does_not_exist() {
         let router = test_router(FakePlaylistRepository::default(), false);
 
         let response = router
@@ -248,7 +220,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn delete_playlist_succeeds() {
+    async fn it_should_return_204_when_deleting_an_existing_playlist() {
         let router = test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
@@ -271,7 +243,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn delete_playlist_reports_bad_request_for_missing_id() {
+    async fn it_should_return_400_when_deleting_a_missing_playlist() {
         let router = test_router(FakePlaylistRepository::default(), true);
 
         let response = router
@@ -289,7 +261,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn list_playlists_returns_empty_array_when_none_created() {
+    async fn it_should_return_an_empty_array_when_no_playlists_exist() {
         let router = test_router(FakePlaylistRepository::default(), true);
 
         let response = router
@@ -309,7 +281,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn list_playlists_returns_all_created_playlists() {
+    async fn it_should_return_all_created_playlists() {
         let router = test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
@@ -336,33 +308,5 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = body_json(response).await;
         assert_eq!(body.as_array().unwrap().len(), 2);
-    }
-
-    #[test]
-    fn fake_repository_save_then_list_returns_saved_playlist() {
-        let repo = FakePlaylistRepository::default();
-        let playlist = Playlist::create(
-            YoutubePlaylistId::new("PL1").unwrap(),
-            PlaylistName::new("First").unwrap(),
-            fixed_timestamp(),
-        );
-
-        repo.save(&playlist).unwrap();
-
-        assert_eq!(repo.list().unwrap(), vec![playlist]);
-    }
-
-    #[test]
-    fn fake_repository_save_then_delete_removes_playlist() {
-        let repo = FakePlaylistRepository::default();
-        let playlist = Playlist::create(
-            YoutubePlaylistId::new("PL1").unwrap(),
-            PlaylistName::new("First").unwrap(),
-            fixed_timestamp(),
-        );
-        repo.save(&playlist).unwrap();
-
-        assert!(repo.delete(&playlist.id).unwrap());
-        assert_eq!(repo.list().unwrap(), Vec::new());
     }
 }

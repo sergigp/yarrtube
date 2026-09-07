@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn failed_write_leaves_original_binary_untouched() {
+    fn it_should_leave_the_original_binary_untouched_when_the_write_fails() {
         use std::os::unix::fs::PermissionsExt;
 
         let dir = std::env::temp_dir().join(format!(
