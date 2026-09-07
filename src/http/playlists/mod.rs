@@ -13,28 +13,33 @@ pub async fn create_playlist(
     State(state): State<AppState>,
     Json(request): Json<CreatePlaylistRequest>,
 ) -> Response {
-    match state
-        .playlist_service
-        .create_playlist(request.id, request.name)
-    {
-        Ok(CreatePlaylistOutcome::Created(playlist)) => {
+    let result = tokio::task::spawn_blocking(move || {
+        state
+            .playlist_service
+            .create_playlist(request.id, request.name)
+    })
+    .await;
+
+    match result {
+        Ok(Ok(CreatePlaylistOutcome::Created(playlist))) => {
             (StatusCode::CREATED, Json(PlaylistResponse::from(playlist))).into_response()
         }
-        Ok(CreatePlaylistOutcome::AlreadyExisted(playlist)) => {
+        Ok(Ok(CreatePlaylistOutcome::AlreadyExisted(playlist))) => {
             (StatusCode::OK, Json(PlaylistResponse::from(playlist))).into_response()
         }
-        Err(e @ CreatePlaylistError::InvalidInput(_)) => {
+        Ok(Err(e @ CreatePlaylistError::InvalidInput(_))) => {
             error_response(StatusCode::BAD_REQUEST, e.to_string())
         }
-        Err(e @ CreatePlaylistError::YoutubePlaylistNotFound(_)) => {
+        Ok(Err(e @ CreatePlaylistError::YoutubePlaylistNotFound(_))) => {
             error_response(StatusCode::BAD_REQUEST, e.to_string())
         }
-        Err(e @ CreatePlaylistError::Lookup(_)) => {
+        Ok(Err(e @ CreatePlaylistError::Lookup(_))) => {
             error_response(StatusCode::BAD_GATEWAY, e.to_string())
         }
-        Err(e @ CreatePlaylistError::Repository(_)) => {
+        Ok(Err(e @ CreatePlaylistError::Repository(_))) => {
             error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         }
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }
 
