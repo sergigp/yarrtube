@@ -1,5 +1,6 @@
 use crate::domain::event::DomainEvent;
-use crate::domain::playlist::{Playlist, PlaylistName, YoutubePlaylistId};
+use crate::domain::playlist::{Playlist, PlaylistName};
+use crate::domain::shared::PlaylistId;
 use crate::infrastructure::repositories::sqlite_event_repository::{
     create_events_table, insert_pending_row,
 };
@@ -9,7 +10,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::{Arc, Mutex};
 
 pub trait PlaylistRepository: Send + Sync {
-    fn find(&self, id: &YoutubePlaylistId) -> anyhow::Result<Option<Playlist>>;
+    fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>>;
     /// Inserts the playlist and a pending event row in the same SQLite
     /// transaction, so a publish can never be lost even if the process dies
     /// right after this call returns.
@@ -23,7 +24,7 @@ pub trait PlaylistRepository: Send + Sync {
     /// SQLite transaction.
     fn delete_with_event(
         &self,
-        id: &YoutubePlaylistId,
+        id: &PlaylistId,
         event: &DomainEvent,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()>;
@@ -59,7 +60,7 @@ impl SqlitePlaylistRepository {
     }
 
     fn row_to_playlist(id: String, name: String, created_at: String) -> anyhow::Result<Playlist> {
-        let id = YoutubePlaylistId::new(id)?;
+        let id = PlaylistId::new(id)?;
         let name = PlaylistName::new(name)?;
         let created_at = DateTime::parse_from_rfc3339(&created_at)
             .context("failed to parse stored created_at")?
@@ -69,7 +70,7 @@ impl SqlitePlaylistRepository {
 }
 
 impl PlaylistRepository for SqlitePlaylistRepository {
-    fn find(&self, id: &YoutubePlaylistId) -> anyhow::Result<Option<Playlist>> {
+    fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
         let conn = self
             .conn
             .lock()
@@ -118,7 +119,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
 
     fn delete_with_event(
         &self,
-        id: &YoutubePlaylistId,
+        id: &PlaylistId,
         event: &DomainEvent,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
@@ -182,7 +183,7 @@ impl SqlitePlaylistRepository {
         Ok(())
     }
 
-    fn delete(&self, id: &YoutubePlaylistId) -> anyhow::Result<()> {
+    fn delete(&self, id: &PlaylistId) -> anyhow::Result<()> {
         let conn = self
             .conn
             .lock()
@@ -204,7 +205,7 @@ mod tests {
 
     fn playlist(id: &str, name: &str) -> Playlist {
         Playlist::create(
-            YoutubePlaylistId::new(id).unwrap(),
+            PlaylistId::new(id).unwrap(),
             PlaylistName::new(name).unwrap(),
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         )
@@ -219,7 +220,7 @@ mod tests {
     #[test]
     fn it_should_return_none_when_the_playlist_does_not_exist() {
         let repo = repo();
-        let id = YoutubePlaylistId::new("PL404").unwrap();
+        let id = PlaylistId::new("PL404").unwrap();
 
         assert_eq!(repo.find(&id).unwrap(), None);
     }
@@ -257,7 +258,7 @@ mod tests {
     #[test]
     fn it_should_succeed_when_deleting_a_missing_playlist() {
         let repo = repo();
-        let id = YoutubePlaylistId::new("PL404").unwrap();
+        let id = PlaylistId::new("PL404").unwrap();
 
         assert!(repo.delete(&id).is_ok());
     }

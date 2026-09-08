@@ -1,7 +1,7 @@
 pub mod download_command;
 pub mod ytdlp_update;
 
-use crate::domain::playlist::YoutubePlaylistId;
+use crate::domain::shared::PlaylistId;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
@@ -17,7 +17,7 @@ pub enum Commands {
     /// Download every video in a YouTube playlist
     Download {
         /// YouTube playlist ID to download
-        playlist_id: YoutubePlaylistId,
+        playlist_id: PlaylistId,
 
         /// Local directory to download videos into
         output_path: String,

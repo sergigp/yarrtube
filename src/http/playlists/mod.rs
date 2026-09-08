@@ -4,8 +4,8 @@ use super::AppState;
 use super::error::error_response;
 use crate::domain::playlist::{
     CreatePlaylistError, CreatePlaylistOutcome, DeletePlaylistError, PlaylistName,
-    YoutubePlaylistId,
 };
+use crate::domain::shared::PlaylistId;
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -16,7 +16,7 @@ pub async fn create_playlist(
     State(state): State<AppState>,
     Json(request): Json<CreatePlaylistRequest>,
 ) -> Response {
-    let id = match YoutubePlaylistId::new(request.id) {
+    let id = match PlaylistId::new(request.id) {
         Ok(id) => id,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
     };
@@ -26,8 +26,7 @@ pub async fn create_playlist(
     };
 
     let result =
-        tokio::task::spawn_blocking(move || state.playlist_service.create_playlist(id, name))
-            .await;
+        tokio::task::spawn_blocking(move || state.playlist_service.create_playlist(id, name)).await;
 
     match result {
         Ok(Ok(CreatePlaylistOutcome::Created(playlist))) => {
@@ -50,7 +49,7 @@ pub async fn create_playlist(
 }
 
 pub async fn delete_playlist(State(state): State<AppState>, Path(id): Path<String>) -> Response {
-    let id = match YoutubePlaylistId::new(id) {
+    let id = match PlaylistId::new(id) {
         Ok(id) => id,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
     };
@@ -81,9 +80,10 @@ pub async fn list_playlists(State(state): State<AppState>) -> Response {
 mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
-    use crate::domain::playlist::{Playlist, YoutubePlaylistId};
+    use crate::domain::playlist::Playlist;
+    use crate::domain::shared::VideoId;
     use crate::domain::task::Task;
-    use crate::domain::video::{Video, YoutubeVideoId};
+    use crate::domain::video::Video;
     use crate::http::playlists_router;
     use crate::infrastructure::repositories::sqlite_event_repository::EventPublisher;
     use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -113,14 +113,14 @@ mod tests {
             Ok(())
         }
 
-        fn delete(&self, id: &YoutubePlaylistId) -> anyhow::Result<()> {
+        fn delete(&self, id: &PlaylistId) -> anyhow::Result<()> {
             self.playlists.lock().unwrap().retain(|p| p.id != *id);
             Ok(())
         }
     }
 
     impl PlaylistRepository for FakePlaylistRepository {
-        fn find(&self, id: &YoutubePlaylistId) -> anyhow::Result<Option<Playlist>> {
+        fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
             Ok(self
                 .playlists
                 .lock()
@@ -141,7 +141,7 @@ mod tests {
 
         fn delete_with_event(
             &self,
-            id: &YoutubePlaylistId,
+            id: &PlaylistId,
             _event: &DomainEvent,
             _now: DateTime<Utc>,
         ) -> anyhow::Result<()> {
@@ -158,7 +158,7 @@ mod tests {
     }
 
     impl YoutubePlaylistRepository for FakeYoutubePlaylistRepository {
-        fn exists(&self, _id: &YoutubePlaylistId) -> anyhow::Result<bool> {
+        fn exists(&self, _id: &PlaylistId) -> anyhow::Result<bool> {
             Ok(self.exists)
         }
     }
@@ -188,17 +188,14 @@ mod tests {
             Ok(())
         }
 
-        fn list_for_playlist(
-            &self,
-            _playlist_id: &YoutubePlaylistId,
-        ) -> anyhow::Result<Vec<Video>> {
+        fn list_for_playlist(&self, _playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>> {
             Ok(Vec::new())
         }
 
         fn delete_not_in(
             &self,
-            _playlist_id: &YoutubePlaylistId,
-            _current_ids: &[YoutubeVideoId],
+            _playlist_id: &PlaylistId,
+            _current_ids: &[VideoId],
         ) -> anyhow::Result<()> {
             Ok(())
         }
@@ -210,7 +207,7 @@ mod tests {
     impl YoutubePlaylistItemsRepository for NoopYoutubePlaylistItemsRepository {
         fn list_current_videos(
             &self,
-            _playlist_id: &YoutubePlaylistId,
+            _playlist_id: &PlaylistId,
         ) -> anyhow::Result<Vec<PlaylistVideo>> {
             Ok(Vec::new())
         }

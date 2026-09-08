@@ -10,7 +10,7 @@ pub enum DomainEvent {
     },
     VideoAdded {
         playlist_id: String,
-        youtube_video_id: String,
+        video_id: String,
     },
 }
 
@@ -29,10 +29,10 @@ impl DomainEvent {
             Self::PlaylistDeleted { playlist_id } => json!({ "playlist_id": playlist_id }),
             Self::VideoAdded {
                 playlist_id,
-                youtube_video_id,
+                video_id,
             } => json!({
                 "playlist_id": playlist_id,
-                "youtube_video_id": youtube_video_id,
+                "video_id": video_id,
             }),
         }
     }
@@ -66,13 +66,13 @@ mod tests {
     fn it_should_map_video_added_to_a_stable_type_and_payload() {
         let event = DomainEvent::VideoAdded {
             playlist_id: "PL1".to_string(),
-            youtube_video_id: "vid1".to_string(),
+            video_id: "vid1".to_string(),
         };
 
         assert_eq!(event.event_type(), "video_added");
         assert_eq!(
             event.payload(),
-            json!({ "playlist_id": "PL1", "youtube_video_id": "vid1" })
+            json!({ "playlist_id": "PL1", "video_id": "vid1" })
         );
     }
 }

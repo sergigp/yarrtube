@@ -1,4 +1,5 @@
-use crate::domain::playlist::{PlaylistService, YoutubePlaylistId};
+use crate::domain::playlist::PlaylistService;
+use crate::domain::shared::PlaylistId;
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 
@@ -17,7 +18,7 @@ impl SyncPlaylistTask {
 impl TaskHandler for SyncPlaylistTask {
     fn handle(&self, payload: &str) -> anyhow::Result<()> {
         let playlist_id = Task::decode_sync_playlist_payload(payload)?;
-        let Ok(playlist_id) = YoutubePlaylistId::new(playlist_id) else {
+        let Ok(playlist_id) = PlaylistId::new(playlist_id) else {
             return Ok(());
         };
         self.playlist_service.sync_playlist(playlist_id)
@@ -28,8 +29,9 @@ impl TaskHandler for SyncPlaylistTask {
 mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
-    use crate::domain::playlist::{Playlist, PlaylistName, YoutubePlaylistId};
-    use crate::domain::video::{Video, YoutubeVideoId};
+    use crate::domain::playlist::{Playlist, PlaylistName};
+    use crate::domain::shared::VideoId;
+    use crate::domain::video::Video;
     use crate::infrastructure::repositories::sqlite_event_repository::EventPublisher;
     use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::{
@@ -50,7 +52,7 @@ mod tests {
     }
 
     impl PlaylistRepository for FakePlaylistRepository {
-        fn find(&self, id: &YoutubePlaylistId) -> anyhow::Result<Option<Playlist>> {
+        fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
             Ok(self
                 .playlists
                 .lock()
@@ -72,7 +74,7 @@ mod tests {
 
         fn delete_with_event(
             &self,
-            _id: &YoutubePlaylistId,
+            _id: &PlaylistId,
             _event: &DomainEvent,
             _now: DateTime<Utc>,
         ) -> anyhow::Result<()> {
@@ -87,7 +89,7 @@ mod tests {
     struct NoopYoutubePlaylistRepository;
 
     impl YoutubePlaylistRepository for NoopYoutubePlaylistRepository {
-        fn exists(&self, _id: &YoutubePlaylistId) -> anyhow::Result<bool> {
+        fn exists(&self, _id: &PlaylistId) -> anyhow::Result<bool> {
             Ok(true)
         }
     }
@@ -122,17 +124,14 @@ mod tests {
             Ok(())
         }
 
-        fn list_for_playlist(
-            &self,
-            _playlist_id: &YoutubePlaylistId,
-        ) -> anyhow::Result<Vec<Video>> {
+        fn list_for_playlist(&self, _playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>> {
             Ok(Vec::new())
         }
 
         fn delete_not_in(
             &self,
-            _playlist_id: &YoutubePlaylistId,
-            _current_ids: &[YoutubeVideoId],
+            _playlist_id: &PlaylistId,
+            _current_ids: &[VideoId],
         ) -> anyhow::Result<()> {
             Ok(())
         }
@@ -143,10 +142,10 @@ mod tests {
     impl YoutubePlaylistItemsRepository for FakeYoutubePlaylistItemsRepository {
         fn list_current_videos(
             &self,
-            _playlist_id: &YoutubePlaylistId,
+            _playlist_id: &PlaylistId,
         ) -> anyhow::Result<Vec<PlaylistVideo>> {
             Ok(vec![PlaylistVideo {
-                youtube_video_id: "vid1".to_string(),
+                video_id: "vid1".to_string(),
                 title: "One".to_string(),
             }])
         }
@@ -187,7 +186,7 @@ mod tests {
         playlist_repository
             .insert_with_event(
                 &Playlist::create(
-                    YoutubePlaylistId::new("PL1").unwrap(),
+                    PlaylistId::new("PL1").unwrap(),
                     PlaylistName::new("My Playlist").unwrap(),
                     now,
                 ),

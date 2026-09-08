@@ -1,4 +1,4 @@
-use super::youtube_playlist_id::YoutubePlaylistId;
+use crate::domain::shared::PlaylistId;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,7 +14,7 @@ impl std::error::Error for PlaylistError {}
 
 #[derive(Debug)]
 pub enum CreatePlaylistError {
-    YoutubePlaylistNotFound(YoutubePlaylistId),
+    YoutubePlaylistNotFound(PlaylistId),
     Lookup(anyhow::Error),
     Repository(anyhow::Error),
 }
@@ -38,7 +38,7 @@ impl std::error::Error for CreatePlaylistError {}
 
 #[derive(Debug)]
 pub enum DeletePlaylistError {
-    NotFound(YoutubePlaylistId),
+    NotFound(PlaylistId),
     Repository(anyhow::Error),
 }
 

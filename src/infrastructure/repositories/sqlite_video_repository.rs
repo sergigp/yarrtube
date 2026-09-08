@@ -1,5 +1,5 @@
-use crate::domain::playlist::YoutubePlaylistId;
-use crate::domain::video::{Video, VideoStatus, YoutubeVideoId};
+use crate::domain::shared::{PlaylistId, VideoId};
+use crate::domain::video::{Video, VideoStatus};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params, params_from_iter};
@@ -7,13 +7,13 @@ use std::sync::Mutex;
 
 pub trait VideoRepository: Send + Sync {
     fn upsert(&self, video: &Video) -> anyhow::Result<()>;
-    fn list_for_playlist(&self, playlist_id: &YoutubePlaylistId) -> anyhow::Result<Vec<Video>>;
+    fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>>;
     /// Deletes every stored video for `playlist_id` whose YouTube ID is not
     /// in `current_ids`.
     fn delete_not_in(
         &self,
-        playlist_id: &YoutubePlaylistId,
-        current_ids: &[YoutubeVideoId],
+        playlist_id: &PlaylistId,
+        current_ids: &[VideoId],
     ) -> anyhow::Result<()>;
 }
 
@@ -26,12 +26,12 @@ impl SqliteVideoRepository {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS videos (
                 playlist_id TEXT NOT NULL,
-                youtube_video_id TEXT NOT NULL,
+                video_id TEXT NOT NULL,
                 title TEXT NOT NULL,
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                PRIMARY KEY (playlist_id, youtube_video_id)
+                PRIMARY KEY (playlist_id, video_id)
             )",
             [],
         )
@@ -43,15 +43,15 @@ impl SqliteVideoRepository {
 
     fn row_to_video(
         playlist_id: String,
-        youtube_video_id: String,
+        video_id: String,
         title: String,
         status: String,
         created_at: String,
         updated_at: String,
     ) -> anyhow::Result<Video> {
         Ok(Video {
-            playlist_id: YoutubePlaylistId::new(playlist_id)?,
-            youtube_video_id: YoutubeVideoId::new(youtube_video_id)?,
+            playlist_id: PlaylistId::new(playlist_id)?,
+            video_id: VideoId::new(video_id)?,
             title,
             status: VideoStatus::parse(&status)?,
             created_at: DateTime::parse_from_rfc3339(&created_at)
@@ -71,14 +71,14 @@ impl VideoRepository for SqliteVideoRepository {
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "INSERT INTO videos (playlist_id, youtube_video_id, title, status, created_at, updated_at)
+            "INSERT INTO videos (playlist_id, video_id, title, status, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?5)
-             ON CONFLICT (playlist_id, youtube_video_id) DO UPDATE SET
+             ON CONFLICT (playlist_id, video_id) DO UPDATE SET
                 title = excluded.title,
                 updated_at = excluded.updated_at",
             params![
                 video.playlist_id.as_str(),
-                video.youtube_video_id.as_str(),
+                video.video_id.as_str(),
                 video.title,
                 video.status.as_str(),
                 video.updated_at.to_rfc3339(),
@@ -88,15 +88,15 @@ impl VideoRepository for SqliteVideoRepository {
         Ok(())
     }
 
-    fn list_for_playlist(&self, playlist_id: &YoutubePlaylistId) -> anyhow::Result<Vec<Video>> {
+    fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>> {
         let conn = self
             .conn
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
             .prepare(
-                "SELECT playlist_id, youtube_video_id, title, status, created_at, updated_at
-                 FROM videos WHERE playlist_id = ?1 ORDER BY youtube_video_id ASC",
+                "SELECT playlist_id, video_id, title, status, created_at, updated_at
+                 FROM videos WHERE playlist_id = ?1 ORDER BY video_id ASC",
             )
             .context("failed to prepare list-videos query")?;
         let rows = stmt
@@ -113,24 +113,17 @@ impl VideoRepository for SqliteVideoRepository {
             .context("failed to list videos")?;
 
         rows.map(|row| {
-            let (playlist_id, youtube_video_id, title, status, created_at, updated_at) =
+            let (playlist_id, video_id, title, status, created_at, updated_at) =
                 row.context("failed to read video row")?;
-            Self::row_to_video(
-                playlist_id,
-                youtube_video_id,
-                title,
-                status,
-                created_at,
-                updated_at,
-            )
+            Self::row_to_video(playlist_id, video_id, title, status, created_at, updated_at)
         })
         .collect()
     }
 
     fn delete_not_in(
         &self,
-        playlist_id: &YoutubePlaylistId,
-        current_ids: &[YoutubeVideoId],
+        playlist_id: &PlaylistId,
+        current_ids: &[VideoId],
     ) -> anyhow::Result<()> {
         let conn = self
             .conn
@@ -151,7 +144,7 @@ impl VideoRepository for SqliteVideoRepository {
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "DELETE FROM videos WHERE playlist_id = ?1 AND youtube_video_id NOT IN ({placeholders})"
+            "DELETE FROM videos WHERE playlist_id = ?1 AND video_id NOT IN ({placeholders})"
         );
         let mut all_params: Vec<String> = vec![playlist_id.as_str().to_string()];
         all_params.extend(current_ids.iter().map(|id| id.as_str().to_string()));
@@ -170,17 +163,12 @@ mod tests {
         SqliteVideoRepository::new(Connection::open_in_memory().unwrap()).unwrap()
     }
 
-    fn playlist_id() -> YoutubePlaylistId {
-        YoutubePlaylistId::new("PL1").unwrap()
+    fn playlist_id() -> PlaylistId {
+        PlaylistId::new("PL1").unwrap()
     }
 
     fn video(video_id: &str, title: &str, now: DateTime<Utc>) -> Video {
-        Video::create(
-            playlist_id(),
-            YoutubeVideoId::new(video_id).unwrap(),
-            title,
-            now,
-        )
+        Video::create(playlist_id(), VideoId::new(video_id).unwrap(), title, now)
     }
 
     #[test]
@@ -219,12 +207,12 @@ mod tests {
         repo.upsert(&video("vid1", "One", now)).unwrap();
         repo.upsert(&video("vid2", "Two", now)).unwrap();
 
-        repo.delete_not_in(&playlist_id(), &[YoutubeVideoId::new("vid1").unwrap()])
+        repo.delete_not_in(&playlist_id(), &[VideoId::new("vid1").unwrap()])
             .unwrap();
 
         let videos = repo.list_for_playlist(&playlist_id()).unwrap();
         assert_eq!(videos.len(), 1);
-        assert_eq!(videos[0].youtube_video_id.as_str(), "vid1");
+        assert_eq!(videos[0].video_id.as_str(), "vid1");
     }
 
     #[test]

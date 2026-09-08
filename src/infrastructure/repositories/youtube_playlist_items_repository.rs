@@ -1,4 +1,4 @@
-use crate::domain::playlist::YoutubePlaylistId;
+use crate::domain::shared::PlaylistId;
 use anyhow::{Context, anyhow};
 use serde::Deserialize;
 
@@ -6,15 +6,12 @@ const PLAYLIST_ITEMS_URL: &str = "https://www.googleapis.com/youtube/v3/playlist
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaylistVideo {
-    pub youtube_video_id: String,
+    pub video_id: String,
     pub title: String,
 }
 
 pub trait YoutubePlaylistItemsRepository: Send + Sync {
-    fn list_current_videos(
-        &self,
-        playlist_id: &YoutubePlaylistId,
-    ) -> anyhow::Result<Vec<PlaylistVideo>>;
+    fn list_current_videos(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>>;
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,7 +94,7 @@ impl YoutubeApiPlaylistItemsRepository {
             .items
             .into_iter()
             .map(|item| PlaylistVideo {
-                youtube_video_id: item.snippet.resource_id.video_id,
+                video_id: item.snippet.resource_id.video_id,
                 title: item.snippet.title,
             })
             .collect();
@@ -107,10 +104,7 @@ impl YoutubeApiPlaylistItemsRepository {
 }
 
 impl YoutubePlaylistItemsRepository for YoutubeApiPlaylistItemsRepository {
-    fn list_current_videos(
-        &self,
-        playlist_id: &YoutubePlaylistId,
-    ) -> anyhow::Result<Vec<PlaylistVideo>> {
+    fn list_current_videos(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>> {
         let mut all_videos = Vec::new();
         let mut page_token: Option<String> = None;
 
@@ -168,22 +162,22 @@ mod tests {
             YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
 
         let videos = repository
-            .list_current_videos(&YoutubePlaylistId::new("PL1").unwrap())
+            .list_current_videos(&PlaylistId::new("PL1").unwrap())
             .unwrap();
 
         assert_eq!(
             videos,
             vec![
                 PlaylistVideo {
-                    youtube_video_id: "1".to_string(),
+                    video_id: "1".to_string(),
                     title: "One".to_string(),
                 },
                 PlaylistVideo {
-                    youtube_video_id: "2".to_string(),
+                    video_id: "2".to_string(),
                     title: "Two".to_string(),
                 },
                 PlaylistVideo {
-                    youtube_video_id: "3".to_string(),
+                    video_id: "3".to_string(),
                     title: "Three".to_string(),
                 },
             ]
@@ -204,7 +198,7 @@ mod tests {
             YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
 
         let videos = repository
-            .list_current_videos(&YoutubePlaylistId::new("PL1").unwrap())
+            .list_current_videos(&PlaylistId::new("PL1").unwrap())
             .unwrap();
 
         assert!(videos.is_empty());

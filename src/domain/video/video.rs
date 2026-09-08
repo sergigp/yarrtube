@@ -1,12 +1,11 @@
 use super::video_status::VideoStatus;
-use super::youtube_video_id::YoutubeVideoId;
-use crate::domain::playlist::YoutubePlaylistId;
+use crate::domain::shared::{PlaylistId, VideoId};
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Video {
-    pub playlist_id: YoutubePlaylistId,
-    pub youtube_video_id: YoutubeVideoId,
+    pub playlist_id: PlaylistId,
+    pub video_id: VideoId,
     pub title: String,
     pub status: VideoStatus,
     pub created_at: DateTime<Utc>,
@@ -15,14 +14,14 @@ pub struct Video {
 
 impl Video {
     pub fn create(
-        playlist_id: YoutubePlaylistId,
-        youtube_video_id: YoutubeVideoId,
+        playlist_id: PlaylistId,
+        video_id: VideoId,
         title: impl Into<String>,
         now: DateTime<Utc>,
     ) -> Self {
         Self {
             playlist_id,
-            youtube_video_id,
+            video_id,
             title: title.into(),
             status: VideoStatus::Pending,
             created_at: now,
@@ -40,8 +39,8 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
 
         let video = Video::create(
-            YoutubePlaylistId::new("PL1").unwrap(),
-            YoutubeVideoId::new("vid1").unwrap(),
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("vid1").unwrap(),
             "My Video",
             now,
         );
