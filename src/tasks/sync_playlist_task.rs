@@ -1,17 +1,17 @@
-use crate::domain::playlist::PlaylistService;
 use crate::domain::shared::PlaylistId;
 use crate::domain::task::Task;
+use crate::domain::video::VideoService;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 
 /// Runs every subsequent sync for a playlist (the first one is triggered by
 /// `subscribers::sync_playlist_on_playlist_created` instead).
 pub struct SyncPlaylistTask {
-    playlist_service: PlaylistService,
+    video_service: VideoService,
 }
 
 impl SyncPlaylistTask {
-    pub fn new(playlist_service: PlaylistService) -> Self {
-        Self { playlist_service }
+    pub fn new(video_service: VideoService) -> Self {
+        Self { video_service }
     }
 }
 
@@ -21,7 +21,7 @@ impl TaskHandler for SyncPlaylistTask {
         let Ok(playlist_id) = PlaylistId::new(playlist_id) else {
             return Ok(());
         };
-        self.playlist_service.sync_playlist(playlist_id)
+        self.video_service.sync_playlist_videos(playlist_id)
     }
 }
 
@@ -31,195 +31,157 @@ mod tests {
     use crate::domain::event::DomainEvent;
     use crate::domain::playlist::{Playlist, PlaylistName};
     use crate::domain::shared::VideoId;
-    use crate::domain::video::Video;
-    use crate::infrastructure::repositories::sqlite_event_repository::EventPublisher;
-    use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
-    use crate::infrastructure::repositories::sqlite_task_repository::{
-        PersistedTask, TaskRepository,
+    use crate::domain::video::{Video, VideoStatus};
+    use crate::infrastructure::repositories::sqlite_event_repository::FakeEventPublisher;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::{
+        FakePlaylistRepository, PlaylistRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-    use crate::infrastructure::repositories::system_clock::Clock;
+    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+    use crate::infrastructure::repositories::system_clock::FixedClock;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::{
-        PlaylistVideo, YoutubePlaylistItemsRepository,
+        FakeYoutubePlaylistItemsRepository, PlaylistVideo,
     };
-    use crate::infrastructure::repositories::youtube_playlist_repository::YoutubePlaylistRepository;
     use chrono::{DateTime, Utc};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
-    #[derive(Default)]
-    struct FakePlaylistRepository {
-        playlists: Mutex<Vec<Playlist>>,
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    impl PlaylistRepository for FakePlaylistRepository {
-        fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
-            Ok(self
-                .playlists
-                .lock()
-                .unwrap()
-                .iter()
-                .find(|p| p.id == *id)
-                .cloned())
-        }
-
-        fn insert_with_event(
-            &self,
-            playlist: &Playlist,
-            _event: &DomainEvent,
-            _now: DateTime<Utc>,
-        ) -> anyhow::Result<()> {
-            self.playlists.lock().unwrap().push(playlist.clone());
-            Ok(())
-        }
-
-        fn delete_with_event(
-            &self,
-            _id: &PlaylistId,
-            _event: &DomainEvent,
-            _now: DateTime<Utc>,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn list(&self) -> anyhow::Result<Vec<Playlist>> {
-            Ok(self.playlists.lock().unwrap().clone())
-        }
-    }
-
-    struct NoopYoutubePlaylistRepository;
-
-    impl YoutubePlaylistRepository for NoopYoutubePlaylistRepository {
-        fn exists(&self, _id: &PlaylistId) -> anyhow::Result<bool> {
-            Ok(true)
-        }
-    }
-
-    struct FixedClock(DateTime<Utc>);
-
-    impl Clock for FixedClock {
-        fn now(&self) -> DateTime<Utc> {
-            self.0
-        }
-    }
-
-    struct NoopEventPublisher;
-
-    impl EventPublisher for NoopEventPublisher {
-        fn publish(&self, _event: &DomainEvent) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
-
-    #[derive(Default)]
-    struct FakeVideoRepository {
-        upserted: Mutex<Vec<String>>,
-    }
-
-    impl VideoRepository for FakeVideoRepository {
-        fn upsert(&self, video: &Video) -> anyhow::Result<()> {
-            self.upserted
-                .lock()
-                .unwrap()
-                .push(video.playlist_id.as_str().to_string());
-            Ok(())
-        }
-
-        fn list_for_playlist(&self, _playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>> {
-            Ok(Vec::new())
-        }
-
-        fn delete_not_in(
-            &self,
-            _playlist_id: &PlaylistId,
-            _current_ids: &[VideoId],
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
-
-    struct FakeYoutubePlaylistItemsRepository;
-
-    impl YoutubePlaylistItemsRepository for FakeYoutubePlaylistItemsRepository {
-        fn list_current_videos(
-            &self,
-            _playlist_id: &PlaylistId,
-        ) -> anyhow::Result<Vec<PlaylistVideo>> {
-            Ok(vec![PlaylistVideo {
-                video_id: "vid1".to_string(),
-                title: "One".to_string(),
-            }])
-        }
-    }
-
-    struct NoopTaskRepository;
-
-    impl TaskRepository for NoopTaskRepository {
-        fn schedule(&self, _task: &Task, _run_at: DateTime<Utc>) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn list_eligible(&self) -> anyhow::Result<Vec<PersistedTask>> {
-            Ok(Vec::new())
-        }
-
-        fn mark_running(&self, _id: i64) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn mark_done(&self, _id: i64) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn mark_failed_or_retry(&self, _id: i64, _error: &str) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn recover_running(&self) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn it_should_sync_the_playlist_named_in_the_task_payload() {
+    #[allow(clippy::type_complexity)]
+    fn handler_with_playlist(
+        current_videos: Vec<PlaylistVideo>,
+    ) -> (
+        SyncPlaylistTask,
+        Arc<FakeEventPublisher>,
+        Arc<FakeVideoRepository>,
+        Arc<FakeTaskRepository>,
+    ) {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         playlist_repository
             .insert_with_event(
                 &Playlist::create(
                     PlaylistId::new("PL1").unwrap(),
                     PlaylistName::new("My Playlist").unwrap(),
-                    now,
+                    fixed_timestamp(),
                 ),
                 &DomainEvent::PlaylistCreated {
                     playlist_id: "PL1".to_string(),
                 },
-                now,
+                fixed_timestamp(),
             )
             .unwrap();
+        let event_publisher = Arc::new(FakeEventPublisher::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_repository = Arc::new(FakeTaskRepository::default());
 
-        let playlist_service = PlaylistService::new(
+        let video_service = VideoService::new(
             playlist_repository,
-            Arc::new(NoopYoutubePlaylistRepository),
-            Arc::new(FixedClock(DateTime::<Utc>::from_timestamp(0, 0).unwrap())),
-            Arc::new(NoopEventPublisher),
             video_repository.clone(),
-            Arc::new(FakeYoutubePlaylistItemsRepository),
-            Arc::new(NoopTaskRepository),
+            Arc::new(FakeYoutubePlaylistItemsRepository {
+                videos: current_videos,
+            }),
+            event_publisher.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
             3600,
         );
-        let handler = SyncPlaylistTask::new(playlist_service);
 
-        handler
-            .handle(
-                &Task::SyncPlaylist {
-                    playlist_id: "PL1".to_string(),
-                }
-                .payload()
-                .to_string(),
-            )
-            .unwrap();
+        (
+            SyncPlaylistTask::new(video_service),
+            event_publisher,
+            video_repository,
+            task_repository,
+        )
+    }
 
-        assert_eq!(*video_repository.upserted.lock().unwrap(), vec!["PL1"]);
+    fn payload_for(playlist_id: &str) -> String {
+        Task::SyncPlaylist {
+            playlist_id: playlist_id.to_string(),
+        }
+        .payload()
+        .to_string()
+    }
+
+    #[test]
+    fn it_should_no_op_when_the_playlist_no_longer_exists() {
+        let (handler, event_publisher, video_repository, task_repository) =
+            handler_with_playlist(Vec::new());
+
+        handler.handle(&payload_for("PL404")).unwrap();
+
+        assert!(event_publisher.published.lock().unwrap().is_empty());
+        assert!(video_repository.videos.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_no_op_when_the_payload_playlist_id_is_invalid() {
+        let (handler, event_publisher, video_repository, task_repository) =
+            handler_with_playlist(Vec::new());
+
+        handler.handle(&payload_for("")).unwrap();
+
+        assert!(event_publisher.published.lock().unwrap().is_empty());
+        assert!(video_repository.videos.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_persist_new_videos_and_publish_an_event_per_video() {
+        let (handler, event_publisher, video_repository, _tasks) =
+            handler_with_playlist(vec![PlaylistVideo {
+                video_id: "vid1".to_string(),
+                title: "One".to_string(),
+            }]);
+
+        handler.handle(&payload_for("PL1")).unwrap();
+
+        let stored = video_repository.videos.lock().unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].status, VideoStatus::Pending);
+        assert_eq!(
+            *event_publisher.published.lock().unwrap(),
+            vec![DomainEvent::VideoAdded {
+                playlist_id: "PL1".to_string(),
+                video_id: "vid1".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_delete_videos_no_longer_present_on_youtube() {
+        let (handler, _events, video_repository, _tasks) = handler_with_playlist(Vec::new());
+        video_repository.videos.lock().unwrap().push(Video::create(
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("vid1").unwrap(),
+            "Stale",
+            fixed_timestamp(),
+        ));
+
+        handler.handle(&payload_for("PL1")).unwrap();
+
+        assert!(video_repository.videos.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_always_schedule_the_next_sync_even_with_no_changes() {
+        let (handler, _events, _videos, task_repository) = handler_with_playlist(Vec::new());
+
+        handler.handle(&payload_for("PL1")).unwrap();
+
+        let scheduled = task_repository.scheduled.lock().unwrap();
+        assert_eq!(scheduled.len(), 1);
+        assert_eq!(
+            scheduled[0].0,
+            Task::SyncPlaylist {
+                playlist_id: "PL1".to_string()
+            }
+        );
+        assert_eq!(
+            scheduled[0].1,
+            fixed_timestamp() + chrono::Duration::seconds(3600)
+        );
     }
 }

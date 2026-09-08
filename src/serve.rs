@@ -1,11 +1,14 @@
 use crate::cli::ytdlp_update;
 use crate::domain::playlist::PlaylistService;
+use crate::domain::video::VideoService;
 use crate::http::{self, AppState};
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
 use crate::infrastructure::repositories::sqlite_event_repository::{
     EventPublisher, EventRepository, SqliteEventRepository,
 };
-use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
+use crate::infrastructure::repositories::sqlite_playlist_repository::{
+    PlaylistRepository, SqlitePlaylistRepository,
+};
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
 };
@@ -99,8 +102,10 @@ fn build_application() -> Result<Application> {
     // Playlists and events share one connection so `insert_with_event`/
     // `delete_with_event` can wrap both writes in a single transaction.
     let playlist_events_conn = Arc::new(Mutex::new(open_connection()?));
-    let playlist_repository = SqlitePlaylistRepository::new(playlist_events_conn.clone())
-        .context("failed to initialize playlist repository")?;
+    let playlist_repository: Arc<dyn PlaylistRepository> = Arc::new(
+        SqlitePlaylistRepository::new(playlist_events_conn.clone())
+            .context("failed to initialize playlist repository")?,
+    );
     let event_repository = Arc::new(
         SqliteEventRepository::new(playlist_events_conn, Arc::new(SystemClock))
             .context("failed to initialize event repository")?,
@@ -121,23 +126,27 @@ fn build_application() -> Result<Application> {
         .context("failed to initialize video repository")?;
 
     let playlist_service = PlaylistService::new(
-        Arc::new(playlist_repository),
+        playlist_repository.clone(),
         Arc::new(YoutubeApiPlaylistRepository::new(youtube_api_key())),
         Arc::new(SystemClock),
-        event_repository.clone() as Arc<dyn EventPublisher>,
+    );
+    let video_service = VideoService::new(
+        playlist_repository,
         Arc::new(video_repository),
         Arc::new(YoutubeApiPlaylistItemsRepository::new(youtube_api_key())),
+        event_repository.clone() as Arc<dyn EventPublisher>,
         task_repository.clone() as Arc<dyn TaskRepository>,
+        Arc::new(SystemClock),
         sync_interval_seconds(),
     );
 
     let event_consumer = Arc::new(DomainEventsConsumer::new(
         event_repository as Arc<dyn EventRepository>,
-        subscribers::registry(playlist_service.clone()),
+        subscribers::registry(video_service.clone()),
     ));
     let task_executor = Arc::new(TaskExecutor::new(
         task_repository as Arc<dyn TaskRepository>,
-        tasks::registry(playlist_service.clone()),
+        tasks::registry(video_service),
     ));
 
     Ok(Application {

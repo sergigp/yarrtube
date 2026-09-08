@@ -60,6 +60,18 @@ impl YoutubePlaylistRepository for YoutubeApiPlaylistRepository {
 }
 
 #[cfg(test)]
+pub struct FakeYoutubePlaylistRepository {
+    pub(crate) exists: bool,
+}
+
+#[cfg(test)]
+impl YoutubePlaylistRepository for FakeYoutubePlaylistRepository {
+    fn exists(&self, _id: &PlaylistId) -> anyhow::Result<bool> {
+        Ok(self.exists)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

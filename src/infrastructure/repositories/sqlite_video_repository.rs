@@ -156,6 +156,52 @@ impl VideoRepository for SqliteVideoRepository {
 }
 
 #[cfg(test)]
+#[derive(Default)]
+pub struct FakeVideoRepository {
+    pub(crate) videos: Mutex<Vec<Video>>,
+}
+
+#[cfg(test)]
+impl VideoRepository for FakeVideoRepository {
+    fn upsert(&self, video: &Video) -> anyhow::Result<()> {
+        let mut videos = self.videos.lock().unwrap();
+        if let Some(existing) = videos
+            .iter_mut()
+            .find(|v| v.playlist_id == video.playlist_id && v.video_id == video.video_id)
+        {
+            existing.title = video.title.clone();
+            existing.updated_at = video.updated_at;
+        } else {
+            videos.push(video.clone());
+        }
+        Ok(())
+    }
+
+    fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>> {
+        Ok(self
+            .videos
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|v| v.playlist_id == *playlist_id)
+            .cloned()
+            .collect())
+    }
+
+    fn delete_not_in(
+        &self,
+        playlist_id: &PlaylistId,
+        current_ids: &[VideoId],
+    ) -> anyhow::Result<()> {
+        self.videos
+            .lock()
+            .unwrap()
+            .retain(|v| v.playlist_id != *playlist_id || current_ids.contains(&v.video_id));
+        Ok(())
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

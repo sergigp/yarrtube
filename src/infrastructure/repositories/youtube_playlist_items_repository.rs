@@ -124,6 +124,19 @@ impl YoutubePlaylistItemsRepository for YoutubeApiPlaylistItemsRepository {
 }
 
 #[cfg(test)]
+#[derive(Default)]
+pub struct FakeYoutubePlaylistItemsRepository {
+    pub(crate) videos: Vec<PlaylistVideo>,
+}
+
+#[cfg(test)]
+impl YoutubePlaylistItemsRepository for FakeYoutubePlaylistItemsRepository {
+    fn list_current_videos(&self, _playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>> {
+        Ok(self.videos.clone())
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

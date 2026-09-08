@@ -80,188 +80,35 @@ pub async fn list_playlists(State(state): State<AppState>) -> Response {
 mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
-    use crate::domain::playlist::Playlist;
-    use crate::domain::shared::VideoId;
-    use crate::domain::task::Task;
-    use crate::domain::video::Video;
     use crate::http::playlists_router;
-    use crate::infrastructure::repositories::sqlite_event_repository::EventPublisher;
-    use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
-    use crate::infrastructure::repositories::sqlite_task_repository::{
-        PersistedTask, TaskRepository,
-    };
-    use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-    use crate::infrastructure::repositories::system_clock::Clock;
-    use crate::infrastructure::repositories::youtube_playlist_items_repository::{
-        PlaylistVideo, YoutubePlaylistItemsRepository,
-    };
-    use crate::infrastructure::repositories::youtube_playlist_repository::YoutubePlaylistRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
+    use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
     use chrono::{DateTime, Utc};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use tower::ServiceExt;
-
-    #[derive(Default)]
-    struct FakePlaylistRepository {
-        playlists: Mutex<Vec<Playlist>>,
-    }
-
-    impl FakePlaylistRepository {
-        fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
-            self.playlists.lock().unwrap().push(playlist.clone());
-            Ok(())
-        }
-
-        fn delete(&self, id: &PlaylistId) -> anyhow::Result<()> {
-            self.playlists.lock().unwrap().retain(|p| p.id != *id);
-            Ok(())
-        }
-    }
-
-    impl PlaylistRepository for FakePlaylistRepository {
-        fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
-            Ok(self
-                .playlists
-                .lock()
-                .unwrap()
-                .iter()
-                .find(|p| p.id == *id)
-                .cloned())
-        }
-
-        fn insert_with_event(
-            &self,
-            playlist: &Playlist,
-            _event: &DomainEvent,
-            _now: DateTime<Utc>,
-        ) -> anyhow::Result<()> {
-            self.insert(playlist)
-        }
-
-        fn delete_with_event(
-            &self,
-            id: &PlaylistId,
-            _event: &DomainEvent,
-            _now: DateTime<Utc>,
-        ) -> anyhow::Result<()> {
-            self.delete(id)
-        }
-
-        fn list(&self) -> anyhow::Result<Vec<Playlist>> {
-            Ok(self.playlists.lock().unwrap().clone())
-        }
-    }
-
-    struct FakeYoutubePlaylistRepository {
-        exists: bool,
-    }
-
-    impl YoutubePlaylistRepository for FakeYoutubePlaylistRepository {
-        fn exists(&self, _id: &PlaylistId) -> anyhow::Result<bool> {
-            Ok(self.exists)
-        }
-    }
-
-    struct FixedClock(DateTime<Utc>);
-
-    impl Clock for FixedClock {
-        fn now(&self) -> DateTime<Utc> {
-            self.0
-        }
-    }
-
-    #[derive(Default)]
-    struct NoopEventPublisher;
-
-    impl EventPublisher for NoopEventPublisher {
-        fn publish(&self, _event: &DomainEvent) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
-
-    #[derive(Default)]
-    struct NoopVideoRepository;
-
-    impl VideoRepository for NoopVideoRepository {
-        fn upsert(&self, _video: &Video) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn list_for_playlist(&self, _playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>> {
-            Ok(Vec::new())
-        }
-
-        fn delete_not_in(
-            &self,
-            _playlist_id: &PlaylistId,
-            _current_ids: &[VideoId],
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
-
-    #[derive(Default)]
-    struct NoopYoutubePlaylistItemsRepository;
-
-    impl YoutubePlaylistItemsRepository for NoopYoutubePlaylistItemsRepository {
-        fn list_current_videos(
-            &self,
-            _playlist_id: &PlaylistId,
-        ) -> anyhow::Result<Vec<PlaylistVideo>> {
-            Ok(Vec::new())
-        }
-    }
-
-    #[derive(Default)]
-    struct NoopTaskRepository;
-
-    impl TaskRepository for NoopTaskRepository {
-        fn schedule(&self, _task: &Task, _run_at: DateTime<Utc>) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn list_eligible(&self) -> anyhow::Result<Vec<PersistedTask>> {
-            Ok(Vec::new())
-        }
-
-        fn mark_running(&self, _id: i64) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn mark_done(&self, _id: i64) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn mark_failed_or_retry(&self, _id: i64, _error: &str) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn recover_running(&self) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn test_router(repository: FakePlaylistRepository, youtube_exists: bool) -> axum::Router {
+    fn test_router(
+        repository: FakePlaylistRepository,
+        youtube_exists: bool,
+    ) -> (axum::Router, Arc<FakePlaylistRepository>) {
+        let repository = Arc::new(repository);
         let state = AppState {
             playlist_service: crate::domain::playlist::PlaylistService::new(
-                Arc::new(repository),
+                repository.clone(),
                 Arc::new(FakeYoutubePlaylistRepository {
                     exists: youtube_exists,
                 }),
                 Arc::new(FixedClock(fixed_timestamp())),
-                Arc::new(NoopEventPublisher),
-                Arc::new(NoopVideoRepository),
-                Arc::new(NoopYoutubePlaylistItemsRepository),
-                Arc::new(NoopTaskRepository),
-                3600,
             ),
         };
-        playlists_router(state)
+        (playlists_router(state), repository)
     }
 
     async fn body_json(response: Response) -> serde_json::Value {
@@ -282,7 +129,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_201_when_creating_a_new_playlist() {
-        let router = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
 
         let response = router
             .oneshot(create_request("PL1", "My Playlist"))
@@ -301,7 +148,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_200_when_creating_a_playlist_that_already_exists() {
-        let router = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
             .oneshot(create_request("PL1", "Original Name"))
@@ -320,7 +167,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_the_name_is_invalid() {
-        let router = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
 
         let response = router.oneshot(create_request("PL1", "")).await.unwrap();
 
@@ -329,7 +176,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_the_youtube_playlist_does_not_exist() {
-        let router = test_router(FakePlaylistRepository::default(), false);
+        let (router, _repository) = test_router(FakePlaylistRepository::default(), false);
 
         let response = router
             .oneshot(create_request("PL404", "My Playlist"))
@@ -340,8 +187,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_record_a_playlist_created_event_only_once_for_repeated_creation() {
+        let (router, repository) = test_router(FakePlaylistRepository::default(), true);
+        router
+            .clone()
+            .oneshot(create_request("PL1", "First"))
+            .await
+            .unwrap();
+
+        router
+            .oneshot(create_request("PL1", "First Again"))
+            .await
+            .unwrap();
+
+        let published = repository.transactional_events.lock().unwrap();
+        assert_eq!(
+            *published,
+            vec![DomainEvent::PlaylistCreated {
+                playlist_id: "PL1".to_string()
+            }]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_return_204_when_deleting_an_existing_playlist() {
-        let router = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
             .oneshot(create_request("PL1", "My Playlist"))
@@ -363,8 +233,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_record_a_playlist_deleted_event_on_successful_deletion() {
+        let (router, repository) = test_router(FakePlaylistRepository::default(), true);
+        router
+            .clone()
+            .oneshot(create_request("PL1", "My Playlist"))
+            .await
+            .unwrap();
+
+        router
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/playlists/PL1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let published = repository.transactional_events.lock().unwrap();
+        assert_eq!(
+            *published,
+            vec![
+                DomainEvent::PlaylistCreated {
+                    playlist_id: "PL1".to_string()
+                },
+                DomainEvent::PlaylistDeleted {
+                    playlist_id: "PL1".to_string()
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_return_400_when_deleting_a_missing_playlist() {
-        let router = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
 
         let response = router
             .oneshot(
@@ -382,7 +286,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_an_empty_array_when_no_playlists_exist() {
-        let router = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
 
         let response = router
             .oneshot(
@@ -402,7 +306,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_all_created_playlists() {
-        let router = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
             .oneshot(create_request("PL1", "First"))

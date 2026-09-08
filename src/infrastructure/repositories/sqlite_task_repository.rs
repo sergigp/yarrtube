@@ -206,6 +206,40 @@ impl TaskRepository for SqliteTaskRepository {
 }
 
 #[cfg(test)]
+#[derive(Default)]
+pub struct FakeTaskRepository {
+    pub(crate) scheduled: Mutex<Vec<(Task, DateTime<Utc>)>>,
+}
+
+#[cfg(test)]
+impl TaskRepository for FakeTaskRepository {
+    fn schedule(&self, task: &Task, run_at: DateTime<Utc>) -> anyhow::Result<()> {
+        self.scheduled.lock().unwrap().push((task.clone(), run_at));
+        Ok(())
+    }
+
+    fn list_eligible(&self) -> anyhow::Result<Vec<PersistedTask>> {
+        Ok(Vec::new())
+    }
+
+    fn mark_running(&self, _id: i64) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn mark_done(&self, _id: i64) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn mark_failed_or_retry(&self, _id: i64, _error: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn recover_running(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::infrastructure::repositories::system_clock::FixedClock;

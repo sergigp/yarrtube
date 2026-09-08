@@ -176,6 +176,20 @@ impl EventRepository for SqliteEventRepository {
 }
 
 #[cfg(test)]
+#[derive(Default)]
+pub struct FakeEventPublisher {
+    pub(crate) published: Mutex<Vec<DomainEvent>>,
+}
+
+#[cfg(test)]
+impl EventPublisher for FakeEventPublisher {
+    fn publish(&self, event: &DomainEvent) -> anyhow::Result<()> {
+        self.published.lock().unwrap().push(event.clone());
+        Ok(())
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::infrastructure::repositories::system_clock::FixedClock;

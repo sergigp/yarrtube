@@ -162,6 +162,62 @@ impl PlaylistRepository for SqlitePlaylistRepository {
 }
 
 #[cfg(test)]
+#[derive(Default)]
+pub struct FakePlaylistRepository {
+    playlists: Mutex<Vec<Playlist>>,
+    /// Events written transactionally alongside a playlist insert/delete —
+    /// this is what production code actually records them into (see
+    /// `insert_with_event`/`delete_with_event` above), not a separately
+    /// injected `EventPublisher`.
+    pub(crate) transactional_events: Mutex<Vec<DomainEvent>>,
+}
+
+#[cfg(test)]
+impl PlaylistRepository for FakePlaylistRepository {
+    fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
+        Ok(self
+            .playlists
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|p| p.id == *id)
+            .cloned())
+    }
+
+    fn insert_with_event(
+        &self,
+        playlist: &Playlist,
+        event: &DomainEvent,
+        _now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        self.transactional_events
+            .lock()
+            .unwrap()
+            .push(event.clone());
+        self.playlists.lock().unwrap().push(playlist.clone());
+        Ok(())
+    }
+
+    fn delete_with_event(
+        &self,
+        id: &PlaylistId,
+        event: &DomainEvent,
+        _now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        self.transactional_events
+            .lock()
+            .unwrap()
+            .push(event.clone());
+        self.playlists.lock().unwrap().retain(|p| p.id != *id);
+        Ok(())
+    }
+
+    fn list(&self) -> anyhow::Result<Vec<Playlist>> {
+        Ok(self.playlists.lock().unwrap().clone())
+    }
+}
+
+#[cfg(test)]
 impl SqlitePlaylistRepository {
     /// Not part of the `PlaylistRepository` port — production code always
     /// goes through `insert_with_event`/`delete_with_event` — but useful for
