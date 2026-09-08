@@ -55,27 +55,56 @@ impl SqliteTaskRepository {
                     [],
                 )
                 .context("failed to create tasks table")?;
+            guard
+                .execute(
+                    "CREATE TABLE IF NOT EXISTS tasks_dead_letter (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        original_task_id INTEGER NOT NULL,
+                        task_type TEXT NOT NULL,
+                        payload TEXT NOT NULL,
+                        retries INTEGER NOT NULL,
+                        last_error TEXT,
+                        created_at TEXT NOT NULL,
+                        failed_at TEXT NOT NULL
+                    )",
+                    [],
+                )
+                .context("failed to create tasks_dead_letter table")?;
         }
         Ok(Self { conn, clock })
     }
 
-    fn apply_failed_attempt(&self, conn: &Connection, id: i64, error: &str) -> anyhow::Result<()> {
-        let retries: i64 = conn
+    fn apply_failed_attempt(
+        &self,
+        conn: &mut Connection,
+        id: i64,
+        error: &str,
+    ) -> anyhow::Result<()> {
+        let (task_type, payload, created_at, retries): (String, String, String, i64) = conn
             .query_row(
-                "SELECT retries FROM tasks WHERE id = ?1",
+                "SELECT task_type, payload, created_at, retries FROM tasks WHERE id = ?1",
                 params![id],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
-            .context("failed to read task retries")?;
+            .context("failed to read task before failure")?;
         let retries = retries + 1;
         let now = self.clock.now();
 
         if retries >= MAX_ATTEMPTS {
-            conn.execute(
-                "UPDATE tasks SET status = 'failed', retries = ?2, updated_at = ?3, last_error = ?4 WHERE id = ?1",
-                params![id, retries, now.to_rfc3339(), error],
+            let tx = conn
+                .transaction()
+                .context("failed to start dead-letter transaction")?;
+            tx.execute(
+                "INSERT INTO tasks_dead_letter (original_task_id, task_type, payload, retries, last_error, created_at, failed_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![id, task_type, payload, retries, error, created_at, now.to_rfc3339()],
             )
-            .context("failed to mark task permanently failed")?;
+
+            .context("failed to insert task into dead letter")?;
+            tx.execute("DELETE FROM tasks WHERE id = ?1", params![id])
+                .context("failed to delete task after moving to dead letter")?;
+            tx.commit()
+                .context("failed to commit dead-letter transaction")?;
             error!(task_id = id, retries, error, "task failed permanently");
         } else {
             let run_at = now + chrono::Duration::seconds(RETRY_DELAY_SECONDS);
@@ -167,25 +196,22 @@ impl TaskRepository for SqliteTaskRepository {
             .conn
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
-        conn.execute(
-            "UPDATE tasks SET status = 'done', updated_at = ?2 WHERE id = ?1",
-            params![id, self.clock.now().to_rfc3339()],
-        )
-        .context("failed to mark task done")?;
+        conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])
+            .context("failed to mark task done")?;
         info!(task_id = id, "task done");
         Ok(())
     }
 
     fn mark_failed_or_retry(&self, id: i64, error: &str) -> anyhow::Result<()> {
-        let conn = self
+        let mut conn = self
             .conn
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
-        self.apply_failed_attempt(&conn, id, error)
+        self.apply_failed_attempt(&mut conn, id, error)
     }
 
     fn recover_running(&self) -> anyhow::Result<()> {
-        let conn = self
+        let mut conn = self
             .conn
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -206,7 +232,7 @@ impl TaskRepository for SqliteTaskRepository {
                 "recovering task left running after an unclean shutdown"
             );
             self.apply_failed_attempt(
-                &conn,
+                &mut conn,
                 id,
                 "recovered as a failed attempt after an unclean shutdown",
             )?;
@@ -253,6 +279,7 @@ impl TaskRepository for FakeTaskRepository {
 mod tests {
     use super::*;
     use crate::infrastructure::repositories::system_clock::FixedClock;
+    use rusqlite::OptionalExtension;
 
     fn repo_with_clock(now: DateTime<Utc>) -> SqliteTaskRepository {
         SqliteTaskRepository::new(
@@ -304,6 +331,25 @@ mod tests {
         repo.mark_done(id).unwrap();
 
         assert!(repo.list_eligible().unwrap().is_empty());
+        let conn = repo.conn.lock().unwrap();
+        let found: Option<i64> = conn
+            .query_row("SELECT id FROM tasks WHERE id = ?1", params![id], |row| {
+                row.get(0)
+            })
+            .optional()
+            .unwrap();
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn it_should_create_a_queryable_empty_dead_letter_table() {
+        let repo = repo();
+
+        let conn = repo.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT * FROM tasks_dead_letter").unwrap();
+        let rows = stmt.query_map([], |_| Ok(())).unwrap();
+
+        assert_eq!(rows.count(), 0);
     }
 
     #[test]
@@ -328,6 +374,33 @@ mod tests {
         }
 
         assert!(repo.list_eligible().unwrap().is_empty());
+        let conn = repo.conn.lock().unwrap();
+        let found: Option<i64> = conn
+            .query_row("SELECT id FROM tasks WHERE id = ?1", params![id], |row| {
+                row.get(0)
+            })
+            .optional()
+            .unwrap();
+        assert!(found.is_none());
+
+        let (original_task_id, task_type, payload, retries, last_error): (
+            i64,
+            String,
+            String,
+            i64,
+            String,
+        ) = conn
+            .query_row(
+                "SELECT original_task_id, task_type, payload, retries, last_error FROM tasks_dead_letter",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            )
+            .unwrap();
+        assert_eq!(original_task_id, id);
+        assert_eq!(task_type, "sync_playlist");
+        assert_eq!(payload, task().payload().to_string());
+        assert_eq!(retries, 5);
+        assert_eq!(last_error, "boom");
     }
 
     #[test]
@@ -390,11 +463,22 @@ mod tests {
         repo.recover_running().unwrap();
 
         let conn = repo.conn.lock().unwrap();
-        let status: String = conn
-            .query_row("SELECT status FROM tasks WHERE id = ?1", params![id], |r| {
+        let found: Option<i64> = conn
+            .query_row("SELECT id FROM tasks WHERE id = ?1", params![id], |r| {
                 r.get(0)
             })
+            .optional()
             .unwrap();
-        assert_eq!(status, "failed");
+        assert!(found.is_none());
+
+        let (original_task_id, retries): (i64, i64) = conn
+            .query_row(
+                "SELECT original_task_id, retries FROM tasks_dead_letter",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(original_task_id, id);
+        assert_eq!(retries, 5);
     }
 }

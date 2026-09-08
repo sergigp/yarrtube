@@ -1,0 +1,22 @@
+## 1. Events dead-letter table
+
+- [x] 1.1 Add `CREATE TABLE IF NOT EXISTS domain_events_dead_letter (id, original_event_id, event_type, payload, retries, last_error, created_at, failed_at)` to `SqliteEventRepository::new` (`src/infrastructure/repositories/sqlite_event_repository.rs`), following the existing `create_events_table` style; verify with a new test that constructing the repository against an in-memory connection succeeds and the table is queryable (`SELECT * FROM domain_events_dead_letter` returns zero rows).
+- [x] 1.2 In `mark_failed_or_retry`, when the incremented `retries` reaches `MAX_ATTEMPTS`, replace the `UPDATE ... SET status = 'failed'` branch with a `rusqlite` transaction that inserts one row into `domain_events_dead_letter` (carrying the source row's `event_type`, `payload`, `created_at`, the final `retries` count, `last_error`, and `failed_at = self.clock.now()`) and then deletes the row from `events`; keep the existing `println!` terminal-failure log unchanged. Verify with a new test `it_should_move_the_event_to_the_dead_letter_table_after_the_fifth_failed_attempt` asserting: the event is gone from `events` (`list_eligible` empty and a direct `SELECT` by id returns no row), and exactly one row exists in `domain_events_dead_letter` with the expected `event_type`/`payload`/`retries`/`last_error`.
+- [x] 1.3 Change `mark_done` from `UPDATE events SET status = 'done' ...` to `DELETE FROM events WHERE id = ?1`; verify the existing test `it_should_no_longer_list_an_event_as_eligible_once_marked_done` still passes, and add an assertion (or a new test) confirming a direct `SELECT` for that id returns no row (not just that it's absent from `list_eligible`).
+- [x] 1.4 Review `it_should_keep_a_failed_event_pending_and_increment_retries_below_the_limit` and `it_should_stay_eligible_after_the_fourth_failed_attempt`: confirm they still pass unchanged (they only exercise attempts below `MAX_ATTEMPTS`, so the retry-in-place path is untouched) — no code change expected, just confirm via `cargo test`.
+
+## 2. Tasks dead-letter table
+
+- [x] 2.1 Add `CREATE TABLE IF NOT EXISTS tasks_dead_letter (id, original_task_id, task_type, payload, retries, last_error, created_at, failed_at)` to `SqliteTaskRepository::new` (`src/infrastructure/repositories/sqlite_task_repository.rs`); verify with a new test that the table exists and is queryable after construction.
+- [x] 2.2 In `apply_failed_attempt`, when the incremented `retries` reaches `MAX_ATTEMPTS`, replace the `UPDATE ... SET status = 'failed'` branch with a `rusqlite` transaction that inserts one row into `tasks_dead_letter` (mirroring the fields described in design.md Decision 3) and deletes the row from `tasks`; keep the existing `println!` log unchanged. This method is shared by `mark_failed_or_retry` and `recover_running`, so both paths pick up the change automatically.
+- [x] 2.3 Change `mark_done` from `UPDATE tasks SET status = 'done' ...` to `DELETE FROM tasks WHERE id = ?1`; verify the existing test `it_should_no_longer_list_a_task_as_eligible_once_marked_done` still passes, plus a direct `SELECT` confirms the row is gone.
+- [x] 2.4 Rewrite `it_should_drop_the_task_after_the_fifth_failed_attempt` to also assert a matching row now exists in `tasks_dead_letter` (not just that `list_eligible` is empty), and confirm a direct `SELECT ... FROM tasks WHERE id = ?1` returns no row (replacing any implicit reliance on `status = 'failed'` remaining queryable in `tasks`).
+- [x] 2.5 Rewrite `it_should_drop_a_recovered_running_task_once_the_attempt_limit_is_exceeded` (currently asserts `status == "failed"` by querying `tasks` directly): change it to assert the row is deleted from `tasks` and present in `tasks_dead_letter` with `retries = 5`, exercising the crash-recovery path (`recover_running`) into the dead-letter transition.
+- [x] 2.6 Review `it_should_reschedule_the_task_after_the_fixed_delay_below_the_attempt_limit` and `it_should_retry_a_recovered_running_task_when_under_the_attempt_limit`: confirm both still pass unchanged (below `MAX_ATTEMPTS`, retry-in-place path untouched) via `cargo test`.
+
+## 3. Verification
+
+- [x] 3.1 Run `cargo fmt --all -- --check` and fix any formatting issues.
+- [x] 3.2 Run `cargo clippy --all-targets --all-features --locked -- -D warnings` and resolve any warnings introduced by the new transaction/table code.
+- [x] 3.3 Run `cargo build --release` and confirm it succeeds.
+- [x] 3.4 Run `cargo test --locked` and confirm the full suite passes, including every new and rewritten test above.
