@@ -26,6 +26,9 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tracing::{error, info, warn};
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::LevelFilter;
 
 const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_DB_PATH: &str = "yarrtube.sqlite3";
@@ -55,8 +58,8 @@ fn sync_interval_seconds() -> i64 {
 
 fn run_startup_ytdlp_update() {
     match ytdlp_update::update(&ytdlp_update::target_path()) {
-        Ok(()) => println!("[startup] yt-dlp self-update succeeded"),
-        Err(e) => eprintln!("[startup] yt-dlp self-update failed: {e}"),
+        Ok(()) => info!("yt-dlp self-update succeeded"),
+        Err(e) => error!(error = %e, "yt-dlp self-update failed"),
     }
 }
 
@@ -70,8 +73,8 @@ fn check_database(path: &std::path::Path) -> Result<()> {
 
 fn run_startup_database_check() {
     match check_database(&db_path()) {
-        Ok(()) => println!("[startup] database check succeeded"),
-        Err(e) => eprintln!("[startup] database check failed: {e}"),
+        Ok(()) => info!("database check succeeded"),
+        Err(e) => error!(error = %e, "database check failed"),
     }
 }
 
@@ -81,9 +84,7 @@ fn youtube_api_key() -> String {
 
 fn run_startup_youtube_api_key_check() {
     if youtube_api_key().is_empty() {
-        eprintln!(
-            "[startup] warning: YOUTUBE_API_KEY is not set; POST /playlists will fail its YouTube lookup"
-        );
+        warn!("YOUTUBE_API_KEY is not set; POST /playlists will fail its YouTube lookup");
     }
 }
 
@@ -164,7 +165,7 @@ async fn heartbeat_loop() {
     let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
     loop {
         interval.tick().await;
-        println!("[heartbeat] yarrtube daemon is alive");
+        info!("yarrtube daemon is alive");
     }
 }
 
@@ -175,7 +176,7 @@ async fn serve_http(port: u16, state: AppState) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
         .await
         .with_context(|| format!("failed to bind HTTP server on port {port}"))?;
-    println!("[startup] HTTP server listening on 0.0.0.0:{port}");
+    info!(port, "HTTP server listening on 0.0.0.0");
     axum::serve(listener, app)
         .await
         .context("HTTP server failed")?;
@@ -188,7 +189,7 @@ async fn run_async(app: Application) -> ExitCode {
     tokio::spawn(app.task_executor.run(BACKGROUND_POLL_INTERVAL));
 
     if let Err(e) = serve_http(port(), app.state).await {
-        eprintln!("Error: {e}");
+        error!(error = %e, "HTTP server failed");
         return ExitCode::FAILURE;
     }
 
@@ -196,6 +197,14 @@ async fn run_async(app: Application) -> ExitCode {
 }
 
 pub fn run() -> ExitCode {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
+
     // These use a blocking HTTP client, so they run before the tokio runtime
     // starts rather than inside it (a blocking client can't run on a tokio
     // worker thread).
@@ -206,7 +215,7 @@ pub fn run() -> ExitCode {
     let app = match build_application() {
         Ok(app) => app,
         Err(e) => {
-            eprintln!("Error: failed to initialize application state: {e}");
+            error!(error = %e, "failed to initialize application state");
             return ExitCode::FAILURE;
         }
     };
@@ -217,7 +226,7 @@ pub fn run() -> ExitCode {
     {
         Ok(rt) => rt,
         Err(e) => {
-            eprintln!("Error: failed to start async runtime: {e}");
+            error!(error = %e, "failed to start async runtime");
             return ExitCode::FAILURE;
         }
     };
