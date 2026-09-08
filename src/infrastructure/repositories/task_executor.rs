@@ -3,6 +3,7 @@ use crate::infrastructure::repositories::task_handler::TaskHandler;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::{error, info};
 
 pub type HandlerRegistry = HashMap<String, Arc<dyn TaskHandler>>;
 
@@ -24,7 +25,7 @@ impl TaskExecutor {
     pub fn poll_once(&self) -> anyhow::Result<()> {
         for task in self.repository.list_eligible()? {
             self.repository.mark_running(task.id)?;
-            println!("[tasks] dispatching task {} ({})", task.id, task.task_type);
+            info!(task_id = task.id, task_type = %task.task_type, "dispatching task");
 
             let outcome = match self.handlers.get(&task.task_type) {
                 Some(handler) => handler.handle(&task.payload),
@@ -53,8 +54,8 @@ impl TaskExecutor {
             let executor = self.clone();
             match tokio::task::spawn_blocking(move || executor.poll_once()).await {
                 Ok(Ok(())) => {}
-                Ok(Err(e)) => eprintln!("[tasks] poll failed: {e}"),
-                Err(e) => eprintln!("[tasks] poll task panicked: {e}"),
+                Ok(Err(e)) => error!(error = %e, "poll failed"),
+                Err(e) => error!(error = %e, "poll task panicked"),
             }
         }
     }

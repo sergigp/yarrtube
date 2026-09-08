@@ -3,6 +3,7 @@ use crate::infrastructure::repositories::sqlite_event_repository::EventRepositor
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::{error, info, warn};
 
 pub type SubscriberRegistry = HashMap<String, Vec<Arc<dyn EventSubscriber>>>;
 
@@ -28,11 +29,11 @@ impl DomainEventsConsumer {
 
             match self.subscribers.get(&event.event_type) {
                 Some(subscribers) => {
-                    println!(
-                        "[events] dispatching event {} ({}) to {} subscriber(s)",
-                        event.id,
-                        event.event_type,
-                        subscribers.len()
+                    info!(
+                        event_id = event.id,
+                        event_type = %event.event_type,
+                        subscriber_count = subscribers.len(),
+                        "dispatching event"
                     );
                     for subscriber in subscribers {
                         if let Err(e) = subscriber.handle(&event.payload) {
@@ -40,9 +41,10 @@ impl DomainEventsConsumer {
                         }
                     }
                 }
-                None => println!(
-                    "[events] event {} ({}) has no registered subscribers, marking done",
-                    event.id, event.event_type
+                None => warn!(
+                    event_id = event.id,
+                    event_type = %event.event_type,
+                    "event has no registered subscribers, marking done"
                 ),
             }
 
@@ -63,8 +65,8 @@ impl DomainEventsConsumer {
             let consumer = self.clone();
             match tokio::task::spawn_blocking(move || consumer.poll_once()).await {
                 Ok(Ok(())) => {}
-                Ok(Err(e)) => eprintln!("[domain-events] poll failed: {e}"),
-                Err(e) => eprintln!("[domain-events] poll task panicked: {e}"),
+                Ok(Err(e)) => error!(error = %e, "poll failed"),
+                Err(e) => error!(error = %e, "poll task panicked"),
             }
         }
     }

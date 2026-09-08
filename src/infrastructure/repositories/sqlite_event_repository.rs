@@ -4,6 +4,7 @@ use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params};
 use std::sync::{Arc, Mutex};
+use tracing::{error, info, warn};
 
 const MAX_ATTEMPTS: i64 = 5;
 
@@ -65,11 +66,11 @@ pub(crate) fn insert_pending_row(
         ],
     )
     .context("failed to insert event")?;
-    println!(
-        "[events] published {} (id={}): {}",
-        event.event_type(),
-        conn.last_insert_rowid(),
-        event.payload()
+    info!(
+        event_id = conn.last_insert_rowid(),
+        event_type = event.event_type(),
+        payload = %event.payload(),
+        "published event"
     );
     Ok(())
 }
@@ -137,7 +138,7 @@ impl EventRepository for SqliteEventRepository {
             params![id, self.clock.now().to_rfc3339()],
         )
         .context("failed to mark event done")?;
-        println!("[events] event {id} done");
+        info!(event_id = id, "event done");
         Ok(())
     }
 
@@ -165,10 +166,14 @@ impl EventRepository for SqliteEventRepository {
         )
         .context("failed to update event after failure")?;
         if status == "failed" {
-            println!("[events] event {id} failed permanently after {retries} attempts: {error}");
+            error!(event_id = id, retries, error, "event failed permanently");
         } else {
-            println!(
-                "[events] event {id} failed (attempt {retries}/{MAX_ATTEMPTS}), will retry: {error}"
+            warn!(
+                event_id = id,
+                retries,
+                max_attempts = MAX_ATTEMPTS,
+                error,
+                "event failed, retrying"
             );
         }
         Ok(())

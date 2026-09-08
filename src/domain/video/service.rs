@@ -10,6 +10,7 @@ use crate::infrastructure::repositories::system_clock::Clock;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubePlaylistItemsRepository;
 use std::collections::HashSet;
 use std::sync::Arc;
+use tracing::{debug, info};
 
 /// Orchestrates every operation on the video aggregate. Injected with only the
 /// ports video operations actually use — not every port the application has.
@@ -48,11 +49,11 @@ impl VideoService {
 
     pub fn sync_playlist_videos(&self, id: PlaylistId) -> anyhow::Result<()> {
         if self.playlist_repository.find(&id)?.is_none() {
-            println!("[sync] playlist {id} no longer exists, skipping sync");
+            debug!(playlist_id = %id, "playlist no longer exists, skipping sync");
             return Ok(());
         }
 
-        println!("[sync] syncing playlist {id}");
+        info!(playlist_id = %id, "syncing playlist");
         let current_videos = self
             .youtube_playlist_items_repository
             .list_current_videos(&id)?;
@@ -73,9 +74,11 @@ impl VideoService {
             ))?;
 
             if is_new {
-                println!(
-                    "[sync] added video {} ({}) to playlist {id}",
-                    video_id, video.title
+                info!(
+                    playlist_id = %id,
+                    video_id = %video_id,
+                    title = %video.title,
+                    "added video to playlist"
                 );
                 self.event_publisher.publish(&DomainEvent::VideoAdded {
                     playlist_id: id.as_str().to_string(),
@@ -89,9 +92,10 @@ impl VideoService {
         let current_id_strs: HashSet<&str> = current_ids.iter().map(|v| v.as_str()).collect();
         for stored in &stored_videos {
             if !current_id_strs.contains(stored.video_id.as_str()) {
-                println!(
-                    "[sync] removing video {} from playlist {id} (no longer on YouTube)",
-                    stored.video_id
+                info!(
+                    playlist_id = %id,
+                    video_id = %stored.video_id,
+                    "removing video from playlist (no longer on YouTube)"
                 );
             }
         }
@@ -104,7 +108,7 @@ impl VideoService {
             },
             next_run_at,
         )?;
-        println!("[sync] scheduled next sync of playlist {id} at {next_run_at}");
+        info!(playlist_id = %id, next_run_at = %next_run_at, "scheduled next sync of playlist");
 
         Ok(())
     }

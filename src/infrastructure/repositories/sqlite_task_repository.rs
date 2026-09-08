@@ -4,6 +4,7 @@ use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params};
 use std::sync::{Arc, Mutex};
+use tracing::{error, info, warn};
 
 const MAX_ATTEMPTS: i64 = 5;
 const RETRY_DELAY_SECONDS: i64 = 30;
@@ -75,7 +76,7 @@ impl SqliteTaskRepository {
                 params![id, retries, now.to_rfc3339(), error],
             )
             .context("failed to mark task permanently failed")?;
-            println!("[tasks] task {id} failed permanently after {retries} attempts: {error}");
+            error!(task_id = id, retries, error, "task failed permanently");
         } else {
             let run_at = now + chrono::Duration::seconds(RETRY_DELAY_SECONDS);
             conn.execute(
@@ -83,8 +84,13 @@ impl SqliteTaskRepository {
                 params![id, retries, run_at.to_rfc3339(), now.to_rfc3339(), error],
             )
             .context("failed to reschedule task after failure")?;
-            println!(
-                "[tasks] task {id} failed (attempt {retries}/{MAX_ATTEMPTS}), retrying at {run_at}: {error}"
+            warn!(
+                task_id = id,
+                retries,
+                max_attempts = MAX_ATTEMPTS,
+                run_at = %run_at,
+                error,
+                "task failed, retrying"
             );
         }
         Ok(())
@@ -109,10 +115,11 @@ impl TaskRepository for SqliteTaskRepository {
             ],
         )
         .context("failed to schedule task")?;
-        println!(
-            "[tasks] scheduled {} (id={}) to run at {run_at}",
-            task.task_type(),
-            conn.last_insert_rowid()
+        info!(
+            task_id = conn.last_insert_rowid(),
+            task_type = task.task_type(),
+            run_at = %run_at,
+            "scheduled task"
         );
         Ok(())
     }
@@ -165,7 +172,7 @@ impl TaskRepository for SqliteTaskRepository {
             params![id, self.clock.now().to_rfc3339()],
         )
         .context("failed to mark task done")?;
-        println!("[tasks] task {id} done");
+        info!(task_id = id, "task done");
         Ok(())
     }
 
@@ -194,7 +201,10 @@ impl TaskRepository for SqliteTaskRepository {
         };
 
         for id in running_ids {
-            println!("[tasks] recovering task {id} left running after an unclean shutdown");
+            warn!(
+                task_id = id,
+                "recovering task left running after an unclean shutdown"
+            );
             self.apply_failed_attempt(
                 &conn,
                 id,

@@ -7,6 +7,7 @@ use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRep
 use crate::infrastructure::repositories::system_clock::Clock;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubePlaylistRepository;
 use std::sync::Arc;
+use tracing::info;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CreatePlaylistOutcome {
@@ -61,7 +62,7 @@ impl PlaylistService {
         self.repository
             .insert_with_event(&playlist, &event, now)
             .map_err(CreatePlaylistError::Repository)?;
-        println!("[playlist] created {} ({})", playlist.id, playlist.name);
+        info!(playlist_id = %playlist.id, name = %playlist.name, "created playlist");
         Ok(CreatePlaylistOutcome::Created(playlist))
     }
 
@@ -78,7 +79,7 @@ impl PlaylistService {
         self.repository
             .delete_with_event(&id, &event, self.clock.now())
             .map_err(DeletePlaylistError::Repository)?;
-        println!("[playlist] deleted {id}");
+        info!(playlist_id = %id, "deleted playlist");
         Ok(())
     }
 
