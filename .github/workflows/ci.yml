@@ -30,6 +30,15 @@ jobs:
       - name: Cache cargo registry and target dir
         uses: Swatinem/rust-cache@v2
 
+      - name: Check OpenSpec changes are archived
+        run: |
+          extra=$(find openspec/changes -mindepth 1 -maxdepth 1 ! -name archive)
+          if [ -n "$extra" ]; then
+            echo "Unarchived OpenSpec changes found (run 'opsx:archive' before merging):"
+            echo "$extra"
+            exit 1
+          fi
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 

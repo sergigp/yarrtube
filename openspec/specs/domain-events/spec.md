@@ -33,7 +33,7 @@ The system SHALL poll for pending events in the background and, for each one, in
 - **THEN** the system marks the event processed without invoking anything and without treating it as an error
 
 ### Requirement: Retry Then Give Up
-The system SHALL track a single retry counter per event. If any subscriber invocation for an event fails, the counter SHALL increment and the event SHALL remain eligible for another attempt, in which every subscriber for that event is invoked again. After 5 failed attempts, the event SHALL be marked permanently failed, logged, and not attempted again.
+The system SHALL track a single retry counter per event. If any subscriber invocation for an event fails, the counter SHALL increment and the event SHALL remain eligible for another attempt, in which every subscriber for that event is invoked again. After 5 failed attempts, the system SHALL log the failure, move the event to the dead-letter table, and remove it from the events table so it is not attempted again.
 
 #### Scenario: A subscriber fails
 - **WHEN** any subscriber invoked for an event raises an error
@@ -41,7 +41,25 @@ The system SHALL track a single retry counter per event. If any subscriber invoc
 
 #### Scenario: Fifth consecutive failure
 - **WHEN** an event's retry counter reaches 5 failed attempts
-- **THEN** the system logs the failure, marks the event permanently failed, and does not attempt it again
+- **THEN** the system logs the failure, records the event's id, type, payload, final error, attempt count, and timestamps in the dead-letter table, and deletes the event from the events table
+
+### Requirement: Dead-Letter Record for Permanently Failed Events
+The system SHALL persist a durable record of every event that exhausts its retries, so a permanently failed event remains inspectable after it leaves the events table.
+
+#### Scenario: Event moved to dead letter
+- **WHEN** an event reaches its 5th failed attempt
+- **THEN** a record containing the event's original id, type, payload, final error message, number of attempts, and timestamps is inserted into the dead-letter table
+
+### Requirement: Events Table Behaves as a Queue
+The system SHALL remove an event from the events table as soon as it reaches a terminal state, so the table only ever contains events that are still pending or eligible for retry.
+
+#### Scenario: Event processed successfully
+- **WHEN** every subscriber for an event succeeds
+- **THEN** the event is deleted from the events table rather than being retained with a completed status
+
+#### Scenario: Event exhausts retries
+- **WHEN** an event reaches its 5th failed attempt and is moved to the dead-letter table
+- **THEN** it is also deleted from the events table
 
 ### Requirement: Isolation from the Publisher
 The system SHALL ensure that a failure or delay in processing an event never affects the outcome already returned by the operation that published it.
