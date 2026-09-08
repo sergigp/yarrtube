@@ -1,4 +1,4 @@
-use crate::domain::playlist::YoutubePlaylistId;
+use crate::domain::shared::PlaylistId;
 use crate::infrastructure::client::youtube_downloader_client::{
     YoutubeDownloaderClient, YtDlpDownloaderClient,
 };
@@ -6,7 +6,7 @@ use crate::infrastructure::shared::youtube_api;
 use std::path::Path;
 use std::process::ExitCode;
 
-pub fn run(playlist_id: &YoutubePlaylistId, output_path: &str) -> ExitCode {
+pub fn run(playlist_id: &PlaylistId, output_path: &str) -> ExitCode {
     let api_key = match std::env::var("YOUTUBE_API_KEY") {
         Ok(key) if !key.is_empty() => key,
         _ => {

@@ -1,11 +1,11 @@
-use crate::domain::playlist::YoutubePlaylistId;
+use crate::domain::shared::PlaylistId;
 use anyhow::Context;
 use serde::Deserialize;
 
 const PLAYLISTS_URL: &str = "https://www.googleapis.com/youtube/v3/playlists";
 
 pub trait YoutubePlaylistRepository: Send + Sync {
-    fn exists(&self, id: &YoutubePlaylistId) -> anyhow::Result<bool>;
+    fn exists(&self, id: &PlaylistId) -> anyhow::Result<bool>;
 }
 
 #[derive(Debug, Deserialize)]
@@ -33,7 +33,7 @@ impl YoutubeApiPlaylistRepository {
 }
 
 impl YoutubePlaylistRepository for YoutubeApiPlaylistRepository {
-    fn exists(&self, id: &YoutubePlaylistId) -> anyhow::Result<bool> {
+    fn exists(&self, id: &PlaylistId) -> anyhow::Result<bool> {
         let client = reqwest::blocking::Client::new();
         let response = client
             .get(&self.base_url)
@@ -60,6 +60,18 @@ impl YoutubePlaylistRepository for YoutubeApiPlaylistRepository {
 }
 
 #[cfg(test)]
+pub struct FakeYoutubePlaylistRepository {
+    pub(crate) exists: bool,
+}
+
+#[cfg(test)]
+impl YoutubePlaylistRepository for FakeYoutubePlaylistRepository {
+    fn exists(&self, _id: &PlaylistId) -> anyhow::Result<bool> {
+        Ok(self.exists)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -78,7 +90,7 @@ mod tests {
 
         let repository =
             YoutubeApiPlaylistRepository::with_base_url("api-key".to_string(), server.url());
-        let id = YoutubePlaylistId::new("PLexists").unwrap();
+        let id = PlaylistId::new("PLexists").unwrap();
 
         assert!(repository.exists(&id).unwrap());
     }
@@ -98,7 +110,7 @@ mod tests {
 
         let repository =
             YoutubeApiPlaylistRepository::with_base_url("api-key".to_string(), server.url());
-        let id = YoutubePlaylistId::new("PLmissing").unwrap();
+        let id = PlaylistId::new("PLmissing").unwrap();
 
         assert!(!repository.exists(&id).unwrap());
     }

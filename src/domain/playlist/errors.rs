@@ -1,4 +1,4 @@
-use super::youtube_playlist_id::YoutubePlaylistId;
+use crate::domain::shared::PlaylistId;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,8 +14,7 @@ impl std::error::Error for PlaylistError {}
 
 #[derive(Debug)]
 pub enum CreatePlaylistError {
-    InvalidInput(PlaylistError),
-    YoutubePlaylistNotFound(YoutubePlaylistId),
+    YoutubePlaylistNotFound(PlaylistId),
     Lookup(anyhow::Error),
     Repository(anyhow::Error),
 }
@@ -23,7 +22,6 @@ pub enum CreatePlaylistError {
 impl fmt::Display for CreatePlaylistError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidInput(e) => write!(f, "{e}"),
             Self::YoutubePlaylistNotFound(id) => {
                 write!(
                     f,
@@ -40,15 +38,13 @@ impl std::error::Error for CreatePlaylistError {}
 
 #[derive(Debug)]
 pub enum DeletePlaylistError {
-    InvalidId(PlaylistError),
-    NotFound(YoutubePlaylistId),
+    NotFound(PlaylistId),
     Repository(anyhow::Error),
 }
 
 impl fmt::Display for DeletePlaylistError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidId(e) => write!(f, "{e}"),
             Self::NotFound(id) => write!(f, "playlist {id} not found"),
             Self::Repository(e) => write!(f, "{e}"),
         }

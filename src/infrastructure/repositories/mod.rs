@@ -1,3 +1,11 @@
+pub mod domain_events_consumer;
+pub mod event_subscriber;
+pub mod sqlite_event_repository;
 pub mod sqlite_playlist_repository;
+pub mod sqlite_task_repository;
+pub mod sqlite_video_repository;
 pub mod system_clock;
+pub mod task_executor;
+pub mod task_handler;
+pub mod youtube_playlist_items_repository;
 pub mod youtube_playlist_repository;
