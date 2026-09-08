@@ -119,9 +119,6 @@ fn build_application() -> Result<Application> {
         )
         .context("failed to initialize task repository")?,
     );
-    task_repository
-        .recover_running()
-        .context("failed to recover tasks left running from a previous run")?;
 
     let video_repository = SqliteVideoRepository::new(open_connection()?)
         .context("failed to initialize video repository")?;
@@ -144,11 +141,16 @@ fn build_application() -> Result<Application> {
     let event_consumer = Arc::new(DomainEventsConsumer::new(
         event_repository as Arc<dyn EventRepository>,
         subscribers::registry(video_service.clone()),
+        Arc::new(SystemClock),
     ));
     let task_executor = Arc::new(TaskExecutor::new(
         task_repository as Arc<dyn TaskRepository>,
         tasks::registry(video_service),
+        Arc::new(SystemClock),
     ));
+    task_executor
+        .recover_stuck_tasks()
+        .context("failed to recover tasks left running from a previous run")?;
 
     Ok(Application {
         state: AppState { playlist_service },
