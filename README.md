@@ -151,6 +151,9 @@ Environment variables read by `serve`:
 - `YTDLP_PATH` - path to the yt-dlp binary used and updated by `download`,
   `update-ytdlp`, and `serve`'s startup self-update (default
   `/usr/local/bin/yt-dlp`).
+- `YARRTUBE_SYNC_INTERVAL_SECONDS` - how often (in seconds) a tracked
+  playlist's videos are re-synced from YouTube after its initial sync
+  (default `3600`, i.e. hourly).
 
 ## Local development (without Docker)
 

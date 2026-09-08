@@ -72,10 +72,21 @@ pub async fn list_playlists(State(state): State<AppState>) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::event::DomainEvent;
     use crate::domain::playlist::{Playlist, YoutubePlaylistId};
+    use crate::domain::task::Task;
+    use crate::domain::video::{Video, YoutubeVideoId};
     use crate::http::playlists_router;
+    use crate::infrastructure::repositories::sqlite_event_repository::EventPublisher;
     use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+    use crate::infrastructure::repositories::sqlite_task_repository::{
+        PersistedTask, TaskRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
     use crate::infrastructure::repositories::system_clock::Clock;
+    use crate::infrastructure::repositories::youtube_playlist_items_repository::{
+        PlaylistVideo, YoutubePlaylistItemsRepository,
+    };
     use crate::infrastructure::repositories::youtube_playlist_repository::YoutubePlaylistRepository;
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
@@ -86,6 +97,18 @@ mod tests {
     #[derive(Default)]
     struct FakePlaylistRepository {
         playlists: Mutex<Vec<Playlist>>,
+    }
+
+    impl FakePlaylistRepository {
+        fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
+            self.playlists.lock().unwrap().push(playlist.clone());
+            Ok(())
+        }
+
+        fn delete(&self, id: &YoutubePlaylistId) -> anyhow::Result<()> {
+            self.playlists.lock().unwrap().retain(|p| p.id != *id);
+            Ok(())
+        }
     }
 
     impl PlaylistRepository for FakePlaylistRepository {
@@ -99,14 +122,22 @@ mod tests {
                 .cloned())
         }
 
-        fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
-            self.playlists.lock().unwrap().push(playlist.clone());
-            Ok(())
+        fn insert_with_event(
+            &self,
+            playlist: &Playlist,
+            _event: &DomainEvent,
+            _now: DateTime<Utc>,
+        ) -> anyhow::Result<()> {
+            self.insert(playlist)
         }
 
-        fn delete(&self, id: &YoutubePlaylistId) -> anyhow::Result<()> {
-            self.playlists.lock().unwrap().retain(|p| p.id != *id);
-            Ok(())
+        fn delete_with_event(
+            &self,
+            id: &YoutubePlaylistId,
+            _event: &DomainEvent,
+            _now: DateTime<Utc>,
+        ) -> anyhow::Result<()> {
+            self.delete(id)
         }
 
         fn list(&self) -> anyhow::Result<Vec<Playlist>> {
@@ -132,6 +163,80 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct NoopEventPublisher;
+
+    impl EventPublisher for NoopEventPublisher {
+        fn publish(&self, _event: &DomainEvent) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct NoopVideoRepository;
+
+    impl VideoRepository for NoopVideoRepository {
+        fn upsert(&self, _video: &Video) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn list_for_playlist(
+            &self,
+            _playlist_id: &YoutubePlaylistId,
+        ) -> anyhow::Result<Vec<Video>> {
+            Ok(Vec::new())
+        }
+
+        fn delete_not_in(
+            &self,
+            _playlist_id: &YoutubePlaylistId,
+            _current_ids: &[YoutubeVideoId],
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct NoopYoutubePlaylistItemsRepository;
+
+    impl YoutubePlaylistItemsRepository for NoopYoutubePlaylistItemsRepository {
+        fn list_current_videos(
+            &self,
+            _playlist_id: &YoutubePlaylistId,
+        ) -> anyhow::Result<Vec<PlaylistVideo>> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[derive(Default)]
+    struct NoopTaskRepository;
+
+    impl TaskRepository for NoopTaskRepository {
+        fn schedule(&self, _task: &Task, _run_at: DateTime<Utc>) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn list_eligible(&self) -> anyhow::Result<Vec<PersistedTask>> {
+            Ok(Vec::new())
+        }
+
+        fn mark_running(&self, _id: i64) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn mark_done(&self, _id: i64) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn mark_failed_or_retry(&self, _id: i64, _error: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn recover_running(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
@@ -144,6 +249,11 @@ mod tests {
                     exists: youtube_exists,
                 }),
                 Arc::new(FixedClock(fixed_timestamp())),
+                Arc::new(NoopEventPublisher),
+                Arc::new(NoopVideoRepository),
+                Arc::new(NoopYoutubePlaylistItemsRepository),
+                Arc::new(NoopTaskRepository),
+                3600,
             ),
         };
         playlists_router(state)

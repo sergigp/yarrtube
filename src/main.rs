@@ -3,6 +3,8 @@ mod domain;
 mod http;
 mod infrastructure;
 mod serve;
+mod subscribers;
+mod tasks;
 
 use clap::Parser;
 use cli::{Cli, Commands};
