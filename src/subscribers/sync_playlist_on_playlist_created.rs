@@ -1,4 +1,4 @@
-use crate::domain::playlist::PlaylistService;
+use crate::domain::playlist::{PlaylistService, YoutubePlaylistId};
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use serde::Deserialize;
 
@@ -22,7 +22,10 @@ impl SyncPlaylistOnPlaylistCreated {
 impl EventSubscriber for SyncPlaylistOnPlaylistCreated {
     fn handle(&self, payload: &str) -> anyhow::Result<()> {
         let payload: PlaylistCreatedPayload = serde_json::from_str(payload)?;
-        self.playlist_service.sync_playlist(payload.playlist_id)
+        let Ok(playlist_id) = YoutubePlaylistId::new(payload.playlist_id) else {
+            return Ok(());
+        };
+        self.playlist_service.sync_playlist(playlist_id)
     }
 }
 

@@ -61,12 +61,9 @@ impl PlaylistService {
 
     pub fn create_playlist(
         &self,
-        id: impl Into<String>,
-        name: impl Into<String>,
+        id: YoutubePlaylistId,
+        name: PlaylistName,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError> {
-        let id = YoutubePlaylistId::new(id).map_err(CreatePlaylistError::InvalidInput)?;
-        let name = PlaylistName::new(name).map_err(CreatePlaylistError::InvalidInput)?;
-
         match self.lookup.exists(&id) {
             Ok(true) => {}
             Ok(false) => return Err(CreatePlaylistError::YoutubePlaylistNotFound(id)),
@@ -91,9 +88,7 @@ impl PlaylistService {
         Ok(CreatePlaylistOutcome::Created(playlist))
     }
 
-    pub fn delete_playlist(&self, id: impl Into<String>) -> Result<(), DeletePlaylistError> {
-        let id = YoutubePlaylistId::new(id).map_err(DeletePlaylistError::InvalidId)?;
-
+    pub fn delete_playlist(&self, id: YoutubePlaylistId) -> Result<(), DeletePlaylistError> {
         match self.repository.find(&id) {
             Ok(Some(_)) => {}
             Ok(None) => return Err(DeletePlaylistError::NotFound(id)),
@@ -114,13 +109,7 @@ impl PlaylistService {
         self.repository.list()
     }
 
-    pub fn sync_playlist(&self, playlist_id: impl Into<String>) -> anyhow::Result<()> {
-        let playlist_id = playlist_id.into();
-        let id = match YoutubePlaylistId::new(&playlist_id) {
-            Ok(id) => id,
-            Err(_) => return Ok(()),
-        };
-
+    pub fn sync_playlist(&self, id: YoutubePlaylistId) -> anyhow::Result<()> {
         if self.repository.find(&id)?.is_none() {
             println!("[sync] playlist {id} no longer exists, skipping sync");
             return Ok(());
@@ -442,17 +431,27 @@ mod tests {
         .0
     }
 
+    fn pid(id: &str) -> YoutubePlaylistId {
+        YoutubePlaylistId::new(id).unwrap()
+    }
+
+    fn pname(name: &str) -> PlaylistName {
+        PlaylistName::new(name).unwrap()
+    }
+
     #[test]
     fn it_should_create_the_playlist_when_the_youtube_playlist_exists() {
         let service = service(true);
 
-        let outcome = service.create_playlist("PL1", "My Playlist").unwrap();
+        let outcome = service
+            .create_playlist(pid("PL1"), pname("My Playlist"))
+            .unwrap();
 
         assert_eq!(
             outcome,
             CreatePlaylistOutcome::Created(Playlist::create(
-                YoutubePlaylistId::new("PL1").unwrap(),
-                PlaylistName::new("My Playlist").unwrap(),
+                pid("PL1"),
+                pname("My Playlist"),
                 fixed_timestamp(),
             ))
         );
@@ -461,9 +460,13 @@ mod tests {
     #[test]
     fn it_should_return_the_existing_playlist_when_the_id_already_exists() {
         let service = service(true);
-        service.create_playlist("PL1", "Original Name").unwrap();
+        service
+            .create_playlist(pid("PL1"), pname("Original Name"))
+            .unwrap();
 
-        let outcome = service.create_playlist("PL1", "Different Name").unwrap();
+        let outcome = service
+            .create_playlist(pid("PL1"), pname("Different Name"))
+            .unwrap();
 
         assert!(
             matches!(outcome, CreatePlaylistOutcome::AlreadyExisted(p) if p.name.as_str() == "Original Name")
@@ -471,19 +474,12 @@ mod tests {
     }
 
     #[test]
-    fn it_should_reject_creation_when_the_name_is_invalid() {
-        let service = service(true);
-
-        let err = service.create_playlist("PL1", "").unwrap_err();
-
-        assert!(matches!(err, CreatePlaylistError::InvalidInput(_)));
-    }
-
-    #[test]
     fn it_should_reject_creation_when_the_youtube_playlist_does_not_exist() {
         let service = service(false);
 
-        let err = service.create_playlist("PL404", "My Playlist").unwrap_err();
+        let err = service
+            .create_playlist(pid("PL404"), pname("My Playlist"))
+            .unwrap_err();
 
         assert!(matches!(
             err,
@@ -496,8 +492,10 @@ mod tests {
         let (service, playlist_repository, _events, _videos, _tasks) =
             ServiceBuilder::new().build();
 
-        service.create_playlist("PL1", "First").unwrap();
-        service.create_playlist("PL1", "First Again").unwrap();
+        service.create_playlist(pid("PL1"), pname("First")).unwrap();
+        service
+            .create_playlist(pid("PL1"), pname("First Again"))
+            .unwrap();
 
         let published = playlist_repository.transactional_events.lock().unwrap();
         assert_eq!(
@@ -511,18 +509,22 @@ mod tests {
     #[test]
     fn it_should_delete_an_existing_playlist() {
         let service = service(true);
-        service.create_playlist("PL1", "My Playlist").unwrap();
+        service
+            .create_playlist(pid("PL1"), pname("My Playlist"))
+            .unwrap();
 
-        assert!(service.delete_playlist("PL1").is_ok());
+        assert!(service.delete_playlist(pid("PL1")).is_ok());
     }
 
     #[test]
     fn it_should_publish_playlist_deleted_on_successful_deletion() {
         let (service, playlist_repository, _events, _videos, _tasks) =
             ServiceBuilder::new().build();
-        service.create_playlist("PL1", "My Playlist").unwrap();
+        service
+            .create_playlist(pid("PL1"), pname("My Playlist"))
+            .unwrap();
 
-        service.delete_playlist("PL1").unwrap();
+        service.delete_playlist(pid("PL1")).unwrap();
 
         let published = playlist_repository.transactional_events.lock().unwrap();
         assert_eq!(
@@ -542,18 +544,9 @@ mod tests {
     fn it_should_report_not_found_when_deleting_a_missing_playlist() {
         let service = service(true);
 
-        let err = service.delete_playlist("PL404").unwrap_err();
+        let err = service.delete_playlist(pid("PL404")).unwrap_err();
 
         assert!(matches!(err, DeletePlaylistError::NotFound(_)));
-    }
-
-    #[test]
-    fn it_should_reject_deletion_when_the_id_is_invalid() {
-        let service = service(true);
-
-        let err = service.delete_playlist("").unwrap_err();
-
-        assert!(matches!(err, DeletePlaylistError::InvalidId(_)));
     }
 
     #[test]
@@ -566,8 +559,8 @@ mod tests {
     #[test]
     fn it_should_return_all_created_playlists() {
         let service = service(true);
-        service.create_playlist("PL1", "First").unwrap();
-        service.create_playlist("PL2", "Second").unwrap();
+        service.create_playlist(pid("PL1"), pname("First")).unwrap();
+        service.create_playlist(pid("PL2"), pname("Second")).unwrap();
 
         assert_eq!(service.list_playlists().unwrap().len(), 2);
     }
@@ -576,7 +569,7 @@ mod tests {
     fn it_should_no_op_when_syncing_a_playlist_that_no_longer_exists() {
         let (service, _playlists, event_publisher, videos, tasks) = ServiceBuilder::new().build();
 
-        service.sync_playlist("PL404").unwrap();
+        service.sync_playlist(pid("PL404")).unwrap();
 
         assert!(event_publisher.published.lock().unwrap().is_empty());
         assert!(videos.videos.lock().unwrap().is_empty());
@@ -593,10 +586,12 @@ mod tests {
             }],
         }
         .build();
-        service.create_playlist("PL1", "My Playlist").unwrap();
+        service
+            .create_playlist(pid("PL1"), pname("My Playlist"))
+            .unwrap();
         event_publisher.published.lock().unwrap().clear();
 
-        service.sync_playlist("PL1").unwrap();
+        service.sync_playlist(pid("PL1")).unwrap();
 
         let stored = videos.videos.lock().unwrap();
         assert_eq!(stored.len(), 1);
@@ -617,15 +612,17 @@ mod tests {
             current_videos: vec![],
         }
         .build();
-        service.create_playlist("PL1", "My Playlist").unwrap();
+        service
+            .create_playlist(pid("PL1"), pname("My Playlist"))
+            .unwrap();
         videos.videos.lock().unwrap().push(Video::create(
-            YoutubePlaylistId::new("PL1").unwrap(),
+            pid("PL1"),
             YoutubeVideoId::new("vid1").unwrap(),
             "Stale",
             fixed_timestamp(),
         ));
 
-        service.sync_playlist("PL1").unwrap();
+        service.sync_playlist(pid("PL1")).unwrap();
 
         assert!(videos.videos.lock().unwrap().is_empty());
     }
@@ -633,9 +630,11 @@ mod tests {
     #[test]
     fn it_should_always_schedule_the_next_sync_even_with_no_changes() {
         let (service, _playlists, _events, _videos, tasks) = ServiceBuilder::new().build();
-        service.create_playlist("PL1", "My Playlist").unwrap();
+        service
+            .create_playlist(pid("PL1"), pname("My Playlist"))
+            .unwrap();
 
-        service.sync_playlist("PL1").unwrap();
+        service.sync_playlist(pid("PL1")).unwrap();
 
         let scheduled = tasks.scheduled.lock().unwrap();
         assert_eq!(scheduled.len(), 1);

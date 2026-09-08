@@ -2,7 +2,10 @@ pub mod dto;
 
 use super::AppState;
 use super::error::error_response;
-use crate::domain::playlist::{CreatePlaylistError, CreatePlaylistOutcome, DeletePlaylistError};
+use crate::domain::playlist::{
+    CreatePlaylistError, CreatePlaylistOutcome, DeletePlaylistError, PlaylistName,
+    YoutubePlaylistId,
+};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -13,12 +16,18 @@ pub async fn create_playlist(
     State(state): State<AppState>,
     Json(request): Json<CreatePlaylistRequest>,
 ) -> Response {
-    let result = tokio::task::spawn_blocking(move || {
-        state
-            .playlist_service
-            .create_playlist(request.id, request.name)
-    })
-    .await;
+    let id = match YoutubePlaylistId::new(request.id) {
+        Ok(id) => id,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
+    };
+    let name = match PlaylistName::new(request.name) {
+        Ok(name) => name,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
+    };
+
+    let result =
+        tokio::task::spawn_blocking(move || state.playlist_service.create_playlist(id, name))
+            .await;
 
     match result {
         Ok(Ok(CreatePlaylistOutcome::Created(playlist))) => {
@@ -26,9 +35,6 @@ pub async fn create_playlist(
         }
         Ok(Ok(CreatePlaylistOutcome::AlreadyExisted(playlist))) => {
             (StatusCode::OK, Json(PlaylistResponse::from(playlist))).into_response()
-        }
-        Ok(Err(e @ CreatePlaylistError::InvalidInput(_))) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
         }
         Ok(Err(e @ CreatePlaylistError::YoutubePlaylistNotFound(_))) => {
             error_response(StatusCode::BAD_REQUEST, e.to_string())
@@ -44,12 +50,14 @@ pub async fn create_playlist(
 }
 
 pub async fn delete_playlist(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+    let id = match YoutubePlaylistId::new(id) {
+        Ok(id) => id,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
+    };
+
     match state.playlist_service.delete_playlist(id) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e @ DeletePlaylistError::NotFound(_)) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Err(e @ DeletePlaylistError::InvalidId(_)) => {
             error_response(StatusCode::BAD_REQUEST, e.to_string())
         }
         Err(e @ DeletePlaylistError::Repository(_)) => {

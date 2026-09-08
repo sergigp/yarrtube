@@ -1,4 +1,4 @@
-use crate::domain::playlist::PlaylistService;
+use crate::domain::playlist::{PlaylistService, YoutubePlaylistId};
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 
@@ -17,6 +17,9 @@ impl SyncPlaylistTask {
 impl TaskHandler for SyncPlaylistTask {
     fn handle(&self, payload: &str) -> anyhow::Result<()> {
         let playlist_id = Task::decode_sync_playlist_payload(payload)?;
+        let Ok(playlist_id) = YoutubePlaylistId::new(playlist_id) else {
+            return Ok(());
+        };
         self.playlist_service.sync_playlist(playlist_id)
     }
 }

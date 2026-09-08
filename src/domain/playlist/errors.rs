@@ -14,7 +14,6 @@ impl std::error::Error for PlaylistError {}
 
 #[derive(Debug)]
 pub enum CreatePlaylistError {
-    InvalidInput(PlaylistError),
     YoutubePlaylistNotFound(YoutubePlaylistId),
     Lookup(anyhow::Error),
     Repository(anyhow::Error),
@@ -23,7 +22,6 @@ pub enum CreatePlaylistError {
 impl fmt::Display for CreatePlaylistError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidInput(e) => write!(f, "{e}"),
             Self::YoutubePlaylistNotFound(id) => {
                 write!(
                     f,
@@ -40,7 +38,6 @@ impl std::error::Error for CreatePlaylistError {}
 
 #[derive(Debug)]
 pub enum DeletePlaylistError {
-    InvalidId(PlaylistError),
     NotFound(YoutubePlaylistId),
     Repository(anyhow::Error),
 }
@@ -48,7 +45,6 @@ pub enum DeletePlaylistError {
 impl fmt::Display for DeletePlaylistError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidId(e) => write!(f, "{e}"),
             Self::NotFound(id) => write!(f, "playlist {id} not found"),
             Self::Repository(e) => write!(f, "{e}"),
         }
