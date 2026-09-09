@@ -33,7 +33,6 @@ impl EventSubscriber for SyncPlaylistOnPlaylistCreated {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::event::DomainEvent;
     use crate::domain::playlist::{Playlist, PlaylistName, Quality};
     use crate::domain::task::Task;
     use crate::infrastructure::repositories::sqlite_event_repository::FakeEventPublisher;
@@ -74,18 +73,12 @@ mod tests {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         playlist_repository
-            .insert_with_event(
-                &Playlist::create(
-                    PlaylistId::new("PL1").unwrap(),
-                    PlaylistName::new("My Playlist").unwrap(),
-                    Quality::High,
-                    now,
-                ),
-                &DomainEvent::PlaylistCreated {
-                    playlist_id: "PL1".to_string(),
-                },
+            .insert(&Playlist::create(
+                PlaylistId::new("PL1").unwrap(),
+                PlaylistName::new("My Playlist").unwrap(),
+                Quality::High,
                 now,
-            )
+            ))
             .unwrap();
         let task_repository = Arc::new(FakeTaskRepository::default());
 

@@ -69,7 +69,6 @@ impl EventSubscriber for DownloadVideoOnVideoAdded {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::event::DomainEvent;
     use crate::domain::playlist::{Playlist, PlaylistName, Quality};
     use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
@@ -83,18 +82,12 @@ mod tests {
     fn playlist_repository_with(id: &str, quality: Quality) -> Arc<FakePlaylistRepository> {
         let repository = Arc::new(FakePlaylistRepository::default());
         repository
-            .insert_with_event(
-                &Playlist::create(
-                    PlaylistId::new(id).unwrap(),
-                    PlaylistName::new("My Playlist").unwrap(),
-                    quality,
-                    fixed_timestamp(),
-                ),
-                &DomainEvent::PlaylistCreated {
-                    playlist_id: id.to_string(),
-                },
+            .insert(&Playlist::create(
+                PlaylistId::new(id).unwrap(),
+                PlaylistName::new("My Playlist").unwrap(),
+                quality,
                 fixed_timestamp(),
-            )
+            ))
             .unwrap();
         repository
     }

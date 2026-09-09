@@ -61,18 +61,12 @@ mod tests {
     ) {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository
-            .insert_with_event(
-                &Playlist::create(
-                    PlaylistId::new("PL1").unwrap(),
-                    PlaylistName::new("My Playlist").unwrap(),
-                    Quality::High,
-                    fixed_timestamp(),
-                ),
-                &DomainEvent::PlaylistCreated {
-                    playlist_id: "PL1".to_string(),
-                },
+            .insert(&Playlist::create(
+                PlaylistId::new("PL1").unwrap(),
+                PlaylistName::new("My Playlist").unwrap(),
+                Quality::High,
                 fixed_timestamp(),
-            )
+            ))
             .unwrap();
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
@@ -152,6 +146,32 @@ mod tests {
                 video_id: "vid1".to_string(),
             }]
         );
+    }
+
+    #[test]
+    fn it_should_leave_an_existing_videos_status_unchanged_while_refreshing_its_title() {
+        let (handler, event_publisher, video_repository, _tasks) =
+            handler_with_playlist(vec![PlaylistVideo {
+                video_id: "vid1".to_string(),
+                title: "Renamed".to_string(),
+            }]);
+        video_repository.videos.lock().unwrap().push(
+            Video::create(
+                PlaylistId::new("PL1").unwrap(),
+                VideoId::new("vid1").unwrap(),
+                "Original",
+                fixed_timestamp(),
+            )
+            .start_download(fixed_timestamp()),
+        );
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        let stored = video_repository.videos.lock().unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].title, "Renamed");
+        assert_eq!(stored[0].status, VideoStatus::InProgress);
+        assert!(event_publisher.published.lock().unwrap().is_empty());
     }
 
     #[test]

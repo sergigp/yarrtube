@@ -37,7 +37,6 @@ impl TaskHandler for DownloadVideoTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::event::DomainEvent;
     use crate::domain::playlist::{Playlist, PlaylistName, Quality};
     use crate::domain::video::{Video, VideoStatus};
     use crate::infrastructure::repositories::sqlite_event_repository::FakeEventPublisher;
@@ -71,22 +70,16 @@ mod tests {
     fn handler_with_seeded_video(succeeds: bool) -> (DownloadVideoTask, Arc<FakeVideoRepository>) {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository
-            .insert_with_event(
-                &Playlist::create(
-                    PlaylistId::new("PL1").unwrap(),
-                    PlaylistName::new("My Playlist").unwrap(),
-                    Quality::High,
-                    fixed_timestamp(),
-                ),
-                &DomainEvent::PlaylistCreated {
-                    playlist_id: "PL1".to_string(),
-                },
+            .insert(&Playlist::create(
+                PlaylistId::new("PL1").unwrap(),
+                PlaylistName::new("My Playlist").unwrap(),
+                Quality::High,
                 fixed_timestamp(),
-            )
+            ))
             .unwrap();
         let video_repository = Arc::new(FakeVideoRepository::default());
         video_repository
-            .upsert(&Video::create(
+            .save(&Video::create(
                 PlaylistId::new("PL1").unwrap(),
                 VideoId::new("vid1").unwrap(),
                 "My Video",

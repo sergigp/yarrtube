@@ -68,28 +68,33 @@ impl VideoService {
             .youtube_playlist_items_repository
             .list_current_videos(&id)?;
         let stored_videos = self.video_repository.list_for_playlist(&id)?;
-        let stored_ids: HashSet<&str> = stored_videos.iter().map(|v| v.video_id.as_str()).collect();
 
         let now = self.clock.now();
         let mut current_ids = Vec::with_capacity(current_videos.len());
         for video in &current_videos {
             let video_id = VideoId::new(&video.video_id)?;
-            let is_new = !stored_ids.contains(video_id.as_str());
+            let existing = self.video_repository.find(&id, &video_id)?;
+            let is_new = existing.is_none();
 
-            self.video_repository.upsert(&Video::create(
-                id.clone(),
-                video_id.clone(),
-                video.title.clone(),
-                now,
-            ))?;
+            let to_save = match existing {
+                None => {
+                    info!(
+                        playlist_id = %id,
+                        video_id = %video_id,
+                        title = %video.title,
+                        "added video to playlist"
+                    );
+                    Video::create(id.clone(), video_id.clone(), video.title.clone(), now)
+                }
+                Some(stored) => Video {
+                    title: video.title.clone(),
+                    updated_at: now,
+                    ..stored
+                },
+            };
+            self.video_repository.save(&to_save)?;
 
             if is_new {
-                info!(
-                    playlist_id = %id,
-                    video_id = %video_id,
-                    title = %video.title,
-                    "added video to playlist"
-                );
                 self.event_publisher.publish(&DomainEvent::VideoAdded {
                     playlist_id: id.as_str().to_string(),
                     video_id: video_id.as_str().to_string(),
@@ -107,9 +112,9 @@ impl VideoService {
                     video_id = %stored.video_id,
                     "removing video from playlist (no longer on YouTube)"
                 );
+                self.video_repository.delete(&id, &stored.video_id)?;
             }
         }
-        self.video_repository.delete_not_in(&id, &current_ids)?;
 
         let next_run_at = now + chrono::Duration::seconds(self.sync_interval_seconds);
         self.task_repository.schedule(
@@ -230,24 +235,18 @@ mod tests {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         if seed_playlist {
             playlist_repository
-                .insert_with_event(
-                    &Playlist::create(
-                        playlist_id(),
-                        PlaylistName::new("My Playlist").unwrap(),
-                        Quality::High,
-                        fixed_timestamp(),
-                    ),
-                    &DomainEvent::PlaylistCreated {
-                        playlist_id: "PL1".to_string(),
-                    },
+                .insert(&Playlist::create(
+                    playlist_id(),
+                    PlaylistName::new("My Playlist").unwrap(),
+                    Quality::High,
                     fixed_timestamp(),
-                )
+                ))
                 .unwrap();
         }
         let video_repository = Arc::new(FakeVideoRepository::default());
         if seed_video {
             video_repository
-                .upsert(&Video::create(
+                .save(&Video::create(
                     playlist_id(),
                     video_id(),
                     "My Video",
@@ -347,23 +346,17 @@ mod tests {
     fn it_should_pass_the_sanitized_title_as_the_desired_filename_to_the_downloader() {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository
-            .insert_with_event(
-                &Playlist::create(
-                    playlist_id(),
-                    PlaylistName::new("My Playlist").unwrap(),
-                    Quality::High,
-                    fixed_timestamp(),
-                ),
-                &DomainEvent::PlaylistCreated {
-                    playlist_id: "PL1".to_string(),
-                },
+            .insert(&Playlist::create(
+                playlist_id(),
+                PlaylistName::new("My Playlist").unwrap(),
+                Quality::High,
                 fixed_timestamp(),
-            )
+            ))
             .unwrap();
         let video_repository = Arc::new(FakeVideoRepository::default());
         let messy_title = "My: Messy / Title?";
         video_repository
-            .upsert(&Video::create(
+            .save(&Video::create(
                 playlist_id(),
                 video_id(),
                 messy_title,
