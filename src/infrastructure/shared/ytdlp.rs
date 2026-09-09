@@ -8,14 +8,29 @@ pub fn ensure_output_dir(output_path: &Path) -> Result<()> {
         .map_err(|e| anyhow!("Failed to create output directory {output_path:?}: {e}"))
 }
 
-/// Runs `yt-dlp <video_url>` in `output_path`. Returns `Ok(true)`/`Ok(false)` for a
-/// completed process based on its exit status. Returns `Err` only when `yt-dlp`
-/// itself could not be spawned (e.g. not found on `PATH`) — a systemic setup
-/// problem, distinct from a single video failing to download.
-pub fn download_video(video_url: &str, output_path: &Path) -> Result<bool> {
-    println!("Running: yt-dlp {video_url} (in {})", output_path.display());
+/// Runs `yt-dlp <video_url>` in `output_path`, saving it under
+/// `desired_filename` (extension chosen by `yt-dlp`). If a file with that
+/// stem already exists in `output_path`, `video_id` is appended to
+/// disambiguate. Returns `Ok(true)`/`Ok(false)` for a completed process based
+/// on its exit status. Returns `Err` only when `yt-dlp` itself could not be
+/// spawned (e.g. not found on `PATH`) — a systemic setup problem, distinct
+/// from a single video failing to download.
+pub fn download_video(
+    video_url: &str,
+    desired_filename: &str,
+    video_id: &str,
+    output_path: &Path,
+) -> Result<bool> {
+    let base = resolve_collision(output_path, desired_filename, video_id);
+    let output_template = format!("{base}.%(ext)s");
+    println!(
+        "Running: yt-dlp {video_url} -o \"{output_template}\" (in {})",
+        output_path.display()
+    );
     match Command::new("yt-dlp")
         .arg(video_url)
+        .arg("-o")
+        .arg(&output_template)
         .current_dir(output_path)
         .status()
     {
@@ -24,6 +39,25 @@ pub fn download_video(video_url: &str, output_path: &Path) -> Result<bool> {
             "`yt-dlp` was not found on PATH. Install yt-dlp and make sure it is available before running yarrtube."
         )),
         Err(e) => Err(anyhow!("Failed to run yt-dlp for {video_url}: {e}")),
+    }
+}
+
+/// Returns `desired_filename` unchanged, unless a file whose stem already
+/// matches it exists in `output_path` — the extension isn't known until
+/// `yt-dlp` picks a format, so the check is by stem, not exact path.
+fn resolve_collision(output_path: &Path, desired_filename: &str, video_id: &str) -> String {
+    let collides = std::fs::read_dir(output_path)
+        .map(|entries| {
+            entries.flatten().any(|entry| {
+                entry.path().file_stem().and_then(|s| s.to_str()) == Some(desired_filename)
+            })
+        })
+        .unwrap_or(false);
+
+    if collides {
+        format!("{desired_filename} [{video_id}]")
+    } else {
+        desired_filename.to_string()
     }
 }
 
@@ -56,12 +90,15 @@ pub(crate) mod test_support {
     }
 
     /// Puts a fake `yt-dlp` script (exiting with `exit_code`) on `PATH` for
-    /// the duration of the guard, restoring the original `PATH` on drop.
+    /// the duration of the guard, restoring the original `PATH` on drop. The
+    /// script also records the arguments it was invoked with, retrievable
+    /// via `captured_args`.
     #[cfg(unix)]
     pub(crate) struct FakeYtDlpOnPath {
         _lock: std::sync::MutexGuard<'static, ()>,
         original_path: String,
         _bin_dir: PathBuf,
+        captured_args_path: PathBuf,
     }
 
     #[cfg(unix)]
@@ -75,7 +112,15 @@ pub(crate) mod test_support {
 
             let bin_dir = unique_temp_dir("fake-ytdlp-bin");
             let script_path = bin_dir.join("yt-dlp");
-            fs::write(&script_path, format!("#!/bin/sh\nexit {exit_code}\n")).unwrap();
+            let captured_args_path = bin_dir.join("captured-args");
+            fs::write(
+                &script_path,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\nexit {exit_code}\n",
+                    captured_args_path.display()
+                ),
+            )
+            .unwrap();
             fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
 
             let original_path = std::env::var("PATH").unwrap_or_default();
@@ -88,7 +133,17 @@ pub(crate) mod test_support {
                 _lock: lock,
                 original_path,
                 _bin_dir: bin_dir,
+                captured_args_path,
             }
+        }
+
+        /// The arguments the fake `yt-dlp` was last invoked with, one per line.
+        pub(crate) fn captured_args(&self) -> Vec<String> {
+            fs::read_to_string(&self.captured_args_path)
+                .unwrap_or_default()
+                .lines()
+                .map(str::to_string)
+                .collect()
         }
     }
 
@@ -115,13 +170,54 @@ mod tests {
 
         {
             let _guard = FakeYtDlpOnPath::with_exit_code(0);
-            assert!(download_video("https://example.com/video", &output_dir).unwrap());
+            assert!(
+                download_video("https://example.com/video", "My Video", "vid1", &output_dir)
+                    .unwrap()
+            );
         }
         {
             let _guard = FakeYtDlpOnPath::with_exit_code(1);
-            assert!(!download_video("https://example.com/video", &output_dir).unwrap());
+            assert!(
+                !download_video("https://example.com/video", "My Video", "vid1", &output_dir)
+                    .unwrap()
+            );
         }
 
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_pass_the_desired_filename_as_the_output_template_when_there_is_no_collision() {
+        use test_support::{FakeYtDlpOnPath, unique_temp_dir};
+
+        let output_dir = unique_temp_dir("ytdlp-output-no-collision");
+        let guard = FakeYtDlpOnPath::with_exit_code(0);
+
+        download_video("https://example.com/video", "My Video", "vid1", &output_dir).unwrap();
+
+        assert_eq!(
+            guard.captured_args(),
+            vec!["https://example.com/video", "-o", "My Video.%(ext)s",]
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_append_the_video_id_to_the_output_template_on_collision() {
+        use test_support::{FakeYtDlpOnPath, unique_temp_dir};
+
+        let output_dir = unique_temp_dir("ytdlp-output-collision");
+        std::fs::write(output_dir.join("My Video.mp4"), b"").unwrap();
+        let guard = FakeYtDlpOnPath::with_exit_code(0);
+
+        download_video("https://example.com/video", "My Video", "vid1", &output_dir).unwrap();
+
+        assert_eq!(
+            guard.captured_args(),
+            vec!["https://example.com/video", "-o", "My Video [vid1].%(ext)s",]
+        );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
