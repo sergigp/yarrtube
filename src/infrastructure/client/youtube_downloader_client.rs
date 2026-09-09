@@ -1,3 +1,4 @@
+use crate::domain::video::VideoFilename;
 use crate::infrastructure::shared::youtube_api::Video;
 use crate::infrastructure::shared::ytdlp::{download_video, ensure_output_dir};
 use anyhow::Result;
@@ -25,9 +26,10 @@ impl YoutubeDownloaderClient for YtDlpDownloaderClient {
         for video in videos {
             println!("Downloading: {} ({})", video.title, video.url);
 
+            let filename = VideoFilename::from_title(&video.title);
             let size_before = dir_size(output_path);
             let start = Instant::now();
-            let result = download_video(&video.url, output_path)?;
+            let result = download_video(&video.url, filename.as_str(), &video.id, output_path)?;
             let elapsed = start.elapsed().as_secs_f64().max(0.001);
             let downloaded_bytes = dir_size(output_path).saturating_sub(size_before);
             let speed = downloaded_bytes as f64 / elapsed;
@@ -72,4 +74,40 @@ fn format_bytes(bytes: u64) -> String {
         unit += 1;
     }
     format!("{size:.2} {}", UNITS[unit])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::shared::ytdlp::test_support::{FakeYtDlpOnPath, unique_temp_dir};
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_download_each_video_using_its_sanitized_title_as_the_filename() {
+        let output_dir = unique_temp_dir("youtube-downloader-client");
+        let guard = FakeYtDlpOnPath::with_exit_code(0);
+
+        let messy_title = "My: Messy / Title?";
+        let videos = vec![Video {
+            id: "vid1".into(),
+            url: "https://www.youtube.com/watch?v=vid1".into(),
+            title: messy_title.into(),
+        }];
+
+        let summary = YtDlpDownloaderClient
+            .download_all(&videos, &output_dir)
+            .unwrap();
+
+        assert_eq!(summary.succeeded, 1);
+        let expected_filename = VideoFilename::from_title(messy_title);
+        assert_eq!(
+            guard.captured_args(),
+            vec![
+                videos[0].url.clone(),
+                "-o".to_string(),
+                format!("{}.%(ext)s", expected_filename.as_str()),
+            ]
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
 }

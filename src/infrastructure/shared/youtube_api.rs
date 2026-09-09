@@ -30,6 +30,7 @@ struct ResourceId {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Video {
+    pub id: String,
     pub url: String,
     pub title: String,
 }
@@ -69,6 +70,7 @@ pub fn fetch_playlist_items_page(
                 "https://www.youtube.com/watch?v={}",
                 item.snippet.resource_id.video_id
             ),
+            id: item.snippet.resource_id.video_id,
             title: item.snippet.title,
         })
         .collect();
@@ -105,10 +107,12 @@ mod tests {
                 None => (
                     vec![
                         Video {
+                            id: "1".into(),
                             url: "https://www.youtube.com/watch?v=1".into(),
                             title: "One".into(),
                         },
                         Video {
+                            id: "2".into(),
                             url: "https://www.youtube.com/watch?v=2".into(),
                             title: "Two".into(),
                         },
@@ -117,6 +121,7 @@ mod tests {
                 ),
                 Some("page2") => (
                     vec![Video {
+                        id: "3".into(),
                         url: "https://www.youtube.com/watch?v=3".into(),
                         title: "Three".into(),
                     }],
@@ -141,14 +146,17 @@ mod tests {
             all_videos,
             vec![
                 Video {
+                    id: "1".into(),
                     url: "https://www.youtube.com/watch?v=1".into(),
                     title: "One".into(),
                 },
                 Video {
+                    id: "2".into(),
                     url: "https://www.youtube.com/watch?v=2".into(),
                     title: "Two".into(),
                 },
                 Video {
+                    id: "3".into(),
                     url: "https://www.youtube.com/watch?v=3".into(),
                     title: "Three".into(),
                 },

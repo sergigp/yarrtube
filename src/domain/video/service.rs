@@ -1,4 +1,5 @@
 use super::video::Video;
+use super::video_filename::VideoFilename;
 use crate::domain::event::DomainEvent;
 use crate::domain::shared::{PlaylistId, VideoId};
 use crate::domain::task::Task;
@@ -141,14 +142,18 @@ impl VideoService {
             return Ok(());
         };
 
+        let filename = VideoFilename::from_title(&video.title);
         let started = video.start_download(self.clock.now());
         self.video_repository.update(&started)?;
 
         let output_dir = Path::new(&self.videos_path).join(playlist.name.as_str());
         info!(playlist_id = %playlist_id, video_id = %video_id, "downloading video");
-        let outcome = self
-            .video_downloader_repository
-            .download(&video_id.to_url(), &output_dir);
+        let outcome = self.video_downloader_repository.download(
+            &video_id.to_url(),
+            filename.as_str(),
+            video_id.as_str(),
+            &output_dir,
+        );
 
         let (succeeded, error) = match outcome {
             Ok(succeeded) => (succeeded, None),
@@ -332,5 +337,60 @@ mod tests {
         let result = service.download_video(playlist_id(), video_id(), false);
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn it_should_pass_the_sanitized_title_as_the_desired_filename_to_the_downloader() {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository
+            .insert_with_event(
+                &Playlist::create(
+                    playlist_id(),
+                    PlaylistName::new("My Playlist").unwrap(),
+                    fixed_timestamp(),
+                ),
+                &DomainEvent::PlaylistCreated {
+                    playlist_id: "PL1".to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let messy_title = "My: Messy / Title?";
+        video_repository
+            .upsert(&Video::create(
+                playlist_id(),
+                video_id(),
+                messy_title,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+
+        let service = VideoService::new(
+            playlist_repository,
+            video_repository,
+            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeEventPublisher::default()),
+            Arc::new(FakeTaskRepository::default()),
+            downloader.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        );
+
+        service
+            .download_video(playlist_id(), video_id(), false)
+            .unwrap();
+
+        let calls = downloader.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        let (_, desired_filename, id, _) = &calls[0];
+        assert_eq!(
+            desired_filename,
+            VideoFilename::from_title(messy_title).as_str()
+        );
+        assert_ne!(desired_filename, messy_title);
+        assert_eq!(id, video_id().as_str());
     }
 }

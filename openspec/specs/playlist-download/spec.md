@@ -46,7 +46,7 @@ The system SHALL resolve a playlist ID into an ordered list of member videos (UR
 - **THEN** the system reports that no videos were found and exits successfully without invoking `yt-dlp`
 
 ### Requirement: Sequential Video Download
-The system SHALL download each resolved video by invoking a locally installed `yt-dlp` executable, one video at a time in playlist order, saving output into the given output directory. The system SHALL NOT pass any format/quality selection flags in this version, relying on `yt-dlp`'s own default behavior.
+The system SHALL download each resolved video by invoking a locally installed `yt-dlp` executable, one video at a time in playlist order, saving output into the given output directory using the filename derived by the `video-naming` capability. The system SHALL NOT pass any format/quality selection flags in this version, relying on `yt-dlp`'s own default behavior for format and quality selection only.
 
 #### Scenario: Multiple videos downloaded in order
 - **WHEN** the resolved playlist contains multiple videos
