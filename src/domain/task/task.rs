@@ -10,6 +10,7 @@ pub enum Task {
     DownloadVideo {
         playlist_id: String,
         video_id: String,
+        quality: String,
     },
 }
 
@@ -22,6 +23,7 @@ struct SyncPlaylistPayload {
 struct DownloadVideoPayload {
     playlist_id: String,
     video_id: String,
+    quality: String,
 }
 
 impl Task {
@@ -38,7 +40,8 @@ impl Task {
             Self::DownloadVideo {
                 playlist_id,
                 video_id,
-            } => json!({ "playlist_id": playlist_id, "video_id": video_id }),
+                quality,
+            } => json!({ "playlist_id": playlist_id, "video_id": video_id, "quality": quality }),
         }
     }
 
@@ -51,11 +54,13 @@ impl Task {
     }
 
     /// Decodes a `download_video` task's raw JSON payload, as handed to a
-    /// `TaskHandler`, back into the playlist and video IDs it targets.
-    pub fn decode_download_video_payload(payload: &str) -> Result<(String, String), TaskError> {
+    /// `TaskHandler`, back into the playlist ID, video ID, and quality it targets.
+    pub fn decode_download_video_payload(
+        payload: &str,
+    ) -> Result<(String, String, String), TaskError> {
         let parsed: DownloadVideoPayload = serde_json::from_str(payload)
             .map_err(|e| TaskError(format!("invalid download_video payload: {e}")))?;
-        Ok((parsed.playlist_id, parsed.video_id))
+        Ok((parsed.playlist_id, parsed.video_id, parsed.quality))
     }
 }
 
@@ -94,27 +99,30 @@ mod tests {
         let task = Task::DownloadVideo {
             playlist_id: "PL1".to_string(),
             video_id: "vid1".to_string(),
+            quality: "high".to_string(),
         };
 
         assert_eq!(task.task_type(), "download_video");
         assert_eq!(
             task.payload(),
-            json!({ "playlist_id": "PL1", "video_id": "vid1" })
+            json!({ "playlist_id": "PL1", "video_id": "vid1", "quality": "high" })
         );
     }
 
     #[test]
-    fn it_should_decode_a_download_video_payload_back_into_its_ids() {
+    fn it_should_decode_a_download_video_payload_back_into_its_ids_and_quality() {
         let task = Task::DownloadVideo {
             playlist_id: "PL1".to_string(),
             video_id: "vid1".to_string(),
+            quality: "high".to_string(),
         };
 
-        let (playlist_id, video_id) =
+        let (playlist_id, video_id, quality) =
             Task::decode_download_video_payload(&task.payload().to_string()).unwrap();
 
         assert_eq!(playlist_id, "PL1");
         assert_eq!(video_id, "vid1");
+        assert_eq!(quality, "high");
     }
 
     #[test]

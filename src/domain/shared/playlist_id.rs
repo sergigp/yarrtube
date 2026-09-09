@@ -19,10 +19,6 @@ impl PlaylistId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-
-    pub fn to_url(&self) -> String {
-        format!("https://www.youtube.com/playlist?list={}", self.0)
-    }
 }
 
 impl fmt::Display for PlaylistId {
@@ -53,14 +49,5 @@ mod tests {
     fn it_should_reject_an_empty_id() {
         assert!(PlaylistId::new("").is_err());
         assert!(PlaylistId::new("   ").is_err());
-    }
-
-    #[test]
-    fn it_should_build_the_youtube_playlist_url() {
-        let id = PlaylistId::new("PLabc123").unwrap();
-        assert_eq!(
-            id.to_url(),
-            "https://www.youtube.com/playlist?list=PLabc123"
-        );
     }
 }

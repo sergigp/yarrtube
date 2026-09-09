@@ -3,7 +3,7 @@ pub mod dto;
 use super::AppState;
 use super::error::error_response;
 use crate::domain::playlist::{
-    CreatePlaylistError, CreatePlaylistOutcome, DeletePlaylistError, PlaylistName,
+    CreatePlaylistError, CreatePlaylistOutcome, DeletePlaylistError, PlaylistName, Quality,
 };
 use crate::domain::shared::PlaylistId;
 use axum::Json;
@@ -24,9 +24,23 @@ pub async fn create_playlist(
         Ok(name) => name,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
     };
+    let quality = match request.quality {
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "Quality must be one of \"high\", \"mid\", or \"low\" (missing)".to_string(),
+            );
+        }
+        Some(quality) => match Quality::new(quality) {
+            Ok(quality) => quality,
+            Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
+        },
+    };
 
-    let result =
-        tokio::task::spawn_blocking(move || state.playlist_service.create_playlist(id, name)).await;
+    let result = tokio::task::spawn_blocking(move || {
+        state.playlist_service.create_playlist(id, name, quality)
+    })
+    .await;
 
     match result {
         Ok(Ok(CreatePlaylistOutcome::Created(playlist))) => {
@@ -117,6 +131,21 @@ mod tests {
     }
 
     fn create_request(id: &str, name: &str) -> Request<Body> {
+        create_request_with_quality(id, name, "high")
+    }
+
+    fn create_request_with_quality(id: &str, name: &str, quality: &str) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri("/playlists")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::json!({ "id": id, "name": name, "quality": quality }).to_string(),
+            ))
+            .unwrap()
+    }
+
+    fn create_request_missing_quality(id: &str, name: &str) -> Request<Body> {
         Request::builder()
             .method("POST")
             .uri("/playlists")
@@ -140,6 +169,7 @@ mod tests {
         let body = body_json(response).await;
         assert_eq!(body["id"], "PL1");
         assert_eq!(body["name"], "My Playlist");
+        assert_eq!(body["quality"], "high");
         assert_eq!(
             body["created_at"],
             fixed_timestamp().to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
@@ -172,6 +202,50 @@ mod tests {
         let response = router.oneshot(create_request("PL1", "")).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_quality_is_missing() {
+        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+
+        let response = router
+            .oneshot(create_request_missing_quality("PL1", "My Playlist"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_quality_is_invalid() {
+        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+
+        let response = router
+            .oneshot(create_request_with_quality("PL1", "My Playlist", "ultra"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_the_existing_quality_when_creating_a_duplicate_with_a_different_quality()
+     {
+        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+        router
+            .clone()
+            .oneshot(create_request_with_quality("PL1", "My Playlist", "high"))
+            .await
+            .unwrap();
+
+        let response = router
+            .oneshot(create_request_with_quality("PL1", "My Playlist", "low"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        assert_eq!(body["quality"], "high");
     }
 
     #[tokio::test]
@@ -331,6 +405,10 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         let body = body_json(response).await;
-        assert_eq!(body.as_array().unwrap().len(), 2);
+        let playlists = body.as_array().unwrap();
+        assert_eq!(playlists.len(), 2);
+        for playlist in playlists {
+            assert_eq!(playlist["quality"], "high");
+        }
     }
 }

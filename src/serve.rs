@@ -135,7 +135,7 @@ fn build_application() -> Result<Application> {
         Arc::new(SystemClock),
     );
     let video_service = VideoService::new(
-        playlist_repository,
+        playlist_repository.clone(),
         Arc::new(video_repository),
         Arc::new(YoutubeApiPlaylistItemsRepository::new(youtube_api_key())),
         event_repository.clone() as Arc<dyn EventPublisher>,
@@ -150,6 +150,7 @@ fn build_application() -> Result<Application> {
         event_repository as Arc<dyn EventRepository>,
         subscribers::registry(
             video_service.clone(),
+            playlist_repository,
             task_repository.clone() as Arc<dyn TaskRepository>,
             Arc::new(SystemClock),
         ),

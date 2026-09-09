@@ -1,3 +1,4 @@
+use crate::domain::playlist::Quality;
 use crate::domain::shared::{PlaylistId, VideoId};
 use crate::domain::task::Task;
 use crate::domain::video::VideoService;
@@ -18,15 +19,18 @@ impl DownloadVideoTask {
 
 impl TaskHandler for DownloadVideoTask {
     fn handle(&self, payload: &str, is_last_attempt: bool) -> anyhow::Result<()> {
-        let (playlist_id, video_id) = Task::decode_download_video_payload(payload)?;
+        let (playlist_id, video_id, quality) = Task::decode_download_video_payload(payload)?;
         let Ok(playlist_id) = PlaylistId::new(playlist_id) else {
             return Ok(());
         };
         let Ok(video_id) = VideoId::new(video_id) else {
             return Ok(());
         };
+        let Ok(quality) = Quality::new(quality) else {
+            return Ok(());
+        };
         self.video_service
-            .download_video(playlist_id, video_id, is_last_attempt)
+            .download_video(playlist_id, video_id, quality, is_last_attempt)
     }
 }
 
@@ -34,7 +38,7 @@ impl TaskHandler for DownloadVideoTask {
 mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
-    use crate::domain::playlist::{Playlist, PlaylistName};
+    use crate::domain::playlist::{Playlist, PlaylistName, Quality};
     use crate::domain::video::{Video, VideoStatus};
     use crate::infrastructure::repositories::sqlite_event_repository::FakeEventPublisher;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
@@ -58,6 +62,7 @@ mod tests {
         Task::DownloadVideo {
             playlist_id: playlist_id.to_string(),
             video_id: video_id.to_string(),
+            quality: "high".to_string(),
         }
         .payload()
         .to_string()
@@ -70,6 +75,7 @@ mod tests {
                 &Playlist::create(
                     PlaylistId::new("PL1").unwrap(),
                     PlaylistName::new("My Playlist").unwrap(),
+                    Quality::High,
                     fixed_timestamp(),
                 ),
                 &DomainEvent::PlaylistCreated {

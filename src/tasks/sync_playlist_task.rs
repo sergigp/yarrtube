@@ -29,7 +29,7 @@ impl TaskHandler for SyncPlaylistTask {
 mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
-    use crate::domain::playlist::{Playlist, PlaylistName};
+    use crate::domain::playlist::{Playlist, PlaylistName, Quality};
     use crate::domain::shared::VideoId;
     use crate::domain::video::{Video, VideoStatus};
     use crate::infrastructure::repositories::sqlite_event_repository::FakeEventPublisher;
@@ -65,6 +65,7 @@ mod tests {
                 &Playlist::create(
                     PlaylistId::new("PL1").unwrap(),
                     PlaylistName::new("My Playlist").unwrap(),
+                    Quality::High,
                     fixed_timestamp(),
                 ),
                 &DomainEvent::PlaylistCreated {

@@ -1,3 +1,4 @@
+use crate::domain::playlist::Quality;
 use anyhow::{Result, anyhow};
 use std::io;
 use std::path::Path;
@@ -8,7 +9,27 @@ pub fn ensure_output_dir(output_path: &Path) -> Result<()> {
         .map_err(|e| anyhow!("Failed to create output directory {output_path:?}: {e}"))
 }
 
-/// Runs `yt-dlp <video_url>` in `output_path`, saving it under
+/// Maps a playlist's `quality` tier to the `yt-dlp` args that select its
+/// resolution cap while softly preferring mp4/h264/aac (falling back to the
+/// best available stream instead of hard-failing when no such stream
+/// exists) — see design.md's "yt-dlp selector shape per tier" decision.
+pub fn args_for_quality(quality: Quality) -> Vec<String> {
+    let format = match quality {
+        Quality::High => "bv*+ba/b".to_string(),
+        Quality::Mid => "bv*[height<=720]+ba/b[height<=720]".to_string(),
+        Quality::Low => "bv*[height<=480]+ba/b[height<=480]".to_string(),
+    };
+    vec![
+        "-f".to_string(),
+        format,
+        "-S".to_string(),
+        "ext:mp4:m4a".to_string(),
+        "--merge-output-format".to_string(),
+        "mp4".to_string(),
+    ]
+}
+
+/// Runs `yt-dlp <args> <video_url>` in `output_path`, saving it under
 /// `desired_filename` (extension chosen by `yt-dlp`). If a file with that
 /// stem already exists in `output_path`, `video_id` is appended to
 /// disambiguate. Returns `Ok(true)`/`Ok(false)` for a completed process based
@@ -19,15 +40,19 @@ pub fn download_video(
     video_url: &str,
     desired_filename: &str,
     video_id: &str,
+    quality: Quality,
     output_path: &Path,
 ) -> Result<bool> {
     let base = resolve_collision(output_path, desired_filename, video_id);
     let output_template = format!("{base}.%(ext)s");
+    let args = args_for_quality(quality);
     println!(
-        "Running: yt-dlp {video_url} -o \"{output_template}\" (in {})",
+        "Running: yt-dlp {} {video_url} -o \"{output_template}\" (in {})",
+        args.join(" "),
         output_path.display()
     );
     match Command::new("yt-dlp")
+        .args(&args)
         .arg(video_url)
         .arg("-o")
         .arg(&output_template)
@@ -171,15 +196,27 @@ mod tests {
         {
             let _guard = FakeYtDlpOnPath::with_exit_code(0);
             assert!(
-                download_video("https://example.com/video", "My Video", "vid1", &output_dir)
-                    .unwrap()
+                download_video(
+                    "https://example.com/video",
+                    "My Video",
+                    "vid1",
+                    Quality::High,
+                    &output_dir
+                )
+                .unwrap()
             );
         }
         {
             let _guard = FakeYtDlpOnPath::with_exit_code(1);
             assert!(
-                !download_video("https://example.com/video", "My Video", "vid1", &output_dir)
-                    .unwrap()
+                !download_video(
+                    "https://example.com/video",
+                    "My Video",
+                    "vid1",
+                    Quality::High,
+                    &output_dir
+                )
+                .unwrap()
             );
         }
 
@@ -194,12 +231,22 @@ mod tests {
         let output_dir = unique_temp_dir("ytdlp-output-no-collision");
         let guard = FakeYtDlpOnPath::with_exit_code(0);
 
-        download_video("https://example.com/video", "My Video", "vid1", &output_dir).unwrap();
+        download_video(
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+        )
+        .unwrap();
 
-        assert_eq!(
-            guard.captured_args(),
-            vec!["https://example.com/video", "-o", "My Video.%(ext)s",]
-        );
+        let mut expected = args_for_quality(Quality::High);
+        expected.extend([
+            "https://example.com/video".to_string(),
+            "-o".to_string(),
+            "My Video.%(ext)s".to_string(),
+        ]);
+        assert_eq!(guard.captured_args(), expected);
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
@@ -212,13 +259,68 @@ mod tests {
         std::fs::write(output_dir.join("My Video.mp4"), b"").unwrap();
         let guard = FakeYtDlpOnPath::with_exit_code(0);
 
-        download_video("https://example.com/video", "My Video", "vid1", &output_dir).unwrap();
+        download_video(
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+        )
+        .unwrap();
 
-        assert_eq!(
-            guard.captured_args(),
-            vec!["https://example.com/video", "-o", "My Video [vid1].%(ext)s",]
-        );
+        let mut expected = args_for_quality(Quality::High);
+        expected.extend([
+            "https://example.com/video".to_string(),
+            "-o".to_string(),
+            "My Video [vid1].%(ext)s".to_string(),
+        ]);
+        assert_eq!(guard.captured_args(), expected);
         std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_map_high_quality_to_an_uncapped_selector() {
+        assert_eq!(
+            args_for_quality(Quality::High),
+            vec![
+                "-f".to_string(),
+                "bv*+ba/b".to_string(),
+                "-S".to_string(),
+                "ext:mp4:m4a".to_string(),
+                "--merge-output-format".to_string(),
+                "mp4".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_map_mid_quality_to_a_720p_capped_selector() {
+        assert_eq!(
+            args_for_quality(Quality::Mid),
+            vec![
+                "-f".to_string(),
+                "bv*[height<=720]+ba/b[height<=720]".to_string(),
+                "-S".to_string(),
+                "ext:mp4:m4a".to_string(),
+                "--merge-output-format".to_string(),
+                "mp4".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_map_low_quality_to_a_480p_capped_selector() {
+        assert_eq!(
+            args_for_quality(Quality::Low),
+            vec![
+                "-f".to_string(),
+                "bv*[height<=480]+ba/b[height<=480]".to_string(),
+                "-S".to_string(),
+                "ext:mp4:m4a".to_string(),
+                "--merge-output-format".to_string(),
+                "mp4".to_string(),
+            ]
+        );
     }
 
     #[test]
