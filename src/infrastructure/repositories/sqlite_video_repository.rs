@@ -2,11 +2,12 @@ use crate::domain::shared::{PlaylistId, VideoId};
 use crate::domain::video::{Video, VideoStatus};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, params, params_from_iter};
+use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use std::sync::Mutex;
 
 pub trait VideoRepository: Send + Sync {
     fn upsert(&self, video: &Video) -> anyhow::Result<()>;
+    fn find(&self, playlist_id: &PlaylistId, video_id: &VideoId) -> anyhow::Result<Option<Video>>;
     fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>>;
     /// Deletes every stored video for `playlist_id` whose YouTube ID is not
     /// in `current_ids`.
@@ -15,6 +16,9 @@ pub trait VideoRepository: Send + Sync {
         playlist_id: &PlaylistId,
         current_ids: &[VideoId],
     ) -> anyhow::Result<()>;
+    /// Writes every mutable column, including `status` — unlike `upsert`,
+    /// which preserves status on conflict for sync's merge semantics.
+    fn update(&self, video: &Video) -> anyhow::Result<()>;
 }
 
 pub struct SqliteVideoRepository {
@@ -88,6 +92,36 @@ impl VideoRepository for SqliteVideoRepository {
         Ok(())
     }
 
+    fn find(&self, playlist_id: &PlaylistId, video_id: &VideoId) -> anyhow::Result<Option<Video>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        conn.query_row(
+            "SELECT playlist_id, video_id, title, status, created_at, updated_at
+             FROM videos WHERE playlist_id = ?1 AND video_id = ?2",
+            params![playlist_id.as_str(), video_id.as_str()],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                ))
+            },
+        )
+        .optional()
+        .context("failed to find video")?
+        .map(
+            |(playlist_id, video_id, title, status, created_at, updated_at)| {
+                Self::row_to_video(playlist_id, video_id, title, status, created_at, updated_at)
+            },
+        )
+        .transpose()
+    }
+
     fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>> {
         let conn = self
             .conn
@@ -153,6 +187,26 @@ impl VideoRepository for SqliteVideoRepository {
             .context("failed to delete removed videos")?;
         Ok(())
     }
+
+    fn update(&self, video: &Video) -> anyhow::Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        conn.execute(
+            "UPDATE videos SET title = ?3, status = ?4, updated_at = ?5
+             WHERE playlist_id = ?1 AND video_id = ?2",
+            params![
+                video.playlist_id.as_str(),
+                video.video_id.as_str(),
+                video.title,
+                video.status.as_str(),
+                video.updated_at.to_rfc3339(),
+            ],
+        )
+        .context("failed to update video")?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -177,6 +231,16 @@ impl VideoRepository for FakeVideoRepository {
         Ok(())
     }
 
+    fn find(&self, playlist_id: &PlaylistId, video_id: &VideoId) -> anyhow::Result<Option<Video>> {
+        Ok(self
+            .videos
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|v| v.playlist_id == *playlist_id && v.video_id == *video_id)
+            .cloned())
+    }
+
     fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>> {
         Ok(self
             .videos
@@ -197,6 +261,17 @@ impl VideoRepository for FakeVideoRepository {
             .lock()
             .unwrap()
             .retain(|v| v.playlist_id != *playlist_id || current_ids.contains(&v.video_id));
+        Ok(())
+    }
+
+    fn update(&self, video: &Video) -> anyhow::Result<()> {
+        let mut videos = self.videos.lock().unwrap();
+        if let Some(existing) = videos
+            .iter_mut()
+            .find(|v| v.playlist_id == video.playlist_id && v.video_id == video.video_id)
+        {
+            *existing = video.clone();
+        }
         Ok(())
     }
 }
@@ -270,5 +345,37 @@ mod tests {
         repo.delete_not_in(&playlist_id(), &[]).unwrap();
 
         assert!(repo.list_for_playlist(&playlist_id()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_return_none_when_finding_a_missing_video() {
+        let repo = repo();
+
+        let found = repo
+            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
+            .unwrap();
+
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn it_should_return_the_stored_video_with_its_updated_status_after_update() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        repo.upsert(&video("vid1", "First", now)).unwrap();
+        let stored = repo
+            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
+            .unwrap()
+            .unwrap();
+
+        let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        repo.update(&stored.start_download(later)).unwrap();
+
+        let found = repo
+            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.status, VideoStatus::InProgress);
+        assert_eq!(found.updated_at, later);
     }
 }

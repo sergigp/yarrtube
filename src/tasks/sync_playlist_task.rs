@@ -16,7 +16,7 @@ impl SyncPlaylistTask {
 }
 
 impl TaskHandler for SyncPlaylistTask {
-    fn handle(&self, payload: &str) -> anyhow::Result<()> {
+    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
         let playlist_id = Task::decode_sync_playlist_payload(payload)?;
         let Ok(playlist_id) = PlaylistId::new(playlist_id) else {
             return Ok(());
@@ -42,6 +42,7 @@ mod tests {
     use crate::infrastructure::repositories::youtube_playlist_items_repository::{
         FakeYoutubePlaylistItemsRepository, PlaylistVideo,
     };
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
     use chrono::{DateTime, Utc};
     use std::sync::Arc;
 
@@ -84,8 +85,10 @@ mod tests {
             }),
             event_publisher.clone(),
             task_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
+            "/videos",
         );
 
         (
@@ -109,7 +112,7 @@ mod tests {
         let (handler, event_publisher, video_repository, task_repository) =
             handler_with_playlist(Vec::new());
 
-        handler.handle(&payload_for("PL404")).unwrap();
+        handler.handle(&payload_for("PL404"), false).unwrap();
 
         assert!(event_publisher.published.lock().unwrap().is_empty());
         assert!(video_repository.videos.lock().unwrap().is_empty());
@@ -121,7 +124,7 @@ mod tests {
         let (handler, event_publisher, video_repository, task_repository) =
             handler_with_playlist(Vec::new());
 
-        handler.handle(&payload_for("")).unwrap();
+        handler.handle(&payload_for(""), false).unwrap();
 
         assert!(event_publisher.published.lock().unwrap().is_empty());
         assert!(video_repository.videos.lock().unwrap().is_empty());
@@ -136,7 +139,7 @@ mod tests {
                 title: "One".to_string(),
             }]);
 
-        handler.handle(&payload_for("PL1")).unwrap();
+        handler.handle(&payload_for("PL1"), false).unwrap();
 
         let stored = video_repository.videos.lock().unwrap();
         assert_eq!(stored.len(), 1);
@@ -160,7 +163,7 @@ mod tests {
             fixed_timestamp(),
         ));
 
-        handler.handle(&payload_for("PL1")).unwrap();
+        handler.handle(&payload_for("PL1"), false).unwrap();
 
         assert!(video_repository.videos.lock().unwrap().is_empty());
     }
@@ -169,7 +172,7 @@ mod tests {
     fn it_should_always_schedule_the_next_sync_even_with_no_changes() {
         let (handler, _events, _videos, task_repository) = handler_with_playlist(Vec::new());
 
-        handler.handle(&payload_for("PL1")).unwrap();
+        handler.handle(&payload_for("PL1"), false).unwrap();
 
         let scheduled = task_repository.scheduled.lock().unwrap();
         assert_eq!(scheduled.len(), 1);

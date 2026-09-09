@@ -1,5 +1,7 @@
+use crate::domain::event::EventFailureOutcome;
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use crate::infrastructure::repositories::sqlite_event_repository::EventRepository;
+use crate::infrastructure::repositories::system_clock::Clock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,18 +15,28 @@ pub type SubscriberRegistry = HashMap<String, Vec<Arc<dyn EventSubscriber>>>;
 pub struct DomainEventsConsumer {
     repository: Arc<dyn EventRepository>,
     subscribers: SubscriberRegistry,
+    clock: Arc<dyn Clock>,
 }
 
 impl DomainEventsConsumer {
-    pub fn new(repository: Arc<dyn EventRepository>, subscribers: SubscriberRegistry) -> Self {
+    pub fn new(
+        repository: Arc<dyn EventRepository>,
+        subscribers: SubscriberRegistry,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
         Self {
             repository,
             subscribers,
+            clock,
         }
     }
 
     pub fn poll_once(&self) -> anyhow::Result<()> {
-        for event in self.repository.list_eligible()? {
+        for id in self.repository.list_eligible()? {
+            let Some(event) = self.repository.find(id)? else {
+                warn!(event_id = id, "eligible event disappeared before dispatch");
+                continue;
+            };
             let mut failure: Option<String> = None;
 
             match self.subscribers.get(&event.event_type) {
@@ -49,8 +61,30 @@ impl DomainEventsConsumer {
             }
 
             match failure {
-                Some(error) => self.repository.mark_failed_or_retry(event.id, &error)?,
-                None => self.repository.mark_done(event.id)?,
+                Some(error) => match event.fail(error.clone(), self.clock.now()) {
+                    EventFailureOutcome::Retry(retried) => {
+                        warn!(
+                            event_id = retried.id,
+                            retries = retried.retries,
+                            error,
+                            "event failed, retrying"
+                        );
+                        self.repository.update(&retried)?;
+                    }
+                    EventFailureOutcome::DeadLetter(dead) => {
+                        error!(
+                            event_id = dead.original_event_id,
+                            retries = dead.retries,
+                            error,
+                            "event failed permanently"
+                        );
+                        self.repository.dead_letter(&dead)?;
+                    }
+                },
+                None => {
+                    self.repository.delete(event.id)?;
+                    info!(event_id = event.id, "event done");
+                }
             }
         }
         Ok(())
@@ -75,29 +109,50 @@ impl DomainEventsConsumer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::event::DomainEvent;
-    use crate::infrastructure::repositories::sqlite_event_repository::PersistedEvent;
+    use crate::domain::event::{DeadLetteredEvent, DomainEvent, ScheduledEvent};
+    use crate::infrastructure::repositories::system_clock::FixedClock;
+    use chrono::{DateTime, Utc};
     use std::sync::Mutex;
 
     #[derive(Default)]
     struct FakeEventRepository {
-        events: Mutex<Vec<PersistedEvent>>,
-        done: Mutex<Vec<i64>>,
-        retried: Mutex<Vec<i64>>,
+        events: Mutex<Vec<ScheduledEvent>>,
+        updated: Mutex<Vec<ScheduledEvent>>,
+        deleted: Mutex<Vec<i64>>,
+        dead_lettered: Mutex<Vec<DeadLetteredEvent>>,
+    }
+
+    fn now() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn scheduled_event(event_type: &str, retries: i64) -> ScheduledEvent {
+        ScheduledEvent {
+            id: 1,
+            event_type: event_type.to_string(),
+            payload: DomainEvent::PlaylistCreated {
+                playlist_id: "PL1".to_string(),
+            }
+            .payload()
+            .to_string(),
+            retries,
+            created_at: now(),
+            updated_at: now(),
+            last_error: None,
+        }
     }
 
     impl FakeEventRepository {
         fn seeded(event_type: &str) -> Self {
+            Self::seeded_with_retries(event_type, 0)
+        }
+
+        fn seeded_with_retries(event_type: &str, retries: i64) -> Self {
             let repo = Self::default();
-            repo.events.lock().unwrap().push(PersistedEvent {
-                id: 1,
-                event_type: event_type.to_string(),
-                payload: DomainEvent::PlaylistCreated {
-                    playlist_id: "PL1".to_string(),
-                }
-                .payload()
-                .to_string(),
-            });
+            repo.events
+                .lock()
+                .unwrap()
+                .push(scheduled_event(event_type, retries));
             repo
         }
     }
@@ -107,17 +162,33 @@ mod tests {
             unimplemented!("not exercised by the consumer")
         }
 
-        fn list_eligible(&self) -> anyhow::Result<Vec<PersistedEvent>> {
-            Ok(self.events.lock().unwrap().clone())
+        fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledEvent>> {
+            Ok(self
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|e| e.id == id)
+                .cloned())
         }
 
-        fn mark_done(&self, id: i64) -> anyhow::Result<()> {
-            self.done.lock().unwrap().push(id);
+        // TODO check why this returns only ids
+        fn list_eligible(&self) -> anyhow::Result<Vec<i64>> {
+            Ok(self.events.lock().unwrap().iter().map(|e| e.id).collect())
+        }
+
+        fn update(&self, event: &ScheduledEvent) -> anyhow::Result<()> {
+            self.updated.lock().unwrap().push(event.clone());
             Ok(())
         }
 
-        fn mark_failed_or_retry(&self, id: i64, _error: &str) -> anyhow::Result<()> {
-            self.retried.lock().unwrap().push(id);
+        fn delete(&self, id: i64) -> anyhow::Result<()> {
+            self.deleted.lock().unwrap().push(id);
+            Ok(())
+        }
+
+        fn dead_letter(&self, event: &DeadLetteredEvent) -> anyhow::Result<()> {
+            self.dead_lettered.lock().unwrap().push(event.clone());
             Ok(())
         }
     }
@@ -138,8 +209,12 @@ mod tests {
         }
     }
 
+    fn clock() -> Arc<dyn Clock> {
+        Arc::new(FixedClock(now()))
+    }
+
     #[test]
-    fn it_should_invoke_the_single_registered_subscriber_and_mark_the_event_done() {
+    fn it_should_invoke_the_single_registered_subscriber_and_delete_the_event() {
         let repository = Arc::new(FakeEventRepository::seeded("playlist_created"));
         let calls = Arc::new(Mutex::new(Vec::new()));
         let subscriber = Arc::new(FakeSubscriber {
@@ -149,12 +224,12 @@ mod tests {
         });
         let mut subscribers: SubscriberRegistry = HashMap::new();
         subscribers.insert("playlist_created".to_string(), vec![subscriber]);
-        let consumer = DomainEventsConsumer::new(repository.clone(), subscribers);
+        let consumer = DomainEventsConsumer::new(repository.clone(), subscribers, clock());
 
         consumer.poll_once().unwrap();
 
         assert_eq!(*calls.lock().unwrap(), vec!["sub1"]);
-        assert_eq!(*repository.done.lock().unwrap(), vec![1]);
+        assert_eq!(*repository.deleted.lock().unwrap(), vec![1]);
     }
 
     #[test]
@@ -173,7 +248,7 @@ mod tests {
         });
         let mut subscribers: SubscriberRegistry = HashMap::new();
         subscribers.insert("playlist_created".to_string(), vec![sub1, sub2]);
-        let consumer = DomainEventsConsumer::new(repository, subscribers);
+        let consumer = DomainEventsConsumer::new(repository, subscribers, clock());
 
         consumer.poll_once().unwrap();
 
@@ -196,22 +271,47 @@ mod tests {
         });
         let mut subscribers: SubscriberRegistry = HashMap::new();
         subscribers.insert("playlist_created".to_string(), vec![failing, succeeding]);
-        let consumer = DomainEventsConsumer::new(repository.clone(), subscribers);
+        let consumer = DomainEventsConsumer::new(repository.clone(), subscribers, clock());
 
         consumer.poll_once().unwrap();
 
         assert_eq!(*calls.lock().unwrap(), vec!["failing", "succeeding"]);
-        assert_eq!(*repository.retried.lock().unwrap(), vec![1]);
-        assert!(repository.done.lock().unwrap().is_empty());
+        let updated = repository.updated.lock().unwrap();
+        assert_eq!(updated.len(), 1);
+        assert_eq!(updated[0].retries, 1);
+        assert!(repository.deleted.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_dead_letter_an_event_that_fails_on_the_fifth_attempt() {
+        let repository = Arc::new(FakeEventRepository::seeded_with_retries(
+            "playlist_created",
+            4,
+        ));
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let failing = Arc::new(FakeSubscriber {
+            calls: calls.clone(),
+            name: "failing",
+            fails: true,
+        });
+        let mut subscribers: SubscriberRegistry = HashMap::new();
+        subscribers.insert("playlist_created".to_string(), vec![failing]);
+        let consumer = DomainEventsConsumer::new(repository.clone(), subscribers, clock());
+
+        consumer.poll_once().unwrap();
+
+        let dead_lettered = repository.dead_lettered.lock().unwrap();
+        assert_eq!(dead_lettered.len(), 1);
+        assert_eq!(dead_lettered[0].retries, 5);
     }
 
     #[test]
     fn it_should_mark_an_event_with_no_registered_subscribers_as_done() {
         let repository = Arc::new(FakeEventRepository::seeded("unregistered_type"));
-        let consumer = DomainEventsConsumer::new(repository.clone(), HashMap::new());
+        let consumer = DomainEventsConsumer::new(repository.clone(), HashMap::new(), clock());
 
         consumer.poll_once().unwrap();
 
-        assert_eq!(*repository.done.lock().unwrap(), vec![1]);
+        assert_eq!(*repository.deleted.lock().unwrap(), vec![1]);
     }
 }

@@ -15,6 +15,22 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  openspec-archived:
+    name: OpenSpec changes archived
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check OpenSpec changes are archived
+        run: |
+          extra=$(find openspec/changes -mindepth 1 -maxdepth 1 ! -name archive)
+          if [ -n "$extra" ]; then
+            echo "Unarchived OpenSpec changes found (run 'opsx:archive' before merging):"
+            echo "$extra"
+            exit 1
+          fi
+
   ci:
     name: fmt, clippy, build, test
     runs-on: ubuntu-latest

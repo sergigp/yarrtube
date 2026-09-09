@@ -142,6 +142,24 @@ atomicity — a race window opens between the two calls. If a project's existing
 relies on DB-level atomicity (upserts, "claim the first one" patterns, counters), don't apply
 the CQS split to it without naming this trade-off out loud and getting an explicit decision.
 
+**State transitions live on the entity, never as behavior-named repository methods.** A
+repository's write side is CRUD only — `insert`/`schedule`/`create`, `update`, `delete`, plus
+one atomic multi-statement write when a use case genuinely needs it (see above). It never
+grows a method named after a business transition (`mark_running`, `mark_done`,
+`mark_failed_or_retry`, `recover_running` and friends) that itself decides the transition —
+computing new state, thresholds, or backoff timing inside the repository. That decision
+belongs on a persisted domain entity as a method consuming `self` (and `now: DateTime<Utc>`
+where timestamps matter) and returning either the next state or an outcome enum when a
+transition can branch into different shapes (e.g. `fail(error, now) -> Retry(Entity) |
+DeadLetter(DeadLetteredEntity)`, mirroring the CQS "reads return entities" contract instead of
+a bespoke result type). The caller — a domain service, or a poller like a task executor/event
+consumer — reads the current entity (`find`/`list_*`), calls the transition method, then
+persists whatever came back via the plain CRUD write. This is the same "decide in the domain,
+persist via CRUD" split as the idempotent-create pattern above, applied to lifecycle state
+instead of existence checks. If you see a repository method whose name is a verb describing a
+business outcome rather than a storage operation, that logic has leaked out of the domain —
+move it, don't add another one next to it.
+
 ## infrastructure/ subfolders
 
 Split by *why* the code lives in `infrastructure/`, not by an unqualified "adapters" catch-all:

@@ -1,8 +1,7 @@
 use crate::infrastructure::shared::youtube_api::Video;
-use anyhow::{Result, anyhow};
-use std::io;
+use crate::infrastructure::shared::ytdlp::{download_video, ensure_output_dir};
+use anyhow::Result;
 use std::path::Path;
-use std::process::Command;
 use std::time::Instant;
 
 pub struct DownloadSummary {
@@ -48,30 +47,6 @@ impl YoutubeDownloaderClient for YtDlpDownloaderClient {
         }
 
         Ok(DownloadSummary { succeeded, failed })
-    }
-}
-
-fn ensure_output_dir(output_path: &Path) -> Result<()> {
-    std::fs::create_dir_all(output_path)
-        .map_err(|e| anyhow!("Failed to create output directory {output_path:?}: {e}"))
-}
-
-/// Runs `yt-dlp <video_url>` in `output_path`. Returns `Ok(true)`/`Ok(false)` for a
-/// completed process based on its exit status. Returns `Err` only when `yt-dlp`
-/// itself could not be spawned (e.g. not found on `PATH`) — a systemic setup
-/// problem, distinct from a single video failing to download.
-fn download_video(video_url: &str, output_path: &Path) -> Result<bool> {
-    println!("Running: yt-dlp {video_url} (in {})", output_path.display());
-    match Command::new("yt-dlp")
-        .arg(video_url)
-        .current_dir(output_path)
-        .status()
-    {
-        Ok(status) => Ok(status.success()),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Err(anyhow!(
-            "`yt-dlp` was not found on PATH. Install yt-dlp and make sure it is available before running yarrtube."
-        )),
-        Err(e) => Err(anyhow!("Failed to run yt-dlp for {video_url}: {e}")),
     }
 }
 

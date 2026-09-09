@@ -44,6 +44,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
     use crate::infrastructure::repositories::system_clock::FixedClock;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
     use chrono::{DateTime, Utc};
     use std::sync::Arc;
 
@@ -56,8 +57,10 @@ mod tests {
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
             Arc::new(FakeEventPublisher::default()),
             task_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
             Arc::new(FixedClock(DateTime::<Utc>::from_timestamp(0, 0).unwrap())),
             3600,
+            "/videos",
         );
         let subscriber = SyncPlaylistOnPlaylistCreated::new(video_service);
 
@@ -91,8 +94,10 @@ mod tests {
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
             Arc::new(FakeEventPublisher::default()),
             task_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
             Arc::new(FixedClock(DateTime::<Utc>::from_timestamp(0, 0).unwrap())),
             3600,
+            "/videos",
         );
         let subscriber = SyncPlaylistOnPlaylistCreated::new(video_service);
 
