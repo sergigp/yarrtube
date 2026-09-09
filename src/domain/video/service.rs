@@ -1,6 +1,7 @@
 use super::video::Video;
 use super::video_filename::VideoFilename;
 use crate::domain::event::DomainEvent;
+use crate::domain::playlist::Quality;
 use crate::domain::shared::{PlaylistId, VideoId};
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::sqlite_event_repository::EventPublisher;
@@ -131,6 +132,7 @@ impl VideoService {
         &self,
         playlist_id: PlaylistId,
         video_id: VideoId,
+        quality: Quality,
         is_last_attempt: bool,
     ) -> anyhow::Result<()> {
         let Some(playlist) = self.playlist_repository.find(&playlist_id)? else {
@@ -152,6 +154,7 @@ impl VideoService {
             &video_id.to_url(),
             filename.as_str(),
             video_id.as_str(),
+            quality,
             &output_dir,
         );
 
@@ -192,7 +195,7 @@ impl VideoService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::playlist::{Playlist, PlaylistName};
+    use crate::domain::playlist::{Playlist, PlaylistName, Quality};
     use crate::domain::video::VideoStatus;
     use crate::infrastructure::repositories::sqlite_event_repository::FakeEventPublisher;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
@@ -231,6 +234,7 @@ mod tests {
                     &Playlist::create(
                         playlist_id(),
                         PlaylistName::new("My Playlist").unwrap(),
+                        Quality::High,
                         fixed_timestamp(),
                     ),
                     &DomainEvent::PlaylistCreated {
@@ -273,7 +277,7 @@ mod tests {
             service_with(true, true, FakeVideoDownloaderRepository::new(true));
 
         service
-            .download_video(playlist_id(), video_id(), false)
+            .download_video(playlist_id(), video_id(), Quality::High, false)
             .unwrap();
 
         let video = video_repository
@@ -288,7 +292,7 @@ mod tests {
         let (service, video_repository) =
             service_with(true, true, FakeVideoDownloaderRepository::new(false));
 
-        let result = service.download_video(playlist_id(), video_id(), false);
+        let result = service.download_video(playlist_id(), video_id(), Quality::High, false);
 
         assert!(result.is_err());
         let video = video_repository
@@ -303,7 +307,7 @@ mod tests {
         let (service, video_repository) =
             service_with(true, true, FakeVideoDownloaderRepository::new(false));
 
-        let result = service.download_video(playlist_id(), video_id(), true);
+        let result = service.download_video(playlist_id(), video_id(), Quality::High, true);
 
         assert!(result.is_err());
         let video = video_repository
@@ -319,7 +323,7 @@ mod tests {
             service_with(false, true, FakeVideoDownloaderRepository::new(true));
 
         service
-            .download_video(playlist_id(), video_id(), false)
+            .download_video(playlist_id(), video_id(), Quality::High, false)
             .unwrap();
 
         let video = video_repository
@@ -334,7 +338,7 @@ mod tests {
         let (service, _video_repository) =
             service_with(true, false, FakeVideoDownloaderRepository::new(true));
 
-        let result = service.download_video(playlist_id(), video_id(), false);
+        let result = service.download_video(playlist_id(), video_id(), Quality::High, false);
 
         assert!(result.is_ok());
     }
@@ -347,6 +351,7 @@ mod tests {
                 &Playlist::create(
                     playlist_id(),
                     PlaylistName::new("My Playlist").unwrap(),
+                    Quality::High,
                     fixed_timestamp(),
                 ),
                 &DomainEvent::PlaylistCreated {
@@ -380,12 +385,12 @@ mod tests {
         );
 
         service
-            .download_video(playlist_id(), video_id(), false)
+            .download_video(playlist_id(), video_id(), Quality::High, false)
             .unwrap();
 
         let calls = downloader.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
-        let (_, desired_filename, id, _) = &calls[0];
+        let (_, desired_filename, id, _, _) = &calls[0];
         assert_eq!(
             desired_filename,
             VideoFilename::from_title(messy_title).as_str()

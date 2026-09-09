@@ -1,6 +1,7 @@
 use super::errors::{CreatePlaylistError, DeletePlaylistError};
 use super::playlist::Playlist;
 use super::playlist_name::PlaylistName;
+use super::quality::Quality;
 use crate::domain::event::DomainEvent;
 use crate::domain::shared::PlaylistId;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -41,6 +42,7 @@ impl PlaylistService {
         &self,
         id: PlaylistId,
         name: PlaylistName,
+        quality: Quality,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError> {
         match self.lookup.exists(&id) {
             Ok(true) => {}
@@ -55,7 +57,7 @@ impl PlaylistService {
         }
 
         let now = self.clock.now();
-        let playlist = Playlist::create(id, name, now);
+        let playlist = Playlist::create(id, name, quality, now);
         let event = DomainEvent::PlaylistCreated {
             playlist_id: playlist.id.as_str().to_string(),
         };

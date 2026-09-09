@@ -47,8 +47,12 @@ docker run -d \
 ```bash
 curl -X POST http://<host>:8080/playlists \
   -H 'content-type: application/json' \
-  -d '{"id": "<youtube_playlist_id>", "name": "My Playlist"}'
+  -d '{"id": "<youtube_playlist_id>", "name": "My Playlist", "quality": "high"}'
 ```
+
+`quality` is `high` (uncapped), `mid` (≤720p), or `low` (≤480p); downloads always
+prefer an mp4/h264/aac file for maximum device/player compatibility. It can't
+be changed after the playlist is created.
 
 Yarrtube downloads every existing video in the playlist, then keeps checking
 for new ones (every hour by default — see [Configuration](#configuration)).
@@ -83,11 +87,11 @@ services:
 
 The HTTP API is how you add or remove playlists to track:
 
-| Method   | Path             | Description                             |
-| -------- | ---------------- | --------------------------------------- |
-| `POST`   | `/playlists`     | Track a new playlist (`{"id", "name"}`) |
-| `GET`    | `/playlists`     | List tracked playlists                  |
-| `DELETE` | `/playlists/:id` | Stop tracking a playlist                |
+| Method   | Path             | Description                                                |
+| -------- | ---------------- | ----------------------------------------------------------- |
+| `POST`   | `/playlists`     | Track a new playlist (`{"id", "name", "quality"}`)          |
+| `GET`    | `/playlists`     | List tracked playlists                                      |
+| `DELETE` | `/playlists/:id` | Stop tracking a playlist                                    |
 
 ## Manual commands
 
@@ -95,9 +99,6 @@ These run against an already-running container with `docker exec`, without
 restarting it:
 
 ```bash
-# Download a playlist immediately, outside the usual tracking/sync flow
-docker exec yarrtube yarrtube download "<playlist_id>" /videos
-
 # Force a yt-dlp update (this also runs automatically on every container start)
 docker exec yarrtube yarrtube update-ytdlp
 ```

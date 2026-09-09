@@ -15,10 +15,6 @@ fn main() -> ExitCode {
     dotenvy::dotenv().ok();
 
     match cli.command {
-        Commands::Download {
-            playlist_id,
-            output_path,
-        } => cli::download_command::run(&playlist_id, &output_path),
         Commands::Serve => serve::run(),
         Commands::UpdateYtdlp => cli::ytdlp_update::run(),
     }
