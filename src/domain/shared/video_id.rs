@@ -18,6 +18,10 @@ impl VideoId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub fn to_url(&self) -> String {
+        format!("https://www.youtube.com/watch?v={}", self.0)
+    }
 }
 
 impl fmt::Display for VideoId {
@@ -40,5 +44,11 @@ mod tests {
     fn it_should_reject_an_empty_id() {
         assert!(VideoId::new("").is_err());
         assert!(VideoId::new("   ").is_err());
+    }
+
+    #[test]
+    fn it_should_build_the_youtube_video_url() {
+        let id = VideoId::new("vid1").unwrap();
+        assert_eq!(id.to_url(), "https://www.youtube.com/watch?v=vid1");
     }
 }

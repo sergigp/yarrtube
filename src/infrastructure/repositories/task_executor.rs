@@ -40,10 +40,11 @@ impl TaskExecutor {
             let payload = task.payload.clone();
             let running = task.start(self.clock.now());
             self.repository.update(&running)?;
+            let is_last_attempt = running.is_last_attempt();
             info!(task_id = id, task_type = %task_type, "dispatching task");
 
             let outcome = match self.handlers.get(&task_type) {
-                Some(handler) => handler.handle(&payload),
+                Some(handler) => handler.handle(&payload, is_last_attempt),
                 None => Err(anyhow::anyhow!(
                     "no handler registered for task type '{}'",
                     task_type
@@ -214,12 +215,18 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
     struct FakeHandler {
         fails: bool,
+        received_is_last_attempt: Mutex<Vec<bool>>,
     }
 
     impl TaskHandler for FakeHandler {
-        fn handle(&self, _payload: &str) -> anyhow::Result<()> {
+        fn handle(&self, _payload: &str, is_last_attempt: bool) -> anyhow::Result<()> {
+            self.received_is_last_attempt
+                .lock()
+                .unwrap()
+                .push(is_last_attempt);
             if self.fails {
                 anyhow::bail!("handler failed");
             }
@@ -242,7 +249,10 @@ mod tests {
         let repository = Arc::new(FakeTaskRepository::seeded("sync_playlist"));
         let executor = TaskExecutor::new(
             repository.clone(),
-            registry(FakeHandler { fails: false }),
+            registry(FakeHandler {
+                fails: false,
+                ..Default::default()
+            }),
             clock(),
         );
 
@@ -259,7 +269,10 @@ mod tests {
         let repository = Arc::new(FakeTaskRepository::seeded("sync_playlist"));
         let executor = TaskExecutor::new(
             repository.clone(),
-            registry(FakeHandler { fails: true }),
+            registry(FakeHandler {
+                fails: true,
+                ..Default::default()
+            }),
             clock(),
         );
 
@@ -278,7 +291,10 @@ mod tests {
         let repository = Arc::new(FakeTaskRepository::seeded_with_retries("sync_playlist", 4));
         let executor = TaskExecutor::new(
             repository.clone(),
-            registry(FakeHandler { fails: true }),
+            registry(FakeHandler {
+                fails: true,
+                ..Default::default()
+            }),
             clock(),
         );
 
@@ -291,6 +307,38 @@ mod tests {
     }
 
     #[test]
+    fn it_should_tell_the_handler_this_is_not_the_last_attempt_when_retries_remain() {
+        let repository = Arc::new(FakeTaskRepository::seeded_with_retries("sync_playlist", 3));
+        let handler = Arc::new(FakeHandler::default());
+        let mut handlers: HandlerRegistry = HashMap::new();
+        handlers.insert("sync_playlist".to_string(), handler.clone());
+        let executor = TaskExecutor::new(repository, handlers, clock());
+
+        executor.poll_once().unwrap();
+
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            vec![false]
+        );
+    }
+
+    #[test]
+    fn it_should_tell_the_handler_this_is_the_last_attempt_when_no_retries_remain() {
+        let repository = Arc::new(FakeTaskRepository::seeded_with_retries("sync_playlist", 4));
+        let handler = Arc::new(FakeHandler::default());
+        let mut handlers: HandlerRegistry = HashMap::new();
+        handlers.insert("sync_playlist".to_string(), handler.clone());
+        let executor = TaskExecutor::new(repository, handlers, clock());
+
+        executor.poll_once().unwrap();
+
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            vec![true]
+        );
+    }
+
+    #[test]
     fn it_should_retry_a_task_recovered_as_running_from_a_previous_process() {
         let repository = Arc::new(FakeTaskRepository::default());
         repository
@@ -300,7 +348,10 @@ mod tests {
             .push(scheduled_task(1, "sync_playlist", 0));
         let executor = TaskExecutor::new(
             repository.clone(),
-            registry(FakeHandler { fails: false }),
+            registry(FakeHandler {
+                fails: false,
+                ..Default::default()
+            }),
             clock(),
         );
 
@@ -322,7 +373,10 @@ mod tests {
             .push(scheduled_task(1, "sync_playlist", 4));
         let executor = TaskExecutor::new(
             repository.clone(),
-            registry(FakeHandler { fails: false }),
+            registry(FakeHandler {
+                fails: false,
+                ..Default::default()
+            }),
             clock(),
         );
 

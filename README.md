@@ -113,6 +113,7 @@ command):
 | `YARRTUBE_PORT`                  | `8080`                  | HTTP port to listen on                                    |
 | `YARRTUBE_SYNC_INTERVAL_SECONDS` | `3600`                  | How often a tracked playlist is re-checked for new videos |
 | `YARRTUBE_DB_PATH`               | `yarrtube.sqlite3`      | Path to the internal SQLite file (inside the container)   |
+| `YARRTUBE_VIDEOS_PATH`           | `/videos`               | Root directory downloaded videos are saved under (inside the container) |
 | `YTDLP_PATH`                     | `/usr/local/bin/yt-dlp` | Path to the managed `yt-dlp` binary                       |
 | `RUST_LOG`                       | `info`                  | Log verbosity (e.g. `RUST_LOG=debug`)                     |
 

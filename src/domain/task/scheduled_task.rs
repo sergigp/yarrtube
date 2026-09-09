@@ -68,6 +68,12 @@ impl ScheduledTask {
         }
     }
 
+    /// Whether a failure of this attempt would exhaust the retry budget
+    /// (`fail` would dead-letter rather than retry).
+    pub fn is_last_attempt(&self) -> bool {
+        self.retries + 1 >= MAX_ATTEMPTS
+    }
+
     pub fn fail(self, error: impl Into<String>, now: DateTime<Utc>) -> TaskFailureOutcome {
         let error = error.into();
         let retries = self.retries + 1;
@@ -159,6 +165,16 @@ mod tests {
             }
             TaskFailureOutcome::Retry(_) => panic!("expected a dead-letter outcome"),
         }
+    }
+
+    #[test]
+    fn it_should_not_report_the_last_attempt_when_retries_are_left() {
+        assert!(!task_with_retries(3).is_last_attempt());
+    }
+
+    #[test]
+    fn it_should_report_the_last_attempt_when_the_next_failure_would_dead_letter() {
+        assert!(task_with_retries(4).is_last_attempt());
     }
 
     #[test]

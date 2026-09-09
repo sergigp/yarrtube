@@ -1,9 +1,9 @@
 ## 1. Video domain
 
-- [ ] 1.1 Add `InProgress`, `Downloaded`, `ErroredRetrying`, `Errored` to
+- [x] 1.1 Add `InProgress`, `Downloaded`, `ErroredRetrying`, `Errored` to
       `VideoStatus` (string round-trip via `as_str`/`parse`), and verify
       with unit tests for each new variant's string representation.
-- [ ] 1.2 Add `Video::start_download`, `mark_downloaded`,
+- [x] 1.2 Add `Video::start_download`, `mark_downloaded`,
       `mark_errored_retrying`, `mark_errored` transition methods (consuming
       `self`, returning the updated `Video` with a bumped `updated_at`), and
       verify with unit tests asserting the resulting status and timestamp
@@ -11,7 +11,7 @@
 
 ## 2. VideoRepository as CRUD
 
-- [ ] 2.1 Add `find(playlist_id, video_id) -> Option<Video>` and
+- [x] 2.1 Add `find(playlist_id, video_id) -> Option<Video>` and
       `update(&Video) -> Result<()>` to `VideoRepository` (writing every
       mutable column, including `status`, unlike `upsert`), implement both
       on `SqliteVideoRepository` and the fake, and verify with tests: `find`
@@ -20,13 +20,13 @@
 
 ## 3. Single-video yt-dlp invocation
 
-- [ ] 3.1 Extract the `Command::new("yt-dlp")` single-video invocation (and
+- [x] 3.1 Extract the `Command::new("yt-dlp")` single-video invocation (and
       output-directory creation) out of
       `infrastructure/client/youtube_downloader_client.rs` into a plain
       function in `infrastructure/shared/` with no trait around it, and
       verify `youtube_downloader_client`'s existing tests still pass calling
       through it (`cargo test youtube_downloader_client`).
-- [ ] 3.2 Add a `VideoDownloaderRepository` port in
+- [x] 3.2 Add a `VideoDownloaderRepository` port in
       `infrastructure/repositories/` (`download(video_url, output_dir) ->
       Result<bool>`) implemented by calling the shared function from 3.1,
       plus a fake for tests, and verify with a test against a real `yt-dlp`-shaped
@@ -35,7 +35,7 @@
 
 ## 4. Task attempt visibility
 
-- [ ] 4.1 Widen `TaskHandler::handle` to also receive attempt information
+- [x] 4.1 Widen `TaskHandler::handle` to also receive attempt information
       (e.g. `is_last_attempt: bool`, computed by `TaskExecutor` from the
       `ScheduledTask`'s `retries`), update `SyncPlaylistTask` to accept and
       ignore it, and verify `cargo test task_handler task_executor
@@ -43,11 +43,11 @@
 
 ## 5. Download task and subscriber
 
-- [ ] 5.1 Add `Task::DownloadVideo{playlist_id, video_id}` (type string,
+- [x] 5.1 Add `Task::DownloadVideo{playlist_id, video_id}` (type string,
       payload encode/decode) to the `Task` domain enum, and verify with unit
       tests for its type string and payload round-trip, matching
       `Task::SyncPlaylist`'s existing test coverage.
-- [ ] 5.2 Add `VideoService.download_video(playlist_id, video_id,
+- [x] 5.2 Add `VideoService.download_video(playlist_id, video_id,
       is_last_attempt)`: no-op if the playlist or video no longer exists;
       otherwise `start_download` + `update`, build the video URL and
       `<videos_path>/<playlist.name>/` output dir, call
@@ -56,11 +56,11 @@
       failure — returning `Err` on failure so the task queue retries/dead-letters
       it. Verify with unit tests covering: success, failure-with-retries-left,
       failure-on-last-attempt, missing playlist, missing video.
-- [ ] 5.3 Add `DownloadVideoTask` handler (`tasks/download_video_task.rs`)
+- [x] 5.3 Add `DownloadVideoTask` handler (`tasks/download_video_task.rs`)
       calling `VideoService.download_video`, register it in `tasks::registry`
       for `"download_video"`, and verify with a handler-level test mirroring
       `sync_playlist_task`'s test style.
-- [ ] 5.4 Add `DownloadVideoOnVideoAdded` subscriber
+- [x] 5.4 Add `DownloadVideoOnVideoAdded` subscriber
       (`subscribers/download_video_on_video_added.rs`) that schedules
       `Task::DownloadVideo` for `run_at = now` on `VideoAdded`, register it
       in `subscribers::registry` for `"video_added"`, and verify with a test
@@ -69,7 +69,7 @@
 
 ## 6. Composition root and configuration
 
-- [ ] 6.1 Add `YARRTUBE_VIDEOS_PATH` (default `/videos`) read in `serve.rs`,
+- [x] 6.1 Add `YARRTUBE_VIDEOS_PATH` (default `/videos`) read in `serve.rs`,
       thread it into `VideoService`'s constructor alongside
       `sync_interval_seconds`, wire the new `VideoDownloaderRepository`
       implementation, and verify `cargo build --release` succeeds and
@@ -78,13 +78,13 @@
 
 ## 7. Documentation
 
-- [ ] 7.1 Add `YARRTUBE_VIDEOS_PATH` to the configuration table in
+- [x] 7.1 Add `YARRTUBE_VIDEOS_PATH` to the configuration table in
       `README.md`, and verify by reading the rendered table for consistency
       with the other rows' format.
 
 ## 8. Full verification
 
-- [ ] 8.1 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets
+- [x] 8.1 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets
       --all-features --locked -- -D warnings`, and `cargo test --locked`,
       and confirm everything passes, including an end-to-end check (e.g. via
       `serve` + a real or stubbed `yt-dlp` on `PATH`) that adding a video to

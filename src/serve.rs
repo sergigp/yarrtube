@@ -17,6 +17,7 @@ use crate::infrastructure::repositories::system_clock::SystemClock;
 use crate::infrastructure::repositories::task_executor::TaskExecutor;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubeApiPlaylistItemsRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
+use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
 use crate::{subscribers, tasks};
 use anyhow::{Context, Result};
 use axum::Router;
@@ -33,6 +34,7 @@ use tracing_subscriber::filter::LevelFilter;
 const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_DB_PATH: &str = "yarrtube.sqlite3";
 const DEFAULT_SYNC_INTERVAL_SECONDS: i64 = 3600;
+const DEFAULT_VIDEOS_PATH: &str = "/videos";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 const BACKGROUND_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -54,6 +56,10 @@ fn sync_interval_seconds() -> i64 {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(DEFAULT_SYNC_INTERVAL_SECONDS)
+}
+
+fn videos_path() -> String {
+    std::env::var("YARRTUBE_VIDEOS_PATH").unwrap_or_else(|_| DEFAULT_VIDEOS_PATH.to_string())
 }
 
 fn run_startup_ytdlp_update() {
@@ -134,13 +140,19 @@ fn build_application() -> Result<Application> {
         Arc::new(YoutubeApiPlaylistItemsRepository::new(youtube_api_key())),
         event_repository.clone() as Arc<dyn EventPublisher>,
         task_repository.clone() as Arc<dyn TaskRepository>,
+        Arc::new(YtDlpVideoDownloaderRepository),
         Arc::new(SystemClock),
         sync_interval_seconds(),
+        videos_path(),
     );
 
     let event_consumer = Arc::new(DomainEventsConsumer::new(
         event_repository as Arc<dyn EventRepository>,
-        subscribers::registry(video_service.clone()),
+        subscribers::registry(
+            video_service.clone(),
+            task_repository.clone() as Arc<dyn TaskRepository>,
+            Arc::new(SystemClock),
+        ),
         Arc::new(SystemClock),
     ));
     let task_executor = Arc::new(TaskExecutor::new(
