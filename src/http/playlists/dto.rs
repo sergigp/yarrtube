@@ -7,6 +7,8 @@ pub struct CreatePlaylistRequest {
     pub id: String,
     pub name: String,
     #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
     pub quality: Option<String>,
 }
 
@@ -14,6 +16,7 @@ pub struct CreatePlaylistRequest {
 pub struct PlaylistResponse {
     pub id: String,
     pub name: String,
+    pub path: String,
     pub quality: String,
     pub created_at: DateTime<Utc>,
 }
@@ -23,6 +26,7 @@ impl From<Playlist> for PlaylistResponse {
         Self {
             id: playlist.id.as_str().to_string(),
             name: playlist.name.as_str().to_string(),
+            path: playlist.path.as_str().to_string(),
             quality: playlist.quality.as_str().to_string(),
             created_at: playlist.created_at,
         }

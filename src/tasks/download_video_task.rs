@@ -1,5 +1,4 @@
-use crate::domain::playlist::Quality;
-use crate::domain::shared::{PlaylistId, VideoId};
+use crate::domain::shared::{PlaylistId, Quality, VideoId};
 use crate::domain::task::Task;
 use crate::domain::video::VideoService;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
@@ -37,7 +36,7 @@ impl TaskHandler for DownloadVideoTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::playlist::{Playlist, PlaylistName, Quality};
+    use crate::domain::playlist::{Playlist, PlaylistName, PlaylistPath};
     use crate::domain::video::video_filename::VideoFilename;
     use crate::domain::video::{Video, VideoStatus};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
@@ -88,6 +87,7 @@ mod tests {
                 .insert(&Playlist::create(
                     playlist_id(),
                     PlaylistName::new("My Playlist").unwrap(),
+                    PlaylistPath::new("my-playlist").unwrap(),
                     Quality::High,
                     fixed_timestamp(),
                 ))
@@ -133,6 +133,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(video.status, VideoStatus::Downloaded);
+        assert_eq!(video.quality, Some(Quality::High));
     }
 
     #[test]
@@ -148,6 +149,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(video.status, VideoStatus::ErroredRetrying);
+        assert_eq!(video.quality, None);
     }
 
     #[test]
@@ -163,6 +165,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(video.status, VideoStatus::Errored);
+        assert_eq!(video.quality, None);
     }
 
     #[test]
@@ -196,6 +199,7 @@ mod tests {
             .insert(&Playlist::create(
                 playlist_id(),
                 PlaylistName::new("My Playlist").unwrap(),
+                PlaylistPath::new("my-playlist").unwrap(),
                 Quality::High,
                 fixed_timestamp(),
             ))
@@ -237,6 +241,51 @@ mod tests {
         );
         assert_ne!(desired_filename, messy_title);
         assert_eq!(id, video_id().as_str());
+    }
+
+    #[test]
+    fn it_should_build_a_nested_output_dir_from_a_multi_segment_playlist_path() {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository
+            .insert(&Playlist::create(
+                playlist_id(),
+                PlaylistName::new("My Playlist").unwrap(),
+                PlaylistPath::new("a/b/c").unwrap(),
+                Quality::High,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        video_repository
+            .save(&Video::create(
+                playlist_id(),
+                video_id(),
+                "My Video",
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+
+        let video_service = VideoService::new(
+            playlist_repository,
+            video_repository,
+            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeEventPublisher::default()),
+            Arc::new(FakeTaskRepository::default()),
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        );
+        let handler = DownloadVideoTask::new(video_service);
+
+        handler.handle(&payload_for("PL1", "vid1"), false).unwrap();
+
+        let calls = downloader.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        let (_, _, _, _, output_dir) = &calls[0];
+        assert_eq!(output_dir, std::path::Path::new("/videos/a/b/c"));
     }
 
     #[test]

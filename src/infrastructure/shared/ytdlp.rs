@@ -1,4 +1,4 @@
-use crate::domain::playlist::Quality;
+use crate::domain::shared::Quality;
 use anyhow::{Result, anyhow};
 use std::io;
 use std::path::Path;

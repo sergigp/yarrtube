@@ -2,8 +2,7 @@ use super::video::Video;
 use super::video_filename::VideoFilename;
 use super::video_status::VideoStatus;
 use crate::domain::event::DomainEvent;
-use crate::domain::playlist::Quality;
-use crate::domain::shared::{PlaylistId, VideoId};
+use crate::domain::shared::{PlaylistId, Quality, VideoId};
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -164,7 +163,7 @@ impl VideoService {
         let started = video.start_download(self.clock.now());
         self.video_repository.update(&started)?;
 
-        let output_dir = Path::new(&self.videos_path).join(playlist.name.as_str());
+        let output_dir = Path::new(&self.videos_path).join(playlist.path.as_str());
         info!(playlist_id = %playlist_id, video_id = %video_id, "downloading video");
         let outcome = self.video_downloader_repository.download(
             &video_id.to_url(),
@@ -181,7 +180,7 @@ impl VideoService {
 
         if succeeded {
             self.video_repository
-                .update(&started.mark_downloaded(self.clock.now()))?;
+                .update(&started.mark_downloaded(quality, self.clock.now()))?;
             info!(playlist_id = %playlist_id, video_id = %video_id, "video downloaded");
             return Ok(());
         }
@@ -224,7 +223,7 @@ impl VideoService {
         };
 
         let filename = VideoFilename::from_title(title);
-        let output_dir = Path::new(&self.videos_path).join(playlist.name.as_str());
+        let output_dir = Path::new(&self.videos_path).join(playlist.path.as_str());
         let deleted =
             self.video_file_repository
                 .delete(&output_dir, filename.as_str(), video_id.as_str())?;

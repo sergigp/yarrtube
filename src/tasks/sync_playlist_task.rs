@@ -29,8 +29,8 @@ impl TaskHandler for SyncPlaylistTask {
 mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
-    use crate::domain::playlist::{Playlist, PlaylistName, Quality};
-    use crate::domain::shared::VideoId;
+    use crate::domain::playlist::{Playlist, PlaylistName, PlaylistPath};
+    use crate::domain::shared::{Quality, VideoId};
     use crate::domain::video::{Video, VideoStatus};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
@@ -65,6 +65,7 @@ mod tests {
             .insert(&Playlist::create(
                 PlaylistId::new("PL1").unwrap(),
                 PlaylistName::new("My Playlist").unwrap(),
+                PlaylistPath::new("my-playlist").unwrap(),
                 Quality::High,
                 fixed_timestamp(),
             ))
@@ -203,7 +204,7 @@ mod tests {
                 fixed_timestamp(),
             )
             .start_download(fixed_timestamp())
-            .mark_downloaded(fixed_timestamp()),
+            .mark_downloaded(Quality::High, fixed_timestamp()),
         );
         video_repository.videos.lock().unwrap().push(Video::create(
             PlaylistId::new("PL1").unwrap(),
