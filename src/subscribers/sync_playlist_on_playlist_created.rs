@@ -42,6 +42,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
     use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::repositories::video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
     use chrono::{DateTime, Utc};
@@ -57,6 +58,7 @@ mod tests {
             Arc::new(FakeEventPublisher::default()),
             task_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FixedClock(DateTime::<Utc>::from_timestamp(0, 0).unwrap())),
             3600,
             "/videos",
@@ -89,6 +91,7 @@ mod tests {
             Arc::new(FakeEventPublisher::default()),
             task_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FixedClock(DateTime::<Utc>::from_timestamp(0, 0).unwrap())),
             3600,
             "/videos",

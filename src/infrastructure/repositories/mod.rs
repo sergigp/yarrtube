@@ -7,6 +7,7 @@ pub mod sqlite_video_repository;
 pub mod system_clock;
 pub mod task_executor;
 pub mod task_handler;
+pub mod video_file_repository;
 pub mod youtube_playlist_items_repository;
 pub mod youtube_playlist_repository;
 pub mod youtube_video_downloader_repository;

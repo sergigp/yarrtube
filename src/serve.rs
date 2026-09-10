@@ -15,6 +15,7 @@ use crate::infrastructure::repositories::sqlite_task_repository::{
 use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
 use crate::infrastructure::repositories::system_clock::SystemClock;
 use crate::infrastructure::repositories::task_executor::TaskExecutor;
+use crate::infrastructure::repositories::video_file_repository::FilesystemVideoFileRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubeApiPlaylistItemsRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
@@ -142,6 +143,7 @@ fn build_application() -> Result<Application> {
         event_repository.clone() as Arc<dyn EventPublisher>,
         task_repository.clone() as Arc<dyn TaskRepository>,
         Arc::new(YtDlpVideoDownloaderRepository),
+        Arc::new(FilesystemVideoFileRepository),
         Arc::new(SystemClock),
         sync_interval_seconds(),
         videos_path(),

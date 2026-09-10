@@ -39,6 +39,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
     use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::repositories::video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::{
         FakeYoutubePlaylistItemsRepository, PlaylistVideo,
     };
@@ -81,6 +82,7 @@ mod tests {
             event_publisher.clone(),
             task_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
@@ -187,6 +189,49 @@ mod tests {
         handler.handle(&payload_for("PL1"), false).unwrap();
 
         assert!(video_repository.videos.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_publish_a_video_deleted_event_with_the_correct_was_downloaded_per_video() {
+        let (handler, event_publisher, video_repository, _tasks) =
+            handler_with_playlist(Vec::new());
+        video_repository.videos.lock().unwrap().push(
+            Video::create(
+                PlaylistId::new("PL1").unwrap(),
+                VideoId::new("vid1").unwrap(),
+                "Downloaded Video",
+                fixed_timestamp(),
+            )
+            .start_download(fixed_timestamp())
+            .mark_downloaded(fixed_timestamp()),
+        );
+        video_repository.videos.lock().unwrap().push(Video::create(
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("vid2").unwrap(),
+            "Pending Video",
+            fixed_timestamp(),
+        ));
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        let published = event_publisher.published.lock().unwrap();
+        assert_eq!(
+            *published,
+            vec![
+                DomainEvent::VideoDeleted {
+                    playlist_id: "PL1".to_string(),
+                    video_id: "vid1".to_string(),
+                    title: "Downloaded Video".to_string(),
+                    was_downloaded: true,
+                },
+                DomainEvent::VideoDeleted {
+                    playlist_id: "PL1".to_string(),
+                    video_id: "vid2".to_string(),
+                    title: "Pending Video".to_string(),
+                    was_downloaded: false,
+                },
+            ]
+        );
     }
 
     #[test]

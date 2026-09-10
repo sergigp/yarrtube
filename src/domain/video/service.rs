@@ -1,5 +1,6 @@
 use super::video::Video;
 use super::video_filename::VideoFilename;
+use super::video_status::VideoStatus;
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::Quality;
 use crate::domain::shared::{PlaylistId, VideoId};
@@ -9,6 +10,7 @@ use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRep
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::system_clock::Clock;
+use crate::infrastructure::repositories::video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubePlaylistItemsRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
 use std::collections::HashSet;
@@ -26,6 +28,7 @@ pub struct VideoService {
     event_publisher: Arc<dyn EventPublisher>,
     task_repository: Arc<dyn TaskRepository>,
     video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+    video_file_repository: Arc<dyn VideoFileRepository>,
     clock: Arc<dyn Clock>,
     sync_interval_seconds: i64,
     videos_path: String,
@@ -40,6 +43,7 @@ impl VideoService {
         event_publisher: Arc<dyn EventPublisher>,
         task_repository: Arc<dyn TaskRepository>,
         video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+        video_file_repository: Arc<dyn VideoFileRepository>,
         clock: Arc<dyn Clock>,
         sync_interval_seconds: i64,
         videos_path: impl Into<String>,
@@ -51,6 +55,7 @@ impl VideoService {
             event_publisher,
             task_repository,
             video_downloader_repository,
+            video_file_repository,
             clock,
             sync_interval_seconds,
             videos_path: videos_path.into(),
@@ -113,6 +118,12 @@ impl VideoService {
                     "removing video from playlist (no longer on YouTube)"
                 );
                 self.video_repository.delete(&id, &stored.video_id)?;
+                self.event_publisher.publish(&DomainEvent::VideoDeleted {
+                    playlist_id: id.as_str().to_string(),
+                    video_id: stored.video_id.as_str().to_string(),
+                    title: stored.title.clone(),
+                    was_downloaded: stored.status == VideoStatus::Downloaded,
+                })?;
             }
         }
 
@@ -195,6 +206,37 @@ impl VideoService {
             }
         }
     }
+
+    /// Deletes a removed video's downloaded file from disk, scheduled by
+    /// `subscribers::delete_video_file_on_video_deleted` whenever a
+    /// downloaded video is removed from its playlist. No-ops (without
+    /// erroring) if the playlist no longer exists or no matching file is
+    /// found, so the task is safe to retry.
+    pub fn delete_video_file(
+        &self,
+        playlist_id: PlaylistId,
+        video_id: VideoId,
+        title: &str,
+    ) -> anyhow::Result<()> {
+        let Some(playlist) = self.playlist_repository.find(&playlist_id)? else {
+            debug!(playlist_id = %playlist_id, "playlist no longer exists, skipping file deletion");
+            return Ok(());
+        };
+
+        let filename = VideoFilename::from_title(title);
+        let output_dir = Path::new(&self.videos_path).join(playlist.name.as_str());
+        let deleted =
+            self.video_file_repository
+                .delete(&output_dir, filename.as_str(), video_id.as_str())?;
+
+        if deleted {
+            info!(playlist_id = %playlist_id, video_id = %video_id, "deleted video file");
+        } else {
+            debug!(playlist_id = %playlist_id, video_id = %video_id, "no matching video file found to delete");
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -211,6 +253,7 @@ mod tests {
         FakeVideoRepository, VideoRepository,
     };
     use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::repositories::video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
     use chrono::{DateTime, Utc};
@@ -262,12 +305,43 @@ mod tests {
             Arc::new(FakeEventPublisher::default()),
             Arc::new(FakeTaskRepository::default()),
             Arc::new(downloader),
+            Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
         );
 
         (service, video_repository)
+    }
+
+    fn service_for_file_deletion(
+        seed_playlist: bool,
+        video_file_repository: Arc<FakeVideoFileRepository>,
+    ) -> VideoService {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        if seed_playlist {
+            playlist_repository
+                .insert(&Playlist::create(
+                    playlist_id(),
+                    PlaylistName::new("My Playlist").unwrap(),
+                    Quality::High,
+                    fixed_timestamp(),
+                ))
+                .unwrap();
+        }
+
+        VideoService::new(
+            playlist_repository,
+            Arc::new(FakeVideoRepository::default()),
+            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeEventPublisher::default()),
+            Arc::new(FakeTaskRepository::default()),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            video_file_repository,
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        )
     }
 
     #[test]
@@ -372,6 +446,7 @@ mod tests {
             Arc::new(FakeEventPublisher::default()),
             Arc::new(FakeTaskRepository::default()),
             downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
@@ -390,5 +465,47 @@ mod tests {
         );
         assert_ne!(desired_filename, messy_title);
         assert_eq!(id, video_id().as_str());
+    }
+
+    #[test]
+    fn it_should_delete_the_video_file_when_present() {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::new(Ok(true)));
+        let service = service_for_file_deletion(true, video_file_repository.clone());
+
+        service
+            .delete_video_file(playlist_id(), video_id(), "My Video")
+            .unwrap();
+
+        let calls = video_file_repository.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        let (output_dir, filename_stem, id) = &calls[0];
+        assert_eq!(output_dir, Path::new("/videos/My Playlist"));
+        assert_eq!(
+            filename_stem,
+            VideoFilename::from_title("My Video").as_str()
+        );
+        assert_eq!(id, video_id().as_str());
+    }
+
+    #[test]
+    fn it_should_no_op_when_the_playlist_no_longer_exists_for_file_deletion() {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::new(Ok(false)));
+        let service = service_for_file_deletion(false, video_file_repository.clone());
+
+        service
+            .delete_video_file(playlist_id(), video_id(), "My Video")
+            .unwrap();
+
+        assert!(video_file_repository.calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_no_op_when_no_matching_file_is_found() {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::new(Ok(false)));
+        let service = service_for_file_deletion(true, video_file_repository.clone());
+
+        let result = service.delete_video_file(playlist_id(), video_id(), "My Video");
+
+        assert!(result.is_ok());
     }
 }
