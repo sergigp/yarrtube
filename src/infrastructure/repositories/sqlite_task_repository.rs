@@ -1,17 +1,17 @@
 use crate::domain::task::{DeadLetteredTask, ScheduledTask, Task, TaskStatus};
-use crate::infrastructure::repositories::system_clock::Clock;
+use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, OptionalExtension, Row, params};
+#[cfg(test)]
+use rusqlite::OptionalExtension;
+use rusqlite::{Connection, Row, params};
 use std::sync::{Arc, Mutex};
 use tracing::info;
 
 pub trait TaskRepository: Send + Sync {
     fn schedule(&self, task: &Task, run_at: DateTime<Utc>) -> anyhow::Result<()>;
-    fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledTask>>;
-    /// IDs of tasks ready to run now, cheapest read for the hot poll loop —
-    /// callers `find` each one right before mutating it.
-    fn list_eligible(&self) -> anyhow::Result<Vec<i64>>;
+    /// Tasks ready to run now.
+    fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>>;
     /// Every task still `running` from a previous, interrupted process.
     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>>;
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()>;
@@ -133,6 +133,21 @@ impl SqliteTaskRepository {
         rows.collect::<Result<Vec<_>, _>>()
             .context("failed to read task row")
     }
+
+    #[cfg(test)]
+    fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledTask>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        conn.query_row(
+            &format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE id = ?1"),
+            params![id],
+            row_to_scheduled_task,
+        )
+        .optional()
+        .context("failed to find task")
+    }
 }
 
 impl TaskRepository for SqliteTaskRepository {
@@ -162,35 +177,24 @@ impl TaskRepository for SqliteTaskRepository {
         Ok(())
     }
 
-    fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledTask>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
-        conn.query_row(
-            &format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE id = ?1"),
-            params![id],
-            row_to_scheduled_task,
-        )
-        .optional()
-        .context("failed to find task")
-    }
-
-    fn list_eligible(&self) -> anyhow::Result<Vec<i64>> {
+    fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {
         let conn = self
             .conn
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
-            .prepare(
-                "SELECT id FROM tasks WHERE status = 'pending' AND run_at <= ?1 ORDER BY id ASC",
-            )
+            .prepare(&format!(
+                "SELECT {SELECT_COLUMNS} FROM tasks WHERE status = 'pending' AND run_at <= ?1 ORDER BY id ASC"
+            ))
             .context("failed to prepare list-eligible-tasks query")?;
         let rows = stmt
-            .query_map(params![self.clock.now().to_rfc3339()], |row| row.get(0))
+            .query_map(
+                params![self.clock.now().to_rfc3339()],
+                row_to_scheduled_task,
+            )
             .context("failed to list eligible tasks")?;
         rows.collect::<Result<Vec<_>, _>>()
-            .context("failed to read eligible task id")
+            .context("failed to read eligible task row")
     }
 
     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {
@@ -273,11 +277,7 @@ impl TaskRepository for FakeTaskRepository {
         Ok(())
     }
 
-    fn find(&self, _id: i64) -> anyhow::Result<Option<ScheduledTask>> {
-        Ok(None)
-    }
-
-    fn list_eligible(&self) -> anyhow::Result<Vec<i64>> {
+    fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {
         Ok(Vec::new())
     }
 
@@ -302,7 +302,7 @@ impl TaskRepository for FakeTaskRepository {
 mod tests {
     use super::*;
     use crate::domain::task::TaskFailureOutcome;
-    use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::shared::system_clock::FixedClock;
 
     fn repo_with_clock(now: DateTime<Utc>) -> SqliteTaskRepository {
         SqliteTaskRepository::new(
@@ -341,10 +341,7 @@ mod tests {
 
         let eligible = repo.list_eligible().unwrap();
         assert_eq!(eligible.len(), 1);
-        assert_eq!(
-            repo.find(eligible[0]).unwrap().unwrap().task_type,
-            "sync_playlist"
-        );
+        assert_eq!(eligible[0].task_type, "sync_playlist");
     }
 
     #[test]
@@ -362,7 +359,7 @@ mod tests {
     fn it_should_no_longer_list_a_task_as_eligible_once_deleted() {
         let repo = repo();
         repo.schedule(&task(), repo.clock.now()).unwrap();
-        let id = repo.list_eligible().unwrap()[0];
+        let id = repo.list_eligible().unwrap()[0].id;
 
         repo.delete(id).unwrap();
 
@@ -385,7 +382,7 @@ mod tests {
     fn it_should_no_longer_list_a_running_task_as_eligible() {
         let repo = repo();
         repo.schedule(&task(), repo.clock.now()).unwrap();
-        let id = repo.list_eligible().unwrap()[0];
+        let id = repo.list_eligible().unwrap()[0].id;
         let scheduled = repo.find(id).unwrap().unwrap();
 
         repo.update(&scheduled.start(repo.clock.now())).unwrap();
@@ -397,7 +394,7 @@ mod tests {
     fn it_should_drop_the_task_after_the_fifth_failed_attempt() {
         let repo = repo();
         repo.schedule(&task(), repo.clock.now()).unwrap();
-        let id = repo.list_eligible().unwrap()[0];
+        let id = repo.list_eligible().unwrap()[0].id;
 
         for _ in 0..5 {
             apply_failure(&repo, id, "boom");
@@ -432,7 +429,7 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         let repo = repo_with_clock(now);
         repo.schedule(&task(), now).unwrap();
-        let id = repo.list_eligible().unwrap()[0];
+        let id = repo.list_eligible().unwrap()[0].id;
 
         apply_failure(&repo, id, "boom");
 
@@ -447,7 +444,7 @@ mod tests {
     fn it_should_retry_a_recovered_running_task_when_under_the_attempt_limit() {
         let repo = repo();
         repo.schedule(&task(), repo.clock.now()).unwrap();
-        let id = repo.list_eligible().unwrap()[0];
+        let id = repo.list_eligible().unwrap()[0].id;
         let scheduled = repo.find(id).unwrap().unwrap();
         repo.update(&scheduled.start(repo.clock.now())).unwrap();
 
@@ -471,7 +468,7 @@ mod tests {
     fn it_should_drop_a_recovered_running_task_once_the_attempt_limit_is_exceeded() {
         let repo = repo();
         repo.schedule(&task(), repo.clock.now()).unwrap();
-        let id = repo.list_eligible().unwrap()[0];
+        let id = repo.list_eligible().unwrap()[0].id;
 
         for _ in 0..4 {
             apply_failure(&repo, id, "boom");

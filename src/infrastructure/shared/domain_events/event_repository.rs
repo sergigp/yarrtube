@@ -1,21 +1,16 @@
-use crate::domain::event::{DeadLetteredEvent, DomainEvent, ScheduledEvent};
-use crate::infrastructure::repositories::system_clock::Clock;
+#[cfg(test)]
+use crate::domain::event::DomainEvent;
+use crate::domain::event::{DeadLetteredEvent, ScheduledEvent};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, OptionalExtension, Row, params};
+#[cfg(test)]
+use rusqlite::OptionalExtension;
+use rusqlite::{Connection, Row, params};
 use std::sync::{Arc, Mutex};
-use tracing::info;
-
-pub trait EventPublisher: Send + Sync {
-    fn publish(&self, event: &DomainEvent) -> anyhow::Result<()>;
-}
 
 pub trait EventRepository: Send + Sync {
-    fn insert_pending(&self, event: &DomainEvent) -> anyhow::Result<()>;
-    fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledEvent>>;
-    /// IDs of pending events, cheapest read for the hot poll loop — callers
-    /// `find` each one right before mutating it.
-    fn list_eligible(&self) -> anyhow::Result<Vec<i64>>;
+    /// Pending events ready to dispatch.
+    fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledEvent>>;
     fn update(&self, event: &ScheduledEvent) -> anyhow::Result<()>;
     fn delete(&self, id: i64) -> anyhow::Result<()>;
     /// Atomically inserts `event` into the dead-letter table and deletes the
@@ -56,9 +51,8 @@ fn row_to_scheduled_event(row: &Row) -> rusqlite::Result<ScheduledEvent> {
 }
 
 /// Creates the `events` table if it doesn't exist yet. Exposed so
-/// `SqlitePlaylistRepository` can ensure it exists too, since it writes to
-/// this table directly to keep a playlist insert and its event in one
-/// transaction (see `insert_pending_row`).
+/// `SqliteEventPublisher` can ensure it exists too, since it writes to this
+/// table without going through `EventRepository`.
 pub(crate) fn create_events_table(conn: &Connection) -> anyhow::Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS events (
@@ -95,40 +89,12 @@ fn create_domain_events_dead_letter_table(conn: &Connection) -> anyhow::Result<(
     Ok(())
 }
 
-/// Inserts a pending event row against any `Connection` (a plain connection
-/// or a `Transaction`, which derefs to one) so callers writing to another
-/// table can include this write in the same transaction.
-pub(crate) fn insert_pending_row(
-    conn: &Connection,
-    event: &DomainEvent,
-    now: DateTime<Utc>,
-) -> anyhow::Result<()> {
-    conn.execute(
-        "INSERT INTO events (event_type, payload, status, retries, created_at, updated_at, last_error)
-         VALUES (?1, ?2, 'pending', 0, ?3, ?3, NULL)",
-        params![
-            event.event_type(),
-            event.payload().to_string(),
-            now.to_rfc3339()
-        ],
-    )
-    .context("failed to insert event")?;
-    info!(
-        event_id = conn.last_insert_rowid(),
-        event_type = event.event_type(),
-        payload = %event.payload(),
-        "published event"
-    );
-    Ok(())
-}
-
 pub struct SqliteEventRepository {
     conn: Arc<Mutex<Connection>>,
-    clock: Arc<dyn Clock>,
 }
 
 impl SqliteEventRepository {
-    pub fn new(conn: Arc<Mutex<Connection>>, clock: Arc<dyn Clock>) -> anyhow::Result<Self> {
+    pub fn new(conn: Arc<Mutex<Connection>>) -> anyhow::Result<Self> {
         {
             let guard = conn
                 .lock()
@@ -136,25 +102,12 @@ impl SqliteEventRepository {
             create_events_table(&guard)?;
             create_domain_events_dead_letter_table(&guard)?;
         }
-        Ok(Self { conn, clock })
+        Ok(Self { conn })
     }
 }
 
-impl EventPublisher for SqliteEventRepository {
-    fn publish(&self, event: &DomainEvent) -> anyhow::Result<()> {
-        self.insert_pending(event)
-    }
-}
-
-impl EventRepository for SqliteEventRepository {
-    fn insert_pending(&self, event: &DomainEvent) -> anyhow::Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
-        insert_pending_row(&conn, event, self.clock.now())
-    }
-
+impl SqliteEventRepository {
+    #[cfg(test)]
     fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledEvent>> {
         let conn = self
             .conn
@@ -168,20 +121,24 @@ impl EventRepository for SqliteEventRepository {
         .optional()
         .context("failed to find event")
     }
+}
 
-    fn list_eligible(&self) -> anyhow::Result<Vec<i64>> {
+impl EventRepository for SqliteEventRepository {
+    fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledEvent>> {
         let conn = self
             .conn
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
-            .prepare("SELECT id FROM events WHERE status = 'pending' ORDER BY id ASC")
+            .prepare(&format!(
+                "SELECT {SELECT_COLUMNS} FROM events WHERE status = 'pending' ORDER BY id ASC"
+            ))
             .context("failed to prepare list-eligible-events query")?;
         let rows = stmt
-            .query_map([], |row| row.get(0))
+            .query_map([], row_to_scheduled_event)
             .context("failed to list eligible events")?;
         rows.collect::<Result<Vec<_>, _>>()
-            .context("failed to read eligible event id")
+            .context("failed to read eligible event row")
     }
 
     fn update(&self, event: &ScheduledEvent) -> anyhow::Result<()> {
@@ -247,14 +204,56 @@ impl EventRepository for SqliteEventRepository {
 
 #[cfg(test)]
 #[derive(Default)]
-pub struct FakeEventPublisher {
-    pub(crate) published: Mutex<Vec<DomainEvent>>,
+pub struct FakeEventRepository {
+    pub(crate) events: Mutex<Vec<ScheduledEvent>>,
+    pub(crate) updated: Mutex<Vec<ScheduledEvent>>,
+    pub(crate) deleted: Mutex<Vec<i64>>,
+    pub(crate) dead_lettered: Mutex<Vec<DeadLetteredEvent>>,
 }
 
 #[cfg(test)]
-impl EventPublisher for FakeEventPublisher {
-    fn publish(&self, event: &DomainEvent) -> anyhow::Result<()> {
-        self.published.lock().unwrap().push(event.clone());
+impl FakeEventRepository {
+    pub fn seeded(event_type: &str) -> Self {
+        Self::seeded_with_retries(event_type, 0)
+    }
+
+    pub fn seeded_with_retries(event_type: &str, retries: i64) -> Self {
+        let repo = Self::default();
+        repo.events.lock().unwrap().push(ScheduledEvent {
+            id: 1,
+            event_type: event_type.to_string(),
+            payload: DomainEvent::PlaylistCreated {
+                playlist_id: "PL1".to_string(),
+            }
+            .payload()
+            .to_string(),
+            retries,
+            created_at: DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
+            updated_at: DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
+            last_error: None,
+        });
+        repo
+    }
+}
+
+#[cfg(test)]
+impl EventRepository for FakeEventRepository {
+    fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledEvent>> {
+        Ok(self.events.lock().unwrap().clone())
+    }
+
+    fn update(&self, event: &ScheduledEvent) -> anyhow::Result<()> {
+        self.updated.lock().unwrap().push(event.clone());
+        Ok(())
+    }
+
+    fn delete(&self, id: i64) -> anyhow::Result<()> {
+        self.deleted.lock().unwrap().push(id);
+        Ok(())
+    }
+
+    fn dead_letter(&self, event: &DeadLetteredEvent) -> anyhow::Result<()> {
+        self.dead_lettered.lock().unwrap().push(event.clone());
         Ok(())
     }
 }
@@ -263,14 +262,30 @@ impl EventPublisher for FakeEventPublisher {
 mod tests {
     use super::*;
     use crate::domain::event::EventFailureOutcome;
-    use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::shared::domain_events::event_publisher::{
+        EventPublisher, SqliteEventPublisher,
+    };
+    use crate::infrastructure::shared::system_clock::FixedClock;
+
+    fn now() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(0, 0).unwrap()
+    }
+
+    /// Publishes through `SqliteEventPublisher` (sharing the repository's
+    /// connection) since `EventRepository` itself no longer writes new rows.
+    fn repo_with_one_pending_event() -> (SqliteEventRepository, i64) {
+        let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        let publisher =
+            SqliteEventPublisher::new(conn.clone(), Arc::new(FixedClock(now()))).unwrap();
+        let repo = SqliteEventRepository::new(conn).unwrap();
+        publisher.publish(&event()).unwrap();
+        let id = repo.list_eligible().unwrap()[0].id;
+        (repo, id)
+    }
 
     fn repo() -> SqliteEventRepository {
-        SqliteEventRepository::new(
-            Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-            Arc::new(FixedClock(DateTime::<Utc>::from_timestamp(0, 0).unwrap())),
-        )
-        .unwrap()
+        SqliteEventRepository::new(Arc::new(Mutex::new(Connection::open_in_memory().unwrap())))
+            .unwrap()
     }
 
     fn event() -> DomainEvent {
@@ -284,7 +299,7 @@ mod tests {
     /// decision.
     fn apply_failure(repo: &SqliteEventRepository, id: i64, error: &str) {
         let scheduled = repo.find(id).unwrap().unwrap();
-        match scheduled.fail(error, repo.clock.now()) {
+        match scheduled.fail(error, now()) {
             EventFailureOutcome::Retry(retried) => repo.update(&retried).unwrap(),
             EventFailureOutcome::DeadLetter(dead) => repo.dead_letter(&dead).unwrap(),
         }
@@ -305,22 +320,18 @@ mod tests {
 
     #[test]
     fn it_should_list_an_inserted_event_as_eligible() {
-        let repo = repo();
-
-        repo.insert_pending(&event()).unwrap();
+        let (repo, id) = repo_with_one_pending_event();
 
         let eligible = repo.list_eligible().unwrap();
         assert_eq!(eligible.len(), 1);
-        let found = repo.find(eligible[0]).unwrap().unwrap();
+        let found = repo.find(id).unwrap().unwrap();
         assert_eq!(found.event_type, "playlist_created");
         assert_eq!(found.payload, event().payload().to_string());
     }
 
     #[test]
     fn it_should_no_longer_list_an_event_as_eligible_once_deleted() {
-        let repo = repo();
-        repo.insert_pending(&event()).unwrap();
-        let id = repo.list_eligible().unwrap()[0];
+        let (repo, id) = repo_with_one_pending_event();
 
         repo.delete(id).unwrap();
 
@@ -330,9 +341,7 @@ mod tests {
 
     #[test]
     fn it_should_keep_a_failed_event_pending_and_increment_retries_below_the_limit() {
-        let repo = repo();
-        repo.insert_pending(&event()).unwrap();
-        let id = repo.list_eligible().unwrap()[0];
+        let (repo, id) = repo_with_one_pending_event();
 
         apply_failure(&repo, id, "boom");
 
@@ -342,9 +351,7 @@ mod tests {
 
     #[test]
     fn it_should_drop_the_event_after_the_fifth_failed_attempt() {
-        let repo = repo();
-        repo.insert_pending(&event()).unwrap();
-        let id = repo.list_eligible().unwrap()[0];
+        let (repo, id) = repo_with_one_pending_event();
 
         for _ in 0..5 {
             apply_failure(&repo, id, "boom");
@@ -355,9 +362,7 @@ mod tests {
 
     #[test]
     fn it_should_move_the_event_to_the_dead_letter_table_after_the_fifth_failed_attempt() {
-        let repo = repo();
-        repo.insert_pending(&event()).unwrap();
-        let id = repo.list_eligible().unwrap()[0];
+        let (repo, id) = repo_with_one_pending_event();
 
         for _ in 0..5 {
             apply_failure(&repo, id, "boom");
@@ -398,9 +403,7 @@ mod tests {
 
     #[test]
     fn it_should_stay_eligible_after_the_fourth_failed_attempt() {
-        let repo = repo();
-        repo.insert_pending(&event()).unwrap();
-        let id = repo.list_eligible().unwrap()[0];
+        let (repo, id) = repo_with_one_pending_event();
 
         for _ in 0..4 {
             apply_failure(&repo, id, "boom");

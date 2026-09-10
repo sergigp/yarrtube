@@ -32,18 +32,18 @@ mod tests {
     use crate::domain::playlist::{Playlist, PlaylistName, Quality};
     use crate::domain::shared::VideoId;
     use crate::domain::video::{Video, VideoStatus};
-    use crate::infrastructure::repositories::sqlite_event_repository::FakeEventPublisher;
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         FakePlaylistRepository, PlaylistRepository,
     };
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
-    use crate::infrastructure::repositories::system_clock::FixedClock;
-    use crate::infrastructure::repositories::video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::{
         FakeYoutubePlaylistItemsRepository, PlaylistVideo,
     };
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
+    use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use std::sync::Arc;
 

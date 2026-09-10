@@ -1,7 +1,7 @@
 use crate::domain::event::EventFailureOutcome;
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
-use crate::infrastructure::repositories::sqlite_event_repository::EventRepository;
-use crate::infrastructure::repositories::system_clock::Clock;
+use crate::infrastructure::shared::domain_events::event_repository::EventRepository;
+use crate::infrastructure::shared::system_clock::Clock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -32,11 +32,7 @@ impl DomainEventsConsumer {
     }
 
     pub fn poll_once(&self) -> anyhow::Result<()> {
-        for id in self.repository.list_eligible()? {
-            let Some(event) = self.repository.find(id)? else {
-                warn!(event_id = id, "eligible event disappeared before dispatch");
-                continue;
-            };
+        for event in self.repository.list_eligible()? {
             let mut failure: Option<String> = None;
 
             match self.subscribers.get(&event.event_type) {
@@ -109,88 +105,13 @@ impl DomainEventsConsumer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::event::{DeadLetteredEvent, DomainEvent, ScheduledEvent};
-    use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::shared::domain_events::event_repository::FakeEventRepository;
+    use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use std::sync::Mutex;
 
-    #[derive(Default)]
-    struct FakeEventRepository {
-        events: Mutex<Vec<ScheduledEvent>>,
-        updated: Mutex<Vec<ScheduledEvent>>,
-        deleted: Mutex<Vec<i64>>,
-        dead_lettered: Mutex<Vec<DeadLetteredEvent>>,
-    }
-
     fn now() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
-    }
-
-    fn scheduled_event(event_type: &str, retries: i64) -> ScheduledEvent {
-        ScheduledEvent {
-            id: 1,
-            event_type: event_type.to_string(),
-            payload: DomainEvent::PlaylistCreated {
-                playlist_id: "PL1".to_string(),
-            }
-            .payload()
-            .to_string(),
-            retries,
-            created_at: now(),
-            updated_at: now(),
-            last_error: None,
-        }
-    }
-
-    impl FakeEventRepository {
-        fn seeded(event_type: &str) -> Self {
-            Self::seeded_with_retries(event_type, 0)
-        }
-
-        fn seeded_with_retries(event_type: &str, retries: i64) -> Self {
-            let repo = Self::default();
-            repo.events
-                .lock()
-                .unwrap()
-                .push(scheduled_event(event_type, retries));
-            repo
-        }
-    }
-
-    impl EventRepository for FakeEventRepository {
-        fn insert_pending(&self, _event: &DomainEvent) -> anyhow::Result<()> {
-            unimplemented!("not exercised by the consumer")
-        }
-
-        fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledEvent>> {
-            Ok(self
-                .events
-                .lock()
-                .unwrap()
-                .iter()
-                .find(|e| e.id == id)
-                .cloned())
-        }
-
-        // TODO check why this returns only ids
-        fn list_eligible(&self) -> anyhow::Result<Vec<i64>> {
-            Ok(self.events.lock().unwrap().iter().map(|e| e.id).collect())
-        }
-
-        fn update(&self, event: &ScheduledEvent) -> anyhow::Result<()> {
-            self.updated.lock().unwrap().push(event.clone());
-            Ok(())
-        }
-
-        fn delete(&self, id: i64) -> anyhow::Result<()> {
-            self.deleted.lock().unwrap().push(id);
-            Ok(())
-        }
-
-        fn dead_letter(&self, event: &DeadLetteredEvent) -> anyhow::Result<()> {
-            self.dead_lettered.lock().unwrap().push(event.clone());
-            Ok(())
-        }
     }
 
     struct FakeSubscriber {

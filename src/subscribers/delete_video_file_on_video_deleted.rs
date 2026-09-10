@@ -2,7 +2,7 @@ use crate::domain::shared::{PlaylistId, VideoId};
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
-use crate::infrastructure::repositories::system_clock::Clock;
+use crate::infrastructure::shared::system_clock::Clock;
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -62,7 +62,7 @@ impl EventSubscriber for DeleteVideoFileOnVideoDeleted {
 mod tests {
     use super::*;
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
-    use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
 
     fn fixed_timestamp() -> DateTime<Utc> {

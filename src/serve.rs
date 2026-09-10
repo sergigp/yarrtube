@@ -3,9 +3,7 @@ use crate::domain::playlist::PlaylistService;
 use crate::domain::video::VideoService;
 use crate::http::{self, AppState};
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
-use crate::infrastructure::repositories::sqlite_event_repository::{
-    EventPublisher, EventRepository, SqliteEventRepository,
-};
+use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::{
     PlaylistRepository, SqlitePlaylistRepository,
 };
@@ -13,12 +11,17 @@ use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
 };
 use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
-use crate::infrastructure::repositories::system_clock::SystemClock;
 use crate::infrastructure::repositories::task_executor::TaskExecutor;
-use crate::infrastructure::repositories::video_file_repository::FilesystemVideoFileRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubeApiPlaylistItemsRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
+use crate::infrastructure::shared::domain_events::event_publisher::{
+    EventPublisher, SqliteEventPublisher,
+};
+use crate::infrastructure::shared::domain_events::event_repository::{
+    EventRepository, SqliteEventRepository,
+};
+use crate::infrastructure::shared::system_clock::SystemClock;
 use crate::{subscribers, tasks};
 use anyhow::{Context, Result};
 use axum::Router;
@@ -111,12 +114,16 @@ fn build_application() -> Result<Application> {
         SqlitePlaylistRepository::new(open_connection()?)
             .context("failed to initialize playlist repository")?,
     );
-    let event_repository = Arc::new(
-        SqliteEventRepository::new(
+    let event_publisher = Arc::new(
+        SqliteEventPublisher::new(
             Arc::new(Mutex::new(open_connection()?)),
             Arc::new(SystemClock),
         )
-        .context("failed to initialize event repository")?,
+        .context("failed to initialize event publisher")?,
+    );
+    let event_repository = Arc::new(
+        SqliteEventRepository::new(Arc::new(Mutex::new(open_connection()?)))
+            .context("failed to initialize event repository")?,
     );
 
     let task_repository = Arc::new(
@@ -133,14 +140,14 @@ fn build_application() -> Result<Application> {
     let playlist_service = PlaylistService::new(
         playlist_repository.clone(),
         Arc::new(YoutubeApiPlaylistRepository::new(youtube_api_key())),
-        event_repository.clone() as Arc<dyn EventPublisher>,
+        event_publisher.clone() as Arc<dyn EventPublisher>,
         Arc::new(SystemClock),
     );
     let video_service = VideoService::new(
         playlist_repository.clone(),
         Arc::new(video_repository),
         Arc::new(YoutubeApiPlaylistItemsRepository::new(youtube_api_key())),
-        event_repository.clone() as Arc<dyn EventPublisher>,
+        event_publisher as Arc<dyn EventPublisher>,
         task_repository.clone() as Arc<dyn TaskRepository>,
         Arc::new(YtDlpVideoDownloaderRepository),
         Arc::new(FilesystemVideoFileRepository),
