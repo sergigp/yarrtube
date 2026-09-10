@@ -33,7 +33,8 @@ impl TaskHandler for DeleteVideoFileTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::playlist::{Playlist, PlaylistName, Quality};
+    use crate::domain::playlist::{Playlist, PlaylistName, PlaylistPath};
+    use crate::domain::shared::Quality;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         FakePlaylistRepository, PlaylistRepository,
@@ -71,6 +72,7 @@ mod tests {
                 .insert(&Playlist::create(
                     PlaylistId::new("PL1").unwrap(),
                     PlaylistName::new("My Playlist").unwrap(),
+                    PlaylistPath::new("my-playlist").unwrap(),
                     Quality::High,
                     fixed_timestamp(),
                 ))

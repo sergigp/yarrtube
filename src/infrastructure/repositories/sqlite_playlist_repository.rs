@@ -1,5 +1,5 @@
-use crate::domain::playlist::{Playlist, PlaylistName, Quality};
-use crate::domain::shared::PlaylistId;
+use crate::domain::playlist::{Playlist, PlaylistName, PlaylistPath};
+use crate::domain::shared::{PlaylistId, Quality};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -22,6 +22,7 @@ impl SqlitePlaylistRepository {
             "CREATE TABLE IF NOT EXISTS playlists (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
+                path TEXT NOT NULL,
                 quality TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )",
@@ -36,16 +37,18 @@ impl SqlitePlaylistRepository {
     fn row_to_playlist(
         id: String,
         name: String,
+        path: String,
         quality: String,
         created_at: String,
     ) -> anyhow::Result<Playlist> {
         let id = PlaylistId::new(id)?;
         let name = PlaylistName::new(name)?;
+        let path = PlaylistPath::new(path)?;
         let quality = Quality::new(quality)?;
         let created_at = DateTime::parse_from_rfc3339(&created_at)
             .context("failed to parse stored created_at")?
             .with_timezone(&Utc);
-        Ok(Playlist::create(id, name, quality, created_at))
+        Ok(Playlist::create(id, name, path, quality, created_at))
     }
 }
 
@@ -56,7 +59,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
-            "SELECT id, name, quality, created_at FROM playlists WHERE id = ?1",
+            "SELECT id, name, path, quality, created_at FROM playlists WHERE id = ?1",
             params![id.as_str()],
             |row| {
                 Ok((
@@ -64,12 +67,15 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
                 ))
             },
         )
         .optional()
         .context("failed to query playlist")?
-        .map(|(id, name, quality, created_at)| Self::row_to_playlist(id, name, quality, created_at))
+        .map(|(id, name, path, quality, created_at)| {
+            Self::row_to_playlist(id, name, path, quality, created_at)
+        })
         .transpose()
     }
 
@@ -79,10 +85,11 @@ impl PlaylistRepository for SqlitePlaylistRepository {
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "INSERT INTO playlists (id, name, quality, created_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO playlists (id, name, path, quality, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
                 playlist.id.as_str(),
                 playlist.name.as_str(),
+                playlist.path.as_str(),
                 playlist.quality.as_str(),
                 playlist.created_at.to_rfc3339()
             ],
@@ -107,7 +114,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
-            .prepare("SELECT id, name, quality, created_at FROM playlists ORDER BY rowid ASC")
+            .prepare("SELECT id, name, path, quality, created_at FROM playlists ORDER BY rowid ASC")
             .context("failed to prepare list query")?;
         let rows = stmt
             .query_map([], |row| {
@@ -116,13 +123,15 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
                 ))
             })
             .context("failed to list playlists")?;
 
         rows.map(|row| {
-            let (id, name, quality, created_at) = row.context("failed to read playlist row")?;
-            Self::row_to_playlist(id, name, quality, created_at)
+            let (id, name, path, quality, created_at) =
+                row.context("failed to read playlist row")?;
+            Self::row_to_playlist(id, name, path, quality, created_at)
         })
         .collect()
     }
@@ -173,6 +182,7 @@ mod tests {
         Playlist::create(
             PlaylistId::new(id).unwrap(),
             PlaylistName::new(name).unwrap(),
+            PlaylistPath::new("my-playlist").unwrap(),
             Quality::High,
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         )

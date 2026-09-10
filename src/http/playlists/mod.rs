@@ -3,9 +3,9 @@ pub mod dto;
 use super::AppState;
 use super::error::error_response;
 use crate::domain::playlist::{
-    CreatePlaylistError, CreatePlaylistOutcome, DeletePlaylistError, PlaylistName, Quality,
+    CreatePlaylistError, CreatePlaylistOutcome, DeletePlaylistError, PlaylistName, PlaylistPath,
 };
-use crate::domain::shared::PlaylistId;
+use crate::domain::shared::{PlaylistId, Quality};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -24,6 +24,18 @@ pub async fn create_playlist(
         Ok(name) => name,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
     };
+    let path = match request.path {
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "Playlist path must not be empty".to_string(),
+            );
+        }
+        Some(path) => match PlaylistPath::new(path) {
+            Ok(path) => path,
+            Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
+        },
+    };
     let quality = match request.quality {
         None => {
             return error_response(
@@ -38,7 +50,9 @@ pub async fn create_playlist(
     };
 
     let result = tokio::task::spawn_blocking(move || {
-        state.playlist_service.create_playlist(id, name, quality)
+        state
+            .playlist_service
+            .create_playlist(id, name, path, quality)
     })
     .await;
 
@@ -137,19 +151,30 @@ mod tests {
         serde_json::from_slice(&bytes).unwrap()
     }
 
+    const DEFAULT_PATH: &str = "music/chill";
+
     fn create_request(id: &str, name: &str) -> Request<Body> {
-        create_request_with_quality(id, name, "high")
+        create_request_with(id, name, DEFAULT_PATH, "high")
     }
 
-    fn create_request_with_quality(id: &str, name: &str, quality: &str) -> Request<Body> {
+    fn create_request_with(id: &str, name: &str, path: &str, quality: &str) -> Request<Body> {
         Request::builder()
             .method("POST")
             .uri("/playlists")
             .header("content-type", "application/json")
             .body(Body::from(
-                serde_json::json!({ "id": id, "name": name, "quality": quality }).to_string(),
+                serde_json::json!({ "id": id, "name": name, "path": path, "quality": quality })
+                    .to_string(),
             ))
             .unwrap()
+    }
+
+    fn create_request_with_quality(id: &str, name: &str, quality: &str) -> Request<Body> {
+        create_request_with(id, name, DEFAULT_PATH, quality)
+    }
+
+    fn create_request_with_path(id: &str, name: &str, path: &str) -> Request<Body> {
+        create_request_with(id, name, path, "high")
     }
 
     fn create_request_missing_quality(id: &str, name: &str) -> Request<Body> {
@@ -158,7 +183,18 @@ mod tests {
             .uri("/playlists")
             .header("content-type", "application/json")
             .body(Body::from(
-                serde_json::json!({ "id": id, "name": name }).to_string(),
+                serde_json::json!({ "id": id, "name": name, "path": DEFAULT_PATH }).to_string(),
+            ))
+            .unwrap()
+    }
+
+    fn create_request_missing_path(id: &str, name: &str) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri("/playlists")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::json!({ "id": id, "name": name, "quality": "high" }).to_string(),
             ))
             .unwrap()
     }
@@ -177,6 +213,7 @@ mod tests {
         let body = body_json(response).await;
         assert_eq!(body["id"], "PL1");
         assert_eq!(body["name"], "My Playlist");
+        assert_eq!(body["path"], DEFAULT_PATH);
         assert_eq!(body["quality"], "high");
         assert_eq!(
             body["created_at"],
@@ -212,6 +249,90 @@ mod tests {
         let response = router.oneshot(create_request("PL1", "")).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_path_is_missing() {
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
+
+        let response = router
+            .oneshot(create_request_missing_path("PL1", "My Playlist"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_path_is_absolute() {
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
+
+        let response = router
+            .oneshot(create_request_with_path(
+                "PL1",
+                "My Playlist",
+                "/absolute/path",
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_path_contains_a_parent_traversal_segment() {
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
+
+        let response = router
+            .oneshot(create_request_with_path("PL1", "My Playlist", "a/../b"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_path_contains_an_empty_segment() {
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
+
+        let response = router
+            .oneshot(create_request_with_path("PL1", "My Playlist", "a//b"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_the_existing_path_when_creating_a_duplicate_with_a_different_path() {
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
+        router
+            .clone()
+            .oneshot(create_request_with_path(
+                "PL1",
+                "My Playlist",
+                "original/path",
+            ))
+            .await
+            .unwrap();
+
+        let response = router
+            .oneshot(create_request_with_path(
+                "PL1",
+                "My Playlist",
+                "different/path",
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        assert_eq!(body["path"], "original/path");
     }
 
     #[tokio::test]

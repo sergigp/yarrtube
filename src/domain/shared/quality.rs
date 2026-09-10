@@ -1,4 +1,4 @@
-use super::errors::PlaylistError;
+use super::errors::QualityError;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -9,13 +9,13 @@ pub enum Quality {
 }
 
 impl Quality {
-    pub fn new(value: impl Into<String>) -> Result<Self, PlaylistError> {
+    pub fn new(value: impl Into<String>) -> Result<Self, QualityError> {
         let value = value.into();
         match value.as_str() {
             "high" => Ok(Self::High),
             "mid" => Ok(Self::Mid),
             "low" => Ok(Self::Low),
-            _ => Err(PlaylistError(format!(
+            _ => Err(QualityError(format!(
                 "Quality must be one of \"high\", \"mid\", or \"low\" (got \"{value}\")"
             ))),
         }

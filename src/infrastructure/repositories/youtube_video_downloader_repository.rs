@@ -1,4 +1,4 @@
-use crate::domain::playlist::Quality;
+use crate::domain::shared::Quality;
 use crate::infrastructure::shared::ytdlp;
 use std::path::Path;
 

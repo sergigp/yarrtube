@@ -69,7 +69,8 @@ impl EventSubscriber for DownloadVideoOnVideoAdded {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::playlist::{Playlist, PlaylistName, Quality};
+    use crate::domain::playlist::{Playlist, PlaylistName, PlaylistPath};
+    use crate::domain::shared::Quality;
     use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::shared::system_clock::FixedClock;
@@ -85,6 +86,7 @@ mod tests {
             .insert(&Playlist::create(
                 PlaylistId::new(id).unwrap(),
                 PlaylistName::new("My Playlist").unwrap(),
+                PlaylistPath::new("my-playlist").unwrap(),
                 quality,
                 fixed_timestamp(),
             ))

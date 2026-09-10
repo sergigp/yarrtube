@@ -42,11 +42,11 @@ The system SHALL automatically retry a failed video download a bounded number of
 - **THEN** the system stops attempting that download and does not try again on its own
 
 ### Requirement: Per-Playlist Output Directory
-The system SHALL save a downloaded video's file under a directory named after the playlist it belongs to, within a single configured root directory.
+The system SHALL save a downloaded video's file under a directory determined by its playlist's configured storage path, within a single configured root directory. A storage path may contain multiple segments, producing nested subdirectories.
 
 #### Scenario: Video downloaded
 - **WHEN** a video finishes downloading
-- **THEN** its file is saved under the configured root directory, in a subdirectory named after its playlist
+- **THEN** its file is saved under the configured root directory, in the subdirectory (or nested subdirectories) identified by its playlist's storage path
 
 #### Scenario: Root directory not configured
 - **WHEN** no root output directory has been explicitly configured
@@ -84,3 +84,14 @@ The system SHALL download a video's file using the resolution associated with it
 #### Scenario: No stream matches the preferred container/codec
 - **WHEN** a video has no available stream in mp4/h264/aac at or below its playlist's resolution cap
 - **THEN** the system downloads the best available stream within that resolution cap instead of failing the download
+
+### Requirement: Downloaded Quality Is Recorded
+The system SHALL record, on the video itself, the quality tier (`high`, `mid`, or `low`) it was actually downloaded at whenever a download succeeds. A video that has not yet completed a successful download SHALL have no recorded quality.
+
+#### Scenario: Download succeeds
+- **WHEN** a video download completes successfully at a given quality tier
+- **THEN** the video's recorded quality becomes that tier
+
+#### Scenario: Video not yet successfully downloaded
+- **WHEN** a video is pending, in progress, or has only failed attempts so far
+- **THEN** the video has no recorded quality

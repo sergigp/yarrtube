@@ -1,5 +1,5 @@
 use super::video_status::VideoStatus;
-use crate::domain::shared::{PlaylistId, VideoId};
+use crate::domain::shared::{PlaylistId, Quality, VideoId};
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -8,6 +8,7 @@ pub struct Video {
     pub video_id: VideoId,
     pub title: String,
     pub status: VideoStatus,
+    pub quality: Option<Quality>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -24,6 +25,7 @@ impl Video {
             video_id,
             title: title.into(),
             status: VideoStatus::Pending,
+            quality: None,
             created_at: now,
             updated_at: now,
         }
@@ -37,9 +39,10 @@ impl Video {
         }
     }
 
-    pub fn mark_downloaded(self, now: DateTime<Utc>) -> Self {
+    pub fn mark_downloaded(self, quality: Quality, now: DateTime<Utc>) -> Self {
         Self {
             status: VideoStatus::Downloaded,
+            quality: Some(quality),
             updated_at: now,
             ..self
         }
@@ -79,6 +82,7 @@ mod tests {
 
         assert_eq!(video.status, VideoStatus::Pending);
         assert_eq!(video.title, "My Video");
+        assert_eq!(video.quality, None);
         assert_eq!(video.created_at, now);
         assert_eq!(video.updated_at, now);
     }
@@ -99,6 +103,7 @@ mod tests {
         let video = video().start_download(now);
 
         assert_eq!(video.status, VideoStatus::InProgress);
+        assert_eq!(video.quality, None);
         assert_eq!(video.updated_at, now);
     }
 
@@ -106,9 +111,10 @@ mod tests {
     fn it_should_transition_to_downloaded_when_marked_downloaded() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
 
-        let video = video().mark_downloaded(now);
+        let video = video().mark_downloaded(Quality::High, now);
 
         assert_eq!(video.status, VideoStatus::Downloaded);
+        assert_eq!(video.quality, Some(Quality::High));
         assert_eq!(video.updated_at, now);
     }
 
@@ -119,6 +125,7 @@ mod tests {
         let video = video().mark_errored_retrying(now);
 
         assert_eq!(video.status, VideoStatus::ErroredRetrying);
+        assert_eq!(video.quality, None);
         assert_eq!(video.updated_at, now);
     }
 
@@ -129,6 +136,7 @@ mod tests {
         let video = video().mark_errored(now);
 
         assert_eq!(video.status, VideoStatus::Errored);
+        assert_eq!(video.quality, None);
         assert_eq!(video.updated_at, now);
     }
 }
