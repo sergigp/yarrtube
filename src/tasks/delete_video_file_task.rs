@@ -34,16 +34,16 @@ impl TaskHandler for DeleteVideoFileTask {
 mod tests {
     use super::*;
     use crate::domain::playlist::{Playlist, PlaylistName, Quality};
-    use crate::infrastructure::repositories::sqlite_event_repository::FakeEventPublisher;
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         FakePlaylistRepository, PlaylistRepository,
     };
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
-    use crate::infrastructure::repositories::system_clock::FixedClock;
-    use crate::infrastructure::repositories::video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
+    use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use std::sync::Arc;
 
@@ -61,18 +61,21 @@ mod tests {
         .to_string()
     }
 
-    fn handler_with_seeded_playlist(
+    fn handler_with(
+        seed_playlist: bool,
         video_file_repository: FakeVideoFileRepository,
     ) -> (DeleteVideoFileTask, Arc<FakeVideoFileRepository>) {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
-        playlist_repository
-            .insert(&Playlist::create(
-                PlaylistId::new("PL1").unwrap(),
-                PlaylistName::new("My Playlist").unwrap(),
-                Quality::High,
-                fixed_timestamp(),
-            ))
-            .unwrap();
+        if seed_playlist {
+            playlist_repository
+                .insert(&Playlist::create(
+                    PlaylistId::new("PL1").unwrap(),
+                    PlaylistName::new("My Playlist").unwrap(),
+                    Quality::High,
+                    fixed_timestamp(),
+                ))
+                .unwrap();
+        }
         let video_file_repository = Arc::new(video_file_repository);
 
         let video_service = VideoService::new(
@@ -97,7 +100,7 @@ mod tests {
     #[test]
     fn it_should_delete_the_video_file() {
         let (handler, video_file_repository) =
-            handler_with_seeded_playlist(FakeVideoFileRepository::new(Ok(true)));
+            handler_with(true, FakeVideoFileRepository::new(Ok(true)));
 
         handler
             .handle(&payload_for("PL1", "vid1", "My Video"), false)
@@ -109,7 +112,7 @@ mod tests {
     #[test]
     fn it_should_no_op_when_the_payload_ids_are_invalid() {
         let (handler, video_file_repository) =
-            handler_with_seeded_playlist(FakeVideoFileRepository::new(Ok(true)));
+            handler_with(true, FakeVideoFileRepository::new(Ok(true)));
 
         handler
             .handle(&payload_for("", "vid1", "My Video"), false)
@@ -121,8 +124,29 @@ mod tests {
     #[test]
     fn it_should_reject_a_malformed_payload() {
         let (handler, _video_file_repository) =
-            handler_with_seeded_playlist(FakeVideoFileRepository::new(Ok(true)));
+            handler_with(true, FakeVideoFileRepository::new(Ok(true)));
 
         assert!(handler.handle("not json", false).is_err());
+    }
+
+    #[test]
+    fn it_should_no_op_when_the_playlist_no_longer_exists() {
+        let (handler, video_file_repository) =
+            handler_with(false, FakeVideoFileRepository::new(Ok(true)));
+
+        let result = handler.handle(&payload_for("PL1", "vid1", "My Video"), false);
+
+        assert!(result.is_ok());
+        assert!(video_file_repository.calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_no_op_when_no_matching_file_is_found() {
+        let (handler, _video_file_repository) =
+            handler_with(true, FakeVideoFileRepository::new(Ok(false)));
+
+        let result = handler.handle(&payload_for("PL1", "vid1", "My Video"), false);
+
+        assert!(result.is_ok());
     }
 }

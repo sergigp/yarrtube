@@ -1,37 +1,32 @@
 ---
 name: rust-architect
-description: sergigp's architecture, naming, and testing conventions for Rust projects — three-plus-one layering (domain/adapter/infrastructure, plus cli when there is one), file-per-concept naming, CQS repositories with anyhow errors, port placement and naming, and it_should_..._when_... test naming with hand-written fakes. Use when writing, reviewing, or refactoring Rust code: creating a new module or file, adding a repository/port/service/entity/value object, adding an HTTP handler or CLI command, deciding where a new .rs file goes, or writing/naming Rust tests.
+description: Architecture, naming, and testing conventions guidelines for architecting Rust codebases. Use when writing, reviewing, or refactoring Rust code: creating a new module or file, adding a repository/port/service/entity/value object, adding an HTTP handler or CLI command, deciding where a new .rs file goes, or writing/naming Rust tests.
 ---
 
-# Rust Architect
+# Philosophy
 
-sergigp's opinions on how Rust code should be structured, built up and stress-tested across
-real refactors in the `yarrtube` project. Apply these by default in any Rust project; treat
-them as defaults to state and confirm, not silently override, when a project's existing
-conventions clearly disagree.
+We try to follow a Domain Driven Design (DDD) approach with hexagonal architecture (aka ports and adapters) with some opinionated decisions. We try to follow clean architecture and we give a lot of importance to tests.
 
-If `OPINIONS.md` exists at the repo root, it's the full history/rationale this skill was
-distilled from — read it for the "why" behind a rule and for a project-specific changelog of
-what's been decided. This file is the condensed, operational version for day-to-day coding.
+# Layers
 
-## Quick decision guide
+We structure our code in three layers: application, domain, and infrastructure.
 
-Given a new piece of code, ask in order:
+## Application Layer
 
-1. **Is it a business rule, validation, or orchestration of a use case?** → `domain/`.
-2. **Is it translating a wire format (HTTP JSON, CLI args) into a domain call and back?**
-   → an adapter layer named after the wire format (`http/`, `cli/`).
-3. **Does it implement a port (trait) the domain depends on?** → `infrastructure/repositories/`.
-4. **Does it implement a port-shaped trait nothing in `domain/` injects** (a CLI command
-   constructs and calls it directly)? → `infrastructure/client/`.
-5. **Is it infra-level code with no trait/port boundary at all** (plain functions/clients used
-   directly by whichever layer needs them)? → `infrastructure/shared/`.
+This is the entry point to the application, the most common case will be http controllers but it can also be a CLI application, subscribers (message consuming from a queue system), etc. The main responsibility of this layer is to **VALIDATE** entry data and **TRANSFORM** it into Value Objects (VO). In the case of http this layer is the one responsible of parsing HTTP requests, validating the data and returning HTTP errors if not valid, transforming into VO and calling the domain layer, in the case that this the method needs to return a response it will transform the domain response into a response DTO and return it to the caller with the correct HTTP status code.
 
-Never put orchestration logic in an adapter layer (HTTP controller, CLI command) — it calls
-exactly one domain method and translates the result. Never put wire-format or CLI-parsing
-concerns in `domain/`.
+## Domain Layer
 
-## Layering
+This is where the core **BUSINESS LOGIC** of the application lives. It is composed of entities, value objects, domain services, and domain events. The main responsibility of this layer is to implement the business rules and logic of the application and **ORCHESTRATE** calls to the ports in the infrastructure layer. We need to try to not depend on any external libraries or frameworks but some concessions could be done.
+
+## Infrastructure Layer
+
+This layer is responsible for implementing ports and **COMMUNICATING WITH EXTERNAL SYSTEMS**. Most of the time we will be coding repositories to access the database, but external clients to external APIs should be implemented here too. As a convention, even if this is not entirely correct bc this should go in the domain layer, we will place the trait of the repository here, near the implementation bc it's convenient when adding new methods to the repository. `repositories/` holds one aggregate's dedicated port implementation (a port injected into a single aggregate's domain service); `shared/` holds infra usable across aggregates, regardless of whether it's a port (e.g. the clock, domain events) — see the file structure below.
+We must not hide behaviour in this layer, repositories should be as simple as possible and should behave like collections with methods like `find`, `find_by_id`, `save`, `delete`, etc. The domain layer should be the one that implements the business logic, rules and entity transformations, not the infrastructure layer. The infrastructure layer should be as simple as possible and should not contain any business logic like domain event publishing, it should only contain the operations on entities and optional monitoring. Write operations such as save, insert, update should have the entity as a parameter, not the properties. Delete could operate on the entity identifier instead of the entity itself and read methods such as find(id), find_all, etc should always return entities or collections of entities.
+
+# File Structure and Naming and other opinions
+
+We try to organize our domain code into modules with the aggregate name as module name. This is an example of how we would structure the code:
 
 ```
 src/
@@ -51,189 +46,62 @@ src/
     mod.rs                  # Cli/Commands definitions (this is the CLI's "routing")
     <command>.rs             # one file per command's orchestration
   infrastructure/
-    repositories/            # port implementations a domain service injects
-      <port>.rs               # trait + its implementation, together
+    repositories/            # one aggregate's dedicated port implementation
+      <implementation>_<port>.rs   # trait + its implementation, together
     client/                  # port-shaped adapters nothing in domain/ injects
       <port>.rs
-    shared/                  # infra code with no trait/port boundary at all
+    shared/                  # infra usable across aggregates (ports or not)
       <thing>.rs
 ```
 
-A single-file module that outgrows itself becomes a folder (`playlists.rs` →
-`playlists/mod.rs` + `playlists/dto.rs`), never stays flat and bloats. `mod.rs`/root files
-are composition roots only (state structs, routing, re-exports, submodule declarations) —
-they are not where a shared helper goes once it needs its own logic; give it a file named
-after the concept it represents (an `error.rs` for shared error-response helpers, not a
-scoop-everything-into-`mod.rs` reflex).
+- We prefer not generic names: not `entity.rs`, not `value_objects.rs`, not `ports.rs`. A file is named after the single type/concept it holds (`user.rs` holds `User`, `user_id.rs` holds `UserId`).
+- `errors.rs` is the one deliberately generic name: every error type for an aggregate (validation errors, use-case error enums) lives together in one file, not scattered across the files that raise them.
+- Every value object gets its own file. Don't bundle multiple value objects into one "value objects" file.
+- A port is named after the concept it fronts, not the one method it happens to expose (`WidgetRepository`, not `WidgetLookup`, even if today it only has an `exists` method). "Repository" is used loosely for "adapter implementing a domain port," not strictly persistence.
+- `infrastructure/repositories/` files are named `<implementation>_<port>.rs` (`sqlite_playlist_repository.rs` implements `PlaylistRepository` with SQLite, `youtube_video_downloader_repository.rs` implements `VideoDownloaderRepository` against YouTube/`yt-dlp`). The prefix signals which technology backs the port. `infrastructure/shared/` and `infrastructure/client/` files are named after the port/thing itself, not this convention, since they aren't per-aggregate repositories.
+- A repository/port method either **reads** (returns `anyhow::Result<Entity>` / `anyhow::Result<Vec<Entity>>` / `anyhow::Result<Option<Entity>>`, an entity or collection, never a wrapper/outcome enum) or **writes** (returns `anyhow::Result<()>`, void on success). No custom infra error types (`RepositoryError`/`LookupError` and friends), infra failures are untyped `anyhow::Error`. A Repository always returns the entities that its name implies (`UserRepository` returns `User`).
+- Business-meaningful outcomes that look like they belong in the repository (e.g. "was this newly created, or did it already exist?") are decided in the domain service, not returned by infra: call `find`, branch on `Some`/`None`, then call `insert`/`save`. This trades DB-level atomicity for keeping business logic out of infra, a known, accepted race window, not an oversight.
+- State transitions live on the entity, never as behavior-named repository methods or as anemic domain models operated from domain service.
 
-## File naming
+# Testing
 
-- No generic filenames: not `entity.rs`, not `value_objects.rs`, not `ports.rs`. A file is
-  named after the single type/concept it holds (`playlist.rs` holds `Playlist`,
-  `youtube_playlist_id.rs` holds `YoutubePlaylistId`). If this causes a clippy
-  `module_inception` warning (a file named the same as its parent folder), silence it
-  explicitly with `#[allow(clippy::module_inception)]` rather than renaming around it —
-  the naming rule wins.
-- `errors.rs` is the one deliberately generic name: every error type for an aggregate
-  (validation errors, use-case error enums) lives together in one file, not scattered
-  across the files that raise them.
-- Every value object gets its own file. Don't bundle multiple value objects into one
-  "value objects" file.
+We have mainly two types of tests: **behavior tests** and **infrastructure tests**. The first ones are the most important, they test the domain logic and they should be fast and isolated. The second ones are slower and they test the integration with external systems as real as possible. Our goal is to couple our tests as much as possible to behaviour instead of implementation, so we can refactor the code without breaking the tests.
 
-## Domain services: orchestration lives here, not in adapters
+## Behaviour Tests
 
-One `service.rs` per aggregate holds **all** the orchestration logic for that aggregate's
-operations — validating input, deciding what an operation's outcome means, calling ports in
-the right order. "How to create a widget" is domain logic, never controller/command logic.
-An adapter (HTTP handler, CLI command) does three things only: parse/deserialize input, call
-exactly one domain service method, map the result to its output format (status code,
-printed output). No business rules, no validation, no multi-step orchestration in adapters.
+This tests the domain logic and the validations at application level. We will place this tests in application (for example in http controllers or event subscribers) and the test will be the type of "I receive this HTTP request and I expect this response and these collateral effects". All of this will be using Fake implementations of the ports that the domain service uses. We will send HTTP requests and assert HTTP responses and final state of fake repositories. In the case of event subscribers we will send events and assert the final state of fake repositories. Very similar for Tasks, we will create tasks and assert the final state of fake repositories.
 
-A service is constructed with only the ports *some operation on that aggregate* actually
-needs — never a dependency the aggregate's operations don't touch. This is enforced at the
-service (aggregate) boundary, not per-method: a service legitimately holds a port that only
-one of its methods uses. It's violated only when a service holds a port *no* operation on
-that aggregate uses — that port belongs to a different aggregate's service.
+The fakes will be hand-written and will be as simple as possible, they will not use any mocking library. The fakes will be state-based, for example a fake repository backed by a `Mutex<Vec<Entity>>`.
+Ideally we should not have tests in domain folder as all logic there is tested from application layer tests. There could be exceptions for very complex domain logic that is hard to test from application layer, but this should be the exception and not the rule.
 
-Folding orchestration into `domain/<aggregate>/service.rs` (rather than a separate
-`application/` layer, as stricter DDD would have it) is a deliberate simplification for
-small-to-medium projects — state it explicitly if a project's scale later justifies splitting
-use-case orchestration out from pure domain rules.
+Clock and Domain Event Publisher are treated like ports, so we will use fakes for them too. The fake clock will be a simple `Mutex<Instant>` and the fake domain event publisher will be a `Mutex<Vec<DomainEvent>>`.
 
-## Ports: placement, naming, and the CQS contract
+## Infrastructure Tests
 
-**Placement:** Port traits are defined in `infrastructure/{repositories,client}/`, in the
-same file as their (usually sole) implementation — not in `domain/`. This is a conscious,
-acknowledged departure from textbook hexagonal architecture (domain owning the contract),
-made for editing convenience: adding a method means touching the trait and its impl in one
-file instead of two. The consequence: `domain/` depends on `infrastructure/` for these
-trait imports, backwards from strict hexagonal — accept this, don't "fix" it by moving
-traits back to `domain/` unless a project explicitly decides to prioritize dependency
-direction over editing convenience.
+Infrastructure tests use the real dependency, colocated with the code. Some examples:
 
-**Naming:** A port is named after the concept it fronts, not the one method it happens to
-expose today (`WidgetRepository`, not `WidgetLookup`, even if today it only has an `exists`
-method) — "repository" is used loosely for "adapter implementing a domain port," not
-strictly persistence. Renaming a port once callers exist is pure churn; name it right the
-first time.
+- Embedded engine (e.g. SQLite) -> a real in-memory instance, not a container, in-memory _is_ the real engine.
+- Networked service (Postgres, Kafka, Redis...) -> testcontainers.
+- Outbound HTTP dependency -> the real HTTP client against a fake/mock server, not a container.
 
-**CQS contract, no typed infra errors:** A repository/port method either **reads** (returns
-`anyhow::Result<Entity>` / `anyhow::Result<Vec<Entity>>` / `anyhow::Result<Option<Entity>>`
-— an entity or collection, never a wrapper/outcome enum) or **writes** (returns
-`anyhow::Result<()>` — void on success). No custom infra error types
-(`RepositoryError`/`LookupError` and friends) — infra failures are untyped `anyhow::Error`.
-A boolean existence/predicate check is a reasonable exception to "reads return entities" —
-there's often no meaningful entity to return for e.g. an external existence check.
+Keep tests in `#[cfg(test)] mod tests` in the same file as the code they test by default. Only introduce a top-level `tests/` directory (which needs a `lib.rs`, turning the project into a library + thin binary) when a project independently justifies it — not just to match a template.
 
-Business-meaningful outcomes that might seem like they belong in the repository (e.g. "was
-this newly created, or did it already exist?") are **computed in the domain service**, not
-returned by infra: call the read method, decide, then call the write method — e.g.
-`create_widget` calls `repository.find(id)`; `Some` is the idempotent-existing case, `None`
-means call `repository.insert(...)` and construct the "created" outcome in the service. The
-service is where untyped `anyhow::Error` becomes something meaningful — its own error enum,
-with variants distinguished by *which port call* produced the error
-(`Lookup(anyhow::Error)` / `Repository(anyhow::Error)`), not by inspecting the error's type.
-When a method has only one possible failure source and nothing domain-specific to add, the
-service may return `anyhow::Result<T>` directly rather than inventing a single-variant enum.
+## Testing Opinions
 
-**Known cost — flag it, don't silently eat it:** splitting an atomic "insert-or-return-existing"
-DB operation into domain-orchestrated `find` (read) then `insert` (write) trades away
-atomicity — a race window opens between the two calls. If a project's existing behavior
-relies on DB-level atomicity (upserts, "claim the first one" patterns, counters), don't apply
-the CQS split to it without naming this trade-off out loud and getting an explicit decision.
+- Test naming: `it_should_<expected outcome>_on_<condition>` — drop the `_on_...` part when there's no meaningful precondition beyond "given valid input" (`it_should_build_the_widget_url`). This naming focuses on behaviour instead of implementation.
+- Tests should be as deterministic as possible. In the case of time we will use a fake clock that we can control. This will behave as a regular port.
 
-**State transitions live on the entity, never as behavior-named repository methods.** A
-repository's write side is CRUD only — `insert`/`schedule`/`create`, `update`, `delete`, plus
-one atomic multi-statement write when a use case genuinely needs it (see above). It never
-grows a method named after a business transition (`mark_running`, `mark_done`,
-`mark_failed_or_retry`, `recover_running` and friends) that itself decides the transition —
-computing new state, thresholds, or backoff timing inside the repository. That decision
-belongs on a persisted domain entity as a method consuming `self` (and `now: DateTime<Utc>`
-where timestamps matter) and returning either the next state or an outcome enum when a
-transition can branch into different shapes (e.g. `fail(error, now) -> Retry(Entity) |
-DeadLetter(DeadLetteredEntity)`, mirroring the CQS "reads return entities" contract instead of
-a bespoke result type). The caller — a domain service, or a poller like a task executor/event
-consumer — reads the current entity (`find`/`list_*`), calls the transition method, then
-persists whatever came back via the plain CRUD write. This is the same "decide in the domain,
-persist via CRUD" split as the idempotent-create pattern above, applied to lifecycle state
-instead of existence checks. If you see a repository method whose name is a verb describing a
-business outcome rather than a storage operation, that logic has leaked out of the domain —
-move it, don't add another one next to it.
+# Other Opinions
 
-## infrastructure/ subfolders
+- Code should be as functional as possible, we prefer mapping/folding/filtering over imperative loops, and immutable data over mutable data. We will use `Option` and `Result` types instead of nulls and exceptions. We will use `iterators` instead of `for` loops when possible. We will use `map`, `filter`, `fold`, etc. instead of imperative loops when possible.
 
-Split by *why* the code lives in `infrastructure/`, not by an unqualified "adapters" catch-all:
-- **`repositories/`** — implements a port a domain service injects.
-- **`client/`** — implements a port-shaped trait (still trait + implementation, for
-  swappability/testability), but nothing in `domain/` injects it — typically a CLI command
-  constructs and calls it directly.
-- **`shared/`** — infra-level code with no trait/port boundary at all: plain functions or
-  clients used directly by whichever layer needs them. Add this folder only once something
-  actually doesn't belong to a single port implementation — don't create it empty up front.
-  The `shared/` vs `client/` line is whether a trait exists, not how "important" the code
-  feels; promoting a `shared/` file to a trait-backed `client/`/`repositories/` entry once a
-  swap/fake need shows up is expected, not a sign the original placement was wrong.
+# Deliberate deviations. Don't "fix" these
 
-## Testing
+Some of these are deliberate deviations from DDD/hexagonal orthodoxy, for convenience or to avoid overengineering:
 
-**Behavior-driven, mock only at the boundary, public API only.** Tests verify observable
-behavior (return values, status codes, persisted state) through the public API — never
-private fields or visibility tricks. The only things replaced with a test double are the
-**ports at the edge of the layer under test** (a domain service's tests fake its injected
-traits) — nothing *inside* that layer gets mocked out. One behavior per test; a failing test
-name alone should say what broke.
+- Port traits live in `infrastructure/`, not `domain/` (dependency direction inverted, traded for editing convenience).
+- Repositories have no typed error enums, everything is `anyhow::Error` until the domain service gives it meaning.
+- An idempotent "create" use case is two non-atomic port calls (`find` then `insert`), not one atomic upsert.
+- Orchestration lives in `domain/<aggregate>/service.rs`, not a separate `application/` layer.
 
-**Hand-written fakes, not interaction-mocking libraries.** A test double is a small, real (if
-simplified) implementation of the trait — state-based, e.g. a fake repository backed by a
-`Mutex<Vec<Entity>>` — not a call-expectation mock (no `mockall`/`#[automock]`/
-`.expect_x().returning(...)`, no new mocking-library dependency). Fakes are simpler for
-traits this small and exercise realistic behavior (insert-then-find, idempotent create)
-instead of asserting on call counts/arguments.
-
-**Infrastructure tests use the real dependency, colocated with the code.** "Infrastructure
-test" (a port implementation against something real) vs. "behavior test" (domain logic
-against fakes) is a real, useful distinction — but *what counts as real* depends on the
-dependency:
-- Embedded engine (SQLite, etc.) → an in-memory instance, not a container — in-memory *is*
-  the real engine.
-- Networked service (Postgres, Kafka, Redis, ClickHouse...) → testcontainers, when a project
-  actually has one. Don't reach for testcontainers or a mocking framework for a dependency a
-  project doesn't have.
-- Outbound HTTP dependency → the real HTTP client against a mock server (`mockito`), not a
-  container.
-
-Keep tests in `#[cfg(test)] mod tests` in the same file as the code they test by default. A
-top-level `tests/` directory needs a `lib.rs` (the project becomes a library + thin binary)
-purely to give integration tests access to internal types — don't introduce that structural
-change just to match a template; do it when a project independently justifies a `lib.rs`
-(e.g. multiple binaries need to share more than modules already give them).
-
-**Test naming:** `it_should_<expected outcome>_when_<condition>` — drop the `_when_...` part
-when there's no meaningful precondition beyond "given valid input"
-(`it_should_build_the_widget_url`). When adopting this in a project with existing tests,
-rename the existing ones too — don't let two conventions coexist.
-
-**Determinism and test data:** time is deterministic via the same `Clock` port used in
-production (a `FixedClock`) — this should require no special-casing, it falls out of already
-having `Clock` as an injected port. Build test data through small helper functions with
-sensible defaults (`fn widget(id, name) -> Widget`), parameterized only on what varies per
-test. Domain-specific assertion helpers and nested `mod <method_name> { ... }` grouping
-inside `mod tests` are patterns to *graduate to* once a test file's size/repetition earns
-them — not a starting template for a handful of tests.
-
-## Deliberate deviations — don't "fix" these
-
-A few rules above are explicit, discussed trade-offs, not oversights. If code in a project
-following this skill looks like it violates textbook architecture in one of these specific
-ways, it's probably intentional:
-- Port traits live in `infrastructure/`, not `domain/` (dependency direction inverted from
-  strict hexagonal, traded for editing convenience).
-- Repositories have no typed error enums — everything is `anyhow::Error` until the domain
-  service gives it meaning.
-- An idempotent "create" use case is two non-atomic port calls (`find` then `insert`), not
-  one atomic upsert — a narrow, named race-condition trade-off, not an oversight.
-- Orchestration lives in `domain/<aggregate>/service.rs`, not a separate `application/`
-  layer — a deliberate simplification for project scale, not missing layering.
-
-When something looks off, say so and ask before changing it — these were each surfaced and
-confirmed explicitly once; they shouldn't need to be re-litigated silently.
+If code looks like it violates textbook architecture in one of these ways, it's probably intentional. Ask before changing it.

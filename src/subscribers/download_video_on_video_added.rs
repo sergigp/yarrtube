@@ -3,7 +3,7 @@ use crate::domain::task::Task;
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
-use crate::infrastructure::repositories::system_clock::Clock;
+use crate::infrastructure::shared::system_clock::Clock;
 use serde::Deserialize;
 use std::sync::Arc;
 use tracing::debug;
@@ -72,7 +72,7 @@ mod tests {
     use crate::domain::playlist::{Playlist, PlaylistName, Quality};
     use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
-    use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
 
     fn fixed_timestamp() -> DateTime<Utc> {

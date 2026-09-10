@@ -95,10 +95,10 @@ mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
     use crate::http::playlists_router;
-    use crate::infrastructure::repositories::sqlite_event_repository::FakeEventPublisher;
     use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
-    use crate::infrastructure::repositories::system_clock::FixedClock;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
+    use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
+    use crate::infrastructure::shared::system_clock::FixedClock;
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
     use chrono::{DateTime, Utc};

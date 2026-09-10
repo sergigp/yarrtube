@@ -1,7 +1,7 @@
 use crate::domain::task::TaskFailureOutcome;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
-use crate::infrastructure::repositories::system_clock::Clock;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::shared::system_clock::Clock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,11 +31,8 @@ impl TaskExecutor {
     }
 
     pub fn poll_once(&self) -> anyhow::Result<()> {
-        for id in self.repository.list_eligible()? {
-            let Some(task) = self.repository.find(id)? else {
-                warn!(task_id = id, "eligible task disappeared before dispatch");
-                continue;
-            };
+        for task in self.repository.list_eligible()? {
+            let id = task.id;
             let task_type = task.task_type.clone();
             let payload = task.payload.clone();
             let running = task.start(self.clock.now());
@@ -126,7 +123,7 @@ impl TaskExecutor {
 mod tests {
     use super::*;
     use crate::domain::task::{DeadLetteredTask, ScheduledTask, Task, TaskStatus};
-    use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use std::sync::Mutex;
 
@@ -181,18 +178,8 @@ mod tests {
             unimplemented!("not exercised by the executor")
         }
 
-        fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledTask>> {
-            Ok(self
-                .tasks
-                .lock()
-                .unwrap()
-                .iter()
-                .find(|t| t.id == id)
-                .cloned())
-        }
-
-        fn list_eligible(&self) -> anyhow::Result<Vec<i64>> {
-            Ok(self.tasks.lock().unwrap().iter().map(|t| t.id).collect())
+        fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+            Ok(self.tasks.lock().unwrap().clone())
         }
 
         fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {
