@@ -95,6 +95,7 @@ mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
     use crate::http::playlists_router;
+    use crate::infrastructure::repositories::sqlite_event_repository::FakeEventPublisher;
     use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
     use crate::infrastructure::repositories::system_clock::FixedClock;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
@@ -111,18 +112,24 @@ mod tests {
     fn test_router(
         repository: FakePlaylistRepository,
         youtube_exists: bool,
-    ) -> (axum::Router, Arc<FakePlaylistRepository>) {
+    ) -> (
+        axum::Router,
+        Arc<FakePlaylistRepository>,
+        Arc<FakeEventPublisher>,
+    ) {
         let repository = Arc::new(repository);
+        let event_publisher = Arc::new(FakeEventPublisher::default());
         let state = AppState {
             playlist_service: crate::domain::playlist::PlaylistService::new(
                 repository.clone(),
                 Arc::new(FakeYoutubePlaylistRepository {
                     exists: youtube_exists,
                 }),
+                event_publisher.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             ),
         };
-        (playlists_router(state), repository)
+        (playlists_router(state), repository, event_publisher)
     }
 
     async fn body_json(response: Response) -> serde_json::Value {
@@ -158,7 +165,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_201_when_creating_a_new_playlist() {
-        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
 
         let response = router
             .oneshot(create_request("PL1", "My Playlist"))
@@ -178,7 +186,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_200_when_creating_a_playlist_that_already_exists() {
-        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
             .oneshot(create_request("PL1", "Original Name"))
@@ -197,7 +206,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_the_name_is_invalid() {
-        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
 
         let response = router.oneshot(create_request("PL1", "")).await.unwrap();
 
@@ -206,7 +216,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_quality_is_missing() {
-        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
 
         let response = router
             .oneshot(create_request_missing_quality("PL1", "My Playlist"))
@@ -218,7 +229,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_quality_is_invalid() {
-        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
 
         let response = router
             .oneshot(create_request_with_quality("PL1", "My Playlist", "ultra"))
@@ -231,7 +243,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_keep_the_existing_quality_when_creating_a_duplicate_with_a_different_quality()
      {
-        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
             .oneshot(create_request_with_quality("PL1", "My Playlist", "high"))
@@ -250,7 +263,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_the_youtube_playlist_does_not_exist() {
-        let (router, _repository) = test_router(FakePlaylistRepository::default(), false);
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), false);
 
         let response = router
             .oneshot(create_request("PL404", "My Playlist"))
@@ -262,7 +276,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_record_a_playlist_created_event_only_once_for_repeated_creation() {
-        let (router, repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
             .oneshot(create_request("PL1", "First"))
@@ -274,7 +289,7 @@ mod tests {
             .await
             .unwrap();
 
-        let published = repository.transactional_events.lock().unwrap();
+        let published = event_publisher.published.lock().unwrap();
         assert_eq!(
             *published,
             vec![DomainEvent::PlaylistCreated {
@@ -285,7 +300,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_204_when_deleting_an_existing_playlist() {
-        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
             .oneshot(create_request("PL1", "My Playlist"))
@@ -308,7 +324,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_record_a_playlist_deleted_event_on_successful_deletion() {
-        let (router, repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
             .oneshot(create_request("PL1", "My Playlist"))
@@ -326,7 +343,7 @@ mod tests {
             .await
             .unwrap();
 
-        let published = repository.transactional_events.lock().unwrap();
+        let published = event_publisher.published.lock().unwrap();
         assert_eq!(
             *published,
             vec![
@@ -342,7 +359,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_deleting_a_missing_playlist() {
-        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
 
         let response = router
             .oneshot(
@@ -360,7 +378,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_an_empty_array_when_no_playlists_exist() {
-        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
 
         let response = router
             .oneshot(
@@ -380,7 +399,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_all_created_playlists() {
-        let (router, _repository) = test_router(FakePlaylistRepository::default(), true);
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
         router
             .clone()
             .oneshot(create_request("PL1", "First"))

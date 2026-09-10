@@ -12,6 +12,12 @@ pub enum DomainEvent {
         playlist_id: String,
         video_id: String,
     },
+    VideoDeleted {
+        playlist_id: String,
+        video_id: String,
+        title: String,
+        was_downloaded: bool,
+    },
 }
 
 impl DomainEvent {
@@ -20,6 +26,7 @@ impl DomainEvent {
             Self::PlaylistCreated { .. } => "playlist_created",
             Self::PlaylistDeleted { .. } => "playlist_deleted",
             Self::VideoAdded { .. } => "video_added",
+            Self::VideoDeleted { .. } => "video_deleted",
         }
     }
 
@@ -33,6 +40,17 @@ impl DomainEvent {
             } => json!({
                 "playlist_id": playlist_id,
                 "video_id": video_id,
+            }),
+            Self::VideoDeleted {
+                playlist_id,
+                video_id,
+                title,
+                was_downloaded,
+            } => json!({
+                "playlist_id": playlist_id,
+                "video_id": video_id,
+                "title": title,
+                "was_downloaded": was_downloaded,
             }),
         }
     }
@@ -73,6 +91,27 @@ mod tests {
         assert_eq!(
             event.payload(),
             json!({ "playlist_id": "PL1", "video_id": "vid1" })
+        );
+    }
+
+    #[test]
+    fn it_should_map_video_deleted_to_a_stable_type_and_payload() {
+        let event = DomainEvent::VideoDeleted {
+            playlist_id: "PL1".to_string(),
+            video_id: "vid1".to_string(),
+            title: "My Video".to_string(),
+            was_downloaded: true,
+        };
+
+        assert_eq!(event.event_type(), "video_deleted");
+        assert_eq!(
+            event.payload(),
+            json!({
+                "playlist_id": "PL1",
+                "video_id": "vid1",
+                "title": "My Video",
+                "was_downloaded": true,
+            })
         );
     }
 }

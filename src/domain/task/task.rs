@@ -12,6 +12,11 @@ pub enum Task {
         video_id: String,
         quality: String,
     },
+    DeleteVideoFile {
+        playlist_id: String,
+        video_id: String,
+        title: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -26,11 +31,19 @@ struct DownloadVideoPayload {
     quality: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct DeleteVideoFilePayload {
+    playlist_id: String,
+    video_id: String,
+    title: String,
+}
+
 impl Task {
     pub fn task_type(&self) -> &'static str {
         match self {
             Self::SyncPlaylist { .. } => "sync_playlist",
             Self::DownloadVideo { .. } => "download_video",
+            Self::DeleteVideoFile { .. } => "delete_video_file",
         }
     }
 
@@ -42,6 +55,11 @@ impl Task {
                 video_id,
                 quality,
             } => json!({ "playlist_id": playlist_id, "video_id": video_id, "quality": quality }),
+            Self::DeleteVideoFile {
+                playlist_id,
+                video_id,
+                title,
+            } => json!({ "playlist_id": playlist_id, "video_id": video_id, "title": title }),
         }
     }
 
@@ -61,6 +79,16 @@ impl Task {
         let parsed: DownloadVideoPayload = serde_json::from_str(payload)
             .map_err(|e| TaskError(format!("invalid download_video payload: {e}")))?;
         Ok((parsed.playlist_id, parsed.video_id, parsed.quality))
+    }
+
+    /// Decodes a `delete_video_file` task's raw JSON payload, as handed to a
+    /// `TaskHandler`, back into the playlist ID, video ID, and title it targets.
+    pub fn decode_delete_video_file_payload(
+        payload: &str,
+    ) -> Result<(String, String, String), TaskError> {
+        let parsed: DeleteVideoFilePayload = serde_json::from_str(payload)
+            .map_err(|e| TaskError(format!("invalid delete_video_file payload: {e}")))?;
+        Ok((parsed.playlist_id, parsed.video_id, parsed.title))
     }
 }
 
@@ -128,5 +156,41 @@ mod tests {
     #[test]
     fn it_should_reject_a_malformed_download_video_payload() {
         assert!(Task::decode_download_video_payload("not json").is_err());
+    }
+
+    #[test]
+    fn it_should_map_delete_video_file_to_a_stable_type_and_payload() {
+        let task = Task::DeleteVideoFile {
+            playlist_id: "PL1".to_string(),
+            video_id: "vid1".to_string(),
+            title: "My Video".to_string(),
+        };
+
+        assert_eq!(task.task_type(), "delete_video_file");
+        assert_eq!(
+            task.payload(),
+            json!({ "playlist_id": "PL1", "video_id": "vid1", "title": "My Video" })
+        );
+    }
+
+    #[test]
+    fn it_should_decode_a_delete_video_file_payload_back_into_its_ids_and_title() {
+        let task = Task::DeleteVideoFile {
+            playlist_id: "PL1".to_string(),
+            video_id: "vid1".to_string(),
+            title: "My Video".to_string(),
+        };
+
+        let (playlist_id, video_id, title) =
+            Task::decode_delete_video_file_payload(&task.payload().to_string()).unwrap();
+
+        assert_eq!(playlist_id, "PL1");
+        assert_eq!(video_id, "vid1");
+        assert_eq!(title, "My Video");
+    }
+
+    #[test]
+    fn it_should_reject_a_malformed_delete_video_file_payload() {
+        assert!(Task::decode_delete_video_file_payload("not json").is_err());
     }
 }

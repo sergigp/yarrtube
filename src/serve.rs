@@ -15,6 +15,7 @@ use crate::infrastructure::repositories::sqlite_task_repository::{
 use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
 use crate::infrastructure::repositories::system_clock::SystemClock;
 use crate::infrastructure::repositories::task_executor::TaskExecutor;
+use crate::infrastructure::repositories::video_file_repository::FilesystemVideoFileRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubeApiPlaylistItemsRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
@@ -106,16 +107,16 @@ struct Application {
 }
 
 fn build_application() -> Result<Application> {
-    // Playlists and events share one connection so `insert_with_event`/
-    // `delete_with_event` can wrap both writes in a single transaction.
-    let playlist_events_conn = Arc::new(Mutex::new(open_connection()?));
     let playlist_repository: Arc<dyn PlaylistRepository> = Arc::new(
-        SqlitePlaylistRepository::new(playlist_events_conn.clone())
+        SqlitePlaylistRepository::new(open_connection()?)
             .context("failed to initialize playlist repository")?,
     );
     let event_repository = Arc::new(
-        SqliteEventRepository::new(playlist_events_conn, Arc::new(SystemClock))
-            .context("failed to initialize event repository")?,
+        SqliteEventRepository::new(
+            Arc::new(Mutex::new(open_connection()?)),
+            Arc::new(SystemClock),
+        )
+        .context("failed to initialize event repository")?,
     );
 
     let task_repository = Arc::new(
@@ -132,6 +133,7 @@ fn build_application() -> Result<Application> {
     let playlist_service = PlaylistService::new(
         playlist_repository.clone(),
         Arc::new(YoutubeApiPlaylistRepository::new(youtube_api_key())),
+        event_repository.clone() as Arc<dyn EventPublisher>,
         Arc::new(SystemClock),
     );
     let video_service = VideoService::new(
@@ -141,6 +143,7 @@ fn build_application() -> Result<Application> {
         event_repository.clone() as Arc<dyn EventPublisher>,
         task_repository.clone() as Arc<dyn TaskRepository>,
         Arc::new(YtDlpVideoDownloaderRepository),
+        Arc::new(FilesystemVideoFileRepository),
         Arc::new(SystemClock),
         sync_interval_seconds(),
         videos_path(),

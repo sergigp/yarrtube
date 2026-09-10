@@ -33,7 +33,6 @@ impl EventSubscriber for SyncPlaylistOnPlaylistCreated {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::event::DomainEvent;
     use crate::domain::playlist::{Playlist, PlaylistName, Quality};
     use crate::domain::task::Task;
     use crate::infrastructure::repositories::sqlite_event_repository::FakeEventPublisher;
@@ -43,6 +42,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
     use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::repositories::video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
     use chrono::{DateTime, Utc};
@@ -58,6 +58,7 @@ mod tests {
             Arc::new(FakeEventPublisher::default()),
             task_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FixedClock(DateTime::<Utc>::from_timestamp(0, 0).unwrap())),
             3600,
             "/videos",
@@ -74,18 +75,12 @@ mod tests {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         playlist_repository
-            .insert_with_event(
-                &Playlist::create(
-                    PlaylistId::new("PL1").unwrap(),
-                    PlaylistName::new("My Playlist").unwrap(),
-                    Quality::High,
-                    now,
-                ),
-                &DomainEvent::PlaylistCreated {
-                    playlist_id: "PL1".to_string(),
-                },
+            .insert(&Playlist::create(
+                PlaylistId::new("PL1").unwrap(),
+                PlaylistName::new("My Playlist").unwrap(),
+                Quality::High,
                 now,
-            )
+            ))
             .unwrap();
         let task_repository = Arc::new(FakeTaskRepository::default());
 
@@ -96,6 +91,7 @@ mod tests {
             Arc::new(FakeEventPublisher::default()),
             task_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FixedClock(DateTime::<Utc>::from_timestamp(0, 0).unwrap())),
             3600,
             "/videos",

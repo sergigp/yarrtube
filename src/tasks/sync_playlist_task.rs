@@ -39,6 +39,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
     use crate::infrastructure::repositories::system_clock::FixedClock;
+    use crate::infrastructure::repositories::video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::{
         FakeYoutubePlaylistItemsRepository, PlaylistVideo,
     };
@@ -61,18 +62,12 @@ mod tests {
     ) {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository
-            .insert_with_event(
-                &Playlist::create(
-                    PlaylistId::new("PL1").unwrap(),
-                    PlaylistName::new("My Playlist").unwrap(),
-                    Quality::High,
-                    fixed_timestamp(),
-                ),
-                &DomainEvent::PlaylistCreated {
-                    playlist_id: "PL1".to_string(),
-                },
+            .insert(&Playlist::create(
+                PlaylistId::new("PL1").unwrap(),
+                PlaylistName::new("My Playlist").unwrap(),
+                Quality::High,
                 fixed_timestamp(),
-            )
+            ))
             .unwrap();
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
@@ -87,6 +82,7 @@ mod tests {
             event_publisher.clone(),
             task_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
@@ -155,6 +151,32 @@ mod tests {
     }
 
     #[test]
+    fn it_should_leave_an_existing_videos_status_unchanged_while_refreshing_its_title() {
+        let (handler, event_publisher, video_repository, _tasks) =
+            handler_with_playlist(vec![PlaylistVideo {
+                video_id: "vid1".to_string(),
+                title: "Renamed".to_string(),
+            }]);
+        video_repository.videos.lock().unwrap().push(
+            Video::create(
+                PlaylistId::new("PL1").unwrap(),
+                VideoId::new("vid1").unwrap(),
+                "Original",
+                fixed_timestamp(),
+            )
+            .start_download(fixed_timestamp()),
+        );
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        let stored = video_repository.videos.lock().unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].title, "Renamed");
+        assert_eq!(stored[0].status, VideoStatus::InProgress);
+        assert!(event_publisher.published.lock().unwrap().is_empty());
+    }
+
+    #[test]
     fn it_should_delete_videos_no_longer_present_on_youtube() {
         let (handler, _events, video_repository, _tasks) = handler_with_playlist(Vec::new());
         video_repository.videos.lock().unwrap().push(Video::create(
@@ -167,6 +189,49 @@ mod tests {
         handler.handle(&payload_for("PL1"), false).unwrap();
 
         assert!(video_repository.videos.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_publish_a_video_deleted_event_with_the_correct_was_downloaded_per_video() {
+        let (handler, event_publisher, video_repository, _tasks) =
+            handler_with_playlist(Vec::new());
+        video_repository.videos.lock().unwrap().push(
+            Video::create(
+                PlaylistId::new("PL1").unwrap(),
+                VideoId::new("vid1").unwrap(),
+                "Downloaded Video",
+                fixed_timestamp(),
+            )
+            .start_download(fixed_timestamp())
+            .mark_downloaded(fixed_timestamp()),
+        );
+        video_repository.videos.lock().unwrap().push(Video::create(
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("vid2").unwrap(),
+            "Pending Video",
+            fixed_timestamp(),
+        ));
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        let published = event_publisher.published.lock().unwrap();
+        assert_eq!(
+            *published,
+            vec![
+                DomainEvent::VideoDeleted {
+                    playlist_id: "PL1".to_string(),
+                    video_id: "vid1".to_string(),
+                    title: "Downloaded Video".to_string(),
+                    was_downloaded: true,
+                },
+                DomainEvent::VideoDeleted {
+                    playlist_id: "PL1".to_string(),
+                    video_id: "vid2".to_string(),
+                    title: "Pending Video".to_string(),
+                    was_downloaded: false,
+                },
+            ]
+        );
     }
 
     #[test]

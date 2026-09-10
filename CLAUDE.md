@@ -81,11 +81,6 @@ tokio tasks alongside the HTTP server and a heartbeat. `main.rs` just parses
 CLI args and dispatches to `cli::download_command`, `serve::run`, or
 `cli::ytdlp_update`.
 
-**Playlists and events share one SQLite connection** (see the comment in
-`build_application`) specifically so playlist writes and event inserts can be
-wrapped in a single transaction (`insert_with_event`/`delete_with_event`) —
-don't split that connection apart without preserving that atomicity.
-
 ## Spec-driven development (OpenSpec)
 
 This repo uses OpenSpec (`openspec/`) for spec-driven change management —
