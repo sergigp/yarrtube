@@ -17,15 +17,21 @@ The system SHALL delete a video's downloaded file from disk as soon as that vide
 - **WHEN** a video that never reached the downloaded status is removed from its playlist
 - **THEN** the system does not attempt any file deletion for that video
 
-### Requirement: File Located By Matching Sanitized Title
-The system SHALL locate a removed video's file by searching its playlist's output directory for a file whose name matches the video's sanitized title, accounting for a `[video_id]` suffix the downloader may have appended to that filename to avoid a collision at download time.
+### Requirement: File Located By Its Recorded Filename
+The system SHALL locate a removed video's file by its recorded filename
+(the exact name recorded when the video was downloaded), rather than by
+re-deriving a filename from its title.
 
-#### Scenario: File found by title
-- **WHEN** a removed video's playlist output directory contains a file whose name matches the video's sanitized title, with or without a `[video_id]` suffix
+#### Scenario: File found by recorded filename
+- **WHEN** a removed video has a recorded filename and its playlist's output directory contains a file with that exact name
 - **THEN** the system deletes that file
 
-#### Scenario: No matching file found
-- **WHEN** no file in the playlist's output directory matches the removed video's sanitized title
+#### Scenario: No recorded filename
+- **WHEN** a removed video has no recorded filename because it was never successfully downloaded
+- **THEN** the system does not attempt any file deletion for it
+
+#### Scenario: Recorded filename not found on disk
+- **WHEN** a removed video has a recorded filename but no file with that exact name exists in its playlist's output directory
 - **THEN** the system does not treat this as an error, and no file is deleted
 
 ### Requirement: File Deletion Skipped For a Deleted Playlist

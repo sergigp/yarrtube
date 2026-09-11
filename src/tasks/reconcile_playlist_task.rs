@@ -3,25 +3,25 @@ use crate::domain::task::Task;
 use crate::domain::video::VideoService;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 
-/// Runs every subsequent sync for a playlist (the first one is triggered by
-/// `subscribers::sync_playlist_on_playlist_created` instead).
-pub struct SyncPlaylistTask {
+/// Runs every subsequent reconcile for a playlist (the first one is
+/// triggered by `subscribers::reconcile_on_playlist_created` instead).
+pub struct ReconcilePlaylistTask {
     video_service: VideoService,
 }
 
-impl SyncPlaylistTask {
+impl ReconcilePlaylistTask {
     pub fn new(video_service: VideoService) -> Self {
         Self { video_service }
     }
 }
 
-impl TaskHandler for SyncPlaylistTask {
+impl TaskHandler for ReconcilePlaylistTask {
     fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let playlist_id = Task::decode_sync_playlist_payload(payload)?;
+        let playlist_id = Task::decode_reconcile_playlist_payload(payload)?;
         let Ok(playlist_id) = PlaylistId::new(playlist_id) else {
             return Ok(());
         };
-        self.video_service.sync_playlist_videos(playlist_id)
+        self.video_service.reconcile_playlist(playlist_id)
     }
 }
 
@@ -29,7 +29,7 @@ impl TaskHandler for SyncPlaylistTask {
 mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
-    use crate::domain::playlist::{Playlist, PlaylistName, PlaylistPath};
+    use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::shared::{Quality, VideoId};
     use crate::domain::video::{Video, VideoStatus};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
@@ -42,6 +42,7 @@ mod tests {
         FakeYoutubePlaylistItemsRepository, PlaylistVideo,
     };
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::repositories::youtube_video_repository::FakeYoutubeVideoRepository;
     use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
@@ -52,13 +53,16 @@ mod tests {
     }
 
     #[allow(clippy::type_complexity)]
-    fn handler_with_playlist(
+    fn handler_with(
+        kind: PlaylistKind,
         current_videos: Vec<PlaylistVideo>,
+        video_file_repository: FakeVideoFileRepository,
     ) -> (
-        SyncPlaylistTask,
+        ReconcilePlaylistTask,
         Arc<FakeEventPublisher>,
         Arc<FakeVideoRepository>,
         Arc<FakeTaskRepository>,
+        Arc<FakeVideoFileRepository>,
     ) {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository
@@ -67,12 +71,14 @@ mod tests {
                 PlaylistName::new("My Playlist").unwrap(),
                 PlaylistPath::new("my-playlist").unwrap(),
                 Quality::High,
+                kind,
                 fixed_timestamp(),
             ))
             .unwrap();
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
         let task_repository = Arc::new(FakeTaskRepository::default());
+        let video_file_repository = Arc::new(video_file_repository);
 
         let video_service = VideoService::new(
             playlist_repository,
@@ -80,25 +86,27 @@ mod tests {
             Arc::new(FakeYoutubePlaylistItemsRepository {
                 videos: current_videos,
             }),
+            Arc::new(FakeYoutubeVideoRepository::default()),
             event_publisher.clone(),
             task_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(true)),
-            Arc::new(FakeVideoFileRepository::default()),
+            video_file_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
         );
 
         (
-            SyncPlaylistTask::new(video_service),
+            ReconcilePlaylistTask::new(video_service),
             event_publisher,
             video_repository,
             task_repository,
+            video_file_repository,
         )
     }
 
     fn payload_for(playlist_id: &str) -> String {
-        Task::SyncPlaylist {
+        Task::ReconcilePlaylist {
             playlist_id: playlist_id.to_string(),
         }
         .payload()
@@ -107,8 +115,11 @@ mod tests {
 
     #[test]
     fn it_should_no_op_when_the_playlist_no_longer_exists() {
-        let (handler, event_publisher, video_repository, task_repository) =
-            handler_with_playlist(Vec::new());
+        let (handler, event_publisher, video_repository, task_repository, _files) = handler_with(
+            PlaylistKind::YoutubeLinked,
+            Vec::new(),
+            FakeVideoFileRepository::default(),
+        );
 
         handler.handle(&payload_for("PL404"), false).unwrap();
 
@@ -119,8 +130,11 @@ mod tests {
 
     #[test]
     fn it_should_no_op_when_the_payload_playlist_id_is_invalid() {
-        let (handler, event_publisher, video_repository, task_repository) =
-            handler_with_playlist(Vec::new());
+        let (handler, event_publisher, video_repository, task_repository, _files) = handler_with(
+            PlaylistKind::YoutubeLinked,
+            Vec::new(),
+            FakeVideoFileRepository::default(),
+        );
 
         handler.handle(&payload_for(""), false).unwrap();
 
@@ -130,12 +144,15 @@ mod tests {
     }
 
     #[test]
-    fn it_should_persist_new_videos_and_publish_an_event_per_video() {
-        let (handler, event_publisher, video_repository, _tasks) =
-            handler_with_playlist(vec![PlaylistVideo {
+    fn it_should_persist_new_videos_and_publish_an_event_per_video_for_a_youtube_linked_playlist() {
+        let (handler, event_publisher, video_repository, _tasks, _files) = handler_with(
+            PlaylistKind::YoutubeLinked,
+            vec![PlaylistVideo {
                 video_id: "vid1".to_string(),
                 title: "One".to_string(),
-            }]);
+            }],
+            FakeVideoFileRepository::default(),
+        );
 
         handler.handle(&payload_for("PL1"), false).unwrap();
 
@@ -153,11 +170,14 @@ mod tests {
 
     #[test]
     fn it_should_leave_an_existing_videos_status_unchanged_while_refreshing_its_title() {
-        let (handler, event_publisher, video_repository, _tasks) =
-            handler_with_playlist(vec![PlaylistVideo {
+        let (handler, event_publisher, video_repository, _tasks, _files) = handler_with(
+            PlaylistKind::YoutubeLinked,
+            vec![PlaylistVideo {
                 video_id: "vid1".to_string(),
                 title: "Renamed".to_string(),
-            }]);
+            }],
+            FakeVideoFileRepository::default(),
+        );
         video_repository.videos.lock().unwrap().push(
             Video::create(
                 PlaylistId::new("PL1").unwrap(),
@@ -179,7 +199,11 @@ mod tests {
 
     #[test]
     fn it_should_delete_videos_no_longer_present_on_youtube() {
-        let (handler, _events, video_repository, _tasks) = handler_with_playlist(Vec::new());
+        let (handler, _events, video_repository, _tasks, _files) = handler_with(
+            PlaylistKind::YoutubeLinked,
+            Vec::new(),
+            FakeVideoFileRepository::default(),
+        );
         video_repository.videos.lock().unwrap().push(Video::create(
             PlaylistId::new("PL1").unwrap(),
             VideoId::new("vid1").unwrap(),
@@ -194,8 +218,11 @@ mod tests {
 
     #[test]
     fn it_should_publish_a_video_deleted_event_with_the_correct_was_downloaded_per_video() {
-        let (handler, event_publisher, video_repository, _tasks) =
-            handler_with_playlist(Vec::new());
+        let (handler, event_publisher, video_repository, _tasks, _files) = handler_with(
+            PlaylistKind::YoutubeLinked,
+            Vec::new(),
+            FakeVideoFileRepository::default(),
+        );
         video_repository.videos.lock().unwrap().push(
             Video::create(
                 PlaylistId::new("PL1").unwrap(),
@@ -204,7 +231,7 @@ mod tests {
                 fixed_timestamp(),
             )
             .start_download(fixed_timestamp())
-            .mark_downloaded(Quality::High, fixed_timestamp()),
+            .mark_downloaded(Quality::High, "Downloaded Video.mp4", fixed_timestamp()),
         );
         video_repository.videos.lock().unwrap().push(Video::create(
             PlaylistId::new("PL1").unwrap(),
@@ -223,12 +250,14 @@ mod tests {
                     playlist_id: "PL1".to_string(),
                     video_id: "vid1".to_string(),
                     title: "Downloaded Video".to_string(),
+                    filename: Some("Downloaded Video.mp4".to_string()),
                     was_downloaded: true,
                 },
                 DomainEvent::VideoDeleted {
                     playlist_id: "PL1".to_string(),
                     video_id: "vid2".to_string(),
                     title: "Pending Video".to_string(),
+                    filename: None,
                     was_downloaded: false,
                 },
             ]
@@ -236,8 +265,12 @@ mod tests {
     }
 
     #[test]
-    fn it_should_always_schedule_the_next_sync_even_with_no_changes() {
-        let (handler, _events, _videos, task_repository) = handler_with_playlist(Vec::new());
+    fn it_should_always_schedule_the_next_reconcile_even_with_no_changes() {
+        let (handler, _events, _videos, task_repository, _files) = handler_with(
+            PlaylistKind::YoutubeLinked,
+            Vec::new(),
+            FakeVideoFileRepository::default(),
+        );
 
         handler.handle(&payload_for("PL1"), false).unwrap();
 
@@ -245,7 +278,7 @@ mod tests {
         assert_eq!(scheduled.len(), 1);
         assert_eq!(
             scheduled[0].0,
-            Task::SyncPlaylist {
+            Task::ReconcilePlaylist {
                 playlist_id: "PL1".to_string()
             }
         );
@@ -253,5 +286,97 @@ mod tests {
             scheduled[0].1,
             fixed_timestamp() + chrono::Duration::seconds(3600)
         );
+    }
+
+    #[test]
+    fn it_should_skip_the_membership_diff_for_a_custom_playlist() {
+        let (handler, event_publisher, video_repository, task_repository, _files) = handler_with(
+            PlaylistKind::Custom,
+            vec![PlaylistVideo {
+                video_id: "vid1".to_string(),
+                title: "One".to_string(),
+            }],
+            FakeVideoFileRepository::default(),
+        );
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        assert!(video_repository.videos.lock().unwrap().is_empty());
+        assert!(event_publisher.published.lock().unwrap().is_empty());
+        assert_eq!(task_repository.scheduled.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn it_should_heal_a_downloaded_video_whose_file_is_missing() {
+        let (handler, _events, video_repository, task_repository, _files) = handler_with(
+            PlaylistKind::Custom,
+            Vec::new(),
+            FakeVideoFileRepository::with_listing(Vec::new()),
+        );
+        video_repository.videos.lock().unwrap().push(
+            Video::create(
+                PlaylistId::new("PL1").unwrap(),
+                VideoId::new("vid1").unwrap(),
+                "My Video",
+                fixed_timestamp(),
+            )
+            .start_download(fixed_timestamp())
+            .mark_downloaded(Quality::High, "My Video.mp4", fixed_timestamp()),
+        );
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        let stored = video_repository.videos.lock().unwrap();
+        assert_eq!(stored[0].status, VideoStatus::Pending);
+        assert_eq!(stored[0].filename, None);
+        assert_eq!(stored[0].quality, None);
+
+        let scheduled = task_repository.scheduled.lock().unwrap();
+        assert!(scheduled.iter().any(|(task, _)| *task
+            == Task::DownloadVideo {
+                playlist_id: "PL1".to_string(),
+                video_id: "vid1".to_string(),
+                quality: "high".to_string(),
+            }));
+    }
+
+    #[test]
+    fn it_should_delete_an_orphaned_file() {
+        let (handler, _events, _videos, _tasks, files) = handler_with(
+            PlaylistKind::Custom,
+            Vec::new(),
+            FakeVideoFileRepository::with_listing(vec!["orphan.mp4".to_string()]),
+        );
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        let calls = files.deleted_calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].1, "orphan.mp4");
+    }
+
+    #[test]
+    fn it_should_leave_a_matching_file_alone() {
+        let (handler, _events, video_repository, _tasks, files) = handler_with(
+            PlaylistKind::Custom,
+            Vec::new(),
+            FakeVideoFileRepository::with_listing(vec!["My Video.mp4".to_string()]),
+        );
+        video_repository.videos.lock().unwrap().push(
+            Video::create(
+                PlaylistId::new("PL1").unwrap(),
+                VideoId::new("vid1").unwrap(),
+                "My Video",
+                fixed_timestamp(),
+            )
+            .start_download(fixed_timestamp())
+            .mark_downloaded(Quality::High, "My Video.mp4", fixed_timestamp()),
+        );
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        assert!(files.deleted_calls.lock().unwrap().is_empty());
+        let stored = video_repository.videos.lock().unwrap();
+        assert_eq!(stored[0].status, VideoStatus::Downloaded);
     }
 }

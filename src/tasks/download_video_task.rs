@@ -36,7 +36,7 @@ impl TaskHandler for DownloadVideoTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::playlist::{Playlist, PlaylistName, PlaylistPath};
+    use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::video::video_filename::VideoFilename;
     use crate::domain::video::{Video, VideoStatus};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
@@ -49,6 +49,7 @@ mod tests {
     };
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::repositories::youtube_video_repository::FakeYoutubeVideoRepository;
     use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
@@ -89,6 +90,7 @@ mod tests {
                     PlaylistName::new("My Playlist").unwrap(),
                     PlaylistPath::new("my-playlist").unwrap(),
                     Quality::High,
+                    PlaylistKind::YoutubeLinked,
                     fixed_timestamp(),
                 ))
                 .unwrap();
@@ -109,6 +111,7 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeYoutubeVideoRepository::default()),
             Arc::new(FakeEventPublisher::default()),
             Arc::new(FakeTaskRepository::default()),
             Arc::new(downloader),
@@ -134,6 +137,7 @@ mod tests {
             .unwrap();
         assert_eq!(video.status, VideoStatus::Downloaded);
         assert_eq!(video.quality, Some(Quality::High));
+        assert_eq!(video.filename, Some("fake-output.mp4".to_string()));
     }
 
     #[test]
@@ -201,6 +205,7 @@ mod tests {
                 PlaylistName::new("My Playlist").unwrap(),
                 PlaylistPath::new("my-playlist").unwrap(),
                 Quality::High,
+                PlaylistKind::YoutubeLinked,
                 fixed_timestamp(),
             ))
             .unwrap();
@@ -220,6 +225,7 @@ mod tests {
             playlist_repository,
             video_repository,
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeYoutubeVideoRepository::default()),
             Arc::new(FakeEventPublisher::default()),
             Arc::new(FakeTaskRepository::default()),
             downloader.clone(),
@@ -252,6 +258,7 @@ mod tests {
                 PlaylistName::new("My Playlist").unwrap(),
                 PlaylistPath::new("a/b/c").unwrap(),
                 Quality::High,
+                PlaylistKind::YoutubeLinked,
                 fixed_timestamp(),
             ))
             .unwrap();
@@ -270,6 +277,7 @@ mod tests {
             playlist_repository,
             video_repository,
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeYoutubeVideoRepository::default()),
             Arc::new(FakeEventPublisher::default()),
             Arc::new(FakeTaskRepository::default()),
             downloader.clone(),

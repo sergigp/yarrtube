@@ -1,3 +1,4 @@
+use super::playlist_kind::PlaylistKind;
 use super::playlist_name::PlaylistName;
 use super::playlist_path::PlaylistPath;
 use crate::domain::shared::{PlaylistId, Quality};
@@ -9,6 +10,7 @@ pub struct Playlist {
     pub name: PlaylistName,
     pub path: PlaylistPath,
     pub quality: Quality,
+    pub kind: PlaylistKind,
     pub created_at: DateTime<Utc>,
 }
 
@@ -18,6 +20,7 @@ impl Playlist {
         name: PlaylistName,
         path: PlaylistPath,
         quality: Quality,
+        kind: PlaylistKind,
         created_at: DateTime<Utc>,
     ) -> Self {
         Self {
@@ -25,6 +28,7 @@ impl Playlist {
             name,
             path,
             quality,
+            kind,
             created_at,
         }
     }
@@ -40,15 +44,23 @@ mod tests {
         let name = PlaylistName::new("My Playlist").unwrap();
         let path = PlaylistPath::new("my-playlist").unwrap();
         let quality = Quality::High;
+        let kind = PlaylistKind::YoutubeLinked;
         let created_at = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
 
-        let playlist =
-            Playlist::create(id.clone(), name.clone(), path.clone(), quality, created_at);
+        let playlist = Playlist::create(
+            id.clone(),
+            name.clone(),
+            path.clone(),
+            quality,
+            kind,
+            created_at,
+        );
 
         assert_eq!(playlist.id, id);
         assert_eq!(playlist.name, name);
         assert_eq!(playlist.path, path);
         assert_eq!(playlist.quality, quality);
+        assert_eq!(playlist.kind, kind);
         assert_eq!(playlist.created_at, created_at);
     }
 }

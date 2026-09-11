@@ -108,9 +108,16 @@ pub async fn list_playlists(State(state): State<AppState>) -> Response {
 mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
+    use crate::domain::video::VideoService;
     use crate::http::playlists_router;
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
+    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+    use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::repositories::youtube_video_repository::FakeYoutubeVideoRepository;
     use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use axum::body::{Body, to_bytes};
@@ -133,6 +140,19 @@ mod tests {
     ) {
         let repository = Arc::new(repository);
         let event_publisher = Arc::new(FakeEventPublisher::default());
+        let video_service = VideoService::new(
+            repository.clone(),
+            Arc::new(FakeVideoRepository::default()),
+            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeYoutubeVideoRepository::default()),
+            event_publisher.clone(),
+            Arc::new(FakeTaskRepository::default()),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        );
         let state = AppState {
             playlist_service: crate::domain::playlist::PlaylistService::new(
                 repository.clone(),
@@ -142,6 +162,7 @@ mod tests {
                 event_publisher.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             ),
+            video_service,
         };
         (playlists_router(state), repository, event_publisher)
     }
@@ -215,6 +236,7 @@ mod tests {
         assert_eq!(body["name"], "My Playlist");
         assert_eq!(body["path"], DEFAULT_PATH);
         assert_eq!(body["quality"], "high");
+        assert_eq!(body["kind"], "youtube_linked");
         assert_eq!(
             body["created_at"],
             fixed_timestamp().to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
@@ -550,6 +572,7 @@ mod tests {
         assert_eq!(playlists.len(), 2);
         for playlist in playlists {
             assert_eq!(playlist["quality"], "high");
+            assert_eq!(playlist["kind"], "youtube_linked");
         }
     }
 }

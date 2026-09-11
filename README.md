@@ -89,9 +89,29 @@ The HTTP API is how you add or remove playlists to track:
 
 | Method   | Path             | Description                                                |
 | -------- | ---------------- | ----------------------------------------------------------- |
-| `POST`   | `/playlists`     | Track a new playlist (`{"id", "name", "quality"}`)          |
-| `GET`    | `/playlists`     | List tracked playlists                                      |
-| `DELETE` | `/playlists/:id` | Stop tracking a playlist                                    |
+| `POST`   | `/playlists`     | Track a new YouTube-linked playlist (`{"id", "name", "path", "quality"}`) |
+| `GET`    | `/playlists`     | List tracked playlists, of either kind                      |
+| `DELETE` | `/playlists/:id` | Stop tracking a playlist, of either kind                    |
+
+A playlist is either YouTube-linked (backed by an existing YouTube playlist,
+its ID validated against the YouTube API) or custom (a caller-supplied UUID
+with no YouTube playlist behind it). `GET`/`DELETE /playlists` work the same
+for both; only creation and video membership differ by kind.
+
+### Custom playlists
+
+A custom playlist has no YouTube playlist behind it — its videos are curated
+entirely through this API instead of mirroring an existing YouTube playlist:
+
+| Method   | Path                                      | Description                                                        |
+| -------- | ------------------------------------------ | ------------------------------------------------------------------ |
+| `POST`   | `/custom-playlists`                        | Create a custom playlist (`{"id", "name", "path", "quality"}`); `id` must be a well-formed, unused UUID |
+| `POST`   | `/custom-playlists/:id/videos`              | Add a video (`{"video"}`, a YouTube URL or bare video ID); verified and titled via the YouTube API before being accepted |
+| `DELETE` | `/custom-playlists/:id/videos/:video_id`    | Remove a video from the playlist                                    |
+
+A YouTube-linked playlist's videos can't be added or removed manually —
+YouTube stays authoritative for that kind, so membership only ever changes
+via reconciliation against the YouTube playlist itself.
 
 ## Manual commands
 
@@ -110,13 +130,29 @@ command):
 
 | Variable                         | Default                 | Description                                               |
 | -------------------------------- | ----------------------- | --------------------------------------------------------- |
-| `YOUTUBE_API_KEY`                | —                       | YouTube Data API v3 key (required)                        |
-| `YARRTUBE_PORT`                  | `8080`                  | HTTP port to listen on                                    |
-| `YARRTUBE_SYNC_INTERVAL_SECONDS` | `3600`                  | How often a tracked playlist is re-checked for new videos |
-| `YARRTUBE_DB_PATH`               | `yarrtube.sqlite3`      | Path to the internal SQLite file (inside the container)   |
-| `YARRTUBE_VIDEOS_PATH`           | `/videos`               | Root directory downloaded videos are saved under (inside the container) |
-| `YTDLP_PATH`                     | `/usr/local/bin/yt-dlp` | Path to the managed `yt-dlp` binary                       |
-| `RUST_LOG`                       | `info`                  | Log verbosity (e.g. `RUST_LOG=debug`)                     |
+| `YOUTUBE_API_KEY`                     | —                       | YouTube Data API v3 key (required)                        |
+| `YARRTUBE_PORT`                       | `8080`                  | HTTP port to listen on                                    |
+| `YARRTUBE_RECONCILE_INTERVAL_SECONDS` | `3600`                  | How often each tracked playlist is reconciled (membership diff for YouTube-linked playlists, filesystem healing for every playlist) |
+| `YARRTUBE_DB_PATH`                    | `yarrtube.sqlite3`      | Path to the internal SQLite file (inside the container)   |
+| `YARRTUBE_VIDEOS_PATH`                | `/videos`               | Root directory downloaded videos are saved under (inside the container) |
+| `YTDLP_PATH`                          | `/usr/local/bin/yt-dlp` | Path to the managed `yt-dlp` binary                       |
+| `RUST_LOG`                            | `info`                  | Log verbosity (e.g. `RUST_LOG=debug`)                     |
+
+### Reconciliation and the output directory
+
+Each tracked playlist runs a recurring reconcile pass (once at creation, then
+every `YARRTUBE_RECONCILE_INTERVAL_SECONDS`) that, in addition to diffing
+YouTube membership for a YouTube-linked playlist, always compares the files
+actually present in that playlist's output directory against what the
+database expects to be there: a `Downloaded` video whose file has gone
+missing is reset and redownloaded, and any file that isn't the recorded
+download of a currently-downloaded video is deleted as an orphan.
+
+**A playlist's output directory is treated as fully system-owned by this
+process.** Any file placed there by hand (or left over from something other
+than yarrtube itself) will be deleted on the next reconcile pass, the same as
+a genuine orphan. Don't store anything in a tracked playlist's output
+directory that you don't want yarrtube to manage.
 
 ## Updating
 

@@ -317,7 +317,7 @@ mod tests {
     }
 
     fn task() -> Task {
-        Task::SyncPlaylist {
+        Task::ReconcilePlaylist {
             playlist_id: "PL1".to_string(),
         }
     }
@@ -341,7 +341,7 @@ mod tests {
 
         let eligible = repo.list_eligible().unwrap();
         assert_eq!(eligible.len(), 1);
-        assert_eq!(eligible[0].task_type, "sync_playlist");
+        assert_eq!(eligible[0].task_type, "reconcile_playlist");
     }
 
     #[test]
@@ -418,7 +418,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(original_task_id, id);
-        assert_eq!(task_type, "sync_playlist");
+        assert_eq!(task_type, "reconcile_playlist");
         assert_eq!(payload, task().payload().to_string());
         assert_eq!(retries, 5);
         assert_eq!(last_error, "boom");

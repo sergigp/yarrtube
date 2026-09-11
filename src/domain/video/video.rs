@@ -9,6 +9,7 @@ pub struct Video {
     pub title: String,
     pub status: VideoStatus,
     pub quality: Option<Quality>,
+    pub filename: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -26,6 +27,7 @@ impl Video {
             title: title.into(),
             status: VideoStatus::Pending,
             quality: None,
+            filename: None,
             created_at: now,
             updated_at: now,
         }
@@ -39,10 +41,16 @@ impl Video {
         }
     }
 
-    pub fn mark_downloaded(self, quality: Quality, now: DateTime<Utc>) -> Self {
+    pub fn mark_downloaded(
+        self,
+        quality: Quality,
+        filename: impl Into<String>,
+        now: DateTime<Utc>,
+    ) -> Self {
         Self {
             status: VideoStatus::Downloaded,
             quality: Some(quality),
+            filename: Some(filename.into()),
             updated_at: now,
             ..self
         }
@@ -59,6 +67,19 @@ impl Video {
     pub fn mark_errored(self, now: DateTime<Utc>) -> Self {
         Self {
             status: VideoStatus::Errored,
+            updated_at: now,
+            ..self
+        }
+    }
+
+    /// Resets a `Downloaded` video back to `Pending`, clearing its recorded
+    /// filename and quality, used by filesystem reconciliation when a
+    /// video's recorded file is missing from disk and needs redownloading.
+    pub fn reset_for_redownload(self, now: DateTime<Utc>) -> Self {
+        Self {
+            status: VideoStatus::Pending,
+            quality: None,
+            filename: None,
             updated_at: now,
             ..self
         }
@@ -83,6 +104,7 @@ mod tests {
         assert_eq!(video.status, VideoStatus::Pending);
         assert_eq!(video.title, "My Video");
         assert_eq!(video.quality, None);
+        assert_eq!(video.filename, None);
         assert_eq!(video.created_at, now);
         assert_eq!(video.updated_at, now);
     }
@@ -111,11 +133,26 @@ mod tests {
     fn it_should_transition_to_downloaded_when_marked_downloaded() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
 
-        let video = video().mark_downloaded(Quality::High, now);
+        let video = video().mark_downloaded(Quality::High, "My Video.mp4", now);
 
         assert_eq!(video.status, VideoStatus::Downloaded);
         assert_eq!(video.quality, Some(Quality::High));
+        assert_eq!(video.filename, Some("My Video.mp4".to_string()));
         assert_eq!(video.updated_at, now);
+    }
+
+    #[test]
+    fn it_should_reset_a_downloaded_video_back_to_pending_for_redownload() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let downloaded = video().mark_downloaded(Quality::High, "My Video.mp4", now);
+
+        let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
+        let reset = downloaded.reset_for_redownload(later);
+
+        assert_eq!(reset.status, VideoStatus::Pending);
+        assert_eq!(reset.quality, None);
+        assert_eq!(reset.filename, None);
+        assert_eq!(reset.updated_at, later);
     }
 
     #[test]

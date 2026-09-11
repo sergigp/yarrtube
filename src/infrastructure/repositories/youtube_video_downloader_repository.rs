@@ -5,9 +5,10 @@ use std::path::Path;
 /// Downloads a single video via `yt-dlp`, injected into `VideoService` for
 /// the event-driven download path.
 pub trait VideoDownloaderRepository: Send + Sync {
-    /// Returns `Ok(true)`/`Ok(false)` for a completed `yt-dlp` process based
-    /// on its exit status. Returns `Err` only for a systemic problem (e.g.
-    /// `yt-dlp` missing from `PATH`).
+    /// Returns `Ok(Some(filename))` with the exact filename `yt-dlp` saved
+    /// on a successful download, `Ok(None)` for a clean `yt-dlp` failure
+    /// (non-zero exit). Returns `Err` only for a systemic problem (e.g.
+    /// `yt-dlp` missing from `PATH`, or an unparseable `--print` output).
     fn download(
         &self,
         video_url: &str,
@@ -15,7 +16,7 @@ pub trait VideoDownloaderRepository: Send + Sync {
         video_id: &str,
         quality: Quality,
         output_dir: &Path,
-    ) -> anyhow::Result<bool>;
+    ) -> anyhow::Result<Option<String>>;
 }
 
 pub struct YtDlpVideoDownloaderRepository;
@@ -28,7 +29,7 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
         video_id: &str,
         quality: Quality,
         output_dir: &Path,
-    ) -> anyhow::Result<bool> {
+    ) -> anyhow::Result<Option<String>> {
         ytdlp::ensure_output_dir(output_dir)?;
         ytdlp::download_video(video_url, desired_filename, video_id, quality, output_dir)
     }
@@ -37,7 +38,7 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
 #[cfg(test)]
 #[derive(Default)]
 pub struct FakeVideoDownloaderRepository {
-    pub(crate) succeeds: std::sync::atomic::AtomicBool,
+    pub(crate) result: std::sync::Mutex<Option<String>>,
     #[allow(clippy::type_complexity)]
     pub(crate) calls: std::sync::Mutex<Vec<(String, String, String, Quality, std::path::PathBuf)>>,
 }
@@ -46,7 +47,7 @@ pub struct FakeVideoDownloaderRepository {
 impl FakeVideoDownloaderRepository {
     pub fn new(succeeds: bool) -> Self {
         Self {
-            succeeds: std::sync::atomic::AtomicBool::new(succeeds),
+            result: std::sync::Mutex::new(succeeds.then(|| "fake-output.mp4".to_string())),
             calls: std::sync::Mutex::new(Vec::new()),
         }
     }
@@ -61,7 +62,7 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
         video_id: &str,
         quality: Quality,
         output_dir: &Path,
-    ) -> anyhow::Result<bool> {
+    ) -> anyhow::Result<Option<String>> {
         self.calls.lock().unwrap().push((
             video_url.to_string(),
             desired_filename.to_string(),
@@ -69,7 +70,7 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
             quality,
             output_dir.to_path_buf(),
         ));
-        Ok(self.succeeds.load(std::sync::atomic::Ordering::SeqCst))
+        Ok(self.result.lock().unwrap().clone())
     }
 }
 
@@ -80,7 +81,7 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_map_a_successful_yt_dlp_process_to_ok_true() {
+    fn it_should_map_a_successful_yt_dlp_process_to_the_printed_filename() {
         let _guard = test_support::FakeYtDlpOnPath::with_exit_code(0);
         let output_dir = test_support::unique_temp_dir("video-downloader-repository");
 
@@ -94,13 +95,16 @@ mod tests {
             )
             .unwrap();
 
-        assert!(result);
+        assert_eq!(
+            result,
+            Some(test_support::DEFAULT_PRINTED_FILENAME.to_string())
+        );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
     #[test]
     #[cfg(unix)]
-    fn it_should_map_a_failed_yt_dlp_process_to_ok_false() {
+    fn it_should_map_a_failed_yt_dlp_process_to_none() {
         let _guard = test_support::FakeYtDlpOnPath::with_exit_code(1);
         let output_dir = test_support::unique_temp_dir("video-downloader-repository");
 
@@ -114,7 +118,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(!result);
+        assert_eq!(result, None);
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 }

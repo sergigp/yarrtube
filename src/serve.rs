@@ -15,6 +15,7 @@ use crate::infrastructure::repositories::task_executor::TaskExecutor;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubeApiPlaylistItemsRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
+use crate::infrastructure::repositories::youtube_video_repository::YoutubeApiVideoRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::{
     EventPublisher, SqliteEventPublisher,
 };
@@ -37,7 +38,7 @@ use tracing_subscriber::filter::LevelFilter;
 
 const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_DB_PATH: &str = "yarrtube.sqlite3";
-const DEFAULT_SYNC_INTERVAL_SECONDS: i64 = 3600;
+const DEFAULT_RECONCILE_INTERVAL_SECONDS: i64 = 3600;
 const DEFAULT_VIDEOS_PATH: &str = "/videos";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 const BACKGROUND_POLL_INTERVAL: Duration = Duration::from_secs(5);
@@ -55,11 +56,11 @@ fn db_path() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_DB_PATH))
 }
 
-fn sync_interval_seconds() -> i64 {
-    std::env::var("YARRTUBE_SYNC_INTERVAL_SECONDS")
+fn reconcile_interval_seconds() -> i64 {
+    std::env::var("YARRTUBE_RECONCILE_INTERVAL_SECONDS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(DEFAULT_SYNC_INTERVAL_SECONDS)
+        .unwrap_or(DEFAULT_RECONCILE_INTERVAL_SECONDS)
 }
 
 fn videos_path() -> String {
@@ -147,12 +148,13 @@ fn build_application() -> Result<Application> {
         playlist_repository.clone(),
         Arc::new(video_repository),
         Arc::new(YoutubeApiPlaylistItemsRepository::new(youtube_api_key())),
+        Arc::new(YoutubeApiVideoRepository::new(youtube_api_key())),
         event_publisher as Arc<dyn EventPublisher>,
         task_repository.clone() as Arc<dyn TaskRepository>,
         Arc::new(YtDlpVideoDownloaderRepository),
         Arc::new(FilesystemVideoFileRepository),
         Arc::new(SystemClock),
-        sync_interval_seconds(),
+        reconcile_interval_seconds(),
         videos_path(),
     );
 
@@ -168,7 +170,7 @@ fn build_application() -> Result<Application> {
     ));
     let task_executor = Arc::new(TaskExecutor::new(
         task_repository as Arc<dyn TaskRepository>,
-        tasks::registry(video_service),
+        tasks::registry(video_service.clone()),
         Arc::new(SystemClock),
     ));
     task_executor
@@ -176,7 +178,10 @@ fn build_application() -> Result<Application> {
         .context("failed to recover tasks left running from a previous run")?;
 
     Ok(Application {
-        state: AppState { playlist_service },
+        state: AppState {
+            playlist_service,
+            video_service,
+        },
         event_consumer,
         task_executor,
     })
