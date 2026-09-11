@@ -18,6 +18,7 @@ pub struct PlaylistResponse {
     pub name: String,
     pub path: String,
     pub quality: String,
+    pub kind: String,
     pub created_at: DateTime<Utc>,
 }
 
@@ -28,6 +29,7 @@ impl From<Playlist> for PlaylistResponse {
             name: playlist.name.as_str().to_string(),
             path: playlist.path.as_str().to_string(),
             quality: playlist.quality.as_str().to_string(),
+            kind: playlist.kind.as_str().to_string(),
             created_at: playlist.created_at,
         }
     }

@@ -144,7 +144,7 @@ mod tests {
         ScheduledTask {
             id,
             task_type: task_type.to_string(),
-            payload: Task::SyncPlaylist {
+            payload: Task::ReconcilePlaylist {
                 playlist_id: "PL1".to_string(),
             }
             .payload()
@@ -223,7 +223,7 @@ mod tests {
 
     fn registry(handler: FakeHandler) -> HandlerRegistry {
         let mut registry: HandlerRegistry = HashMap::new();
-        registry.insert("sync_playlist".to_string(), Arc::new(handler));
+        registry.insert("reconcile_playlist".to_string(), Arc::new(handler));
         registry
     }
 
@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn it_should_dispatch_an_eligible_task_and_delete_it_on_success() {
-        let repository = Arc::new(FakeTaskRepository::seeded("sync_playlist"));
+        let repository = Arc::new(FakeTaskRepository::seeded("reconcile_playlist"));
         let executor = TaskExecutor::new(
             repository.clone(),
             registry(FakeHandler {
@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn it_should_retry_a_task_whose_handler_fails() {
-        let repository = Arc::new(FakeTaskRepository::seeded("sync_playlist"));
+        let repository = Arc::new(FakeTaskRepository::seeded("reconcile_playlist"));
         let executor = TaskExecutor::new(
             repository.clone(),
             registry(FakeHandler {
@@ -275,7 +275,10 @@ mod tests {
 
     #[test]
     fn it_should_dead_letter_a_task_whose_handler_fails_on_the_fifth_attempt() {
-        let repository = Arc::new(FakeTaskRepository::seeded_with_retries("sync_playlist", 4));
+        let repository = Arc::new(FakeTaskRepository::seeded_with_retries(
+            "reconcile_playlist",
+            4,
+        ));
         let executor = TaskExecutor::new(
             repository.clone(),
             registry(FakeHandler {
@@ -295,10 +298,13 @@ mod tests {
 
     #[test]
     fn it_should_tell_the_handler_this_is_not_the_last_attempt_when_retries_remain() {
-        let repository = Arc::new(FakeTaskRepository::seeded_with_retries("sync_playlist", 3));
+        let repository = Arc::new(FakeTaskRepository::seeded_with_retries(
+            "reconcile_playlist",
+            3,
+        ));
         let handler = Arc::new(FakeHandler::default());
         let mut handlers: HandlerRegistry = HashMap::new();
-        handlers.insert("sync_playlist".to_string(), handler.clone());
+        handlers.insert("reconcile_playlist".to_string(), handler.clone());
         let executor = TaskExecutor::new(repository, handlers, clock());
 
         executor.poll_once().unwrap();
@@ -311,10 +317,13 @@ mod tests {
 
     #[test]
     fn it_should_tell_the_handler_this_is_the_last_attempt_when_no_retries_remain() {
-        let repository = Arc::new(FakeTaskRepository::seeded_with_retries("sync_playlist", 4));
+        let repository = Arc::new(FakeTaskRepository::seeded_with_retries(
+            "reconcile_playlist",
+            4,
+        ));
         let handler = Arc::new(FakeHandler::default());
         let mut handlers: HandlerRegistry = HashMap::new();
-        handlers.insert("sync_playlist".to_string(), handler.clone());
+        handlers.insert("reconcile_playlist".to_string(), handler.clone());
         let executor = TaskExecutor::new(repository, handlers, clock());
 
         executor.poll_once().unwrap();
@@ -332,7 +341,7 @@ mod tests {
             .running
             .lock()
             .unwrap()
-            .push(scheduled_task(1, "sync_playlist", 0));
+            .push(scheduled_task(1, "reconcile_playlist", 0));
         let executor = TaskExecutor::new(
             repository.clone(),
             registry(FakeHandler {
@@ -357,7 +366,7 @@ mod tests {
             .running
             .lock()
             .unwrap()
-            .push(scheduled_task(1, "sync_playlist", 4));
+            .push(scheduled_task(1, "reconcile_playlist", 4));
         let executor = TaskExecutor::new(
             repository.clone(),
             registry(FakeHandler {

@@ -16,6 +16,7 @@ pub enum DomainEvent {
         playlist_id: String,
         video_id: String,
         title: String,
+        filename: Option<String>,
         was_downloaded: bool,
     },
 }
@@ -45,11 +46,13 @@ impl DomainEvent {
                 playlist_id,
                 video_id,
                 title,
+                filename,
                 was_downloaded,
             } => json!({
                 "playlist_id": playlist_id,
                 "video_id": video_id,
                 "title": title,
+                "filename": filename,
                 "was_downloaded": was_downloaded,
             }),
         }
@@ -100,6 +103,7 @@ mod tests {
             playlist_id: "PL1".to_string(),
             video_id: "vid1".to_string(),
             title: "My Video".to_string(),
+            filename: Some("My Video.mp4".to_string()),
             was_downloaded: true,
         };
 
@@ -110,7 +114,30 @@ mod tests {
                 "playlist_id": "PL1",
                 "video_id": "vid1",
                 "title": "My Video",
+                "filename": "My Video.mp4",
                 "was_downloaded": true,
+            })
+        );
+    }
+
+    #[test]
+    fn it_should_map_video_deleted_with_no_recorded_filename() {
+        let event = DomainEvent::VideoDeleted {
+            playlist_id: "PL1".to_string(),
+            video_id: "vid1".to_string(),
+            title: "My Video".to_string(),
+            filename: None,
+            was_downloaded: false,
+        };
+
+        assert_eq!(
+            event.payload(),
+            json!({
+                "playlist_id": "PL1",
+                "video_id": "vid1",
+                "title": "My Video",
+                "filename": null,
+                "was_downloaded": false,
             })
         );
     }

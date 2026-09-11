@@ -109,7 +109,7 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         ScheduledTask {
             id: 1,
-            task_type: "sync_playlist".to_string(),
+            task_type: "reconcile_playlist".to_string(),
             payload: "{}".to_string(),
             status: TaskStatus::Pending,
             retries,
@@ -158,7 +158,7 @@ mod tests {
         match outcome {
             TaskFailureOutcome::DeadLetter(dead) => {
                 assert_eq!(dead.original_task_id, 1);
-                assert_eq!(dead.task_type, "sync_playlist");
+                assert_eq!(dead.task_type, "reconcile_playlist");
                 assert_eq!(dead.retries, 5);
                 assert_eq!(dead.last_error, "boom");
                 assert_eq!(dead.failed_at, now);

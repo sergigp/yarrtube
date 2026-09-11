@@ -18,7 +18,8 @@ impl DeleteVideoFileTask {
 
 impl TaskHandler for DeleteVideoFileTask {
     fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let (playlist_id, video_id, title) = Task::decode_delete_video_file_payload(payload)?;
+        let (playlist_id, video_id, _title, filename) =
+            Task::decode_delete_video_file_payload(payload)?;
         let Ok(playlist_id) = PlaylistId::new(playlist_id) else {
             return Ok(());
         };
@@ -26,14 +27,14 @@ impl TaskHandler for DeleteVideoFileTask {
             return Ok(());
         };
         self.video_service
-            .delete_video_file(playlist_id, video_id, &title)
+            .delete_video_file(playlist_id, video_id, filename)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::playlist::{Playlist, PlaylistName, PlaylistPath};
+    use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::shared::Quality;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
@@ -43,6 +44,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::repositories::youtube_video_repository::FakeYoutubeVideoRepository;
     use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
@@ -52,11 +54,17 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn payload_for(playlist_id: &str, video_id: &str, title: &str) -> String {
+    fn payload_for(
+        playlist_id: &str,
+        video_id: &str,
+        title: &str,
+        filename: Option<&str>,
+    ) -> String {
         Task::DeleteVideoFile {
             playlist_id: playlist_id.to_string(),
             video_id: video_id.to_string(),
             title: title.to_string(),
+            filename: filename.map(str::to_string),
         }
         .payload()
         .to_string()
@@ -74,6 +82,7 @@ mod tests {
                     PlaylistName::new("My Playlist").unwrap(),
                     PlaylistPath::new("my-playlist").unwrap(),
                     Quality::High,
+                    PlaylistKind::YoutubeLinked,
                     fixed_timestamp(),
                 ))
                 .unwrap();
@@ -84,6 +93,7 @@ mod tests {
             playlist_repository,
             Arc::new(FakeVideoRepository::default()),
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeYoutubeVideoRepository::default()),
             Arc::new(FakeEventPublisher::default()),
             Arc::new(FakeTaskRepository::default()),
             Arc::new(FakeVideoDownloaderRepository::new(true)),
@@ -105,10 +115,31 @@ mod tests {
             handler_with(true, FakeVideoFileRepository::new(Ok(true)));
 
         handler
-            .handle(&payload_for("PL1", "vid1", "My Video"), false)
+            .handle(
+                &payload_for("PL1", "vid1", "My Video", Some("My Video.mp4")),
+                false,
+            )
             .unwrap();
 
-        assert_eq!(video_file_repository.calls.lock().unwrap().len(), 1);
+        assert_eq!(video_file_repository.deleted_calls.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn it_should_no_op_when_the_video_has_no_recorded_filename() {
+        let (handler, video_file_repository) =
+            handler_with(true, FakeVideoFileRepository::new(Ok(true)));
+
+        handler
+            .handle(&payload_for("PL1", "vid1", "My Video", None), false)
+            .unwrap();
+
+        assert!(
+            video_file_repository
+                .deleted_calls
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -117,10 +148,19 @@ mod tests {
             handler_with(true, FakeVideoFileRepository::new(Ok(true)));
 
         handler
-            .handle(&payload_for("", "vid1", "My Video"), false)
+            .handle(
+                &payload_for("", "vid1", "My Video", Some("My Video.mp4")),
+                false,
+            )
             .unwrap();
 
-        assert!(video_file_repository.calls.lock().unwrap().is_empty());
+        assert!(
+            video_file_repository
+                .deleted_calls
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -136,10 +176,19 @@ mod tests {
         let (handler, video_file_repository) =
             handler_with(false, FakeVideoFileRepository::new(Ok(true)));
 
-        let result = handler.handle(&payload_for("PL1", "vid1", "My Video"), false);
+        let result = handler.handle(
+            &payload_for("PL1", "vid1", "My Video", Some("My Video.mp4")),
+            false,
+        );
 
         assert!(result.is_ok());
-        assert!(video_file_repository.calls.lock().unwrap().is_empty());
+        assert!(
+            video_file_repository
+                .deleted_calls
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -147,7 +196,10 @@ mod tests {
         let (handler, _video_file_repository) =
             handler_with(true, FakeVideoFileRepository::new(Ok(false)));
 
-        let result = handler.handle(&payload_for("PL1", "vid1", "My Video"), false);
+        let result = handler.handle(
+            &payload_for("PL1", "vid1", "My Video", Some("My Video.mp4")),
+            false,
+        );
 
         assert!(result.is_ok());
     }

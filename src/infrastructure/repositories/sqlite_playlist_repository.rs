@@ -1,4 +1,4 @@
-use crate::domain::playlist::{Playlist, PlaylistName, PlaylistPath};
+use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
 use crate::domain::shared::{PlaylistId, Quality};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -29,26 +29,38 @@ impl SqlitePlaylistRepository {
             [],
         )
         .context("failed to create playlists table")?;
+        match conn.execute(
+            "ALTER TABLE playlists ADD COLUMN kind TEXT NOT NULL DEFAULT 'youtube_linked'",
+            [],
+        ) {
+            Ok(_) => {}
+            Err(rusqlite::Error::SqliteFailure(_, Some(message)))
+                if message.contains("duplicate column name") => {}
+            Err(e) => return Err(e).context("failed to add kind column to playlists table"),
+        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn row_to_playlist(
         id: String,
         name: String,
         path: String,
         quality: String,
+        kind: String,
         created_at: String,
     ) -> anyhow::Result<Playlist> {
         let id = PlaylistId::new(id)?;
         let name = PlaylistName::new(name)?;
         let path = PlaylistPath::new(path)?;
         let quality = Quality::new(quality)?;
+        let kind = PlaylistKind::new(kind)?;
         let created_at = DateTime::parse_from_rfc3339(&created_at)
             .context("failed to parse stored created_at")?
             .with_timezone(&Utc);
-        Ok(Playlist::create(id, name, path, quality, created_at))
+        Ok(Playlist::create(id, name, path, quality, kind, created_at))
     }
 }
 
@@ -59,7 +71,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
-            "SELECT id, name, path, quality, created_at FROM playlists WHERE id = ?1",
+            "SELECT id, name, path, quality, kind, created_at FROM playlists WHERE id = ?1",
             params![id.as_str()],
             |row| {
                 Ok((
@@ -68,13 +80,14 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
                 ))
             },
         )
         .optional()
         .context("failed to query playlist")?
-        .map(|(id, name, path, quality, created_at)| {
-            Self::row_to_playlist(id, name, path, quality, created_at)
+        .map(|(id, name, path, quality, kind, created_at)| {
+            Self::row_to_playlist(id, name, path, quality, kind, created_at)
         })
         .transpose()
     }
@@ -85,12 +98,13 @@ impl PlaylistRepository for SqlitePlaylistRepository {
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "INSERT INTO playlists (id, name, path, quality, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO playlists (id, name, path, quality, kind, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 playlist.id.as_str(),
                 playlist.name.as_str(),
                 playlist.path.as_str(),
                 playlist.quality.as_str(),
+                playlist.kind.as_str(),
                 playlist.created_at.to_rfc3339()
             ],
         )
@@ -114,7 +128,9 @@ impl PlaylistRepository for SqlitePlaylistRepository {
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
-            .prepare("SELECT id, name, path, quality, created_at FROM playlists ORDER BY rowid ASC")
+            .prepare(
+                "SELECT id, name, path, quality, kind, created_at FROM playlists ORDER BY rowid ASC",
+            )
             .context("failed to prepare list query")?;
         let rows = stmt
             .query_map([], |row| {
@@ -124,14 +140,15 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
                 ))
             })
             .context("failed to list playlists")?;
 
         rows.map(|row| {
-            let (id, name, path, quality, created_at) =
+            let (id, name, path, quality, kind, created_at) =
                 row.context("failed to read playlist row")?;
-            Self::row_to_playlist(id, name, path, quality, created_at)
+            Self::row_to_playlist(id, name, path, quality, kind, created_at)
         })
         .collect()
     }
@@ -178,12 +195,31 @@ mod tests {
         SqlitePlaylistRepository::new(Connection::open_in_memory().unwrap()).unwrap()
     }
 
+    #[test]
+    fn it_should_be_idempotent_when_constructed_twice_against_an_already_migrated_database() {
+        let db_path = std::env::temp_dir().join(format!(
+            "yarrtube-playlist-repo-migration-{}-{}.sqlite3",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+
+        SqlitePlaylistRepository::new(Connection::open(&db_path).unwrap()).unwrap();
+        let result = SqlitePlaylistRepository::new(Connection::open(&db_path).unwrap());
+
+        assert!(result.is_ok());
+        std::fs::remove_file(&db_path).unwrap();
+    }
+
     fn playlist(id: &str, name: &str) -> Playlist {
         Playlist::create(
             PlaylistId::new(id).unwrap(),
             PlaylistName::new(name).unwrap(),
             PlaylistPath::new("my-playlist").unwrap(),
             Quality::High,
+            PlaylistKind::YoutubeLinked,
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         )
     }

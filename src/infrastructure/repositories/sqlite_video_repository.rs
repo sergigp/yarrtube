@@ -38,6 +38,12 @@ impl SqliteVideoRepository {
             [],
         )
         .context("failed to create videos table")?;
+        match conn.execute("ALTER TABLE videos ADD COLUMN filename TEXT", []) {
+            Ok(_) => {}
+            Err(rusqlite::Error::SqliteFailure(_, Some(message)))
+                if message.contains("duplicate column name") => {}
+            Err(e) => return Err(e).context("failed to add filename column to videos table"),
+        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -50,6 +56,7 @@ impl SqliteVideoRepository {
         title: String,
         status: String,
         quality: Option<String>,
+        filename: Option<String>,
         created_at: String,
         updated_at: String,
     ) -> anyhow::Result<Video> {
@@ -59,6 +66,7 @@ impl SqliteVideoRepository {
             title,
             status: VideoStatus::parse(&status)?,
             quality: quality.map(Quality::new).transpose()?,
+            filename,
             created_at: DateTime::parse_from_rfc3339(&created_at)
                 .context("failed to parse stored created_at")?
                 .with_timezone(&Utc),
@@ -76,12 +84,13 @@ impl VideoRepository for SqliteVideoRepository {
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "INSERT INTO videos (playlist_id, video_id, title, status, quality, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO videos (playlist_id, video_id, title, status, quality, filename, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT (playlist_id, video_id) DO UPDATE SET
                 title = excluded.title,
                 status = excluded.status,
                 quality = excluded.quality,
+                filename = excluded.filename,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at",
             params![
@@ -90,6 +99,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.title,
                 video.status.as_str(),
                 video.quality.map(|q| q.as_str()),
+                video.filename,
                 video.created_at.to_rfc3339(),
                 video.updated_at.to_rfc3339(),
             ],
@@ -104,7 +114,7 @@ impl VideoRepository for SqliteVideoRepository {
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
-            "SELECT playlist_id, video_id, title, status, quality, created_at, updated_at
+            "SELECT playlist_id, video_id, title, status, quality, filename, created_at, updated_at
              FROM videos WHERE playlist_id = ?1 AND video_id = ?2",
             params![playlist_id.as_str(), video_id.as_str()],
             |row| {
@@ -114,21 +124,23 @@ impl VideoRepository for SqliteVideoRepository {
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, Option<String>>(4)?,
-                    row.get::<_, String>(5)?,
+                    row.get::<_, Option<String>>(5)?,
                     row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
                 ))
             },
         )
         .optional()
         .context("failed to find video")?
         .map(
-            |(playlist_id, video_id, title, status, quality, created_at, updated_at)| {
+            |(playlist_id, video_id, title, status, quality, filename, created_at, updated_at)| {
                 Self::row_to_video(
                     playlist_id,
                     video_id,
                     title,
                     status,
                     quality,
+                    filename,
                     created_at,
                     updated_at,
                 )
@@ -144,7 +156,7 @@ impl VideoRepository for SqliteVideoRepository {
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
             .prepare(
-                "SELECT playlist_id, video_id, title, status, quality, created_at, updated_at
+                "SELECT playlist_id, video_id, title, status, quality, filename, created_at, updated_at
                  FROM videos WHERE playlist_id = ?1 ORDER BY video_id ASC",
             )
             .context("failed to prepare list-videos query")?;
@@ -156,14 +168,15 @@ impl VideoRepository for SqliteVideoRepository {
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, Option<String>>(4)?,
-                    row.get::<_, String>(5)?,
+                    row.get::<_, Option<String>>(5)?,
                     row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
                 ))
             })
             .context("failed to list videos")?;
 
         rows.map(|row| {
-            let (playlist_id, video_id, title, status, quality, created_at, updated_at) =
+            let (playlist_id, video_id, title, status, quality, filename, created_at, updated_at) =
                 row.context("failed to read video row")?;
             Self::row_to_video(
                 playlist_id,
@@ -171,6 +184,7 @@ impl VideoRepository for SqliteVideoRepository {
                 title,
                 status,
                 quality,
+                filename,
                 created_at,
                 updated_at,
             )
@@ -197,7 +211,7 @@ impl VideoRepository for SqliteVideoRepository {
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "UPDATE videos SET title = ?3, status = ?4, quality = ?5, updated_at = ?6
+            "UPDATE videos SET title = ?3, status = ?4, quality = ?5, filename = ?6, updated_at = ?7
              WHERE playlist_id = ?1 AND video_id = ?2",
             params![
                 video.playlist_id.as_str(),
@@ -205,6 +219,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.title,
                 video.status.as_str(),
                 video.quality.map(|q| q.as_str()),
+                video.filename,
                 video.updated_at.to_rfc3339(),
             ],
         )
@@ -283,6 +298,24 @@ mod tests {
         SqliteVideoRepository::new(Connection::open_in_memory().unwrap()).unwrap()
     }
 
+    #[test]
+    fn it_should_be_idempotent_when_constructed_twice_against_an_already_migrated_database() {
+        let db_path = std::env::temp_dir().join(format!(
+            "yarrtube-video-repo-migration-{}-{}.sqlite3",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+
+        SqliteVideoRepository::new(Connection::open(&db_path).unwrap()).unwrap();
+        let result = SqliteVideoRepository::new(Connection::open(&db_path).unwrap());
+
+        assert!(result.is_ok());
+        std::fs::remove_file(&db_path).unwrap();
+    }
+
     fn playlist_id() -> PlaylistId {
         PlaylistId::new("PL1").unwrap()
     }
@@ -325,7 +358,7 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let downloaded = video("vid1", "First", now)
             .start_download(now)
-            .mark_downloaded(Quality::Mid, now);
+            .mark_downloaded(Quality::Mid, "First.mp4", now);
         repo.save(&downloaded).unwrap();
 
         let found = repo
@@ -334,6 +367,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(found.quality, Some(Quality::Mid));
+        assert_eq!(found.filename, Some("First.mp4".to_string()));
     }
 
     #[test]

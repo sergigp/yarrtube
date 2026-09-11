@@ -1,5 +1,6 @@
-use super::errors::{CreatePlaylistError, DeletePlaylistError};
+use super::errors::{CreateCustomPlaylistError, CreatePlaylistError, DeletePlaylistError};
 use super::playlist::Playlist;
+use super::playlist_kind::PlaylistKind;
 use super::playlist_name::PlaylistName;
 use super::playlist_path::PlaylistPath;
 use crate::domain::event::DomainEvent;
@@ -10,6 +11,7 @@ use crate::infrastructure::shared::domain_events::event_publisher::EventPublishe
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
 use tracing::info;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CreatePlaylistOutcome {
@@ -62,7 +64,7 @@ impl PlaylistService {
         }
 
         let now = self.clock.now();
-        let playlist = Playlist::create(id, name, path, quality, now);
+        let playlist = Playlist::create(id, name, path, quality, PlaylistKind::YoutubeLinked, now);
         self.repository
             .insert(&playlist)
             .map_err(CreatePlaylistError::Repository)?;
@@ -73,6 +75,40 @@ impl PlaylistService {
             .map_err(CreatePlaylistError::Repository)?;
         info!(playlist_id = %playlist.id, name = %playlist.name, "created playlist");
         Ok(CreatePlaylistOutcome::Created(playlist))
+    }
+
+    /// Creates a playlist with no YouTube playlist behind it: the caller
+    /// supplies the ID (a well-formed, unused UUID) directly, and no YouTube
+    /// API request is made.
+    pub fn create_custom_playlist(
+        &self,
+        id: PlaylistId,
+        name: PlaylistName,
+        path: PlaylistPath,
+        quality: Quality,
+    ) -> Result<Playlist, CreateCustomPlaylistError> {
+        if let Err(e) = Uuid::parse_str(id.as_str()) {
+            return Err(CreateCustomPlaylistError::InvalidId(id, e.to_string()));
+        }
+
+        match self.repository.find(&id) {
+            Ok(Some(_)) => return Err(CreateCustomPlaylistError::AlreadyExists(id)),
+            Ok(None) => {}
+            Err(e) => return Err(CreateCustomPlaylistError::Repository(e)),
+        }
+
+        let now = self.clock.now();
+        let playlist = Playlist::create(id, name, path, quality, PlaylistKind::Custom, now);
+        self.repository
+            .insert(&playlist)
+            .map_err(CreateCustomPlaylistError::Repository)?;
+        self.event_publisher
+            .publish(&DomainEvent::PlaylistCreated {
+                playlist_id: playlist.id.as_str().to_string(),
+            })
+            .map_err(CreateCustomPlaylistError::Repository)?;
+        info!(playlist_id = %playlist.id, name = %playlist.name, "created custom playlist");
+        Ok(playlist)
     }
 
     pub fn delete_playlist(&self, id: PlaylistId) -> Result<(), DeletePlaylistError> {

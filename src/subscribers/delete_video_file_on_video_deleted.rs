@@ -11,6 +11,7 @@ struct VideoDeletedPayload {
     playlist_id: String,
     video_id: String,
     title: String,
+    filename: Option<String>,
     was_downloaded: bool,
 }
 
@@ -52,6 +53,7 @@ impl EventSubscriber for DeleteVideoFileOnVideoDeleted {
                 playlist_id: payload.playlist_id,
                 video_id: payload.video_id,
                 title: payload.title,
+                filename: payload.filename,
             },
             self.clock.now(),
         )
@@ -80,7 +82,7 @@ mod tests {
 
         subscriber
             .handle(
-                r#"{"playlist_id": "PL1", "video_id": "vid1", "title": "My Video", "was_downloaded": true}"#,
+                r#"{"playlist_id": "PL1", "video_id": "vid1", "title": "My Video", "filename": "My Video.mp4", "was_downloaded": true}"#,
             )
             .unwrap();
 
@@ -92,6 +94,7 @@ mod tests {
                     playlist_id: "PL1".to_string(),
                     video_id: "vid1".to_string(),
                     title: "My Video".to_string(),
+                    filename: Some("My Video.mp4".to_string()),
                 },
                 fixed_timestamp()
             )]
@@ -105,7 +108,7 @@ mod tests {
 
         subscriber
             .handle(
-                r#"{"playlist_id": "PL1", "video_id": "vid1", "title": "My Video", "was_downloaded": false}"#,
+                r#"{"playlist_id": "PL1", "video_id": "vid1", "title": "My Video", "filename": null, "was_downloaded": false}"#,
             )
             .unwrap();
 
@@ -119,7 +122,7 @@ mod tests {
 
         subscriber
             .handle(
-                r#"{"playlist_id": "", "video_id": "vid1", "title": "My Video", "was_downloaded": true}"#,
+                r#"{"playlist_id": "", "video_id": "vid1", "title": "My Video", "filename": null, "was_downloaded": true}"#,
             )
             .unwrap();
 
