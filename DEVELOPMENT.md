@@ -5,7 +5,13 @@
 1. Copy `.env.example` to `.env` and fill in `YOUTUBE_API_KEY`.
 2. Install [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) and make sure it's on
    your `PATH`.
-3. Build and run:
+3. Build the web UI (one-time, and again whenever `web/` changes — `cargo
+   build`/`test`/`clippy` all embed `web/dist/` at compile time, so it must
+   exist first):
+   ```bash
+   cd web && npm ci && npm run build && cd ..
+   ```
+4. Build and run:
    ```bash
    cargo build --release
    ./target/release/yarrtube serve

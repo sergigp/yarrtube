@@ -186,6 +186,10 @@ mod tests {
             Ok(self.running.lock().unwrap().clone())
         }
 
+        fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+            unimplemented!("not exercised by the executor")
+        }
+
         fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {
             self.updated.lock().unwrap().push(task.clone());
             Ok(())

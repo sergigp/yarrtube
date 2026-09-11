@@ -1,5 +1,6 @@
 use crate::cli::ytdlp_update;
 use crate::domain::playlist::PlaylistService;
+use crate::domain::task::TaskService;
 use crate::domain::video::VideoService;
 use crate::http::{self, AppState};
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
@@ -23,10 +24,12 @@ use crate::infrastructure::shared::domain_events::event_repository::{
     EventRepository, SqliteEventRepository,
 };
 use crate::infrastructure::shared::system_clock::SystemClock;
+use crate::infrastructure::shared::web_assets::WebAssets;
 use crate::{subscribers, tasks};
 use anyhow::{Context, Result};
 use axum::Router;
-use axum::http::StatusCode;
+use axum::http::{StatusCode, Uri, header};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -138,6 +141,8 @@ fn build_application() -> Result<Application> {
     let video_repository = SqliteVideoRepository::new(open_connection()?)
         .context("failed to initialize video repository")?;
 
+    let task_service = TaskService::new(task_repository.clone() as Arc<dyn TaskRepository>);
+
     let playlist_service = PlaylistService::new(
         playlist_repository.clone(),
         Arc::new(YoutubeApiPlaylistRepository::new(youtube_api_key())),
@@ -181,6 +186,7 @@ fn build_application() -> Result<Application> {
         state: AppState {
             playlist_service,
             video_service,
+            task_service,
         },
         event_consumer,
         task_executor,
@@ -189,6 +195,22 @@ fn build_application() -> Result<Application> {
 
 async fn status() -> StatusCode {
     StatusCode::OK
+}
+
+/// Serves the embedded single-page application: `index.html` for `/`, the
+/// matching embedded file for any other path, `404` for anything unmatched.
+/// Mounted as the router's fallback, after `/api` and `/status`.
+async fn serve_spa(uri: Uri) -> Response {
+    let path = uri.path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+
+    match WebAssets::get(path) {
+        Some(file) => {
+            let mime = file.metadata.mimetype();
+            ([(header::CONTENT_TYPE, mime)], file.data).into_response()
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 async fn heartbeat_loop() {
@@ -202,7 +224,8 @@ async fn heartbeat_loop() {
 async fn serve_http(port: u16, state: AppState) -> Result<()> {
     let app = Router::new()
         .route("/status", get(status))
-        .merge(http::playlists_router(state));
+        .nest("/api", http::api_router(state))
+        .fallback(serve_spa);
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
         .await
         .with_context(|| format!("failed to bind HTTP server on port {port}"))?;
@@ -262,4 +285,51 @@ pub fn run() -> ExitCode {
     };
 
     runtime.block_on(run_async(app))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    fn spa_router() -> Router {
+        Router::new().fallback(serve_spa)
+    }
+
+    async fn get(router: Router, path: &str) -> Response {
+        router
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn it_should_serve_the_embedded_index_html_at_root() {
+        let response = get(spa_router(), "/").await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(body.contains("<div id=\"root\">"));
+    }
+
+    #[tokio::test]
+    async fn it_should_serve_a_known_embedded_asset_by_path() {
+        let asset_path = WebAssets::iter()
+            .find(|p| p.as_ref() != "index.html")
+            .expect("web/dist/ must contain at least one built asset");
+
+        let response = get(spa_router(), &format!("/{asset_path}")).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_404_for_an_unknown_path() {
+        let response = get(spa_router(), "/does-not-exist.js").await;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
 }

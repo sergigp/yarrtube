@@ -7,3 +7,7 @@
 .env
 
 *.sqlite3
+
+# Built by `npm run build` in web/, required to exist before `cargo build`
+web/dist/
+web/node_modules/
