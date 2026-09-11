@@ -24,20 +24,12 @@ impl SqlitePlaylistRepository {
                 name TEXT NOT NULL,
                 path TEXT NOT NULL,
                 quality TEXT NOT NULL,
+                kind TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )",
             [],
         )
         .context("failed to create playlists table")?;
-        match conn.execute(
-            "ALTER TABLE playlists ADD COLUMN kind TEXT NOT NULL DEFAULT 'youtube_linked'",
-            [],
-        ) {
-            Ok(_) => {}
-            Err(rusqlite::Error::SqliteFailure(_, Some(message)))
-                if message.contains("duplicate column name") => {}
-            Err(e) => return Err(e).context("failed to add kind column to playlists table"),
-        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -193,24 +185,6 @@ mod tests {
 
     fn repo() -> SqlitePlaylistRepository {
         SqlitePlaylistRepository::new(Connection::open_in_memory().unwrap()).unwrap()
-    }
-
-    #[test]
-    fn it_should_be_idempotent_when_constructed_twice_against_an_already_migrated_database() {
-        let db_path = std::env::temp_dir().join(format!(
-            "yarrtube-playlist-repo-migration-{}-{}.sqlite3",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-
-        SqlitePlaylistRepository::new(Connection::open(&db_path).unwrap()).unwrap();
-        let result = SqlitePlaylistRepository::new(Connection::open(&db_path).unwrap());
-
-        assert!(result.is_ok());
-        std::fs::remove_file(&db_path).unwrap();
     }
 
     fn playlist(id: &str, name: &str) -> Playlist {

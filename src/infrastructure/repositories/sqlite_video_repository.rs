@@ -31,6 +31,7 @@ impl SqliteVideoRepository {
                 title TEXT NOT NULL,
                 status TEXT NOT NULL,
                 quality TEXT,
+                filename TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (playlist_id, video_id)
@@ -38,12 +39,6 @@ impl SqliteVideoRepository {
             [],
         )
         .context("failed to create videos table")?;
-        match conn.execute("ALTER TABLE videos ADD COLUMN filename TEXT", []) {
-            Ok(_) => {}
-            Err(rusqlite::Error::SqliteFailure(_, Some(message)))
-                if message.contains("duplicate column name") => {}
-            Err(e) => return Err(e).context("failed to add filename column to videos table"),
-        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -296,24 +291,6 @@ mod tests {
 
     fn repo() -> SqliteVideoRepository {
         SqliteVideoRepository::new(Connection::open_in_memory().unwrap()).unwrap()
-    }
-
-    #[test]
-    fn it_should_be_idempotent_when_constructed_twice_against_an_already_migrated_database() {
-        let db_path = std::env::temp_dir().join(format!(
-            "yarrtube-video-repo-migration-{}-{}.sqlite3",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-
-        SqliteVideoRepository::new(Connection::open(&db_path).unwrap()).unwrap();
-        let result = SqliteVideoRepository::new(Connection::open(&db_path).unwrap());
-
-        assert!(result.is_ok());
-        std::fs::remove_file(&db_path).unwrap();
     }
 
     fn playlist_id() -> PlaylistId {
