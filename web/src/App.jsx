@@ -3,6 +3,7 @@ import './App.css'
 import { PlaylistList } from './components/PlaylistList'
 import { PlaylistDetail } from './components/PlaylistDetail'
 import { TasksView } from './components/TasksView'
+import { CreatePlaylistForm } from './components/CreatePlaylistForm'
 
 function PlaylistsTab() {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null)
@@ -16,7 +17,12 @@ function PlaylistsTab() {
     )
   }
 
-  return <PlaylistList onSelect={setSelectedPlaylist} />
+  return (
+    <>
+      <CreatePlaylistForm />
+      <PlaylistList onSelect={setSelectedPlaylist} />
+    </>
+  )
 }
 
 export default function App() {

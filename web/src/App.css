@@ -107,3 +107,87 @@ button.list-item:hover {
 .error {
   color: #dc2626;
 }
+
+.create-playlist-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.create-playlist-form h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.create-playlist-form .form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.create-playlist-form label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.create-playlist-form input,
+.create-playlist-form select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.create-playlist-form button {
+  align-self: flex-start;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+.create-playlist-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.video-detail {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.video-detail dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.video-detail dt {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.video-detail dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.video-detail video {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  border-radius: 6px;
+}

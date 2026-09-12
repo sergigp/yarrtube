@@ -35,6 +35,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tower_http::services::ServeDir;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::LevelFilter;
@@ -225,6 +226,7 @@ async fn serve_http(port: u16, state: AppState) -> Result<()> {
     let app = Router::new()
         .route("/status", get(status))
         .nest("/api", http::api_router(state))
+        .nest_service("/media", ServeDir::new(videos_path()))
         .fallback(serve_spa);
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
         .await
@@ -298,6 +300,23 @@ mod tests {
         Router::new().fallback(serve_spa)
     }
 
+    fn media_router(root: &std::path::Path) -> Router {
+        Router::new()
+            .nest_service("/media", ServeDir::new(root))
+            .fallback(serve_spa)
+    }
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "yarrtube-serve-test-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
     async fn get(router: Router, path: &str) -> Response {
         router
             .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
@@ -331,5 +350,85 @@ mod tests {
         let response = get(spa_router(), "/does-not-exist.js").await;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn it_should_serve_a_known_file_under_the_mounted_media_root() {
+        let root = unique_temp_dir("known-file");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("video.mp4"), b"fake video bytes").unwrap();
+
+        let response = get(media_router(&root), "/media/video.mp4").await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(bytes.as_ref(), b"fake video bytes");
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_should_serve_a_byte_range_of_a_known_file() {
+        let root = unique_temp_dir("byte-range");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("video.mp4"), b"0123456789").unwrap();
+
+        let response = media_router(&root)
+            .oneshot(
+                Request::builder()
+                    .uri("/media/video.mp4")
+                    .header(header::RANGE, "bytes=2-5")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(bytes.as_ref(), b"2345");
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_should_not_serve_a_file_outside_the_media_root_via_path_traversal() {
+        let root = unique_temp_dir("traversal-root");
+        std::fs::create_dir_all(&root).unwrap();
+        let secret_name = format!("yarrtube-serve-test-secret-{}.txt", std::process::id());
+        let secret_path = root.parent().unwrap().join(&secret_name);
+        std::fs::write(&secret_path, b"outside the root").unwrap();
+
+        let response = media_router(&root)
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/media/..%2f{secret_name}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_ne!(response.status(), StatusCode::OK);
+
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::remove_file(&secret_path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_should_still_serve_the_spa_root_and_a_known_asset_with_media_mounted() {
+        let root = unique_temp_dir("spa-alongside");
+        std::fs::create_dir_all(&root).unwrap();
+
+        let response = get(media_router(&root), "/").await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let asset_path = WebAssets::iter()
+            .find(|p| p.as_ref() != "index.html")
+            .expect("web/dist/ must contain at least one built asset");
+        let response = get(media_router(&root), &format!("/{asset_path}")).await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }

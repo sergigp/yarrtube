@@ -23,7 +23,7 @@ pub fn args_for_quality(quality: Quality) -> Vec<String> {
         "-f".to_string(),
         format,
         "-S".to_string(),
-        "ext:mp4:m4a".to_string(),
+        "codec:h264:aac,ext:mp4:m4a".to_string(),
         "--merge-output-format".to_string(),
         "mp4".to_string(),
     ]
@@ -359,7 +359,7 @@ mod tests {
                 "-f".to_string(),
                 "bv*+ba/b".to_string(),
                 "-S".to_string(),
-                "ext:mp4:m4a".to_string(),
+                "codec:h264:aac,ext:mp4:m4a".to_string(),
                 "--merge-output-format".to_string(),
                 "mp4".to_string(),
             ]
@@ -374,7 +374,7 @@ mod tests {
                 "-f".to_string(),
                 "bv*[height<=720]+ba/b[height<=720]".to_string(),
                 "-S".to_string(),
-                "ext:mp4:m4a".to_string(),
+                "codec:h264:aac,ext:mp4:m4a".to_string(),
                 "--merge-output-format".to_string(),
                 "mp4".to_string(),
             ]
@@ -389,7 +389,7 @@ mod tests {
                 "-f".to_string(),
                 "bv*[height<=480]+ba/b[height<=480]".to_string(),
                 "-S".to_string(),
-                "ext:mp4:m4a".to_string(),
+                "codec:h264:aac,ext:mp4:m4a".to_string(),
                 "--merge-output-format".to_string(),
                 "mp4".to_string(),
             ]
