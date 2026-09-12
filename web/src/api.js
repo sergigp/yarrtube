@@ -18,6 +18,10 @@ export function fetchTasks() {
   return request('/tasks')
 }
 
+export function videoMediaUrl(playlistPath, filename) {
+  return `/media/${playlistPath}/${filename}`
+}
+
 export async function createPlaylist({ playlist, name, path, quality }) {
   const response = await fetch('/api/playlists', {
     method: 'POST',

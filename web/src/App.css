@@ -159,3 +159,35 @@ button.list-item:hover {
   opacity: 0.6;
   cursor: default;
 }
+
+.video-detail {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.video-detail dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.video-detail dt {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.video-detail dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.video-detail video {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  border-radius: 6px;
+}
