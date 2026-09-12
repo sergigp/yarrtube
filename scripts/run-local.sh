@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Builds and runs yarrtube locally for manual testing. The SQLite database
-# and downloaded videos are written under a fresh directory in /tmp so test
-# data doesn't linger in the repo or a real media library.
+# Runs `cargo run -- serve` for manual testing. The SQLite database lives in
+# the repo root (already gitignored); downloaded videos go to a fresh /tmp
+# directory so they don't linger on disk.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PORT="${YARRTUBE_PORT:-8080}"
-SKIP_BUILD=false
+SKIP_WEB_BUILD=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -14,17 +14,16 @@ while [[ $# -gt 0 ]]; do
       PORT="$2"
       shift 2
       ;;
-    --skip-build)
-      SKIP_BUILD=true
+    --skip-web-build)
+      SKIP_WEB_BUILD=true
       shift
       ;;
     -h | --help)
       cat <<USAGE
-Usage: $(basename "$0") [--port <port>] [--skip-build]
+Usage: $(basename "$0") [--port <port>] [--skip-web-build]
 
-  --port <port>   HTTP port to listen on (default: 8080)
-  --skip-build    Reuse the existing web/dist and target/release build
-                  instead of rebuilding both
+  --port <port>        HTTP port to listen on (default: 8080)
+  --skip-web-build      Reuse the existing web/dist instead of rebuilding it
 USAGE
       exit 0
       ;;
@@ -52,25 +51,32 @@ if [[ -z "${YOUTUBE_API_KEY:-}" ]]; then
   echo "         Tracking a YouTube-linked playlist will fail; custom playlists still work." >&2
 fi
 
-if [[ "$SKIP_BUILD" == false ]]; then
+if [[ "$SKIP_WEB_BUILD" == false ]]; then
   echo "==> building web UI"
   (cd "$REPO_ROOT/web" && npm ci && npm run build)
-
-  echo "==> building yarrtube (release)"
-  (cd "$REPO_ROOT" && cargo build --release --locked)
 fi
 
-WORKDIR="$(mktemp -d /tmp/yarrtube-local.XXXXXX)"
-mkdir -p "$WORKDIR/videos"
+DB_PATH="$REPO_ROOT/yarrtube.sqlite3"
+VIDEOS_PATH="$(mktemp -d /tmp/yarrtube-local-videos.XXXXXX)"
+RUST_LOG_VALUE="${RUST_LOG:-info}"
 
-echo "==> working directory: $WORKDIR"
-echo "==> starting yarrtube serve on http://localhost:$PORT"
-echo "    Ctrl+C to stop. Data stays under /tmp until macOS reclaims it."
+echo "==> environment injected into yarrtube:"
+if [[ -n "${YOUTUBE_API_KEY:-}" ]]; then
+  echo "    YOUTUBE_API_KEY=<set>"
+else
+  echo "    YOUTUBE_API_KEY=<not set>"
+fi
+echo "    YARRTUBE_PORT=$PORT"
+echo "    YARRTUBE_DB_PATH=$DB_PATH"
+echo "    YARRTUBE_VIDEOS_PATH=$VIDEOS_PATH"
+echo "    RUST_LOG=$RUST_LOG_VALUE"
+echo "==> starting yarrtube serve on http://localhost:$PORT (Ctrl+C to stop)"
 
+cd "$REPO_ROOT"
 exec env \
   YOUTUBE_API_KEY="${YOUTUBE_API_KEY:-}" \
   YARRTUBE_PORT="$PORT" \
-  YARRTUBE_DB_PATH="$WORKDIR/yarrtube.sqlite3" \
-  YARRTUBE_VIDEOS_PATH="$WORKDIR/videos" \
-  RUST_LOG="${RUST_LOG:-info}" \
-  "$REPO_ROOT/target/release/yarrtube" serve
+  YARRTUBE_DB_PATH="$DB_PATH" \
+  YARRTUBE_VIDEOS_PATH="$VIDEOS_PATH" \
+  RUST_LOG="$RUST_LOG_VALUE" \
+  cargo run -- serve
