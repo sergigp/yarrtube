@@ -109,7 +109,7 @@ mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
     use crate::domain::video::VideoService;
-    use crate::http::playlists_router;
+    use crate::http::api_router;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
@@ -163,8 +163,15 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             ),
             video_service,
+            task_service: crate::domain::task::TaskService::new(Arc::new(
+                FakeTaskRepository::default(),
+            )),
         };
-        (playlists_router(state), repository, event_publisher)
+        (
+            axum::Router::new().nest("/api", api_router(state)),
+            repository,
+            event_publisher,
+        )
     }
 
     async fn body_json(response: Response) -> serde_json::Value {
@@ -181,7 +188,7 @@ mod tests {
     fn create_request_with(id: &str, name: &str, path: &str, quality: &str) -> Request<Body> {
         Request::builder()
             .method("POST")
-            .uri("/playlists")
+            .uri("/api/playlists")
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::json!({ "id": id, "name": name, "path": path, "quality": quality })
@@ -201,7 +208,7 @@ mod tests {
     fn create_request_missing_quality(id: &str, name: &str) -> Request<Body> {
         Request::builder()
             .method("POST")
-            .uri("/playlists")
+            .uri("/api/playlists")
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::json!({ "id": id, "name": name, "path": DEFAULT_PATH }).to_string(),
@@ -212,7 +219,7 @@ mod tests {
     fn create_request_missing_path(id: &str, name: &str) -> Request<Body> {
         Request::builder()
             .method("POST")
-            .uri("/playlists")
+            .uri("/api/playlists")
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::json!({ "id": id, "name": name, "quality": "high" }).to_string(),
@@ -455,7 +462,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri("/playlists/PL1")
+                    .uri("/api/playlists/PL1")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -479,7 +486,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri("/playlists/PL1")
+                    .uri("/api/playlists/PL1")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -509,7 +516,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri("/playlists/PL404")
+                    .uri("/api/playlists/PL404")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -528,7 +535,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri("/playlists")
+                    .uri("/api/playlists")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -559,7 +566,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri("/playlists")
+                    .uri("/api/playlists")
                     .body(Body::empty())
                     .unwrap(),
             )

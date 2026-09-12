@@ -37,15 +37,15 @@ docker run -d \
   ghcr.io/sergigp/yarrtube:latest
 ```
 
-- `-p 8080:8080` exposes the HTTP API used to track playlists (and
-  `/status` for a health check).
+- `-p 8080:8080` exposes the browser UI at `/`, the HTTP API used to track
+  playlists under `/api` (and `/status` for a health check).
 - `-v /path/on/host/videos:/videos` is where downloaded videos will show up
   on your host — point it at your media library.
 
 ### Track a playlist
 
 ```bash
-curl -X POST http://<host>:8080/playlists \
+curl -X POST http://<host>:8080/api/playlists \
   -H 'content-type: application/json' \
   -d '{"id": "<youtube_playlist_id>", "name": "My Playlist", "quality": "high"}'
 ```
@@ -83,31 +83,40 @@ services:
 > the container's own database and `yt-dlp` binary are recreated on restart,
 > which is expected.
 
+## Browser UI
+
+Open `http://<host>:8080/` for a small read-only UI showing tracked
+playlists, a playlist's videos (click a playlist to drill in), and a tab
+listing pending/in-progress tasks. The videos and tasks views poll every 3
+seconds, so status changes show up without a manual refresh.
+
 ## Managing tracked playlists
 
-The HTTP API is how you add or remove playlists to track:
+The HTTP API (under `/api`) is how you add or remove playlists to track:
 
-| Method   | Path             | Description                                                |
-| -------- | ---------------- | ----------------------------------------------------------- |
-| `POST`   | `/playlists`     | Track a new YouTube-linked playlist (`{"id", "name", "path", "quality"}`) |
-| `GET`    | `/playlists`     | List tracked playlists, of either kind                      |
-| `DELETE` | `/playlists/:id` | Stop tracking a playlist, of either kind                    |
+| Method   | Path                  | Description                                                |
+| -------- | --------------------- | ----------------------------------------------------------- |
+| `POST`   | `/api/playlists`      | Track a new YouTube-linked playlist (`{"id", "name", "path", "quality"}`) |
+| `GET`    | `/api/playlists`      | List tracked playlists, of either kind                      |
+| `DELETE` | `/api/playlists/:id`  | Stop tracking a playlist, of either kind                    |
+| `GET`    | `/api/playlists/:id/videos` | List the videos recorded for a playlist                |
+| `GET`    | `/api/tasks`          | List tasks that have not yet completed (`pending`/`running`) |
 
 A playlist is either YouTube-linked (backed by an existing YouTube playlist,
 its ID validated against the YouTube API) or custom (a caller-supplied UUID
-with no YouTube playlist behind it). `GET`/`DELETE /playlists` work the same
-for both; only creation and video membership differ by kind.
+with no YouTube playlist behind it). `GET`/`DELETE /api/playlists` work the
+same for both; only creation and video membership differ by kind.
 
 ### Custom playlists
 
 A custom playlist has no YouTube playlist behind it — its videos are curated
 entirely through this API instead of mirroring an existing YouTube playlist:
 
-| Method   | Path                                      | Description                                                        |
-| -------- | ------------------------------------------ | ------------------------------------------------------------------ |
-| `POST`   | `/custom-playlists`                        | Create a custom playlist (`{"id", "name", "path", "quality"}`); `id` must be a well-formed, unused UUID |
-| `POST`   | `/custom-playlists/:id/videos`              | Add a video (`{"video"}`, a YouTube URL or bare video ID); verified and titled via the YouTube API before being accepted |
-| `DELETE` | `/custom-playlists/:id/videos/:video_id`    | Remove a video from the playlist                                    |
+| Method   | Path                                          | Description                                                        |
+| -------- | ---------------------------------------------- | ------------------------------------------------------------------ |
+| `POST`   | `/api/custom-playlists`                        | Create a custom playlist (`{"id", "name", "path", "quality"}`); `id` must be a well-formed, unused UUID |
+| `POST`   | `/api/custom-playlists/:id/videos`              | Add a video (`{"video"}`, a YouTube URL or bare video ID); verified and titled via the YouTube API before being accepted |
+| `DELETE` | `/api/custom-playlists/:id/videos/:video_id`    | Remove a video from the playlist                                    |
 
 A YouTube-linked playlist's videos can't be added or removed manually —
 YouTube stays authoritative for that kind, so membership only ever changes

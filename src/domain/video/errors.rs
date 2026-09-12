@@ -63,3 +63,20 @@ impl fmt::Display for RemoveVideoFromPlaylistError {
 }
 
 impl std::error::Error for RemoveVideoFromPlaylistError {}
+
+#[derive(Debug)]
+pub enum ListVideosError {
+    PlaylistNotFound(PlaylistId),
+    Repository(anyhow::Error),
+}
+
+impl fmt::Display for ListVideosError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PlaylistNotFound(id) => write!(f, "playlist {id} not found"),
+            Self::Repository(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for ListVideosError {}

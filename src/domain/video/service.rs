@@ -1,4 +1,4 @@
-use super::errors::{AddVideoToCustomPlaylistError, RemoveVideoFromPlaylistError};
+use super::errors::{AddVideoToCustomPlaylistError, ListVideosError, RemoveVideoFromPlaylistError};
 use super::video::Video;
 use super::video_filename::VideoFilename;
 use super::video_status::VideoStatus;
@@ -378,6 +378,19 @@ impl VideoService {
             .map_err(AddVideoToCustomPlaylistError::Repository)?;
         info!(playlist_id = %playlist_id, video_id = %video_id, "added video to custom playlist");
         Ok(())
+    }
+
+    /// Lists every video recorded for a playlist, confirming the playlist
+    /// exists first.
+    pub fn list_videos(&self, playlist_id: &PlaylistId) -> Result<Vec<Video>, ListVideosError> {
+        self.playlist_repository
+            .find(playlist_id)
+            .map_err(ListVideosError::Repository)?
+            .ok_or_else(|| ListVideosError::PlaylistNotFound(playlist_id.clone()))?;
+
+        self.video_repository
+            .list_for_playlist(playlist_id)
+            .map_err(ListVideosError::Repository)
     }
 
     /// Removes a video from a custom playlist, hard-deleting its stored

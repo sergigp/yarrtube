@@ -14,6 +14,9 @@ pub trait TaskRepository: Send + Sync {
     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>>;
     /// Every task still `running` from a previous, interrupted process.
     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>>;
+    /// Every task that has not yet completed (`pending` or `running`),
+    /// regardless of scheduled run time.
+    fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>>;
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()>;
     fn delete(&self, id: i64) -> anyhow::Result<()>;
     /// Atomically inserts `task` into the dead-letter table and deletes the
@@ -201,6 +204,10 @@ impl TaskRepository for SqliteTaskRepository {
         self.list_where("status = 'running'")
     }
 
+    fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+        self.list_where("status IN ('pending', 'running')")
+    }
+
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {
         let conn = self
             .conn
@@ -282,6 +289,10 @@ impl TaskRepository for FakeTaskRepository {
     }
 
     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+        Ok(Vec::new())
+    }
+
+    fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
         Ok(Vec::new())
     }
 
@@ -497,5 +508,32 @@ mod tests {
             .unwrap();
         assert_eq!(original_task_id, id);
         assert_eq!(retries, 5);
+    }
+
+    #[test]
+    fn it_should_list_a_future_pending_task_as_non_completed() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let future = now + chrono::Duration::seconds(60);
+        repo.schedule(&task(), future).unwrap();
+
+        let non_completed = repo.list_non_completed().unwrap();
+
+        assert_eq!(non_completed.len(), 1);
+        assert_eq!(non_completed[0].status, TaskStatus::Pending);
+        assert_eq!(non_completed[0].run_at, future);
+    }
+
+    #[test]
+    fn it_should_not_list_a_dead_lettered_task_as_non_completed() {
+        let repo = repo();
+        repo.schedule(&task(), repo.clock.now()).unwrap();
+        let id = repo.list_eligible().unwrap()[0].id;
+
+        for _ in 0..5 {
+            apply_failure(&repo, id, "boom");
+        }
+
+        assert!(repo.list_non_completed().unwrap().is_empty());
     }
 }

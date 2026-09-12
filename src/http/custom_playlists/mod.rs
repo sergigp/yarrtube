@@ -220,8 +220,11 @@ mod tests {
         let state = AppState {
             playlist_service,
             video_service,
+            task_service: crate::domain::task::TaskService::new(Arc::new(
+                FakeTaskRepository::default(),
+            )),
         };
-        let router = Router::new()
+        let inner = Router::new()
             .route("/custom-playlists", post(create_custom_playlist))
             .route("/custom-playlists/{id}/videos", post(add_video))
             .route(
@@ -229,6 +232,7 @@ mod tests {
                 delete(remove_video),
             )
             .with_state(state);
+        let router = Router::new().nest("/api", inner);
         (router, event_publisher)
     }
 
@@ -242,7 +246,7 @@ mod tests {
     fn create_request(id: &str, name: &str) -> Request<Body> {
         Request::builder()
             .method("POST")
-            .uri("/custom-playlists")
+            .uri("/api/custom-playlists")
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::json!({ "id": id, "name": name, "path": "music/chill", "quality": "high" })
@@ -254,7 +258,7 @@ mod tests {
     fn add_video_request(playlist_id: &str, video: &str) -> Request<Body> {
         Request::builder()
             .method("POST")
-            .uri(format!("/custom-playlists/{playlist_id}/videos"))
+            .uri(format!("/api/custom-playlists/{playlist_id}/videos"))
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::json!({ "video": video }).to_string(),
@@ -265,7 +269,9 @@ mod tests {
     fn remove_video_request(playlist_id: &str, video_id: &str) -> Request<Body> {
         Request::builder()
             .method("DELETE")
-            .uri(format!("/custom-playlists/{playlist_id}/videos/{video_id}"))
+            .uri(format!(
+                "/api/custom-playlists/{playlist_id}/videos/{video_id}"
+            ))
             .body(Body::empty())
             .unwrap()
     }
@@ -396,7 +402,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/custom-playlists")
+                    .uri("/api/custom-playlists")
                     .header("content-type", "application/json")
                     .body(Body::from(
                         serde_json::json!({ "id": VALID_UUID, "name": "My Playlist", "quality": "high" })
@@ -422,7 +428,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/custom-playlists")
+                    .uri("/api/custom-playlists")
                     .header("content-type", "application/json")
                     .body(Body::from(
                         serde_json::json!({ "id": VALID_UUID, "name": "My Playlist", "path": "custom", "quality": "ultra" })
