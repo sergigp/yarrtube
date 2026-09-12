@@ -1,8 +1,4 @@
-## Purpose
-
-Lets a caller create, delete, and list the playlists the daemon tracks, so a future scheduler has a persisted set of playlists to query and download from.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Create Playlist
 The system SHALL provide an HTTP endpoint that creates a playlist given a `playlist` value that is either a YouTube playlist ID or a YouTube playlist URL, a name, a storage path, and a quality tier (`high`, `mid`, or `low`). The system SHALL extract the playlist ID from the `playlist` value when it is a URL, confirms the resulting YouTube playlist ID corresponds to an existing, accessible YouTube playlist before persisting, and stores the playlist with kind `youtube_linked`, that ID, path, quality, and a system-generated creation timestamp.
@@ -58,59 +54,3 @@ A playlist created through this endpoint always has kind `youtube_linked`; see `
 #### Scenario: Nonexistent YouTube playlist
 - **WHEN** a request supplies a `playlist` value whose extracted playlist ID does not correspond to an existing, accessible YouTube playlist
 - **THEN** the system rejects the request without persisting anything and returns a bad request with a meaningful error description
-
-### Requirement: Delete Playlist
-The system SHALL provide an HTTP endpoint that deletes a previously created playlist identified by its ID, regardless of the playlist's kind.
-
-#### Scenario: Successful deletion
-- **WHEN** a request identifies a playlist ID that exists in storage
-- **THEN** the system removes it and confirms the deletion
-
-#### Scenario: Deleting a custom playlist
-- **WHEN** a request identifies a playlist ID that exists in storage with kind `custom`
-- **THEN** the system removes it the same way it would a YouTube-linked playlist
-
-#### Scenario: Deleting a nonexistent playlist
-- **WHEN** a request identifies a playlist ID that does not exist in storage
-- **THEN** the system reports that nothing was found and makes no change to storage and returns a bad request with a meaningful error description
-
-### Requirement: List Playlists
-The system SHALL provide an HTTP endpoint that returns every currently stored playlist, of either kind.
-
-#### Scenario: Playlists exist
-- **WHEN** one or more playlists have been created
-- **THEN** the system returns all of them, each with its ID, name, path, quality, kind, and creation timestamp
-
-#### Scenario: Playlists of both kinds exist
-- **WHEN** at least one YouTube-linked playlist and at least one custom playlist have been created
-- **THEN** the system returns both together in a single list, each item's kind distinguishing them
-
-#### Scenario: No playlists exist
-- **WHEN** no playlists have been created
-- **THEN** the system returns an empty list rather than an error
-
-### Requirement: Playlist Creation Publishes a Domain Event
-The system SHALL publish a PlaylistCreated domain event, containing the playlist's ID, whenever a playlist is newly created — and SHALL NOT publish it when creation is a no-op because the playlist already existed.
-
-#### Scenario: New playlist created
-- **WHEN** a create-playlist request results in a new playlist being persisted
-- **THEN** the system publishes a PlaylistCreated event containing that playlist's ID
-
-#### Scenario: Playlist already existed
-- **WHEN** a create-playlist request identifies a playlist ID that already exists in storage
-- **THEN** the system does not publish a PlaylistCreated event
-
-### Requirement: Playlist Deletion Publishes a Domain Event
-The system SHALL publish a PlaylistDeleted domain event, containing the playlist's ID, whenever a playlist is successfully deleted, regardless of its kind.
-
-#### Scenario: Existing playlist deleted
-- **WHEN** a delete-playlist request successfully removes a playlist from storage
-- **THEN** the system publishes a PlaylistDeleted event containing that playlist's ID
-
-#### Scenario: Existing custom playlist deleted
-- **WHEN** a delete-playlist request successfully removes a playlist with kind `custom` from storage
-- **THEN** the system publishes a PlaylistDeleted event containing that playlist's ID, the same way it would for a YouTube-linked playlist
-
-#### Scenario: Deleting a nonexistent playlist
-- **WHEN** a delete-playlist request identifies a playlist ID that does not exist in storage
-- **THEN** the system does not publish a PlaylistDeleted event

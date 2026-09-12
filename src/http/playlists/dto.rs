@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct CreatePlaylistRequest {
-    pub id: String,
+    pub playlist: String,
     pub name: String,
     #[serde(default)]
     pub path: Option<String>,

@@ -16,7 +16,7 @@ pub async fn create_playlist(
     State(state): State<AppState>,
     Json(request): Json<CreatePlaylistRequest>,
 ) -> Response {
-    let id = match PlaylistId::new(request.id) {
+    let id = match PlaylistId::from_url_or_id(request.playlist) {
         Ok(id) => id,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
     };
@@ -191,7 +191,7 @@ mod tests {
             .uri("/api/playlists")
             .header("content-type", "application/json")
             .body(Body::from(
-                serde_json::json!({ "id": id, "name": name, "path": path, "quality": quality })
+                serde_json::json!({ "playlist": id, "name": name, "path": path, "quality": quality })
                     .to_string(),
             ))
             .unwrap()
@@ -211,7 +211,8 @@ mod tests {
             .uri("/api/playlists")
             .header("content-type", "application/json")
             .body(Body::from(
-                serde_json::json!({ "id": id, "name": name, "path": DEFAULT_PATH }).to_string(),
+                serde_json::json!({ "playlist": id, "name": name, "path": DEFAULT_PATH })
+                    .to_string(),
             ))
             .unwrap()
     }
@@ -222,7 +223,7 @@ mod tests {
             .uri("/api/playlists")
             .header("content-type", "application/json")
             .body(Body::from(
-                serde_json::json!({ "id": id, "name": name, "quality": "high" }).to_string(),
+                serde_json::json!({ "playlist": id, "name": name, "quality": "high" }).to_string(),
             ))
             .unwrap()
     }
@@ -409,6 +410,87 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = body_json(response).await;
         assert_eq!(body["quality"], "high");
+    }
+
+    #[tokio::test]
+    async fn it_should_return_201_when_creating_a_playlist_from_a_youtube_url() {
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
+
+        let response = router
+            .oneshot(create_request(
+                "https://www.youtube.com/playlist?list=PL1",
+                "My Playlist",
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = body_json(response).await;
+        assert_eq!(body["id"], "PL1");
+    }
+
+    #[tokio::test]
+    async fn it_should_return_201_when_creating_a_playlist_from_a_watch_url_with_a_list_param() {
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
+
+        let response = router
+            .oneshot(create_request(
+                "https://youtube.com/watch?v=vid1&list=PL1",
+                "My Playlist",
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = body_json(response).await;
+        assert_eq!(body["id"], "PL1");
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_the_url_is_not_a_recognized_youtube_url() {
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
+
+        let response = router
+            .oneshot(create_request(
+                "https://example.com/playlist?list=PL1",
+                "My Playlist",
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_the_youtube_url_is_missing_the_list_parameter() {
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
+
+        let response = router
+            .oneshot(create_request(
+                "https://www.youtube.com/watch?v=vid1",
+                "My Playlist",
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_the_playlist_value_is_empty() {
+        let (router, _repository, _event_publisher) =
+            test_router(FakePlaylistRepository::default(), true);
+
+        let response = router
+            .oneshot(create_request("", "My Playlist"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

@@ -47,12 +47,15 @@ docker run -d \
 ```bash
 curl -X POST http://<host>:8080/api/playlists \
   -H 'content-type: application/json' \
-  -d '{"id": "<youtube_playlist_id>", "name": "My Playlist", "quality": "high"}'
+  -d '{"playlist": "<youtube_playlist_id_or_url>", "name": "My Playlist", "quality": "high"}'
 ```
 
-`quality` is `high` (uncapped), `mid` (≤720p), or `low` (≤480p); downloads always
-prefer an mp4/h264/aac file for maximum device/player compatibility. It can't
-be changed after the playlist is created.
+`playlist` accepts either a bare YouTube playlist ID or a full YouTube
+playlist URL (e.g. `https://www.youtube.com/playlist?list=...` or a
+`watch?v=...&list=...` URL). `quality` is `high` (uncapped), `mid` (≤720p), or
+`low` (≤480p); downloads always prefer an mp4/h264/aac file for maximum
+device/player compatibility. It can't be changed after the playlist is
+created.
 
 Yarrtube downloads every existing video in the playlist, then keeps checking
 for new ones (every hour by default — see [Configuration](#configuration)).
@@ -96,7 +99,7 @@ The HTTP API (under `/api`) is how you add or remove playlists to track:
 
 | Method   | Path                  | Description                                                |
 | -------- | --------------------- | ----------------------------------------------------------- |
-| `POST`   | `/api/playlists`      | Track a new YouTube-linked playlist (`{"id", "name", "path", "quality"}`) |
+| `POST`   | `/api/playlists`      | Track a new YouTube-linked playlist (`{"playlist", "name", "path", "quality"}`); `playlist` is a YouTube playlist ID or URL |
 | `GET`    | `/api/playlists`      | List tracked playlists, of either kind                      |
 | `DELETE` | `/api/playlists/:id`  | Stop tracking a playlist, of either kind                    |
 | `GET`    | `/api/playlists/:id/videos` | List the videos recorded for a playlist                |
