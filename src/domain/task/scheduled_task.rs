@@ -1,3 +1,6 @@
+use super::errors::TaskError;
+use super::task::Task;
+use crate::domain::shared::{PlaylistId, VideoId};
 use chrono::{DateTime, Duration, Utc};
 
 const MAX_ATTEMPTS: i64 = 5;
@@ -72,6 +75,39 @@ impl ScheduledTask {
     /// (`fail` would dead-letter rather than retry).
     pub fn is_last_attempt(&self) -> bool {
         self.retries + 1 >= MAX_ATTEMPTS
+    }
+
+    /// Decodes this task's stored payload into the playlist it concerns and,
+    /// for task types that target a specific video, that video's ID.
+    pub fn referenced_ids(&self) -> Result<(PlaylistId, Option<VideoId>), TaskError> {
+        let (playlist_id, video_id) = match self.task_type.as_str() {
+            "reconcile_playlist" => {
+                let playlist_id = Task::decode_reconcile_playlist_payload(&self.payload)?;
+                (playlist_id, None)
+            }
+            "download_video" => {
+                let (playlist_id, video_id, _quality) =
+                    Task::decode_download_video_payload(&self.payload)?;
+                (playlist_id, Some(video_id))
+            }
+            "delete_video_file" => {
+                let (playlist_id, video_id, _title, _filename) =
+                    Task::decode_delete_video_file_payload(&self.payload)?;
+                (playlist_id, Some(video_id))
+            }
+            other => return Err(TaskError(format!("unknown task type '{other}'"))),
+        };
+
+        let playlist_id = PlaylistId::new(playlist_id)
+            .map_err(|e| TaskError(format!("invalid playlist id in task payload: {e}")))?;
+        let video_id = video_id
+            .map(|id| {
+                VideoId::new(id)
+                    .map_err(|e| TaskError(format!("invalid video id in task payload: {e}")))
+            })
+            .transpose()?;
+
+        Ok((playlist_id, video_id))
     }
 
     pub fn fail(self, error: impl Into<String>, now: DateTime<Utc>) -> TaskFailureOutcome {
@@ -184,5 +220,71 @@ mod tests {
         assert!(TaskStatus::parse("bogus").is_err());
         assert_eq!(TaskStatus::Pending.as_str(), "pending");
         assert_eq!(TaskStatus::Running.as_str(), "running");
+    }
+
+    fn task_with(task_type: &str, payload: serde_json::Value) -> ScheduledTask {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        ScheduledTask {
+            id: 1,
+            task_type: task_type.to_string(),
+            payload: payload.to_string(),
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at: now,
+            created_at: now,
+            updated_at: now,
+            last_error: None,
+        }
+    }
+
+    #[test]
+    fn it_should_extract_only_the_playlist_id_from_a_reconcile_playlist_payload() {
+        let task = task_with(
+            "reconcile_playlist",
+            serde_json::json!({ "playlist_id": "PL1" }),
+        );
+
+        let (playlist_id, video_id) = task.referenced_ids().unwrap();
+
+        assert_eq!(playlist_id.as_str(), "PL1");
+        assert_eq!(video_id, None);
+    }
+
+    #[test]
+    fn it_should_extract_the_playlist_and_video_ids_from_a_download_video_payload() {
+        let task = task_with(
+            "download_video",
+            serde_json::json!({ "playlist_id": "PL1", "video_id": "vid1", "quality": "high" }),
+        );
+
+        let (playlist_id, video_id) = task.referenced_ids().unwrap();
+
+        assert_eq!(playlist_id.as_str(), "PL1");
+        assert_eq!(video_id.unwrap().as_str(), "vid1");
+    }
+
+    #[test]
+    fn it_should_extract_the_playlist_and_video_ids_from_a_delete_video_file_payload() {
+        let task = task_with(
+            "delete_video_file",
+            serde_json::json!({
+                "playlist_id": "PL1",
+                "video_id": "vid1",
+                "title": "Some video",
+                "filename": "vid1.mp4",
+            }),
+        );
+
+        let (playlist_id, video_id) = task.referenced_ids().unwrap();
+
+        assert_eq!(playlist_id.as_str(), "PL1");
+        assert_eq!(video_id.unwrap().as_str(), "vid1");
+    }
+
+    #[test]
+    fn it_should_reject_an_unknown_task_type() {
+        let task = task_with("some_unknown_task", serde_json::json!({}));
+
+        assert!(task.referenced_ids().is_err());
     }
 }

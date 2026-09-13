@@ -3,7 +3,7 @@ import { createPlaylist } from '../api'
 
 const initialForm = { playlist: '', name: '', path: '', quality: 'high' }
 
-export function CreatePlaylistForm() {
+export function CreatePlaylistForm({ onSuccess }) {
   const [form, setForm] = useState(initialForm)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
@@ -18,6 +18,7 @@ export function CreatePlaylistForm() {
     try {
       await createPlaylist(form)
       setForm(initialForm)
+      onSuccess?.()
     } catch (err) {
       setError(err)
     } finally {
@@ -27,7 +28,6 @@ export function CreatePlaylistForm() {
 
   return (
     <form className="create-playlist-form" onSubmit={handleSubmit}>
-      <h2>Create Playlist</h2>
       <div className="form-row">
         <label htmlFor="create-playlist-id">Playlist ID or URL</label>
         <input

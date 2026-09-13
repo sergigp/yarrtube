@@ -3,7 +3,7 @@ import './App.css'
 import { PlaylistList } from './components/PlaylistList'
 import { PlaylistDetail } from './components/PlaylistDetail'
 import { TasksView } from './components/TasksView'
-import { CreatePlaylistForm } from './components/CreatePlaylistForm'
+import { AddPlaylistDialog } from './components/AddPlaylistDialog'
 
 function PlaylistsTab() {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null)
@@ -13,20 +13,17 @@ function PlaylistsTab() {
       <PlaylistDetail
         playlist={selectedPlaylist}
         onBack={() => setSelectedPlaylist(null)}
+        onDeleted={() => setSelectedPlaylist(null)}
       />
     )
   }
 
-  return (
-    <>
-      <CreatePlaylistForm />
-      <PlaylistList onSelect={setSelectedPlaylist} />
-    </>
-  )
+  return <PlaylistList onSelect={setSelectedPlaylist} />
 }
 
 export default function App() {
   const [tab, setTab] = useState('playlists')
+  const [addPlaylistOpen, setAddPlaylistOpen] = useState(false)
 
   return (
     <div className="app">
@@ -46,10 +43,16 @@ export default function App() {
             Tasks
           </button>
         </nav>
+        <div className="header-actions">
+          <button className="primary-button" onClick={() => setAddPlaylistOpen(true)}>
+            Add Playlist
+          </button>
+        </div>
       </header>
       <main className="app-main">
         {tab === 'playlists' ? <PlaylistsTab /> : <TasksView />}
       </main>
+      <AddPlaylistDialog open={addPlaylistOpen} onOpenChange={setAddPlaylistOpen} />
     </div>
   )
 }

@@ -11,10 +11,18 @@ pub struct TaskResponse {
     pub run_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
     pub last_error: Option<String>,
+    pub playlist_name: Option<String>,
+    pub video_id: Option<String>,
+    pub video_title: Option<String>,
 }
 
-impl From<ScheduledTask> for TaskResponse {
-    fn from(task: ScheduledTask) -> Self {
+impl TaskResponse {
+    pub fn from_task_with_context(
+        task: ScheduledTask,
+        playlist_name: Option<String>,
+        video_id: Option<String>,
+        video_title: Option<String>,
+    ) -> Self {
         Self {
             id: task.id,
             task_type: task.task_type,
@@ -23,6 +31,9 @@ impl From<ScheduledTask> for TaskResponse {
             run_at: task.run_at,
             created_at: task.created_at,
             last_error: task.last_error,
+            playlist_name,
+            video_id,
+            video_title,
         }
     }
 }

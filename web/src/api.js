@@ -36,3 +36,28 @@ export async function createPlaylist({ playlist, name, path, quality }) {
   }
   return response.json()
 }
+
+export async function deletePlaylist(id) {
+  const response = await fetch(`/api/playlists/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(
+      body?.error ?? `request to delete playlist ${id} failed with status ${response.status}`,
+    )
+  }
+}
+
+export async function deleteVideoFromCustomPlaylist(playlistId, videoId) {
+  const response = await fetch(
+    `/api/custom-playlists/${encodeURIComponent(playlistId)}/videos/${encodeURIComponent(videoId)}`,
+    { method: 'DELETE' },
+  )
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(
+      body?.error ?? `request to delete video ${videoId} failed with status ${response.status}`,
+    )
+  }
+}

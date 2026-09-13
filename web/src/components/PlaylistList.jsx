@@ -1,5 +1,6 @@
 import { usePolling } from '../usePolling'
 import { fetchPlaylists } from '../api'
+import { PlaylistActionsMenu } from './PlaylistActionsMenu'
 
 export function PlaylistList({ onSelect }) {
   const { data: playlists, error } = usePolling(fetchPlaylists, [])
@@ -19,13 +20,15 @@ export function PlaylistList({ onSelect }) {
   return (
     <ul className="list">
       {playlists.map((playlist) => (
-        <li key={playlist.id}>
+        <li key={playlist.id} className="list-row">
           <button className="list-item" onClick={() => onSelect(playlist)}>
             <span className="list-item-title">{playlist.name}</span>
-            <span className="list-item-meta">
-              {playlist.kind} · {playlist.quality}
+            <span className="chip-group">
+              <span className="status-badge">{playlist.kind}</span>
+              <span className="status-badge">{playlist.quality}</span>
             </span>
           </button>
+          <PlaylistActionsMenu playlist={playlist} />
         </li>
       ))}
     </ul>

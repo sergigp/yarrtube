@@ -382,6 +382,14 @@ impl VideoService {
 
     /// Lists every video recorded for a playlist, confirming the playlist
     /// exists first.
+    pub fn find(
+        &self,
+        playlist_id: &PlaylistId,
+        video_id: &VideoId,
+    ) -> anyhow::Result<Option<Video>> {
+        self.video_repository.find(playlist_id, video_id)
+    }
+
     pub fn list_videos(&self, playlist_id: &PlaylistId) -> Result<Vec<Video>, ListVideosError> {
         self.playlist_repository
             .find(playlist_id)

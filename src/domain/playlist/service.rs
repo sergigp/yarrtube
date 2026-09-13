@@ -133,4 +133,8 @@ impl PlaylistService {
     pub fn list_playlists(&self) -> anyhow::Result<Vec<Playlist>> {
         self.repository.list()
     }
+
+    pub fn find_playlist(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
+        self.repository.find(id)
+    }
 }
