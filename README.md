@@ -32,6 +32,8 @@ the rest of your media stack (Plex, Jellyfin, etc.).
 docker run -d \
   --name yarrtube \
   -e YOUTUBE_API_KEY=your-api-key-here \
+  -e PUID=1000 \
+  -e PGID=1000 \
   -p 8080:8080 \
   -v /path/on/host/videos:/videos \
   ghcr.io/sergigp/yarrtube:latest
@@ -41,6 +43,8 @@ docker run -d \
   playlists under `/api` (and `/status` for a health check).
 - `-v /path/on/host/videos:/videos` is where downloaded videos will show up
   on your host — point it at your media library.
+- `PUID`/`PGID` are the numeric user/group ID that should own downloaded
+  files — see the [Note](#docker-compose) below.
 
 ### Track a playlist
 
@@ -75,16 +79,22 @@ services:
       - 8080:8080
     environment:
       - YOUTUBE_API_KEY=your-youtube-data-api-v3-key
+      - PUID=1000
+      - PGID=1000
       - TZ=Europe/Madrid
     volumes:
       - /volume1/data/media/youtube:/videos
 ```
 
-> **Note:** the image has no `PUID`/`PGID` privilege-drop mechanism and runs
-> as root; downloaded files are still written world-readable, so Plex/Jellyfin
-> can read them regardless. Only the mounted video directory is persisted —
-> the container's own database and `yt-dlp` binary are recreated on restart,
-> which is expected.
+> **Note:** set `PUID`/`PGID` to the numeric user/group ID that should own
+> downloaded files on the host (run `id <user>` on the host to find them) —
+> the same convention used by `linuxserver.io`/`hotio` images. The container
+> starts as root, creates a matching user internally, `chown`s `/videos` and
+> its own database, then drops to that user before running anything else. If
+> `PUID`/`PGID` are left unset, the container keeps the old behavior of
+> running (and writing files) as root. Only the mounted video directory is
+> persisted — the container's own database and `yt-dlp` binary are recreated
+> on restart, which is expected.
 
 ## Browser UI
 
@@ -143,6 +153,8 @@ command):
 | Variable                         | Default                 | Description                                               |
 | -------------------------------- | ----------------------- | --------------------------------------------------------- |
 | `YOUTUBE_API_KEY`                     | —                       | YouTube Data API v3 key (required)                        |
+| `PUID`                                | `0` (root)              | Numeric user ID the daemon runs as and that owns downloaded files |
+| `PGID`                                | `0` (root)              | Numeric group ID the daemon runs as and that owns downloaded files |
 | `YARRTUBE_PORT`                       | `8080`                  | HTTP port to listen on                                    |
 | `YARRTUBE_RECONCILE_INTERVAL_SECONDS` | `3600`                  | How often each tracked playlist is reconciled (membership diff for YouTube-linked playlists, filesystem healing for every playlist) |
 | `YARRTUBE_DB_PATH`                    | `yarrtube.sqlite3`      | Path to the internal SQLite file (inside the container)   |
