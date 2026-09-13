@@ -33,7 +33,7 @@ export function PlaylistActionsMenu({ playlist, onDeleted }) {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete "${playlist.name}"?`}
-        description="This removes the playlist from tracking. Its downloaded video files and records are not cleaned up automatically."
+        description="This removes the playlist from tracking, along with its video records and downloaded files."
         onConfirm={async () => {
           await deletePlaylist(playlist.id)
           onDeleted?.()

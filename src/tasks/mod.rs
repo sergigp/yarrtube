@@ -1,9 +1,11 @@
+pub mod delete_playlist_files_task;
 pub mod delete_video_file_task;
 pub mod download_video_task;
 pub mod reconcile_playlist_task;
 
 use crate::domain::video::VideoService;
 use crate::infrastructure::repositories::task_executor::HandlerRegistry;
+use delete_playlist_files_task::DeletePlaylistFilesTask;
 use delete_video_file_task::DeleteVideoFileTask;
 use download_video_task::DownloadVideoTask;
 use reconcile_playlist_task::ReconcilePlaylistTask;
@@ -24,7 +26,11 @@ pub fn registry(video_service: VideoService) -> HandlerRegistry {
     );
     registry.insert(
         "delete_video_file".to_string(),
-        Arc::new(DeleteVideoFileTask::new(video_service)),
+        Arc::new(DeleteVideoFileTask::new(video_service.clone())),
+    );
+    registry.insert(
+        "delete_playlist_files".to_string(),
+        Arc::new(DeletePlaylistFilesTask::new(video_service)),
     );
     registry
 }

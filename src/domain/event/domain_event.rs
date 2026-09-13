@@ -7,6 +7,7 @@ pub enum DomainEvent {
     },
     PlaylistDeleted {
         playlist_id: String,
+        path: String,
     },
     VideoAdded {
         playlist_id: String,
@@ -34,7 +35,10 @@ impl DomainEvent {
     pub fn payload(&self) -> Value {
         match self {
             Self::PlaylistCreated { playlist_id } => json!({ "playlist_id": playlist_id }),
-            Self::PlaylistDeleted { playlist_id } => json!({ "playlist_id": playlist_id }),
+            Self::PlaylistDeleted { playlist_id, path } => json!({
+                "playlist_id": playlist_id,
+                "path": path,
+            }),
             Self::VideoAdded {
                 playlist_id,
                 video_id,
@@ -77,10 +81,14 @@ mod tests {
     fn it_should_map_playlist_deleted_to_a_stable_type_and_payload() {
         let event = DomainEvent::PlaylistDeleted {
             playlist_id: "PL1".to_string(),
+            path: "music/chill".to_string(),
         };
 
         assert_eq!(event.event_type(), "playlist_deleted");
-        assert_eq!(event.payload(), json!({ "playlist_id": "PL1" }));
+        assert_eq!(
+            event.payload(),
+            json!({ "playlist_id": "PL1", "path": "music/chill" })
+        );
     }
 
     #[test]

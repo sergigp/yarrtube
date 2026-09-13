@@ -326,6 +326,24 @@ impl VideoService {
         Ok(())
     }
 
+    /// Recursively deletes a deleted playlist's output directory from disk,
+    /// scheduled by `subscribers::delete_playlist_files_on_playlist_deleted`
+    /// whenever a playlist is deleted. The playlist row is already gone by
+    /// the time this runs, so `path` travels with the task instead of being
+    /// looked up. Safe to do unconditionally because playlist paths are
+    /// unique, so nothing else lives at that path.
+    pub fn delete_playlist_files(
+        &self,
+        playlist_id: PlaylistId,
+        path: String,
+    ) -> anyhow::Result<()> {
+        let output_dir = Path::new(&self.videos_path).join(&path);
+        self.video_file_repository
+            .delete_dir_recursive(&output_dir)?;
+        info!(playlist_id = %playlist_id, path = %path, "deleted playlist output directory");
+        Ok(())
+    }
+
     /// Adds a video to a custom playlist, confirming it exists and is
     /// accessible on YouTube (and fetching its title from there) before
     /// persisting. No-ops if the video is already stored for this playlist.

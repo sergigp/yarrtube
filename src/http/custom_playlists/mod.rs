@@ -66,6 +66,9 @@ pub async fn create_custom_playlist(
         Ok(Err(e @ CreateCustomPlaylistError::AlreadyExists(_))) => {
             error_response(StatusCode::BAD_REQUEST, e.to_string())
         }
+        Ok(Err(e @ CreateCustomPlaylistError::PathAlreadyInUse(_))) => {
+            error_response(StatusCode::BAD_REQUEST, e.to_string())
+        }
         Ok(Err(e @ CreateCustomPlaylistError::Repository(_))) => {
             error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         }
@@ -198,6 +201,7 @@ mod tests {
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let playlist_service = PlaylistService::new(
             playlist_repository.clone(),
+            video_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository { exists: true }),
             event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
             Arc::new(FixedClock(fixed_timestamp())),

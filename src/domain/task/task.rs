@@ -18,6 +18,10 @@ pub enum Task {
         title: String,
         filename: Option<String>,
     },
+    DeletePlaylistFiles {
+        playlist_id: String,
+        path: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,12 +44,19 @@ struct DeleteVideoFilePayload {
     filename: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct DeletePlaylistFilesPayload {
+    playlist_id: String,
+    path: String,
+}
+
 impl Task {
     pub fn task_type(&self) -> &'static str {
         match self {
             Self::ReconcilePlaylist { .. } => "reconcile_playlist",
             Self::DownloadVideo { .. } => "download_video",
             Self::DeleteVideoFile { .. } => "delete_video_file",
+            Self::DeletePlaylistFiles { .. } => "delete_playlist_files",
         }
     }
 
@@ -67,6 +78,10 @@ impl Task {
                 "video_id": video_id,
                 "title": title,
                 "filename": filename,
+            }),
+            Self::DeletePlaylistFiles { playlist_id, path } => json!({
+                "playlist_id": playlist_id,
+                "path": path,
             }),
         }
     }
@@ -103,6 +118,17 @@ impl Task {
             parsed.title,
             parsed.filename,
         ))
+    }
+
+    /// Decodes a `delete_playlist_files` task's raw JSON payload, as handed
+    /// to a `TaskHandler`, back into the playlist ID and output path it
+    /// targets.
+    pub fn decode_delete_playlist_files_payload(
+        payload: &str,
+    ) -> Result<(String, String), TaskError> {
+        let parsed: DeletePlaylistFilesPayload = serde_json::from_str(payload)
+            .map_err(|e| TaskError(format!("invalid delete_playlist_files payload: {e}")))?;
+        Ok((parsed.playlist_id, parsed.path))
     }
 }
 
@@ -215,5 +241,38 @@ mod tests {
     #[test]
     fn it_should_reject_a_malformed_delete_video_file_payload() {
         assert!(Task::decode_delete_video_file_payload("not json").is_err());
+    }
+
+    #[test]
+    fn it_should_map_delete_playlist_files_to_a_stable_type_and_payload() {
+        let task = Task::DeletePlaylistFiles {
+            playlist_id: "PL1".to_string(),
+            path: "music/chill".to_string(),
+        };
+
+        assert_eq!(task.task_type(), "delete_playlist_files");
+        assert_eq!(
+            task.payload(),
+            json!({ "playlist_id": "PL1", "path": "music/chill" })
+        );
+    }
+
+    #[test]
+    fn it_should_decode_a_delete_playlist_files_payload_back_into_its_playlist_id_and_path() {
+        let task = Task::DeletePlaylistFiles {
+            playlist_id: "PL1".to_string(),
+            path: "music/chill".to_string(),
+        };
+
+        let (playlist_id, path) =
+            Task::decode_delete_playlist_files_payload(&task.payload().to_string()).unwrap();
+
+        assert_eq!(playlist_id, "PL1");
+        assert_eq!(path, "music/chill");
+    }
+
+    #[test]
+    fn it_should_reject_a_malformed_delete_playlist_files_payload() {
+        assert!(Task::decode_delete_playlist_files_payload("not json").is_err());
     }
 }

@@ -139,20 +139,23 @@ fn build_application() -> Result<Application> {
         .context("failed to initialize task repository")?,
     );
 
-    let video_repository = SqliteVideoRepository::new(open_connection()?)
-        .context("failed to initialize video repository")?;
+    let video_repository = Arc::new(
+        SqliteVideoRepository::new(open_connection()?)
+            .context("failed to initialize video repository")?,
+    );
 
     let task_service = TaskService::new(task_repository.clone() as Arc<dyn TaskRepository>);
 
     let playlist_service = PlaylistService::new(
         playlist_repository.clone(),
+        video_repository.clone(),
         Arc::new(YoutubeApiPlaylistRepository::new(youtube_api_key())),
         event_publisher.clone() as Arc<dyn EventPublisher>,
         Arc::new(SystemClock),
     );
     let video_service = VideoService::new(
         playlist_repository.clone(),
-        Arc::new(video_repository),
+        video_repository,
         Arc::new(YoutubeApiPlaylistItemsRepository::new(youtube_api_key())),
         Arc::new(YoutubeApiVideoRepository::new(youtube_api_key())),
         event_publisher as Arc<dyn EventPublisher>,
