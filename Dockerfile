@@ -27,4 +27,4 @@ EXPOSE 8080
 VOLUME ["/videos"]
 
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["serve"]
+CMD ["yarrtube", "serve"]
