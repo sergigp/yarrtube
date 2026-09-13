@@ -14,15 +14,17 @@ RUN cargo build --release --locked
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+    && apt-get install -y --no-install-recommends ffmpeg ca-certificates gosu \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /build/target/release/yarrtube /usr/local/bin/yarrtube
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 WORKDIR /app
 
 EXPOSE 8080
 VOLUME ["/videos"]
 
-ENTRYPOINT ["yarrtube"]
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["serve"]
