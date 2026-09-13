@@ -20,6 +20,10 @@ pub trait VideoFileRepository: Send + Sync {
     /// yt-dlp's own in-progress-download temporary files. A missing
     /// `output_dir` is an empty listing (`Ok(vec![])`), not an error.
     fn list(&self, output_dir: &Path) -> anyhow::Result<Vec<String>>;
+
+    /// Recursively deletes `dir` and everything in it. A missing `dir` is
+    /// "nothing to delete", not an error.
+    fn delete_dir_recursive(&self, dir: &Path) -> anyhow::Result<()>;
 }
 
 pub struct FilesystemVideoFileRepository;
@@ -71,6 +75,14 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
             })
             .collect()
     }
+
+    fn delete_dir_recursive(&self, dir: &Path) -> anyhow::Result<()> {
+        match std::fs::remove_dir_all(dir) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(anyhow::anyhow!("failed to delete directory {dir:?}: {e}")),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -79,6 +91,7 @@ pub struct FakeVideoFileRepository {
     pub(crate) deleted_calls: std::sync::Mutex<Vec<(std::path::PathBuf, String)>>,
     pub(crate) delete_result: std::sync::Mutex<Option<anyhow::Result<bool>>>,
     pub(crate) list_result: std::sync::Mutex<Option<anyhow::Result<Vec<String>>>>,
+    pub(crate) deleted_dirs: std::sync::Mutex<Vec<std::path::PathBuf>>,
 }
 
 #[cfg(test)]
@@ -88,6 +101,7 @@ impl FakeVideoFileRepository {
             deleted_calls: std::sync::Mutex::new(Vec::new()),
             delete_result: std::sync::Mutex::new(Some(result)),
             list_result: std::sync::Mutex::new(None),
+            deleted_dirs: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -96,6 +110,7 @@ impl FakeVideoFileRepository {
             deleted_calls: std::sync::Mutex::new(Vec::new()),
             delete_result: std::sync::Mutex::new(None),
             list_result: std::sync::Mutex::new(Some(Ok(files))),
+            deleted_dirs: std::sync::Mutex::new(Vec::new()),
         }
     }
 }
@@ -118,6 +133,11 @@ impl VideoFileRepository for FakeVideoFileRepository {
             Some(result) => result,
             None => Ok(Vec::new()),
         }
+    }
+
+    fn delete_dir_recursive(&self, dir: &Path) -> anyhow::Result<()> {
+        self.deleted_dirs.lock().unwrap().push(dir.to_path_buf());
+        Ok(())
     }
 }
 
@@ -198,5 +218,29 @@ mod tests {
         let listed = FilesystemVideoFileRepository.list(&dir).unwrap();
 
         assert!(listed.is_empty());
+    }
+
+    #[test]
+    fn it_should_recursively_delete_a_directory_and_everything_in_it() {
+        let dir = unique_temp_dir("video-file-repository-delete-dir");
+        std::fs::create_dir_all(dir.join("nested")).unwrap();
+        std::fs::write(dir.join("One.mp4"), b"").unwrap();
+        std::fs::write(dir.join("nested").join("Two.mp4"), b"").unwrap();
+
+        FilesystemVideoFileRepository
+            .delete_dir_recursive(&dir)
+            .unwrap();
+
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn it_should_no_op_when_the_directory_to_delete_is_already_missing() {
+        let dir =
+            unique_temp_dir("video-file-repository-delete-dir-missing").join("does-not-exist");
+
+        let result = FilesystemVideoFileRepository.delete_dir_recursive(&dir);
+
+        assert!(result.is_ok());
     }
 }

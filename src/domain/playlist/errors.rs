@@ -1,3 +1,4 @@
+use super::playlist_path::PlaylistPath;
 use crate::domain::shared::PlaylistId;
 use std::fmt;
 
@@ -15,6 +16,7 @@ impl std::error::Error for PlaylistError {}
 #[derive(Debug)]
 pub enum CreatePlaylistError {
     YoutubePlaylistNotFound(PlaylistId),
+    PathAlreadyInUse(PlaylistPath),
     Lookup(anyhow::Error),
     Repository(anyhow::Error),
 }
@@ -26,6 +28,12 @@ impl fmt::Display for CreatePlaylistError {
                 write!(
                     f,
                     "YouTube playlist {id} does not exist or is not accessible"
+                )
+            }
+            Self::PathAlreadyInUse(path) => {
+                write!(
+                    f,
+                    "playlist path \"{path}\" is already used by another playlist"
                 )
             }
             Self::Lookup(e) => write!(f, "{e}"),
@@ -40,6 +48,7 @@ impl std::error::Error for CreatePlaylistError {}
 pub enum CreateCustomPlaylistError {
     InvalidId(PlaylistId, String),
     AlreadyExists(PlaylistId),
+    PathAlreadyInUse(PlaylistPath),
     Repository(anyhow::Error),
 }
 
@@ -50,6 +59,12 @@ impl fmt::Display for CreateCustomPlaylistError {
                 write!(f, "playlist id {id} is not a well-formed UUID: {reason}")
             }
             Self::AlreadyExists(id) => write!(f, "playlist {id} already exists"),
+            Self::PathAlreadyInUse(path) => {
+                write!(
+                    f,
+                    "playlist path \"{path}\" is already used by another playlist"
+                )
+            }
             Self::Repository(e) => write!(f, "{e}"),
         }
     }

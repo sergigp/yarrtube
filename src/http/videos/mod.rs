@@ -77,6 +77,7 @@ mod tests {
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let playlist_service = PlaylistService::new(
             playlist_repository.clone(),
+            video_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository { exists: true }),
             event_publisher.clone() as Arc<dyn EventPublisher>,
             Arc::new(FixedClock(fixed_timestamp())),

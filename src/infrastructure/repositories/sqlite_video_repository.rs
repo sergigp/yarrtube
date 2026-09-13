@@ -16,6 +16,10 @@ pub trait VideoRepository: Send + Sync {
     /// which is a plain insert-or-replace, `update` only touches a row that
     /// still exists.
     fn update(&self, video: &Video) -> anyhow::Result<()>;
+    /// Deletes every video row stored for `playlist_id`, leaving other
+    /// playlists' rows untouched. Used by `PlaylistService::delete_playlist`
+    /// so no video row can outlive its playlist.
+    fn delete_all_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<()>;
 }
 
 pub struct SqliteVideoRepository {
@@ -221,6 +225,19 @@ impl VideoRepository for SqliteVideoRepository {
         .context("failed to update video")?;
         Ok(())
     }
+
+    fn delete_all_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        conn.execute(
+            "DELETE FROM videos WHERE playlist_id = ?1",
+            params![playlist_id.as_str()],
+        )
+        .context("failed to delete videos for playlist")?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -281,6 +298,14 @@ impl VideoRepository for FakeVideoRepository {
         {
             *existing = video.clone();
         }
+        Ok(())
+    }
+
+    fn delete_all_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<()> {
+        self.videos
+            .lock()
+            .unwrap()
+            .retain(|v| v.playlist_id != *playlist_id);
         Ok(())
     }
 }
@@ -398,6 +423,27 @@ mod tests {
             .unwrap();
 
         assert!(found.is_none());
+    }
+
+    #[test]
+    fn it_should_delete_every_video_for_the_playlist_and_leave_others_untouched() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        repo.save(&video("vid1", "One", now)).unwrap();
+        repo.save(&video("vid2", "Two", now)).unwrap();
+        let other_playlist_id = PlaylistId::new("PL2").unwrap();
+        repo.save(&Video::create(
+            other_playlist_id.clone(),
+            VideoId::new("vid1").unwrap(),
+            "Other Playlist's Video",
+            now,
+        ))
+        .unwrap();
+
+        repo.delete_all_for_playlist(&playlist_id()).unwrap();
+
+        assert!(repo.list_for_playlist(&playlist_id()).unwrap().is_empty());
+        assert_eq!(repo.list_for_playlist(&other_playlist_id).unwrap().len(), 1);
     }
 
     #[test]

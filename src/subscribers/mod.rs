@@ -1,3 +1,4 @@
+pub mod delete_playlist_files_on_playlist_deleted;
 pub mod delete_video_file_on_video_deleted;
 pub mod download_video_on_video_added;
 pub mod reconcile_on_playlist_created;
@@ -7,6 +8,7 @@ use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegis
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::shared::system_clock::Clock;
+use delete_playlist_files_on_playlist_deleted::DeletePlaylistFilesOnPlaylistDeleted;
 use delete_video_file_on_video_deleted::DeleteVideoFileOnVideoDeleted;
 use download_video_on_video_added::DownloadVideoOnVideoAdded;
 use reconcile_on_playlist_created::ReconcileOnPlaylistCreated;
@@ -37,6 +39,13 @@ pub fn registry(
     registry.insert(
         "video_deleted".to_string(),
         vec![Arc::new(DeleteVideoFileOnVideoDeleted::new(
+            task_repository.clone(),
+            clock.clone(),
+        ))],
+    );
+    registry.insert(
+        "playlist_deleted".to_string(),
+        vec![Arc::new(DeletePlaylistFilesOnPlaylistDeleted::new(
             task_repository,
             clock,
         ))],
