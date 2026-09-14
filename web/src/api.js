@@ -19,7 +19,8 @@ export function fetchTasks() {
 }
 
 export function videoMediaUrl(playlistPath, filename) {
-  return `/media/${playlistPath}/${filename}`
+  const encodedPath = playlistPath.split('/').map(encodeURIComponent).join('/')
+  return `/media/${encodedPath}/${encodeURIComponent(filename)}`
 }
 
 export async function createPlaylist({ playlist, name, path, quality }) {

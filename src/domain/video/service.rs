@@ -189,9 +189,13 @@ impl VideoService {
     }
 
     /// Reconciles `playlist`'s output directory against its recorded
-    /// downloads: heals a `Downloaded` video whose file is missing (reset it
-    /// and schedule a fresh download), and deletes a file that doesn't
-    /// belong to any currently-`Downloaded` video (an orphan).
+    /// downloads: heals a `Downloaded` video whose file is missing, or whose
+    /// file is present but not mp4 (a stale non-mp4 container downloaded
+    /// before yt-dlp was made to always remux to mp4 — see
+    /// `args_for_quality`), by resetting it and scheduling a fresh download.
+    /// Also deletes a file that doesn't belong to any currently-`Downloaded`
+    /// video (an orphan) — this is what clears out a stale non-mp4 file once
+    /// its video has been redownloaded under a fresh filename.
     pub fn reconcile_filesystem(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let output_dir = Path::new(&self.videos_path).join(playlist.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
@@ -206,11 +210,13 @@ impl VideoService {
             .collect();
 
         for video in &downloaded {
-            let file_present = video
-                .filename
-                .as_deref()
-                .is_some_and(|filename| files.iter().any(|f| f == filename));
-            if file_present {
+            let healthy = video.filename.as_deref().is_some_and(|filename| {
+                files.iter().any(|f| f == filename)
+                    && Path::new(filename)
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("mp4"))
+            });
+            if healthy {
                 continue;
             }
 
@@ -218,7 +224,8 @@ impl VideoService {
             warn!(
                 playlist_id = %playlist.id,
                 video_id = %video.video_id,
-                "downloaded video's file is missing from disk, resetting for redownload"
+                filename = video.filename.as_deref().unwrap_or(""),
+                "downloaded video's file is missing or not mp4, resetting for redownload"
             );
             let reset = (*video).clone().reset_for_redownload(now);
             self.video_repository.update(&reset)?;

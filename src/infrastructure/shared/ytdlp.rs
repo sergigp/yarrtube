@@ -13,6 +13,15 @@ pub fn ensure_output_dir(output_path: &Path) -> Result<()> {
 /// resolution cap while softly preferring mp4/h264/aac (falling back to the
 /// best available stream instead of hard-failing when no such stream
 /// exists) — see design.md's "yt-dlp selector shape per tier" decision.
+///
+/// `--merge-output-format mp4` only takes effect when yt-dlp actually merges
+/// separate video/audio streams; when the `b` fallback in the selector picks
+/// a single already-muxed stream instead (e.g. because YouTube didn't offer
+/// separate h264/aac DASH tracks for that video), no merge happens and the
+/// file would otherwise keep its source container (webm/mkv), which browser
+/// `<video>` players reject. `--remux-video mp4` repackages the container
+/// into mp4 whenever it isn't already, independent of whether a merge
+/// happened, so every download consistently lands as `.mp4`.
 pub fn args_for_quality(quality: Quality) -> Vec<String> {
     let format = match quality {
         Quality::High => "bv*+ba/b".to_string(),
@@ -25,6 +34,8 @@ pub fn args_for_quality(quality: Quality) -> Vec<String> {
         "-S".to_string(),
         "codec:h264:aac,ext:mp4:m4a".to_string(),
         "--merge-output-format".to_string(),
+        "mp4".to_string(),
+        "--remux-video".to_string(),
         "mp4".to_string(),
     ]
 }
@@ -362,6 +373,8 @@ mod tests {
                 "codec:h264:aac,ext:mp4:m4a".to_string(),
                 "--merge-output-format".to_string(),
                 "mp4".to_string(),
+                "--remux-video".to_string(),
+                "mp4".to_string(),
             ]
         );
     }
@@ -377,6 +390,8 @@ mod tests {
                 "codec:h264:aac,ext:mp4:m4a".to_string(),
                 "--merge-output-format".to_string(),
                 "mp4".to_string(),
+                "--remux-video".to_string(),
+                "mp4".to_string(),
             ]
         );
     }
@@ -391,6 +406,8 @@ mod tests {
                 "-S".to_string(),
                 "codec:h264:aac,ext:mp4:m4a".to_string(),
                 "--merge-output-format".to_string(),
+                "mp4".to_string(),
+                "--remux-video".to_string(),
                 "mp4".to_string(),
             ]
         );
