@@ -28,6 +28,10 @@ pub fn api_router(state: AppState) -> Router {
             axum::routing::delete(playlists::delete_playlist),
         )
         .route(
+            "/playlists/{id}/reconcile",
+            post(playlists::reconcile_playlist),
+        )
+        .route(
             "/playlists/{id}/videos",
             get(videos::list_videos_for_playlist),
         )

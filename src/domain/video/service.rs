@@ -67,25 +67,17 @@ impl VideoService {
         }
     }
 
-    /// Runs one reconcile pass for a playlist: diffs membership against
-    /// YouTube when it's `YoutubeLinked` (a no-op for `Custom`), always
-    /// reconciles the filesystem against recorded downloads, then always
-    /// reschedules the next pass — no-ops entirely if the playlist no longer
-    /// exists. Called by the recurring `ReconcilePlaylistTask` and by the
-    /// one-shot `PlaylistCreated` reaction alike.
+    /// Runs one reconcile pass for a playlist and reschedules the next
+    /// recurring pass — no-ops entirely if the playlist no longer exists.
+    /// Called by the recurring `ReconcilePlaylistTask` and by the one-shot
+    /// `PlaylistCreated` reaction alike.
     pub fn reconcile_playlist(&self, id: PlaylistId) -> anyhow::Result<()> {
         let Some(playlist) = self.playlist_repository.find(&id)? else {
             debug!(playlist_id = %id, "playlist no longer exists, skipping reconcile");
             return Ok(());
         };
 
-        info!(playlist_id = %id, kind = %playlist.kind, "reconciling playlist");
-
-        if playlist.kind == PlaylistKind::YoutubeLinked {
-            self.sync_playlist_membership(&playlist)?;
-        }
-
-        self.reconcile_filesystem(&playlist)?;
+        self.run_reconcile_pass(&playlist)?;
 
         let now = self.clock.now();
         let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
@@ -98,6 +90,35 @@ impl VideoService {
         info!(playlist_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of playlist");
 
         Ok(())
+    }
+
+    /// Runs one reconcile pass for a playlist immediately, on demand,
+    /// without touching the recurring reconcile schedule — whatever
+    /// `ReconcilePlaylist` task is already pending for this playlist (from
+    /// creation or the last recurring pass) is left exactly as it was. This
+    /// means triggering it repeatedly never queues extra tasks. No-ops
+    /// entirely if the playlist no longer exists.
+    pub fn force_reconcile_playlist(&self, id: PlaylistId) -> anyhow::Result<()> {
+        let Some(playlist) = self.playlist_repository.find(&id)? else {
+            debug!(playlist_id = %id, "playlist no longer exists, skipping reconcile");
+            return Ok(());
+        };
+
+        self.run_reconcile_pass(&playlist)
+    }
+
+    /// Diffs membership against YouTube when `playlist` is `YoutubeLinked`
+    /// (a no-op for `Custom`), then always reconciles the filesystem against
+    /// recorded downloads. Shared by `reconcile_playlist` and
+    /// `force_reconcile_playlist`.
+    fn run_reconcile_pass(&self, playlist: &Playlist) -> anyhow::Result<()> {
+        info!(playlist_id = %playlist.id, kind = %playlist.kind, "reconciling playlist");
+
+        if playlist.kind == PlaylistKind::YoutubeLinked {
+            self.sync_playlist_membership(playlist)?;
+        }
+
+        self.reconcile_filesystem(playlist)
     }
 
     /// Diffs a YouTube-linked playlist's stored videos against YouTube's
