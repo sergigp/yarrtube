@@ -10,6 +10,7 @@ pub struct Video {
     pub status: VideoStatus,
     pub quality: Option<Quality>,
     pub filename: Option<String>,
+    pub position: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -28,8 +29,24 @@ impl Video {
             status: VideoStatus::Pending,
             quality: None,
             filename: None,
+            position: None,
             created_at: now,
             updated_at: now,
+        }
+    }
+
+    /// Creates a video discovered in a YouTube-linked playlist, recording its
+    /// current position in that playlist (see `VideoService::sync_playlist_membership`).
+    pub fn create_with_position(
+        playlist_id: PlaylistId,
+        video_id: VideoId,
+        title: impl Into<String>,
+        position: i64,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            position: Some(position),
+            ..Self::create(playlist_id, video_id, title, now)
         }
     }
 
@@ -107,8 +124,24 @@ mod tests {
         assert_eq!(video.title, "My Video");
         assert_eq!(video.quality, None);
         assert_eq!(video.filename, None);
+        assert_eq!(video.position, None);
         assert_eq!(video.created_at, now);
         assert_eq!(video.updated_at, now);
+    }
+
+    #[test]
+    fn it_should_build_a_video_with_a_known_playlist_position() {
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+
+        let video = Video::create_with_position(
+            PlaylistId::new("PL1").unwrap(),
+            VideoId::new("vid1").unwrap(),
+            "My Video",
+            3,
+            now,
+        );
+
+        assert_eq!(video.position, Some(3));
     }
 
     fn video() -> Video {

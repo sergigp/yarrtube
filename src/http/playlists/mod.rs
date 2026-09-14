@@ -1022,10 +1022,11 @@ mod tests {
         let (router, video_repository, task_repository) = test_router_for_reconcile(
             repository,
             FakeYoutubePlaylistItemsRepository {
-                videos: vec![PlaylistVideo {
+                videos: std::sync::Mutex::new(vec![PlaylistVideo {
                     video_id: "vid1".to_string(),
                     title: "One".to_string(),
-                }],
+                    position: 0,
+                }]),
             },
             FakeVideoFileRepository::default(),
         );

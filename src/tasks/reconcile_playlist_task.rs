@@ -84,7 +84,7 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: current_videos,
+                videos: std::sync::Mutex::new(current_videos),
             }),
             Arc::new(FakeYoutubeVideoRepository::default()),
             event_publisher.clone(),
@@ -150,6 +150,7 @@ mod tests {
             vec![PlaylistVideo {
                 video_id: "vid1".to_string(),
                 title: "One".to_string(),
+                position: 0,
             }],
             FakeVideoFileRepository::default(),
         );
@@ -175,6 +176,7 @@ mod tests {
             vec![PlaylistVideo {
                 video_id: "vid1".to_string(),
                 title: "Renamed".to_string(),
+                position: 0,
             }],
             FakeVideoFileRepository::default(),
         );
@@ -195,6 +197,58 @@ mod tests {
         assert_eq!(stored[0].title, "Renamed");
         assert_eq!(stored[0].status, VideoStatus::InProgress);
         assert!(event_publisher.published.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_update_a_stored_videos_position_on_a_later_reconcile_pass() {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository
+            .insert(&Playlist::create(
+                PlaylistId::new("PL1").unwrap(),
+                PlaylistName::new("My Playlist").unwrap(),
+                PlaylistPath::new("my-playlist").unwrap(),
+                Quality::High,
+                PlaylistKind::YoutubeLinked,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let youtube_playlist_items_repository = Arc::new(FakeYoutubePlaylistItemsRepository {
+            videos: std::sync::Mutex::new(vec![PlaylistVideo {
+                video_id: "vid1".to_string(),
+                title: "One".to_string(),
+                position: 0,
+            }]),
+        });
+        let video_service = VideoService::new(
+            playlist_repository,
+            video_repository.clone(),
+            youtube_playlist_items_repository.clone(),
+            Arc::new(FakeYoutubeVideoRepository::default()),
+            Arc::new(FakeEventPublisher::default()),
+            Arc::new(FakeTaskRepository::default()),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        );
+
+        video_service
+            .force_reconcile_playlist(PlaylistId::new("PL1").unwrap())
+            .unwrap();
+        assert_eq!(video_repository.videos.lock().unwrap()[0].position, Some(0));
+
+        *youtube_playlist_items_repository.videos.lock().unwrap() = vec![PlaylistVideo {
+            video_id: "vid1".to_string(),
+            title: "One".to_string(),
+            position: 2,
+        }];
+        video_service
+            .force_reconcile_playlist(PlaylistId::new("PL1").unwrap())
+            .unwrap();
+
+        assert_eq!(video_repository.videos.lock().unwrap()[0].position, Some(2));
     }
 
     #[test]
@@ -295,6 +349,7 @@ mod tests {
             vec![PlaylistVideo {
                 video_id: "vid1".to_string(),
                 title: "One".to_string(),
+                position: 0,
             }],
             FakeVideoFileRepository::default(),
         );
