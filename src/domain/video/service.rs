@@ -193,9 +193,13 @@ impl VideoService {
     /// file is present but not mp4 (a stale non-mp4 container downloaded
     /// before yt-dlp was made to always remux to mp4 — see
     /// `args_for_quality`), by resetting it and scheduling a fresh download.
-    /// Also deletes a file that doesn't belong to any currently-`Downloaded`
-    /// video (an orphan) — this is what clears out a stale non-mp4 file once
-    /// its video has been redownloaded under a fresh filename.
+    /// Also resets any `Errored` video (one that permanently exhausted its
+    /// download retries) the same way, with no limit on how many times a
+    /// given video may be recovered this way — see design.md's "Reconcile
+    /// also recovers Errored videos" decision. Also deletes a file that
+    /// doesn't belong to any currently-`Downloaded` video (an orphan) — this
+    /// is what clears out a stale non-mp4 file once its video has been
+    /// redownloaded under a fresh filename.
     pub fn reconcile_filesystem(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let output_dir = Path::new(&self.videos_path).join(playlist.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
@@ -228,6 +232,28 @@ impl VideoService {
                 "downloaded video's file is missing or not mp4, resetting for redownload"
             );
             let reset = (*video).clone().reset_for_redownload(now);
+            self.video_repository.update(&reset)?;
+            self.task_repository.schedule(
+                &Task::DownloadVideo {
+                    playlist_id: playlist.id.as_str().to_string(),
+                    video_id: video.video_id.as_str().to_string(),
+                    quality: playlist.quality.as_str().to_string(),
+                },
+                now,
+            )?;
+        }
+
+        for video in stored_videos
+            .iter()
+            .filter(|v| v.status == VideoStatus::Errored)
+        {
+            let now = self.clock.now();
+            warn!(
+                playlist_id = %playlist.id,
+                video_id = %video.video_id,
+                "permanently errored video found during reconcile, resetting for redownload"
+            );
+            let reset = video.clone().reset_for_redownload(now);
             self.video_repository.update(&reset)?;
             self.task_repository.schedule(
                 &Task::DownloadVideo {

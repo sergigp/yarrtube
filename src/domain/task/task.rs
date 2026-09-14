@@ -22,6 +22,7 @@ pub enum Task {
         playlist_id: String,
         path: String,
     },
+    UpdateYtdlp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,6 +51,9 @@ struct DeletePlaylistFilesPayload {
     path: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct UpdateYtdlpPayload {}
+
 impl Task {
     pub fn task_type(&self) -> &'static str {
         match self {
@@ -57,6 +61,7 @@ impl Task {
             Self::DownloadVideo { .. } => "download_video",
             Self::DeleteVideoFile { .. } => "delete_video_file",
             Self::DeletePlaylistFiles { .. } => "delete_playlist_files",
+            Self::UpdateYtdlp => "update_ytdlp",
         }
     }
 
@@ -83,6 +88,7 @@ impl Task {
                 "playlist_id": playlist_id,
                 "path": path,
             }),
+            Self::UpdateYtdlp => json!({}),
         }
     }
 
@@ -129,6 +135,15 @@ impl Task {
         let parsed: DeletePlaylistFilesPayload = serde_json::from_str(payload)
             .map_err(|e| TaskError(format!("invalid delete_playlist_files payload: {e}")))?;
         Ok((parsed.playlist_id, parsed.path))
+    }
+
+    /// Decodes an `update_ytdlp` task's raw JSON payload, as handed to a
+    /// `TaskHandler`. The payload carries no fields; this only confirms it's
+    /// well-formed.
+    pub fn decode_update_ytdlp_payload(payload: &str) -> Result<(), TaskError> {
+        serde_json::from_str::<UpdateYtdlpPayload>(payload)
+            .map_err(|e| TaskError(format!("invalid update_ytdlp payload: {e}")))?;
+        Ok(())
     }
 }
 
@@ -274,5 +289,25 @@ mod tests {
     #[test]
     fn it_should_reject_a_malformed_delete_playlist_files_payload() {
         assert!(Task::decode_delete_playlist_files_payload("not json").is_err());
+    }
+
+    #[test]
+    fn it_should_map_update_ytdlp_to_a_stable_type_and_payload() {
+        let task = Task::UpdateYtdlp;
+
+        assert_eq!(task.task_type(), "update_ytdlp");
+        assert_eq!(task.payload(), json!({}));
+    }
+
+    #[test]
+    fn it_should_round_trip_an_update_ytdlp_payload() {
+        let task = Task::UpdateYtdlp;
+
+        assert!(Task::decode_update_ytdlp_payload(&task.payload().to_string()).is_ok());
+    }
+
+    #[test]
+    fn it_should_reject_a_malformed_update_ytdlp_payload() {
+        assert!(Task::decode_update_ytdlp_payload("not json").is_err());
     }
 }

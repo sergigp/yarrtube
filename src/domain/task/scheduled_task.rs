@@ -4,7 +4,22 @@ use crate::domain::shared::{PlaylistId, VideoId};
 use chrono::{DateTime, Duration, Utc};
 
 const MAX_ATTEMPTS: i64 = 5;
-const RETRY_DELAY_SECONDS: i64 = 30;
+
+/// Retry delay grows geometrically with the post-increment retry count:
+/// `BASE_RETRY_DELAY_SECONDS * RETRY_DELAY_MULTIPLIER.pow(retries)`. Tuned
+/// so a task's first 4 failures (the 5th dead-letters instead of retrying)
+/// span about 5 hours total end-to-end (~7.5min, ~22.5min, ~1.1h, ~3.4h
+/// between successive attempts) — wide enough for the hourly `yt-dlp`
+/// self-update loop to realistically fix a systemic problem before
+/// `download_video`'s attempts are exhausted. Applied uniformly to every
+/// task type (see design.md's "Retry-count-based delay, applied uniformly"
+/// decision).
+const BASE_RETRY_DELAY_SECONDS: i64 = 150;
+const RETRY_DELAY_MULTIPLIER: i64 = 3;
+
+pub(crate) fn retry_delay_seconds(retries: i64) -> i64 {
+    BASE_RETRY_DELAY_SECONDS * RETRY_DELAY_MULTIPLIER.pow(retries as u32)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskStatus {
@@ -128,7 +143,7 @@ impl ScheduledTask {
             TaskFailureOutcome::Retry(Self {
                 status: TaskStatus::Pending,
                 retries,
-                run_at: now + Duration::seconds(RETRY_DELAY_SECONDS),
+                run_at: now + Duration::seconds(retry_delay_seconds(retries)),
                 updated_at: now,
                 last_error: Some(error),
                 ..self
@@ -177,11 +192,35 @@ mod tests {
             TaskFailureOutcome::Retry(retried) => {
                 assert_eq!(retried.status, TaskStatus::Pending);
                 assert_eq!(retried.retries, 4);
-                assert_eq!(retried.run_at, now + Duration::seconds(RETRY_DELAY_SECONDS));
+                assert_eq!(
+                    retried.run_at,
+                    now + Duration::seconds(retry_delay_seconds(4))
+                );
                 assert_eq!(retried.updated_at, now);
                 assert_eq!(retried.last_error, Some("boom".to_string()));
             }
             TaskFailureOutcome::DeadLetter(_) => panic!("expected a retry outcome"),
+        }
+    }
+
+    #[test]
+    fn it_should_grow_the_retry_delay_with_each_successive_failure() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+
+        let mut task = task_with_retries(0);
+        let mut previous_delay = None;
+        for _ in 0..4 {
+            match task.clone().fail("boom", now) {
+                TaskFailureOutcome::Retry(retried) => {
+                    let delay = retried.run_at - now;
+                    if let Some(previous_delay) = previous_delay {
+                        assert!(delay > previous_delay);
+                    }
+                    previous_delay = Some(delay);
+                    task = retried;
+                }
+                TaskFailureOutcome::DeadLetter(_) => panic!("expected a retry outcome"),
+            }
         }
     }
 

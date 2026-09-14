@@ -31,15 +31,15 @@ The system SHALL track a video's status through its download lifecycle: pending,
 - **THEN** the video's status becomes permanently errored
 
 ### Requirement: Automatic Retry On Download Failure
-The system SHALL automatically retry a failed video download a bounded number of times before giving up, without any manual action.
+The system SHALL automatically retry a failed video download a bounded number of times before giving up on that attempt sequence, without any manual action. Exhausting that bounded sequence SHALL NOT prevent the video from being attempted again later by playlist reconciliation.
 
 #### Scenario: Transient download failure
 - **WHEN** a video download attempt fails and retries remain
-- **THEN** the system automatically attempts the download again after a short delay
+- **THEN** the system automatically attempts the download again after a delay
 
 #### Scenario: Retries exhausted
 - **WHEN** a video download has failed on every allowed attempt
-- **THEN** the system stops attempting that download and does not try again on its own
+- **THEN** the system stops attempting that download within that attempt sequence, though the video may be attempted again later by playlist reconciliation
 
 ### Requirement: Per-Playlist Output Directory
 The system SHALL save a downloaded video's file under a directory determined by its playlist's configured storage path, within a single configured root directory. A storage path may contain multiple segments, producing nested subdirectories.

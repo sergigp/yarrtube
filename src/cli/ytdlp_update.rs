@@ -7,7 +7,7 @@ use std::process::ExitCode;
 
 const RELEASES_API_URL: &str = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest";
 const LINUX_ASSET_NAME: &str = "yt-dlp_linux";
-const DEFAULT_YTDLP_PATH: &str = "/usr/local/bin/yt-dlp";
+const DEFAULT_YTDLP_PATH: &str = "/app/bin/yt-dlp";
 
 #[derive(Debug, Deserialize)]
 struct Release {

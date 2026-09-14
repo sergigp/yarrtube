@@ -390,6 +390,74 @@ mod tests {
     }
 
     #[test]
+    fn it_should_recover_a_permanently_errored_video() {
+        let (handler, _events, video_repository, task_repository, _files) = handler_with(
+            PlaylistKind::Custom,
+            Vec::new(),
+            FakeVideoFileRepository::with_listing(Vec::new()),
+        );
+        video_repository.videos.lock().unwrap().push(
+            Video::create(
+                PlaylistId::new("PL1").unwrap(),
+                VideoId::new("vid1").unwrap(),
+                "My Video",
+                fixed_timestamp(),
+            )
+            .start_download(fixed_timestamp())
+            .mark_errored(fixed_timestamp()),
+        );
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        let stored = video_repository.videos.lock().unwrap();
+        assert_eq!(stored[0].status, VideoStatus::Pending);
+        assert_eq!(stored[0].filename, None);
+        assert_eq!(stored[0].quality, None);
+
+        let scheduled = task_repository.scheduled.lock().unwrap();
+        assert!(scheduled.iter().any(|(task, _)| *task
+            == Task::DownloadVideo {
+                playlist_id: "PL1".to_string(),
+                video_id: "vid1".to_string(),
+                quality: "high".to_string(),
+            }));
+    }
+
+    #[test]
+    fn it_should_recover_a_video_again_after_it_errors_again_post_recovery() {
+        let (handler, _events, video_repository, _tasks, _files) = handler_with(
+            PlaylistKind::Custom,
+            Vec::new(),
+            FakeVideoFileRepository::with_listing(Vec::new()),
+        );
+        video_repository.videos.lock().unwrap().push(
+            Video::create(
+                PlaylistId::new("PL1").unwrap(),
+                VideoId::new("vid1").unwrap(),
+                "My Video",
+                fixed_timestamp(),
+            )
+            .start_download(fixed_timestamp())
+            .mark_errored(fixed_timestamp()),
+        );
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+        {
+            let mut stored = video_repository.videos.lock().unwrap();
+            assert_eq!(stored[0].status, VideoStatus::Pending);
+            stored[0] = stored[0].clone().start_download(fixed_timestamp());
+            stored[0] = stored[0].clone().mark_errored(fixed_timestamp());
+        }
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        let stored = video_repository.videos.lock().unwrap();
+        assert_eq!(stored[0].status, VideoStatus::Pending);
+        assert_eq!(stored[0].filename, None);
+        assert_eq!(stored[0].quality, None);
+    }
+
+    #[test]
     fn it_should_leave_a_matching_file_alone() {
         let (handler, _events, video_repository, _tasks, files) = handler_with(
             PlaylistKind::Custom,

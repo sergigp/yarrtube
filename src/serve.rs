@@ -1,8 +1,9 @@
 use crate::cli::ytdlp_update;
 use crate::domain::playlist::PlaylistService;
-use crate::domain::task::TaskService;
+use crate::domain::task::{Task, TaskService};
 use crate::domain::video::VideoService;
 use crate::http::{self, AppState};
+use crate::infrastructure::client::ytdlp_updater::RealYtdlpUpdater;
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
 use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::{
@@ -23,7 +24,7 @@ use crate::infrastructure::shared::domain_events::event_publisher::{
 use crate::infrastructure::shared::domain_events::event_repository::{
     EventRepository, SqliteEventRepository,
 };
-use crate::infrastructure::shared::system_clock::SystemClock;
+use crate::infrastructure::shared::system_clock::{Clock, SystemClock};
 use crate::infrastructure::shared::web_assets::WebAssets;
 use crate::{subscribers, tasks};
 use anyhow::{Context, Result};
@@ -160,7 +161,9 @@ fn build_application() -> Result<Application> {
         Arc::new(YoutubeApiVideoRepository::new(youtube_api_key())),
         event_publisher as Arc<dyn EventPublisher>,
         task_repository.clone() as Arc<dyn TaskRepository>,
-        Arc::new(YtDlpVideoDownloaderRepository),
+        Arc::new(YtDlpVideoDownloaderRepository::new(
+            ytdlp_update::target_path(),
+        )),
         Arc::new(FilesystemVideoFileRepository),
         Arc::new(SystemClock),
         reconcile_interval_seconds(),
@@ -177,14 +180,28 @@ fn build_application() -> Result<Application> {
         ),
         Arc::new(SystemClock),
     ));
+    let task_repository = task_repository as Arc<dyn TaskRepository>;
     let task_executor = Arc::new(TaskExecutor::new(
-        task_repository as Arc<dyn TaskRepository>,
-        tasks::registry(video_service.clone()),
+        task_repository.clone(),
+        tasks::registry(
+            video_service.clone(),
+            task_repository.clone(),
+            Arc::new(SystemClock),
+            Arc::new(RealYtdlpUpdater),
+            ytdlp_update::target_path(),
+        ),
         Arc::new(SystemClock),
     ));
     task_executor
         .recover_stuck_tasks()
         .context("failed to recover tasks left running from a previous run")?;
+
+    let update_ytdlp_first_run_at = SystemClock.now()
+        + chrono::Duration::seconds(tasks::update_ytdlp_task::UPDATE_INTERVAL_SECONDS);
+    task_repository
+        .schedule(&Task::UpdateYtdlp, update_ytdlp_first_run_at)
+        .context("failed to schedule the recurring yt-dlp self-update task")?;
+    info!(run_at = %update_ytdlp_first_run_at, "scheduled recurring yt-dlp self-update task");
 
     Ok(Application {
         state: AppState {

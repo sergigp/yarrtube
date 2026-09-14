@@ -93,8 +93,10 @@ services:
 > its own database, then drops to that user before running anything else. If
 > `PUID`/`PGID` are left unset, the container keeps the old behavior of
 > running (and writing files) as root. Only the mounted video directory is
-> persisted — the container's own database and `yt-dlp` binary are recreated
-> on restart, which is expected.
+> persisted — the container's own database is recreated on restart, which is
+> expected. The image bundles a known-good `yt-dlp` binary at build time, so
+> a freshly started container always has a usable one even before its
+> startup self-update runs.
 
 ## Browser UI
 
@@ -141,7 +143,7 @@ These run against an already-running container with `docker exec`, without
 restarting it:
 
 ```bash
-# Force a yt-dlp update (this also runs automatically on every container start)
+# Force a yt-dlp update (this also runs automatically at container start and hourly while it runs)
 docker exec yarrtube yarrtube update-ytdlp
 ```
 
@@ -159,7 +161,7 @@ command):
 | `YARRTUBE_RECONCILE_INTERVAL_SECONDS` | `3600`                  | How often each tracked playlist is reconciled (membership diff for YouTube-linked playlists, filesystem healing for every playlist) |
 | `YARRTUBE_DB_PATH`                    | `yarrtube.sqlite3`      | Path to the internal SQLite file (inside the container)   |
 | `YARRTUBE_VIDEOS_PATH`                | `/videos`               | Root directory downloaded videos are saved under (inside the container) |
-| `YTDLP_PATH`                          | `/usr/local/bin/yt-dlp` | Path to the managed `yt-dlp` binary                       |
+| `YTDLP_PATH`                          | `/app/bin/yt-dlp`       | Path to the managed `yt-dlp` binary (also the path bundled into the image at build time) |
 | `RUST_LOG`                            | `info`                  | Log verbosity (e.g. `RUST_LOG=debug`)                     |
 
 ### Reconciliation and the output directory
