@@ -8,6 +8,7 @@ const PLAYLIST_ITEMS_URL: &str = "https://www.googleapis.com/youtube/v3/playlist
 pub struct PlaylistVideo {
     pub video_id: String,
     pub title: String,
+    pub position: i64,
 }
 
 pub trait YoutubePlaylistItemsRepository: Send + Sync {
@@ -31,6 +32,8 @@ struct PlaylistItemSnippet {
     title: String,
     #[serde(rename = "resourceId")]
     resource_id: ResourceId,
+    #[serde(rename = "position")]
+    position: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -113,6 +116,7 @@ impl YoutubeApiPlaylistItemsRepository {
             .map(|item| PlaylistVideo {
                 video_id: item.snippet.resource_id.video_id,
                 title: item.snippet.title,
+                position: item.snippet.position,
             })
             .collect();
 
@@ -143,13 +147,13 @@ impl YoutubePlaylistItemsRepository for YoutubeApiPlaylistItemsRepository {
 #[cfg(test)]
 #[derive(Default)]
 pub struct FakeYoutubePlaylistItemsRepository {
-    pub(crate) videos: Vec<PlaylistVideo>,
+    pub(crate) videos: std::sync::Mutex<Vec<PlaylistVideo>>,
 }
 
 #[cfg(test)]
 impl YoutubePlaylistItemsRepository for FakeYoutubePlaylistItemsRepository {
     fn list_current_videos(&self, _playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>> {
-        Ok(self.videos.clone())
+        Ok(self.videos.lock().unwrap().clone())
     }
 }
 
@@ -169,8 +173,8 @@ mod tests {
             .with_status(200)
             .with_body(
                 r#"{"items": [
-                    {"snippet": {"title": "One", "resourceId": {"videoId": "1"}}},
-                    {"snippet": {"title": "Two", "resourceId": {"videoId": "2"}}}
+                    {"snippet": {"title": "One", "resourceId": {"videoId": "1"}, "position": 0}},
+                    {"snippet": {"title": "Two", "resourceId": {"videoId": "2"}, "position": 1}}
                 ], "nextPageToken": "page2"}"#,
             )
             .create();
@@ -183,7 +187,7 @@ mod tests {
             .with_status(200)
             .with_body(
                 r#"{"items": [
-                    {"snippet": {"title": "Three", "resourceId": {"videoId": "3"}}}
+                    {"snippet": {"title": "Three", "resourceId": {"videoId": "3"}, "position": 2}}
                 ]}"#,
             )
             .create();
@@ -201,14 +205,17 @@ mod tests {
                 PlaylistVideo {
                     video_id: "1".to_string(),
                     title: "One".to_string(),
+                    position: 0,
                 },
                 PlaylistVideo {
                     video_id: "2".to_string(),
                     title: "Two".to_string(),
+                    position: 1,
                 },
                 PlaylistVideo {
                     video_id: "3".to_string(),
                     title: "Three".to_string(),
+                    position: 2,
                 },
             ]
         );

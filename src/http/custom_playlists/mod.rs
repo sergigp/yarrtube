@@ -469,6 +469,7 @@ mod tests {
         let stored = video_repository.videos.lock().unwrap();
         assert_eq!(stored.len(), 1);
         assert_eq!(stored[0].title, "My Video");
+        assert_eq!(stored[0].position, None);
         assert_eq!(
             *events.published.lock().unwrap(),
             vec![DomainEvent::VideoAdded {

@@ -146,10 +146,17 @@ impl VideoService {
                         title = %video.title,
                         "added video to playlist"
                     );
-                    Video::create(id.clone(), video_id.clone(), video.title.clone(), now)
+                    Video::create_with_position(
+                        id.clone(),
+                        video_id.clone(),
+                        video.title.clone(),
+                        video.position,
+                        now,
+                    )
                 }
                 Some(stored) => Video {
                     title: video.title.clone(),
+                    position: Some(video.position),
                     updated_at: now,
                     ..stored
                 },

@@ -44,6 +44,12 @@ impl SqliteVideoRepository {
         )
         .inspect_err(|e| tracing::error!(error = %e, "failed to create videos table"))
         .context("failed to create videos table")?;
+        if let Err(e) = conn.execute("ALTER TABLE videos ADD COLUMN position INTEGER", [])
+            && !e.to_string().contains("duplicate column name")
+        {
+            tracing::error!(error = %e, "failed to add position column to videos table");
+            return Err(e).context("failed to add position column to videos table");
+        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -57,6 +63,7 @@ impl SqliteVideoRepository {
         status: String,
         quality: Option<String>,
         filename: Option<String>,
+        position: Option<i64>,
         created_at: String,
         updated_at: String,
     ) -> anyhow::Result<Video> {
@@ -67,6 +74,7 @@ impl SqliteVideoRepository {
             status: VideoStatus::parse(&status)?,
             quality: quality.map(Quality::new).transpose()?,
             filename,
+            position,
             created_at: DateTime::parse_from_rfc3339(&created_at)
                 .context("failed to parse stored created_at")?
                 .with_timezone(&Utc),
@@ -91,13 +99,14 @@ impl VideoRepository for SqliteVideoRepository {
             })
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "INSERT INTO videos (playlist_id, video_id, title, status, quality, filename, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "INSERT INTO videos (playlist_id, video_id, title, status, quality, filename, position, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT (playlist_id, video_id) DO UPDATE SET
                 title = excluded.title,
                 status = excluded.status,
                 quality = excluded.quality,
                 filename = excluded.filename,
+                position = excluded.position,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at",
             params![
@@ -107,6 +116,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.status.as_str(),
                 video.quality.map(|q| q.as_str()),
                 video.filename,
+                video.position,
                 video.created_at.to_rfc3339(),
                 video.updated_at.to_rfc3339(),
             ],
@@ -132,7 +142,7 @@ impl VideoRepository for SqliteVideoRepository {
             })
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
-            "SELECT playlist_id, video_id, title, status, quality, filename, created_at, updated_at
+            "SELECT playlist_id, video_id, title, status, quality, filename, position, created_at, updated_at
              FROM videos WHERE playlist_id = ?1 AND video_id = ?2",
             params![playlist_id.as_str(), video_id.as_str()],
             |row| {
@@ -143,8 +153,9 @@ impl VideoRepository for SqliteVideoRepository {
                     row.get::<_, String>(3)?,
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
-                    row.get::<_, String>(6)?,
+                    row.get::<_, Option<i64>>(6)?,
                     row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
                 ))
             },
         )
@@ -154,7 +165,7 @@ impl VideoRepository for SqliteVideoRepository {
         })
         .context("failed to find video")?
         .map(
-            |(playlist_id, video_id, title, status, quality, filename, created_at, updated_at)| {
+            |(playlist_id, video_id, title, status, quality, filename, position, created_at, updated_at)| {
                 Self::row_to_video(
                     playlist_id,
                     video_id,
@@ -162,6 +173,7 @@ impl VideoRepository for SqliteVideoRepository {
                     status,
                     quality,
                     filename,
+                    position,
                     created_at,
                     updated_at,
                 )
@@ -178,8 +190,9 @@ impl VideoRepository for SqliteVideoRepository {
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
             .prepare(
-                "SELECT playlist_id, video_id, title, status, quality, filename, created_at, updated_at
-                 FROM videos WHERE playlist_id = ?1 ORDER BY video_id ASC",
+                "SELECT playlist_id, video_id, title, status, quality, filename, position, created_at, updated_at
+                 FROM videos WHERE playlist_id = ?1
+                 ORDER BY position IS NULL, position ASC, video_id ASC",
             )
             .inspect_err(|e| {
                 tracing::error!(playlist_id = %playlist_id, error = %e, "failed to prepare list-videos query")
@@ -194,17 +207,28 @@ impl VideoRepository for SqliteVideoRepository {
                     row.get::<_, String>(3)?,
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
-                    row.get::<_, String>(6)?,
+                    row.get::<_, Option<i64>>(6)?,
                     row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
                 ))
             })
             .inspect_err(|e| tracing::error!(playlist_id = %playlist_id, error = %e, "failed to list videos"))
             .context("failed to list videos")?;
 
         rows.map(|row| {
-            let (playlist_id, video_id, title, status, quality, filename, created_at, updated_at) =
-                row.inspect_err(|e| tracing::error!(error = %e, "failed to read video row"))
-                    .context("failed to read video row")?;
+            let (
+                playlist_id,
+                video_id,
+                title,
+                status,
+                quality,
+                filename,
+                position,
+                created_at,
+                updated_at,
+            ) = row
+                .inspect_err(|e| tracing::error!(error = %e, "failed to read video row"))
+                .context("failed to read video row")?;
             Self::row_to_video(
                 playlist_id,
                 video_id,
@@ -212,6 +236,7 @@ impl VideoRepository for SqliteVideoRepository {
                 status,
                 quality,
                 filename,
+                position,
                 created_at,
                 updated_at,
             )
@@ -251,7 +276,7 @@ impl VideoRepository for SqliteVideoRepository {
             })
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "UPDATE videos SET title = ?3, status = ?4, quality = ?5, filename = ?6, updated_at = ?7
+            "UPDATE videos SET title = ?3, status = ?4, quality = ?5, filename = ?6, position = ?7, updated_at = ?8
              WHERE playlist_id = ?1 AND video_id = ?2",
             params![
                 video.playlist_id.as_str(),
@@ -260,6 +285,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.status.as_str(),
                 video.quality.map(|q| q.as_str()),
                 video.filename,
+                video.position,
                 video.updated_at.to_rfc3339(),
             ],
         )
@@ -325,14 +351,22 @@ impl VideoRepository for FakeVideoRepository {
     }
 
     fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>> {
-        Ok(self
+        let mut videos: Vec<Video> = self
             .videos
             .lock()
             .unwrap()
             .iter()
             .filter(|v| v.playlist_id == *playlist_id)
             .cloned()
-            .collect())
+            .collect();
+        videos.sort_by(|a, b| {
+            (a.position.is_none(), a.position, a.video_id.as_str()).cmp(&(
+                b.position.is_none(),
+                b.position,
+                b.video_id.as_str(),
+            ))
+        });
+        Ok(videos)
     }
 
     fn delete(&self, playlist_id: &PlaylistId, video_id: &VideoId) -> anyhow::Result<()> {
@@ -405,6 +439,109 @@ mod tests {
             .unwrap();
 
         assert_eq!(found.quality, None);
+    }
+
+    #[test]
+    fn it_should_round_trip_a_video_with_a_recorded_position() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let with_position = Video::create_with_position(
+            playlist_id(),
+            VideoId::new("vid1").unwrap(),
+            "First",
+            5,
+            now,
+        );
+        repo.save(&with_position).unwrap();
+
+        let found = repo
+            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(found.position, Some(5));
+    }
+
+    #[test]
+    fn it_should_round_trip_a_video_with_no_recorded_position() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        repo.save(&video("vid1", "First", now)).unwrap();
+
+        let found = repo
+            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(found.position, None);
+    }
+
+    #[test]
+    fn it_should_list_videos_ordered_by_position_rather_than_insertion_order() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        repo.save(&Video::create_with_position(
+            playlist_id(),
+            VideoId::new("vid_c").unwrap(),
+            "Third",
+            2,
+            now,
+        ))
+        .unwrap();
+        repo.save(&Video::create_with_position(
+            playlist_id(),
+            VideoId::new("vid_a").unwrap(),
+            "First",
+            0,
+            now,
+        ))
+        .unwrap();
+        repo.save(&Video::create_with_position(
+            playlist_id(),
+            VideoId::new("vid_b").unwrap(),
+            "Second",
+            1,
+            now,
+        ))
+        .unwrap();
+
+        let videos = repo.list_for_playlist(&playlist_id()).unwrap();
+
+        assert_eq!(
+            videos
+                .iter()
+                .map(|v| v.video_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["vid_a", "vid_b", "vid_c"]
+        );
+    }
+
+    #[test]
+    fn it_should_sort_videos_with_no_position_last_by_video_id() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        repo.save(&video("vid_no_position_b", "No position B", now))
+            .unwrap();
+        repo.save(&Video::create_with_position(
+            playlist_id(),
+            VideoId::new("vid_positioned").unwrap(),
+            "Positioned",
+            5,
+            now,
+        ))
+        .unwrap();
+        repo.save(&video("vid_no_position_a", "No position A", now))
+            .unwrap();
+
+        let videos = repo.list_for_playlist(&playlist_id()).unwrap();
+
+        assert_eq!(
+            videos
+                .iter()
+                .map(|v| v.video_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["vid_positioned", "vid_no_position_a", "vid_no_position_b"]
+        );
     }
 
     #[test]

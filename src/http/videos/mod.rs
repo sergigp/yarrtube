@@ -159,6 +159,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_return_videos_ordered_by_playlist_position() {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        video_repository
+            .save(&Video::create_with_position(
+                PlaylistId::new("PL1").unwrap(),
+                VideoId::new("vid_third").unwrap(),
+                "Third",
+                2,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        video_repository
+            .save(&Video::create_with_position(
+                PlaylistId::new("PL1").unwrap(),
+                VideoId::new("vid_first").unwrap(),
+                "First",
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        video_repository
+            .save(&Video::create_with_position(
+                PlaylistId::new("PL1").unwrap(),
+                VideoId::new("vid_second").unwrap(),
+                "Second",
+                1,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let router = test_router(playlist_repository, video_repository);
+
+        let response = router.oneshot(request("PL1")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        let videos = body.as_array().unwrap();
+        assert_eq!(
+            videos.iter().map(|v| v["id"].clone()).collect::<Vec<_>>(),
+            vec!["vid_first", "vid_second", "vid_third"]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_return_an_empty_list_when_the_playlist_has_no_videos() {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
