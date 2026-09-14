@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ConfirmDialog } from './ConfirmDialog'
-import { deletePlaylist } from '../api'
+import { deletePlaylist, reconcilePlaylist } from '../api'
 
 export function PlaylistActionsMenu({ playlist, onDeleted }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -20,6 +20,18 @@ export function PlaylistActionsMenu({ playlist, onDeleted }) {
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content className="dropdown-menu-content" align="end">
+            <DropdownMenu.Item
+              className="dropdown-menu-item"
+              onSelect={async () => {
+                try {
+                  await reconcilePlaylist(playlist.id)
+                } catch (err) {
+                  window.alert(`Failed to reconcile "${playlist.name}": ${err.message}`)
+                }
+              }}
+            >
+              Reconcile
+            </DropdownMenu.Item>
             <DropdownMenu.Item
               className="dropdown-menu-item dropdown-menu-item-danger"
               onSelect={() => setConfirmOpen(true)}

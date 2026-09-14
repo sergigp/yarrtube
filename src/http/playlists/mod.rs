@@ -96,6 +96,22 @@ pub async fn delete_playlist(State(state): State<AppState>, Path(id): Path<Strin
     }
 }
 
+pub async fn reconcile_playlist(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+    let id = match PlaylistId::new(id) {
+        Ok(id) => id,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
+    };
+
+    let result =
+        tokio::task::spawn_blocking(move || state.video_service.reconcile_playlist(id)).await;
+
+    match result {
+        Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
+        Ok(Err(e)) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
 pub async fn list_playlists(State(state): State<AppState>) -> Response {
     match state.playlist_service.list_playlists() {
         Ok(playlists) => {
@@ -930,5 +946,156 @@ mod tests {
         assert!(!output_dir.exists());
 
         std::fs::remove_dir_all(&videos_root).ok();
+    }
+
+    fn reconcile_request(id: &str) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/playlists/{id}/reconcile"))
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    fn test_router_for_reconcile(
+        repository: FakePlaylistRepository,
+        playlist_items: FakeYoutubePlaylistItemsRepository,
+        video_file_repository: FakeVideoFileRepository,
+    ) -> (
+        axum::Router,
+        Arc<FakeVideoRepository>,
+        Arc<FakeTaskRepository>,
+    ) {
+        let repository = Arc::new(repository);
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_repository = Arc::new(FakeTaskRepository::default());
+        let event_publisher = Arc::new(FakeEventPublisher::default());
+        let video_service = VideoService::new(
+            repository.clone(),
+            video_repository.clone(),
+            Arc::new(playlist_items),
+            Arc::new(FakeYoutubeVideoRepository::default()),
+            event_publisher.clone(),
+            task_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(video_file_repository),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        );
+        let state = AppState {
+            playlist_service: crate::domain::playlist::PlaylistService::new(
+                repository,
+                video_repository.clone(),
+                Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+                event_publisher,
+                Arc::new(FixedClock(fixed_timestamp())),
+            ),
+            video_service,
+            task_service: crate::domain::task::TaskService::new(Arc::new(
+                FakeTaskRepository::default(),
+            )),
+        };
+        (
+            axum::Router::new().nest("/api", api_router(state)),
+            video_repository,
+            task_repository,
+        )
+    }
+
+    #[tokio::test]
+    async fn it_should_return_204_and_apply_membership_changes_when_reconciling_a_youtube_linked_playlist()
+     {
+        use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+        use crate::infrastructure::repositories::youtube_playlist_items_repository::PlaylistVideo;
+
+        let repository = FakePlaylistRepository::default();
+        repository
+            .insert(&crate::domain::playlist::Playlist::create(
+                PlaylistId::new("PL1").unwrap(),
+                crate::domain::playlist::PlaylistName::new("My Playlist").unwrap(),
+                crate::domain::playlist::PlaylistPath::new("music/chill").unwrap(),
+                Quality::High,
+                crate::domain::playlist::PlaylistKind::YoutubeLinked,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let (router, video_repository, task_repository) = test_router_for_reconcile(
+            repository,
+            FakeYoutubePlaylistItemsRepository {
+                videos: vec![PlaylistVideo {
+                    video_id: "vid1".to_string(),
+                    title: "One".to_string(),
+                }],
+            },
+            FakeVideoFileRepository::default(),
+        );
+
+        let response = router.oneshot(reconcile_request("PL1")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        let stored = video_repository.videos.lock().unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].video_id.as_str(), "vid1");
+        drop(stored);
+        assert_eq!(task_repository.scheduled.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_204_without_a_youtube_call_when_reconciling_a_custom_playlist() {
+        use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+
+        let repository = FakePlaylistRepository::default();
+        repository
+            .insert(&crate::domain::playlist::Playlist::create(
+                PlaylistId::new("11111111-1111-1111-1111-111111111111").unwrap(),
+                crate::domain::playlist::PlaylistName::new("Custom").unwrap(),
+                crate::domain::playlist::PlaylistPath::new("custom/path").unwrap(),
+                Quality::High,
+                crate::domain::playlist::PlaylistKind::Custom,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let (router, video_repository, task_repository) = test_router_for_reconcile(
+            repository,
+            FakeYoutubePlaylistItemsRepository::default(),
+            FakeVideoFileRepository::default(),
+        );
+
+        let response = router
+            .oneshot(reconcile_request("11111111-1111-1111-1111-111111111111"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert!(video_repository.videos.lock().unwrap().is_empty());
+        assert_eq!(task_repository.scheduled.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_204_and_do_nothing_when_reconciling_a_nonexistent_playlist() {
+        let (router, video_repository, task_repository) = test_router_for_reconcile(
+            FakePlaylistRepository::default(),
+            FakeYoutubePlaylistItemsRepository::default(),
+            FakeVideoFileRepository::default(),
+        );
+
+        let response = router.oneshot(reconcile_request("PL404")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert!(video_repository.videos.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_reconciling_with_an_invalid_playlist_id() {
+        let (router, _video_repository, _task_repository) = test_router_for_reconcile(
+            FakePlaylistRepository::default(),
+            FakeYoutubePlaylistItemsRepository::default(),
+            FakeVideoFileRepository::default(),
+        );
+
+        let response = router.oneshot(reconcile_request("%20")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

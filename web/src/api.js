@@ -49,6 +49,18 @@ export async function deletePlaylist(id) {
   }
 }
 
+export async function reconcilePlaylist(id) {
+  const response = await fetch(`/api/playlists/${encodeURIComponent(id)}/reconcile`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(
+      body?.error ?? `request to reconcile playlist ${id} failed with status ${response.status}`,
+    )
+  }
+}
+
 export async function deleteVideoFromCustomPlaylist(playlistId, videoId) {
   const response = await fetch(
     `/api/custom-playlists/${encodeURIComponent(playlistId)}/videos/${encodeURIComponent(videoId)}`,
