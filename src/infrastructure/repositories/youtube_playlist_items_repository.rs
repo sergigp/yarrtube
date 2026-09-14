@@ -77,11 +77,20 @@ impl YoutubeApiPlaylistItemsRepository {
             .get(&self.base_url)
             .query(&query)
             .send()
+            .inspect_err(|_| {
+                tracing::error!(playlist_id, page_token = ?page_token, "YouTube API request failed")
+            })
             .context("YouTube API request failed")?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().unwrap_or_default();
+            tracing::error!(
+                playlist_id,
+                page_token = ?page_token,
+                status = %status,
+                "YouTube API request failed"
+            );
             return Err(anyhow!(
                 "YouTube API request failed with status {status}: {body}"
             ));
@@ -89,6 +98,14 @@ impl YoutubeApiPlaylistItemsRepository {
 
         let parsed: PlaylistItemsResponse = response
             .json()
+            .inspect_err(|e| {
+                tracing::error!(
+                    playlist_id,
+                    page_token = ?page_token,
+                    error = %e,
+                    "failed to parse YouTube API response"
+                )
+            })
             .context("failed to parse YouTube API response")?;
         let videos = parsed
             .items

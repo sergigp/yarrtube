@@ -43,16 +43,21 @@ impl YoutubePlaylistRepository for YoutubeApiPlaylistRepository {
                 ("key", self.api_key.as_str()),
             ])
             .send()
+            .inspect_err(|_| tracing::error!(playlist_id = %id, "YouTube API request failed"))
             .context("YouTube API request failed")?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().unwrap_or_default();
+            tracing::error!(playlist_id = %id, status = %status, "YouTube API request failed");
             anyhow::bail!("YouTube API request failed with status {status}: {body}");
         }
 
         let parsed: PlaylistsResponse = response
             .json()
+            .inspect_err(|e| {
+                tracing::error!(playlist_id = %id, error = %e, "failed to parse YouTube API response")
+            })
             .context("failed to parse YouTube API response")?;
 
         Ok(!parsed.items.is_empty())
