@@ -492,7 +492,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_reschedule_the_task_after_the_fixed_delay_below_the_attempt_limit() {
+    fn it_should_reschedule_the_task_after_the_growing_retry_delay_below_the_attempt_limit() {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         let repo = repo_with_clock(now);
         repo.schedule(&task(), now).unwrap();
@@ -502,7 +502,12 @@ mod tests {
 
         assert!(repo.list_eligible().unwrap().is_empty());
         let found = repo.find(id).unwrap().unwrap();
-        assert_eq!(found.run_at, now + chrono::Duration::seconds(30));
+        assert_eq!(
+            found.run_at,
+            now + chrono::Duration::seconds(
+                crate::domain::task::scheduled_task::retry_delay_seconds(1)
+            )
+        );
         assert_eq!(found.retries, 1);
         assert_eq!(found.last_error, Some("boom".to_string()));
     }

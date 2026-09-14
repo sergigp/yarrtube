@@ -40,16 +40,17 @@ pub fn args_for_quality(quality: Quality) -> Vec<String> {
     ]
 }
 
-/// Runs `yt-dlp <args> <video_url>` in `output_path`, saving it under
+/// Runs `<ytdlp_path> <args> <video_url>` in `output_path`, saving it under
 /// `desired_filename` (extension chosen by `yt-dlp`). If a file with that
 /// stem already exists in `output_path`, `video_id` is appended to
 /// disambiguate. Asks `yt-dlp` to print the exact filename it saved via
 /// `--print after_move:filename`, in quiet mode so that's the only line on
 /// stdout. Returns `Ok(Some(filename))` on a successful download,
 /// `Ok(None)` for a clean `yt-dlp` failure (non-zero exit). Returns `Err`
-/// only for a systemic problem: `yt-dlp` missing from `PATH`, or a
-/// successful exit that didn't print a parseable filename.
+/// only for a systemic problem: no binary at `ytdlp_path`, or a successful
+/// exit that didn't print a parseable filename.
 pub fn download_video(
+    ytdlp_path: &Path,
     video_url: &str,
     desired_filename: &str,
     video_id: &str,
@@ -66,11 +67,12 @@ pub fn download_video(
         "after_move:filename".to_string(),
     ]);
     println!(
-        "Running: yt-dlp {} {video_url} -o \"{output_template}\" (in {})",
+        "Running: {} {} {video_url} -o \"{output_template}\" (in {})",
+        ytdlp_path.display(),
         args.join(" "),
         output_path.display()
     );
-    let output = match Command::new("yt-dlp")
+    let output = match Command::new(ytdlp_path)
         .args(&args)
         .arg(video_url)
         .arg("-o")
@@ -83,7 +85,8 @@ pub fn download_video(
         Ok(output) => output,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             return Err(anyhow!(
-                "`yt-dlp` was not found on PATH. Install yt-dlp and make sure it is available before running yarrtube."
+                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
+                ytdlp_path.display()
             ));
         }
         Err(e) => return Err(anyhow!("Failed to run yt-dlp for {video_url}: {e}")),
@@ -139,25 +142,14 @@ pub(crate) mod test_support {
         dir
     }
 
-    /// `PATH` is process-global, so every test that mutates it (here and in
-    /// `youtube_video_downloader_repository`'s tests, which build on this
-    /// same helper) must serialize on this lock — otherwise two such tests
-    /// running on different threads clobber each other's `PATH`.
+    /// A fake `yt-dlp` binary (a shell script exiting with `exit_code`) at
+    /// its own path, passed explicitly to `download_video` in tests rather
+    /// than relying on `PATH`. The script also records the arguments it was
+    /// invoked with, retrievable via `captured_args`.
     #[cfg(unix)]
-    fn path_mutex() -> &'static std::sync::Mutex<()> {
-        static PATH_MUTEX: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-        PATH_MUTEX.get_or_init(|| std::sync::Mutex::new(()))
-    }
-
-    /// Puts a fake `yt-dlp` script (exiting with `exit_code`) on `PATH` for
-    /// the duration of the guard, restoring the original `PATH` on drop. The
-    /// script also records the arguments it was invoked with, retrievable
-    /// via `captured_args`.
-    #[cfg(unix)]
-    pub(crate) struct FakeYtDlpOnPath {
-        _lock: std::sync::MutexGuard<'static, ()>,
-        original_path: String,
+    pub(crate) struct FakeYtDlp {
         _bin_dir: PathBuf,
+        pub(crate) path: PathBuf,
         captured_args_path: PathBuf,
     }
 
@@ -166,7 +158,7 @@ pub(crate) mod test_support {
     pub(crate) const DEFAULT_PRINTED_FILENAME: &str = "fake-output.mp4";
 
     #[cfg(unix)]
-    impl FakeYtDlpOnPath {
+    impl FakeYtDlp {
         pub(crate) fn with_exit_code(exit_code: i32) -> Self {
             Self::with_exit_code_and_printed_filename(exit_code, DEFAULT_PRINTED_FILENAME)
         }
@@ -176,10 +168,6 @@ pub(crate) mod test_support {
             printed_filename: &str,
         ) -> Self {
             use std::os::unix::fs::PermissionsExt;
-
-            let lock = path_mutex()
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
 
             let bin_dir = unique_temp_dir("fake-ytdlp-bin");
             let script_path = bin_dir.join("yt-dlp");
@@ -199,16 +187,9 @@ pub(crate) mod test_support {
             .unwrap();
             fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
 
-            let original_path = std::env::var("PATH").unwrap_or_default();
-            let new_path = format!("{}:{original_path}", bin_dir.display());
-            unsafe {
-                std::env::set_var("PATH", new_path);
-            }
-
             Self {
-                _lock: lock,
-                original_path,
                 _bin_dir: bin_dir,
+                path: script_path,
                 captured_args_path,
             }
         }
@@ -222,15 +203,6 @@ pub(crate) mod test_support {
                 .collect()
         }
     }
-
-    #[cfg(unix)]
-    impl Drop for FakeYtDlpOnPath {
-        fn drop(&mut self) {
-            unsafe {
-                std::env::set_var("PATH", &self.original_path);
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -240,12 +212,13 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_return_the_printed_filename_on_success() {
-        use test_support::{DEFAULT_PRINTED_FILENAME, FakeYtDlpOnPath, unique_temp_dir};
+        use test_support::{DEFAULT_PRINTED_FILENAME, FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-output");
-        let _guard = FakeYtDlpOnPath::with_exit_code(0);
+        let fake = FakeYtDlp::with_exit_code(0);
 
         let filename = download_video(
+            &fake.path,
             "https://example.com/video",
             "My Video",
             "vid1",
@@ -261,12 +234,13 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_return_none_on_a_clean_failed_exit() {
-        use test_support::{FakeYtDlpOnPath, unique_temp_dir};
+        use test_support::{FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-output");
-        let _guard = FakeYtDlpOnPath::with_exit_code(1);
+        let fake = FakeYtDlp::with_exit_code(1);
 
         let filename = download_video(
+            &fake.path,
             "https://example.com/video",
             "My Video",
             "vid1",
@@ -282,12 +256,13 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_pass_the_desired_filename_as_the_output_template_when_there_is_no_collision() {
-        use test_support::{FakeYtDlpOnPath, unique_temp_dir};
+        use test_support::{FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-output-no-collision");
-        let guard = FakeYtDlpOnPath::with_exit_code(0);
+        let fake = FakeYtDlp::with_exit_code(0);
 
         download_video(
+            &fake.path,
             "https://example.com/video",
             "My Video",
             "vid1",
@@ -306,20 +281,21 @@ mod tests {
             "-o".to_string(),
             "My Video.%(ext)s".to_string(),
         ]);
-        assert_eq!(guard.captured_args(), expected);
+        assert_eq!(fake.captured_args(), expected);
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
     #[test]
     #[cfg(unix)]
     fn it_should_append_the_video_id_to_the_output_template_on_collision() {
-        use test_support::{FakeYtDlpOnPath, unique_temp_dir};
+        use test_support::{FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-output-collision");
         std::fs::write(output_dir.join("My Video.mp4"), b"").unwrap();
-        let guard = FakeYtDlpOnPath::with_exit_code(0);
+        let fake = FakeYtDlp::with_exit_code(0);
 
         download_video(
+            &fake.path,
             "https://example.com/video",
             "My Video",
             "vid1",
@@ -338,19 +314,40 @@ mod tests {
             "-o".to_string(),
             "My Video [vid1].%(ext)s".to_string(),
         ]);
-        assert_eq!(guard.captured_args(), expected);
+        assert_eq!(fake.captured_args(), expected);
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
     #[test]
     #[cfg(unix)]
     fn it_should_error_when_a_successful_exit_prints_no_filename() {
-        use test_support::{FakeYtDlpOnPath, unique_temp_dir};
+        use test_support::{FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-output-no-print");
-        let _guard = FakeYtDlpOnPath::with_exit_code_and_printed_filename(0, "");
+        let fake = FakeYtDlp::with_exit_code_and_printed_filename(0, "");
 
         let result = download_video(
+            &fake.path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+        );
+
+        assert!(result.is_err());
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_error_when_no_binary_exists_at_the_configured_path() {
+        use test_support::unique_temp_dir;
+
+        let output_dir = unique_temp_dir("ytdlp-output-missing-binary");
+        let missing_path = output_dir.join("does-not-exist");
+
+        let result = download_video(
+            &missing_path,
             "https://example.com/video",
             "My Video",
             "vid1",

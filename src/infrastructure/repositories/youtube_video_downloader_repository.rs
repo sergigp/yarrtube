@@ -1,6 +1,6 @@
 use crate::domain::shared::Quality;
 use crate::infrastructure::shared::ytdlp;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Downloads a single video via `yt-dlp`, injected into `VideoService` for
 /// the event-driven download path.
@@ -19,7 +19,17 @@ pub trait VideoDownloaderRepository: Send + Sync {
     ) -> anyhow::Result<Option<String>>;
 }
 
-pub struct YtDlpVideoDownloaderRepository;
+/// Invokes `yt-dlp` at `ytdlp_path`, the same configured path `update-ytdlp`
+/// installs to — see design.md's "Move the default YTDLP_PATH..." decision.
+pub struct YtDlpVideoDownloaderRepository {
+    ytdlp_path: PathBuf,
+}
+
+impl YtDlpVideoDownloaderRepository {
+    pub fn new(ytdlp_path: PathBuf) -> Self {
+        Self { ytdlp_path }
+    }
+}
 
 impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
     fn download(
@@ -31,7 +41,14 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
         output_dir: &Path,
     ) -> anyhow::Result<Option<String>> {
         ytdlp::ensure_output_dir(output_dir)?;
-        ytdlp::download_video(video_url, desired_filename, video_id, quality, output_dir)
+        ytdlp::download_video(
+            &self.ytdlp_path,
+            video_url,
+            desired_filename,
+            video_id,
+            quality,
+            output_dir,
+        )
     }
 }
 
@@ -82,10 +99,10 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_map_a_successful_yt_dlp_process_to_the_printed_filename() {
-        let _guard = test_support::FakeYtDlpOnPath::with_exit_code(0);
+        let fake = test_support::FakeYtDlp::with_exit_code(0);
         let output_dir = test_support::unique_temp_dir("video-downloader-repository");
 
-        let result = YtDlpVideoDownloaderRepository
+        let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
             .download(
                 "https://example.com/video",
                 "My Video",
@@ -105,10 +122,10 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_map_a_failed_yt_dlp_process_to_none() {
-        let _guard = test_support::FakeYtDlpOnPath::with_exit_code(1);
+        let fake = test_support::FakeYtDlp::with_exit_code(1);
         let output_dir = test_support::unique_temp_dir("video-downloader-repository");
 
-        let result = YtDlpVideoDownloaderRepository
+        let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
             .download(
                 "https://example.com/video",
                 "My Video",

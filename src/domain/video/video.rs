@@ -72,9 +72,11 @@ impl Video {
         }
     }
 
-    /// Resets a `Downloaded` video back to `Pending`, clearing its recorded
-    /// filename and quality, used by filesystem reconciliation when a
-    /// video's recorded file is missing from disk and needs redownloading.
+    /// Resets a video back to `Pending`, clearing its recorded filename and
+    /// quality, used by filesystem reconciliation both when a `Downloaded`
+    /// video's recorded file is missing from disk and when an `Errored`
+    /// video is given another chance, in each case followed by scheduling a
+    /// fresh download.
     pub fn reset_for_redownload(self, now: DateTime<Utc>) -> Self {
         Self {
             status: VideoStatus::Pending,
