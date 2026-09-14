@@ -40,7 +40,10 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
         match std::fs::remove_file(&path) {
             Ok(()) => Ok(true),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
-            Err(e) => Err(anyhow::anyhow!("failed to delete file {path:?}: {e}")),
+            Err(e) => {
+                tracing::error!(path = ?path, error = %e, "failed to delete file");
+                Err(anyhow::anyhow!("failed to delete file {path:?}: {e}"))
+            }
         }
     }
 
@@ -49,6 +52,7 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
             Ok(entries) => entries,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(e) => {
+                tracing::error!(output_dir = ?output_dir, error = %e, "failed to read output directory");
                 return Err(anyhow::anyhow!(
                     "failed to read output directory {output_dir:?}: {e}"
                 ));
@@ -60,18 +64,17 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
                 let entry = match entry {
                     Ok(entry) => entry,
                     Err(e) => {
+                        tracing::error!(output_dir = ?output_dir, error = %e, "failed to read directory entry");
                         return Some(Err(anyhow::anyhow!("failed to read directory entry: {e}")));
                     }
                 };
                 if is_in_progress_temp_file(&entry.path()) {
                     return None;
                 }
-                Some(
-                    entry
-                        .file_name()
-                        .into_string()
-                        .map_err(|name| anyhow::anyhow!("non-UTF-8 filename: {name:?}")),
-                )
+                Some(entry.file_name().into_string().map_err(|name| {
+                    tracing::error!(output_dir = ?output_dir, filename = ?name, "non-UTF-8 filename");
+                    anyhow::anyhow!("non-UTF-8 filename: {name:?}")
+                }))
             })
             .collect()
     }
@@ -80,7 +83,10 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
         match std::fs::remove_dir_all(dir) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(anyhow::anyhow!("failed to delete directory {dir:?}: {e}")),
+            Err(e) => {
+                tracing::error!(dir = ?dir, error = %e, "failed to delete directory");
+                Err(anyhow::anyhow!("failed to delete directory {dir:?}: {e}"))
+            }
         }
     }
 }

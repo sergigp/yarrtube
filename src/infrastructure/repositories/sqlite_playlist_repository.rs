@@ -29,6 +29,7 @@ impl SqlitePlaylistRepository {
             )",
             [],
         )
+        .inspect_err(|e| tracing::error!(error = %e, "failed to create playlists table"))
         .context("failed to create playlists table")?;
         Ok(Self {
             conn: Mutex::new(conn),
@@ -61,6 +62,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| tracing::error!(playlist_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
             "SELECT id, name, path, quality, kind, created_at FROM playlists WHERE id = ?1",
@@ -77,6 +79,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
             },
         )
         .optional()
+        .inspect_err(|e| tracing::error!(playlist_id = %id, error = %e, "failed to query playlist"))
         .context("failed to query playlist")?
         .map(|(id, name, path, quality, kind, created_at)| {
             Self::row_to_playlist(id, name, path, quality, kind, created_at)
@@ -88,6 +91,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| tracing::error!(playlist_id = %playlist.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
             "INSERT INTO playlists (id, name, path, quality, kind, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -100,6 +104,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                 playlist.created_at.to_rfc3339()
             ],
         )
+        .inspect_err(|e| tracing::error!(playlist_id = %playlist.id, error = %e, "failed to insert playlist"))
         .context("failed to insert playlist")?;
         Ok(())
     }
@@ -108,8 +113,12 @@ impl PlaylistRepository for SqlitePlaylistRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| tracing::error!(playlist_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute("DELETE FROM playlists WHERE id = ?1", params![id.as_str()])
+            .inspect_err(
+                |e| tracing::error!(playlist_id = %id, error = %e, "failed to delete playlist"),
+            )
             .context("failed to delete playlist")?;
         Ok(())
     }
@@ -118,11 +127,13 @@ impl PlaylistRepository for SqlitePlaylistRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| tracing::error!("database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
             .prepare(
                 "SELECT id, name, path, quality, kind, created_at FROM playlists ORDER BY rowid ASC",
             )
+            .inspect_err(|e| tracing::error!(error = %e, "failed to prepare list query"))
             .context("failed to prepare list query")?;
         let rows = stmt
             .query_map([], |row| {
@@ -135,11 +146,13 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                     row.get::<_, String>(5)?,
                 ))
             })
+            .inspect_err(|e| tracing::error!(error = %e, "failed to list playlists"))
             .context("failed to list playlists")?;
 
         rows.map(|row| {
-            let (id, name, path, quality, kind, created_at) =
-                row.context("failed to read playlist row")?;
+            let (id, name, path, quality, kind, created_at) = row
+                .inspect_err(|e| tracing::error!(error = %e, "failed to read playlist row"))
+                .context("failed to read playlist row")?;
             Self::row_to_playlist(id, name, path, quality, kind, created_at)
         })
         .collect()

@@ -42,6 +42,7 @@ impl SqliteVideoRepository {
             )",
             [],
         )
+        .inspect_err(|e| tracing::error!(error = %e, "failed to create videos table"))
         .context("failed to create videos table")?;
         Ok(Self {
             conn: Mutex::new(conn),
@@ -81,6 +82,13 @@ impl VideoRepository for SqliteVideoRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| {
+                tracing::error!(
+                    playlist_id = %video.playlist_id,
+                    video_id = %video.video_id,
+                    "database lock poisoned"
+                )
+            })
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
             "INSERT INTO videos (playlist_id, video_id, title, status, quality, filename, created_at, updated_at)
@@ -103,6 +111,14 @@ impl VideoRepository for SqliteVideoRepository {
                 video.updated_at.to_rfc3339(),
             ],
         )
+        .inspect_err(|e| {
+            tracing::error!(
+                playlist_id = %video.playlist_id,
+                video_id = %video.video_id,
+                error = %e,
+                "failed to save video"
+            )
+        })
         .context("failed to save video")?;
         Ok(())
     }
@@ -111,6 +127,9 @@ impl VideoRepository for SqliteVideoRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| {
+                tracing::error!(playlist_id = %playlist_id, video_id = %video_id, "database lock poisoned")
+            })
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
             "SELECT playlist_id, video_id, title, status, quality, filename, created_at, updated_at
@@ -130,6 +149,9 @@ impl VideoRepository for SqliteVideoRepository {
             },
         )
         .optional()
+        .inspect_err(|e| {
+            tracing::error!(playlist_id = %playlist_id, video_id = %video_id, error = %e, "failed to find video")
+        })
         .context("failed to find video")?
         .map(
             |(playlist_id, video_id, title, status, quality, filename, created_at, updated_at)| {
@@ -152,12 +174,16 @@ impl VideoRepository for SqliteVideoRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| tracing::error!(playlist_id = %playlist_id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
             .prepare(
                 "SELECT playlist_id, video_id, title, status, quality, filename, created_at, updated_at
                  FROM videos WHERE playlist_id = ?1 ORDER BY video_id ASC",
             )
+            .inspect_err(|e| {
+                tracing::error!(playlist_id = %playlist_id, error = %e, "failed to prepare list-videos query")
+            })
             .context("failed to prepare list-videos query")?;
         let rows = stmt
             .query_map(params![playlist_id.as_str()], |row| {
@@ -172,11 +198,13 @@ impl VideoRepository for SqliteVideoRepository {
                     row.get::<_, String>(7)?,
                 ))
             })
+            .inspect_err(|e| tracing::error!(playlist_id = %playlist_id, error = %e, "failed to list videos"))
             .context("failed to list videos")?;
 
         rows.map(|row| {
             let (playlist_id, video_id, title, status, quality, filename, created_at, updated_at) =
-                row.context("failed to read video row")?;
+                row.inspect_err(|e| tracing::error!(error = %e, "failed to read video row"))
+                    .context("failed to read video row")?;
             Self::row_to_video(
                 playlist_id,
                 video_id,
@@ -195,11 +223,17 @@ impl VideoRepository for SqliteVideoRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| {
+                tracing::error!(playlist_id = %playlist_id, video_id = %video_id, "database lock poisoned")
+            })
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
             "DELETE FROM videos WHERE playlist_id = ?1 AND video_id = ?2",
             params![playlist_id.as_str(), video_id.as_str()],
         )
+        .inspect_err(|e| {
+            tracing::error!(playlist_id = %playlist_id, video_id = %video_id, error = %e, "failed to delete video")
+        })
         .context("failed to delete video")?;
         Ok(())
     }
@@ -208,6 +242,13 @@ impl VideoRepository for SqliteVideoRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| {
+                tracing::error!(
+                    playlist_id = %video.playlist_id,
+                    video_id = %video.video_id,
+                    "database lock poisoned"
+                )
+            })
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
             "UPDATE videos SET title = ?3, status = ?4, quality = ?5, filename = ?6, updated_at = ?7
@@ -222,6 +263,14 @@ impl VideoRepository for SqliteVideoRepository {
                 video.updated_at.to_rfc3339(),
             ],
         )
+        .inspect_err(|e| {
+            tracing::error!(
+                playlist_id = %video.playlist_id,
+                video_id = %video.video_id,
+                error = %e,
+                "failed to update video"
+            )
+        })
         .context("failed to update video")?;
         Ok(())
     }
@@ -230,11 +279,15 @@ impl VideoRepository for SqliteVideoRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| tracing::error!(playlist_id = %playlist_id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
             "DELETE FROM videos WHERE playlist_id = ?1",
             params![playlist_id.as_str()],
         )
+        .inspect_err(|e| {
+            tracing::error!(playlist_id = %playlist_id, error = %e, "failed to delete videos for playlist")
+        })
         .context("failed to delete videos for playlist")?;
         Ok(())
     }

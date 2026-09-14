@@ -85,6 +85,7 @@ impl SqliteTaskRepository {
         {
             let guard = conn
                 .lock()
+                .inspect_err(|_| tracing::error!("database lock poisoned"))
                 .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
             guard
                 .execute(
@@ -101,6 +102,7 @@ impl SqliteTaskRepository {
                     )",
                     [],
                 )
+                .inspect_err(|e| tracing::error!(error = %e, "failed to create tasks table"))
                 .context("failed to create tasks table")?;
             guard
                 .execute(
@@ -116,6 +118,9 @@ impl SqliteTaskRepository {
                     )",
                     [],
                 )
+                .inspect_err(
+                    |e| tracing::error!(error = %e, "failed to create tasks_dead_letter table"),
+                )
                 .context("failed to create tasks_dead_letter table")?;
         }
         Ok(Self { conn, clock })
@@ -125,15 +130,19 @@ impl SqliteTaskRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| tracing::error!("database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let query = format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE {predicate} ORDER BY id ASC");
         let mut stmt = conn
             .prepare(&query)
+            .inspect_err(|e| tracing::error!(error = %e, "failed to prepare tasks query"))
             .context("failed to prepare tasks query")?;
         let rows = stmt
             .query_map([], row_to_scheduled_task)
+            .inspect_err(|e| tracing::error!(error = %e, "failed to list tasks"))
             .context("failed to list tasks")?;
         rows.collect::<Result<Vec<_>, _>>()
+            .inspect_err(|e| tracing::error!(error = %e, "failed to read task row"))
             .context("failed to read task row")
     }
 
@@ -158,6 +167,9 @@ impl TaskRepository for SqliteTaskRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| {
+                tracing::error!(task_type = task.task_type(), "database lock poisoned")
+            })
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let now = self.clock.now().to_rfc3339();
         conn.execute(
@@ -170,6 +182,9 @@ impl TaskRepository for SqliteTaskRepository {
                 now
             ],
         )
+        .inspect_err(|e| {
+            tracing::error!(task_type = task.task_type(), error = %e, "failed to schedule task")
+        })
         .context("failed to schedule task")?;
         info!(
             task_id = conn.last_insert_rowid(),
@@ -184,19 +199,25 @@ impl TaskRepository for SqliteTaskRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| tracing::error!("database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
             .prepare(&format!(
                 "SELECT {SELECT_COLUMNS} FROM tasks WHERE status = 'pending' AND run_at <= ?1 ORDER BY id ASC"
             ))
+            .inspect_err(|e| {
+                tracing::error!(error = %e, "failed to prepare list-eligible-tasks query")
+            })
             .context("failed to prepare list-eligible-tasks query")?;
         let rows = stmt
             .query_map(
                 params![self.clock.now().to_rfc3339()],
                 row_to_scheduled_task,
             )
+            .inspect_err(|e| tracing::error!(error = %e, "failed to list eligible tasks"))
             .context("failed to list eligible tasks")?;
         rows.collect::<Result<Vec<_>, _>>()
+            .inspect_err(|e| tracing::error!(error = %e, "failed to read eligible task row"))
             .context("failed to read eligible task row")
     }
 
@@ -212,6 +233,7 @@ impl TaskRepository for SqliteTaskRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| tracing::error!(task_id = task.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
             "UPDATE tasks SET status = ?2, retries = ?3, run_at = ?4, updated_at = ?5, last_error = ?6 WHERE id = ?1",
@@ -224,6 +246,7 @@ impl TaskRepository for SqliteTaskRepository {
                 task.last_error,
             ],
         )
+        .inspect_err(|e| tracing::error!(task_id = task.id, error = %e, "failed to update task"))
         .context("failed to update task")?;
         Ok(())
     }
@@ -232,8 +255,10 @@ impl TaskRepository for SqliteTaskRepository {
         let conn = self
             .conn
             .lock()
+            .inspect_err(|_| tracing::error!(task_id = id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])
+            .inspect_err(|e| tracing::error!(task_id = id, error = %e, "failed to delete task"))
             .context("failed to delete task")?;
         Ok(())
     }
@@ -242,9 +267,19 @@ impl TaskRepository for SqliteTaskRepository {
         let mut conn = self
             .conn
             .lock()
+            .inspect_err(|_| {
+                tracing::error!(task_id = task.original_task_id, "database lock poisoned")
+            })
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let tx = conn
             .transaction()
+            .inspect_err(|e| {
+                tracing::error!(
+                    task_id = task.original_task_id,
+                    error = %e,
+                    "failed to start dead-letter transaction"
+                )
+            })
             .context("failed to start dead-letter transaction")?;
         tx.execute(
             "INSERT INTO tasks_dead_letter (original_task_id, task_type, payload, retries, last_error, created_at, failed_at)
@@ -259,13 +294,34 @@ impl TaskRepository for SqliteTaskRepository {
                 task.failed_at.to_rfc3339(),
             ],
         )
+        .inspect_err(|e| {
+            tracing::error!(
+                task_id = task.original_task_id,
+                error = %e,
+                "failed to insert task into dead letter"
+            )
+        })
         .context("failed to insert task into dead letter")?;
         tx.execute(
             "DELETE FROM tasks WHERE id = ?1",
             params![task.original_task_id],
         )
+        .inspect_err(|e| {
+            tracing::error!(
+                task_id = task.original_task_id,
+                error = %e,
+                "failed to delete task after moving to dead letter"
+            )
+        })
         .context("failed to delete task after moving to dead letter")?;
         tx.commit()
+            .inspect_err(|e| {
+                tracing::error!(
+                    task_id = task.original_task_id,
+                    error = %e,
+                    "failed to commit dead-letter transaction"
+                )
+            })
             .context("failed to commit dead-letter transaction")?;
         Ok(())
     }

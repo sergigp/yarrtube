@@ -63,16 +63,21 @@ impl YoutubeVideoRepository for YoutubeApiVideoRepository {
                 ("key", self.api_key.as_str()),
             ])
             .send()
+            .inspect_err(|_| tracing::error!(video_id = %id, "YouTube API request failed"))
             .context("YouTube API request failed")?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().unwrap_or_default();
+            tracing::error!(video_id = %id, status = %status, "YouTube API request failed");
             anyhow::bail!("YouTube API request failed with status {status}: {body}");
         }
 
         let parsed: VideosResponse = response
             .json()
+            .inspect_err(|e| {
+                tracing::error!(video_id = %id, error = %e, "failed to parse YouTube API response")
+            })
             .context("failed to parse YouTube API response")?;
 
         Ok(parsed.items.into_iter().next().map(|item| YoutubeVideo {
