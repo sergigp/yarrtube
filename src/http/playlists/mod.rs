@@ -103,7 +103,7 @@ pub async fn reconcile_playlist(State(state): State<AppState>, Path(id): Path<St
     };
 
     let result =
-        tokio::task::spawn_blocking(move || state.video_service.reconcile_playlist(id)).await;
+        tokio::task::spawn_blocking(move || state.video_service.force_reconcile_playlist(id)).await;
 
     match result {
         Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
@@ -1037,7 +1037,79 @@ mod tests {
         assert_eq!(stored.len(), 1);
         assert_eq!(stored[0].video_id.as_str(), "vid1");
         drop(stored);
-        assert_eq!(task_repository.scheduled.lock().unwrap().len(), 1);
+        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn it_should_not_schedule_any_task_when_reconciling_repeatedly_on_demand() {
+        use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+
+        let repository = FakePlaylistRepository::default();
+        repository
+            .insert(&crate::domain::playlist::Playlist::create(
+                PlaylistId::new("PL1").unwrap(),
+                crate::domain::playlist::PlaylistName::new("My Playlist").unwrap(),
+                crate::domain::playlist::PlaylistPath::new("music/chill").unwrap(),
+                Quality::High,
+                crate::domain::playlist::PlaylistKind::YoutubeLinked,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let (router, _video_repository, task_repository) = test_router_for_reconcile(
+            repository,
+            FakeYoutubePlaylistItemsRepository::default(),
+            FakeVideoFileRepository::default(),
+        );
+
+        router
+            .clone()
+            .oneshot(reconcile_request("PL1"))
+            .await
+            .unwrap();
+        router
+            .clone()
+            .oneshot(reconcile_request("PL1"))
+            .await
+            .unwrap();
+        router.oneshot(reconcile_request("PL1")).await.unwrap();
+
+        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn it_should_leave_an_existing_pending_reconcile_task_untouched() {
+        use crate::domain::task::Task;
+        use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+        use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
+
+        let repository = FakePlaylistRepository::default();
+        repository
+            .insert(&crate::domain::playlist::Playlist::create(
+                PlaylistId::new("PL1").unwrap(),
+                crate::domain::playlist::PlaylistName::new("My Playlist").unwrap(),
+                crate::domain::playlist::PlaylistPath::new("music/chill").unwrap(),
+                Quality::High,
+                crate::domain::playlist::PlaylistKind::YoutubeLinked,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let (router, _video_repository, task_repository) = test_router_for_reconcile(
+            repository,
+            FakeYoutubePlaylistItemsRepository::default(),
+            FakeVideoFileRepository::default(),
+        );
+        let existing_task = Task::ReconcilePlaylist {
+            playlist_id: "PL1".to_string(),
+        };
+        let existing_run_at = fixed_timestamp() + chrono::Duration::seconds(1800);
+        task_repository
+            .schedule(&existing_task, existing_run_at)
+            .unwrap();
+
+        router.oneshot(reconcile_request("PL1")).await.unwrap();
+
+        let scheduled = task_repository.scheduled.lock().unwrap();
+        assert_eq!(*scheduled, vec![(existing_task, existing_run_at)]);
     }
 
     #[tokio::test]
@@ -1068,7 +1140,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
         assert!(video_repository.videos.lock().unwrap().is_empty());
-        assert_eq!(task_repository.scheduled.lock().unwrap().len(), 1);
+        assert!(task_repository.scheduled.lock().unwrap().is_empty());
     }
 
     #[tokio::test]
