@@ -20,6 +20,12 @@ pub enum DomainEvent {
         filename: Option<String>,
         was_downloaded: bool,
     },
+    ChannelCreated {
+        channel_id: String,
+    },
+    ChannelDeleted {
+        channel_id: String,
+    },
 }
 
 impl DomainEvent {
@@ -29,6 +35,8 @@ impl DomainEvent {
             Self::PlaylistDeleted { .. } => "playlist_deleted",
             Self::VideoAdded { .. } => "video_added",
             Self::VideoDeleted { .. } => "video_deleted",
+            Self::ChannelCreated { .. } => "channel_created",
+            Self::ChannelDeleted { .. } => "channel_deleted",
         }
     }
 
@@ -59,6 +67,8 @@ impl DomainEvent {
                 "filename": filename,
                 "was_downloaded": was_downloaded,
             }),
+            Self::ChannelCreated { channel_id } => json!({ "channel_id": channel_id }),
+            Self::ChannelDeleted { channel_id } => json!({ "channel_id": channel_id }),
         }
     }
 }
@@ -148,5 +158,25 @@ mod tests {
                 "was_downloaded": false,
             })
         );
+    }
+
+    #[test]
+    fn it_should_map_channel_created_to_a_stable_type_and_payload() {
+        let event = DomainEvent::ChannelCreated {
+            channel_id: "@somechannel".to_string(),
+        };
+
+        assert_eq!(event.event_type(), "channel_created");
+        assert_eq!(event.payload(), json!({ "channel_id": "@somechannel" }));
+    }
+
+    #[test]
+    fn it_should_map_channel_deleted_to_a_stable_type_and_payload() {
+        let event = DomainEvent::ChannelDeleted {
+            channel_id: "@somechannel".to_string(),
+        };
+
+        assert_eq!(event.event_type(), "channel_deleted");
+        assert_eq!(event.payload(), json!({ "channel_id": "@somechannel" }));
     }
 }

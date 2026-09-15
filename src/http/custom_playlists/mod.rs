@@ -227,6 +227,12 @@ mod tests {
             task_service: crate::domain::task::TaskService::new(Arc::new(
                 FakeTaskRepository::default(),
             )),
+            channel_service: crate::domain::channel::ChannelService::new(
+                Arc::new(crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository::default()),
+                Arc::new(crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository { resolved: None }),
+                event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
+                Arc::new(FixedClock(fixed_timestamp())),
+            ),
         };
         let inner = Router::new()
             .route("/custom-playlists", post(create_custom_playlist))

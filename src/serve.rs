@@ -1,4 +1,5 @@
 use crate::cli::ytdlp_update;
+use crate::domain::channel::ChannelService;
 use crate::domain::playlist::PlaylistService;
 use crate::domain::task::{Task, TaskService};
 use crate::domain::video::VideoService;
@@ -6,6 +7,7 @@ use crate::http::{self, AppState};
 use crate::infrastructure::client::ytdlp_updater::RealYtdlpUpdater;
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
 use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
+use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::{
     PlaylistRepository, SqlitePlaylistRepository,
 };
@@ -14,6 +16,7 @@ use crate::infrastructure::repositories::sqlite_task_repository::{
 };
 use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
 use crate::infrastructure::repositories::task_executor::TaskExecutor;
+use crate::infrastructure::repositories::youtube_channel_repository::YoutubeApiChannelRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubeApiPlaylistItemsRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
@@ -145,12 +148,23 @@ fn build_application() -> Result<Application> {
             .context("failed to initialize video repository")?,
     );
 
+    let channel_repository = Arc::new(
+        SqliteChannelRepository::new(open_connection()?)
+            .context("failed to initialize channel repository")?,
+    );
+
     let task_service = TaskService::new(task_repository.clone() as Arc<dyn TaskRepository>);
 
     let playlist_service = PlaylistService::new(
         playlist_repository.clone(),
         video_repository.clone(),
         Arc::new(YoutubeApiPlaylistRepository::new(youtube_api_key())),
+        event_publisher.clone() as Arc<dyn EventPublisher>,
+        Arc::new(SystemClock),
+    );
+    let channel_service = ChannelService::new(
+        channel_repository,
+        Arc::new(YoutubeApiChannelRepository::new(youtube_api_key())),
         event_publisher.clone() as Arc<dyn EventPublisher>,
         Arc::new(SystemClock),
     );
@@ -208,6 +222,7 @@ fn build_application() -> Result<Application> {
             playlist_service,
             video_service,
             task_service,
+            channel_service,
         },
         event_consumer,
         task_executor,

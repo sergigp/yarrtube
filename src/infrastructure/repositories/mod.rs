@@ -1,11 +1,13 @@
 pub mod domain_events_consumer;
 pub mod event_subscriber;
 pub mod filesystem_video_file_repository;
+pub mod sqlite_channel_repository;
 pub mod sqlite_playlist_repository;
 pub mod sqlite_task_repository;
 pub mod sqlite_video_repository;
 pub mod task_executor;
 pub mod task_handler;
+pub mod youtube_channel_repository;
 pub mod youtube_playlist_items_repository;
 pub mod youtube_playlist_repository;
 pub mod youtube_video_downloader_repository;
