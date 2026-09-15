@@ -11,30 +11,6 @@ pub trait EventPublisher: Send + Sync {
     fn publish(&self, event: &DomainEvent) -> anyhow::Result<()>;
 }
 
-fn insert_pending_row(
-    conn: &Connection,
-    event: &DomainEvent,
-    now: DateTime<Utc>,
-) -> anyhow::Result<()> {
-    conn.execute(
-        "INSERT INTO events (event_type, payload, status, retries, created_at, updated_at, last_error)
-         VALUES (?1, ?2, 'pending', 0, ?3, ?3, NULL)",
-        params![
-            event.event_type(),
-            event.payload().to_string(),
-            now.to_rfc3339()
-        ],
-    )
-    .context("failed to insert event")?;
-    info!(
-        event_id = conn.last_insert_rowid(),
-        event_type = event.event_type(),
-        payload = %event.payload(),
-        "published event"
-    );
-    Ok(())
-}
-
 pub struct SqliteEventPublisher {
     conn: Arc<Mutex<Connection>>,
     clock: Arc<dyn Clock>,
@@ -60,6 +36,30 @@ impl EventPublisher for SqliteEventPublisher {
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         insert_pending_row(&conn, event, self.clock.now())
     }
+}
+
+fn insert_pending_row(
+    conn: &Connection,
+    event: &DomainEvent,
+    now: DateTime<Utc>,
+) -> anyhow::Result<()> {
+    conn.execute(
+        "INSERT INTO events (event_type, payload, status, retries, created_at, updated_at, last_error)
+         VALUES (?1, ?2, 'pending', 0, ?3, ?3, NULL)",
+        params![
+            event.event_type(),
+            event.payload().to_string(),
+            now.to_rfc3339()
+        ],
+    )
+    .context("failed to insert event")?;
+    info!(
+        event_id = conn.last_insert_rowid(),
+        event_type = event.event_type(),
+        payload = %event.payload(),
+        "published event"
+    );
+    Ok(())
 }
 
 #[cfg(test)]

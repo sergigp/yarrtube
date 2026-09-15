@@ -35,31 +35,6 @@ impl SqliteChannelRepository {
             conn: Mutex::new(conn),
         })
     }
-
-    #[allow(clippy::too_many_arguments)]
-    fn row_to_channel(
-        id: String,
-        name: String,
-        youtube_channel_id: String,
-        quality: String,
-        video_limit: i64,
-        created_at: String,
-    ) -> anyhow::Result<Channel> {
-        let id = ChannelHandle::new(id)?;
-        let quality = Quality::new(quality)?;
-        let video_limit = VideoLimit::new(video_limit)?;
-        let created_at = DateTime::parse_from_rfc3339(&created_at)
-            .context("failed to parse stored created_at")?
-            .with_timezone(&Utc);
-        Ok(Channel::create(
-            id,
-            name,
-            youtube_channel_id,
-            quality,
-            video_limit,
-            created_at,
-        ))
-    }
 }
 
 impl ChannelRepository for SqliteChannelRepository {
@@ -168,6 +143,33 @@ impl ChannelRepository for SqliteChannelRepository {
             )
         })
         .collect()
+    }
+}
+
+impl SqliteChannelRepository {
+    #[allow(clippy::too_many_arguments)]
+    fn row_to_channel(
+        id: String,
+        name: String,
+        youtube_channel_id: String,
+        quality: String,
+        video_limit: i64,
+        created_at: String,
+    ) -> anyhow::Result<Channel> {
+        let id = ChannelHandle::new(id)?;
+        let quality = Quality::new(quality)?;
+        let video_limit = VideoLimit::new(video_limit)?;
+        let created_at = DateTime::parse_from_rfc3339(&created_at)
+            .context("failed to parse stored created_at")?
+            .with_timezone(&Utc);
+        Ok(Channel::create(
+            id,
+            name,
+            youtube_channel_id,
+            quality,
+            video_limit,
+            created_at,
+        ))
     }
 }
 

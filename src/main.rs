@@ -1,13 +1,10 @@
-mod cli;
+mod application;
 mod domain;
-mod http;
 mod infrastructure;
 mod serve;
-mod subscribers;
-mod tasks;
 
+use application::cli::{Cli, Commands};
 use clap::Parser;
-use cli::{Cli, Commands};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -16,6 +13,6 @@ fn main() -> ExitCode {
 
     match cli.command {
         Commands::Serve => serve::run(),
-        Commands::UpdateYtdlp => cli::ytdlp_update::run(),
+        Commands::UpdateYtdlp => application::cli::update_ytdlp::run(),
     }
 }

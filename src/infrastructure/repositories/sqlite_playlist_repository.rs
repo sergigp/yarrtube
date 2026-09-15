@@ -35,26 +35,6 @@ impl SqlitePlaylistRepository {
             conn: Mutex::new(conn),
         })
     }
-
-    #[allow(clippy::too_many_arguments)]
-    fn row_to_playlist(
-        id: String,
-        name: String,
-        path: String,
-        quality: String,
-        kind: String,
-        created_at: String,
-    ) -> anyhow::Result<Playlist> {
-        let id = PlaylistId::new(id)?;
-        let name = PlaylistName::new(name)?;
-        let path = PlaylistPath::new(path)?;
-        let quality = Quality::new(quality)?;
-        let kind = PlaylistKind::new(kind)?;
-        let created_at = DateTime::parse_from_rfc3339(&created_at)
-            .context("failed to parse stored created_at")?
-            .with_timezone(&Utc);
-        Ok(Playlist::create(id, name, path, quality, kind, created_at))
-    }
 }
 
 impl PlaylistRepository for SqlitePlaylistRepository {
@@ -156,6 +136,28 @@ impl PlaylistRepository for SqlitePlaylistRepository {
             Self::row_to_playlist(id, name, path, quality, kind, created_at)
         })
         .collect()
+    }
+}
+
+impl SqlitePlaylistRepository {
+    #[allow(clippy::too_many_arguments)]
+    fn row_to_playlist(
+        id: String,
+        name: String,
+        path: String,
+        quality: String,
+        kind: String,
+        created_at: String,
+    ) -> anyhow::Result<Playlist> {
+        let id = PlaylistId::new(id)?;
+        let name = PlaylistName::new(name)?;
+        let path = PlaylistPath::new(path)?;
+        let quality = Quality::new(quality)?;
+        let kind = PlaylistKind::new(kind)?;
+        let created_at = DateTime::parse_from_rfc3339(&created_at)
+            .context("failed to parse stored created_at")?
+            .with_timezone(&Utc);
+        Ok(Playlist::create(id, name, path, quality, kind, created_at))
     }
 }
 

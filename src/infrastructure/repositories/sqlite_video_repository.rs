@@ -54,35 +54,6 @@ impl SqliteVideoRepository {
             conn: Mutex::new(conn),
         })
     }
-
-    #[allow(clippy::too_many_arguments)]
-    fn row_to_video(
-        playlist_id: String,
-        video_id: String,
-        title: String,
-        status: String,
-        quality: Option<String>,
-        filename: Option<String>,
-        position: Option<i64>,
-        created_at: String,
-        updated_at: String,
-    ) -> anyhow::Result<Video> {
-        Ok(Video {
-            playlist_id: PlaylistId::new(playlist_id)?,
-            video_id: VideoId::new(video_id)?,
-            title,
-            status: VideoStatus::parse(&status)?,
-            quality: quality.map(Quality::new).transpose()?,
-            filename,
-            position,
-            created_at: DateTime::parse_from_rfc3339(&created_at)
-                .context("failed to parse stored created_at")?
-                .with_timezone(&Utc),
-            updated_at: DateTime::parse_from_rfc3339(&updated_at)
-                .context("failed to parse stored updated_at")?
-                .with_timezone(&Utc),
-        })
-    }
 }
 
 impl VideoRepository for SqliteVideoRepository {
@@ -316,6 +287,37 @@ impl VideoRepository for SqliteVideoRepository {
         })
         .context("failed to delete videos for playlist")?;
         Ok(())
+    }
+}
+
+impl SqliteVideoRepository {
+    #[allow(clippy::too_many_arguments)]
+    fn row_to_video(
+        playlist_id: String,
+        video_id: String,
+        title: String,
+        status: String,
+        quality: Option<String>,
+        filename: Option<String>,
+        position: Option<i64>,
+        created_at: String,
+        updated_at: String,
+    ) -> anyhow::Result<Video> {
+        Ok(Video {
+            playlist_id: PlaylistId::new(playlist_id)?,
+            video_id: VideoId::new(video_id)?,
+            title,
+            status: VideoStatus::parse(&status)?,
+            quality: quality.map(Quality::new).transpose()?,
+            filename,
+            position,
+            created_at: DateTime::parse_from_rfc3339(&created_at)
+                .context("failed to parse stored created_at")?
+                .with_timezone(&Utc),
+            updated_at: DateTime::parse_from_rfc3339(&updated_at)
+                .context("failed to parse stored updated_at")?
+                .with_timezone(&Utc),
+        })
     }
 }
 

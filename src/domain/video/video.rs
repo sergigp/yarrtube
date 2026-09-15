@@ -36,7 +36,7 @@ impl Video {
     }
 
     /// Creates a video discovered in a YouTube-linked playlist, recording its
-    /// current position in that playlist (see `VideoService::sync_playlist_membership`).
+    /// current position in that playlist (see `VideoReconciler::sync_playlist_membership`).
     pub fn create_with_position(
         playlist_id: PlaylistId,
         video_id: VideoId,
