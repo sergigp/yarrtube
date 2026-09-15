@@ -159,16 +159,23 @@ mod tests {
     use super::*;
     use crate::domain::event::DomainEvent;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
+    use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::Quality;
     use crate::domain::video::Video;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         FakePlaylistRepository, PlaylistRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+        FakePlaylistVideoRepository, PlaylistVideoRepository,
     };
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         FakeVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
 
@@ -193,8 +200,13 @@ mod tests {
         playlist_repository: Arc<FakePlaylistRepository>,
         video_repository: Arc<FakeVideoRepository>,
         youtube_video: Option<YoutubeVideo>,
-    ) -> (axum::Router, Arc<FakeEventPublisher>) {
+    ) -> (
+        axum::Router,
+        Arc<FakeEventPublisher>,
+        Arc<FakePlaylistVideoRepository>,
+    ) {
         let event_publisher = Arc::new(FakeEventPublisher::default());
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
         let playlist_creator = crate::domain::services::PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository { exists: true }),
@@ -204,6 +216,7 @@ mod tests {
         let playlist_deleter = crate::domain::services::PlaylistDeleter::new(
             playlist_repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
         );
         let playlist_searcher =
@@ -211,6 +224,7 @@ mod tests {
         let video_reconciler = crate::domain::services::VideoReconciler::new(
             playlist_repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
             event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
             Arc::new(FakeTaskRepository::default()),
@@ -222,6 +236,7 @@ mod tests {
         let custom_playlist_video_adder = crate::domain::services::CustomPlaylistVideoAdder::new(
             playlist_repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             Arc::new(FakeYoutubeVideoRepository {
                 video: youtube_video,
             }),
@@ -232,10 +247,28 @@ mod tests {
             crate::domain::services::CustomPlaylistVideoRemover::new(
                 playlist_repository.clone(),
                 video_repository.clone(),
+                playlist_video_repository.clone(),
                 event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
             );
-        let video_searcher =
-            crate::domain::services::VideoSearcher::new(playlist_repository, video_repository);
+        let video_searcher = crate::domain::services::VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository.clone(),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
+            video_repository,
+        );
+        let channel_video_reconciler = crate::domain::services::ChannelVideoReconciler::new(
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeVideoRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
+            Arc::new(FakeChannelVideosRepository::default()),
+            event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
+            Arc::new(FakeTaskRepository::default()),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        );
         let state = AppState {
             playlist_creator,
             playlist_deleter,
@@ -250,9 +283,12 @@ mod tests {
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository::default()),
                 Arc::new(crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeVideoRepository::default()),
+                Arc::new(FakeChannelVideoRepository::default()),
                 event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
                 Arc::new(FixedClock(fixed_timestamp())),
             ),
+            channel_video_reconciler,
         };
         let inner = Router::new()
             .route("/custom-playlists", post(create_custom_playlist))
@@ -263,7 +299,7 @@ mod tests {
             )
             .with_state(state);
         let router = Router::new().nest("/api", inner);
-        (router, event_publisher)
+        (router, event_publisher, playlist_video_repository)
     }
 
     async fn body_json(response: Response) -> serde_json::Value {
@@ -330,7 +366,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_201_when_creating_a_custom_playlist() {
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             Arc::new(FakePlaylistRepository::default()),
             Arc::new(FakeVideoRepository::default()),
             None,
@@ -349,7 +385,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_publish_a_playlist_created_event_on_creation() {
-        let (router, events) = test_router(
+        let (router, events, _playlist_videos) = test_router(
             Arc::new(FakePlaylistRepository::default()),
             Arc::new(FakeVideoRepository::default()),
             None,
@@ -370,7 +406,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_the_id_is_not_a_well_formed_uuid() {
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             Arc::new(FakePlaylistRepository::default()),
             Arc::new(FakeVideoRepository::default()),
             None,
@@ -390,7 +426,7 @@ mod tests {
         playlist_repository
             .insert(&custom_playlist(VALID_UUID))
             .unwrap();
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             playlist_repository,
             Arc::new(FakeVideoRepository::default()),
             None,
@@ -406,7 +442,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_the_name_is_invalid() {
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             Arc::new(FakePlaylistRepository::default()),
             Arc::new(FakeVideoRepository::default()),
             None,
@@ -422,7 +458,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_path_is_missing() {
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             Arc::new(FakePlaylistRepository::default()),
             Arc::new(FakeVideoRepository::default()),
             None,
@@ -448,7 +484,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_quality_is_invalid() {
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             Arc::new(FakePlaylistRepository::default()),
             Arc::new(FakeVideoRepository::default()),
             None,
@@ -477,7 +513,7 @@ mod tests {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository.insert(&custom_playlist("PL1")).unwrap();
         let video_repository = Arc::new(FakeVideoRepository::default());
-        let (router, events) = test_router(
+        let (router, events, _playlist_videos) = test_router(
             playlist_repository,
             video_repository.clone(),
             Some(YoutubeVideo {
@@ -495,12 +531,11 @@ mod tests {
         let stored = video_repository.videos.lock().unwrap();
         assert_eq!(stored.len(), 1);
         assert_eq!(stored[0].title, "My Video");
-        assert_eq!(stored[0].position, None);
         assert_eq!(
             *events.published.lock().unwrap(),
-            vec![DomainEvent::VideoAdded {
+            vec![DomainEvent::VideoAddedToPlaylist {
                 playlist_id: "PL1".to_string(),
-                video_id: "vid1".to_string(),
+                video_id: stored[0].id.as_str().to_string(),
             }]
         );
     }
@@ -510,7 +545,7 @@ mod tests {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository.insert(&custom_playlist("PL1")).unwrap();
         let video_repository = Arc::new(FakeVideoRepository::default());
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             playlist_repository,
             video_repository.clone(),
             Some(YoutubeVideo {
@@ -536,15 +571,7 @@ mod tests {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository.insert(&custom_playlist("PL1")).unwrap();
         let video_repository = Arc::new(FakeVideoRepository::default());
-        video_repository
-            .save(&Video::create(
-                PlaylistId::new("PL1").unwrap(),
-                crate::domain::shared::VideoId::new("vid1").unwrap(),
-                "Existing",
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let (router, events) = test_router(
+        let (router, events, playlist_video_repository) = test_router(
             playlist_repository,
             video_repository.clone(),
             Some(YoutubeVideo {
@@ -552,6 +579,20 @@ mod tests {
                 title: "My Video".to_string(),
             }),
         );
+        let existing = Video::create(
+            crate::domain::shared::VideoId::new("vid1").unwrap(),
+            "Existing",
+            fixed_timestamp(),
+        );
+        video_repository.save(&existing).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                PlaylistId::new("PL1").unwrap(),
+                existing.id.clone(),
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        playlist_video_repository.register_youtube_id(&existing.id, &existing.youtube_id);
 
         let response = router
             .oneshot(add_video_request("PL1", "vid1"))
@@ -567,7 +608,7 @@ mod tests {
     async fn it_should_return_400_when_the_video_does_not_exist_on_youtube() {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository.insert(&custom_playlist("PL1")).unwrap();
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             playlist_repository,
             Arc::new(FakeVideoRepository::default()),
             None,
@@ -585,7 +626,7 @@ mod tests {
     async fn it_should_return_400_when_the_video_value_is_malformed() {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository.insert(&custom_playlist("PL1")).unwrap();
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             playlist_repository,
             Arc::new(FakeVideoRepository::default()),
             None,
@@ -601,7 +642,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_the_target_playlist_does_not_exist_for_add() {
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             Arc::new(FakePlaylistRepository::default()),
             Arc::new(FakeVideoRepository::default()),
             Some(YoutubeVideo {
@@ -624,7 +665,7 @@ mod tests {
         playlist_repository
             .insert(&youtube_linked_playlist("PL1"))
             .unwrap();
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             playlist_repository,
             Arc::new(FakeVideoRepository::default()),
             Some(YoutubeVideo {
@@ -646,15 +687,22 @@ mod tests {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository.insert(&custom_playlist("PL1")).unwrap();
         let video_repository = Arc::new(FakeVideoRepository::default());
-        video_repository
-            .save(&Video::create(
+        let (router, events, playlist_video_repository) =
+            test_router(playlist_repository, video_repository.clone(), None);
+        let existing = Video::create(
+            crate::domain::shared::VideoId::new("vid1").unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        );
+        video_repository.save(&existing).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
-                crate::domain::shared::VideoId::new("vid1").unwrap(),
-                "My Video",
+                existing.id.clone(),
                 fixed_timestamp(),
             ))
             .unwrap();
-        let (router, events) = test_router(playlist_repository, video_repository.clone(), None);
+        playlist_video_repository.register_youtube_id(&existing.id, &existing.youtube_id);
 
         let response = router
             .oneshot(remove_video_request("PL1", "vid1"))
@@ -665,9 +713,9 @@ mod tests {
         assert!(video_repository.videos.lock().unwrap().is_empty());
         assert_eq!(
             *events.published.lock().unwrap(),
-            vec![DomainEvent::VideoDeleted {
+            vec![DomainEvent::VideoRemovedFromPlaylist {
                 playlist_id: "PL1".to_string(),
-                video_id: "vid1".to_string(),
+                video_id: existing.id.as_str().to_string(),
                 title: "My Video".to_string(),
                 filename: None,
                 was_downloaded: false,
@@ -679,7 +727,7 @@ mod tests {
     async fn it_should_return_400_when_the_video_is_not_a_member_for_removal() {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository.insert(&custom_playlist("PL1")).unwrap();
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             playlist_repository,
             Arc::new(FakeVideoRepository::default()),
             None,
@@ -695,7 +743,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_the_target_playlist_does_not_exist_for_removal() {
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             Arc::new(FakePlaylistRepository::default()),
             Arc::new(FakeVideoRepository::default()),
             None,
@@ -715,7 +763,7 @@ mod tests {
         playlist_repository
             .insert(&youtube_linked_playlist("PL1"))
             .unwrap();
-        let (router, _events) = test_router(
+        let (router, _events, _playlist_videos) = test_router(
             playlist_repository,
             Arc::new(FakeVideoRepository::default()),
             None,

@@ -2,23 +2,29 @@ use crate::application::http::{self, AppState};
 use crate::application::{subscribers, tasks};
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
-    CustomPlaylistVideoAdder, CustomPlaylistVideoRemover, PlaylistCreator, PlaylistDeleter,
-    PlaylistSearcher, VideoDownloader, VideoFileDeleter, VideoReconciler, VideoSearcher,
+    ChannelVideoReconciler, CustomPlaylistVideoAdder, CustomPlaylistVideoRemover, PlaylistCreator,
+    PlaylistDeleter, PlaylistSearcher, VideoDownloader, VideoFileDeleter, VideoReconciler,
+    VideoSearcher,
 };
 use crate::domain::task::{Task, TaskService};
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
 use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
-use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
+use crate::infrastructure::repositories::sqlite_channel_repository::{
+    ChannelRepository, SqliteChannelRepository,
+};
+use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::{
     PlaylistRepository, SqlitePlaylistRepository,
 };
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
 };
 use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
 use crate::infrastructure::repositories::task_executor::TaskExecutor;
 use crate::infrastructure::repositories::youtube_channel_repository::YoutubeApiChannelRepository;
+use crate::infrastructure::repositories::youtube_channel_videos_repository::YtDlpChannelVideosRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubeApiPlaylistItemsRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
@@ -149,9 +155,18 @@ fn build_application() -> Result<Application> {
             .context("failed to initialize video repository")?,
     );
 
-    let channel_repository = Arc::new(
+    let channel_repository: Arc<dyn ChannelRepository> = Arc::new(
         SqliteChannelRepository::new(open_connection()?)
             .context("failed to initialize channel repository")?,
+    );
+
+    let playlist_video_repository = Arc::new(
+        SqlitePlaylistVideoRepository::new(open_connection()?)
+            .context("failed to initialize playlist video repository")?,
+    );
+    let channel_video_repository = Arc::new(
+        SqliteChannelVideoRepository::new(open_connection()?)
+            .context("failed to initialize channel video repository")?,
     );
 
     let task_service = TaskService::new(task_repository.clone() as Arc<dyn TaskRepository>);
@@ -165,12 +180,15 @@ fn build_application() -> Result<Application> {
     let playlist_deleter = PlaylistDeleter::new(
         playlist_repository.clone(),
         video_repository.clone(),
+        playlist_video_repository.clone(),
         event_publisher.clone() as Arc<dyn EventPublisher>,
     );
     let playlist_searcher = PlaylistSearcher::new(playlist_repository.clone());
     let channel_service = ChannelService::new(
-        channel_repository,
+        channel_repository.clone(),
         Arc::new(YoutubeApiChannelRepository::new(youtube_api_key())),
+        video_repository.clone(),
+        channel_video_repository.clone(),
         event_publisher.clone() as Arc<dyn EventPublisher>,
         Arc::new(SystemClock),
     );
@@ -181,6 +199,7 @@ fn build_application() -> Result<Application> {
     let video_reconciler = VideoReconciler::new(
         playlist_repository.clone(),
         video_repository.clone(),
+        playlist_video_repository.clone(),
         Arc::new(YoutubeApiPlaylistItemsRepository::new(youtube_api_key())),
         event_publisher.clone(),
         task_repository.clone(),
@@ -189,21 +208,28 @@ fn build_application() -> Result<Application> {
         reconcile_interval_seconds(),
         videos_path(),
     );
+    let channel_video_reconciler = ChannelVideoReconciler::new(
+        channel_repository.clone(),
+        video_repository.clone(),
+        channel_video_repository.clone(),
+        Arc::new(YtDlpChannelVideosRepository::new(target_path())),
+        event_publisher.clone(),
+        task_repository.clone(),
+        video_file_repository.clone(),
+        Arc::new(SystemClock),
+        reconcile_interval_seconds(),
+        videos_path(),
+    );
     let video_downloader = VideoDownloader::new(
-        playlist_repository.clone(),
         video_repository.clone(),
         Arc::new(YtDlpVideoDownloaderRepository::new(target_path())),
         Arc::new(SystemClock),
-        videos_path(),
     );
-    let video_file_deleter = VideoFileDeleter::new(
-        playlist_repository.clone(),
-        video_file_repository,
-        videos_path(),
-    );
+    let video_file_deleter = VideoFileDeleter::new(video_file_repository, videos_path());
     let custom_playlist_video_adder = CustomPlaylistVideoAdder::new(
         playlist_repository.clone(),
         video_repository.clone(),
+        playlist_video_repository.clone(),
         Arc::new(YoutubeApiVideoRepository::new(youtube_api_key())),
         event_publisher.clone(),
         Arc::new(SystemClock),
@@ -211,17 +237,27 @@ fn build_application() -> Result<Application> {
     let custom_playlist_video_remover = CustomPlaylistVideoRemover::new(
         playlist_repository.clone(),
         video_repository.clone(),
+        playlist_video_repository.clone(),
         event_publisher.clone(),
     );
-    let video_searcher = VideoSearcher::new(playlist_repository.clone(), video_repository);
+    let video_searcher = VideoSearcher::new(
+        playlist_repository.clone(),
+        playlist_video_repository,
+        channel_repository.clone(),
+        channel_video_repository.clone(),
+        video_repository,
+    );
 
     let event_consumer = Arc::new(DomainEventsConsumer::new(
         event_repository as Arc<dyn EventRepository>,
         subscribers::registry(
             video_reconciler.clone(),
+            channel_video_reconciler.clone(),
             playlist_repository,
+            channel_repository,
             task_repository.clone(),
             Arc::new(SystemClock),
+            videos_path(),
         ),
         Arc::new(SystemClock),
     ));
@@ -229,6 +265,7 @@ fn build_application() -> Result<Application> {
         task_repository.clone(),
         tasks::registry(
             video_reconciler.clone(),
+            channel_video_reconciler.clone(),
             video_downloader.clone(),
             video_file_deleter.clone(),
             task_repository.clone(),
@@ -260,6 +297,7 @@ fn build_application() -> Result<Application> {
             video_searcher,
             task_service,
             channel_service,
+            channel_video_reconciler,
         },
         event_consumer,
         task_executor,
@@ -435,6 +473,26 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(bytes.as_ref(), b"fake video bytes");
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_should_serve_a_channel_owned_videos_file_under_its_nested_storage_path() {
+        // The `/media` mount is container-agnostic: a channel's storage path
+        // (e.g. "creators/somechannel", see `Channel.path`) is served the
+        // same way a playlist's is, since both are just subdirectories under
+        // the configured videos root.
+        let root = unique_temp_dir("channel-owned-file");
+        let channel_dir = root.join("creators/somechannel");
+        std::fs::create_dir_all(&channel_dir).unwrap();
+        std::fs::write(channel_dir.join("video.mp4"), b"fake channel video bytes").unwrap();
+
+        let response = get(media_router(&root), "/media/creators/somechannel/video.mp4").await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(bytes.as_ref(), b"fake channel video bytes");
 
         std::fs::remove_dir_all(&root).unwrap();
     }

@@ -5,7 +5,7 @@ Serves the file content of downloaded videos over HTTP, directly from the same d
 ## Requirements
 
 ### Requirement: Serve Downloaded Video File Content
-The system SHALL make a downloaded video's file content retrievable over HTTP, at a URL derived from its playlist's storage path and its recorded filename, without requiring authentication.
+The system SHALL make a downloaded video's file content retrievable over HTTP, at a URL derived from its owning playlist's or channel's storage path and its recorded filename, without requiring authentication.
 
 #### Scenario: Requesting a downloaded video's file
 - **WHEN** a client requests the media URL of a video that has completed downloading

@@ -1,5 +1,6 @@
 use super::channel_handle::ChannelHandle;
 use super::video_limit::VideoLimit;
+use crate::domain::playlist::PlaylistPath;
 use crate::domain::shared::Quality;
 use chrono::{DateTime, Utc};
 
@@ -10,16 +11,19 @@ pub struct Channel {
     pub youtube_channel_id: String,
     pub quality: Quality,
     pub video_limit: VideoLimit,
+    pub path: PlaylistPath,
     pub created_at: DateTime<Utc>,
 }
 
 impl Channel {
+    #[allow(clippy::too_many_arguments)]
     pub fn create(
         id: ChannelHandle,
         name: impl Into<String>,
         youtube_channel_id: impl Into<String>,
         quality: Quality,
         video_limit: VideoLimit,
+        path: PlaylistPath,
         created_at: DateTime<Utc>,
     ) -> Self {
         Self {
@@ -28,6 +32,7 @@ impl Channel {
             youtube_channel_id: youtube_channel_id.into(),
             quality,
             video_limit,
+            path,
             created_at,
         }
     }
@@ -42,6 +47,7 @@ mod tests {
         let id = ChannelHandle::new("@somechannel").unwrap();
         let quality = Quality::High;
         let video_limit = VideoLimit::new(10).unwrap();
+        let path = PlaylistPath::new("creators/somechannel").unwrap();
         let created_at = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
 
         let channel = Channel::create(
@@ -50,6 +56,7 @@ mod tests {
             "UC123",
             quality,
             video_limit,
+            path.clone(),
             created_at,
         );
 
@@ -58,6 +65,7 @@ mod tests {
         assert_eq!(channel.youtube_channel_id, "UC123");
         assert_eq!(channel.quality, quality);
         assert_eq!(channel.video_limit, video_limit);
+        assert_eq!(channel.path, path);
         assert_eq!(channel.created_at, created_at);
     }
 }

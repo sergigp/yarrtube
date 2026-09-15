@@ -1,52 +1,34 @@
 use super::video_status::VideoStatus;
-use crate::domain::shared::{PlaylistId, Quality, VideoId};
+use crate::domain::shared::{Quality, VideoId, VideoRecordId};
 use chrono::{DateTime, Utc};
 
+/// A downloaded (or to-be-downloaded) video's own record: its download
+/// state, independent of any container. Container membership — which
+/// playlist(s) or channel(s) this video belongs to, and its position within
+/// each — is recorded separately by `PlaylistVideo`/`ChannelVideo`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Video {
-    pub playlist_id: PlaylistId,
-    pub video_id: VideoId,
+    pub id: VideoRecordId,
+    pub youtube_id: VideoId,
     pub title: String,
     pub status: VideoStatus,
     pub quality: Option<Quality>,
     pub filename: Option<String>,
-    pub position: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
 impl Video {
-    pub fn create(
-        playlist_id: PlaylistId,
-        video_id: VideoId,
-        title: impl Into<String>,
-        now: DateTime<Utc>,
-    ) -> Self {
+    pub fn create(youtube_id: VideoId, title: impl Into<String>, now: DateTime<Utc>) -> Self {
         Self {
-            playlist_id,
-            video_id,
+            id: VideoRecordId::new_generated(),
+            youtube_id,
             title: title.into(),
             status: VideoStatus::Pending,
             quality: None,
             filename: None,
-            position: None,
             created_at: now,
             updated_at: now,
-        }
-    }
-
-    /// Creates a video discovered in a YouTube-linked playlist, recording its
-    /// current position in that playlist (see `VideoReconciler::sync_playlist_membership`).
-    pub fn create_with_position(
-        playlist_id: PlaylistId,
-        video_id: VideoId,
-        title: impl Into<String>,
-        position: i64,
-        now: DateTime<Utc>,
-    ) -> Self {
-        Self {
-            position: Some(position),
-            ..Self::create(playlist_id, video_id, title, now)
         }
     }
 
@@ -113,40 +95,28 @@ mod tests {
     fn it_should_build_a_pending_video() {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
 
-        let video = Video::create(
-            PlaylistId::new("PL1").unwrap(),
-            VideoId::new("vid1").unwrap(),
-            "My Video",
-            now,
-        );
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", now);
 
         assert_eq!(video.status, VideoStatus::Pending);
         assert_eq!(video.title, "My Video");
         assert_eq!(video.quality, None);
         assert_eq!(video.filename, None);
-        assert_eq!(video.position, None);
         assert_eq!(video.created_at, now);
         assert_eq!(video.updated_at, now);
     }
 
     #[test]
-    fn it_should_build_a_video_with_a_known_playlist_position() {
+    fn it_should_generate_a_distinct_surrogate_id_per_video() {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
 
-        let video = Video::create_with_position(
-            PlaylistId::new("PL1").unwrap(),
-            VideoId::new("vid1").unwrap(),
-            "My Video",
-            3,
-            now,
-        );
+        let a = Video::create(VideoId::new("vid1").unwrap(), "First", now);
+        let b = Video::create(VideoId::new("vid2").unwrap(), "Second", now);
 
-        assert_eq!(video.position, Some(3));
+        assert_ne!(a.id, b.id);
     }
 
     fn video() -> Video {
         Video::create(
-            PlaylistId::new("PL1").unwrap(),
             VideoId::new("vid1").unwrap(),
             "My Video",
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),

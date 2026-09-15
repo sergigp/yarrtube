@@ -1,11 +1,12 @@
 use crate::domain::services::VideoFileDeleter;
-use crate::domain::shared::{PlaylistId, VideoId};
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
+use std::path::Path;
 
 /// Deletes one video's downloaded file, scheduled by
-/// `subscribers::delete_video_file_on_video_deleted` whenever a downloaded
-/// video is removed from its tracked playlist.
+/// `subscribers::delete_video_file_on_video_removed_from_playlist`/
+/// `..._from_channel` whenever a downloaded video is removed from its
+/// tracked container.
 pub struct DeleteVideoFileTask {
     video_file_deleter: VideoFileDeleter,
 }
@@ -18,76 +19,33 @@ impl DeleteVideoFileTask {
 
 impl TaskHandler for DeleteVideoFileTask {
     fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let (playlist_id, video_id, _title, filename) =
-            Task::decode_delete_video_file_payload(payload)?;
-        let Ok(playlist_id) = PlaylistId::new(playlist_id) else {
-            return Ok(());
-        };
-        let Ok(video_id) = VideoId::new(video_id) else {
-            return Ok(());
-        };
+        let (filename, output_dir) = Task::decode_delete_video_file_payload(payload)?;
         self.video_file_deleter
-            .delete_video_file(playlist_id, video_id, filename)
+            .delete_video_file(filename, Path::new(&output_dir))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
-    use crate::domain::shared::Quality;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::sqlite_playlist_repository::{
-        FakePlaylistRepository, PlaylistRepository,
-    };
 
-    use chrono::{DateTime, Utc};
     use std::sync::Arc;
 
-    fn fixed_timestamp() -> DateTime<Utc> {
-        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
-    }
-
-    fn payload_for(
-        playlist_id: &str,
-        video_id: &str,
-        title: &str,
-        filename: Option<&str>,
-    ) -> String {
+    fn payload_for(filename: Option<&str>) -> String {
         Task::DeleteVideoFile {
-            playlist_id: playlist_id.to_string(),
-            video_id: video_id.to_string(),
-            title: title.to_string(),
             filename: filename.map(str::to_string),
+            output_dir: "/videos/my-playlist".to_string(),
         }
         .payload()
         .to_string()
     }
 
-    fn handler_with(
-        seed_playlist: bool,
+    fn handler(
         video_file_repository: FakeVideoFileRepository,
     ) -> (DeleteVideoFileTask, Arc<FakeVideoFileRepository>) {
-        let playlist_repository = Arc::new(FakePlaylistRepository::default());
-        if seed_playlist {
-            playlist_repository
-                .insert(&Playlist::create(
-                    PlaylistId::new("PL1").unwrap(),
-                    PlaylistName::new("My Playlist").unwrap(),
-                    PlaylistPath::new("my-playlist").unwrap(),
-                    Quality::High,
-                    PlaylistKind::YoutubeLinked,
-                    fixed_timestamp(),
-                ))
-                .unwrap();
-        }
         let video_file_repository = Arc::new(video_file_repository);
-
-        let video_file_deleter = VideoFileDeleter::new(
-            playlist_repository,
-            video_file_repository.clone(),
-            "/videos",
-        );
+        let video_file_deleter = VideoFileDeleter::new(video_file_repository.clone(), "/videos");
 
         (
             DeleteVideoFileTask::new(video_file_deleter),
@@ -97,14 +55,10 @@ mod tests {
 
     #[test]
     fn it_should_delete_the_video_file() {
-        let (handler, video_file_repository) =
-            handler_with(true, FakeVideoFileRepository::new(Ok(true)));
+        let (handler, video_file_repository) = handler(FakeVideoFileRepository::new(Ok(true)));
 
         handler
-            .handle(
-                &payload_for("PL1", "vid1", "My Video", Some("My Video.mp4")),
-                false,
-            )
+            .handle(&payload_for(Some("My Video.mp4")), false)
             .unwrap();
 
         assert_eq!(video_file_repository.deleted_calls.lock().unwrap().len(), 1);
@@ -112,33 +66,9 @@ mod tests {
 
     #[test]
     fn it_should_no_op_when_the_video_has_no_recorded_filename() {
-        let (handler, video_file_repository) =
-            handler_with(true, FakeVideoFileRepository::new(Ok(true)));
+        let (handler, video_file_repository) = handler(FakeVideoFileRepository::new(Ok(true)));
 
-        handler
-            .handle(&payload_for("PL1", "vid1", "My Video", None), false)
-            .unwrap();
-
-        assert!(
-            video_file_repository
-                .deleted_calls
-                .lock()
-                .unwrap()
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn it_should_no_op_when_the_payload_ids_are_invalid() {
-        let (handler, video_file_repository) =
-            handler_with(true, FakeVideoFileRepository::new(Ok(true)));
-
-        handler
-            .handle(
-                &payload_for("", "vid1", "My Video", Some("My Video.mp4")),
-                false,
-            )
-            .unwrap();
+        handler.handle(&payload_for(None), false).unwrap();
 
         assert!(
             video_file_repository
@@ -151,41 +81,16 @@ mod tests {
 
     #[test]
     fn it_should_reject_a_malformed_payload() {
-        let (handler, _video_file_repository) =
-            handler_with(true, FakeVideoFileRepository::new(Ok(true)));
+        let (handler, _video_file_repository) = handler(FakeVideoFileRepository::new(Ok(true)));
 
         assert!(handler.handle("not json", false).is_err());
     }
 
     #[test]
-    fn it_should_no_op_when_the_playlist_no_longer_exists() {
-        let (handler, video_file_repository) =
-            handler_with(false, FakeVideoFileRepository::new(Ok(true)));
-
-        let result = handler.handle(
-            &payload_for("PL1", "vid1", "My Video", Some("My Video.mp4")),
-            false,
-        );
-
-        assert!(result.is_ok());
-        assert!(
-            video_file_repository
-                .deleted_calls
-                .lock()
-                .unwrap()
-                .is_empty()
-        );
-    }
-
-    #[test]
     fn it_should_no_op_when_no_matching_file_is_found() {
-        let (handler, _video_file_repository) =
-            handler_with(true, FakeVideoFileRepository::new(Ok(false)));
+        let (handler, _video_file_repository) = handler(FakeVideoFileRepository::new(Ok(false)));
 
-        let result = handler.handle(
-            &payload_for("PL1", "vid1", "My Video", Some("My Video.mp4")),
-            false,
-        );
+        let result = handler.handle(&payload_for(Some("My Video.mp4")), false);
 
         assert!(result.is_ok());
     }

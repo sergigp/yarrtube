@@ -10,9 +10,11 @@ and any new videos added to it later get downloaded on their own.
 It runs as a small Docker container meant to stay up permanently alongside
 the rest of your media stack (Plex, Jellyfin, etc.).
 
+It can also track a whole YouTube channel, keeping its most recent uploads
+(up to a configurable limit) synced the same way.
+
 **Coming soon:**
 
-- Subscribing to entire YouTube channels, not just playlists
 - A Chrome/Firefox extension to send a video to Yarrtube straight from
   YouTube
 
@@ -137,6 +139,23 @@ A YouTube-linked playlist's videos can't be added or removed manually —
 YouTube stays authoritative for that kind, so membership only ever changes
 via reconciliation against the YouTube playlist itself.
 
+## Managing tracked channels
+
+Tracking a channel keeps its `video_limit` most recent uploads synced —
+newly-uploaded videos are downloaded automatically, and videos that age out
+of that window once newer ones are uploaded are cleaned up automatically:
+
+| Method   | Path                        | Description                                                |
+| -------- | --------------------------- | ------------------------------------------------------------ |
+| `POST`   | `/api/channels`             | Track a new channel (`{"channel", "quality", "video_limit", "path"}`); `channel` is a YouTube handle (e.g. `@somechannel`) or channel URL |
+| `GET`    | `/api/channels`             | List tracked channels                                        |
+| `DELETE` | `/api/channels/:handle`     | Stop tracking a channel (also deletes its downloaded files)  |
+| `POST`   | `/api/channels/:handle/reconcile` | Run an on-demand reconcile immediately, without affecting the recurring schedule |
+| `GET`    | `/api/channels/:handle/videos`    | List the videos recorded for a channel, most recent first |
+
+A channel's `path` works exactly like a playlist's: the storage path for its
+downloads, relative to `YARRTUBE_VIDEOS_PATH`.
+
 ## Manual commands
 
 These run against an already-running container with `docker exec`, without
@@ -158,7 +177,7 @@ command):
 | `PUID`                                | `0` (root)              | Numeric user ID the daemon runs as and that owns downloaded files |
 | `PGID`                                | `0` (root)              | Numeric group ID the daemon runs as and that owns downloaded files |
 | `YARRTUBE_PORT`                       | `8080`                  | HTTP port to listen on                                    |
-| `YARRTUBE_RECONCILE_INTERVAL_SECONDS` | `3600`                  | How often each tracked playlist is reconciled (membership diff for YouTube-linked playlists, filesystem healing for every playlist) |
+| `YARRTUBE_RECONCILE_INTERVAL_SECONDS` | `3600`                  | How often each tracked playlist or channel is reconciled (membership diff for YouTube-linked playlists and channels, filesystem healing for every playlist) |
 | `YARRTUBE_DB_PATH`                    | `yarrtube.sqlite3`      | Path to the internal SQLite file (inside the container)   |
 | `YARRTUBE_VIDEOS_PATH`                | `/videos`               | Root directory downloaded videos are saved under (inside the container) |
 | `YTDLP_PATH`                          | `/app/bin/yt-dlp`       | Path to the managed `yt-dlp` binary (also the path bundled into the image at build time) |

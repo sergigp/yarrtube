@@ -79,11 +79,27 @@ export function fetchChannels() {
   return request('/channels')
 }
 
-export async function createChannel({ channel, quality, video_limit }) {
+export function fetchChannelVideos(handle) {
+  return request(`/channels/${encodeURIComponent(handle)}/videos`)
+}
+
+export async function reconcileChannel(handle) {
+  const response = await fetch(`/api/channels/${encodeURIComponent(handle)}/reconcile`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(
+      body?.error ?? `request to reconcile channel ${handle} failed with status ${response.status}`,
+    )
+  }
+}
+
+export async function createChannel({ channel, quality, video_limit, path }) {
   const response = await fetch('/api/channels', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ channel, quality, video_limit }),
+    body: JSON.stringify({ channel, quality, video_limit, path }),
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)

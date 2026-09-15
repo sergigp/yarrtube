@@ -2,7 +2,7 @@ import { usePolling } from '../usePolling'
 import { fetchChannels } from '../api'
 import { ChannelActionsMenu } from './ChannelActionsMenu'
 
-export function ChannelList() {
+export function ChannelList({ onSelect }) {
   const { data: channels, error } = usePolling(fetchChannels, [])
 
   if (error) {
@@ -21,13 +21,13 @@ export function ChannelList() {
     <ul className="list">
       {channels.map((channel) => (
         <li key={channel.id} className="list-row">
-          <span className="list-item">
+          <button className="list-item" onClick={() => onSelect(channel)}>
             <span className="list-item-title">{channel.name}</span>
             <span className="chip-group">
               <span className="status-badge">{channel.quality}</span>
               <span className="status-badge">limit {channel.video_limit}</span>
             </span>
-          </span>
+          </button>
           <ChannelActionsMenu channel={channel} />
         </li>
       ))}

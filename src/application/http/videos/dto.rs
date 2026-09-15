@@ -16,7 +16,7 @@ pub struct VideoResponse {
 impl From<Video> for VideoResponse {
     fn from(video: Video) -> Self {
         Self {
-            id: video.video_id.as_str().to_string(),
+            id: video.youtube_id.as_str().to_string(),
             title: video.title,
             status: video.status.as_str().to_string(),
             quality: video.quality.map(|q| q.as_str().to_string()),

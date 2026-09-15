@@ -5,16 +5,18 @@ Lets a caller create, delete, and list the YouTube channels the daemon tracks by
 ## Requirements
 
 ### Requirement: Create Channel
-The system SHALL provide an HTTP endpoint that creates a channel given a `channel` value that is either a YouTube channel handle (e.g. `@somechannel`) or a YouTube channel URL carrying a handle (e.g. `https://www.youtube.com/@somechannel`), a quality tier (`high`, `mid`, or `low`), and a video limit that is a positive integer number of the channel's most recent videos to keep synced. The system SHALL extract the handle from the `channel` value when it is a URL, resolve that handle against the YouTube Data API to confirm it corresponds to an existing, accessible channel and to obtain that channel's immutable YouTube channel ID and display title, and store the channel with the handle as its ID, the resolved title as its name, the resolved immutable channel ID, the quality, the video limit, and a system-generated creation timestamp.
+The system SHALL provide an HTTP endpoint that creates a channel given a `channel` value that is either a YouTube channel handle (e.g. `@somechannel`) or a YouTube channel URL carrying a handle (e.g. `https://www.youtube.com/@somechannel`), a quality tier (`high`, `mid`, or `low`), a video limit that is a positive integer number of the channel's most recent videos to keep synced, and a storage path. The system SHALL extract the handle from the `channel` value when it is a URL, resolve that handle against the YouTube Data API to confirm it corresponds to an existing, accessible channel and to obtain that channel's immutable YouTube channel ID and display title, and store the channel with the handle as its ID, the resolved title as its name, the resolved immutable channel ID, the quality, the video limit, the path, and a system-generated creation timestamp.
 
 The stored ID is the handle, not the immutable channel ID, so the HTTP surface stays human-readable (e.g. `DELETE /channels/@somechannel`). The immutable ID is stored alongside it because a handle can be changed later by the channel's owner, while the immutable ID cannot.
 
+The storage path identifies where the channel's videos are saved, relative to the configured videos root directory, and may contain multiple `/`-separated segments to express nested subdirectories (e.g. `creators/somechannel`), the same as a playlist's storage path.
+
 #### Scenario: Successful creation from a bare handle
-- **WHEN** a request supplies a `channel` value that is a bare handle that resolves to an existing YouTube channel, a valid quality, and a valid video limit
-- **THEN** the system persists a channel record with that handle as its ID, the channel's resolved title as its name, the resolved immutable channel ID, the quality, the video limit, and a creation timestamp, and returns the created channel
+- **WHEN** a request supplies a `channel` value that is a bare handle that resolves to an existing YouTube channel, a valid quality, a valid video limit, and a valid path
+- **THEN** the system persists a channel record with that handle as its ID, the channel's resolved title as its name, the resolved immutable channel ID, the quality, the video limit, the path, and a creation timestamp, and returns the created channel
 
 #### Scenario: Successful creation from a channel URL
-- **WHEN** a request supplies a `channel` value that is a full YouTube channel URL (e.g. `https://www.youtube.com/@somechannel`) whose handle resolves to an existing YouTube channel, a valid quality, and a valid video limit
+- **WHEN** a request supplies a `channel` value that is a full YouTube channel URL (e.g. `https://www.youtube.com/@somechannel`) whose handle resolves to an existing YouTube channel, a valid quality, a valid video limit, and a valid path
 - **THEN** the system extracts the handle from the URL, persists a channel record the same way as the bare-handle case, and returns the created channel
 
 #### Scenario: Duplicate channel handle
@@ -28,6 +30,10 @@ The stored ID is the handle, not the immutable channel ID, so the HTTP surface s
 #### Scenario: Duplicate channel handle with a different video limit
 - **WHEN** a request supplies a `channel` value whose handle already exists in storage, with a video limit different from the stored record's
 - **THEN** the system makes no change, ignores the request's video limit, and returns the existing record with its original video limit
+
+#### Scenario: Duplicate channel handle with a different path
+- **WHEN** a request supplies a `channel` value whose handle already exists in storage, with a path value different from the stored record's
+- **THEN** the system makes no change, ignores the request's path value, and returns the existing record with its original path
 
 #### Scenario: Missing or empty channel value
 - **WHEN** a request omits the `channel` field, or supplies an empty or whitespace-only value
@@ -57,6 +63,10 @@ The stored ID is the handle, not the immutable channel ID, so the HTTP surface s
 - **WHEN** a request omits the video limit, or supplies a value that is not a positive integer
 - **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request with a meaningful error description
 
+#### Scenario: Missing or invalid path
+- **WHEN** a request omits path, supplies an empty path, or supplies a path that is absolute, contains a `..` segment, or contains an empty segment (e.g. leading/trailing/doubled `/`)
+- **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request with a meaningful error description
+
 ### Requirement: Delete Channel
 The system SHALL provide an HTTP endpoint that deletes a previously created channel identified by its handle.
 
@@ -73,7 +83,7 @@ The system SHALL provide an HTTP endpoint that returns every currently stored ch
 
 #### Scenario: Channels exist
 - **WHEN** one or more channels have been created
-- **THEN** the system returns all of them, each with its handle, name, immutable YouTube channel ID, quality, video limit, and creation timestamp
+- **THEN** the system returns all of them, each with its handle, name, immutable YouTube channel ID, quality, video limit, path, and creation timestamp
 
 #### Scenario: No channels exist
 - **WHEN** no channels have been created

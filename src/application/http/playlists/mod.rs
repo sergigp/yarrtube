@@ -128,10 +128,13 @@ mod tests {
     use crate::domain::event::DomainEvent;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
     use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
+    use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
 
@@ -148,6 +151,26 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
+    /// Builds a fresh `ChannelVideoReconciler` wired to unrelated fakes —
+    /// these tests don't exercise channel reconciliation, they just need
+    /// `AppState` to construct.
+    fn channel_video_reconciler(
+        event_publisher: Arc<FakeEventPublisher>,
+    ) -> crate::domain::services::ChannelVideoReconciler {
+        crate::domain::services::ChannelVideoReconciler::new(
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeVideoRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
+            Arc::new(FakeChannelVideosRepository::default()),
+            event_publisher,
+            Arc::new(FakeTaskRepository::default()),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        )
+    }
+
     fn test_router(
         repository: FakePlaylistRepository,
         youtube_exists: bool,
@@ -156,11 +179,12 @@ mod tests {
         Arc<FakePlaylistRepository>,
         Arc<FakeEventPublisher>,
     ) {
-        let (router, repository, event_publisher, _video_repository) =
+        let (router, repository, event_publisher, _video_repository, _playlist_video_repository) =
             test_router_with_videos(repository, youtube_exists, FakeVideoRepository::default());
         (router, repository, event_publisher)
     }
 
+    #[allow(clippy::type_complexity)]
     fn test_router_with_videos(
         repository: FakePlaylistRepository,
         youtube_exists: bool,
@@ -170,13 +194,16 @@ mod tests {
         Arc<FakePlaylistRepository>,
         Arc<FakeEventPublisher>,
         Arc<FakeVideoRepository>,
+        Arc<FakePlaylistVideoRepository>,
     ) {
         let repository = Arc::new(repository);
         let video_repository = Arc::new(video_repository);
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let video_reconciler = crate::domain::services::VideoReconciler::new(
             repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
             event_publisher.clone(),
             Arc::new(FakeTaskRepository::default()),
@@ -188,6 +215,7 @@ mod tests {
         let custom_playlist_video_adder = crate::domain::services::CustomPlaylistVideoAdder::new(
             repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             Arc::new(FakeYoutubeVideoRepository::default()),
             event_publisher.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -196,10 +224,14 @@ mod tests {
             crate::domain::services::CustomPlaylistVideoRemover::new(
                 repository.clone(),
                 video_repository.clone(),
+                playlist_video_repository.clone(),
                 event_publisher.clone(),
             );
         let video_searcher = crate::domain::services::VideoSearcher::new(
             repository.clone(),
+            playlist_video_repository.clone(),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
             video_repository.clone(),
         );
         let state = AppState {
@@ -214,6 +246,7 @@ mod tests {
             playlist_deleter: crate::domain::services::PlaylistDeleter::new(
                 repository.clone(),
                 video_repository.clone(),
+                playlist_video_repository.clone(),
                 event_publisher.clone(),
             ),
             playlist_searcher: crate::domain::services::PlaylistSearcher::new(repository.clone()),
@@ -227,15 +260,19 @@ mod tests {
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(FakeChannelRepository::default()),
                 Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeVideoRepository::default()),
+                Arc::new(FakeChannelVideoRepository::default()),
                 event_publisher.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             ),
+            channel_video_reconciler: channel_video_reconciler(event_publisher.clone()),
         };
         (
             axum::Router::new().nest("/api", api_router(state)),
             repository,
             event_publisher,
             video_repository,
+            playlist_video_repository,
         )
     }
 
@@ -706,25 +743,29 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_delete_every_video_record_for_a_deleted_youtube_linked_playlist() {
+        use crate::domain::playlist_video::PlaylistVideo;
         use crate::domain::shared::VideoId;
         use crate::domain::video::Video;
+        use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
         use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 
-        let (router, _repository, _event_publisher, video_repository) = test_router_with_videos(
-            FakePlaylistRepository::default(),
-            true,
-            FakeVideoRepository::default(),
-        );
+        let (router, _repository, _event_publisher, video_repository, playlist_video_repository) =
+            test_router_with_videos(
+                FakePlaylistRepository::default(),
+                true,
+                FakeVideoRepository::default(),
+            );
         router
             .clone()
             .oneshot(create_request("PL1", "My Playlist"))
             .await
             .unwrap();
-        video_repository
-            .save(&Video::create(
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
-                VideoId::new("vid1").unwrap(),
-                "My Video",
+                video.id.clone(),
                 fixed_timestamp(),
             ))
             .unwrap();
@@ -742,20 +783,29 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
         assert!(video_repository.videos.lock().unwrap().is_empty());
+        assert!(
+            playlist_video_repository
+                .list_for_playlist(&PlaylistId::new("PL1").unwrap())
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[tokio::test]
     async fn it_should_delete_every_video_record_for_a_deleted_custom_playlist() {
         use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
+        use crate::domain::playlist_video::PlaylistVideo;
         use crate::domain::shared::{Quality, VideoId};
         use crate::domain::video::Video;
         use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+        use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
         use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 
         let repository = FakePlaylistRepository::default();
+        let custom_playlist_id = PlaylistId::new("11111111-1111-1111-1111-111111111111").unwrap();
         repository
             .insert(&Playlist::create(
-                PlaylistId::new("11111111-1111-1111-1111-111111111111").unwrap(),
+                custom_playlist_id.clone(),
                 PlaylistName::new("Custom").unwrap(),
                 PlaylistPath::new("custom/path").unwrap(),
                 Quality::High,
@@ -763,13 +813,14 @@ mod tests {
                 fixed_timestamp(),
             ))
             .unwrap();
-        let (router, _repository, _event_publisher, video_repository) =
+        let (router, _repository, _event_publisher, video_repository, playlist_video_repository) =
             test_router_with_videos(repository, true, FakeVideoRepository::default());
-        video_repository
-            .save(&Video::create(
-                PlaylistId::new("11111111-1111-1111-1111-111111111111").unwrap(),
-                VideoId::new("vid1").unwrap(),
-                "My Video",
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                custom_playlist_id.clone(),
+                video.id.clone(),
                 fixed_timestamp(),
             ))
             .unwrap();
@@ -787,6 +838,12 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
         assert!(video_repository.videos.lock().unwrap().is_empty());
+        assert!(
+            playlist_video_repository
+                .list_for_playlist(&custom_playlist_id)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[tokio::test]
@@ -870,7 +927,7 @@ mod tests {
     {
         use crate::application::subscribers::delete_playlist_files_on_playlist_deleted::DeletePlaylistFilesOnPlaylistDeleted;
         use crate::application::tasks::delete_playlist_files_task::DeletePlaylistFilesTask;
-        use crate::domain::shared::{Quality, VideoId};
+        use crate::domain::shared::VideoId;
         use crate::domain::video::Video;
         use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
         use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
@@ -885,27 +942,23 @@ mod tests {
 
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
         video_repository
             .save(
-                &Video::create(
-                    PlaylistId::new("PL1").unwrap(),
-                    VideoId::new("vid1").unwrap(),
-                    "My Video",
-                    fixed_timestamp(),
-                )
-                .start_download(fixed_timestamp())
-                .mark_downloaded(Quality::High, "My Video.mp4", fixed_timestamp()),
+                &Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(Quality::High, "My Video.mp4", fixed_timestamp()),
             )
             .unwrap();
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let video_file_deleter = crate::domain::services::VideoFileDeleter::new(
-            playlist_repository.clone(),
             Arc::new(FilesystemVideoFileRepository),
             videos_root.to_str().unwrap(),
         );
         let video_reconciler = crate::domain::services::VideoReconciler::new(
             playlist_repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
             event_publisher.clone(),
             Arc::new(FakeTaskRepository::default()),
@@ -917,6 +970,7 @@ mod tests {
         let custom_playlist_video_adder = crate::domain::services::CustomPlaylistVideoAdder::new(
             playlist_repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             Arc::new(FakeYoutubeVideoRepository::default()),
             event_publisher.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -925,10 +979,14 @@ mod tests {
             crate::domain::services::CustomPlaylistVideoRemover::new(
                 playlist_repository.clone(),
                 video_repository.clone(),
+                playlist_video_repository.clone(),
                 event_publisher.clone(),
             );
         let video_searcher = crate::domain::services::VideoSearcher::new(
             playlist_repository.clone(),
+            playlist_video_repository.clone(),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
             video_repository.clone(),
         );
         let playlist_creator = crate::domain::services::PlaylistCreator::new(
@@ -940,6 +998,7 @@ mod tests {
         let playlist_deleter = crate::domain::services::PlaylistDeleter::new(
             playlist_repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             event_publisher.clone(),
         );
         let playlist_searcher = crate::domain::services::PlaylistSearcher::new(playlist_repository);
@@ -957,9 +1016,12 @@ mod tests {
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(FakeChannelRepository::default()),
                 Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeVideoRepository::default()),
+                Arc::new(FakeChannelVideoRepository::default()),
                 event_publisher.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             ),
+            channel_video_reconciler: channel_video_reconciler(event_publisher.clone()),
         };
         let router = axum::Router::new().nest("/api", api_router(state));
 
@@ -1031,11 +1093,13 @@ mod tests {
     ) {
         let repository = Arc::new(repository);
         let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
         let task_repository = Arc::new(FakeTaskRepository::default());
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let video_reconciler = crate::domain::services::VideoReconciler::new(
             repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             Arc::new(playlist_items),
             event_publisher.clone(),
             task_repository.clone(),
@@ -1047,6 +1111,7 @@ mod tests {
         let custom_playlist_video_adder = crate::domain::services::CustomPlaylistVideoAdder::new(
             repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             Arc::new(FakeYoutubeVideoRepository::default()),
             event_publisher.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1055,10 +1120,14 @@ mod tests {
             crate::domain::services::CustomPlaylistVideoRemover::new(
                 repository.clone(),
                 video_repository.clone(),
+                playlist_video_repository.clone(),
                 event_publisher.clone(),
             );
         let video_searcher = crate::domain::services::VideoSearcher::new(
             repository.clone(),
+            playlist_video_repository.clone(),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
             video_repository.clone(),
         );
         let state = AppState {
@@ -1071,6 +1140,7 @@ mod tests {
             playlist_deleter: crate::domain::services::PlaylistDeleter::new(
                 repository.clone(),
                 video_repository.clone(),
+                playlist_video_repository,
                 event_publisher.clone(),
             ),
             playlist_searcher: crate::domain::services::PlaylistSearcher::new(repository),
@@ -1084,9 +1154,12 @@ mod tests {
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(FakeChannelRepository::default()),
                 Arc::new(FakeYoutubeChannelRepository { resolved: None }),
-                event_publisher,
+                Arc::new(FakeVideoRepository::default()),
+                Arc::new(FakeChannelVideoRepository::default()),
+                event_publisher.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             ),
+            channel_video_reconciler: channel_video_reconciler(event_publisher),
         };
         (
             axum::Router::new().nest("/api", api_router(state)),
@@ -1099,7 +1172,7 @@ mod tests {
     async fn it_should_return_204_and_apply_membership_changes_when_reconciling_a_youtube_linked_playlist()
      {
         use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
-        use crate::infrastructure::repositories::youtube_playlist_items_repository::PlaylistVideo;
+        use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubePlaylistItem;
 
         let repository = FakePlaylistRepository::default();
         repository
@@ -1115,7 +1188,7 @@ mod tests {
         let (router, video_repository, task_repository) = test_router_for_reconcile(
             repository,
             FakeYoutubePlaylistItemsRepository {
-                videos: std::sync::Mutex::new(vec![PlaylistVideo {
+                videos: std::sync::Mutex::new(vec![YoutubePlaylistItem {
                     video_id: "vid1".to_string(),
                     title: "One".to_string(),
                     position: 0,
@@ -1129,7 +1202,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
         let stored = video_repository.videos.lock().unwrap();
         assert_eq!(stored.len(), 1);
-        assert_eq!(stored[0].video_id.as_str(), "vid1");
+        assert_eq!(stored[0].youtube_id.as_str(), "vid1");
         drop(stored);
         assert!(task_repository.scheduled.lock().unwrap().is_empty());
     }

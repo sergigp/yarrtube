@@ -1,0 +1,52 @@
+use crate::domain::channel::ChannelHandle;
+use crate::domain::shared::VideoRecordId;
+use chrono::{DateTime, Utc};
+
+/// Records that a `Video` belongs to a `Channel`'s tracked most-recent
+/// uploads, and its recency rank among them (`0` = most recent). `id` is
+/// assigned by storage on insert; `0` before a fresh row has been persisted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChannelVideo {
+    pub id: i64,
+    pub channel_id: ChannelHandle,
+    pub video_id: VideoRecordId,
+    pub position: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+impl ChannelVideo {
+    pub fn create(
+        channel_id: ChannelHandle,
+        video_id: VideoRecordId,
+        position: i64,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id: 0,
+            channel_id,
+            video_id,
+            position,
+            created_at: now,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_build_a_channel_video_with_its_recency_position() {
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+
+        let channel_video = ChannelVideo::create(
+            ChannelHandle::new("@somechannel").unwrap(),
+            VideoRecordId::new_generated(),
+            2,
+            now,
+        );
+
+        assert_eq!(channel_video.position, 2);
+        assert_eq!(channel_video.created_at, now);
+    }
+}

@@ -12,16 +12,14 @@ pub struct TaskResponse {
     pub created_at: DateTime<Utc>,
     pub last_error: Option<String>,
     pub playlist_name: Option<String>,
-    pub video_id: Option<String>,
-    pub video_title: Option<String>,
+    pub channel_name: Option<String>,
 }
 
 impl TaskResponse {
     pub fn from_task_with_context(
         task: ScheduledTask,
         playlist_name: Option<String>,
-        video_id: Option<String>,
-        video_title: Option<String>,
+        channel_name: Option<String>,
     ) -> Self {
         Self {
             id: task.id,
@@ -32,8 +30,7 @@ impl TaskResponse {
             created_at: task.created_at,
             last_error: task.last_error,
             playlist_name,
-            video_id,
-            video_title,
+            channel_name,
         }
     }
 }

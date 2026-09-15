@@ -1,3 +1,4 @@
+use crate::domain::channel::ChannelHandle;
 use crate::domain::shared::{PlaylistId, VideoId};
 use std::fmt;
 
@@ -67,6 +68,7 @@ impl std::error::Error for RemoveVideoFromPlaylistError {}
 #[derive(Debug)]
 pub enum ListVideosError {
     PlaylistNotFound(PlaylistId),
+    ChannelNotFound(ChannelHandle),
     Repository(anyhow::Error),
 }
 
@@ -74,6 +76,7 @@ impl fmt::Display for ListVideosError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::PlaylistNotFound(id) => write!(f, "playlist {id} not found"),
+            Self::ChannelNotFound(id) => write!(f, "channel {id} not found"),
             Self::Repository(e) => write!(f, "{e}"),
         }
     }

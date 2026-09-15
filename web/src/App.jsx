@@ -3,6 +3,7 @@ import './App.css'
 import { PlaylistList } from './components/PlaylistList'
 import { PlaylistDetail } from './components/PlaylistDetail'
 import { ChannelList } from './components/ChannelList'
+import { ChannelDetail } from './components/ChannelDetail'
 import { TasksView } from './components/TasksView'
 import { AddPlaylistDialog } from './components/AddPlaylistDialog'
 import { AddChannelDialog } from './components/AddChannelDialog'
@@ -21,6 +22,22 @@ function PlaylistsTab() {
   }
 
   return <PlaylistList onSelect={setSelectedPlaylist} />
+}
+
+function ChannelsTab() {
+  const [selectedChannel, setSelectedChannel] = useState(null)
+
+  if (selectedChannel) {
+    return (
+      <ChannelDetail
+        channel={selectedChannel}
+        onBack={() => setSelectedChannel(null)}
+        onDeleted={() => setSelectedChannel(null)}
+      />
+    )
+  }
+
+  return <ChannelList onSelect={setSelectedChannel} />
 }
 
 export default function App() {
@@ -66,7 +83,7 @@ export default function App() {
       </header>
       <main className="app-main">
         {tab === 'playlists' && <PlaylistsTab />}
-        {tab === 'channels' && <ChannelList />}
+        {tab === 'channels' && <ChannelsTab />}
         {tab === 'tasks' && <TasksView />}
       </main>
       <AddPlaylistDialog open={addPlaylistOpen} onOpenChange={setAddPlaylistOpen} />
