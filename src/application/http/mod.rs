@@ -7,8 +7,8 @@ pub mod videos;
 
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
-    CustomPlaylistVideoAdder, CustomPlaylistVideoRemover, PlaylistCreator, PlaylistDeleter,
-    PlaylistSearcher, VideoReconciler, VideoSearcher,
+    ChannelVideoReconciler, CustomPlaylistVideoAdder, CustomPlaylistVideoRemover, PlaylistCreator,
+    PlaylistDeleter, PlaylistSearcher, VideoReconciler, VideoSearcher,
 };
 use crate::domain::task::TaskService;
 use axum::Router;
@@ -25,6 +25,7 @@ pub struct AppState {
     pub video_searcher: VideoSearcher,
     pub task_service: TaskService,
     pub channel_service: ChannelService,
+    pub channel_video_reconciler: ChannelVideoReconciler,
 }
 
 pub fn api_router(state: AppState) -> Router {
@@ -65,6 +66,14 @@ pub fn api_router(state: AppState) -> Router {
         .route(
             "/channels/{handle}",
             axum::routing::delete(channels::delete_channel),
+        )
+        .route(
+            "/channels/{handle}/reconcile",
+            post(channels::reconcile_channel),
+        )
+        .route(
+            "/channels/{handle}/videos",
+            get(videos::list_videos_for_channel),
         )
         .with_state(state)
 }

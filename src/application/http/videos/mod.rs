@@ -2,6 +2,7 @@ pub mod dto;
 
 use super::AppState;
 use super::error::error_response;
+use crate::domain::channel::ChannelHandle;
 use crate::domain::shared::PlaylistId;
 use crate::domain::video::ListVideosError;
 use axum::Json;
@@ -28,6 +29,36 @@ pub async fn list_videos_for_playlist(
         Err(e @ ListVideosError::PlaylistNotFound(_)) => {
             error_response(StatusCode::BAD_REQUEST, e.to_string())
         }
+        Err(e @ ListVideosError::ChannelNotFound(_)) => {
+            error_response(StatusCode::BAD_REQUEST, e.to_string())
+        }
+        Err(e @ ListVideosError::Repository(_)) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        }
+    }
+}
+
+pub async fn list_videos_for_channel(
+    State(state): State<AppState>,
+    Path(handle): Path<String>,
+) -> Response {
+    let channel_id = match ChannelHandle::new(handle) {
+        Ok(id) => id,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
+    };
+
+    match state.video_searcher.list_for_channel(&channel_id) {
+        Ok(videos) => {
+            let response: Vec<VideoResponse> =
+                videos.into_iter().map(VideoResponse::from).collect();
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e @ ListVideosError::PlaylistNotFound(_)) => {
+            error_response(StatusCode::BAD_REQUEST, e.to_string())
+        }
+        Err(e @ ListVideosError::ChannelNotFound(_)) => {
+            error_response(StatusCode::BAD_REQUEST, e.to_string())
+        }
         Err(e @ ListVideosError::Repository(_)) => {
             error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         }
@@ -37,19 +68,31 @@ pub async fn list_videos_for_playlist(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::channel::{Channel, VideoLimit};
+    use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
+    use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, VideoId};
     use crate::domain::video::Video;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::{
+        ChannelRepository, FakeChannelRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, FakeChannelVideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         FakePlaylistRepository, PlaylistRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+        FakePlaylistVideoRepository, PlaylistVideoRepository,
     };
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         FakeVideoRepository, VideoRepository,
     };
     use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
+    use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
 
@@ -72,6 +115,9 @@ mod tests {
 
     fn test_router(
         playlist_repository: Arc<FakePlaylistRepository>,
+        playlist_video_repository: Arc<FakePlaylistVideoRepository>,
+        channel_repository: Arc<FakeChannelRepository>,
+        channel_video_repository: Arc<FakeChannelVideoRepository>,
         video_repository: Arc<FakeVideoRepository>,
     ) -> axum::Router {
         let event_publisher = Arc::new(FakeEventPublisher::default());
@@ -84,19 +130,35 @@ mod tests {
         let playlist_deleter = crate::domain::services::PlaylistDeleter::new(
             playlist_repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             event_publisher.clone() as Arc<dyn EventPublisher>,
         );
         let playlist_searcher =
             crate::domain::services::PlaylistSearcher::new(playlist_repository.clone());
         let channel_service = crate::domain::channel::ChannelService::new(
-            Arc::new(FakeChannelRepository::default()),
+            channel_repository.clone(),
             Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+            video_repository.clone(),
+            channel_video_repository.clone(),
             event_publisher.clone() as Arc<dyn EventPublisher>,
             Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let channel_video_reconciler = crate::domain::services::ChannelVideoReconciler::new(
+            channel_repository.clone(),
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::default()),
+            event_publisher.clone() as Arc<dyn EventPublisher>,
+            Arc::new(FakeTaskRepository::default()),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
         );
         let video_reconciler = crate::domain::services::VideoReconciler::new(
             playlist_repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
             event_publisher.clone() as Arc<dyn EventPublisher>,
             Arc::new(FakeTaskRepository::default()),
@@ -108,6 +170,7 @@ mod tests {
         let custom_playlist_video_adder = crate::domain::services::CustomPlaylistVideoAdder::new(
             playlist_repository.clone(),
             video_repository.clone(),
+            playlist_video_repository.clone(),
             Arc::new(FakeYoutubeVideoRepository::default()),
             event_publisher.clone() as Arc<dyn EventPublisher>,
             Arc::new(FixedClock(fixed_timestamp())),
@@ -116,10 +179,16 @@ mod tests {
             crate::domain::services::CustomPlaylistVideoRemover::new(
                 playlist_repository.clone(),
                 video_repository.clone(),
+                playlist_video_repository.clone(),
                 event_publisher.clone() as Arc<dyn EventPublisher>,
             );
-        let video_searcher =
-            crate::domain::services::VideoSearcher::new(playlist_repository, video_repository);
+        let video_searcher = crate::domain::services::VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+        );
         let state = AppState {
             playlist_creator,
             playlist_deleter,
@@ -132,9 +201,11 @@ mod tests {
                 FakeTaskRepository::default(),
             )),
             channel_service,
+            channel_video_reconciler,
         };
         let inner = Router::new()
             .route("/playlists/{id}/videos", get(list_videos_for_playlist))
+            .route("/channels/{handle}/videos", get(list_videos_for_channel))
             .with_state(state);
         Router::new().nest("/api", inner)
     }
@@ -155,6 +226,18 @@ mod tests {
         )
     }
 
+    fn channel(id: &str) -> Channel {
+        Channel::create(
+            ChannelHandle::new(id).unwrap(),
+            "Some Channel",
+            "UC123",
+            Quality::High,
+            VideoLimit::new(10).unwrap(),
+            PlaylistPath::new("creators/somechannel").unwrap(),
+            fixed_timestamp(),
+        )
+    }
+
     fn request(playlist_id: &str) -> Request<Body> {
         Request::builder()
             .method("GET")
@@ -163,20 +246,36 @@ mod tests {
             .unwrap()
     }
 
+    fn channel_request(handle: &str) -> Request<Body> {
+        Request::builder()
+            .method("GET")
+            .uri(format!("/api/channels/{handle}/videos"))
+            .body(Body::empty())
+            .unwrap()
+    }
+
     #[tokio::test]
     async fn it_should_return_the_playlists_videos() {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
-        video_repository
-            .save(&Video::create(
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
-                VideoId::new("vid1").unwrap(),
-                "My Video",
+                video.id.clone(),
                 fixed_timestamp(),
             ))
             .unwrap();
-        let router = test_router(playlist_repository, video_repository);
+        let router = test_router(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
+            video_repository,
+        );
 
         let response = router.oneshot(request("PL1")).await.unwrap();
 
@@ -193,35 +292,31 @@ mod tests {
     async fn it_should_return_videos_ordered_by_playlist_position() {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
-        video_repository
-            .save(&Video::create_with_position(
-                PlaylistId::new("PL1").unwrap(),
-                VideoId::new("vid_third").unwrap(),
-                "Third",
-                2,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        video_repository
-            .save(&Video::create_with_position(
-                PlaylistId::new("PL1").unwrap(),
-                VideoId::new("vid_first").unwrap(),
-                "First",
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        video_repository
-            .save(&Video::create_with_position(
-                PlaylistId::new("PL1").unwrap(),
-                VideoId::new("vid_second").unwrap(),
-                "Second",
-                1,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let router = test_router(playlist_repository, video_repository);
+        for (youtube_id, title, position) in [
+            ("vid_third", "Third", 2),
+            ("vid_first", "First", 0),
+            ("vid_second", "Second", 1),
+        ] {
+            let video = Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp());
+            video_repository.save(&video).unwrap();
+            playlist_video_repository
+                .save(&PlaylistVideo::create_with_position(
+                    PlaylistId::new("PL1").unwrap(),
+                    video.id.clone(),
+                    position,
+                    fixed_timestamp(),
+                ))
+                .unwrap();
+        }
+        let router = test_router(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
+            video_repository,
+        );
 
         let response = router.oneshot(request("PL1")).await.unwrap();
 
@@ -240,6 +335,9 @@ mod tests {
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let router = test_router(
             playlist_repository,
+            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
             Arc::new(FakeVideoRepository::default()),
         );
 
@@ -254,10 +352,92 @@ mod tests {
     async fn it_should_return_400_when_the_playlist_does_not_exist() {
         let router = test_router(
             Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
             Arc::new(FakeVideoRepository::default()),
         );
 
         let response = router.oneshot(request("PL404")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_the_channels_videos_ordered_by_recency() {
+        let channel_repository = Arc::new(FakeChannelRepository::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        for (youtube_id, title, position) in
+            [("vid_newest", "Newest", 0), ("vid_oldest", "Oldest", 1)]
+        {
+            let video = Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp());
+            video_repository.save(&video).unwrap();
+            channel_video_repository
+                .save(&ChannelVideo::create(
+                    ChannelHandle::new("@somechannel").unwrap(),
+                    video.id.clone(),
+                    position,
+                    fixed_timestamp(),
+                ))
+                .unwrap();
+        }
+        let router = test_router(
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::default()),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+        );
+
+        let response = router
+            .oneshot(channel_request("@somechannel"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        let videos = body.as_array().unwrap();
+        assert_eq!(
+            videos.iter().map(|v| v["id"].clone()).collect::<Vec<_>>(),
+            vec!["vid_newest", "vid_oldest"]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_an_empty_list_when_the_channel_has_no_videos() {
+        let channel_repository = Arc::new(FakeChannelRepository::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let router = test_router(
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::default()),
+            channel_repository,
+            Arc::new(FakeChannelVideoRepository::default()),
+            Arc::new(FakeVideoRepository::default()),
+        );
+
+        let response = router
+            .oneshot(channel_request("@somechannel"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        assert_eq!(body, serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_the_channel_does_not_exist() {
+        let router = test_router(
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
+            Arc::new(FakeVideoRepository::default()),
+        );
+
+        let response = router.oneshot(channel_request("@missing")).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }

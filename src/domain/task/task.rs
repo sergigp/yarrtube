@@ -7,19 +7,24 @@ pub enum Task {
     ReconcilePlaylist {
         playlist_id: String,
     },
+    ReconcileChannel {
+        channel_id: String,
+    },
     DownloadVideo {
-        playlist_id: String,
         video_id: String,
         quality: String,
+        output_dir: String,
     },
     DeleteVideoFile {
-        playlist_id: String,
-        video_id: String,
-        title: String,
         filename: Option<String>,
+        output_dir: String,
     },
     DeletePlaylistFiles {
         playlist_id: String,
+        path: String,
+    },
+    DeleteChannelFiles {
+        channel_id: String,
         path: String,
     },
     UpdateYtdlp,
@@ -31,23 +36,32 @@ struct ReconcilePlaylistPayload {
 }
 
 #[derive(Debug, Deserialize)]
+struct ReconcileChannelPayload {
+    channel_id: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct DownloadVideoPayload {
-    playlist_id: String,
     video_id: String,
     quality: String,
+    output_dir: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct DeleteVideoFilePayload {
-    playlist_id: String,
-    video_id: String,
-    title: String,
     filename: Option<String>,
+    output_dir: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct DeletePlaylistFilesPayload {
     playlist_id: String,
+    path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeleteChannelFilesPayload {
+    channel_id: String,
     path: String,
 }
 
@@ -58,9 +72,11 @@ impl Task {
     pub fn task_type(&self) -> &'static str {
         match self {
             Self::ReconcilePlaylist { .. } => "reconcile_playlist",
+            Self::ReconcileChannel { .. } => "reconcile_channel",
             Self::DownloadVideo { .. } => "download_video",
             Self::DeleteVideoFile { .. } => "delete_video_file",
             Self::DeletePlaylistFiles { .. } => "delete_playlist_files",
+            Self::DeleteChannelFiles { .. } => "delete_channel_files",
             Self::UpdateYtdlp => "update_ytdlp",
         }
     }
@@ -68,24 +84,25 @@ impl Task {
     pub fn payload(&self) -> Value {
         match self {
             Self::ReconcilePlaylist { playlist_id } => json!({ "playlist_id": playlist_id }),
+            Self::ReconcileChannel { channel_id } => json!({ "channel_id": channel_id }),
             Self::DownloadVideo {
-                playlist_id,
                 video_id,
                 quality,
-            } => json!({ "playlist_id": playlist_id, "video_id": video_id, "quality": quality }),
+                output_dir,
+            } => json!({ "video_id": video_id, "quality": quality, "output_dir": output_dir }),
             Self::DeleteVideoFile {
-                playlist_id,
-                video_id,
-                title,
                 filename,
+                output_dir,
             } => json!({
-                "playlist_id": playlist_id,
-                "video_id": video_id,
-                "title": title,
                 "filename": filename,
+                "output_dir": output_dir,
             }),
             Self::DeletePlaylistFiles { playlist_id, path } => json!({
                 "playlist_id": playlist_id,
+                "path": path,
+            }),
+            Self::DeleteChannelFiles { channel_id, path } => json!({
+                "channel_id": channel_id,
                 "path": path,
             }),
             Self::UpdateYtdlp => json!({}),
@@ -100,30 +117,34 @@ impl Task {
         Ok(parsed.playlist_id)
     }
 
+    /// Decodes a `reconcile_channel` task's raw JSON payload, as handed to a
+    /// `TaskHandler`, back into the channel handle it targets.
+    pub fn decode_reconcile_channel_payload(payload: &str) -> Result<String, TaskError> {
+        let parsed: ReconcileChannelPayload = serde_json::from_str(payload)
+            .map_err(|e| TaskError(format!("invalid reconcile_channel payload: {e}")))?;
+        Ok(parsed.channel_id)
+    }
+
     /// Decodes a `download_video` task's raw JSON payload, as handed to a
-    /// `TaskHandler`, back into the playlist ID, video ID, and quality it targets.
+    /// `TaskHandler`, back into the video's surrogate ID, quality, and
+    /// output directory it targets.
     pub fn decode_download_video_payload(
         payload: &str,
     ) -> Result<(String, String, String), TaskError> {
         let parsed: DownloadVideoPayload = serde_json::from_str(payload)
             .map_err(|e| TaskError(format!("invalid download_video payload: {e}")))?;
-        Ok((parsed.playlist_id, parsed.video_id, parsed.quality))
+        Ok((parsed.video_id, parsed.quality, parsed.output_dir))
     }
 
     /// Decodes a `delete_video_file` task's raw JSON payload, as handed to a
-    /// `TaskHandler`, back into the playlist ID, video ID, title, and
-    /// recorded filename it targets.
+    /// `TaskHandler`, back into the recorded filename and output directory
+    /// it targets.
     pub fn decode_delete_video_file_payload(
         payload: &str,
-    ) -> Result<(String, String, String, Option<String>), TaskError> {
+    ) -> Result<(Option<String>, String), TaskError> {
         let parsed: DeleteVideoFilePayload = serde_json::from_str(payload)
             .map_err(|e| TaskError(format!("invalid delete_video_file payload: {e}")))?;
-        Ok((
-            parsed.playlist_id,
-            parsed.video_id,
-            parsed.title,
-            parsed.filename,
-        ))
+        Ok((parsed.filename, parsed.output_dir))
     }
 
     /// Decodes a `delete_playlist_files` task's raw JSON payload, as handed
@@ -135,6 +156,17 @@ impl Task {
         let parsed: DeletePlaylistFilesPayload = serde_json::from_str(payload)
             .map_err(|e| TaskError(format!("invalid delete_playlist_files payload: {e}")))?;
         Ok((parsed.playlist_id, parsed.path))
+    }
+
+    /// Decodes a `delete_channel_files` task's raw JSON payload, as handed
+    /// to a `TaskHandler`, back into the channel handle and output path it
+    /// targets.
+    pub fn decode_delete_channel_files_payload(
+        payload: &str,
+    ) -> Result<(String, String), TaskError> {
+        let parsed: DeleteChannelFilesPayload = serde_json::from_str(payload)
+            .map_err(|e| TaskError(format!("invalid delete_channel_files payload: {e}")))?;
+        Ok((parsed.channel_id, parsed.path))
     }
 
     /// Decodes an `update_ytdlp` task's raw JSON payload, as handed to a
@@ -179,34 +211,61 @@ mod tests {
     }
 
     #[test]
+    fn it_should_map_reconcile_channel_to_a_stable_type_and_payload() {
+        let task = Task::ReconcileChannel {
+            channel_id: "@somechannel".to_string(),
+        };
+
+        assert_eq!(task.task_type(), "reconcile_channel");
+        assert_eq!(task.payload(), json!({ "channel_id": "@somechannel" }));
+    }
+
+    #[test]
+    fn it_should_decode_a_reconcile_channel_payload_back_into_its_channel_id() {
+        let task = Task::ReconcileChannel {
+            channel_id: "@somechannel".to_string(),
+        };
+
+        let channel_id =
+            Task::decode_reconcile_channel_payload(&task.payload().to_string()).unwrap();
+
+        assert_eq!(channel_id, "@somechannel");
+    }
+
+    #[test]
+    fn it_should_reject_a_malformed_reconcile_channel_payload() {
+        assert!(Task::decode_reconcile_channel_payload("not json").is_err());
+    }
+
+    #[test]
     fn it_should_map_download_video_to_a_stable_type_and_payload() {
         let task = Task::DownloadVideo {
-            playlist_id: "PL1".to_string(),
-            video_id: "vid1".to_string(),
+            video_id: "rec1".to_string(),
             quality: "high".to_string(),
+            output_dir: "/videos/music".to_string(),
         };
 
         assert_eq!(task.task_type(), "download_video");
         assert_eq!(
             task.payload(),
-            json!({ "playlist_id": "PL1", "video_id": "vid1", "quality": "high" })
+            json!({ "video_id": "rec1", "quality": "high", "output_dir": "/videos/music" })
         );
     }
 
     #[test]
-    fn it_should_decode_a_download_video_payload_back_into_its_ids_and_quality() {
+    fn it_should_decode_a_download_video_payload_back_into_its_fields() {
         let task = Task::DownloadVideo {
-            playlist_id: "PL1".to_string(),
-            video_id: "vid1".to_string(),
+            video_id: "rec1".to_string(),
             quality: "high".to_string(),
+            output_dir: "/videos/music".to_string(),
         };
 
-        let (playlist_id, video_id, quality) =
+        let (video_id, quality, output_dir) =
             Task::decode_download_video_payload(&task.payload().to_string()).unwrap();
 
-        assert_eq!(playlist_id, "PL1");
-        assert_eq!(video_id, "vid1");
+        assert_eq!(video_id, "rec1");
         assert_eq!(quality, "high");
+        assert_eq!(output_dir, "/videos/music");
     }
 
     #[test]
@@ -217,40 +276,32 @@ mod tests {
     #[test]
     fn it_should_map_delete_video_file_to_a_stable_type_and_payload() {
         let task = Task::DeleteVideoFile {
-            playlist_id: "PL1".to_string(),
-            video_id: "vid1".to_string(),
-            title: "My Video".to_string(),
             filename: Some("My Video.mp4".to_string()),
+            output_dir: "/videos/music".to_string(),
         };
 
         assert_eq!(task.task_type(), "delete_video_file");
         assert_eq!(
             task.payload(),
             json!({
-                "playlist_id": "PL1",
-                "video_id": "vid1",
-                "title": "My Video",
                 "filename": "My Video.mp4",
+                "output_dir": "/videos/music",
             })
         );
     }
 
     #[test]
-    fn it_should_decode_a_delete_video_file_payload_back_into_its_ids_title_and_filename() {
+    fn it_should_decode_a_delete_video_file_payload_back_into_its_filename_and_output_dir() {
         let task = Task::DeleteVideoFile {
-            playlist_id: "PL1".to_string(),
-            video_id: "vid1".to_string(),
-            title: "My Video".to_string(),
             filename: Some("My Video.mp4".to_string()),
+            output_dir: "/videos/music".to_string(),
         };
 
-        let (playlist_id, video_id, title, filename) =
+        let (filename, output_dir) =
             Task::decode_delete_video_file_payload(&task.payload().to_string()).unwrap();
 
-        assert_eq!(playlist_id, "PL1");
-        assert_eq!(video_id, "vid1");
-        assert_eq!(title, "My Video");
         assert_eq!(filename, Some("My Video.mp4".to_string()));
+        assert_eq!(output_dir, "/videos/music");
     }
 
     #[test]
@@ -289,6 +340,39 @@ mod tests {
     #[test]
     fn it_should_reject_a_malformed_delete_playlist_files_payload() {
         assert!(Task::decode_delete_playlist_files_payload("not json").is_err());
+    }
+
+    #[test]
+    fn it_should_map_delete_channel_files_to_a_stable_type_and_payload() {
+        let task = Task::DeleteChannelFiles {
+            channel_id: "@somechannel".to_string(),
+            path: "creators/somechannel".to_string(),
+        };
+
+        assert_eq!(task.task_type(), "delete_channel_files");
+        assert_eq!(
+            task.payload(),
+            json!({ "channel_id": "@somechannel", "path": "creators/somechannel" })
+        );
+    }
+
+    #[test]
+    fn it_should_decode_a_delete_channel_files_payload_back_into_its_channel_id_and_path() {
+        let task = Task::DeleteChannelFiles {
+            channel_id: "@somechannel".to_string(),
+            path: "creators/somechannel".to_string(),
+        };
+
+        let (channel_id, path) =
+            Task::decode_delete_channel_files_payload(&task.payload().to_string()).unwrap();
+
+        assert_eq!(channel_id, "@somechannel");
+        assert_eq!(path, "creators/somechannel");
+    }
+
+    #[test]
+    fn it_should_reject_a_malformed_delete_channel_files_payload() {
+        assert!(Task::decode_delete_channel_files_payload("not json").is_err());
     }
 
     #[test]

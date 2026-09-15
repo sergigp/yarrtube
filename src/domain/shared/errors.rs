@@ -32,3 +32,14 @@ impl fmt::Display for QualityError {
 }
 
 impl std::error::Error for QualityError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VideoRecordIdError(pub String);
+
+impl fmt::Display for VideoRecordIdError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for VideoRecordIdError {}

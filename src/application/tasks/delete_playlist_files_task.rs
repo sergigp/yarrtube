@@ -31,7 +31,6 @@ impl TaskHandler for DeletePlaylistFilesTask {
 mod tests {
     use super::*;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
     use std::sync::Arc;
 
     fn payload_for(playlist_id: &str, path: &str) -> String {
@@ -45,11 +44,7 @@ mod tests {
 
     fn handler() -> (DeletePlaylistFilesTask, Arc<FakeVideoFileRepository>) {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_file_deleter = VideoFileDeleter::new(
-            Arc::new(FakePlaylistRepository::default()),
-            video_file_repository.clone(),
-            "/videos",
-        );
+        let video_file_deleter = VideoFileDeleter::new(video_file_repository.clone(), "/videos");
 
         (
             DeletePlaylistFilesTask::new(video_file_deleter),

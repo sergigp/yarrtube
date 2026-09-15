@@ -1,10 +1,12 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::{Playlist, PlaylistKind};
+use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::shared::{PlaylistId, VideoId};
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoStatus};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubePlaylistItemsRepository;
@@ -21,6 +23,7 @@ use tracing::{debug, info, warn};
 pub struct VideoReconciler {
     playlist_repository: Arc<dyn PlaylistRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     youtube_playlist_items_repository: Arc<dyn YoutubePlaylistItemsRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     task_repository: Arc<dyn TaskRepository>,
@@ -35,6 +38,7 @@ impl VideoReconciler {
     pub fn new(
         playlist_repository: Arc<dyn PlaylistRepository>,
         video_repository: Arc<dyn VideoRepository>,
+        playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         youtube_playlist_items_repository: Arc<dyn YoutubePlaylistItemsRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         task_repository: Arc<dyn TaskRepository>,
@@ -46,6 +50,7 @@ impl VideoReconciler {
         Self {
             playlist_repository,
             video_repository,
+            playlist_video_repository,
             youtube_playlist_items_repository,
             event_publisher,
             task_repository,
@@ -117,67 +122,86 @@ impl VideoReconciler {
         let current_videos = self
             .youtube_playlist_items_repository
             .list_current_videos(id)?;
-        let stored_videos = self.video_repository.list_for_playlist(id)?;
+        let stored_videos = self.playlist_video_repository.list_for_playlist(id)?;
 
         let now = self.clock.now();
-        let mut current_ids = Vec::with_capacity(current_videos.len());
-        for video in &current_videos {
-            let video_id = VideoId::new(&video.video_id)?;
-            let existing = self.video_repository.find(id, &video_id)?;
-            let is_new = existing.is_none();
+        let mut current_youtube_ids = Vec::with_capacity(current_videos.len());
+        for current in &current_videos {
+            let youtube_id = VideoId::new(&current.video_id)?;
+            let existing = self
+                .playlist_video_repository
+                .find_by_youtube_video(id, &youtube_id)?;
 
-            let to_save = match existing {
+            match existing {
                 None => {
+                    let video = Video::create(youtube_id.clone(), current.title.clone(), now);
+                    self.video_repository.save(&video)?;
+                    let playlist_video = PlaylistVideo::create_with_position(
+                        id.clone(),
+                        video.id.clone(),
+                        current.position,
+                        now,
+                    );
+                    self.playlist_video_repository.save(&playlist_video)?;
                     info!(
                         playlist_id = %id,
-                        video_id = %video_id,
-                        title = %video.title,
+                        video_id = %youtube_id,
+                        title = %current.title,
                         "added video to playlist"
                     );
-                    Video::create_with_position(
-                        id.clone(),
-                        video_id.clone(),
-                        video.title.clone(),
-                        video.position,
-                        now,
-                    )
+                    self.event_publisher
+                        .publish(&DomainEvent::VideoAddedToPlaylist {
+                            playlist_id: id.as_str().to_string(),
+                            video_id: video.id.as_str().to_string(),
+                        })?;
                 }
-                Some(stored) => Video {
-                    title: video.title.clone(),
-                    position: Some(video.position),
-                    updated_at: now,
-                    ..stored
-                },
-            };
-            self.video_repository.save(&to_save)?;
-
-            if is_new {
-                self.event_publisher.publish(&DomainEvent::VideoAdded {
-                    playlist_id: id.as_str().to_string(),
-                    video_id: video_id.as_str().to_string(),
-                })?;
+                Some(existing) => {
+                    if let Some(video) = self.video_repository.find(&existing.video_id)? {
+                        self.video_repository.update(&Video {
+                            title: current.title.clone(),
+                            updated_at: now,
+                            ..video
+                        })?;
+                    }
+                    if existing.position != Some(current.position) {
+                        self.playlist_video_repository.save(&PlaylistVideo {
+                            position: Some(current.position),
+                            created_at: now,
+                            ..existing
+                        })?;
+                    }
+                }
             }
 
-            current_ids.push(video_id);
+            current_youtube_ids.push(youtube_id);
         }
 
-        let current_id_strs: HashSet<&str> = current_ids.iter().map(|v| v.as_str()).collect();
+        let current_id_strs: HashSet<&str> =
+            current_youtube_ids.iter().map(|v| v.as_str()).collect();
         for stored in &stored_videos {
-            if !current_id_strs.contains(stored.video_id.as_str()) {
-                info!(
-                    playlist_id = %id,
-                    video_id = %stored.video_id,
-                    "removing video from playlist (no longer on YouTube)"
-                );
-                self.video_repository.delete(id, &stored.video_id)?;
-                self.event_publisher.publish(&DomainEvent::VideoDeleted {
-                    playlist_id: id.as_str().to_string(),
-                    video_id: stored.video_id.as_str().to_string(),
-                    title: stored.title.clone(),
-                    filename: stored.filename.clone(),
-                    was_downloaded: stored.status == VideoStatus::Downloaded,
-                })?;
+            let Some(video) = self.video_repository.find(&stored.video_id)? else {
+                continue;
+            };
+            if current_id_strs.contains(video.youtube_id.as_str()) {
+                continue;
             }
+
+            info!(
+                playlist_id = %id,
+                video_id = %video.youtube_id,
+                "removing video from playlist (no longer on YouTube)"
+            );
+            self.playlist_video_repository
+                .delete(id, &video.youtube_id)?;
+            self.video_repository.delete(&video.id)?;
+            self.event_publisher
+                .publish(&DomainEvent::VideoRemovedFromPlaylist {
+                    playlist_id: id.as_str().to_string(),
+                    video_id: video.id.as_str().to_string(),
+                    title: video.title.clone(),
+                    filename: video.filename.clone(),
+                    was_downloaded: video.status == VideoStatus::Downloaded,
+                })?;
         }
 
         Ok(())
@@ -198,7 +222,13 @@ impl VideoReconciler {
     fn reconcile_filesystem(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let output_dir = Path::new(&self.videos_path).join(playlist.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
-        let stored_videos = self.video_repository.list_for_playlist(&playlist.id)?;
+        let stored_playlist_videos = self
+            .playlist_video_repository
+            .list_for_playlist(&playlist.id)?;
+        let stored_videos: Vec<Video> = stored_playlist_videos
+            .iter()
+            .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
+            .collect::<anyhow::Result<Vec<Video>>>()?;
         let downloaded: Vec<&Video> = stored_videos
             .iter()
             .filter(|v| v.status == VideoStatus::Downloaded)
@@ -222,7 +252,7 @@ impl VideoReconciler {
             let now = self.clock.now();
             warn!(
                 playlist_id = %playlist.id,
-                video_id = %video.video_id,
+                video_id = %video.youtube_id,
                 filename = video.filename.as_deref().unwrap_or(""),
                 "downloaded video's file is missing or not mp4, resetting for redownload"
             );
@@ -230,9 +260,9 @@ impl VideoReconciler {
             self.video_repository.update(&reset)?;
             self.task_repository.schedule(
                 &Task::DownloadVideo {
-                    playlist_id: playlist.id.as_str().to_string(),
-                    video_id: video.video_id.as_str().to_string(),
+                    video_id: video.id.as_str().to_string(),
                     quality: playlist.quality.as_str().to_string(),
+                    output_dir: output_dir.to_string_lossy().to_string(),
                 },
                 now,
             )?;
@@ -245,16 +275,16 @@ impl VideoReconciler {
             let now = self.clock.now();
             warn!(
                 playlist_id = %playlist.id,
-                video_id = %video.video_id,
+                video_id = %video.youtube_id,
                 "permanently errored video found during reconcile, resetting for redownload"
             );
             let reset = video.clone().reset_for_redownload(now);
             self.video_repository.update(&reset)?;
             self.task_repository.schedule(
                 &Task::DownloadVideo {
-                    playlist_id: playlist.id.as_str().to_string(),
-                    video_id: video.video_id.as_str().to_string(),
+                    video_id: video.id.as_str().to_string(),
                     quality: playlist.quality.as_str().to_string(),
+                    output_dir: output_dir.to_string_lossy().to_string(),
                 },
                 now,
             )?;

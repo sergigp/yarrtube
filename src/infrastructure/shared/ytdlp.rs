@@ -105,6 +105,75 @@ pub fn download_video(
     }
 }
 
+/// One video discovered by `list_channel_videos`, in the order `yt-dlp`
+/// printed it (newest first).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChannelVideoEntry {
+    pub video_id: String,
+    pub title: String,
+}
+
+#[derive(serde::Deserialize)]
+struct FlatPlaylistEntry {
+    id: String,
+    title: String,
+}
+
+/// Lists a channel's `limit` most recent uploads via
+/// `yt-dlp --flat-playlist --print-json -I 1:<limit>` against `channel_url`,
+/// parsing one JSON object per stdout line. A clean non-zero exit or empty
+/// output means "no videos" (`Ok(vec![])`), not an error — mirroring
+/// `download_video`'s error posture. Returns `Err` only for a systemic
+/// problem: no binary at `ytdlp_path`, or output that doesn't parse as one
+/// JSON object per line.
+pub fn list_channel_videos(
+    ytdlp_path: &Path,
+    channel_url: &str,
+    limit: u32,
+) -> Result<Vec<ChannelVideoEntry>> {
+    let output = match Command::new(ytdlp_path)
+        .args([
+            "--flat-playlist",
+            "--print-json",
+            "-I",
+            &format!("1:{limit}"),
+            "--quiet",
+            "--no-warnings",
+        ])
+        .arg(channel_url)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .output()
+    {
+        Ok(output) => output,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            return Err(anyhow!(
+                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
+                ytdlp_path.display()
+            ));
+        }
+        Err(e) => return Err(anyhow!("Failed to run yt-dlp for {channel_url}: {e}")),
+    };
+
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let parsed: FlatPlaylistEntry = serde_json::from_str(line)
+                .map_err(|e| anyhow!("failed to parse yt-dlp channel video listing line: {e}"))?;
+            Ok(ChannelVideoEntry {
+                video_id: parsed.id,
+                title: parsed.title,
+            })
+        })
+        .collect()
+}
+
 /// Returns `desired_filename` unchanged, unless a file whose stem already
 /// matches it exists in `output_path` — the extension isn't known until
 /// `yt-dlp` picks a format, so the check is by stem, not exact path.
@@ -182,6 +251,36 @@ pub(crate) mod test_support {
                 format!(
                     "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\n{print_stmt}exit {exit_code}\n",
                     captured_args_path.display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
+
+            Self {
+                _bin_dir: bin_dir,
+                path: script_path,
+                captured_args_path,
+            }
+        }
+
+        /// A fake `yt-dlp` that exits 0 and prints `stdout` verbatim,
+        /// written to a file and `cat`-ed rather than embedded in the
+        /// script, so it's immune to shell quoting of its content (e.g. a
+        /// `|` character or embedded newlines).
+        pub(crate) fn with_stdout(stdout: &str) -> Self {
+            use std::os::unix::fs::PermissionsExt;
+
+            let bin_dir = unique_temp_dir("fake-ytdlp-bin");
+            let script_path = bin_dir.join("yt-dlp");
+            let captured_args_path = bin_dir.join("captured-args");
+            let stdout_path = bin_dir.join("stdout-content");
+            fs::write(&stdout_path, stdout).unwrap();
+            fs::write(
+                &script_path,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\ncat \"{}\"\nexit 0\n",
+                    captured_args_path.display(),
+                    stdout_path.display()
                 ),
             )
             .unwrap();
@@ -420,5 +519,128 @@ mod tests {
 
         assert!(output_dir.is_dir());
         std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_parse_one_json_line_per_discovered_video() {
+        let stdout =
+            "{\"id\": \"vid1\", \"title\": \"One\"}\n{\"id\": \"vid2\", \"title\": \"Two\"}\n";
+        let fake = test_support::FakeYtDlp::with_stdout(stdout);
+
+        let videos = list_channel_videos(
+            &fake.path,
+            "https://www.youtube.com/@somechannel/videos",
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(
+            videos,
+            vec![
+                ChannelVideoEntry {
+                    video_id: "vid1".to_string(),
+                    title: "One".to_string()
+                },
+                ChannelVideoEntry {
+                    video_id: "vid2".to_string(),
+                    title: "Two".to_string()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_pass_the_limit_through_the_index_range_flag() {
+        let fake = test_support::FakeYtDlp::with_stdout("");
+
+        list_channel_videos(&fake.path, "https://www.youtube.com/@somechannel/videos", 5).unwrap();
+
+        assert!(fake.captured_args().contains(&"1:5".to_string()));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_return_an_empty_list_on_a_clean_failed_exit() {
+        let fake = test_support::FakeYtDlp::with_exit_code(1);
+
+        let videos = list_channel_videos(
+            &fake.path,
+            "https://www.youtube.com/@somechannel/videos",
+            10,
+        )
+        .unwrap();
+
+        assert!(videos.is_empty());
+    }
+
+    #[test]
+    fn it_should_error_when_no_binary_exists_at_the_configured_path_for_channel_video_listing() {
+        use test_support::unique_temp_dir;
+
+        let output_dir = unique_temp_dir("ytdlp-channel-videos-missing-binary");
+        let missing_path = output_dir.join("does-not-exist");
+
+        let result = list_channel_videos(
+            &missing_path,
+            "https://www.youtube.com/@somechannel/videos",
+            10,
+        );
+
+        assert!(result.is_err());
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    /// Regression test for the JSON-line parsing format (see design.md):
+    /// a delimited `"%(title)s | ..."` format would corrupt parsing on a
+    /// title containing `|`; JSON output doesn't have that failure mode.
+    #[test]
+    #[cfg(unix)]
+    fn it_should_parse_a_title_containing_a_pipe_character_without_corrupting_adjacent_videos() {
+        let stdout = serde_json::json!({"id": "vid1", "title": "Before | After"}).to_string()
+            + "\n"
+            + &serde_json::json!({"id": "vid2", "title": "Untouched"}).to_string()
+            + "\n";
+        let fake = test_support::FakeYtDlp::with_stdout(&stdout);
+
+        let videos = list_channel_videos(
+            &fake.path,
+            "https://www.youtube.com/@somechannel/videos",
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(
+            videos,
+            vec![
+                ChannelVideoEntry {
+                    video_id: "vid1".to_string(),
+                    title: "Before | After".to_string()
+                },
+                ChannelVideoEntry {
+                    video_id: "vid2".to_string(),
+                    title: "Untouched".to_string()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_parse_a_title_containing_an_embedded_newline() {
+        let stdout =
+            serde_json::json!({"id": "vid1", "title": "Line one\nLine two"}).to_string() + "\n";
+        let fake = test_support::FakeYtDlp::with_stdout(&stdout);
+
+        let videos = list_channel_videos(
+            &fake.path,
+            "https://www.youtube.com/@somechannel/videos",
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(videos.len(), 1);
+        assert_eq!(videos[0].title, "Line one\nLine two");
     }
 }

@@ -5,8 +5,19 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 const RELEASES_API_URL: &str = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest";
-const LINUX_ASSET_NAME: &str = "yt-dlp_linux";
 const DEFAULT_YTDLP_PATH: &str = "/app/bin/yt-dlp";
+
+/// The standalone-binary release asset name for the current platform (the
+/// production Docker image is always Linux, but `serve`/`update-ytdlp` also
+/// run directly on a developer's machine — see `scripts/run-local.sh` —
+/// where downloading the Linux asset would silently replace a working local
+/// `yt-dlp` with one that can't execute).
+fn asset_name_for_platform() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "yt-dlp_macos",
+        _ => "yt-dlp_linux",
+    }
+}
 
 #[derive(Debug, Deserialize)]
 struct Release {
@@ -40,17 +51,19 @@ pub fn target_path() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_YTDLP_PATH))
 }
 
-/// Downloads the latest yt-dlp standalone Linux binary and replaces
-/// `target_path` with it.
+/// Downloads the latest yt-dlp standalone binary for the current platform
+/// and replaces `target_path` with it.
 fn update(target_path: &Path) -> Result<()> {
-    let download_url = latest_linux_binary_url()?;
+    let download_url = latest_binary_url()?;
     let bytes = download_bytes(&download_url)?;
     install_binary(&bytes, target_path)
 }
 
 /// Queries the yt-dlp GitHub releases API for the latest stable release and
-/// returns the download URL of its standalone Linux binary asset.
-fn latest_linux_binary_url() -> Result<String> {
+/// returns the download URL of its standalone binary asset for the current
+/// platform.
+fn latest_binary_url() -> Result<String> {
+    let asset_name = asset_name_for_platform();
     let client = reqwest::blocking::Client::new();
     let response = client
         .get(RELEASES_API_URL)
@@ -73,9 +86,9 @@ fn latest_linux_binary_url() -> Result<String> {
     release
         .assets
         .into_iter()
-        .find(|asset| asset.name == LINUX_ASSET_NAME)
+        .find(|asset| asset.name == asset_name)
         .map(|asset| asset.browser_download_url)
-        .ok_or_else(|| anyhow!("No '{LINUX_ASSET_NAME}' asset found in the latest yt-dlp release"))
+        .ok_or_else(|| anyhow!("No '{asset_name}' asset found in the latest yt-dlp release"))
 }
 
 fn download_bytes(download_url: &str) -> Result<Vec<u8>> {

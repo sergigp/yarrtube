@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ConfirmDialog } from './ConfirmDialog'
-import { deleteChannel } from '../api'
+import { deleteChannel, reconcileChannel } from '../api'
 
 export function ChannelActionsMenu({ channel, onDeleted }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -20,6 +20,18 @@ export function ChannelActionsMenu({ channel, onDeleted }) {
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content className="dropdown-menu-content" align="end">
+            <DropdownMenu.Item
+              className="dropdown-menu-item"
+              onSelect={async () => {
+                try {
+                  await reconcileChannel(channel.id)
+                } catch (err) {
+                  window.alert(`Failed to reconcile "${channel.name}": ${err.message}`)
+                }
+              }}
+            >
+              Reconcile
+            </DropdownMenu.Item>
             <DropdownMenu.Item
               className="dropdown-menu-item dropdown-menu-item-danger"
               onSelect={() => setConfirmOpen(true)}

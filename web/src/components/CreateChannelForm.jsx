@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createChannel } from '../api'
 
-const initialForm = { channel: '', quality: 'high', video_limit: '10' }
+const initialForm = { channel: '', quality: 'high', video_limit: '10', path: '' }
 
 export function CreateChannelForm({ onSuccess }) {
   const [form, setForm] = useState(initialForm)
@@ -20,6 +20,7 @@ export function CreateChannelForm({ onSuccess }) {
         channel: form.channel,
         quality: form.quality,
         video_limit: Number(form.video_limit),
+        path: form.path,
       })
       setForm(initialForm)
       onSuccess?.()
@@ -40,6 +41,16 @@ export function CreateChannelForm({ onSuccess }) {
           value={form.channel}
           onChange={setField('channel')}
           placeholder="@somechannel"
+          required
+        />
+      </div>
+      <div className="form-row">
+        <label htmlFor="create-channel-path">Path</label>
+        <input
+          id="create-channel-path"
+          type="text"
+          value={form.path}
+          onChange={setField('path')}
           required
         />
       </div>

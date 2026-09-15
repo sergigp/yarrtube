@@ -1,4 +1,4 @@
-use crate::domain::shared::{PlaylistId, Quality, VideoId};
+use crate::domain::shared::{Quality, VideoId, VideoRecordId};
 use crate::domain::video::{Video, VideoStatus};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -9,17 +9,12 @@ pub trait VideoRepository: Send + Sync {
     /// Plain insert-or-full-replace of every column — no conflict-merge
     /// policy. Callers decide what `Video` value to persist.
     fn save(&self, video: &Video) -> anyhow::Result<()>;
-    fn find(&self, playlist_id: &PlaylistId, video_id: &VideoId) -> anyhow::Result<Option<Video>>;
-    fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>>;
-    fn delete(&self, playlist_id: &PlaylistId, video_id: &VideoId) -> anyhow::Result<()>;
+    fn find(&self, id: &VideoRecordId) -> anyhow::Result<Option<Video>>;
     /// Writes every mutable column, including `status` — unlike `save`,
     /// which is a plain insert-or-replace, `update` only touches a row that
     /// still exists.
     fn update(&self, video: &Video) -> anyhow::Result<()>;
-    /// Deletes every video row stored for `playlist_id`, leaving other
-    /// playlists' rows untouched. Used by `PlaylistService::delete_playlist`
-    /// so no video row can outlive its playlist.
-    fn delete_all_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<()>;
+    fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()>;
 }
 
 pub struct SqliteVideoRepository {
@@ -30,26 +25,19 @@ impl SqliteVideoRepository {
     pub fn new(conn: Connection) -> anyhow::Result<Self> {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS videos (
-                playlist_id TEXT NOT NULL,
-                video_id TEXT NOT NULL,
+                id TEXT PRIMARY KEY,
+                youtube_id TEXT NOT NULL,
                 title TEXT NOT NULL,
                 status TEXT NOT NULL,
                 quality TEXT,
                 filename TEXT,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (playlist_id, video_id)
+                updated_at TEXT NOT NULL
             )",
             [],
         )
         .inspect_err(|e| tracing::error!(error = %e, "failed to create videos table"))
         .context("failed to create videos table")?;
-        if let Err(e) = conn.execute("ALTER TABLE videos ADD COLUMN position INTEGER", [])
-            && !e.to_string().contains("duplicate column name")
-        {
-            tracing::error!(error = %e, "failed to add position column to videos table");
-            return Err(e).context("failed to add position column to videos table");
-        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -61,61 +49,47 @@ impl VideoRepository for SqliteVideoRepository {
         let conn = self
             .conn
             .lock()
-            .inspect_err(|_| {
-                tracing::error!(
-                    playlist_id = %video.playlist_id,
-                    video_id = %video.video_id,
-                    "database lock poisoned"
-                )
-            })
+            .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "INSERT INTO videos (playlist_id, video_id, title, status, quality, filename, position, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-             ON CONFLICT (playlist_id, video_id) DO UPDATE SET
+            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT (id) DO UPDATE SET
+                youtube_id = excluded.youtube_id,
                 title = excluded.title,
                 status = excluded.status,
                 quality = excluded.quality,
                 filename = excluded.filename,
-                position = excluded.position,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at",
             params![
-                video.playlist_id.as_str(),
-                video.video_id.as_str(),
+                video.id.as_str(),
+                video.youtube_id.as_str(),
                 video.title,
                 video.status.as_str(),
                 video.quality.map(|q| q.as_str()),
                 video.filename,
-                video.position,
                 video.created_at.to_rfc3339(),
                 video.updated_at.to_rfc3339(),
             ],
         )
         .inspect_err(|e| {
-            tracing::error!(
-                playlist_id = %video.playlist_id,
-                video_id = %video.video_id,
-                error = %e,
-                "failed to save video"
-            )
+            tracing::error!(video_id = %video.id, error = %e, "failed to save video")
         })
         .context("failed to save video")?;
         Ok(())
     }
 
-    fn find(&self, playlist_id: &PlaylistId, video_id: &VideoId) -> anyhow::Result<Option<Video>> {
+    fn find(&self, id: &VideoRecordId) -> anyhow::Result<Option<Video>> {
         let conn = self
             .conn
             .lock()
-            .inspect_err(|_| {
-                tracing::error!(playlist_id = %playlist_id, video_id = %video_id, "database lock poisoned")
-            })
+            .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
-            "SELECT playlist_id, video_id, title, status, quality, filename, position, created_at, updated_at
-             FROM videos WHERE playlist_id = ?1 AND video_id = ?2",
-            params![playlist_id.as_str(), video_id.as_str()],
+            "SELECT id, youtube_id, title, status, quality, filename, created_at, updated_at
+             FROM videos WHERE id = ?1",
+            params![id.as_str()],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -124,168 +98,59 @@ impl VideoRepository for SqliteVideoRepository {
                     row.get::<_, String>(3)?,
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
-                    row.get::<_, Option<i64>>(6)?,
+                    row.get::<_, String>(6)?,
                     row.get::<_, String>(7)?,
-                    row.get::<_, String>(8)?,
                 ))
             },
         )
         .optional()
-        .inspect_err(|e| {
-            tracing::error!(playlist_id = %playlist_id, video_id = %video_id, error = %e, "failed to find video")
-        })
+        .inspect_err(|e| tracing::error!(video_id = %id, error = %e, "failed to find video"))
         .context("failed to find video")?
         .map(
-            |(playlist_id, video_id, title, status, quality, filename, position, created_at, updated_at)| {
+            |(id, youtube_id, title, status, quality, filename, created_at, updated_at)| {
                 Self::row_to_video(
-                    playlist_id,
-                    video_id,
-                    title,
-                    status,
-                    quality,
-                    filename,
-                    position,
-                    created_at,
-                    updated_at,
+                    id, youtube_id, title, status, quality, filename, created_at, updated_at,
                 )
             },
         )
         .transpose()
     }
 
-    fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>> {
-        let conn = self
-            .conn
-            .lock()
-            .inspect_err(|_| tracing::error!(playlist_id = %playlist_id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
-        let mut stmt = conn
-            .prepare(
-                "SELECT playlist_id, video_id, title, status, quality, filename, position, created_at, updated_at
-                 FROM videos WHERE playlist_id = ?1
-                 ORDER BY position IS NULL, position ASC, video_id ASC",
-            )
-            .inspect_err(|e| {
-                tracing::error!(playlist_id = %playlist_id, error = %e, "failed to prepare list-videos query")
-            })
-            .context("failed to prepare list-videos query")?;
-        let rows = stmt
-            .query_map(params![playlist_id.as_str()], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, Option<String>>(4)?,
-                    row.get::<_, Option<String>>(5)?,
-                    row.get::<_, Option<i64>>(6)?,
-                    row.get::<_, String>(7)?,
-                    row.get::<_, String>(8)?,
-                ))
-            })
-            .inspect_err(|e| tracing::error!(playlist_id = %playlist_id, error = %e, "failed to list videos"))
-            .context("failed to list videos")?;
-
-        rows.map(|row| {
-            let (
-                playlist_id,
-                video_id,
-                title,
-                status,
-                quality,
-                filename,
-                position,
-                created_at,
-                updated_at,
-            ) = row
-                .inspect_err(|e| tracing::error!(error = %e, "failed to read video row"))
-                .context("failed to read video row")?;
-            Self::row_to_video(
-                playlist_id,
-                video_id,
-                title,
-                status,
-                quality,
-                filename,
-                position,
-                created_at,
-                updated_at,
-            )
-        })
-        .collect()
-    }
-
-    fn delete(&self, playlist_id: &PlaylistId, video_id: &VideoId) -> anyhow::Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .inspect_err(|_| {
-                tracing::error!(playlist_id = %playlist_id, video_id = %video_id, "database lock poisoned")
-            })
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
-        conn.execute(
-            "DELETE FROM videos WHERE playlist_id = ?1 AND video_id = ?2",
-            params![playlist_id.as_str(), video_id.as_str()],
-        )
-        .inspect_err(|e| {
-            tracing::error!(playlist_id = %playlist_id, video_id = %video_id, error = %e, "failed to delete video")
-        })
-        .context("failed to delete video")?;
-        Ok(())
-    }
-
     fn update(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self
             .conn
             .lock()
-            .inspect_err(|_| {
-                tracing::error!(
-                    playlist_id = %video.playlist_id,
-                    video_id = %video.video_id,
-                    "database lock poisoned"
-                )
-            })
+            .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "UPDATE videos SET title = ?3, status = ?4, quality = ?5, filename = ?6, position = ?7, updated_at = ?8
-             WHERE playlist_id = ?1 AND video_id = ?2",
+            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, updated_at = ?7
+             WHERE id = ?1",
             params![
-                video.playlist_id.as_str(),
-                video.video_id.as_str(),
+                video.id.as_str(),
+                video.youtube_id.as_str(),
                 video.title,
                 video.status.as_str(),
                 video.quality.map(|q| q.as_str()),
                 video.filename,
-                video.position,
                 video.updated_at.to_rfc3339(),
             ],
         )
         .inspect_err(|e| {
-            tracing::error!(
-                playlist_id = %video.playlist_id,
-                video_id = %video.video_id,
-                error = %e,
-                "failed to update video"
-            )
+            tracing::error!(video_id = %video.id, error = %e, "failed to update video")
         })
         .context("failed to update video")?;
         Ok(())
     }
 
-    fn delete_all_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<()> {
+    fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()> {
         let conn = self
             .conn
             .lock()
-            .inspect_err(|_| tracing::error!(playlist_id = %playlist_id, "database lock poisoned"))
+            .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
-        conn.execute(
-            "DELETE FROM videos WHERE playlist_id = ?1",
-            params![playlist_id.as_str()],
-        )
-        .inspect_err(|e| {
-            tracing::error!(playlist_id = %playlist_id, error = %e, "failed to delete videos for playlist")
-        })
-        .context("failed to delete videos for playlist")?;
+        conn.execute("DELETE FROM videos WHERE id = ?1", params![id.as_str()])
+            .inspect_err(|e| tracing::error!(video_id = %id, error = %e, "failed to delete video"))
+            .context("failed to delete video")?;
         Ok(())
     }
 }
@@ -293,24 +158,22 @@ impl VideoRepository for SqliteVideoRepository {
 impl SqliteVideoRepository {
     #[allow(clippy::too_many_arguments)]
     fn row_to_video(
-        playlist_id: String,
-        video_id: String,
+        id: String,
+        youtube_id: String,
         title: String,
         status: String,
         quality: Option<String>,
         filename: Option<String>,
-        position: Option<i64>,
         created_at: String,
         updated_at: String,
     ) -> anyhow::Result<Video> {
         Ok(Video {
-            playlist_id: PlaylistId::new(playlist_id)?,
-            video_id: VideoId::new(video_id)?,
+            id: VideoRecordId::new(id)?,
+            youtube_id: VideoId::new(youtube_id)?,
             title,
             status: VideoStatus::parse(&status)?,
             quality: quality.map(Quality::new).transpose()?,
             filename,
-            position,
             created_at: DateTime::parse_from_rfc3339(&created_at)
                 .context("failed to parse stored created_at")?
                 .with_timezone(&Utc),
@@ -331,10 +194,7 @@ pub struct FakeVideoRepository {
 impl VideoRepository for FakeVideoRepository {
     fn save(&self, video: &Video) -> anyhow::Result<()> {
         let mut videos = self.videos.lock().unwrap();
-        if let Some(existing) = videos
-            .iter_mut()
-            .find(|v| v.playlist_id == video.playlist_id && v.video_id == video.video_id)
-        {
+        if let Some(existing) = videos.iter_mut().find(|v| v.id == video.id) {
             *existing = video.clone();
         } else {
             videos.push(video.clone());
@@ -342,59 +202,26 @@ impl VideoRepository for FakeVideoRepository {
         Ok(())
     }
 
-    fn find(&self, playlist_id: &PlaylistId, video_id: &VideoId) -> anyhow::Result<Option<Video>> {
+    fn find(&self, id: &VideoRecordId) -> anyhow::Result<Option<Video>> {
         Ok(self
             .videos
             .lock()
             .unwrap()
             .iter()
-            .find(|v| v.playlist_id == *playlist_id && v.video_id == *video_id)
+            .find(|v| v.id == *id)
             .cloned())
-    }
-
-    fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<Video>> {
-        let mut videos: Vec<Video> = self
-            .videos
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|v| v.playlist_id == *playlist_id)
-            .cloned()
-            .collect();
-        videos.sort_by(|a, b| {
-            (a.position.is_none(), a.position, a.video_id.as_str()).cmp(&(
-                b.position.is_none(),
-                b.position,
-                b.video_id.as_str(),
-            ))
-        });
-        Ok(videos)
-    }
-
-    fn delete(&self, playlist_id: &PlaylistId, video_id: &VideoId) -> anyhow::Result<()> {
-        self.videos
-            .lock()
-            .unwrap()
-            .retain(|v| v.playlist_id != *playlist_id || v.video_id != *video_id);
-        Ok(())
     }
 
     fn update(&self, video: &Video) -> anyhow::Result<()> {
         let mut videos = self.videos.lock().unwrap();
-        if let Some(existing) = videos
-            .iter_mut()
-            .find(|v| v.playlist_id == video.playlist_id && v.video_id == video.video_id)
-        {
+        if let Some(existing) = videos.iter_mut().find(|v| v.id == video.id) {
             *existing = video.clone();
         }
         Ok(())
     }
 
-    fn delete_all_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<()> {
-        self.videos
-            .lock()
-            .unwrap()
-            .retain(|v| v.playlist_id != *playlist_id);
+    fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()> {
+        self.videos.lock().unwrap().retain(|v| v.id != *id);
         Ok(())
     }
 }
@@ -407,158 +234,50 @@ mod tests {
         SqliteVideoRepository::new(Connection::open_in_memory().unwrap()).unwrap()
     }
 
-    fn playlist_id() -> PlaylistId {
-        PlaylistId::new("PL1").unwrap()
-    }
-
-    fn video(video_id: &str, title: &str, now: DateTime<Utc>) -> Video {
-        Video::create(playlist_id(), VideoId::new(video_id).unwrap(), title, now)
+    fn video(title: &str, now: DateTime<Utc>) -> Video {
+        Video::create(VideoId::new("yt1").unwrap(), title, now)
     }
 
     #[test]
     fn it_should_return_the_video_after_saving_it() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let video = video("First", now);
 
-        repo.save(&video("vid1", "First", now)).unwrap();
+        repo.save(&video).unwrap();
 
-        let videos = repo.list_for_playlist(&playlist_id()).unwrap();
-        assert_eq!(videos.len(), 1);
-        assert_eq!(videos[0].title, "First");
-        assert_eq!(videos[0].status, VideoStatus::Pending);
-        assert_eq!(videos[0].quality, None);
-    }
-
-    #[test]
-    fn it_should_round_trip_a_video_with_no_recorded_quality() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&video("vid1", "First", now)).unwrap();
-
-        let found = repo
-            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
-            .unwrap()
-            .unwrap();
-
+        let found = repo.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.title, "First");
+        assert_eq!(found.youtube_id.as_str(), "yt1");
+        assert_eq!(found.status, VideoStatus::Pending);
         assert_eq!(found.quality, None);
     }
 
     #[test]
-    fn it_should_round_trip_a_video_with_a_recorded_position() {
+    fn it_should_allow_two_videos_to_share_the_same_youtube_id() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let with_position = Video::create_with_position(
-            playlist_id(),
-            VideoId::new("vid1").unwrap(),
-            "First",
-            5,
-            now,
-        );
-        repo.save(&with_position).unwrap();
+        let a = Video::create(VideoId::new("shared").unwrap(), "A", now);
+        let b = Video::create(VideoId::new("shared").unwrap(), "B", now);
 
-        let found = repo
-            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
-            .unwrap()
-            .unwrap();
+        repo.save(&a).unwrap();
+        repo.save(&b).unwrap();
 
-        assert_eq!(found.position, Some(5));
-    }
-
-    #[test]
-    fn it_should_round_trip_a_video_with_no_recorded_position() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&video("vid1", "First", now)).unwrap();
-
-        let found = repo
-            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(found.position, None);
-    }
-
-    #[test]
-    fn it_should_list_videos_ordered_by_position_rather_than_insertion_order() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&Video::create_with_position(
-            playlist_id(),
-            VideoId::new("vid_c").unwrap(),
-            "Third",
-            2,
-            now,
-        ))
-        .unwrap();
-        repo.save(&Video::create_with_position(
-            playlist_id(),
-            VideoId::new("vid_a").unwrap(),
-            "First",
-            0,
-            now,
-        ))
-        .unwrap();
-        repo.save(&Video::create_with_position(
-            playlist_id(),
-            VideoId::new("vid_b").unwrap(),
-            "Second",
-            1,
-            now,
-        ))
-        .unwrap();
-
-        let videos = repo.list_for_playlist(&playlist_id()).unwrap();
-
-        assert_eq!(
-            videos
-                .iter()
-                .map(|v| v.video_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["vid_a", "vid_b", "vid_c"]
-        );
-    }
-
-    #[test]
-    fn it_should_sort_videos_with_no_position_last_by_video_id() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&video("vid_no_position_b", "No position B", now))
-            .unwrap();
-        repo.save(&Video::create_with_position(
-            playlist_id(),
-            VideoId::new("vid_positioned").unwrap(),
-            "Positioned",
-            5,
-            now,
-        ))
-        .unwrap();
-        repo.save(&video("vid_no_position_a", "No position A", now))
-            .unwrap();
-
-        let videos = repo.list_for_playlist(&playlist_id()).unwrap();
-
-        assert_eq!(
-            videos
-                .iter()
-                .map(|v| v.video_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["vid_positioned", "vid_no_position_a", "vid_no_position_b"]
-        );
+        assert_eq!(repo.find(&a.id).unwrap().unwrap().title, "A");
+        assert_eq!(repo.find(&b.id).unwrap().unwrap().title, "B");
     }
 
     #[test]
     fn it_should_round_trip_a_video_with_a_recorded_quality() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let downloaded = video("vid1", "First", now)
-            .start_download(now)
-            .mark_downloaded(Quality::Mid, "First.mp4", now);
+        let downloaded =
+            video("First", now)
+                .start_download(now)
+                .mark_downloaded(Quality::Mid, "First.mp4", now);
         repo.save(&downloaded).unwrap();
 
-        let found = repo
-            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
-            .unwrap()
-            .unwrap();
+        let found = repo.find(&downloaded.id).unwrap().unwrap();
 
         assert_eq!(found.quality, Some(Quality::Mid));
         assert_eq!(found.filename, Some("First.mp4".to_string()));
@@ -568,93 +287,67 @@ mod tests {
     fn it_should_overwrite_every_field_including_status_when_saving_an_existing_video() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&video("vid1", "First", now)).unwrap();
+        let original = video("First", now);
+        repo.save(&original).unwrap();
 
         let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let updated = video("vid1", "Renamed", later).start_download(later);
+        let updated = Video {
+            title: "Renamed".to_string(),
+            updated_at: later,
+            ..original.clone()
+        }
+        .start_download(later);
         repo.save(&updated).unwrap();
 
-        let videos = repo.list_for_playlist(&playlist_id()).unwrap();
-        assert_eq!(videos.len(), 1);
-        assert_eq!(videos[0].title, "Renamed");
-        assert_eq!(videos[0].status, VideoStatus::InProgress);
-        assert_eq!(videos[0].updated_at, later);
+        let found = repo.find(&original.id).unwrap().unwrap();
+        assert_eq!(found.title, "Renamed");
+        assert_eq!(found.status, VideoStatus::InProgress);
+        assert_eq!(found.updated_at, later);
     }
 
     #[test]
     fn it_should_delete_only_the_named_video() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&video("vid1", "One", now)).unwrap();
-        repo.save(&video("vid2", "Two", now)).unwrap();
+        let one = video("One", now);
+        let two = video("Two", now);
+        repo.save(&one).unwrap();
+        repo.save(&two).unwrap();
 
-        repo.delete(&playlist_id(), &VideoId::new("vid1").unwrap())
-            .unwrap();
+        repo.delete(&one.id).unwrap();
 
-        let videos = repo.list_for_playlist(&playlist_id()).unwrap();
-        assert_eq!(videos.len(), 1);
-        assert_eq!(videos[0].video_id.as_str(), "vid2");
+        assert!(repo.find(&one.id).unwrap().is_none());
+        assert!(repo.find(&two.id).unwrap().is_some());
     }
 
     #[test]
     fn it_should_succeed_when_deleting_a_missing_video() {
         let repo = repo();
 
-        assert!(
-            repo.delete(&playlist_id(), &VideoId::new("vid1").unwrap())
-                .is_ok()
-        );
+        assert!(repo.delete(&VideoRecordId::new_generated()).is_ok());
     }
 
     #[test]
     fn it_should_return_none_when_finding_a_missing_video() {
         let repo = repo();
 
-        let found = repo
-            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
-            .unwrap();
+        let found = repo.find(&VideoRecordId::new_generated()).unwrap();
 
         assert!(found.is_none());
-    }
-
-    #[test]
-    fn it_should_delete_every_video_for_the_playlist_and_leave_others_untouched() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&video("vid1", "One", now)).unwrap();
-        repo.save(&video("vid2", "Two", now)).unwrap();
-        let other_playlist_id = PlaylistId::new("PL2").unwrap();
-        repo.save(&Video::create(
-            other_playlist_id.clone(),
-            VideoId::new("vid1").unwrap(),
-            "Other Playlist's Video",
-            now,
-        ))
-        .unwrap();
-
-        repo.delete_all_for_playlist(&playlist_id()).unwrap();
-
-        assert!(repo.list_for_playlist(&playlist_id()).unwrap().is_empty());
-        assert_eq!(repo.list_for_playlist(&other_playlist_id).unwrap().len(), 1);
     }
 
     #[test]
     fn it_should_return_the_stored_video_with_its_updated_status_after_update() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&video("vid1", "First", now)).unwrap();
-        let stored = repo
-            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
-            .unwrap()
-            .unwrap();
+        let original = video("First", now);
+        repo.save(&original).unwrap();
+        let stored = repo.find(&original.id).unwrap().unwrap();
 
         let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         repo.update(&stored.start_download(later)).unwrap();
 
-        let found = repo
-            .find(&playlist_id(), &VideoId::new("vid1").unwrap())
-            .unwrap()
-            .unwrap();
+        let found = repo.find(&original.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::InProgress);
         assert_eq!(found.updated_at, later);
     }

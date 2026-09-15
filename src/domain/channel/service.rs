@@ -3,8 +3,11 @@ use super::channel_handle::ChannelHandle;
 use super::errors::{CreateChannelError, DeleteChannelError};
 use super::video_limit::VideoLimit;
 use crate::domain::event::DomainEvent;
+use crate::domain::playlist::PlaylistPath;
 use crate::domain::shared::Quality;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
+use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
+use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_channel_repository::YoutubeChannelRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -23,6 +26,8 @@ pub enum CreateChannelOutcome {
 pub struct ChannelService {
     repository: Arc<dyn ChannelRepository>,
     lookup: Arc<dyn YoutubeChannelRepository>,
+    video_repository: Arc<dyn VideoRepository>,
+    channel_video_repository: Arc<dyn ChannelVideoRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
 }
@@ -31,12 +36,16 @@ impl ChannelService {
     pub fn new(
         repository: Arc<dyn ChannelRepository>,
         lookup: Arc<dyn YoutubeChannelRepository>,
+        video_repository: Arc<dyn VideoRepository>,
+        channel_video_repository: Arc<dyn ChannelVideoRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             repository,
             lookup,
+            video_repository,
+            channel_video_repository,
             event_publisher,
             clock,
         }
@@ -47,6 +56,7 @@ impl ChannelService {
         id: ChannelHandle,
         quality: Quality,
         video_limit: VideoLimit,
+        path: PlaylistPath,
     ) -> Result<CreateChannelOutcome, CreateChannelError> {
         match self.repository.find(&id) {
             Ok(Some(existing)) => return Ok(CreateChannelOutcome::AlreadyExisted(existing)),
@@ -67,6 +77,7 @@ impl ChannelService {
             resolved.youtube_channel_id,
             quality,
             video_limit,
+            path,
             now,
         );
         self.repository
@@ -81,12 +92,27 @@ impl ChannelService {
         Ok(CreateChannelOutcome::Created(channel))
     }
 
+    /// Deletes a channel and every video row stored under it (its
+    /// `ChannelVideo` rows and, for each, its owned `Video` row).
     pub fn delete_channel(&self, id: ChannelHandle) -> Result<(), DeleteChannelError> {
-        match self.repository.find(&id) {
-            Ok(Some(_)) => {}
+        let channel = match self.repository.find(&id) {
+            Ok(Some(channel)) => channel,
             Ok(None) => return Err(DeleteChannelError::NotFound(id)),
             Err(e) => return Err(DeleteChannelError::Repository(e)),
+        };
+
+        let channel_videos = self
+            .channel_video_repository
+            .list_for_channel(&id)
+            .map_err(DeleteChannelError::Repository)?;
+        for channel_video in &channel_videos {
+            self.video_repository
+                .delete(&channel_video.video_id)
+                .map_err(DeleteChannelError::Repository)?;
         }
+        self.channel_video_repository
+            .delete_all_for_channel(&id)
+            .map_err(DeleteChannelError::Repository)?;
 
         self.repository
             .delete(&id)
@@ -94,6 +120,7 @@ impl ChannelService {
         self.event_publisher
             .publish(&DomainEvent::ChannelDeleted {
                 channel_id: id.as_str().to_string(),
+                path: channel.path.as_str().to_string(),
             })
             .map_err(DeleteChannelError::Repository)?;
         info!(channel_id = %id, "deleted channel");
@@ -103,12 +130,18 @@ impl ChannelService {
     pub fn list_channels(&self) -> anyhow::Result<Vec<Channel>> {
         self.repository.list()
     }
+
+    pub fn find_channel(&self, id: &ChannelHandle) -> anyhow::Result<Option<Channel>> {
+        self.repository.find(id)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
     use crate::infrastructure::repositories::youtube_channel_repository::{
         FakeYoutubeChannelRepository, ResolvedChannel,
     };
@@ -120,18 +153,36 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
+    fn path() -> PlaylistPath {
+        PlaylistPath::new("creators/somechannel").unwrap()
+    }
+
     fn service(
         repository: FakeChannelRepository,
         resolved: Option<ResolvedChannel>,
-    ) -> (ChannelService, Arc<FakeEventPublisher>) {
+    ) -> (
+        ChannelService,
+        Arc<FakeEventPublisher>,
+        Arc<FakeVideoRepository>,
+        Arc<FakeChannelVideoRepository>,
+    ) {
         let event_publisher = Arc::new(FakeEventPublisher::default());
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
         let service = ChannelService::new(
             Arc::new(repository),
             Arc::new(FakeYoutubeChannelRepository { resolved }),
+            video_repository.clone(),
+            channel_video_repository.clone(),
             event_publisher.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
         );
-        (service, event_publisher)
+        (
+            service,
+            event_publisher,
+            video_repository,
+            channel_video_repository,
+        )
     }
 
     fn resolved_channel() -> ResolvedChannel {
@@ -143,7 +194,7 @@ mod tests {
 
     #[test]
     fn it_should_create_a_new_channel_from_a_bare_handle() {
-        let (service, event_publisher) =
+        let (service, event_publisher, _videos, _channel_videos) =
             service(FakeChannelRepository::default(), Some(resolved_channel()));
 
         let outcome = service
@@ -151,6 +202,7 @@ mod tests {
                 ChannelHandle::new("@somechannel").unwrap(),
                 Quality::High,
                 VideoLimit::new(10).unwrap(),
+                path(),
             )
             .unwrap();
 
@@ -162,6 +214,7 @@ mod tests {
         assert_eq!(channel.youtube_channel_id, "UC123");
         assert_eq!(channel.quality, Quality::High);
         assert_eq!(channel.video_limit.value(), 10);
+        assert_eq!(channel.path, path());
         assert_eq!(channel.created_at, fixed_timestamp());
 
         let published = event_publisher.published.lock().unwrap();
@@ -175,13 +228,14 @@ mod tests {
 
     #[test]
     fn it_should_not_change_or_publish_when_the_channel_already_exists() {
-        let (service, event_publisher) =
+        let (service, event_publisher, _videos, _channel_videos) =
             service(FakeChannelRepository::default(), Some(resolved_channel()));
         let created = service
             .create_channel(
                 ChannelHandle::new("@somechannel").unwrap(),
                 Quality::High,
                 VideoLimit::new(10).unwrap(),
+                path(),
             )
             .unwrap();
         let CreateChannelOutcome::Created(original) = created else {
@@ -193,6 +247,7 @@ mod tests {
                 ChannelHandle::new("@somechannel").unwrap(),
                 Quality::Low,
                 VideoLimit::new(5).unwrap(),
+                PlaylistPath::new("different/path").unwrap(),
             )
             .unwrap();
 
@@ -202,6 +257,7 @@ mod tests {
         assert_eq!(channel, original);
         assert_eq!(channel.quality, Quality::High);
         assert_eq!(channel.video_limit.value(), 10);
+        assert_eq!(channel.path, path());
 
         let published = event_publisher.published.lock().unwrap();
         assert_eq!(published.len(), 1);
@@ -209,12 +265,14 @@ mod tests {
 
     #[test]
     fn it_should_fail_when_the_youtube_channel_does_not_exist() {
-        let (service, event_publisher) = service(FakeChannelRepository::default(), None);
+        let (service, event_publisher, _videos, _channel_videos) =
+            service(FakeChannelRepository::default(), None);
 
         let result = service.create_channel(
             ChannelHandle::new("@missing").unwrap(),
             Quality::High,
             VideoLimit::new(10).unwrap(),
+            path(),
         );
 
         assert!(matches!(
@@ -226,13 +284,14 @@ mod tests {
 
     #[test]
     fn it_should_delete_an_existing_channel_and_publish_an_event() {
-        let (service, event_publisher) =
+        let (service, event_publisher, _videos, _channel_videos) =
             service(FakeChannelRepository::default(), Some(resolved_channel()));
         service
             .create_channel(
                 ChannelHandle::new("@somechannel").unwrap(),
                 Quality::High,
                 VideoLimit::new(10).unwrap(),
+                path(),
             )
             .unwrap();
 
@@ -256,7 +315,8 @@ mod tests {
                     channel_id: "@somechannel".to_string()
                 },
                 DomainEvent::ChannelDeleted {
-                    channel_id: "@somechannel".to_string()
+                    channel_id: "@somechannel".to_string(),
+                    path: path().as_str().to_string(),
                 },
             ]
         );
@@ -264,7 +324,8 @@ mod tests {
 
     #[test]
     fn it_should_fail_and_not_publish_when_deleting_a_nonexistent_channel() {
-        let (service, event_publisher) = service(FakeChannelRepository::default(), None);
+        let (service, event_publisher, _videos, _channel_videos) =
+            service(FakeChannelRepository::default(), None);
 
         let result = service.delete_channel(ChannelHandle::new("@missing").unwrap());
 
@@ -274,20 +335,22 @@ mod tests {
 
     #[test]
     fn it_should_return_an_empty_list_when_no_channels_exist() {
-        let (service, _event_publisher) = service(FakeChannelRepository::default(), None);
+        let (service, _event_publisher, _videos, _channel_videos) =
+            service(FakeChannelRepository::default(), None);
 
         assert_eq!(service.list_channels().unwrap(), Vec::new());
     }
 
     #[test]
     fn it_should_return_every_created_channel() {
-        let (service, _event_publisher) =
+        let (service, _event_publisher, _videos, _channel_videos) =
             service(FakeChannelRepository::default(), Some(resolved_channel()));
         service
             .create_channel(
                 ChannelHandle::new("@somechannel").unwrap(),
                 Quality::High,
                 VideoLimit::new(10).unwrap(),
+                path(),
             )
             .unwrap();
 

@@ -5,14 +5,17 @@ use serde::Deserialize;
 const PLAYLIST_ITEMS_URL: &str = "https://www.googleapis.com/youtube/v3/playlistItems";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PlaylistVideo {
+pub struct YoutubePlaylistItem {
     pub video_id: String,
     pub title: String,
     pub position: i64,
 }
 
 pub trait YoutubePlaylistItemsRepository: Send + Sync {
-    fn list_current_videos(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>>;
+    fn list_current_videos(
+        &self,
+        playlist_id: &PlaylistId,
+    ) -> anyhow::Result<Vec<YoutubePlaylistItem>>;
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,7 +67,7 @@ impl YoutubeApiPlaylistItemsRepository {
         &self,
         playlist_id: &str,
         page_token: Option<&str>,
-    ) -> anyhow::Result<(Vec<PlaylistVideo>, Option<String>)> {
+    ) -> anyhow::Result<(Vec<YoutubePlaylistItem>, Option<String>)> {
         let client = reqwest::blocking::Client::new();
         let mut query = vec![
             ("part", "snippet"),
@@ -113,7 +116,7 @@ impl YoutubeApiPlaylistItemsRepository {
         let videos = parsed
             .items
             .into_iter()
-            .map(|item| PlaylistVideo {
+            .map(|item| YoutubePlaylistItem {
                 video_id: item.snippet.resource_id.video_id,
                 title: item.snippet.title,
                 position: item.snippet.position,
@@ -125,7 +128,10 @@ impl YoutubeApiPlaylistItemsRepository {
 }
 
 impl YoutubePlaylistItemsRepository for YoutubeApiPlaylistItemsRepository {
-    fn list_current_videos(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>> {
+    fn list_current_videos(
+        &self,
+        playlist_id: &PlaylistId,
+    ) -> anyhow::Result<Vec<YoutubePlaylistItem>> {
         let mut all_videos = Vec::new();
         let mut page_token: Option<String> = None;
 
@@ -147,12 +153,15 @@ impl YoutubePlaylistItemsRepository for YoutubeApiPlaylistItemsRepository {
 #[cfg(test)]
 #[derive(Default)]
 pub struct FakeYoutubePlaylistItemsRepository {
-    pub(crate) videos: std::sync::Mutex<Vec<PlaylistVideo>>,
+    pub(crate) videos: std::sync::Mutex<Vec<YoutubePlaylistItem>>,
 }
 
 #[cfg(test)]
 impl YoutubePlaylistItemsRepository for FakeYoutubePlaylistItemsRepository {
-    fn list_current_videos(&self, _playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>> {
+    fn list_current_videos(
+        &self,
+        _playlist_id: &PlaylistId,
+    ) -> anyhow::Result<Vec<YoutubePlaylistItem>> {
         Ok(self.videos.lock().unwrap().clone())
     }
 }
@@ -202,17 +211,17 @@ mod tests {
         assert_eq!(
             videos,
             vec![
-                PlaylistVideo {
+                YoutubePlaylistItem {
                     video_id: "1".to_string(),
                     title: "One".to_string(),
                     position: 0,
                 },
-                PlaylistVideo {
+                YoutubePlaylistItem {
                     video_id: "2".to_string(),
                     title: "Two".to_string(),
                     position: 1,
                 },
-                PlaylistVideo {
+                YoutubePlaylistItem {
                     video_id: "3".to_string(),
                     title: "Three".to_string(),
                     position: 2,

@@ -2,6 +2,7 @@ use crate::domain::event::DomainEvent;
 use crate::domain::playlist::errors::DeletePlaylistError;
 use crate::domain::shared::PlaylistId;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::sync::Arc;
@@ -12,6 +13,7 @@ use tracing::info;
 pub struct PlaylistDeleter {
     repository: Arc<dyn PlaylistRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     event_publisher: Arc<dyn EventPublisher>,
 }
 
@@ -19,11 +21,13 @@ impl PlaylistDeleter {
     pub fn new(
         repository: Arc<dyn PlaylistRepository>,
         video_repository: Arc<dyn VideoRepository>,
+        playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         event_publisher: Arc<dyn EventPublisher>,
     ) -> Self {
         Self {
             repository,
             video_repository,
+            playlist_video_repository,
             event_publisher,
         }
     }
@@ -35,9 +39,19 @@ impl PlaylistDeleter {
             Err(e) => return Err(DeletePlaylistError::Repository(e)),
         };
 
-        self.video_repository
+        let playlist_videos = self
+            .playlist_video_repository
+            .list_for_playlist(&id)
+            .map_err(DeletePlaylistError::Repository)?;
+        for playlist_video in &playlist_videos {
+            self.video_repository
+                .delete(&playlist_video.video_id)
+                .map_err(DeletePlaylistError::Repository)?;
+        }
+        self.playlist_video_repository
             .delete_all_for_playlist(&id)
             .map_err(DeletePlaylistError::Repository)?;
+
         self.repository
             .delete(&id)
             .map_err(DeletePlaylistError::Repository)?;

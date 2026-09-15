@@ -42,6 +42,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         FakePlaylistRepository, PlaylistRepository,
     };
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
@@ -58,6 +59,7 @@ mod tests {
         let video_reconciler = VideoReconciler::new(
             playlist_repository,
             Arc::new(FakeVideoRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::default()),
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
             Arc::new(FakeEventPublisher::default()),
             task_repository.clone(),

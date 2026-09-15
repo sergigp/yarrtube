@@ -1,8 +1,10 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::PlaylistKind;
+use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::shared::{PlaylistId, VideoId};
 use crate::domain::video::{AddVideoToCustomPlaylistError, Video};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_repository::YoutubeVideoRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
@@ -17,6 +19,7 @@ use tracing::info;
 pub struct CustomPlaylistVideoAdder {
     playlist_repository: Arc<dyn PlaylistRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     youtube_video_repository: Arc<dyn YoutubeVideoRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
@@ -26,6 +29,7 @@ impl CustomPlaylistVideoAdder {
     pub fn new(
         playlist_repository: Arc<dyn PlaylistRepository>,
         video_repository: Arc<dyn VideoRepository>,
+        playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         youtube_video_repository: Arc<dyn YoutubeVideoRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
@@ -33,6 +37,7 @@ impl CustomPlaylistVideoAdder {
         Self {
             playlist_repository,
             video_repository,
+            playlist_video_repository,
             youtube_video_repository,
             event_publisher,
             clock,
@@ -57,8 +62,8 @@ impl CustomPlaylistVideoAdder {
         }
 
         if self
-            .video_repository
-            .find(&playlist_id, &video_id)
+            .playlist_video_repository
+            .find_by_youtube_video(&playlist_id, &video_id)
             .map_err(AddVideoToCustomPlaylistError::Repository)?
             .is_some()
         {
@@ -72,19 +77,18 @@ impl CustomPlaylistVideoAdder {
             .ok_or_else(|| AddVideoToCustomPlaylistError::YoutubeVideoNotFound(video_id.clone()))?;
 
         let now = self.clock.now();
-        let video = Video::create(
-            playlist_id.clone(),
-            video_id.clone(),
-            youtube_video.title,
-            now,
-        );
+        let video = Video::create(video_id.clone(), youtube_video.title, now);
         self.video_repository
             .save(&video)
             .map_err(AddVideoToCustomPlaylistError::Repository)?;
+        let playlist_video = PlaylistVideo::create(playlist_id.clone(), video.id.clone(), now);
+        self.playlist_video_repository
+            .save(&playlist_video)
+            .map_err(AddVideoToCustomPlaylistError::Repository)?;
         self.event_publisher
-            .publish(&DomainEvent::VideoAdded {
+            .publish(&DomainEvent::VideoAddedToPlaylist {
                 playlist_id: playlist_id.as_str().to_string(),
-                video_id: video_id.as_str().to_string(),
+                video_id: video.id.as_str().to_string(),
             })
             .map_err(AddVideoToCustomPlaylistError::Repository)?;
         info!(playlist_id = %playlist_id, video_id = %video_id, "added video to custom playlist");

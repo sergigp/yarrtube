@@ -1,60 +1,51 @@
-use crate::domain::shared::{PlaylistId, VideoId};
+use crate::domain::channel::ChannelHandle;
+use crate::domain::shared::PlaylistId;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
-use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{debug, info};
 
-/// Deletes a video's downloaded file, or a whole playlist's output
+/// Deletes a video's downloaded file, or a whole playlist's/channel's output
 /// directory, from disk.
 #[derive(Clone)]
 pub struct VideoFileDeleter {
-    playlist_repository: Arc<dyn PlaylistRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
     videos_path: String,
 }
 
 impl VideoFileDeleter {
     pub fn new(
-        playlist_repository: Arc<dyn PlaylistRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
         videos_path: impl Into<String>,
     ) -> Self {
         Self {
-            playlist_repository,
             video_file_repository,
             videos_path: videos_path.into(),
         }
     }
 
     /// Deletes a removed video's downloaded file from disk, scheduled by
-    /// `subscribers::delete_video_file_on_video_deleted` whenever a
-    /// downloaded video is removed from its playlist. No-ops (without
-    /// erroring) if the video has no recorded filename, the playlist no
-    /// longer exists, or no matching file is found, so the task is safe to
-    /// retry.
+    /// `subscribers::delete_video_file_on_video_removed_from_playlist`/
+    /// `..._channel` whenever a downloaded video is removed from its
+    /// container. `output_dir` is the container's already-resolved output
+    /// directory. No-ops (without erroring) if the video has no recorded
+    /// filename or no matching file is found, so the task is safe to retry.
     pub fn delete_video_file(
         &self,
-        playlist_id: PlaylistId,
-        video_id: VideoId,
         filename: Option<String>,
+        output_dir: &Path,
     ) -> anyhow::Result<()> {
         let Some(filename) = filename else {
-            debug!(playlist_id = %playlist_id, video_id = %video_id, "video has no recorded filename, skipping file deletion");
-            return Ok(());
-        };
-        let Some(playlist) = self.playlist_repository.find(&playlist_id)? else {
-            debug!(playlist_id = %playlist_id, "playlist no longer exists, skipping file deletion");
+            debug!("video has no recorded filename, skipping file deletion");
             return Ok(());
         };
 
-        let output_dir = Path::new(&self.videos_path).join(playlist.path.as_str());
-        let deleted = self.video_file_repository.delete(&output_dir, &filename)?;
+        let deleted = self.video_file_repository.delete(output_dir, &filename)?;
 
         if deleted {
-            info!(playlist_id = %playlist_id, video_id = %video_id, "deleted video file");
+            info!(filename, "deleted video file");
         } else {
-            debug!(playlist_id = %playlist_id, video_id = %video_id, "no matching video file found to delete");
+            debug!(filename, "no matching video file found to delete");
         }
 
         Ok(())
@@ -71,10 +62,29 @@ impl VideoFileDeleter {
         playlist_id: PlaylistId,
         path: String,
     ) -> anyhow::Result<()> {
-        let output_dir = Path::new(&self.videos_path).join(&path);
+        let output_dir = self.output_dir(&path);
         self.video_file_repository
             .delete_dir_recursive(&output_dir)?;
         info!(playlist_id = %playlist_id, path = %path, "deleted playlist output directory");
         Ok(())
+    }
+
+    /// Recursively deletes a deleted channel's output directory from disk,
+    /// scheduled by `subscribers::delete_channel_files_on_channel_deleted`
+    /// whenever a channel is deleted. Mirrors `delete_playlist_video_files`.
+    pub fn delete_channel_video_files(
+        &self,
+        channel_id: ChannelHandle,
+        path: String,
+    ) -> anyhow::Result<()> {
+        let output_dir = self.output_dir(&path);
+        self.video_file_repository
+            .delete_dir_recursive(&output_dir)?;
+        info!(channel_id = %channel_id, path = %path, "deleted channel output directory");
+        Ok(())
+    }
+
+    fn output_dir(&self, path: &str) -> PathBuf {
+        Path::new(&self.videos_path).join(path)
     }
 }

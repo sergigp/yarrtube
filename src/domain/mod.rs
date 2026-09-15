@@ -1,6 +1,8 @@
 pub mod channel;
+pub mod channel_video;
 pub mod event;
 pub mod playlist;
+pub mod playlist_video;
 pub mod services;
 pub mod shared;
 pub mod task;
