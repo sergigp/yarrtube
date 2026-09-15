@@ -43,6 +43,7 @@ mod tests {
     use crate::domain::shared::{Quality, VideoId};
     use crate::domain::video::{Video, VideoService};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         FakePlaylistRepository, PlaylistRepository,
     };
@@ -50,6 +51,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::{
         FakeVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
@@ -82,6 +84,12 @@ mod tests {
             event_publisher.clone() as Arc<dyn EventPublisher>,
             Arc::new(FixedClock(fixed_timestamp())),
         );
+        let channel_service = crate::domain::channel::ChannelService::new(
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+            event_publisher.clone() as Arc<dyn EventPublisher>,
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
         let video_service = VideoService::new(
             playlist_repository,
             video_repository,
@@ -101,6 +109,7 @@ mod tests {
             task_service: crate::domain::task::TaskService::new(Arc::new(
                 FakeTaskRepository::default(),
             )),
+            channel_service,
         };
         let inner = Router::new()
             .route("/playlists/{id}/videos", get(list_videos_for_playlist))

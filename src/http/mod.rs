@@ -1,9 +1,11 @@
+pub mod channels;
 pub mod custom_playlists;
 pub mod error;
 pub mod playlists;
 pub mod tasks;
 pub mod videos;
 
+use crate::domain::channel::ChannelService;
 use crate::domain::playlist::PlaylistService;
 use crate::domain::task::TaskService;
 use crate::domain::video::VideoService;
@@ -15,6 +17,7 @@ pub struct AppState {
     pub playlist_service: PlaylistService,
     pub video_service: VideoService,
     pub task_service: TaskService,
+    pub channel_service: ChannelService,
 }
 
 pub fn api_router(state: AppState) -> Router {
@@ -48,5 +51,13 @@ pub fn api_router(state: AppState) -> Router {
             axum::routing::delete(custom_playlists::remove_video),
         )
         .route("/tasks", get(tasks::list_tasks))
+        .route(
+            "/channels",
+            post(channels::create_channel).get(channels::list_channels),
+        )
+        .route(
+            "/channels/{handle}",
+            axum::routing::delete(channels::delete_channel),
+        )
         .with_state(state)
 }

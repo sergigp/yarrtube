@@ -130,9 +130,11 @@ mod tests {
     use crate::domain::video::VideoService;
     use crate::http::api_router;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+    use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
@@ -202,6 +204,12 @@ mod tests {
             task_service: crate::domain::task::TaskService::new(Arc::new(
                 FakeTaskRepository::default(),
             )),
+            channel_service: crate::domain::channel::ChannelService::new(
+                Arc::new(FakeChannelRepository::default()),
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                event_publisher.clone(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ),
         };
         (
             axum::Router::new().nest("/api", api_router(state)),
@@ -896,6 +904,12 @@ mod tests {
             task_service: crate::domain::task::TaskService::new(Arc::new(
                 FakeTaskRepository::default(),
             )),
+            channel_service: crate::domain::channel::ChannelService::new(
+                Arc::new(FakeChannelRepository::default()),
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                event_publisher.clone(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            ),
         };
         let router = axum::Router::new().nest("/api", api_router(state));
 
@@ -987,13 +1001,19 @@ mod tests {
                 repository,
                 video_repository.clone(),
                 Arc::new(FakeYoutubePlaylistRepository { exists: true }),
-                event_publisher,
+                event_publisher.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             ),
             video_service,
             task_service: crate::domain::task::TaskService::new(Arc::new(
                 FakeTaskRepository::default(),
             )),
+            channel_service: crate::domain::channel::ChannelService::new(
+                Arc::new(FakeChannelRepository::default()),
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                event_publisher,
+                Arc::new(FixedClock(fixed_timestamp())),
+            ),
         };
         (
             axum::Router::new().nest("/api", api_router(state)),

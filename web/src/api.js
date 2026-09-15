@@ -74,3 +74,34 @@ export async function deleteVideoFromCustomPlaylist(playlistId, videoId) {
     )
   }
 }
+
+export function fetchChannels() {
+  return request('/channels')
+}
+
+export async function createChannel({ channel, quality, video_limit }) {
+  const response = await fetch('/api/channels', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ channel, quality, video_limit }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(
+      body?.error ?? `request to /channels failed with status ${response.status}`,
+    )
+  }
+  return response.json()
+}
+
+export async function deleteChannel(id) {
+  const response = await fetch(`/api/channels/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(
+      body?.error ?? `request to delete channel ${id} failed with status ${response.status}`,
+    )
+  }
+}
