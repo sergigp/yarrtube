@@ -5,9 +5,10 @@ use std::path::Path;
 const IN_PROGRESS_EXTENSIONS: &[&str] = &["part", "ytdl"];
 
 /// Locates and deletes a video's downloaded file on disk, and lists a
-/// playlist output directory's current entries, injected into `VideoService`
-/// for the event-driven cleanup path and filesystem reconciliation. Separate
-/// from `VideoDownloaderRepository` (`youtube_video_downloader_repository.rs`):
+/// playlist output directory's current entries, injected into
+/// `VideoFileDeleter` and `VideoReconciler` for the event-driven cleanup
+/// path and filesystem reconciliation. Separate from
+/// `VideoDownloaderRepository` (`youtube_video_downloader_repository.rs`):
 /// downloading shells out to `yt-dlp`, this is pure filesystem search,
 /// listing, and removal.
 pub trait VideoFileRepository: Send + Sync {
@@ -27,12 +28,6 @@ pub trait VideoFileRepository: Send + Sync {
 }
 
 pub struct FilesystemVideoFileRepository;
-
-fn is_in_progress_temp_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| IN_PROGRESS_EXTENSIONS.contains(&ext))
-}
 
 impl VideoFileRepository for FilesystemVideoFileRepository {
     fn delete(&self, output_dir: &Path, filename: &str) -> anyhow::Result<bool> {
@@ -89,6 +84,12 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
             }
         }
     }
+}
+
+fn is_in_progress_temp_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| IN_PROGRESS_EXTENSIONS.contains(&ext))
 }
 
 #[cfg(test)]

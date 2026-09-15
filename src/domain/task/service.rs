@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 /// Orchestrates read access to the task aggregate for external callers (e.g.
 /// HTTP). Background task scheduling/execution goes through `TaskRepository`
-/// directly via `VideoService`/`TaskExecutor`; this exists for queries.
+/// directly via the domain services in `domain/services/`/`TaskExecutor`;
+/// this exists for queries.
 #[derive(Clone)]
 pub struct TaskService {
     task_repository: Arc<dyn TaskRepository>,

@@ -1,10 +1,12 @@
-use crate::cli::ytdlp_update;
+use crate::application::http::{self, AppState};
+use crate::application::{subscribers, tasks};
 use crate::domain::channel::ChannelService;
-use crate::domain::playlist::PlaylistService;
+use crate::domain::services::{
+    CustomPlaylistVideoAdder, CustomPlaylistVideoRemover, PlaylistCreator, PlaylistDeleter,
+    PlaylistSearcher, VideoDownloader, VideoFileDeleter, VideoReconciler, VideoSearcher,
+};
 use crate::domain::task::{Task, TaskService};
-use crate::domain::video::VideoService;
-use crate::http::{self, AppState};
-use crate::infrastructure::client::ytdlp_updater::RealYtdlpUpdater;
+use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
 use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
@@ -29,7 +31,6 @@ use crate::infrastructure::shared::domain_events::event_repository::{
 };
 use crate::infrastructure::shared::system_clock::{Clock, SystemClock};
 use crate::infrastructure::shared::web_assets::WebAssets;
-use crate::{subscribers, tasks};
 use anyhow::{Context, Result};
 use axum::Router;
 use axum::http::{StatusCode, Uri, header};
@@ -76,7 +77,7 @@ fn videos_path() -> String {
 }
 
 fn run_startup_ytdlp_update() {
-    match ytdlp_update::update(&ytdlp_update::target_path()) {
+    match RealYtdlpUpdater.update(&target_path()) {
         Ok(()) => info!("yt-dlp self-update succeeded"),
         Err(e) => error!(error = %e, "yt-dlp self-update failed"),
     }
@@ -155,54 +156,85 @@ fn build_application() -> Result<Application> {
 
     let task_service = TaskService::new(task_repository.clone() as Arc<dyn TaskRepository>);
 
-    let playlist_service = PlaylistService::new(
+    let playlist_creator = PlaylistCreator::new(
         playlist_repository.clone(),
-        video_repository.clone(),
         Arc::new(YoutubeApiPlaylistRepository::new(youtube_api_key())),
         event_publisher.clone() as Arc<dyn EventPublisher>,
         Arc::new(SystemClock),
     );
+    let playlist_deleter = PlaylistDeleter::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        event_publisher.clone() as Arc<dyn EventPublisher>,
+    );
+    let playlist_searcher = PlaylistSearcher::new(playlist_repository.clone());
     let channel_service = ChannelService::new(
         channel_repository,
         Arc::new(YoutubeApiChannelRepository::new(youtube_api_key())),
         event_publisher.clone() as Arc<dyn EventPublisher>,
         Arc::new(SystemClock),
     );
-    let video_service = VideoService::new(
+    let event_publisher = event_publisher as Arc<dyn EventPublisher>;
+    let task_repository = task_repository as Arc<dyn TaskRepository>;
+    let video_file_repository = Arc::new(FilesystemVideoFileRepository);
+
+    let video_reconciler = VideoReconciler::new(
         playlist_repository.clone(),
-        video_repository,
+        video_repository.clone(),
         Arc::new(YoutubeApiPlaylistItemsRepository::new(youtube_api_key())),
-        Arc::new(YoutubeApiVideoRepository::new(youtube_api_key())),
-        event_publisher as Arc<dyn EventPublisher>,
-        task_repository.clone() as Arc<dyn TaskRepository>,
-        Arc::new(YtDlpVideoDownloaderRepository::new(
-            ytdlp_update::target_path(),
-        )),
-        Arc::new(FilesystemVideoFileRepository),
+        event_publisher.clone(),
+        task_repository.clone(),
+        video_file_repository.clone(),
         Arc::new(SystemClock),
         reconcile_interval_seconds(),
         videos_path(),
     );
+    let video_downloader = VideoDownloader::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        Arc::new(YtDlpVideoDownloaderRepository::new(target_path())),
+        Arc::new(SystemClock),
+        videos_path(),
+    );
+    let video_file_deleter = VideoFileDeleter::new(
+        playlist_repository.clone(),
+        video_file_repository,
+        videos_path(),
+    );
+    let custom_playlist_video_adder = CustomPlaylistVideoAdder::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        Arc::new(YoutubeApiVideoRepository::new(youtube_api_key())),
+        event_publisher.clone(),
+        Arc::new(SystemClock),
+    );
+    let custom_playlist_video_remover = CustomPlaylistVideoRemover::new(
+        playlist_repository.clone(),
+        video_repository.clone(),
+        event_publisher.clone(),
+    );
+    let video_searcher = VideoSearcher::new(playlist_repository.clone(), video_repository);
 
     let event_consumer = Arc::new(DomainEventsConsumer::new(
         event_repository as Arc<dyn EventRepository>,
         subscribers::registry(
-            video_service.clone(),
+            video_reconciler.clone(),
             playlist_repository,
-            task_repository.clone() as Arc<dyn TaskRepository>,
+            task_repository.clone(),
             Arc::new(SystemClock),
         ),
         Arc::new(SystemClock),
     ));
-    let task_repository = task_repository as Arc<dyn TaskRepository>;
     let task_executor = Arc::new(TaskExecutor::new(
         task_repository.clone(),
         tasks::registry(
-            video_service.clone(),
+            video_reconciler.clone(),
+            video_downloader.clone(),
+            video_file_deleter.clone(),
             task_repository.clone(),
             Arc::new(SystemClock),
             Arc::new(RealYtdlpUpdater),
-            ytdlp_update::target_path(),
+            target_path(),
         ),
         Arc::new(SystemClock),
     ));
@@ -219,8 +251,13 @@ fn build_application() -> Result<Application> {
 
     Ok(Application {
         state: AppState {
-            playlist_service,
-            video_service,
+            playlist_creator,
+            playlist_deleter,
+            playlist_searcher,
+            video_reconciler,
+            custom_playlist_video_adder,
+            custom_playlist_video_remover,
+            video_searcher,
             task_service,
             channel_service,
         },

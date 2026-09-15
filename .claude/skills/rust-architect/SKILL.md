@@ -35,16 +35,22 @@ src/
       <value_object>.rs   # one file per value object, named after the type
       <entity>.rs         # named after the type, even if it repeats the folder name
       errors.rs           # every error type for this aggregate, together
-      service.rs          # ALL orchestration logic for this aggregate's operations
-  http/  (or grpc/, etc. — one per external interface)
-    mod.rs                 # AppState + router wiring only
-    error.rs               # shared response-mapping helpers
-    <resource>/
-      mod.rs                # handlers only
-      dto.rs                # request/response wire types + From<Domain> conversions
-  cli/                      # only if the project has a CLI
-    mod.rs                  # Cli/Commands definitions (this is the CLI's "routing")
-    <command>.rs             # one file per command's orchestration
+    services/              # every aggregate's use-case services, together, flat
+      <use_case>.rs         # one domain service per use case, e.g. widget_creator.rs
+  application/              # every external entry point (adapters), one subfolder per interface
+    http/  (or grpc/, etc.)
+      mod.rs                 # AppState + router wiring only
+      error.rs               # shared response-mapping helpers
+      <resource>/
+        mod.rs                # handlers only
+        dto.rs                # request/response wire types + From<Domain> conversions
+    cli/                      # only if the project has a CLI
+      mod.rs                  # Cli/Commands definitions (this is the CLI's "routing")
+      <command>.rs             # one file per command's orchestration
+    subscribers/              # event subscribers, one file per subscriber
+      <subscriber>.rs
+    tasks/                    # scheduled/background task handlers, one file per task
+      <task>.rs
   infrastructure/
     repositories/            # one aggregate's dedicated port implementation
       <implementation>_<port>.rs   # trait + its implementation, together
@@ -62,6 +68,8 @@ src/
 - A repository/port method either **reads** (returns `anyhow::Result<Entity>` / `anyhow::Result<Vec<Entity>>` / `anyhow::Result<Option<Entity>>`, an entity or collection, never a wrapper/outcome enum) or **writes** (returns `anyhow::Result<()>`, void on success). No custom infra error types (`RepositoryError`/`LookupError` and friends), infra failures are untyped `anyhow::Error`. A Repository always returns the entities that its name implies (`UserRepository` returns `User`).
 - Business-meaningful outcomes that look like they belong in the repository (e.g. "was this newly created, or did it already exist?") are decided in the domain service, not returned by infra: call `find`, branch on `Some`/`None`, then call `insert`/`save`. This trades DB-level atomicity for keeping business logic out of infra, a known, accepted race window, not an oversight.
 - State transitions live on the entity, never as behavior-named repository methods or as anemic domain models operated from domain service.
+- **Fn ordering**: within any `impl` block, and among free functions in a file, order is: `new` (if it exists), then every `pub` method or trait-impl method (trait-impl methods are the type's public surface even without the `pub` keyword), then private/helper methods. This applies uniformly, no exceptions — including repositories' `row_to_*` mapping helpers, which go after the trait-impl methods they support, not before.
+- Domain services are call-agnostic: they know nothing about HTTP, CLI, subscribers, or tasks. Adapting any external trigger into a domain call — parsing/validating input, invoking the domain service, mapping its result back — is the application layer's sole responsibility.
 
 # Testing
 
@@ -102,6 +110,6 @@ Some of these are deliberate deviations from DDD/hexagonal orthodoxy, for conven
 - Port traits live in `infrastructure/`, not `domain/` (dependency direction inverted, traded for editing convenience).
 - Repositories have no typed error enums, everything is `anyhow::Error` until the domain service gives it meaning.
 - An idempotent "create" use case is two non-atomic port calls (`find` then `insert`), not one atomic upsert.
-- Orchestration lives in `domain/<aggregate>/service.rs`, not a separate `application/` layer.
+- Orchestration lives in `domain/services/`, not a separate `application/` layer. The `application/` folder holds only adapters (HTTP, CLI, subscribers, tasks) that translate an external trigger into a domain call — business orchestration itself never lives there.
 
 If code looks like it violates textbook architecture in one of these ways, it's probably intentional. Ask before changing it.

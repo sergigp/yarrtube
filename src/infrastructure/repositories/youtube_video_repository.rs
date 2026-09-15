@@ -11,8 +11,8 @@ pub struct YoutubeVideo {
 }
 
 /// Confirms a single video's existence/accessibility and fetches its title,
-/// injected into `VideoService` for adding a video to a custom playlist.
-/// Sibling to `YoutubePlaylistRepository`/`YoutubePlaylistItemsRepository`.
+/// injected into `CustomPlaylistVideoAdder` for adding a video to a custom
+/// playlist. Sibling to `YoutubePlaylistRepository`/`YoutubePlaylistItemsRepository`.
 pub trait YoutubeVideoRepository: Send + Sync {
     fn find(&self, id: &VideoId) -> anyhow::Result<Option<YoutubeVideo>>;
 }

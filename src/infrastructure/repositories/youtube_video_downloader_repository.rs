@@ -2,7 +2,7 @@ use crate::domain::shared::Quality;
 use crate::infrastructure::shared::ytdlp;
 use std::path::{Path, PathBuf};
 
-/// Downloads a single video via `yt-dlp`, injected into `VideoService` for
+/// Downloads a single video via `yt-dlp`, injected into `VideoDownloader` for
 /// the event-driven download path.
 pub trait VideoDownloaderRepository: Send + Sync {
     /// Returns `Ok(Some(filename))` with the exact filename `yt-dlp` saved
