@@ -223,6 +223,7 @@ fn build_application() -> Result<Application> {
     let video_downloader = VideoDownloader::new(
         video_repository.clone(),
         Arc::new(YtDlpVideoDownloaderRepository::new(target_path())),
+        video_file_repository.clone(),
         Arc::new(SystemClock),
     );
     let video_file_deleter = VideoFileDeleter::new(video_file_repository, videos_path());

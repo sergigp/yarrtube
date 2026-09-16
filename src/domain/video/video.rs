@@ -14,6 +14,7 @@ pub struct Video {
     pub status: VideoStatus,
     pub quality: Option<Quality>,
     pub filename: Option<String>,
+    pub thumbnail_filename: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -27,6 +28,7 @@ impl Video {
             status: VideoStatus::Pending,
             quality: None,
             filename: None,
+            thumbnail_filename: None,
             created_at: now,
             updated_at: now,
         }
@@ -44,12 +46,14 @@ impl Video {
         self,
         quality: Quality,
         filename: impl Into<String>,
+        thumbnail_filename: Option<String>,
         now: DateTime<Utc>,
     ) -> Self {
         Self {
             status: VideoStatus::Downloaded,
             quality: Some(quality),
             filename: Some(filename.into()),
+            thumbnail_filename,
             updated_at: now,
             ..self
         }
@@ -71,16 +75,17 @@ impl Video {
         }
     }
 
-    /// Resets a video back to `Pending`, clearing its recorded filename and
-    /// quality, used by filesystem reconciliation both when a `Downloaded`
-    /// video's recorded file is missing from disk and when an `Errored`
-    /// video is given another chance, in each case followed by scheduling a
-    /// fresh download.
+    /// Resets a video back to `Pending`, clearing its recorded filename,
+    /// thumbnail filename, and quality, used by filesystem reconciliation
+    /// both when a `Downloaded` video's recorded file is missing from disk
+    /// and when an `Errored` video is given another chance, in each case
+    /// followed by scheduling a fresh download.
     pub fn reset_for_redownload(self, now: DateTime<Utc>) -> Self {
         Self {
             status: VideoStatus::Pending,
             quality: None,
             filename: None,
+            thumbnail_filename: None,
             updated_at: now,
             ..self
         }
@@ -101,6 +106,7 @@ mod tests {
         assert_eq!(video.title, "My Video");
         assert_eq!(video.quality, None);
         assert_eq!(video.filename, None);
+        assert_eq!(video.thumbnail_filename, None);
         assert_eq!(video.created_at, now);
         assert_eq!(video.updated_at, now);
     }
@@ -138,18 +144,38 @@ mod tests {
     fn it_should_transition_to_downloaded_when_marked_downloaded() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
 
-        let video = video().mark_downloaded(Quality::High, "My Video.mp4", now);
+        let video = video().mark_downloaded(
+            Quality::High,
+            "My Video.mp4",
+            Some("My Video.jpg".to_string()),
+            now,
+        );
 
         assert_eq!(video.status, VideoStatus::Downloaded);
         assert_eq!(video.quality, Some(Quality::High));
         assert_eq!(video.filename, Some("My Video.mp4".to_string()));
+        assert_eq!(video.thumbnail_filename, Some("My Video.jpg".to_string()));
         assert_eq!(video.updated_at, now);
+    }
+
+    #[test]
+    fn it_should_record_no_thumbnail_filename_when_marked_downloaded_without_one() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+
+        let video = video().mark_downloaded(Quality::High, "My Video.mp4", None, now);
+
+        assert_eq!(video.thumbnail_filename, None);
     }
 
     #[test]
     fn it_should_reset_a_downloaded_video_back_to_pending_for_redownload() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
-        let downloaded = video().mark_downloaded(Quality::High, "My Video.mp4", now);
+        let downloaded = video().mark_downloaded(
+            Quality::High,
+            "My Video.mp4",
+            Some("My Video.jpg".to_string()),
+            now,
+        );
 
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
         let reset = downloaded.reset_for_redownload(later);
@@ -157,6 +183,7 @@ mod tests {
         assert_eq!(reset.status, VideoStatus::Pending);
         assert_eq!(reset.quality, None);
         assert_eq!(reset.filename, None);
+        assert_eq!(reset.thumbnail_filename, None);
         assert_eq!(reset.updated_at, later);
     }
 

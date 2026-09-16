@@ -73,6 +73,11 @@ export function ChannelDetail({ channel, onBack, onDeleted }) {
               <video
                 controls
                 src={videoMediaUrl(channel.path, selectedVideo.filename)}
+                poster={
+                  selectedVideo.thumbnail_filename
+                    ? videoMediaUrl(channel.path, selectedVideo.thumbnail_filename)
+                    : undefined
+                }
               />
             ) : (
               <p className="muted">

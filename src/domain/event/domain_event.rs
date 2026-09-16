@@ -18,6 +18,7 @@ pub enum DomainEvent {
         video_id: String,
         title: String,
         filename: Option<String>,
+        thumbnail_filename: Option<String>,
         was_downloaded: bool,
     },
     ChannelCreated {
@@ -36,6 +37,7 @@ pub enum DomainEvent {
         video_id: String,
         title: String,
         filename: Option<String>,
+        thumbnail_filename: Option<String>,
         was_downloaded: bool,
     },
 }
@@ -73,12 +75,14 @@ impl DomainEvent {
                 video_id,
                 title,
                 filename,
+                thumbnail_filename,
                 was_downloaded,
             } => json!({
                 "playlist_id": playlist_id,
                 "video_id": video_id,
                 "title": title,
                 "filename": filename,
+                "thumbnail_filename": thumbnail_filename,
                 "was_downloaded": was_downloaded,
             }),
             Self::ChannelCreated { channel_id } => json!({ "channel_id": channel_id }),
@@ -98,12 +102,14 @@ impl DomainEvent {
                 video_id,
                 title,
                 filename,
+                thumbnail_filename,
                 was_downloaded,
             } => json!({
                 "channel_id": channel_id,
                 "video_id": video_id,
                 "title": title,
                 "filename": filename,
+                "thumbnail_filename": thumbnail_filename,
                 "was_downloaded": was_downloaded,
             }),
         }
@@ -159,6 +165,7 @@ mod tests {
             video_id: "rec1".to_string(),
             title: "My Video".to_string(),
             filename: Some("My Video.mp4".to_string()),
+            thumbnail_filename: Some("My Video.jpg".to_string()),
             was_downloaded: true,
         };
 
@@ -170,6 +177,7 @@ mod tests {
                 "video_id": "rec1",
                 "title": "My Video",
                 "filename": "My Video.mp4",
+                "thumbnail_filename": "My Video.jpg",
                 "was_downloaded": true,
             })
         );
@@ -182,6 +190,7 @@ mod tests {
             video_id: "rec1".to_string(),
             title: "My Video".to_string(),
             filename: None,
+            thumbnail_filename: None,
             was_downloaded: false,
         };
 
@@ -192,6 +201,7 @@ mod tests {
                 "video_id": "rec1",
                 "title": "My Video",
                 "filename": null,
+                "thumbnail_filename": null,
                 "was_downloaded": false,
             })
         );
@@ -242,6 +252,7 @@ mod tests {
             video_id: "rec1".to_string(),
             title: "My Video".to_string(),
             filename: Some("My Video.mp4".to_string()),
+            thumbnail_filename: Some("My Video.jpg".to_string()),
             was_downloaded: true,
         };
 
@@ -253,6 +264,7 @@ mod tests {
                 "video_id": "rec1",
                 "title": "My Video",
                 "filename": "My Video.mp4",
+                "thumbnail_filename": "My Video.jpg",
                 "was_downloaded": true,
             })
         );

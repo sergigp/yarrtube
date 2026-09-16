@@ -339,6 +339,7 @@ mod tests {
                 v.start_download(fixed_timestamp()).mark_downloaded(
                     Quality::High,
                     "Downloaded Video.mp4",
+                    Some("Downloaded Video.jpg".to_string()),
                     fixed_timestamp(),
                 )
             },
@@ -362,6 +363,7 @@ mod tests {
                     video_id: downloaded.id.as_str().to_string(),
                     title: "Downloaded Video".to_string(),
                     filename: Some("Downloaded Video.mp4".to_string()),
+                    thumbnail_filename: Some("Downloaded Video.jpg".to_string()),
                     was_downloaded: true,
                 },
                 DomainEvent::VideoRemovedFromPlaylist {
@@ -369,6 +371,7 @@ mod tests {
                     video_id: pending.id.as_str().to_string(),
                     title: "Pending Video".to_string(),
                     filename: None,
+                    thumbnail_filename: None,
                     was_downloaded: false,
                 },
             ]
@@ -436,6 +439,7 @@ mod tests {
                 v.start_download(fixed_timestamp()).mark_downloaded(
                     Quality::High,
                     "My Video.mp4",
+                    Some("My Video.jpg".to_string()),
                     fixed_timestamp(),
                 )
             },
@@ -446,6 +450,7 @@ mod tests {
         let stored = video_repository.videos.lock().unwrap();
         assert_eq!(stored[0].status, VideoStatus::Pending);
         assert_eq!(stored[0].filename, None);
+        assert_eq!(stored[0].thumbnail_filename, None);
         assert_eq!(stored[0].quality, None);
 
         let scheduled = task_repository.scheduled.lock().unwrap();
@@ -474,6 +479,7 @@ mod tests {
                 v.start_download(fixed_timestamp()).mark_downloaded(
                     Quality::High,
                     "My Video.webm",
+                    None,
                     fixed_timestamp(),
                 )
             },
@@ -595,6 +601,7 @@ mod tests {
                 v.start_download(fixed_timestamp()).mark_downloaded(
                     Quality::High,
                     "My Video.mp4",
+                    None,
                     fixed_timestamp(),
                 )
             },
@@ -605,5 +612,67 @@ mod tests {
         assert!(files.deleted_calls.lock().unwrap().is_empty());
         let stored = video_repository.videos.lock().unwrap();
         assert_eq!(stored[0].status, VideoStatus::Downloaded);
+    }
+
+    #[test]
+    fn it_should_leave_a_matching_thumbnail_file_alone() {
+        let (handler, _events, video_repository, playlist_videos, _tasks, files) = handler_with(
+            PlaylistKind::Custom,
+            Vec::new(),
+            FakeVideoFileRepository::with_listing(vec![
+                "My Video.mp4".to_string(),
+                "My Video.jpg".to_string(),
+            ]),
+        );
+        seed_member(
+            &video_repository,
+            &playlist_videos,
+            "vid1",
+            "My Video",
+            |v| {
+                v.start_download(fixed_timestamp()).mark_downloaded(
+                    Quality::High,
+                    "My Video.mp4",
+                    Some("My Video.jpg".to_string()),
+                    fixed_timestamp(),
+                )
+            },
+        );
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        assert!(files.deleted_calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_delete_an_unrecorded_stray_thumbnail_file() {
+        let (handler, _events, video_repository, playlist_videos, _tasks, files) = handler_with(
+            PlaylistKind::Custom,
+            Vec::new(),
+            FakeVideoFileRepository::with_listing(vec![
+                "My Video.mp4".to_string(),
+                "stray.jpg".to_string(),
+            ]),
+        );
+        seed_member(
+            &video_repository,
+            &playlist_videos,
+            "vid1",
+            "My Video",
+            |v| {
+                v.start_download(fixed_timestamp()).mark_downloaded(
+                    Quality::High,
+                    "My Video.mp4",
+                    None,
+                    fixed_timestamp(),
+                )
+            },
+        );
+
+        handler.handle(&payload_for("PL1"), false).unwrap();
+
+        let calls = files.deleted_calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].1, "stray.jpg");
     }
 }

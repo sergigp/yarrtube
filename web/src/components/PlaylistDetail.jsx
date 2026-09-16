@@ -93,6 +93,11 @@ export function PlaylistDetail({ playlist, onBack, onDeleted }) {
               <video
                 controls
                 src={videoMediaUrl(playlist.path, selectedVideo.filename)}
+                poster={
+                  selectedVideo.thumbnail_filename
+                    ? videoMediaUrl(playlist.path, selectedVideo.thumbnail_filename)
+                    : undefined
+                }
               />
             ) : (
               <p className="muted">

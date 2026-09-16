@@ -19,9 +19,13 @@ impl DeleteVideoFileTask {
 
 impl TaskHandler for DeleteVideoFileTask {
     fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let (filename, output_dir) = Task::decode_delete_video_file_payload(payload)?;
-        self.video_file_deleter
-            .delete_video_file(filename, Path::new(&output_dir))
+        let (filename, thumbnail_filename, output_dir) =
+            Task::decode_delete_video_file_payload(payload)?;
+        self.video_file_deleter.delete_video_file(
+            filename,
+            thumbnail_filename,
+            Path::new(&output_dir),
+        )
     }
 }
 
@@ -33,8 +37,16 @@ mod tests {
     use std::sync::Arc;
 
     fn payload_for(filename: Option<&str>) -> String {
+        payload_for_with_thumbnail(filename, None)
+    }
+
+    fn payload_for_with_thumbnail(
+        filename: Option<&str>,
+        thumbnail_filename: Option<&str>,
+    ) -> String {
         Task::DeleteVideoFile {
             filename: filename.map(str::to_string),
+            thumbnail_filename: thumbnail_filename.map(str::to_string),
             output_dir: "/videos/my-playlist".to_string(),
         }
         .payload()
@@ -91,6 +103,48 @@ mod tests {
         let (handler, _video_file_repository) = handler(FakeVideoFileRepository::new(Ok(false)));
 
         let result = handler.handle(&payload_for(Some("My Video.mp4")), false);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn it_should_delete_the_video_file_and_its_thumbnail_file() {
+        let (handler, video_file_repository) = handler(FakeVideoFileRepository::new(Ok(true)));
+
+        handler
+            .handle(
+                &payload_for_with_thumbnail(Some("My Video.mp4"), Some("My Video.jpg")),
+                false,
+            )
+            .unwrap();
+
+        let calls = video_file_repository.deleted_calls.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].1, "My Video.mp4");
+        assert_eq!(calls[1].1, "My Video.jpg");
+    }
+
+    #[test]
+    fn it_should_no_op_the_thumbnail_half_when_the_video_has_no_recorded_thumbnail_filename() {
+        let (handler, video_file_repository) = handler(FakeVideoFileRepository::new(Ok(true)));
+
+        handler
+            .handle(&payload_for(Some("My Video.mp4")), false)
+            .unwrap();
+
+        let calls = video_file_repository.deleted_calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].1, "My Video.mp4");
+    }
+
+    #[test]
+    fn it_should_no_op_without_erroring_when_no_matching_thumbnail_file_is_found() {
+        let (handler, _video_file_repository) = handler(FakeVideoFileRepository::new(Ok(false)));
+
+        let result = handler.handle(
+            &payload_for_with_thumbnail(None, Some("My Video.jpg")),
+            false,
+        );
 
         assert!(result.is_ok());
     }

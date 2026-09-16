@@ -1,10 +1,4 @@
-# video-listing Specification
-
-## Purpose
-
-Provides an HTTP endpoint to list the videos belonging to a single tracked playlist, so a playlist's contents can be browsed.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: List Videos For A Playlist
 The system SHALL provide an HTTP endpoint that, given a tracked playlist's ID, returns every video recorded for that playlist, including each video's ID, title, status, quality (when downloaded), filename (when downloaded), and thumbnail filename (when present). For a YouTube-linked playlist, the returned videos SHALL be ordered by their current position in the source YouTube playlist. For a custom playlist, no particular order is guaranteed.
