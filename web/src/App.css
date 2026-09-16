@@ -91,8 +91,36 @@ button.list-item:hover {
   flex-shrink: 0;
 }
 
+.list-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .list-item-title {
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-item-thumbnail {
+  width: 48px;
+  height: 27px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.list-item-thumbnail-placeholder {
+  width: 48px;
+  height: 27px;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .list-item-meta {

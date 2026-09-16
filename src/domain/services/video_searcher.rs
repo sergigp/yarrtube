@@ -110,7 +110,10 @@ impl VideoSearcher {
                             .filter(|video| video.status == VideoStatus::Downloaded)
                             .map(|video| RecentVideo {
                                 video,
-                                source: VideoSource::Playlist(playlist.id.clone()),
+                                source: VideoSource::Playlist(
+                                    playlist.id.clone(),
+                                    playlist.path.clone(),
+                                ),
                             })
                             .collect()
                     })
@@ -142,7 +145,10 @@ impl VideoSearcher {
                             .filter(|video| video.status == VideoStatus::Downloaded)
                             .map(|video| RecentVideo {
                                 video,
-                                source: VideoSource::Channel(channel.id.clone()),
+                                source: VideoSource::Channel(
+                                    channel.id.clone(),
+                                    channel.path.clone(),
+                                ),
                             })
                             .collect()
                     })

@@ -1,12 +1,13 @@
 use super::video::Video;
 use crate::domain::channel::ChannelHandle;
+use crate::domain::playlist::PlaylistPath;
 use crate::domain::shared::PlaylistId;
 
 /// The playlist or channel that tracks a `RecentVideo`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VideoSource {
-    Playlist(PlaylistId),
-    Channel(ChannelHandle),
+    Playlist(PlaylistId, PlaylistPath),
+    Channel(ChannelHandle, PlaylistPath),
 }
 
 /// A `Video` paired with the source that tracks it, for read models (like

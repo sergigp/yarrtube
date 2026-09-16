@@ -143,7 +143,18 @@ export function PlaylistDetail({ playlist, onBack, onDeleted, initialVideoId }) 
                     }
                     onClick={() => setManualSelection(video)}
                   >
-                    <span className="list-item-title">{video.title}</span>
+                    <span className="list-item-main">
+                      {video.thumbnail_filename ? (
+                        <img
+                          className="list-item-thumbnail"
+                          src={videoMediaUrl(playlist.path, video.thumbnail_filename)}
+                          alt=""
+                        />
+                      ) : (
+                        <span className="list-item-thumbnail-placeholder" />
+                      )}
+                      <span className="list-item-title">{video.title}</span>
+                    </span>
                     <VideoStatusIndicator status={video.status} />
                   </button>
                 </li>

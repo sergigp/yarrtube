@@ -298,6 +298,19 @@ mod tests {
         )
     }
 
+    fn downloaded_video_with_thumbnail(
+        youtube_id: &str,
+        title: &str,
+        created_at: DateTime<Utc>,
+    ) -> Video {
+        Video::create(VideoId::new(youtube_id).unwrap(), title, created_at).mark_downloaded(
+            Quality::High,
+            format!("{title}.mp4"),
+            Some(format!("{title}.jpg")),
+            created_at,
+        )
+    }
+
     fn request(playlist_id: &str) -> Request<Body> {
         Request::builder()
             .method("GET")
@@ -543,7 +556,7 @@ mod tests {
             ))
             .unwrap();
 
-        let from_channel = downloaded_video(
+        let from_channel = downloaded_video_with_thumbnail(
             "vid_from_channel",
             "From Channel",
             DateTime::<Utc>::from_timestamp(200, 0).unwrap(),
@@ -575,9 +588,13 @@ mod tests {
         assert_eq!(videos[0]["id"], "vid_from_channel");
         assert_eq!(videos[0]["source"]["kind"], "channel");
         assert_eq!(videos[0]["source"]["id"], "@somechannel");
+        assert_eq!(videos[0]["source"]["path"], "creators/somechannel");
+        assert_eq!(videos[0]["thumbnail_filename"], "From Channel.jpg");
         assert_eq!(videos[1]["id"], "vid_from_playlist");
         assert_eq!(videos[1]["source"]["kind"], "playlist");
         assert_eq!(videos[1]["source"]["id"], "PL1");
+        assert_eq!(videos[1]["source"]["path"], "music");
+        assert_eq!(videos[1]["thumbnail_filename"], serde_json::Value::Null);
     }
 
     #[tokio::test]
