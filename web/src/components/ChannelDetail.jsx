@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { usePolling } from '../usePolling'
-import { fetchChannelVideos, videoMediaUrl } from '../api'
+import { fetchChannels, fetchChannelVideos, videoMediaUrl } from '../api'
 import { ChannelActionsMenu } from './ChannelActionsMenu'
 
 const STATUS_MESSAGES = {
@@ -40,31 +41,53 @@ function VideoDetail({ channel, video }) {
         <span className="status-badge">{video.quality ?? '—'}</span>
       </span>
       <p className="video-detail-path">{path}</p>
+      <a
+        className="video-detail-youtube-link"
+        href={`https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`}
+        target="_blank"
+        rel="noopener"
+      >
+        Open on YouTube
+      </a>
     </div>
   )
 }
 
-export function ChannelDetail({ channel, onBack, onDeleted, initialVideoId }) {
-  const { data: videos, error } = usePolling(
-    () => fetchChannelVideos(channel.id),
-    [channel.id],
-  )
+export function ChannelDetail() {
+  const { id } = useParams()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { data: channels, error: channelsError } = usePolling(fetchChannels, [])
+  const channel = channels?.find((item) => item.id === id) ?? null
+
+  const { data: videos, error } = usePolling(() => fetchChannelVideos(id), [id])
   const [manualSelection, setManualSelection] = useState(null)
+  const initialVideoId = searchParams.get('video')
   const deepLinkedVideo = !manualSelection && initialVideoId
     ? (videos?.find((video) => video.id === initialVideoId) ?? null)
     : null
-  const selectedVideo = manualSelection ?? deepLinkedVideo
+  const defaultVideo = !manualSelection && !deepLinkedVideo ? (videos?.[0] ?? null) : null
+  const selectedVideo = manualSelection ?? deepLinkedVideo ?? defaultVideo
   const autoplay = selectedVideo !== null && selectedVideo === deepLinkedVideo
 
+  if (channelsError) {
+    return <p className="error">Failed to load channel: {channelsError.message}</p>
+  }
+
+  if (!channels) {
+    return <p className="muted">Loading channel…</p>
+  }
+
+  if (!channel) {
+    return <p className="error">Channel not found.</p>
+  }
+
   return (
-    <div>
+    <div className="playlist-detail-route">
       <div className="playlist-detail-header">
-        <button className="back-link" onClick={onBack}>
-          ← Back to channels
-        </button>
         <div className="playlist-detail-title-row">
           <h2>{channel.name}</h2>
-          <ChannelActionsMenu channel={channel} onDeleted={onDeleted} />
+          <ChannelActionsMenu channel={channel} onDeleted={() => navigate('/')} />
         </div>
       </div>
 

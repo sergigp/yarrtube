@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { usePolling } from '../usePolling'
-import { fetchVideos, videoMediaUrl, deleteVideoFromCustomPlaylist } from '../api'
+import { fetchPlaylists, fetchVideos, videoMediaUrl, deleteVideoFromCustomPlaylist } from '../api'
 import { ConfirmDialog } from './ConfirmDialog'
 import { PlaylistActionsMenu } from './PlaylistActionsMenu'
 
@@ -43,6 +44,14 @@ function VideoDetail({ playlist, video, onDeleted }) {
         <span className="status-badge">{video.quality ?? '—'}</span>
       </span>
       <p className="video-detail-path">{path}</p>
+      <a
+        className="video-detail-youtube-link"
+        href={`https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`}
+        target="_blank"
+        rel="noopener"
+      >
+        Open on YouTube
+      </a>
 
       {canDelete && (
         <button className="danger-button video-detail-delete" onClick={() => setConfirmOpen(true)}>
@@ -64,27 +73,41 @@ function VideoDetail({ playlist, video, onDeleted }) {
   )
 }
 
-export function PlaylistDetail({ playlist, onBack, onDeleted, initialVideoId }) {
-  const { data: videos, error } = usePolling(
-    () => fetchVideos(playlist.id),
-    [playlist.id],
-  )
+export function PlaylistDetail() {
+  const { id } = useParams()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { data: playlists, error: playlistsError } = usePolling(fetchPlaylists, [])
+  const playlist = playlists?.find((item) => item.id === id) ?? null
+
+  const { data: videos, error } = usePolling(() => fetchVideos(id), [id])
   const [manualSelection, setManualSelection] = useState(null)
+  const initialVideoId = searchParams.get('video')
   const deepLinkedVideo = !manualSelection && initialVideoId
     ? (videos?.find((video) => video.id === initialVideoId) ?? null)
     : null
-  const selectedVideo = manualSelection ?? deepLinkedVideo
+  const defaultVideo = !manualSelection && !deepLinkedVideo ? (videos?.[0] ?? null) : null
+  const selectedVideo = manualSelection ?? deepLinkedVideo ?? defaultVideo
   const autoplay = selectedVideo !== null && selectedVideo === deepLinkedVideo
 
+  if (playlistsError) {
+    return <p className="error">Failed to load playlist: {playlistsError.message}</p>
+  }
+
+  if (!playlists) {
+    return <p className="muted">Loading playlist…</p>
+  }
+
+  if (!playlist) {
+    return <p className="error">Playlist not found.</p>
+  }
+
   return (
-    <div>
+    <div className="playlist-detail-route">
       <div className="playlist-detail-header">
-        <button className="back-link" onClick={onBack}>
-          ← Back to playlists
-        </button>
         <div className="playlist-detail-title-row">
           <h2>{playlist.name}</h2>
-          <PlaylistActionsMenu playlist={playlist} onDeleted={onDeleted} />
+          <PlaylistActionsMenu playlist={playlist} onDeleted={() => navigate('/')} />
         </div>
       </div>
 
