@@ -13,6 +13,9 @@ pub trait PlaylistVideoRepository: Send + Sync {
         playlist_id: &PlaylistId,
         youtube_video_id: &VideoId,
     ) -> anyhow::Result<Option<PlaylistVideo>>;
+    /// Finds whichever playlist a video belongs to, keyed by the video's own
+    /// surrogate ID rather than a `(playlist_id, youtube_video_id)` pair.
+    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<PlaylistVideo>>;
     /// Ordered by position (YouTube-defined order), with no-position rows
     /// (custom-playlist additions) sorted last, by insertion order.
     fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>>;
@@ -97,6 +100,27 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
             tracing::error!(playlist_id = %playlist_id, error = %e, "failed to find playlist video")
         })
         .context("failed to find playlist video")?
+        .map(columns_to_playlist_video)
+        .transpose()
+    }
+
+    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<PlaylistVideo>> {
+        let conn = self
+            .conn
+            .lock()
+            .inspect_err(|_| tracing::error!(video_id = %video_id, "database lock poisoned"))
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        conn.query_row(
+            "SELECT id, playlist_id, video_id, position, created_at
+             FROM playlist_videos WHERE video_id = ?1",
+            params![video_id.as_str()],
+            row_to_columns,
+        )
+        .optional()
+        .inspect_err(|e| {
+            tracing::error!(video_id = %video_id, error = %e, "failed to find playlist video by video")
+        })
+        .context("failed to find playlist video by video")?
         .map(columns_to_playlist_video)
         .transpose()
     }
@@ -246,6 +270,16 @@ impl PlaylistVideoRepository for FakePlaylistVideoRepository {
                 pv.playlist_id == *playlist_id
                     && youtube_ids.get(pv.video_id.as_str()) == Some(youtube_video_id)
             })
+            .cloned())
+    }
+
+    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<PlaylistVideo>> {
+        Ok(self
+            .playlist_videos
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|pv| pv.video_id == *video_id)
             .cloned())
     }
 
@@ -494,6 +528,31 @@ mod tests {
 
         let found = repo
             .find_by_youtube_video(&playlist_id(), &VideoId::new("yt1").unwrap())
+            .unwrap();
+
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn it_should_find_a_playlist_video_by_its_video_record_id() {
+        let repo = repo();
+        let video = seed_video(&repo, "yt1", "First");
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        repo.save(&PlaylistVideo::create(playlist_id(), video.id.clone(), now))
+            .unwrap();
+
+        let found = repo.find_by_video(&video.id).unwrap().unwrap();
+
+        assert_eq!(found.playlist_id, playlist_id());
+        assert_eq!(found.video_id, video.id);
+    }
+
+    #[test]
+    fn it_should_return_none_when_finding_by_video_for_an_untracked_video() {
+        let repo = repo();
+
+        let found = repo
+            .find_by_video(&VideoRecordId::new("missing").unwrap())
             .unwrap();
 
         assert!(found.is_none());

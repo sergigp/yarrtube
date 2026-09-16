@@ -3,17 +3,27 @@ import { fetchTasks } from '../api'
 import { formatRelativeTime } from '../formatDateTime'
 
 function describeTask(task) {
-  const playlist = task.playlist_name ?? 'an unknown playlist'
-  const video = task.video_title ?? 'a video'
+  const payload = task.payload ?? {}
 
   switch (task.task_type) {
     case 'reconcile_playlist':
-      return `Reconciling playlist ${playlist}`
-    case 'download_video':
-      return `Downloading ${video} in ${playlist}`
+      return `Reconciling playlist ${payload.playlist_name ?? 'an unknown playlist'}`
+    case 'reconcile_channel':
+      return `Reconciling channel ${payload.channel_name ?? 'an unknown channel'}`
+    case 'download_video': {
+      const video = payload.video_title ?? 'a video'
+      const container = payload.playlist_name ?? payload.channel_name ?? 'an unknown playlist or channel'
+      return `Downloading ${video} in ${container}`
+    }
     case 'delete_video_file':
-      return `Removing file for ${video} in ${playlist}`
+      return payload.filename ? `Removing file ${payload.filename}` : 'Removing a video file'
     default:
+      if (payload.path) {
+        return `Deleting files at ${payload.path}`
+      }
+      if (task.task_type === 'update_ytdlp') {
+        return 'Updating yt-dlp'
+      }
       return task.task_type
   }
 }

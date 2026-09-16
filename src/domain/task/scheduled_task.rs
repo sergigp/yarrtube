@@ -1,6 +1,3 @@
-use super::task::Task;
-use crate::domain::channel::ChannelHandle;
-use crate::domain::shared::PlaylistId;
 use chrono::{DateTime, Duration, Utc};
 
 const MAX_ATTEMPTS: i64 = 5;
@@ -60,14 +57,6 @@ pub struct ScheduledTask {
     pub last_error: Option<String>,
 }
 
-/// The playlist or channel a `reconcile_playlist`/`reconcile_channel` task
-/// targets, as decoded by `ScheduledTask::referenced_container`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TaskContainer {
-    Playlist(PlaylistId),
-    Channel(ChannelHandle),
-}
-
 /// A task that exhausted its retry budget, shaped for the dead-letter table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeadLetteredTask {
@@ -98,30 +87,6 @@ impl ScheduledTask {
     /// (`fail` would dead-letter rather than retry).
     pub fn is_last_attempt(&self) -> bool {
         self.retries + 1 >= MAX_ATTEMPTS
-    }
-
-    /// Decodes this task's stored payload into the playlist or channel it
-    /// concerns, for the two task types that reconcile a whole container
-    /// (`reconcile_playlist`/`reconcile_channel`). `None` for every other
-    /// task type, which no longer carries container context on its payload
-    /// (see design.md's "Tasks stay single and container-agnostic"
-    /// decision) — and for a payload that fails to decode.
-    pub fn referenced_container(&self) -> Option<TaskContainer> {
-        match self.task_type.as_str() {
-            "reconcile_playlist" => {
-                let playlist_id = Task::decode_reconcile_playlist_payload(&self.payload).ok()?;
-                PlaylistId::new(playlist_id)
-                    .ok()
-                    .map(TaskContainer::Playlist)
-            }
-            "reconcile_channel" => {
-                let channel_id = Task::decode_reconcile_channel_payload(&self.payload).ok()?;
-                ChannelHandle::new(channel_id)
-                    .ok()
-                    .map(TaskContainer::Channel)
-            }
-            _ => None,
-        }
     }
 
     pub fn fail(self, error: impl Into<String>, now: DateTime<Utc>) -> TaskFailureOutcome {
@@ -258,65 +223,5 @@ mod tests {
         assert!(TaskStatus::parse("bogus").is_err());
         assert_eq!(TaskStatus::Pending.as_str(), "pending");
         assert_eq!(TaskStatus::Running.as_str(), "running");
-    }
-
-    fn task_with(task_type: &str, payload: serde_json::Value) -> ScheduledTask {
-        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
-        ScheduledTask {
-            id: 1,
-            task_type: task_type.to_string(),
-            payload: payload.to_string(),
-            status: TaskStatus::Pending,
-            retries: 0,
-            run_at: now,
-            created_at: now,
-            updated_at: now,
-            last_error: None,
-        }
-    }
-
-    #[test]
-    fn it_should_extract_the_playlist_id_from_a_reconcile_playlist_payload() {
-        let task = task_with(
-            "reconcile_playlist",
-            serde_json::json!({ "playlist_id": "PL1" }),
-        );
-
-        assert_eq!(
-            task.referenced_container(),
-            Some(TaskContainer::Playlist(PlaylistId::new("PL1").unwrap()))
-        );
-    }
-
-    #[test]
-    fn it_should_extract_the_channel_id_from_a_reconcile_channel_payload() {
-        let task = task_with(
-            "reconcile_channel",
-            serde_json::json!({ "channel_id": "@somechannel" }),
-        );
-
-        assert_eq!(
-            task.referenced_container(),
-            Some(TaskContainer::Channel(
-                ChannelHandle::new("@somechannel").unwrap()
-            ))
-        );
-    }
-
-    #[test]
-    fn it_should_return_none_for_a_task_type_with_no_container_on_its_payload() {
-        let task = task_with(
-            "download_video",
-            serde_json::json!({ "video_id": "rec1", "quality": "high", "output_dir": "/videos" }),
-        );
-
-        assert_eq!(task.referenced_container(), None);
-    }
-
-    #[test]
-    fn it_should_return_none_for_an_unknown_task_type() {
-        let task = task_with("some_unknown_task", serde_json::json!({}));
-
-        assert_eq!(task.referenced_container(), None);
     }
 }

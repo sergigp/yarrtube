@@ -2,106 +2,51 @@ pub mod dto;
 
 use super::AppState;
 use super::error::error_response;
-use crate::domain::channel::ChannelHandle;
-use crate::domain::shared::PlaylistId;
-use crate::domain::task::{ScheduledTask, TaskContainer};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use dto::TaskResponse;
-use std::collections::HashMap;
 
 pub async fn list_tasks(State(state): State<AppState>) -> Response {
-    let tasks = match state.task_service.list_non_completed() {
-        Ok(tasks) => tasks,
+    let views = match state.task_view_searcher.search_all_pending() {
+        Ok(views) => views,
         Err(e) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
 
-    let referenced_containers: Vec<TaskContainer> = tasks
-        .iter()
-        .filter_map(|task| task.referenced_container())
-        .collect();
-
-    let mut playlist_names: HashMap<PlaylistId, String> = HashMap::new();
-    for playlist_id in referenced_containers.iter().filter_map(|c| match c {
-        TaskContainer::Playlist(id) => Some(id),
-        TaskContainer::Channel(_) => None,
-    }) {
-        if playlist_names.contains_key(playlist_id) {
-            continue;
-        }
-        match state.playlist_searcher.search(playlist_id) {
-            Ok(Some(playlist)) => {
-                playlist_names.insert(playlist_id.clone(), playlist.name.as_str().to_string());
-            }
-            Ok(None) => {}
-            Err(e) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-        }
-    }
-
-    let mut channel_names: HashMap<ChannelHandle, String> = HashMap::new();
-    for channel_id in referenced_containers.iter().filter_map(|c| match c {
-        TaskContainer::Channel(id) => Some(id),
-        TaskContainer::Playlist(_) => None,
-    }) {
-        if channel_names.contains_key(channel_id) {
-            continue;
-        }
-        match state.channel_service.find_channel(channel_id) {
-            Ok(Some(channel)) => {
-                channel_names.insert(channel_id.clone(), channel.name.clone());
-            }
-            Ok(None) => {}
-            Err(e) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-        }
-    }
-
-    let response: Vec<TaskResponse> = tasks
-        .into_iter()
-        .map(|task| build_task_response(task, &playlist_names, &channel_names))
-        .collect();
+    let response: Vec<TaskResponse> = views.into_iter().map(TaskResponse::from).collect();
     (StatusCode::OK, Json(response)).into_response()
-}
-
-fn build_task_response(
-    task: ScheduledTask,
-    playlist_names: &HashMap<PlaylistId, String>,
-    channel_names: &HashMap<ChannelHandle, String>,
-) -> TaskResponse {
-    match task.referenced_container() {
-        Some(TaskContainer::Playlist(playlist_id)) => {
-            let playlist_name = playlist_names.get(&playlist_id).cloned();
-            TaskResponse::from_task_with_context(task, playlist_name, None)
-        }
-        Some(TaskContainer::Channel(channel_id)) => {
-            let channel_name = channel_names.get(&channel_id).cloned();
-            TaskResponse::from_task_with_context(task, None, channel_name)
-        }
-        None => TaskResponse::from_task_with_context(task, None, None),
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::channel::{Channel, VideoLimit};
+    use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
+    use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
-    use crate::domain::shared::Quality;
-    use crate::domain::task::{Task, TaskService};
+    use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::shared::{PlaylistId, Quality, VideoId, VideoRecordId};
+    use crate::domain::task::Task;
+    use crate::domain::video::Video;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, FakeChannelRepository,
     };
-    use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, FakeChannelVideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         FakePlaylistRepository, PlaylistRepository,
     };
-    use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+        FakePlaylistVideoRepository, PlaylistVideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        FakeVideoRepository, VideoRepository,
+    };
     use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
     use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
@@ -130,18 +75,30 @@ mod tests {
             task_repository,
             Arc::new(FakePlaylistRepository::default()),
             Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeVideoRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn test_router_with(
         task_repository: Arc<dyn TaskRepository>,
         playlist_repository: Arc<FakePlaylistRepository>,
         channel_repository: Arc<FakeChannelRepository>,
+        video_repository: Arc<FakeVideoRepository>,
+        playlist_video_repository: Arc<FakePlaylistVideoRepository>,
+        channel_video_repository: Arc<FakeChannelVideoRepository>,
     ) -> axum::Router {
         let event_publisher = Arc::new(FakeEventPublisher::default());
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
-        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
+            task_repository.clone(),
+            playlist_repository.clone(),
+            channel_repository.clone(),
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            channel_video_repository.clone(),
+        );
         let playlist_creator = crate::domain::services::PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository { exists: true }),
@@ -218,7 +175,7 @@ mod tests {
             custom_playlist_video_adder,
             custom_playlist_video_remover,
             video_searcher,
-            task_service: TaskService::new(task_repository),
+            task_view_searcher,
             channel_service,
             channel_video_reconciler,
         };
@@ -330,6 +287,20 @@ mod tests {
         )
     }
 
+    fn video(id: &str, title: &str) -> Video {
+        Video {
+            id: VideoRecordId::new(id).unwrap(),
+            youtube_id: VideoId::new("yt1").unwrap(),
+            title: title.to_string(),
+            status: crate::domain::video::VideoStatus::Pending,
+            quality: None,
+            filename: None,
+            thumbnail_filename: None,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+        }
+    }
+
     #[tokio::test]
     async fn it_should_include_the_playlist_name_for_a_pending_reconcile_playlist_task() {
         let task_repository = sqlite_repo();
@@ -349,6 +320,9 @@ mod tests {
             task_repository,
             playlist_repository,
             Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeVideoRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
         );
 
         let response = router.oneshot(request()).await.unwrap();
@@ -356,8 +330,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = body_json(response).await;
         let tasks = body.as_array().unwrap();
-        assert_eq!(tasks[0]["playlist_name"], "My Playlist");
-        assert_eq!(tasks[0]["channel_name"], serde_json::Value::Null);
+        assert_eq!(tasks[0]["payload"]["playlist_name"], "My Playlist");
     }
 
     #[tokio::test]
@@ -379,6 +352,9 @@ mod tests {
             task_repository,
             Arc::new(FakePlaylistRepository::default()),
             channel_repository,
+            Arc::new(FakeVideoRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
         );
 
         let response = router.oneshot(request()).await.unwrap();
@@ -386,12 +362,12 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = body_json(response).await;
         let tasks = body.as_array().unwrap();
-        assert_eq!(tasks[0]["channel_name"], "Some Channel");
-        assert_eq!(tasks[0]["playlist_name"], serde_json::Value::Null);
+        assert_eq!(tasks[0]["payload"]["channel_name"], "Some Channel");
     }
 
     #[tokio::test]
-    async fn it_should_show_no_container_name_for_a_pending_download_video_task() {
+    async fn it_should_include_the_video_title_and_playlist_name_for_a_pending_download_video_task()
+    {
         let task_repository = sqlite_repo();
         task_repository
             .schedule(
@@ -403,6 +379,98 @@ mod tests {
                 fixed_timestamp(),
             )
             .unwrap();
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository
+            .insert(&playlist("PL1", "My Playlist"))
+            .unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        video_repository.save(&video("rec1", "My Video")).unwrap();
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                PlaylistId::new("PL1").unwrap(),
+                VideoRecordId::new("rec1").unwrap(),
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let router = test_router_with(
+            task_repository,
+            playlist_repository,
+            Arc::new(FakeChannelRepository::default()),
+            video_repository,
+            playlist_video_repository,
+            Arc::new(FakeChannelVideoRepository::default()),
+        );
+
+        let response = router.oneshot(request()).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        let tasks = body.as_array().unwrap();
+        assert_eq!(tasks[0]["payload"]["video_title"], "My Video");
+        assert_eq!(tasks[0]["payload"]["playlist_name"], "My Playlist");
+    }
+
+    #[tokio::test]
+    async fn it_should_include_the_video_title_and_channel_name_for_a_channel_owned_download_video_task()
+     {
+        let task_repository = sqlite_repo();
+        task_repository
+            .schedule(
+                &Task::DownloadVideo {
+                    video_id: "rec1".to_string(),
+                    quality: "high".to_string(),
+                    output_dir: "/videos/somechannel".to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let channel_repository = Arc::new(FakeChannelRepository::default());
+        channel_repository
+            .insert(&channel("@somechannel", "Some Channel"))
+            .unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        video_repository.save(&video("rec1", "My Video")).unwrap();
+        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                ChannelHandle::new("@somechannel").unwrap(),
+                VideoRecordId::new("rec1").unwrap(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let router = test_router_with(
+            task_repository,
+            Arc::new(FakePlaylistRepository::default()),
+            channel_repository,
+            video_repository,
+            Arc::new(FakePlaylistVideoRepository::default()),
+            channel_video_repository,
+        );
+
+        let response = router.oneshot(request()).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        let tasks = body.as_array().unwrap();
+        assert_eq!(tasks[0]["payload"]["video_title"], "My Video");
+        assert_eq!(tasks[0]["payload"]["channel_name"], "Some Channel");
+    }
+
+    #[tokio::test]
+    async fn it_should_include_the_filename_for_a_pending_delete_video_file_task() {
+        let task_repository = sqlite_repo();
+        task_repository
+            .schedule(
+                &Task::DeleteVideoFile {
+                    filename: Some("My Video.mp4".to_string()),
+                    thumbnail_filename: Some("My Video.jpg".to_string()),
+                    output_dir: "/videos/music".to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
         let router = test_router(task_repository);
 
         let response = router.oneshot(request()).await.unwrap();
@@ -410,12 +478,56 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = body_json(response).await;
         let tasks = body.as_array().unwrap();
-        assert_eq!(tasks[0]["playlist_name"], serde_json::Value::Null);
-        assert_eq!(tasks[0]["channel_name"], serde_json::Value::Null);
+        assert_eq!(tasks[0]["payload"]["filename"], "My Video.mp4");
     }
 
     #[tokio::test]
-    async fn it_should_return_ok_and_omit_the_name_when_the_referenced_playlist_no_longer_exists() {
+    async fn it_should_include_the_path_for_a_pending_delete_playlist_files_task() {
+        let task_repository = sqlite_repo();
+        task_repository
+            .schedule(
+                &Task::DeletePlaylistFiles {
+                    playlist_id: "PL1".to_string(),
+                    path: "music/chill".to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let router = test_router(task_repository);
+
+        let response = router.oneshot(request()).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        let tasks = body.as_array().unwrap();
+        assert_eq!(tasks[0]["payload"]["path"], "music/chill");
+    }
+
+    #[tokio::test]
+    async fn it_should_include_the_path_for_a_pending_delete_channel_files_task() {
+        let task_repository = sqlite_repo();
+        task_repository
+            .schedule(
+                &Task::DeleteChannelFiles {
+                    channel_id: "@somechannel".to_string(),
+                    path: "creators/somechannel".to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let router = test_router(task_repository);
+
+        let response = router.oneshot(request()).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        let tasks = body.as_array().unwrap();
+        assert_eq!(tasks[0]["payload"]["path"], "creators/somechannel");
+    }
+
+    #[tokio::test]
+    async fn it_should_return_ok_and_an_empty_payload_when_the_referenced_playlist_no_longer_exists()
+     {
         let task_repository = sqlite_repo();
         task_repository
             .schedule(
@@ -433,6 +545,6 @@ mod tests {
         let body = body_json(response).await;
         let tasks = body.as_array().unwrap();
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0]["playlist_name"], serde_json::Value::Null);
+        assert_eq!(tasks[0]["payload"], serde_json::json!({}));
     }
 }

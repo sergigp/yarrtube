@@ -130,10 +130,6 @@ impl ChannelService {
     pub fn list_channels(&self) -> anyhow::Result<Vec<Channel>> {
         self.repository.list()
     }
-
-    pub fn find_channel(&self, id: &ChannelHandle) -> anyhow::Result<Option<Channel>> {
-        self.repository.find(id)
-    }
 }
 
 #[cfg(test)]

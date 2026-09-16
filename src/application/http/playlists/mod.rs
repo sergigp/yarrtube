@@ -200,6 +200,14 @@ mod tests {
         let video_repository = Arc::new(video_repository);
         let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
         let event_publisher = Arc::new(FakeEventPublisher::default());
+        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
+            Arc::new(FakeTaskRepository::default()),
+            repository.clone(),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            Arc::new(FakeChannelVideoRepository::default()),
+        );
         let video_reconciler = crate::domain::services::VideoReconciler::new(
             repository.clone(),
             video_repository.clone(),
@@ -254,9 +262,7 @@ mod tests {
             custom_playlist_video_adder,
             custom_playlist_video_remover,
             video_searcher,
-            task_service: crate::domain::task::TaskService::new(Arc::new(
-                FakeTaskRepository::default(),
-            )),
+            task_view_searcher,
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(FakeChannelRepository::default()),
                 Arc::new(FakeYoutubeChannelRepository { resolved: None }),
@@ -1001,6 +1007,14 @@ mod tests {
             playlist_video_repository.clone(),
             event_publisher.clone(),
         );
+        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
+            Arc::new(FakeTaskRepository::default()),
+            playlist_repository.clone(),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            Arc::new(FakeChannelVideoRepository::default()),
+        );
         let playlist_searcher = crate::domain::services::PlaylistSearcher::new(playlist_repository);
         let state = AppState {
             playlist_creator,
@@ -1010,9 +1024,7 @@ mod tests {
             custom_playlist_video_adder,
             custom_playlist_video_remover,
             video_searcher,
-            task_service: crate::domain::task::TaskService::new(Arc::new(
-                FakeTaskRepository::default(),
-            )),
+            task_view_searcher,
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(FakeChannelRepository::default()),
                 Arc::new(FakeYoutubeChannelRepository { resolved: None }),
@@ -1096,6 +1108,14 @@ mod tests {
         let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
         let task_repository = Arc::new(FakeTaskRepository::default());
         let event_publisher = Arc::new(FakeEventPublisher::default());
+        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
+            task_repository.clone(),
+            repository.clone(),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            Arc::new(FakeChannelVideoRepository::default()),
+        );
         let video_reconciler = crate::domain::services::VideoReconciler::new(
             repository.clone(),
             video_repository.clone(),
@@ -1148,9 +1168,7 @@ mod tests {
             custom_playlist_video_adder,
             custom_playlist_video_remover,
             video_searcher,
-            task_service: crate::domain::task::TaskService::new(Arc::new(
-                FakeTaskRepository::default(),
-            )),
+            task_view_searcher,
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(FakeChannelRepository::default()),
                 Arc::new(FakeYoutubeChannelRepository { resolved: None }),
