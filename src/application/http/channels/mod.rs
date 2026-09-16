@@ -139,7 +139,6 @@ mod tests {
     use crate::application::http::api_router;
     use crate::domain::channel::ChannelService;
     use crate::domain::event::DomainEvent;
-    use crate::domain::task::TaskService;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
     use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
@@ -191,6 +190,14 @@ mod tests {
         let task_repository = Arc::new(FakeTaskRepository::default());
         let channel_repository = Arc::new(FakeChannelRepository::default());
         let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
+            task_repository.clone(),
+            playlist_repository.clone(),
+            channel_repository.clone(),
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            channel_video_repository.clone(),
+        );
         let playlist_creator = crate::domain::services::PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository { exists: true }),
@@ -267,7 +274,7 @@ mod tests {
             custom_playlist_video_adder,
             custom_playlist_video_remover,
             video_searcher,
-            task_service: TaskService::new(Arc::new(FakeTaskRepository::default())),
+            task_view_searcher,
             channel_service,
             channel_video_reconciler,
         };

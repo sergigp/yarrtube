@@ -3,10 +3,10 @@ use crate::application::{subscribers, tasks};
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
     ChannelVideoReconciler, CustomPlaylistVideoAdder, CustomPlaylistVideoRemover, PlaylistCreator,
-    PlaylistDeleter, PlaylistSearcher, VideoDownloader, VideoFileDeleter, VideoReconciler,
-    VideoSearcher,
+    PlaylistDeleter, PlaylistSearcher, TaskViewSearcher, VideoDownloader, VideoFileDeleter,
+    VideoReconciler, VideoSearcher,
 };
-use crate::domain::task::{Task, TaskService};
+use crate::domain::task::Task;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
 use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
@@ -169,7 +169,14 @@ fn build_application() -> Result<Application> {
             .context("failed to initialize channel video repository")?,
     );
 
-    let task_service = TaskService::new(task_repository.clone() as Arc<dyn TaskRepository>);
+    let task_view_searcher = TaskViewSearcher::new(
+        task_repository.clone(),
+        playlist_repository.clone(),
+        channel_repository.clone(),
+        video_repository.clone(),
+        playlist_video_repository.clone(),
+        channel_video_repository.clone(),
+    );
 
     let playlist_creator = PlaylistCreator::new(
         playlist_repository.clone(),
@@ -296,7 +303,7 @@ fn build_application() -> Result<Application> {
             custom_playlist_video_adder,
             custom_playlist_video_remover,
             video_searcher,
-            task_service,
+            task_view_searcher,
             channel_service,
             channel_video_reconciler,
         },

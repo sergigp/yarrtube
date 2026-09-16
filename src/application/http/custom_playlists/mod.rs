@@ -207,6 +207,14 @@ mod tests {
     ) {
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
+            Arc::new(FakeTaskRepository::default()),
+            playlist_repository.clone(),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            Arc::new(FakeChannelVideoRepository::default()),
+        );
         let playlist_creator = crate::domain::services::PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository { exists: true }),
@@ -277,9 +285,7 @@ mod tests {
             custom_playlist_video_adder,
             custom_playlist_video_remover,
             video_searcher,
-            task_service: crate::domain::task::TaskService::new(Arc::new(
-                FakeTaskRepository::default(),
-            )),
+            task_view_searcher,
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository::default()),
                 Arc::new(crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository { resolved: None }),

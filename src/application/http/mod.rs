@@ -8,9 +8,8 @@ pub mod videos;
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
     ChannelVideoReconciler, CustomPlaylistVideoAdder, CustomPlaylistVideoRemover, PlaylistCreator,
-    PlaylistDeleter, PlaylistSearcher, VideoReconciler, VideoSearcher,
+    PlaylistDeleter, PlaylistSearcher, TaskViewSearcher, VideoReconciler, VideoSearcher,
 };
-use crate::domain::task::TaskService;
 use axum::Router;
 use axum::routing::{get, post};
 
@@ -23,7 +22,7 @@ pub struct AppState {
     pub custom_playlist_video_adder: CustomPlaylistVideoAdder,
     pub custom_playlist_video_remover: CustomPlaylistVideoRemover,
     pub video_searcher: VideoSearcher,
-    pub task_service: TaskService,
+    pub task_view_searcher: TaskViewSearcher,
     pub channel_service: ChannelService,
     pub channel_video_reconciler: ChannelVideoReconciler,
 }

@@ -158,6 +158,14 @@ mod tests {
         video_repository: Arc<FakeVideoRepository>,
     ) -> axum::Router {
         let event_publisher = Arc::new(FakeEventPublisher::default());
+        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
+            Arc::new(FakeTaskRepository::default()),
+            playlist_repository.clone(),
+            channel_repository.clone(),
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            channel_video_repository.clone(),
+        );
         let playlist_creator = crate::domain::services::PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository { exists: true }),
@@ -234,9 +242,7 @@ mod tests {
             custom_playlist_video_adder,
             custom_playlist_video_remover,
             video_searcher,
-            task_service: crate::domain::task::TaskService::new(Arc::new(
-                FakeTaskRepository::default(),
-            )),
+            task_view_searcher,
             channel_service,
             channel_video_reconciler,
         };

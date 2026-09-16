@@ -14,6 +14,9 @@ pub trait ChannelVideoRepository: Send + Sync {
         channel_id: &ChannelHandle,
         youtube_video_id: &VideoId,
     ) -> anyhow::Result<Option<ChannelVideo>>;
+    /// Finds whichever channel a video belongs to, keyed by the video's own
+    /// surrogate ID rather than a `(channel_id, youtube_video_id)` pair.
+    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<ChannelVideo>>;
     /// Ordered by recency position (`0` = most recent).
     fn list_for_channel(&self, channel_id: &ChannelHandle) -> anyhow::Result<Vec<ChannelVideo>>;
     fn delete(&self, channel_id: &ChannelHandle, youtube_video_id: &VideoId) -> anyhow::Result<()>;
@@ -97,6 +100,27 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
             tracing::error!(channel_id = %channel_id, error = %e, "failed to find channel video")
         })
         .context("failed to find channel video")?
+        .map(columns_to_channel_video)
+        .transpose()
+    }
+
+    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<ChannelVideo>> {
+        let conn = self
+            .conn
+            .lock()
+            .inspect_err(|_| tracing::error!(video_id = %video_id, "database lock poisoned"))
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        conn.query_row(
+            "SELECT id, channel_id, video_id, position, created_at
+             FROM channel_videos WHERE video_id = ?1",
+            params![video_id.as_str()],
+            row_to_columns,
+        )
+        .optional()
+        .inspect_err(|e| {
+            tracing::error!(video_id = %video_id, error = %e, "failed to find channel video by video")
+        })
+        .context("failed to find channel video by video")?
         .map(columns_to_channel_video)
         .transpose()
     }
@@ -246,6 +270,16 @@ impl ChannelVideoRepository for FakeChannelVideoRepository {
                 cv.channel_id == *channel_id
                     && youtube_ids.get(cv.video_id.as_str()) == Some(youtube_video_id)
             })
+            .cloned())
+    }
+
+    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<ChannelVideo>> {
+        Ok(self
+            .channel_videos
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|cv| cv.video_id == *video_id)
             .cloned())
     }
 
@@ -435,6 +469,36 @@ mod tests {
 
         let found = repo
             .find_by_youtube_video(&channel_id(), &VideoId::new("yt1").unwrap())
+            .unwrap();
+
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn it_should_find_a_channel_video_by_its_video_record_id() {
+        let repo = repo();
+        let video = seed_video(&repo, "yt1", "First");
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        repo.save(&ChannelVideo::create(
+            channel_id(),
+            video.id.clone(),
+            0,
+            now,
+        ))
+        .unwrap();
+
+        let found = repo.find_by_video(&video.id).unwrap().unwrap();
+
+        assert_eq!(found.channel_id, channel_id());
+        assert_eq!(found.video_id, video.id);
+    }
+
+    #[test]
+    fn it_should_return_none_when_finding_by_video_for_an_untracked_video() {
+        let repo = repo();
+
+        let found = repo
+            .find_by_video(&VideoRecordId::new("missing").unwrap())
             .unwrap();
 
         assert!(found.is_none());
