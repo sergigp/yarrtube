@@ -71,6 +71,7 @@ impl CustomPlaylistVideoRemover {
                 video_id: video.id.as_str().to_string(),
                 title: video.title.clone(),
                 filename: video.filename.clone(),
+                thumbnail_filename: video.thumbnail_filename.clone(),
                 was_downloaded: video.status == VideoStatus::Downloaded,
             })
             .map_err(RemoveVideoFromPlaylistError::Repository)?;

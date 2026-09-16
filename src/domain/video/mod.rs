@@ -1,4 +1,5 @@
 pub mod errors;
+pub mod thumbnail_filename;
 #[allow(clippy::module_inception)]
 pub mod video;
 pub mod video_filename;

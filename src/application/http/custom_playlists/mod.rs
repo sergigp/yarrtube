@@ -718,6 +718,7 @@ mod tests {
                 video_id: existing.id.as_str().to_string(),
                 title: "My Video".to_string(),
                 filename: None,
+                thumbnail_filename: None,
                 was_downloaded: false,
             }]
         );

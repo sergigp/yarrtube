@@ -17,6 +17,7 @@ pub enum Task {
     },
     DeleteVideoFile {
         filename: Option<String>,
+        thumbnail_filename: Option<String>,
         output_dir: String,
     },
     DeletePlaylistFiles {
@@ -50,6 +51,7 @@ struct DownloadVideoPayload {
 #[derive(Debug, Deserialize)]
 struct DeleteVideoFilePayload {
     filename: Option<String>,
+    thumbnail_filename: Option<String>,
     output_dir: String,
 }
 
@@ -92,9 +94,11 @@ impl Task {
             } => json!({ "video_id": video_id, "quality": quality, "output_dir": output_dir }),
             Self::DeleteVideoFile {
                 filename,
+                thumbnail_filename,
                 output_dir,
             } => json!({
                 "filename": filename,
+                "thumbnail_filename": thumbnail_filename,
                 "output_dir": output_dir,
             }),
             Self::DeletePlaylistFiles { playlist_id, path } => json!({
@@ -137,14 +141,18 @@ impl Task {
     }
 
     /// Decodes a `delete_video_file` task's raw JSON payload, as handed to a
-    /// `TaskHandler`, back into the recorded filename and output directory
-    /// it targets.
+    /// `TaskHandler`, back into the recorded filename, recorded thumbnail
+    /// filename, and output directory it targets.
     pub fn decode_delete_video_file_payload(
         payload: &str,
-    ) -> Result<(Option<String>, String), TaskError> {
+    ) -> Result<(Option<String>, Option<String>, String), TaskError> {
         let parsed: DeleteVideoFilePayload = serde_json::from_str(payload)
             .map_err(|e| TaskError(format!("invalid delete_video_file payload: {e}")))?;
-        Ok((parsed.filename, parsed.output_dir))
+        Ok((
+            parsed.filename,
+            parsed.thumbnail_filename,
+            parsed.output_dir,
+        ))
     }
 
     /// Decodes a `delete_playlist_files` task's raw JSON payload, as handed
@@ -277,6 +285,7 @@ mod tests {
     fn it_should_map_delete_video_file_to_a_stable_type_and_payload() {
         let task = Task::DeleteVideoFile {
             filename: Some("My Video.mp4".to_string()),
+            thumbnail_filename: Some("My Video.jpg".to_string()),
             output_dir: "/videos/music".to_string(),
         };
 
@@ -285,6 +294,7 @@ mod tests {
             task.payload(),
             json!({
                 "filename": "My Video.mp4",
+                "thumbnail_filename": "My Video.jpg",
                 "output_dir": "/videos/music",
             })
         );
@@ -294,13 +304,15 @@ mod tests {
     fn it_should_decode_a_delete_video_file_payload_back_into_its_filename_and_output_dir() {
         let task = Task::DeleteVideoFile {
             filename: Some("My Video.mp4".to_string()),
+            thumbnail_filename: Some("My Video.jpg".to_string()),
             output_dir: "/videos/music".to_string(),
         };
 
-        let (filename, output_dir) =
+        let (filename, thumbnail_filename, output_dir) =
             Task::decode_delete_video_file_payload(&task.payload().to_string()).unwrap();
 
         assert_eq!(filename, Some("My Video.mp4".to_string()));
+        assert_eq!(thumbnail_filename, Some("My Video.jpg".to_string()));
         assert_eq!(output_dir, "/videos/music");
     }
 

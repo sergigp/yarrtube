@@ -38,6 +38,7 @@ mod tests {
     use crate::domain::video::{Video, VideoStatus};
 
     use crate::domain::shared::VideoId;
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         FakeVideoRepository, VideoRepository,
     };
@@ -66,22 +67,38 @@ mod tests {
         seed_video: bool,
         downloader: FakeVideoDownloaderRepository,
     ) -> (DownloadVideoTask, Arc<FakeVideoRepository>, Video) {
+        handler_with_files(seed_video, downloader, FakeVideoFileRepository::default()).0
+    }
+
+    fn handler_with_files(
+        seed_video: bool,
+        downloader: FakeVideoDownloaderRepository,
+        video_file_repository: FakeVideoFileRepository,
+    ) -> (
+        (DownloadVideoTask, Arc<FakeVideoRepository>, Video),
+        Arc<FakeVideoFileRepository>,
+    ) {
         let video_repository = Arc::new(FakeVideoRepository::default());
         let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
         if seed_video {
             video_repository.save(&video).unwrap();
         }
+        let video_file_repository = Arc::new(video_file_repository);
 
         let video_downloader = VideoDownloader::new(
             video_repository.clone(),
             Arc::new(downloader),
+            video_file_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
         (
-            DownloadVideoTask::new(video_downloader),
-            video_repository,
-            video,
+            (
+                DownloadVideoTask::new(video_downloader),
+                video_repository,
+                video,
+            ),
+            video_file_repository,
         )
     }
 
@@ -147,6 +164,7 @@ mod tests {
         let video_downloader = VideoDownloader::new(
             video_repository,
             downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FixedClock(fixed_timestamp())),
         );
         let handler = DownloadVideoTask::new(video_downloader);
@@ -176,6 +194,7 @@ mod tests {
         let video_downloader = VideoDownloader::new(
             video_repository,
             downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FixedClock(fixed_timestamp())),
         );
         let handler = DownloadVideoTask::new(video_downloader);
@@ -212,5 +231,77 @@ mod tests {
             handler_with(true, FakeVideoDownloaderRepository::new(true));
 
         assert!(handler.handle("not json", false).is_err());
+    }
+
+    #[test]
+    fn it_should_record_the_thumbnail_filename_when_one_was_written() {
+        let ((handler, video_repository, video), _files) = handler_with_files(
+            true,
+            FakeVideoDownloaderRepository::new(true),
+            FakeVideoFileRepository::with_listing(vec!["fake-output.jpg".to_string()]),
+        );
+
+        handler
+            .handle(&payload_for(video.id.as_str()), false)
+            .unwrap();
+
+        let found = video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(
+            found.thumbnail_filename,
+            Some("fake-output.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn it_should_record_no_thumbnail_filename_when_none_was_written() {
+        let ((handler, video_repository, video), _files) = handler_with_files(
+            true,
+            FakeVideoDownloaderRepository::new(true),
+            FakeVideoFileRepository::with_listing(Vec::new()),
+        );
+
+        handler
+            .handle(&payload_for(video.id.as_str()), false)
+            .unwrap();
+
+        let found = video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.thumbnail_filename, None);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_detect_a_real_thumbnail_file_written_by_yt_dlp_alongside_the_video() {
+        use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
+        use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
+        use crate::infrastructure::shared::ytdlp::test_support::{FakeYtDlp, unique_temp_dir};
+
+        let output_dir = unique_temp_dir("download-video-task-thumbnail-e2e");
+        let fake =
+            FakeYtDlp::with_downloaded_files("My Video.mp4", &["My Video.mp4", "My Video.jpg"]);
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+
+        let video_downloader = VideoDownloader::new(
+            video_repository.clone(),
+            Arc::new(YtDlpVideoDownloaderRepository::new(fake.path.clone())),
+            Arc::new(FilesystemVideoFileRepository),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let handler = DownloadVideoTask::new(video_downloader);
+
+        let payload = Task::DownloadVideo {
+            video_id: video.id.as_str().to_string(),
+            quality: "high".to_string(),
+            output_dir: output_dir.to_string_lossy().to_string(),
+        }
+        .payload()
+        .to_string();
+        handler.handle(&payload, false).unwrap();
+
+        let found = video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.filename, Some("My Video.mp4".to_string()));
+        assert_eq!(found.thumbnail_filename, Some("My Video.jpg".to_string()));
+        std::fs::remove_dir_all(&output_dir).unwrap();
     }
 }

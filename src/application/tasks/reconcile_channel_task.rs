@@ -266,6 +266,7 @@ mod tests {
                 video_id: existing.id.as_str().to_string(),
                 title: "Old".to_string(),
                 filename: None,
+                thumbnail_filename: None,
                 was_downloaded: false,
             }]
         );
@@ -378,6 +379,7 @@ mod tests {
             v.start_download(fixed_timestamp()).mark_downloaded(
                 Quality::High,
                 "My Video.mp4",
+                Some("My Video.jpg".to_string()),
                 fixed_timestamp(),
             )
         });
@@ -387,6 +389,7 @@ mod tests {
         let stored = videos.videos.lock().unwrap();
         assert_eq!(stored[0].status, VideoStatus::Pending);
         assert_eq!(stored[0].filename, None);
+        assert_eq!(stored[0].thumbnail_filename, None);
         assert_eq!(stored[0].quality, None);
 
         let scheduled = tasks.scheduled.lock().unwrap();
@@ -413,6 +416,7 @@ mod tests {
             v.start_download(fixed_timestamp()).mark_downloaded(
                 Quality::High,
                 "My Video.webm",
+                None,
                 fixed_timestamp(),
             )
         });
@@ -495,6 +499,7 @@ mod tests {
             v.start_download(fixed_timestamp()).mark_downloaded(
                 Quality::High,
                 "My Video.mp4",
+                None,
                 fixed_timestamp(),
             )
         });
@@ -504,5 +509,63 @@ mod tests {
         assert!(files.deleted_calls.lock().unwrap().is_empty());
         let stored = videos.videos.lock().unwrap();
         assert_eq!(stored[0].status, VideoStatus::Downloaded);
+    }
+
+    #[test]
+    fn it_should_leave_a_matching_thumbnail_file_alone() {
+        let (handler, _events, videos, channel_videos, _tasks, files) = handler_with_files(
+            Some(channel(10)),
+            vec![ChannelVideoListing {
+                youtube_id: "yt1".to_string(),
+                title: "My Video".to_string(),
+                position: 0,
+            }],
+            FakeVideoFileRepository::with_listing(vec![
+                "My Video.mp4".to_string(),
+                "My Video.jpg".to_string(),
+            ]),
+        );
+        seed_member(&videos, &channel_videos, "yt1", "My Video", |v| {
+            v.start_download(fixed_timestamp()).mark_downloaded(
+                Quality::High,
+                "My Video.mp4",
+                Some("My Video.jpg".to_string()),
+                fixed_timestamp(),
+            )
+        });
+
+        handler.handle(&payload_for("@somechannel"), false).unwrap();
+
+        assert!(files.deleted_calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_delete_an_unrecorded_stray_thumbnail_file() {
+        let (handler, _events, videos, channel_videos, _tasks, files) = handler_with_files(
+            Some(channel(10)),
+            vec![ChannelVideoListing {
+                youtube_id: "yt1".to_string(),
+                title: "My Video".to_string(),
+                position: 0,
+            }],
+            FakeVideoFileRepository::with_listing(vec![
+                "My Video.mp4".to_string(),
+                "stray.jpg".to_string(),
+            ]),
+        );
+        seed_member(&videos, &channel_videos, "yt1", "My Video", |v| {
+            v.start_download(fixed_timestamp()).mark_downloaded(
+                Quality::High,
+                "My Video.mp4",
+                None,
+                fixed_timestamp(),
+            )
+        });
+
+        handler.handle(&payload_for("@somechannel"), false).unwrap();
+
+        let calls = files.deleted_calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].1, "stray.jpg");
     }
 }

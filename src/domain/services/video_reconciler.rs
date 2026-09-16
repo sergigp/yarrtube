@@ -200,6 +200,7 @@ impl VideoReconciler {
                     video_id: video.id.as_str().to_string(),
                     title: video.title.clone(),
                     filename: video.filename.clone(),
+                    thumbnail_filename: video.thumbnail_filename.clone(),
                     was_downloaded: video.status == VideoStatus::Downloaded,
                 })?;
         }
@@ -233,9 +234,10 @@ impl VideoReconciler {
             .iter()
             .filter(|v| v.status == VideoStatus::Downloaded)
             .collect();
-        let downloaded_filenames: HashSet<&str> = downloaded
+        let protected_filenames: HashSet<&str> = downloaded
             .iter()
-            .filter_map(|v| v.filename.as_deref())
+            .flat_map(|v| [v.filename.as_deref(), v.thumbnail_filename.as_deref()])
+            .flatten()
             .collect();
 
         for video in &downloaded {
@@ -291,7 +293,7 @@ impl VideoReconciler {
         }
 
         for file in &files {
-            if downloaded_filenames.contains(file.as_str()) {
+            if protected_filenames.contains(file.as_str()) {
                 continue;
             }
             if self.video_file_repository.delete(&output_dir, file)? {

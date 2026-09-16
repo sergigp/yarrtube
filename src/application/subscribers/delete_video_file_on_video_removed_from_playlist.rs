@@ -13,6 +13,7 @@ use tracing::debug;
 struct VideoRemovedFromPlaylistPayload {
     playlist_id: String,
     filename: Option<String>,
+    thumbnail_filename: Option<String>,
     was_downloaded: bool,
 }
 
@@ -64,6 +65,7 @@ impl EventSubscriber for DeleteVideoFileOnVideoRemovedFromPlaylist {
         self.task_repository.schedule(
             &Task::DeleteVideoFile {
                 filename: payload.filename,
+                thumbnail_filename: payload.thumbnail_filename,
                 output_dir: output_dir.to_string_lossy().to_string(),
             },
             self.clock.now(),
@@ -120,7 +122,7 @@ mod tests {
 
         subscriber
             .handle(
-                r#"{"playlist_id": "PL1", "video_id": "rec1", "title": "My Video", "filename": "My Video.mp4", "was_downloaded": true}"#,
+                r#"{"playlist_id": "PL1", "video_id": "rec1", "title": "My Video", "filename": "My Video.mp4", "thumbnail_filename": "My Video.jpg", "was_downloaded": true}"#,
             )
             .unwrap();
 
@@ -130,6 +132,7 @@ mod tests {
             vec![(
                 Task::DeleteVideoFile {
                     filename: Some("My Video.mp4".to_string()),
+                    thumbnail_filename: Some("My Video.jpg".to_string()),
                     output_dir: "/videos/my-playlist".to_string(),
                 },
                 fixed_timestamp()
@@ -145,7 +148,7 @@ mod tests {
 
         subscriber
             .handle(
-                r#"{"playlist_id": "PL1", "video_id": "rec1", "title": "My Video", "filename": null, "was_downloaded": false}"#,
+                r#"{"playlist_id": "PL1", "video_id": "rec1", "title": "My Video", "filename": null, "thumbnail_filename": null, "was_downloaded": false}"#,
             )
             .unwrap();
 
@@ -160,7 +163,7 @@ mod tests {
 
         subscriber
             .handle(
-                r#"{"playlist_id": "", "video_id": "rec1", "title": "My Video", "filename": null, "was_downloaded": true}"#,
+                r#"{"playlist_id": "", "video_id": "rec1", "title": "My Video", "filename": null, "thumbnail_filename": null, "was_downloaded": true}"#,
             )
             .unwrap();
 
@@ -175,7 +178,7 @@ mod tests {
 
         subscriber
             .handle(
-                r#"{"playlist_id": "PL404", "video_id": "rec1", "title": "My Video", "filename": "My Video.mp4", "was_downloaded": true}"#,
+                r#"{"playlist_id": "PL404", "video_id": "rec1", "title": "My Video", "filename": "My Video.mp4", "thumbnail_filename": null, "was_downloaded": true}"#,
             )
             .unwrap();
 

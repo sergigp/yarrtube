@@ -1,5 +1,7 @@
 use crate::domain::shared::{Quality, VideoRecordId};
+use crate::domain::video::thumbnail_filename::expected_thumbnail_filename;
 use crate::domain::video::video_filename::VideoFilename;
+use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -15,6 +17,7 @@ use tracing::{debug, error, info, warn};
 pub struct VideoDownloader {
     video_repository: Arc<dyn VideoRepository>,
     video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+    video_file_repository: Arc<dyn VideoFileRepository>,
     clock: Arc<dyn Clock>,
 }
 
@@ -22,11 +25,13 @@ impl VideoDownloader {
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
         video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+        video_file_repository: Arc<dyn VideoFileRepository>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             video_repository,
             video_downloader_repository,
+            video_file_repository,
             clock,
         }
     }
@@ -61,9 +66,17 @@ impl VideoDownloader {
 
         match outcome {
             Ok(Some(downloaded_filename)) => {
+                let expected_thumbnail = expected_thumbnail_filename(&downloaded_filename);
+                let thumbnail_filename = self
+                    .video_file_repository
+                    .list(output_dir)?
+                    .iter()
+                    .any(|f| f == &expected_thumbnail)
+                    .then_some(expected_thumbnail);
                 self.video_repository.update(&started.mark_downloaded(
                     quality,
                     downloaded_filename,
+                    thumbnail_filename,
                     self.clock.now(),
                 ))?;
                 info!(video_id = %video_id, "video downloaded");

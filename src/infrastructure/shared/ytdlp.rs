@@ -61,6 +61,10 @@ pub fn download_video(
     let output_template = format!("{base}.%(ext)s");
     let mut args = args_for_quality(quality);
     args.extend([
+        "--embed-thumbnail".to_string(),
+        "--write-thumbnail".to_string(),
+        "--convert-thumbnails".to_string(),
+        "jpg".to_string(),
         "--quiet".to_string(),
         "--no-warnings".to_string(),
         "--print".to_string(),
@@ -263,6 +267,37 @@ pub(crate) mod test_support {
             }
         }
 
+        /// A fake `yt-dlp` that exits 0, prints `printed_filename`, and
+        /// creates each of `extra_files` (relative to the directory it's
+        /// invoked in) — stands in for `yt-dlp` actually writing a video
+        /// file and its converted thumbnail sibling to `output_path`.
+        pub(crate) fn with_downloaded_files(printed_filename: &str, extra_files: &[&str]) -> Self {
+            use std::os::unix::fs::PermissionsExt;
+
+            let bin_dir = unique_temp_dir("fake-ytdlp-bin");
+            let script_path = bin_dir.join("yt-dlp");
+            let captured_args_path = bin_dir.join("captured-args");
+            let touch_stmts: String = extra_files
+                .iter()
+                .map(|f| format!("touch \"{f}\"\n"))
+                .collect();
+            fs::write(
+                &script_path,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\n{touch_stmts}printf '%s\\n' '{printed_filename}'\nexit 0\n",
+                    captured_args_path.display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
+
+            Self {
+                _bin_dir: bin_dir,
+                path: script_path,
+                captured_args_path,
+            }
+        }
+
         /// A fake `yt-dlp` that exits 0 and prints `stdout` verbatim,
         /// written to a file and `cat`-ed rather than embedded in the
         /// script, so it's immune to shell quoting of its content (e.g. a
@@ -372,6 +407,10 @@ mod tests {
 
         let mut expected = args_for_quality(Quality::High);
         expected.extend([
+            "--embed-thumbnail".to_string(),
+            "--write-thumbnail".to_string(),
+            "--convert-thumbnails".to_string(),
+            "jpg".to_string(),
             "--quiet".to_string(),
             "--no-warnings".to_string(),
             "--print".to_string(),
@@ -381,6 +420,32 @@ mod tests {
             "My Video.%(ext)s".to_string(),
         ]);
         assert_eq!(fake.captured_args(), expected);
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_pass_thumbnail_embedding_and_conversion_flags_to_yt_dlp() {
+        use test_support::{FakeYtDlp, unique_temp_dir};
+
+        let output_dir = unique_temp_dir("ytdlp-output-thumbnail-flags");
+        let fake = FakeYtDlp::with_exit_code(0);
+
+        download_video(
+            &fake.path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+        )
+        .unwrap();
+
+        let args = fake.captured_args();
+        assert!(args.contains(&"--embed-thumbnail".to_string()));
+        assert!(args.contains(&"--write-thumbnail".to_string()));
+        assert!(args.contains(&"--convert-thumbnails".to_string()));
+        assert!(args.contains(&"jpg".to_string()));
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
@@ -405,6 +470,10 @@ mod tests {
 
         let mut expected = args_for_quality(Quality::High);
         expected.extend([
+            "--embed-thumbnail".to_string(),
+            "--write-thumbnail".to_string(),
+            "--convert-thumbnails".to_string(),
+            "jpg".to_string(),
             "--quiet".to_string(),
             "--no-warnings".to_string(),
             "--print".to_string(),

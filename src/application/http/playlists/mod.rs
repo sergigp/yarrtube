@@ -947,7 +947,7 @@ mod tests {
             .save(
                 &Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
                     .start_download(fixed_timestamp())
-                    .mark_downloaded(Quality::High, "My Video.mp4", fixed_timestamp()),
+                    .mark_downloaded(Quality::High, "My Video.mp4", None, fixed_timestamp()),
             )
             .unwrap();
         let event_publisher = Arc::new(FakeEventPublisher::default());

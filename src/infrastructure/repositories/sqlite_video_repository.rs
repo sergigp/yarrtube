@@ -31,6 +31,7 @@ impl SqliteVideoRepository {
                 status TEXT NOT NULL,
                 quality TEXT,
                 filename TEXT,
+                thumbnail_filename TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )",
@@ -52,14 +53,15 @@ impl VideoRepository for SqliteVideoRepository {
             .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT (id) DO UPDATE SET
                 youtube_id = excluded.youtube_id,
                 title = excluded.title,
                 status = excluded.status,
                 quality = excluded.quality,
                 filename = excluded.filename,
+                thumbnail_filename = excluded.thumbnail_filename,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at",
             params![
@@ -69,6 +71,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.status.as_str(),
                 video.quality.map(|q| q.as_str()),
                 video.filename,
+                video.thumbnail_filename,
                 video.created_at.to_rfc3339(),
                 video.updated_at.to_rfc3339(),
             ],
@@ -87,7 +90,7 @@ impl VideoRepository for SqliteVideoRepository {
             .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
-            "SELECT id, youtube_id, title, status, quality, filename, created_at, updated_at
+            "SELECT id, youtube_id, title, status, quality, filename, thumbnail_filename, created_at, updated_at
              FROM videos WHERE id = ?1",
             params![id.as_str()],
             |row| {
@@ -98,8 +101,9 @@ impl VideoRepository for SqliteVideoRepository {
                     row.get::<_, String>(3)?,
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
-                    row.get::<_, String>(6)?,
+                    row.get::<_, Option<String>>(6)?,
                     row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
                 ))
             },
         )
@@ -107,9 +111,10 @@ impl VideoRepository for SqliteVideoRepository {
         .inspect_err(|e| tracing::error!(video_id = %id, error = %e, "failed to find video"))
         .context("failed to find video")?
         .map(
-            |(id, youtube_id, title, status, quality, filename, created_at, updated_at)| {
+            |(id, youtube_id, title, status, quality, filename, thumbnail_filename, created_at, updated_at)| {
                 Self::row_to_video(
-                    id, youtube_id, title, status, quality, filename, created_at, updated_at,
+                    id, youtube_id, title, status, quality, filename, thumbnail_filename,
+                    created_at, updated_at,
                 )
             },
         )
@@ -123,7 +128,7 @@ impl VideoRepository for SqliteVideoRepository {
             .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, updated_at = ?7
+            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, updated_at = ?8
              WHERE id = ?1",
             params![
                 video.id.as_str(),
@@ -132,6 +137,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.status.as_str(),
                 video.quality.map(|q| q.as_str()),
                 video.filename,
+                video.thumbnail_filename,
                 video.updated_at.to_rfc3339(),
             ],
         )
@@ -164,6 +170,7 @@ impl SqliteVideoRepository {
         status: String,
         quality: Option<String>,
         filename: Option<String>,
+        thumbnail_filename: Option<String>,
         created_at: String,
         updated_at: String,
     ) -> anyhow::Result<Video> {
@@ -174,6 +181,7 @@ impl SqliteVideoRepository {
             status: VideoStatus::parse(&status)?,
             quality: quality.map(Quality::new).transpose()?,
             filename,
+            thumbnail_filename,
             created_at: DateTime::parse_from_rfc3339(&created_at)
                 .context("failed to parse stored created_at")?
                 .with_timezone(&Utc),
@@ -271,16 +279,35 @@ mod tests {
     fn it_should_round_trip_a_video_with_a_recorded_quality() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let downloaded =
-            video("First", now)
-                .start_download(now)
-                .mark_downloaded(Quality::Mid, "First.mp4", now);
+        let downloaded = video("First", now).start_download(now).mark_downloaded(
+            Quality::Mid,
+            "First.mp4",
+            None,
+            now,
+        );
         repo.save(&downloaded).unwrap();
 
         let found = repo.find(&downloaded.id).unwrap().unwrap();
 
         assert_eq!(found.quality, Some(Quality::Mid));
         assert_eq!(found.filename, Some("First.mp4".to_string()));
+    }
+
+    #[test]
+    fn it_should_round_trip_a_video_with_a_recorded_thumbnail_filename() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let downloaded = video("First", now).start_download(now).mark_downloaded(
+            Quality::Mid,
+            "First.mp4",
+            Some("First.jpg".to_string()),
+            now,
+        );
+        repo.save(&downloaded).unwrap();
+
+        let found = repo.find(&downloaded.id).unwrap().unwrap();
+
+        assert_eq!(found.thumbnail_filename, Some("First.jpg".to_string()));
     }
 
     #[test]

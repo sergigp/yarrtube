@@ -24,28 +24,47 @@ impl VideoFileDeleter {
         }
     }
 
-    /// Deletes a removed video's downloaded file from disk, scheduled by
+    /// Deletes a removed video's downloaded file, and its thumbnail file if
+    /// any, from disk, scheduled by
     /// `subscribers::delete_video_file_on_video_removed_from_playlist`/
     /// `..._channel` whenever a downloaded video is removed from its
     /// container. `output_dir` is the container's already-resolved output
-    /// directory. No-ops (without erroring) if the video has no recorded
-    /// filename or no matching file is found, so the task is safe to retry.
+    /// directory. No-ops (without erroring) for either file it has no
+    /// recorded filename for, or no matching file is found, so the task is
+    /// safe to retry.
     pub fn delete_video_file(
         &self,
         filename: Option<String>,
+        thumbnail_filename: Option<String>,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
-        let Some(filename) = filename else {
-            debug!("video has no recorded filename, skipping file deletion");
-            return Ok(());
-        };
+        match filename {
+            Some(filename) => {
+                let deleted = self.video_file_repository.delete(output_dir, &filename)?;
+                if deleted {
+                    info!(filename, "deleted video file");
+                } else {
+                    debug!(filename, "no matching video file found to delete");
+                }
+            }
+            None => debug!("video has no recorded filename, skipping file deletion"),
+        }
 
-        let deleted = self.video_file_repository.delete(output_dir, &filename)?;
-
-        if deleted {
-            info!(filename, "deleted video file");
-        } else {
-            debug!(filename, "no matching video file found to delete");
+        match thumbnail_filename {
+            Some(thumbnail_filename) => {
+                let deleted = self
+                    .video_file_repository
+                    .delete(output_dir, &thumbnail_filename)?;
+                if deleted {
+                    info!(thumbnail_filename, "deleted video thumbnail file");
+                } else {
+                    debug!(
+                        thumbnail_filename,
+                        "no matching video thumbnail file found to delete"
+                    );
+                }
+            }
+            None => debug!("video has no recorded thumbnail filename, skipping file deletion"),
         }
 
         Ok(())
