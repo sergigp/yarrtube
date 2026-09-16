@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
+import { fetchPlaylists, fetchChannels } from './api'
+import { Home } from './components/Home'
 import { PlaylistList } from './components/PlaylistList'
 import { PlaylistDetail } from './components/PlaylistDetail'
 import { ChannelList } from './components/ChannelList'
@@ -8,15 +10,45 @@ import { TasksView } from './components/TasksView'
 import { AddPlaylistDialog } from './components/AddPlaylistDialog'
 import { AddChannelDialog } from './components/AddChannelDialog'
 
-function PlaylistsTab() {
+function PlaylistsTab({ deepLink, onDeepLinkHandled }) {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null)
+  const [initialVideoId, setInitialVideoId] = useState(null)
+
+  useEffect(() => {
+    if (!deepLink) {
+      return undefined
+    }
+
+    let cancelled = false
+    fetchPlaylists().then((playlists) => {
+      if (cancelled) {
+        return
+      }
+      const match = playlists.find((playlist) => playlist.id === deepLink.id)
+      if (match) {
+        setSelectedPlaylist(match)
+        setInitialVideoId(deepLink.videoId)
+      }
+      onDeepLinkHandled()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [deepLink, onDeepLinkHandled])
 
   if (selectedPlaylist) {
     return (
       <PlaylistDetail
         playlist={selectedPlaylist}
-        onBack={() => setSelectedPlaylist(null)}
-        onDeleted={() => setSelectedPlaylist(null)}
+        initialVideoId={initialVideoId}
+        onBack={() => {
+          setSelectedPlaylist(null)
+          setInitialVideoId(null)
+        }}
+        onDeleted={() => {
+          setSelectedPlaylist(null)
+          setInitialVideoId(null)
+        }}
       />
     )
   }
@@ -24,15 +56,45 @@ function PlaylistsTab() {
   return <PlaylistList onSelect={setSelectedPlaylist} />
 }
 
-function ChannelsTab() {
+function ChannelsTab({ deepLink, onDeepLinkHandled }) {
   const [selectedChannel, setSelectedChannel] = useState(null)
+  const [initialVideoId, setInitialVideoId] = useState(null)
+
+  useEffect(() => {
+    if (!deepLink) {
+      return undefined
+    }
+
+    let cancelled = false
+    fetchChannels().then((channels) => {
+      if (cancelled) {
+        return
+      }
+      const match = channels.find((channel) => channel.id === deepLink.id)
+      if (match) {
+        setSelectedChannel(match)
+        setInitialVideoId(deepLink.videoId)
+      }
+      onDeepLinkHandled()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [deepLink, onDeepLinkHandled])
 
   if (selectedChannel) {
     return (
       <ChannelDetail
         channel={selectedChannel}
-        onBack={() => setSelectedChannel(null)}
-        onDeleted={() => setSelectedChannel(null)}
+        initialVideoId={initialVideoId}
+        onBack={() => {
+          setSelectedChannel(null)
+          setInitialVideoId(null)
+        }}
+        onDeleted={() => {
+          setSelectedChannel(null)
+          setInitialVideoId(null)
+        }}
       />
     )
   }
@@ -41,15 +103,27 @@ function ChannelsTab() {
 }
 
 export default function App() {
-  const [tab, setTab] = useState('playlists')
+  const [tab, setTab] = useState('home')
   const [addPlaylistOpen, setAddPlaylistOpen] = useState(false)
   const [addChannelOpen, setAddChannelOpen] = useState(false)
+  const [deepLink, setDeepLink] = useState(null)
+
+  const handleHomeSelect = (source, videoId) => {
+    setDeepLink({ kind: source.kind, id: source.id, videoId })
+    setTab(source.kind === 'channel' ? 'channels' : 'playlists')
+  }
 
   return (
     <div className="app">
       <header className="app-header">
         <h1>Yarrtube</h1>
         <nav className="tabs">
+          <button
+            className={tab === 'home' ? 'tab active' : 'tab'}
+            onClick={() => setTab('home')}
+          >
+            Home
+          </button>
           <button
             className={tab === 'playlists' ? 'tab active' : 'tab'}
             onClick={() => setTab('playlists')}
@@ -82,8 +156,19 @@ export default function App() {
         </div>
       </header>
       <main className="app-main">
-        {tab === 'playlists' && <PlaylistsTab />}
-        {tab === 'channels' && <ChannelsTab />}
+        {tab === 'home' && <Home onSelect={handleHomeSelect} />}
+        {tab === 'playlists' && (
+          <PlaylistsTab
+            deepLink={deepLink?.kind === 'playlist' ? deepLink : null}
+            onDeepLinkHandled={() => setDeepLink(null)}
+          />
+        )}
+        {tab === 'channels' && (
+          <ChannelsTab
+            deepLink={deepLink?.kind === 'channel' ? deepLink : null}
+            onDeepLinkHandled={() => setDeepLink(null)}
+          />
+        )}
         {tab === 'tasks' && <TasksView />}
       </main>
       <AddPlaylistDialog open={addPlaylistOpen} onOpenChange={setAddPlaylistOpen} />

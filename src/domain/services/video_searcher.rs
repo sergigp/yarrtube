@@ -1,6 +1,6 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::shared::PlaylistId;
-use crate::domain::video::{ListVideosError, Video};
+use crate::domain::video::{ListVideosError, RecentVideo, Video, VideoSource, VideoStatus};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -73,6 +73,88 @@ impl VideoSearcher {
             .iter()
             .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
             .collect::<anyhow::Result<Vec<Video>>>()
+            .map_err(ListVideosError::Repository)
+    }
+
+    /// Lists downloaded videos across every tracked playlist and channel,
+    /// newest sync first, truncated to `limit`. A video tracked by more than
+    /// one source appears once per source.
+    pub fn list_recent(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
+        let mut recent = self.recent_from_playlists()?;
+        recent.extend(self.recent_from_channels()?);
+
+        recent.sort_by_key(|r| std::cmp::Reverse(r.video.created_at));
+        recent.truncate(limit);
+        Ok(recent)
+    }
+
+    fn recent_from_playlists(&self) -> Result<Vec<RecentVideo>, ListVideosError> {
+        let playlists = self
+            .playlist_repository
+            .list()
+            .map_err(ListVideosError::Repository)?;
+
+        playlists
+            .iter()
+            .map(|playlist| -> anyhow::Result<Vec<RecentVideo>> {
+                let playlist_videos = self
+                    .playlist_video_repository
+                    .list_for_playlist(&playlist.id)?;
+                playlist_videos
+                    .iter()
+                    .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
+                    .collect::<anyhow::Result<Vec<Video>>>()
+                    .map(|videos| {
+                        videos
+                            .into_iter()
+                            .filter(|video| video.status == VideoStatus::Downloaded)
+                            .map(|video| RecentVideo {
+                                video,
+                                source: VideoSource::Playlist(
+                                    playlist.id.clone(),
+                                    playlist.path.clone(),
+                                ),
+                            })
+                            .collect()
+                    })
+            })
+            .collect::<anyhow::Result<Vec<Vec<RecentVideo>>>>()
+            .map(|nested| nested.into_iter().flatten().collect())
+            .map_err(ListVideosError::Repository)
+    }
+
+    fn recent_from_channels(&self) -> Result<Vec<RecentVideo>, ListVideosError> {
+        let channels = self
+            .channel_repository
+            .list()
+            .map_err(ListVideosError::Repository)?;
+
+        channels
+            .iter()
+            .map(|channel| -> anyhow::Result<Vec<RecentVideo>> {
+                let channel_videos = self
+                    .channel_video_repository
+                    .list_for_channel(&channel.id)?;
+                channel_videos
+                    .iter()
+                    .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
+                    .collect::<anyhow::Result<Vec<Video>>>()
+                    .map(|videos| {
+                        videos
+                            .into_iter()
+                            .filter(|video| video.status == VideoStatus::Downloaded)
+                            .map(|video| RecentVideo {
+                                video,
+                                source: VideoSource::Channel(
+                                    channel.id.clone(),
+                                    channel.path.clone(),
+                                ),
+                            })
+                            .collect()
+                    })
+            })
+            .collect::<anyhow::Result<Vec<Vec<RecentVideo>>>>()
+            .map(|nested| nested.into_iter().flatten().collect())
             .map_err(ListVideosError::Repository)
     }
 }
