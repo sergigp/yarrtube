@@ -1,4 +1,4 @@
-use crate::domain::video::Video;
+use crate::domain::video::{RecentVideo, Video, VideoSource};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
@@ -29,10 +29,45 @@ impl From<Video> for VideoResponse {
     }
 }
 
+#[derive(Debug, Serialize, PartialEq)]
+pub struct RecentVideoSourceResponse {
+    pub kind: String,
+    pub id: String,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct RecentVideoResponse {
+    pub id: String,
+    pub title: String,
+    pub source: RecentVideoSourceResponse,
+}
+
+impl From<RecentVideo> for RecentVideoResponse {
+    fn from(recent_video: RecentVideo) -> Self {
+        let source = match recent_video.source {
+            VideoSource::Playlist(id) => RecentVideoSourceResponse {
+                kind: "playlist".to_string(),
+                id: id.as_str().to_string(),
+            },
+            VideoSource::Channel(id) => RecentVideoSourceResponse {
+                kind: "channel".to_string(),
+                id: id.as_str().to_string(),
+            },
+        };
+        Self {
+            id: recent_video.video.youtube_id.as_str().to_string(),
+            title: recent_video.video.title,
+            source,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::shared::{Quality, VideoId};
+    use crate::domain::channel::ChannelHandle;
+    use crate::domain::shared::{PlaylistId, Quality, VideoId};
+    use crate::domain::video::Video;
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
@@ -63,5 +98,33 @@ mod tests {
 
         let json = serde_json::to_value(&response).unwrap();
         assert_eq!(json["thumbnail_filename"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn it_should_tag_the_source_as_playlist() {
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+
+        let response = RecentVideoResponse::from(RecentVideo {
+            video,
+            source: VideoSource::Playlist(PlaylistId::new("PL1").unwrap()),
+        });
+
+        assert_eq!(response.id, "vid1");
+        assert_eq!(response.title, "My Video");
+        assert_eq!(response.source.kind, "playlist");
+        assert_eq!(response.source.id, "PL1");
+    }
+
+    #[test]
+    fn it_should_tag_the_source_as_channel() {
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+
+        let response = RecentVideoResponse::from(RecentVideo {
+            video,
+            source: VideoSource::Channel(ChannelHandle::new("@somechannel").unwrap()),
+        });
+
+        assert_eq!(response.source.kind, "channel");
+        assert_eq!(response.source.id, "@somechannel");
     }
 }

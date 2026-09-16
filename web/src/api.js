@@ -14,6 +14,10 @@ export function fetchVideos(playlistId) {
   return request(`/playlists/${encodeURIComponent(playlistId)}/videos`)
 }
 
+export function fetchRecentVideos() {
+  return request('/videos/recent')
+}
+
 export function fetchTasks() {
   return request('/tasks')
 }

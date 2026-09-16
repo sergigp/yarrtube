@@ -46,6 +46,7 @@ pub fn api_router(state: AppState) -> Router {
             "/playlists/{id}/videos",
             get(videos::list_videos_for_playlist),
         )
+        .route("/videos/recent", get(videos::list_recent_videos))
         .route(
             "/custom-playlists",
             post(custom_playlists::create_custom_playlist),

@@ -64,12 +64,17 @@ function VideoDetail({ playlist, video, onDeleted }) {
   )
 }
 
-export function PlaylistDetail({ playlist, onBack, onDeleted }) {
+export function PlaylistDetail({ playlist, onBack, onDeleted, initialVideoId }) {
   const { data: videos, error } = usePolling(
     () => fetchVideos(playlist.id),
     [playlist.id],
   )
-  const [selectedVideo, setSelectedVideo] = useState(null)
+  const [manualSelection, setManualSelection] = useState(null)
+  const deepLinkedVideo = !manualSelection && initialVideoId
+    ? (videos?.find((video) => video.id === initialVideoId) ?? null)
+    : null
+  const selectedVideo = manualSelection ?? deepLinkedVideo
+  const autoplay = selectedVideo !== null && selectedVideo === deepLinkedVideo
 
   return (
     <div>
@@ -92,6 +97,7 @@ export function PlaylistDetail({ playlist, onBack, onDeleted }) {
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <video
                 controls
+                autoPlay={autoplay}
                 src={videoMediaUrl(playlist.path, selectedVideo.filename)}
                 poster={
                   selectedVideo.thumbnail_filename
@@ -113,7 +119,7 @@ export function PlaylistDetail({ playlist, onBack, onDeleted }) {
               <VideoDetail
                 playlist={playlist}
                 video={selectedVideo}
-                onDeleted={() => setSelectedVideo(null)}
+                onDeleted={() => setManualSelection(null)}
               />
             ) : (
               <p className="muted">No video selected.</p>
@@ -135,7 +141,7 @@ export function PlaylistDetail({ playlist, onBack, onDeleted }) {
                     className={
                       selectedVideo?.id === video.id ? 'list-item active' : 'list-item'
                     }
-                    onClick={() => setSelectedVideo(video)}
+                    onClick={() => setManualSelection(video)}
                   >
                     <span className="list-item-title">{video.title}</span>
                     <VideoStatusIndicator status={video.status} />

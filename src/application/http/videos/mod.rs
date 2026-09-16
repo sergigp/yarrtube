@@ -6,10 +6,20 @@ use crate::domain::channel::ChannelHandle;
 use crate::domain::shared::PlaylistId;
 use crate::domain::video::ListVideosError;
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use dto::VideoResponse;
+use dto::{RecentVideoResponse, VideoResponse};
+use serde::Deserialize;
+
+const DEFAULT_RECENT_VIDEOS_LIMIT: usize = 20;
+const MAX_RECENT_VIDEOS_LIMIT: usize = 100;
+
+#[derive(Debug, Deserialize)]
+pub struct ListRecentVideosQuery {
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
 
 pub async fn list_videos_for_playlist(
     State(state): State<AppState>,
@@ -51,6 +61,33 @@ pub async fn list_videos_for_channel(
         Ok(videos) => {
             let response: Vec<VideoResponse> =
                 videos.into_iter().map(VideoResponse::from).collect();
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e @ ListVideosError::PlaylistNotFound(_)) => {
+            error_response(StatusCode::BAD_REQUEST, e.to_string())
+        }
+        Err(e @ ListVideosError::ChannelNotFound(_)) => {
+            error_response(StatusCode::BAD_REQUEST, e.to_string())
+        }
+        Err(e @ ListVideosError::Repository(_)) => {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        }
+    }
+}
+
+pub async fn list_recent_videos(
+    State(state): State<AppState>,
+    Query(query): Query<ListRecentVideosQuery>,
+) -> Response {
+    let limit = query
+        .limit
+        .unwrap_or(DEFAULT_RECENT_VIDEOS_LIMIT)
+        .min(MAX_RECENT_VIDEOS_LIMIT);
+
+    match state.video_searcher.list_recent(limit) {
+        Ok(videos) => {
+            let response: Vec<RecentVideoResponse> =
+                videos.into_iter().map(RecentVideoResponse::from).collect();
             (StatusCode::OK, Json(response)).into_response()
         }
         Err(e @ ListVideosError::PlaylistNotFound(_)) => {
@@ -206,6 +243,7 @@ mod tests {
         let inner = Router::new()
             .route("/playlists/{id}/videos", get(list_videos_for_playlist))
             .route("/channels/{handle}/videos", get(list_videos_for_channel))
+            .route("/videos/recent", get(list_recent_videos))
             .with_state(state);
         Router::new().nest("/api", inner)
     }
@@ -235,6 +273,28 @@ mod tests {
             VideoLimit::new(10).unwrap(),
             PlaylistPath::new("creators/somechannel").unwrap(),
             fixed_timestamp(),
+        )
+    }
+
+    fn recent_request(query: &str) -> Request<Body> {
+        let uri = if query.is_empty() {
+            "/api/videos/recent".to_string()
+        } else {
+            format!("/api/videos/recent?{query}")
+        };
+        Request::builder()
+            .method("GET")
+            .uri(uri)
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    fn downloaded_video(youtube_id: &str, title: &str, created_at: DateTime<Utc>) -> Video {
+        Video::create(VideoId::new(youtube_id).unwrap(), title, created_at).mark_downloaded(
+            Quality::High,
+            format!("{title}.mp4"),
+            None,
+            created_at,
         )
     }
 
@@ -440,5 +500,287 @@ mod tests {
         let response = router.oneshot(channel_request("@missing")).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_an_empty_list_when_no_downloaded_videos_exist() {
+        let router = test_router(
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
+            Arc::new(FakeVideoRepository::default()),
+        );
+
+        let response = router.oneshot(recent_request("")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        assert_eq!(body, serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn it_should_combine_and_sort_recent_videos_from_playlists_and_channels() {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let channel_repository = Arc::new(FakeChannelRepository::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let video_repository = Arc::new(FakeVideoRepository::default());
+
+        let from_playlist = downloaded_video(
+            "vid_from_playlist",
+            "From Playlist",
+            DateTime::<Utc>::from_timestamp(100, 0).unwrap(),
+        );
+        video_repository.save(&from_playlist).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                PlaylistId::new("PL1").unwrap(),
+                from_playlist.id.clone(),
+                fixed_timestamp(),
+            ))
+            .unwrap();
+
+        let from_channel = downloaded_video(
+            "vid_from_channel",
+            "From Channel",
+            DateTime::<Utc>::from_timestamp(200, 0).unwrap(),
+        );
+        video_repository.save(&from_channel).unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                ChannelHandle::new("@somechannel").unwrap(),
+                from_channel.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+
+        let router = test_router(
+            playlist_repository,
+            playlist_video_repository,
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+        );
+
+        let response = router.oneshot(recent_request("")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        let videos = body.as_array().unwrap();
+        assert_eq!(videos.len(), 2);
+        assert_eq!(videos[0]["id"], "vid_from_channel");
+        assert_eq!(videos[0]["source"]["kind"], "channel");
+        assert_eq!(videos[0]["source"]["id"], "@somechannel");
+        assert_eq!(videos[1]["id"], "vid_from_playlist");
+        assert_eq!(videos[1]["source"]["kind"], "playlist");
+        assert_eq!(videos[1]["source"]["id"], "PL1");
+    }
+
+    #[tokio::test]
+    async fn it_should_exclude_non_downloaded_videos_from_recent() {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let video_repository = Arc::new(FakeVideoRepository::default());
+
+        let pending = Video::create(
+            VideoId::new("vid_pending").unwrap(),
+            "Pending",
+            fixed_timestamp(),
+        );
+        video_repository.save(&pending).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                PlaylistId::new("PL1").unwrap(),
+                pending.id.clone(),
+                fixed_timestamp(),
+            ))
+            .unwrap();
+
+        let router = test_router(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
+            video_repository,
+        );
+
+        let response = router.oneshot(recent_request("")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        assert_eq!(body, serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn it_should_list_a_video_tracked_by_two_sources_once_per_source() {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let channel_repository = Arc::new(FakeChannelRepository::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let video_repository = Arc::new(FakeVideoRepository::default());
+
+        let shared = downloaded_video("vid_shared", "Shared", fixed_timestamp());
+        video_repository.save(&shared).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                PlaylistId::new("PL1").unwrap(),
+                shared.id.clone(),
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                ChannelHandle::new("@somechannel").unwrap(),
+                shared.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+
+        let router = test_router(
+            playlist_repository,
+            playlist_video_repository,
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+        );
+
+        let response = router.oneshot(recent_request("")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        let videos = body.as_array().unwrap();
+        assert_eq!(videos.len(), 2);
+        assert!(videos.iter().all(|v| v["id"] == "vid_shared"));
+        let kinds: Vec<&str> = videos
+            .iter()
+            .map(|v| v["source"]["kind"].as_str().unwrap())
+            .collect();
+        assert!(kinds.contains(&"playlist"));
+        assert!(kinds.contains(&"channel"));
+    }
+
+    #[tokio::test]
+    async fn it_should_apply_the_default_limit_of_20_when_omitted() {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        for i in 0..25 {
+            let video = downloaded_video(
+                &format!("vid{i}"),
+                &format!("Video {i}"),
+                DateTime::<Utc>::from_timestamp(i, 0).unwrap(),
+            );
+            video_repository.save(&video).unwrap();
+            playlist_video_repository
+                .save(&PlaylistVideo::create(
+                    PlaylistId::new("PL1").unwrap(),
+                    video.id.clone(),
+                    fixed_timestamp(),
+                ))
+                .unwrap();
+        }
+        let router = test_router(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
+            video_repository,
+        );
+
+        let response = router.oneshot(recent_request("")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        let videos = body.as_array().unwrap();
+        assert_eq!(videos.len(), 20);
+        assert_eq!(videos[0]["id"], "vid24");
+        assert_eq!(videos[19]["id"], "vid5");
+    }
+
+    #[tokio::test]
+    async fn it_should_narrow_the_result_with_an_explicit_limit() {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        for i in 0..3 {
+            let video = downloaded_video(
+                &format!("vid{i}"),
+                &format!("Video {i}"),
+                DateTime::<Utc>::from_timestamp(i, 0).unwrap(),
+            );
+            video_repository.save(&video).unwrap();
+            playlist_video_repository
+                .save(&PlaylistVideo::create(
+                    PlaylistId::new("PL1").unwrap(),
+                    video.id.clone(),
+                    fixed_timestamp(),
+                ))
+                .unwrap();
+        }
+        let router = test_router(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
+            video_repository,
+        );
+
+        let response = router.oneshot(recent_request("limit=2")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        let videos = body.as_array().unwrap();
+        assert_eq!(videos.len(), 2);
+        assert_eq!(videos[0]["id"], "vid2");
+        assert_eq!(videos[1]["id"], "vid1");
+    }
+
+    #[tokio::test]
+    async fn it_should_cap_the_limit_at_100() {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        for i in 0..105 {
+            let video = downloaded_video(
+                &format!("vid{i}"),
+                &format!("Video {i}"),
+                DateTime::<Utc>::from_timestamp(i, 0).unwrap(),
+            );
+            video_repository.save(&video).unwrap();
+            playlist_video_repository
+                .save(&PlaylistVideo::create(
+                    PlaylistId::new("PL1").unwrap(),
+                    video.id.clone(),
+                    fixed_timestamp(),
+                ))
+                .unwrap();
+        }
+        let router = test_router(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::default()),
+            video_repository,
+        );
+
+        let response = router.oneshot(recent_request("limit=1000")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        let videos = body.as_array().unwrap();
+        assert_eq!(videos.len(), 100);
+        assert_eq!(videos[0]["id"], "vid104");
+        assert_eq!(videos[99]["id"], "vid5");
     }
 }
