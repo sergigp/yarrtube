@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import * as Dialog from '@radix-ui/react-dialog'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 
 /**
  * Shared destructive-action confirmation dialog. `onConfirm` may return a
@@ -39,34 +40,20 @@ export function ConfirmDialog({
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content confirm-dialog">
-          <Dialog.Title className="dialog-title">{title}</Dialog.Title>
-          {description && (
-            <Dialog.Description className="confirm-dialog-description">
-              {description}
-            </Dialog.Description>
-          )}
-          {error && <p className="error">{error.message}</p>}
-          <div className="confirm-dialog-actions">
-            <Dialog.Close asChild>
-              <button type="button" className="secondary-button" disabled={confirming}>
-                Cancel
-              </button>
-            </Dialog.Close>
-            <button
-              type="button"
-              className="danger-button"
-              onClick={handleConfirm}
-              disabled={confirming}
-            >
-              {confirming ? 'Deleting…' : confirmLabel}
-            </button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogTitle>{title}</DialogTitle>
+        {description && <DialogDescription>{description}</DialogDescription>}
+        {error && <p className="text-sm text-destructive">{error.message}</p>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={confirming} onClick={() => handleOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" onClick={handleConfirm} disabled={confirming}>
+            {confirming ? 'Deleting…' : confirmLabel}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -1,13 +1,26 @@
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
 import { fetchChannels, fetchChannelVideos, videoMediaUrl } from '../api'
 import { ChannelActionsMenu } from './ChannelActionsMenu'
+import { Thumbnail } from './Thumbnail'
+import { Beacon } from './Beacon'
+import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 
 const STATUS_MESSAGES = {
   PENDING: 'This video is pending.',
   ERRORED_RETRYING: 'This video failed to download and will be retried.',
   ERRORED: 'This video failed to download.',
+}
+
+const STATUS_LABELS = {
+  DOWNLOADED: 'Downloaded',
+  IN_PROGRESS: 'Downloading',
+  PENDING: 'Pending',
+  ERRORED_RETRYING: 'Retrying',
+  ERRORED: 'Errored',
 }
 
 function VideoStatusIndicator({ status }) {
@@ -16,18 +29,18 @@ function VideoStatusIndicator({ status }) {
   }
 
   if (status === 'IN_PROGRESS') {
-    return (
-      <span className="video-status-icon video-status-icon-downloading" role="img" title="Downloading" aria-label="Downloading">
-        ⬇
-      </span>
-    )
+    return <Beacon variant="live" label="Downloading" className="shrink-0" />
   }
 
   const message = STATUS_MESSAGES[status] ?? 'This video is pending.'
   return (
-    <span className="video-status-icon video-status-icon-warning" role="img" title={message} aria-label={message}>
-      ⚠
-    </span>
+    <TriangleAlert
+      className="size-3.5 shrink-0 text-amber-600"
+      role="img"
+      aria-label={message}
+    >
+      <title>{message}</title>
+    </TriangleAlert>
   )
 }
 
@@ -35,14 +48,16 @@ function VideoDetail({ channel, video }) {
   const path = video.filename ? `${channel.path}/${video.filename}` : channel.path
 
   return (
-    <div className="video-detail">
-      <span className="chip-group">
-        <span className={`status-badge status-badge-${video.status}`}>{video.status}</span>
-        <span className="status-badge">{video.quality ?? '—'}</span>
-      </span>
-      <p className="video-detail-path">{path}</p>
+    <div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge variant={video.status === 'DOWNLOADED' ? 'secondary' : 'outline'}>
+          {STATUS_LABELS[video.status] ?? video.status}
+        </Badge>
+        <Badge variant="outline">{video.quality ?? '—'}</Badge>
+      </div>
+      <p className="mt-2 text-xs break-words text-muted-foreground">{path}</p>
       <a
-        className="video-detail-youtube-link"
+        className="mt-3 inline-block text-sm text-primary underline-offset-4 hover:underline"
         href={`https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`}
         target="_blank"
         rel="noopener"
@@ -71,36 +86,39 @@ export function ChannelDetail() {
   const autoplay = selectedVideo !== null && selectedVideo === deepLinkedVideo
 
   if (channelsError) {
-    return <p className="error">Failed to load channel: {channelsError.message}</p>
+    return <p className="text-sm text-destructive">Failed to load channel: {channelsError.message}</p>
   }
 
   if (!channels) {
-    return <p className="muted">Loading channel…</p>
+    return <p className="text-sm text-muted-foreground">Loading channel…</p>
   }
 
   if (!channel) {
-    return <p className="error">Channel not found.</p>
+    return <p className="text-sm text-destructive">Channel not found.</p>
   }
 
   return (
-    <div className="playlist-detail-route">
-      <div className="playlist-detail-header">
-        <div className="playlist-detail-title-row">
-          <h2>{channel.name}</h2>
-          <ChannelActionsMenu channel={channel} onDeleted={() => navigate('/')} />
-        </div>
+    <div className="flex h-full min-h-[480px] flex-col">
+      <div className="mb-4 flex shrink-0 items-center gap-2">
+        <h2 className="min-w-0 flex-1 truncate font-heading text-xl font-semibold text-foreground">
+          {channel.name}
+        </h2>
+        <ChannelActionsMenu channel={channel} onDeleted={() => navigate('/')} />
       </div>
 
-      <div className="playlist-detail-layout">
-        <div className="video-main-column">
-          {selectedVideo && <h3 className="video-title-heading">{selectedVideo.title}</h3>}
+      <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-6 overflow-hidden md:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="flex min-w-0 flex-col gap-4 overflow-hidden md:h-full md:overflow-y-auto">
+          {selectedVideo && (
+            <h3 className="text-base font-medium text-foreground">{selectedVideo.title}</h3>
+          )}
 
-          <div className="video-player-pane">
+          <div className="flex min-h-80 items-center justify-center rounded-lg bg-secondary/60">
             {selectedVideo?.status === 'DOWNLOADED' && selectedVideo.filename ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <video
                 controls
                 autoPlay={autoplay}
+                className="block max-h-[70vh] w-full rounded-lg"
                 src={videoMediaUrl(channel.path, selectedVideo.filename)}
                 poster={
                   selectedVideo.thumbnail_filename
@@ -109,7 +127,7 @@ export function ChannelDetail() {
                 }
               />
             ) : (
-              <p className="muted">
+              <p className="text-sm text-muted-foreground">
                 {selectedVideo
                   ? 'This video has not been downloaded yet.'
                   : 'Select a video to play it.'}
@@ -117,47 +135,53 @@ export function ChannelDetail() {
             )}
           </div>
 
-          <div className="video-detail-pane">
-            {selectedVideo ? (
-              <VideoDetail channel={channel} video={selectedVideo} />
-            ) : (
-              <p className="muted">No video selected.</p>
-            )}
-          </div>
+          {selectedVideo ? (
+            <VideoDetail channel={channel} video={selectedVideo} />
+          ) : (
+            <p className="text-sm text-muted-foreground">No video selected.</p>
+          )}
         </div>
 
-        <div className="video-sidebar">
-          {error && <p className="error">Failed to load videos: {error.message}</p>}
-          {!error && !videos && <p className="muted">Loading videos…</p>}
+        <div className="min-h-0 overflow-y-auto md:h-full">
+          {error && <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>}
+          {!error && !videos && <p className="text-sm text-muted-foreground">Loading videos…</p>}
           {!error && videos && videos.length === 0 && (
-            <p className="muted">No videos recorded for this channel yet.</p>
+            <p className="text-sm text-muted-foreground">No videos recorded for this channel yet.</p>
           )}
           {!error && videos && videos.length > 0 && (
-            <ul className="list">
-              {videos.map((video) => (
-                <li key={video.id}>
-                  <button
-                    className={
-                      selectedVideo?.id === video.id ? 'list-item active' : 'list-item'
-                    }
-                    onClick={() => setManualSelection(video)}
-                  >
-                    <span className="list-item-main">
-                      {video.thumbnail_filename ? (
-                        <img
-                          className="list-item-thumbnail"
-                          src={videoMediaUrl(channel.path, video.thumbnail_filename)}
-                          alt=""
-                        />
-                      ) : (
-                        <span className="list-item-thumbnail-placeholder" />
+            <ul className="flex flex-col divide-y divide-border">
+              {videos.map((video) => {
+                const active = selectedVideo?.id === video.id
+                return (
+                  <li key={video.id}>
+                    <button
+                      className={cn(
+                        'flex w-full items-start gap-3 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-accent',
+                        active && 'bg-accent',
                       )}
-                      <span className="list-item-title">{video.title}</span>
-                    </span>
-                    <VideoStatusIndicator status={video.status} />
-                  </button>
-                </li>
-              ))}
+                      onClick={() => setManualSelection(video)}
+                    >
+                      <Thumbnail
+                        src={
+                          video.thumbnail_filename
+                            ? videoMediaUrl(channel.path, video.thumbnail_filename)
+                            : null
+                        }
+                        className="aspect-video w-24 shrink-0 rounded-md object-cover"
+                      />
+                      <span
+                        className={cn(
+                          'min-w-0 flex-1 text-sm leading-snug text-foreground',
+                          active && 'font-medium text-primary',
+                        )}
+                      >
+                        {video.title}
+                      </span>
+                      <VideoStatusIndicator status={video.status} />
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>

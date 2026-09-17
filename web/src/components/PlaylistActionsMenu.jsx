@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { ConfirmDialog } from './ConfirmDialog'
 import { deletePlaylist, reconcilePlaylist } from '../api'
+import { Button } from '@/components/ui/button'
 
 export function PlaylistActionsMenu({ playlist, onDeleted }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   return (
     <>
-      <div className="detail-actions">
-        <button
-          className="secondary-button"
+      <div className="flex shrink-0 gap-2">
+        <Button
+          variant="outline"
           onClick={async () => {
             try {
               await reconcilePlaylist(playlist.id)
@@ -19,10 +20,10 @@ export function PlaylistActionsMenu({ playlist, onDeleted }) {
           }}
         >
           Sync
-        </button>
-        <button className="danger-button" onClick={() => setConfirmOpen(true)}>
+        </Button>
+        <Button variant="destructive" onClick={() => setConfirmOpen(true)}>
           Delete
-        </button>
+        </Button>
       </div>
       <ConfirmDialog
         open={confirmOpen}
