@@ -31,7 +31,7 @@ export default function App() {
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           <Sidebar />
           <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-            <div className="px-4 py-6 sm:px-6">
+            <div className="h-full px-4 py-6 sm:px-6">
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/playlists/:id" element={<PlaylistDetail />} />

@@ -30,19 +30,45 @@ Clicking the application's logo, from any view, SHALL navigate to the home view.
 - **THEN** the application navigates to the home view
 
 ### Requirement: Home Page Layout
-The home view SHALL display recently synced videos as a grid of cards, each showing the video's thumbnail with its title below it, and SHALL display a sidebar listing the titles of tracked channels and tracked playlists, each as a separate section.
+The home view SHALL display recently synced videos as a grid of cards, each showing the video's thumbnail with its title below it.
 
 #### Scenario: Home view with recent videos
 - **WHEN** one or more videos have been synced
 - **THEN** the home view renders them as a grid of thumbnail-and-title cards
 
+### Requirement: Persistent Channels And Playlists Sidebar
+The application SHALL display a sidebar listing the titles of tracked channels and tracked playlists, each as a separate section, visible from every top-level view rather than only the home view. When the user is on a playlist's or channel's detail view, the sidebar SHALL mark that entry as active.
+
 #### Scenario: Sidebar lists channels and playlists
 - **WHEN** one or more channels and playlists are tracked
-- **THEN** the home view's sidebar lists each tracked channel's title under a "Channels" section and each tracked playlist's title under a "Playlists" section
+- **THEN** the sidebar lists each tracked channel's title under a "Channels" section and each tracked playlist's title under a "Playlists" section
 
 #### Scenario: Selecting a sidebar entry
-- **WHEN** a user clicks a channel or playlist title in the home sidebar
+- **WHEN** a user clicks a channel or playlist title in the sidebar
 - **THEN** the application navigates to that channel's or playlist's detail view
+
+#### Scenario: Sidebar visible from a detail view
+- **WHEN** a user is on a playlist detail view, a channel detail view, or the tasks view
+- **THEN** the sidebar remains visible
+
+#### Scenario: Active sidebar entry
+- **WHEN** a user is on a playlist's or channel's detail view
+- **THEN** the sidebar marks that playlist's or channel's entry as active
+
+### Requirement: Sidebar Row Actions
+Each tracked channel or playlist row in the sidebar SHALL provide a visible control to trigger a sync (reconcile) and a visible control to delete it. Deleting SHALL require the user to confirm before it takes effect. Deleting the channel or playlist whose detail view is currently open SHALL return the user to the home view.
+
+#### Scenario: Syncing from the sidebar
+- **WHEN** a user activates a sidebar row's sync control
+- **THEN** the application triggers a reconcile for that channel or playlist
+
+#### Scenario: Deleting from the sidebar requires confirmation
+- **WHEN** a user activates a sidebar row's delete control
+- **THEN** the application prompts for confirmation before deleting that channel or playlist
+
+#### Scenario: Deleting the currently viewed entry
+- **WHEN** a user confirms deletion of the channel or playlist whose detail view is currently open
+- **THEN** the application navigates to the home view
 
 ### Requirement: Unified Add Dialog
 The application SHALL provide a single entry point — one "Add" control, always available — that opens one dialog for adding either a playlist or a channel, with a switcher inside the dialog to choose which.
@@ -108,13 +134,6 @@ In a playlist or channel detail view, the video player and the selected video's 
 #### Scenario: Scrolling the video list
 - **WHEN** a user scrolls the video list in a playlist or channel detail view
 - **THEN** the video player and the video detail pane do not move
-
-### Requirement: Detail View Visible Actions
-In a playlist or channel detail view, the available actions (at least reconcile and delete) SHALL be presented as directly visible controls rather than hidden behind a collapsed menu.
-
-#### Scenario: Viewing available actions
-- **WHEN** a user views a playlist's or channel's detail view
-- **THEN** its reconcile and delete actions are visible without needing to open a menu
 
 ### Requirement: Video Detail Links To YouTube
 A selected video's detail pane SHALL include a link that opens that video on YouTube in a new tab.
