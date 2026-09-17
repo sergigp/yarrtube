@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
+import { Menu } from 'lucide-react'
 import { Home } from './components/Home'
 import { PlaylistDetail } from './components/PlaylistDetail'
 import { ChannelDetail } from './components/ChannelDetail'
@@ -10,11 +11,21 @@ import { Button } from '@/components/ui/button'
 
 export default function App() {
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
     <BrowserRouter>
-      <div className="flex h-screen flex-col">
+      <div className="flex h-dvh flex-col">
         <header className="flex shrink-0 items-center gap-4 border-b border-border px-4 py-3 sm:px-6">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
+          >
+            <Menu className="size-5" />
+          </Button>
           <Link
             to="/"
             className="font-heading text-xl font-semibold tracking-tight text-foreground no-underline"
@@ -29,7 +40,7 @@ export default function App() {
           </div>
         </header>
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          <Sidebar />
+          <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
           <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
             <div className="h-full px-4 py-6 sm:px-6">
               <Routes>

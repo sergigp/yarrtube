@@ -116,7 +116,7 @@ export function ChannelDetail() {
   return (
     <div className="flex h-full min-h-[480px] flex-col">
       <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-6 overflow-hidden md:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex min-w-0 flex-col gap-4 overflow-hidden md:h-full md:overflow-y-auto">
+        <div className="flex min-w-0 flex-col gap-4 h-full overflow-hidden overflow-y-auto">
           <div className="flex min-h-80 items-center justify-center rounded-lg bg-secondary/60">
             {selectedVideo?.status === 'DOWNLOADED' && selectedVideo.filename ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
@@ -147,7 +147,7 @@ export function ChannelDetail() {
           )}
         </div>
 
-        <div className="min-h-0 overflow-y-auto md:h-full">
+        <div className="min-h-0 h-full overflow-y-auto">
           {error && <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>}
           {!error && !videos && <p className="text-sm text-muted-foreground">Loading videos…</p>}
           {!error && videos && videos.length === 0 && (
