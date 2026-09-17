@@ -94,7 +94,7 @@ export function TasksView() {
               <Badge variant={CATEGORY_BADGE_VARIANT[category] ?? 'secondary'}>{category}</Badge>
               {task.retries > 0 && <Badge variant="outline">{task.retries} retries</Badge>}
               <span className="w-16 text-right text-xs text-muted-foreground">
-                {formatRelativeTime(task.run_at)}
+                {category === 'pending' ? formatRelativeTime(task.run_at) : ''}
               </span>
             </span>
           </li>
