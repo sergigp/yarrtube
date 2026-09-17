@@ -26,11 +26,8 @@ export default function App() {
           >
             <Menu className="size-5" />
           </Button>
-          <Link
-            to="/"
-            className="font-heading text-xl font-semibold tracking-tight text-foreground no-underline"
-          >
-            Yarrtube
+          <Link to="/" className="flex items-center no-underline" aria-label="Yarrtube">
+            <img src="/logo.png" alt="Yarrtube" className="h-10 w-auto sm:h-12" />
           </Link>
           <div className="ml-auto flex items-center gap-2">
             <Button asChild variant="ghost">
