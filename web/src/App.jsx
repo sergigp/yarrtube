@@ -5,6 +5,7 @@ import { PlaylistDetail } from './components/PlaylistDetail'
 import { ChannelDetail } from './components/ChannelDetail'
 import { TasksView } from './components/TasksView'
 import { AddDialog } from './components/AddDialog'
+import { Sidebar } from './components/Sidebar'
 import { Button } from '@/components/ui/button'
 
 export default function App() {
@@ -27,16 +28,19 @@ export default function App() {
             <Button onClick={() => setAddDialogOpen(true)}>Add</Button>
           </div>
         </header>
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/playlists/:id" element={<PlaylistDetail />} />
-              <Route path="/channels/:id" element={<ChannelDetail />} />
-              <Route path="/tasks" element={<TasksView />} />
-            </Routes>
-          </div>
-        </main>
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <Sidebar />
+          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+            <div className="px-4 py-6 sm:px-6">
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/playlists/:id" element={<PlaylistDetail />} />
+                <Route path="/channels/:id" element={<ChannelDetail />} />
+                <Route path="/tasks" element={<TasksView />} />
+              </Routes>
+            </div>
+          </main>
+        </div>
         <AddDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} />
       </div>
     </BrowserRouter>

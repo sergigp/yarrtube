@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
 import { fetchChannels, fetchChannelVideos, videoMediaUrl } from '../api'
-import { ChannelActionsMenu } from './ChannelActionsMenu'
 import { Thumbnail } from './Thumbnail'
 import { Beacon } from './Beacon'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +20,12 @@ const STATUS_LABELS = {
   PENDING: 'Pending',
   ERRORED_RETRYING: 'Retrying',
   ERRORED: 'Errored',
+}
+
+const QUALITY_LABELS = {
+  high: 'High quality',
+  mid: 'Medium quality',
+  low: 'Low quality',
 }
 
 function VideoStatusIndicator({ status }) {
@@ -48,12 +53,17 @@ function VideoDetail({ channel, video }) {
   const path = video.filename ? `${channel.path}/${video.filename}` : channel.path
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Badge variant={video.status === 'DOWNLOADED' ? 'secondary' : 'outline'}>
-          {STATUS_LABELS[video.status] ?? video.status}
-        </Badge>
-        <Badge variant="outline">{video.quality ?? '—'}</Badge>
+    <div className="rounded-lg border border-border p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h3 className="min-w-0 flex-1 font-heading text-xl font-semibold text-foreground">
+          {video.title}
+        </h3>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Badge variant={video.status === 'DOWNLOADED' ? 'secondary' : 'outline'}>
+            {STATUS_LABELS[video.status] ?? video.status}
+          </Badge>
+          <Badge variant="outline">{QUALITY_LABELS[video.quality] ?? '—'}</Badge>
+        </div>
       </div>
       <p className="mt-2 text-xs break-words text-muted-foreground">{path}</p>
       <a
@@ -71,7 +81,6 @@ function VideoDetail({ channel, video }) {
 export function ChannelDetail() {
   const { id } = useParams()
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
   const { data: channels, error: channelsError } = usePolling(fetchChannels, [])
   const channel = channels?.find((item) => item.id === id) ?? null
 
@@ -99,19 +108,8 @@ export function ChannelDetail() {
 
   return (
     <div className="flex h-full min-h-[480px] flex-col">
-      <div className="mb-4 flex shrink-0 items-center gap-2">
-        <h2 className="min-w-0 flex-1 truncate font-heading text-xl font-semibold text-foreground">
-          {channel.name}
-        </h2>
-        <ChannelActionsMenu channel={channel} onDeleted={() => navigate('/')} />
-      </div>
-
       <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-6 overflow-hidden md:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-4 overflow-hidden md:h-full md:overflow-y-auto">
-          {selectedVideo && (
-            <h3 className="text-base font-medium text-foreground">{selectedVideo.title}</h3>
-          )}
-
           <div className="flex min-h-80 items-center justify-center rounded-lg bg-secondary/60">
             {selectedVideo?.status === 'DOWNLOADED' && selectedVideo.filename ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
