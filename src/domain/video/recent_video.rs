@@ -3,11 +3,14 @@ use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::shared::PlaylistId;
 
-/// The playlist or channel that tracks a `RecentVideo`.
+/// The playlist or channel that tracks a `RecentVideo`. A channel source
+/// additionally carries its channel's avatar filename (when recorded), so
+/// listings can render it without an extra per-video lookup — a playlist
+/// source has no avatar.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VideoSource {
     Playlist(PlaylistId, PlaylistPath),
-    Channel(ChannelHandle, PlaylistPath),
+    Channel(ChannelHandle, PlaylistPath, Option<String>),
 }
 
 /// A `Video` paired with the source that tracks it, for read models (like

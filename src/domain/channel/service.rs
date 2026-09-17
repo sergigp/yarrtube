@@ -5,6 +5,7 @@ use super::video_limit::VideoLimit;
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::shared::Quality;
+use crate::infrastructure::repositories::filesystem_channel_avatar_repository::ChannelAvatarRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -12,7 +13,7 @@ use crate::infrastructure::repositories::youtube_channel_repository::YoutubeChan
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CreateChannelOutcome {
@@ -26,6 +27,7 @@ pub enum CreateChannelOutcome {
 pub struct ChannelService {
     repository: Arc<dyn ChannelRepository>,
     lookup: Arc<dyn YoutubeChannelRepository>,
+    avatar_repository: Arc<dyn ChannelAvatarRepository>,
     video_repository: Arc<dyn VideoRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     event_publisher: Arc<dyn EventPublisher>,
@@ -33,9 +35,11 @@ pub struct ChannelService {
 }
 
 impl ChannelService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         repository: Arc<dyn ChannelRepository>,
         lookup: Arc<dyn YoutubeChannelRepository>,
+        avatar_repository: Arc<dyn ChannelAvatarRepository>,
         video_repository: Arc<dyn VideoRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         event_publisher: Arc<dyn EventPublisher>,
@@ -44,6 +48,7 @@ impl ChannelService {
         Self {
             repository,
             lookup,
+            avatar_repository,
             video_repository,
             channel_video_repository,
             event_publisher,
@@ -70,6 +75,17 @@ impl ChannelService {
             Err(e) => return Err(CreateChannelError::Lookup(e)),
         };
 
+        let avatar_filename =
+            resolved
+                .avatar_url
+                .and_then(|url| match self.avatar_repository.store(&id, &url) {
+                    Ok(filename) => filename,
+                    Err(e) => {
+                        warn!(channel_id = %id, error = %e, "failed to store channel avatar");
+                        None
+                    }
+                });
+
         let now = self.clock.now();
         let channel = Channel::create(
             id,
@@ -78,6 +94,7 @@ impl ChannelService {
             quality,
             video_limit,
             path,
+            avatar_filename,
             now,
         );
         self.repository
@@ -114,6 +131,12 @@ impl ChannelService {
             .delete_all_for_channel(&id)
             .map_err(DeleteChannelError::Repository)?;
 
+        if let Some(avatar_filename) = &channel.avatar_filename {
+            self.avatar_repository
+                .delete(avatar_filename)
+                .map_err(DeleteChannelError::Repository)?;
+        }
+
         self.repository
             .delete(&id)
             .map_err(DeleteChannelError::Repository)?;
@@ -135,6 +158,7 @@ impl ChannelService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
     use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
@@ -162,12 +186,39 @@ mod tests {
         Arc<FakeVideoRepository>,
         Arc<FakeChannelVideoRepository>,
     ) {
+        let (service, event_publisher, video_repository, channel_video_repository, _avatars) =
+            service_with_avatar_repository(
+                repository,
+                resolved,
+                FakeChannelAvatarRepository::with_no_avatar(),
+            );
+        (
+            service,
+            event_publisher,
+            video_repository,
+            channel_video_repository,
+        )
+    }
+
+    fn service_with_avatar_repository(
+        repository: FakeChannelRepository,
+        resolved: Option<ResolvedChannel>,
+        avatar_repository: FakeChannelAvatarRepository,
+    ) -> (
+        ChannelService,
+        Arc<FakeEventPublisher>,
+        Arc<FakeVideoRepository>,
+        Arc<FakeChannelVideoRepository>,
+        Arc<FakeChannelAvatarRepository>,
+    ) {
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
         let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let avatar_repository = Arc::new(avatar_repository);
         let service = ChannelService::new(
             Arc::new(repository),
             Arc::new(FakeYoutubeChannelRepository { resolved }),
+            avatar_repository.clone(),
             video_repository.clone(),
             channel_video_repository.clone(),
             event_publisher.clone(),
@@ -178,6 +229,7 @@ mod tests {
             event_publisher,
             video_repository,
             channel_video_repository,
+            avatar_repository,
         )
     }
 
@@ -185,6 +237,14 @@ mod tests {
         ResolvedChannel {
             youtube_channel_id: "UC123".to_string(),
             title: "Some Channel".to_string(),
+            avatar_url: None,
+        }
+    }
+
+    fn resolved_channel_with_avatar() -> ResolvedChannel {
+        ResolvedChannel {
+            avatar_url: Some("https://example.com/avatar.jpg".to_string()),
+            ..resolved_channel()
         }
     }
 
@@ -279,6 +339,85 @@ mod tests {
     }
 
     #[test]
+    fn it_should_record_the_avatar_filename_when_the_avatar_repository_stores_one() {
+        let (service, _events, _videos, _channel_videos, avatars) = service_with_avatar_repository(
+            FakeChannelRepository::default(),
+            Some(resolved_channel_with_avatar()),
+            FakeChannelAvatarRepository::with_stored_filename("@somechannel.jpg"),
+        );
+
+        let outcome = service
+            .create_channel(
+                ChannelHandle::new("@somechannel").unwrap(),
+                Quality::High,
+                VideoLimit::new(10).unwrap(),
+                path(),
+            )
+            .unwrap();
+
+        let CreateChannelOutcome::Created(channel) = outcome else {
+            panic!("expected Created outcome");
+        };
+        assert_eq!(
+            channel.avatar_filename,
+            Some("@somechannel.jpg".to_string())
+        );
+        assert_eq!(
+            *avatars.stored_calls.lock().unwrap(),
+            vec![(
+                ChannelHandle::new("@somechannel").unwrap(),
+                "https://example.com/avatar.jpg".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_not_record_an_avatar_filename_when_none_was_resolved() {
+        let (service, _events, _videos, _channel_videos, _avatars) = service_with_avatar_repository(
+            FakeChannelRepository::default(),
+            Some(resolved_channel()),
+            FakeChannelAvatarRepository::with_stored_filename("@somechannel.jpg"),
+        );
+
+        let outcome = service
+            .create_channel(
+                ChannelHandle::new("@somechannel").unwrap(),
+                Quality::High,
+                VideoLimit::new(10).unwrap(),
+                path(),
+            )
+            .unwrap();
+
+        let CreateChannelOutcome::Created(channel) = outcome else {
+            panic!("expected Created outcome");
+        };
+        assert_eq!(channel.avatar_filename, None);
+    }
+
+    #[test]
+    fn it_should_not_record_an_avatar_filename_when_the_avatar_repository_stores_none() {
+        let (service, _events, _videos, _channel_videos, _avatars) = service_with_avatar_repository(
+            FakeChannelRepository::default(),
+            Some(resolved_channel_with_avatar()),
+            FakeChannelAvatarRepository::with_no_avatar(),
+        );
+
+        let outcome = service
+            .create_channel(
+                ChannelHandle::new("@somechannel").unwrap(),
+                Quality::High,
+                VideoLimit::new(10).unwrap(),
+                path(),
+            )
+            .unwrap();
+
+        let CreateChannelOutcome::Created(channel) = outcome else {
+            panic!("expected Created outcome");
+        };
+        assert_eq!(channel.avatar_filename, None);
+    }
+
+    #[test]
     fn it_should_delete_an_existing_channel_and_publish_an_event() {
         let (service, event_publisher, _videos, _channel_videos) =
             service(FakeChannelRepository::default(), Some(resolved_channel()));
@@ -316,6 +455,55 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn it_should_delete_the_avatar_file_when_deleting_a_channel_with_a_recorded_avatar() {
+        let (service, _events, _videos, _channel_videos, avatars) = service_with_avatar_repository(
+            FakeChannelRepository::default(),
+            Some(resolved_channel_with_avatar()),
+            FakeChannelAvatarRepository::with_stored_filename("@somechannel.jpg"),
+        );
+        service
+            .create_channel(
+                ChannelHandle::new("@somechannel").unwrap(),
+                Quality::High,
+                VideoLimit::new(10).unwrap(),
+                path(),
+            )
+            .unwrap();
+
+        service
+            .delete_channel(ChannelHandle::new("@somechannel").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            *avatars.deleted_calls.lock().unwrap(),
+            vec!["@somechannel.jpg".to_string()]
+        );
+    }
+
+    #[test]
+    fn it_should_not_attempt_avatar_deletion_when_no_avatar_was_recorded() {
+        let (service, _events, _videos, _channel_videos, avatars) = service_with_avatar_repository(
+            FakeChannelRepository::default(),
+            Some(resolved_channel()),
+            FakeChannelAvatarRepository::with_no_avatar(),
+        );
+        service
+            .create_channel(
+                ChannelHandle::new("@somechannel").unwrap(),
+                Quality::High,
+                VideoLimit::new(10).unwrap(),
+                path(),
+            )
+            .unwrap();
+
+        service
+            .delete_channel(ChannelHandle::new("@somechannel").unwrap())
+            .unwrap();
+
+        assert!(avatars.deleted_calls.lock().unwrap().is_empty());
     }
 
     #[test]

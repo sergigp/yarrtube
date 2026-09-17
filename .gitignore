@@ -11,6 +11,9 @@
 # Persistent local video storage used by scripts/run-local.sh
 /videos
 
+# Container-local channel avatar storage (see serve.rs::avatars_path)
+/avatars
+
 # Built by `npm run build` in web/, required to exist before `cargo build`
 web/dist/
 web/node_modules/

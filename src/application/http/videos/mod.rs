@@ -111,6 +111,7 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, VideoId};
     use crate::domain::video::Video;
+    use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, FakeChannelRepository,
@@ -183,6 +184,7 @@ mod tests {
         let channel_service = crate::domain::channel::ChannelService::new(
             channel_repository.clone(),
             Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+            Arc::new(FakeChannelAvatarRepository::default()),
             video_repository.clone(),
             channel_video_repository.clone(),
             event_publisher.clone() as Arc<dyn EventPublisher>,
@@ -278,6 +280,7 @@ mod tests {
             Quality::High,
             VideoLimit::new(10).unwrap(),
             PlaylistPath::new("creators/somechannel").unwrap(),
+            None,
             fixed_timestamp(),
         )
     }
@@ -300,6 +303,7 @@ mod tests {
             Quality::High,
             format!("{title}.mp4"),
             None,
+            None,
             created_at,
         )
     }
@@ -313,6 +317,7 @@ mod tests {
             Quality::High,
             format!("{title}.mp4"),
             Some(format!("{title}.jpg")),
+            None,
             created_at,
         )
     }

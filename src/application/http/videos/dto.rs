@@ -10,6 +10,7 @@ pub struct VideoResponse {
     pub quality: Option<String>,
     pub filename: Option<String>,
     pub thumbnail_filename: Option<String>,
+    pub duration_seconds: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -23,6 +24,7 @@ impl From<Video> for VideoResponse {
             quality: video.quality.map(|q| q.as_str().to_string()),
             filename: video.filename,
             thumbnail_filename: video.thumbnail_filename,
+            duration_seconds: video.duration_seconds,
             created_at: video.created_at,
             updated_at: video.updated_at,
         }
@@ -34,6 +36,7 @@ pub struct RecentVideoSourceResponse {
     pub kind: String,
     pub id: String,
     pub path: String,
+    pub avatar_filename: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -41,6 +44,7 @@ pub struct RecentVideoResponse {
     pub id: String,
     pub title: String,
     pub thumbnail_filename: Option<String>,
+    pub duration_seconds: Option<i64>,
     pub source: RecentVideoSourceResponse,
 }
 
@@ -51,17 +55,20 @@ impl From<RecentVideo> for RecentVideoResponse {
                 kind: "playlist".to_string(),
                 id: id.as_str().to_string(),
                 path: path.as_str().to_string(),
+                avatar_filename: None,
             },
-            VideoSource::Channel(id, path) => RecentVideoSourceResponse {
+            VideoSource::Channel(id, path, avatar_filename) => RecentVideoSourceResponse {
                 kind: "channel".to_string(),
                 id: id.as_str().to_string(),
                 path: path.as_str().to_string(),
+                avatar_filename,
             },
         };
         Self {
             id: recent_video.video.youtube_id.as_str().to_string(),
             title: recent_video.video.title,
             thumbnail_filename: recent_video.video.thumbnail_filename,
+            duration_seconds: recent_video.video.duration_seconds,
             source,
         }
     }
@@ -87,6 +94,7 @@ mod tests {
                 Quality::High,
                 "My Video.mp4",
                 Some("My Video.jpg".to_string()),
+                None,
                 fixed_timestamp(),
             );
 
@@ -104,6 +112,34 @@ mod tests {
 
         let json = serde_json::to_value(&response).unwrap();
         assert_eq!(json["thumbnail_filename"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn it_should_serialize_a_recorded_duration() {
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+            .start_download(fixed_timestamp())
+            .mark_downloaded(
+                Quality::High,
+                "My Video.mp4",
+                None,
+                Some(223),
+                fixed_timestamp(),
+            );
+
+        let response: VideoResponse = video.into();
+
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["duration_seconds"], 223);
+    }
+
+    #[test]
+    fn it_should_serialize_no_duration_as_null() {
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
+
+        let response: VideoResponse = video.into();
+
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["duration_seconds"], serde_json::Value::Null);
     }
 
     #[test]
@@ -134,12 +170,62 @@ mod tests {
             source: VideoSource::Channel(
                 ChannelHandle::new("@somechannel").unwrap(),
                 PlaylistPath::new("creators/somechannel").unwrap(),
+                None,
             ),
         });
 
         assert_eq!(response.source.kind, "channel");
         assert_eq!(response.source.id, "@somechannel");
         assert_eq!(response.source.path, "creators/somechannel");
+    }
+
+    #[test]
+    fn it_should_include_the_channel_avatar_filename_when_present() {
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+
+        let response = RecentVideoResponse::from(RecentVideo {
+            video,
+            source: VideoSource::Channel(
+                ChannelHandle::new("@somechannel").unwrap(),
+                PlaylistPath::new("creators/somechannel").unwrap(),
+                Some("@somechannel.jpg".to_string()),
+            ),
+        });
+
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["source"]["avatar_filename"], "@somechannel.jpg");
+    }
+
+    #[test]
+    fn it_should_omit_the_channel_avatar_filename_when_absent() {
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+
+        let response = RecentVideoResponse::from(RecentVideo {
+            video,
+            source: VideoSource::Channel(
+                ChannelHandle::new("@somechannel").unwrap(),
+                PlaylistPath::new("creators/somechannel").unwrap(),
+                None,
+            ),
+        });
+
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["source"]["avatar_filename"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn it_should_have_no_avatar_filename_for_a_playlist_source() {
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+
+        let response = RecentVideoResponse::from(RecentVideo {
+            video,
+            source: VideoSource::Playlist(
+                PlaylistId::new("PL1").unwrap(),
+                PlaylistPath::new("music").unwrap(),
+            ),
+        });
+
+        assert_eq!(response.source.avatar_filename, None);
     }
 
     #[test]
@@ -150,6 +236,7 @@ mod tests {
                 Quality::High,
                 "My Video.mp4",
                 Some("My Video.jpg".to_string()),
+                None,
                 fixed_timestamp(),
             );
 
@@ -179,5 +266,45 @@ mod tests {
 
         let json = serde_json::to_value(&response).unwrap();
         assert_eq!(json["thumbnail_filename"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn it_should_include_recent_video_duration_when_present() {
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+            .start_download(fixed_timestamp())
+            .mark_downloaded(
+                Quality::High,
+                "My Video.mp4",
+                None,
+                Some(223),
+                fixed_timestamp(),
+            );
+
+        let response = RecentVideoResponse::from(RecentVideo {
+            video,
+            source: VideoSource::Playlist(
+                PlaylistId::new("PL1").unwrap(),
+                PlaylistPath::new("music").unwrap(),
+            ),
+        });
+
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["duration_seconds"], 223);
+    }
+
+    #[test]
+    fn it_should_omit_recent_video_duration_when_absent() {
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+
+        let response = RecentVideoResponse::from(RecentVideo {
+            video,
+            source: VideoSource::Playlist(
+                PlaylistId::new("PL1").unwrap(),
+                PlaylistPath::new("music").unwrap(),
+            ),
+        });
+
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["duration_seconds"], serde_json::Value::Null);
     }
 }

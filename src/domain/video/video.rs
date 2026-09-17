@@ -15,6 +15,7 @@ pub struct Video {
     pub quality: Option<Quality>,
     pub filename: Option<String>,
     pub thumbnail_filename: Option<String>,
+    pub duration_seconds: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -29,6 +30,7 @@ impl Video {
             quality: None,
             filename: None,
             thumbnail_filename: None,
+            duration_seconds: None,
             created_at: now,
             updated_at: now,
         }
@@ -47,6 +49,7 @@ impl Video {
         quality: Quality,
         filename: impl Into<String>,
         thumbnail_filename: Option<String>,
+        duration_seconds: Option<i64>,
         now: DateTime<Utc>,
     ) -> Self {
         Self {
@@ -54,6 +57,7 @@ impl Video {
             quality: Some(quality),
             filename: Some(filename.into()),
             thumbnail_filename,
+            duration_seconds,
             updated_at: now,
             ..self
         }
@@ -86,6 +90,7 @@ impl Video {
             quality: None,
             filename: None,
             thumbnail_filename: None,
+            duration_seconds: None,
             updated_at: now,
             ..self
         }
@@ -107,6 +112,7 @@ mod tests {
         assert_eq!(video.quality, None);
         assert_eq!(video.filename, None);
         assert_eq!(video.thumbnail_filename, None);
+        assert_eq!(video.duration_seconds, None);
         assert_eq!(video.created_at, now);
         assert_eq!(video.updated_at, now);
     }
@@ -148,6 +154,7 @@ mod tests {
             Quality::High,
             "My Video.mp4",
             Some("My Video.jpg".to_string()),
+            Some(223),
             now,
         );
 
@@ -155,6 +162,7 @@ mod tests {
         assert_eq!(video.quality, Some(Quality::High));
         assert_eq!(video.filename, Some("My Video.mp4".to_string()));
         assert_eq!(video.thumbnail_filename, Some("My Video.jpg".to_string()));
+        assert_eq!(video.duration_seconds, Some(223));
         assert_eq!(video.updated_at, now);
     }
 
@@ -162,9 +170,18 @@ mod tests {
     fn it_should_record_no_thumbnail_filename_when_marked_downloaded_without_one() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
 
-        let video = video().mark_downloaded(Quality::High, "My Video.mp4", None, now);
+        let video = video().mark_downloaded(Quality::High, "My Video.mp4", None, None, now);
 
         assert_eq!(video.thumbnail_filename, None);
+    }
+
+    #[test]
+    fn it_should_record_no_duration_when_marked_downloaded_without_one() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+
+        let video = video().mark_downloaded(Quality::High, "My Video.mp4", None, None, now);
+
+        assert_eq!(video.duration_seconds, None);
     }
 
     #[test]
@@ -174,6 +191,7 @@ mod tests {
             Quality::High,
             "My Video.mp4",
             Some("My Video.jpg".to_string()),
+            Some(223),
             now,
         );
 
@@ -184,6 +202,7 @@ mod tests {
         assert_eq!(reset.quality, None);
         assert_eq!(reset.filename, None);
         assert_eq!(reset.thumbnail_filename, None);
+        assert_eq!(reset.duration_seconds, None);
         assert_eq!(reset.updated_at, later);
     }
 

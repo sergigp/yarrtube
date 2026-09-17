@@ -27,6 +27,7 @@ impl SqliteChannelRepository {
                 quality TEXT NOT NULL,
                 video_limit INTEGER NOT NULL,
                 path TEXT NOT NULL,
+                avatar_filename TEXT,
                 created_at TEXT NOT NULL
             )",
             [],
@@ -47,7 +48,7 @@ impl ChannelRepository for SqliteChannelRepository {
             .inspect_err(|_| tracing::error!(channel_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
-            "SELECT id, name, youtube_channel_id, quality, video_limit, path, created_at FROM channels WHERE id = ?1",
+            "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at FROM channels WHERE id = ?1",
             params![id.as_str()],
             |row| {
                 Ok((
@@ -57,24 +58,28 @@ impl ChannelRepository for SqliteChannelRepository {
                     row.get::<_, String>(3)?,
                     row.get::<_, i64>(4)?,
                     row.get::<_, String>(5)?,
-                    row.get::<_, String>(6)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, String>(7)?,
                 ))
             },
         )
         .optional()
         .inspect_err(|e| tracing::error!(channel_id = %id, error = %e, "failed to query channel"))
         .context("failed to query channel")?
-        .map(|(id, name, youtube_channel_id, quality, video_limit, path, created_at)| {
-            Self::row_to_channel(
-                id,
-                name,
-                youtube_channel_id,
-                quality,
-                video_limit,
-                path,
-                created_at,
-            )
-        })
+        .map(
+            |(id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at)| {
+                Self::row_to_channel(
+                    id,
+                    name,
+                    youtube_channel_id,
+                    quality,
+                    video_limit,
+                    path,
+                    avatar_filename,
+                    created_at,
+                )
+            },
+        )
         .transpose()
     }
 
@@ -85,7 +90,7 @@ impl ChannelRepository for SqliteChannelRepository {
             .inspect_err(|_| tracing::error!(channel_id = %channel.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 channel.id.as_str(),
                 channel.name,
@@ -93,6 +98,7 @@ impl ChannelRepository for SqliteChannelRepository {
                 channel.quality.as_str(),
                 channel.video_limit.value(),
                 channel.path.as_str(),
+                channel.avatar_filename,
                 channel.created_at.to_rfc3339()
             ],
         )
@@ -123,7 +129,7 @@ impl ChannelRepository for SqliteChannelRepository {
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, youtube_channel_id, quality, video_limit, path, created_at FROM channels ORDER BY rowid ASC",
+                "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at FROM channels ORDER BY rowid ASC",
             )
             .inspect_err(|e| tracing::error!(error = %e, "failed to prepare list query"))
             .context("failed to prepare list query")?;
@@ -136,14 +142,24 @@ impl ChannelRepository for SqliteChannelRepository {
                     row.get::<_, String>(3)?,
                     row.get::<_, i64>(4)?,
                     row.get::<_, String>(5)?,
-                    row.get::<_, String>(6)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, String>(7)?,
                 ))
             })
             .inspect_err(|e| tracing::error!(error = %e, "failed to list channels"))
             .context("failed to list channels")?;
 
         rows.map(|row| {
-            let (id, name, youtube_channel_id, quality, video_limit, path, created_at) = row
+            let (
+                id,
+                name,
+                youtube_channel_id,
+                quality,
+                video_limit,
+                path,
+                avatar_filename,
+                created_at,
+            ) = row
                 .inspect_err(|e| tracing::error!(error = %e, "failed to read channel row"))
                 .context("failed to read channel row")?;
             Self::row_to_channel(
@@ -153,6 +169,7 @@ impl ChannelRepository for SqliteChannelRepository {
                 quality,
                 video_limit,
                 path,
+                avatar_filename,
                 created_at,
             )
         })
@@ -169,6 +186,7 @@ impl SqliteChannelRepository {
         quality: String,
         video_limit: i64,
         path: String,
+        avatar_filename: Option<String>,
         created_at: String,
     ) -> anyhow::Result<Channel> {
         let id = ChannelHandle::new(id)?;
@@ -185,6 +203,7 @@ impl SqliteChannelRepository {
             quality,
             video_limit,
             path,
+            avatar_filename,
             created_at,
         ))
     }
@@ -239,6 +258,7 @@ mod tests {
             Quality::High,
             VideoLimit::new(10).unwrap(),
             PlaylistPath::new("creators/somechannel").unwrap(),
+            None,
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         )
     }
@@ -270,6 +290,37 @@ mod tests {
         let found = repo.find(&channel.id).unwrap().unwrap();
 
         assert_eq!(found.path.as_str(), "creators/somechannel");
+    }
+
+    #[test]
+    fn it_should_round_trip_a_channel_with_a_recorded_avatar_filename() {
+        let repo = repo();
+        let channel = Channel::create(
+            ChannelHandle::new("@somechannel").unwrap(),
+            "Some Channel",
+            "UC123",
+            Quality::High,
+            VideoLimit::new(10).unwrap(),
+            PlaylistPath::new("creators/somechannel").unwrap(),
+            Some("@somechannel.jpg".to_string()),
+            DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
+        );
+        repo.insert(&channel).unwrap();
+
+        let found = repo.find(&channel.id).unwrap().unwrap();
+
+        assert_eq!(found.avatar_filename, Some("@somechannel.jpg".to_string()));
+    }
+
+    #[test]
+    fn it_should_round_trip_a_channel_with_no_recorded_avatar_filename() {
+        let repo = repo();
+        let channel = channel("@somechannel", "Some Channel");
+        repo.insert(&channel).unwrap();
+
+        let found = repo.find(&channel.id).unwrap().unwrap();
+
+        assert_eq!(found.avatar_filename, None);
     }
 
     #[test]

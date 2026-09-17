@@ -9,8 +9,10 @@ import {
   reconcilePlaylist,
   deleteChannel,
   deletePlaylist,
+  avatarMediaUrl,
 } from '../api'
 import { ConfirmDialog } from './ConfirmDialog'
+import { Thumbnail } from './Thumbnail'
 import { cn } from '@/lib/utils'
 
 function activeIdFrom(pathname, prefix) {
@@ -21,7 +23,7 @@ function activeIdFrom(pathname, prefix) {
   return rest ? decodeURIComponent(rest) : null
 }
 
-function SidebarRow({ item, active, href, onSync, onDeleteRequest }) {
+function SidebarRow({ item, active, href, onSync, onDeleteRequest, showAvatar }) {
   const [syncing, setSyncing] = useState(false)
 
   return (
@@ -29,11 +31,17 @@ function SidebarRow({ item, active, href, onSync, onDeleteRequest }) {
       <Link
         to={href}
         className={cn(
-          'min-w-0 flex-1 truncate px-2 py-1.5 text-sm no-underline transition-colors',
+          'flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm no-underline transition-colors',
           active ? 'font-medium text-primary' : 'text-foreground hover:text-primary',
         )}
       >
-        {item.name}
+        {showAvatar && (
+          <Thumbnail
+            src={item.avatar_filename ? avatarMediaUrl(item.avatar_filename) : null}
+            className="size-5 shrink-0 rounded-full object-cover"
+          />
+        )}
+        <span className="min-w-0 flex-1 truncate">{item.name}</span>
       </Link>
       <span className="flex shrink-0 items-center gap-0.5 pr-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         <button
@@ -76,6 +84,7 @@ function SidebarSection({
   onSync,
   onDelete,
   deleteDescription,
+  showAvatar,
 }) {
   const [pendingDelete, setPendingDelete] = useState(null)
 
@@ -95,6 +104,7 @@ function SidebarSection({
               item={item}
               active={item.id === activeId}
               href={hrefFor(item)}
+              showAvatar={showAvatar}
               onSync={async () => {
                 try {
                   await onSync(item.id)
@@ -142,6 +152,7 @@ export function Sidebar() {
         error={channelsError}
         activeId={activeChannelId}
         hrefFor={(channel) => `/channels/${channel.id}`}
+        showAvatar
         onSync={reconcileChannel}
         onDelete={async (id) => {
           await deleteChannel(id)

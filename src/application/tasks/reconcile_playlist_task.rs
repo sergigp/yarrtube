@@ -340,6 +340,7 @@ mod tests {
                     Quality::High,
                     "Downloaded Video.mp4",
                     Some("Downloaded Video.jpg".to_string()),
+                    None,
                     fixed_timestamp(),
                 )
             },
@@ -440,6 +441,7 @@ mod tests {
                     Quality::High,
                     "My Video.mp4",
                     Some("My Video.jpg".to_string()),
+                    None,
                     fixed_timestamp(),
                 )
             },
@@ -479,6 +481,7 @@ mod tests {
                 v.start_download(fixed_timestamp()).mark_downloaded(
                     Quality::High,
                     "My Video.webm",
+                    None,
                     None,
                     fixed_timestamp(),
                 )
@@ -602,6 +605,7 @@ mod tests {
                     Quality::High,
                     "My Video.mp4",
                     None,
+                    None,
                     fixed_timestamp(),
                 )
             },
@@ -634,6 +638,7 @@ mod tests {
                     Quality::High,
                     "My Video.mp4",
                     Some("My Video.jpg".to_string()),
+                    None,
                     fixed_timestamp(),
                 )
             },
@@ -663,6 +668,7 @@ mod tests {
                 v.start_download(fixed_timestamp()).mark_downloaded(
                     Quality::High,
                     "My Video.mp4",
+                    None,
                     None,
                     fixed_timestamp(),
                 )

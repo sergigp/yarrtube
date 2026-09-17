@@ -139,6 +139,7 @@ mod tests {
     use crate::application::http::api_router;
     use crate::domain::channel::ChannelService;
     use crate::domain::event::DomainEvent;
+    use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
     use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
@@ -172,6 +173,7 @@ mod tests {
         ResolvedChannel {
             youtube_channel_id: "UC123".to_string(),
             title: "Some Channel".to_string(),
+            avatar_url: None,
         }
     }
 
@@ -249,6 +251,7 @@ mod tests {
         let channel_service = ChannelService::new(
             channel_repository.clone(),
             lookup,
+            Arc::new(FakeChannelAvatarRepository::default()),
             video_repository,
             channel_video_repository.clone(),
             event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,

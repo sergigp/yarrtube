@@ -126,6 +126,7 @@ mod tests {
     use super::*;
     use crate::application::http::api_router;
     use crate::domain::event::DomainEvent;
+    use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
     use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
@@ -266,6 +267,7 @@ mod tests {
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(FakeChannelRepository::default()),
                 Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
                 Arc::new(FakeVideoRepository::default()),
                 Arc::new(FakeChannelVideoRepository::default()),
                 event_publisher.clone(),
@@ -953,7 +955,7 @@ mod tests {
             .save(
                 &Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
                     .start_download(fixed_timestamp())
-                    .mark_downloaded(Quality::High, "My Video.mp4", None, fixed_timestamp()),
+                    .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp()),
             )
             .unwrap();
         let event_publisher = Arc::new(FakeEventPublisher::default());
@@ -1028,6 +1030,7 @@ mod tests {
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(FakeChannelRepository::default()),
                 Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
                 Arc::new(FakeVideoRepository::default()),
                 Arc::new(FakeChannelVideoRepository::default()),
                 event_publisher.clone(),
@@ -1172,6 +1175,7 @@ mod tests {
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(FakeChannelRepository::default()),
                 Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
                 Arc::new(FakeVideoRepository::default()),
                 Arc::new(FakeChannelVideoRepository::default()),
                 event_publisher.clone(),

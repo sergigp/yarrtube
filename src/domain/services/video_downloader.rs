@@ -65,8 +65,8 @@ impl VideoDownloader {
         );
 
         match outcome {
-            Ok(Some(downloaded_filename)) => {
-                let expected_thumbnail = expected_thumbnail_filename(&downloaded_filename);
+            Ok(Some(downloaded)) => {
+                let expected_thumbnail = expected_thumbnail_filename(&downloaded.filename);
                 let thumbnail_filename = self
                     .video_file_repository
                     .list(output_dir)?
@@ -75,8 +75,9 @@ impl VideoDownloader {
                     .then_some(expected_thumbnail);
                 self.video_repository.update(&started.mark_downloaded(
                     quality,
-                    downloaded_filename,
+                    downloaded.filename,
                     thumbnail_filename,
+                    downloaded.duration_seconds,
                     self.clock.now(),
                 ))?;
                 info!(video_id = %video_id, "video downloaded");

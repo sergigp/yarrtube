@@ -8,6 +8,7 @@ const CHANNELS_URL: &str = "https://www.googleapis.com/youtube/v3/channels";
 pub struct ResolvedChannel {
     pub youtube_channel_id: String,
     pub title: String,
+    pub avatar_url: Option<String>,
 }
 
 pub trait YoutubeChannelRepository: Send + Sync {
@@ -28,6 +29,36 @@ struct ChannelItem {
 #[derive(Debug, Deserialize)]
 struct ChannelSnippet {
     title: String,
+    #[serde(default)]
+    thumbnails: Option<ChannelThumbnails>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChannelThumbnails {
+    #[serde(default)]
+    default: Option<ChannelThumbnail>,
+    #[serde(default)]
+    medium: Option<ChannelThumbnail>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChannelThumbnail {
+    url: String,
+}
+
+impl ChannelSnippet {
+    /// `medium` (240x240) is the right size for a UI avatar without pulling
+    /// down `high` unnecessarily; `default` is a fallback for the rare case
+    /// `medium` is absent.
+    fn avatar_url(&self) -> Option<String> {
+        self.thumbnails.as_ref().and_then(|thumbnails| {
+            thumbnails
+                .medium
+                .as_ref()
+                .or(thumbnails.default.as_ref())
+                .map(|thumbnail| thumbnail.url.clone())
+        })
+    }
 }
 
 pub struct YoutubeApiChannelRepository {
@@ -79,6 +110,7 @@ impl YoutubeChannelRepository for YoutubeApiChannelRepository {
 
         Ok(parsed.items.into_iter().next().map(|item| ResolvedChannel {
             youtube_channel_id: item.id,
+            avatar_url: item.snippet.avatar_url(),
             title: item.snippet.title,
         }))
     }
@@ -120,6 +152,76 @@ mod tests {
         let resolved = repository.resolve(&handle).unwrap().unwrap();
         assert_eq!(resolved.youtube_channel_id, "UC123");
         assert_eq!(resolved.title, "Some Channel");
+    }
+
+    #[test]
+    fn it_should_return_no_avatar_url_when_the_response_has_no_thumbnails() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(r#"{"items": [{"id": "UC123", "snippet": {"title": "Some Channel"}}]}"#)
+            .create();
+
+        let repository =
+            YoutubeApiChannelRepository::with_base_url("api-key".to_string(), server.url());
+        let handle = ChannelHandle::new("@somechannel").unwrap();
+
+        let resolved = repository.resolve(&handle).unwrap().unwrap();
+        assert_eq!(resolved.avatar_url, None);
+    }
+
+    #[test]
+    fn it_should_prefer_the_medium_thumbnail_as_the_avatar_url() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"items": [{"id": "UC123", "snippet": {"title": "Some Channel", "thumbnails": {
+                    "default": {"url": "https://example.com/default.jpg"},
+                    "medium": {"url": "https://example.com/medium.jpg"},
+                    "high": {"url": "https://example.com/high.jpg"}
+                }}}]}"#,
+            )
+            .create();
+
+        let repository =
+            YoutubeApiChannelRepository::with_base_url("api-key".to_string(), server.url());
+        let handle = ChannelHandle::new("@somechannel").unwrap();
+
+        let resolved = repository.resolve(&handle).unwrap().unwrap();
+        assert_eq!(
+            resolved.avatar_url,
+            Some("https://example.com/medium.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn it_should_fall_back_to_the_default_thumbnail_when_medium_is_absent() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"items": [{"id": "UC123", "snippet": {"title": "Some Channel", "thumbnails": {
+                    "default": {"url": "https://example.com/default.jpg"}
+                }}}]}"#,
+            )
+            .create();
+
+        let repository =
+            YoutubeApiChannelRepository::with_base_url("api-key".to_string(), server.url());
+        let handle = ChannelHandle::new("@somechannel").unwrap();
+
+        let resolved = repository.resolve(&handle).unwrap().unwrap();
+        assert_eq!(
+            resolved.avatar_url,
+            Some("https://example.com/default.jpg".to_string())
+        );
     }
 
     #[test]
