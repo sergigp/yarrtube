@@ -316,14 +316,17 @@ async fn status() -> StatusCode {
     StatusCode::OK
 }
 
-/// Serves the embedded single-page application: `index.html` for `/`, the
-/// matching embedded file for any other path, `404` for anything unmatched.
-/// Mounted as the router's fallback, after `/api` and `/status`.
+/// Serves the embedded single-page application: the matching embedded file
+/// for a path that names one (e.g. a hashed JS/CSS asset), `index.html` for
+/// `/` or any other unmatched path (so the client-side router can handle
+/// routes like `/playlists/:id`), `404` only if `index.html` itself is
+/// missing from the embedded bundle. Mounted as the router's fallback, after
+/// `/api` and `/status`.
 async fn serve_spa(uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
     let path = if path.is_empty() { "index.html" } else { path };
 
-    match WebAssets::get(path) {
+    match WebAssets::get(path).or_else(|| WebAssets::get("index.html")) {
         Some(file) => {
             let mime = file.metadata.mimetype();
             ([(header::CONTENT_TYPE, mime)], file.data).into_response()
@@ -464,10 +467,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_404_for_an_unknown_path() {
-        let response = get(spa_router(), "/does-not-exist.js").await;
+    async fn it_should_serve_index_html_for_an_unmatched_client_route() {
+        let response = get(spa_router(), "/playlists/some-playlist-id").await;
 
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(body.contains("<div id=\"root\">"));
     }
 
     #[tokio::test]
