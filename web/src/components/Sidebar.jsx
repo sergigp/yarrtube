@@ -23,13 +23,14 @@ function activeIdFrom(pathname, prefix) {
   return rest ? decodeURIComponent(rest) : null
 }
 
-function SidebarRow({ item, active, href, onSync, onDeleteRequest, showAvatar }) {
+function SidebarRow({ item, active, href, onSync, onDeleteRequest, showAvatar, onNavigate }) {
   const [syncing, setSyncing] = useState(false)
 
   return (
     <li className={cn('group flex items-center rounded-md', active && 'bg-accent')}>
       <Link
         to={href}
+        onClick={onNavigate}
         className={cn(
           'flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm no-underline transition-colors',
           active ? 'font-medium text-primary' : 'text-foreground hover:text-primary',
@@ -85,6 +86,7 @@ function SidebarSection({
   onDelete,
   deleteDescription,
   showAvatar,
+  onNavigate,
 }) {
   const [pendingDelete, setPendingDelete] = useState(null)
 
@@ -105,6 +107,7 @@ function SidebarSection({
               active={item.id === activeId}
               href={hrefFor(item)}
               showAvatar={showAvatar}
+              onNavigate={onNavigate}
               onSync={async () => {
                 try {
                   await onSync(item.id)
@@ -135,7 +138,7 @@ function SidebarSection({
   )
 }
 
-export function Sidebar() {
+export function Sidebar({ open = false, onClose }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { data: channels, error: channelsError } = usePolling(fetchChannels, [])
@@ -145,38 +148,66 @@ export function Sidebar() {
   const activePlaylistId = activeIdFrom(location.pathname, '/playlists/')
 
   return (
-    <aside className="flex w-full shrink-0 flex-col gap-6 overflow-y-auto border-b border-border px-3 py-4 md:h-full md:w-60 md:border-r md:border-b-0 md:py-6">
-      <SidebarSection
-        title="Channels"
-        items={channels}
-        error={channelsError}
-        activeId={activeChannelId}
-        hrefFor={(channel) => `/channels/${channel.id}`}
-        showAvatar
-        onSync={reconcileChannel}
-        onDelete={async (id) => {
-          await deleteChannel(id)
-          if (activeChannelId === id) {
-            navigate('/')
-          }
-        }}
-        deleteDescription="This removes the channel from tracking."
-      />
-      <SidebarSection
-        title="Playlists"
-        items={playlists}
-        error={playlistsError}
-        activeId={activePlaylistId}
-        hrefFor={(playlist) => `/playlists/${playlist.id}`}
-        onSync={reconcilePlaylist}
-        onDelete={async (id) => {
-          await deletePlaylist(id)
-          if (activePlaylistId === id) {
-            navigate('/')
-          }
-        }}
-        deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
-      />
-    </aside>
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 flex w-72 max-w-[85%] flex-col gap-6 overflow-y-auto border-r border-border bg-background px-3 py-4 shadow-lg transition-transform duration-200 ease-in-out',
+          open ? 'translate-x-0' : '-translate-x-full',
+          'md:static md:z-auto md:h-full md:w-60 md:max-w-none md:translate-x-0 md:shadow-none md:transition-none md:py-6',
+        )}
+      >
+        <div className="flex items-center justify-between md:hidden">
+          <span className="font-heading text-sm font-semibold text-foreground">Menu</span>
+          <button
+            type="button"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            onClick={onClose}
+            aria-label="Close menu"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <SidebarSection
+          title="Channels"
+          items={channels}
+          error={channelsError}
+          activeId={activeChannelId}
+          hrefFor={(channel) => `/channels/${channel.id}`}
+          showAvatar
+          onNavigate={onClose}
+          onSync={reconcileChannel}
+          onDelete={async (id) => {
+            await deleteChannel(id)
+            if (activeChannelId === id) {
+              navigate('/')
+            }
+          }}
+          deleteDescription="This removes the channel from tracking."
+        />
+        <SidebarSection
+          title="Playlists"
+          items={playlists}
+          error={playlistsError}
+          activeId={activePlaylistId}
+          hrefFor={(playlist) => `/playlists/${playlist.id}`}
+          onNavigate={onClose}
+          onSync={reconcilePlaylist}
+          onDelete={async (id) => {
+            await deletePlaylist(id)
+            if (activePlaylistId === id) {
+              navigate('/')
+            }
+          }}
+          deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
+        />
+      </aside>
+    </>
   )
 }
