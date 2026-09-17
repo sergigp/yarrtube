@@ -9,6 +9,28 @@ pub fn ensure_output_dir(output_path: &Path) -> Result<()> {
         .map_err(|e| anyhow!("Failed to create output directory {output_path:?}: {e}"))
 }
 
+/// Runs `cmd`, retrying briefly on a transient "text file busy" error. The
+/// `yt-dlp` binary can be mid-replacement by a concurrent `update-ytdlp` run
+/// (which swaps it in via an atomic rename, but the exec of the old inode
+/// can still transiently race the kernel's write-lock teardown), and the
+/// same race shows up in tests that write a fake binary and exec it right
+/// away.
+fn output_retrying_busy(cmd: &mut Command) -> io::Result<std::process::Output> {
+    const MAX_ATTEMPTS: u32 = 5;
+    const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(20);
+
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        match cmd.output() {
+            Err(e) if e.kind() == io::ErrorKind::ExecutableFileBusy && attempt < MAX_ATTEMPTS => {
+                std::thread::sleep(RETRY_DELAY);
+            }
+            result => return result,
+        }
+    }
+}
+
 /// Maps a playlist's `quality` tier to the `yt-dlp` args that select its
 /// resolution cap while softly preferring mp4/h264/aac (falling back to the
 /// best available stream instead of hard-failing when no such stream
@@ -100,16 +122,15 @@ pub fn download_video(
         args.join(" "),
         output_path.display()
     );
-    let output = match Command::new(ytdlp_path)
-        .args(&args)
+    let mut cmd = Command::new(ytdlp_path);
+    cmd.args(&args)
         .arg(video_url)
         .arg("-o")
         .arg(&output_template)
         .current_dir(output_path)
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .output()
-    {
+        .stderr(Stdio::inherit());
+    let output = match output_retrying_busy(&mut cmd) {
         Ok(output) => output,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             return Err(anyhow!(
@@ -173,20 +194,19 @@ pub fn list_channel_videos(
     channel_url: &str,
     limit: u32,
 ) -> Result<Vec<ChannelVideoEntry>> {
-    let output = match Command::new(ytdlp_path)
-        .args([
-            "--flat-playlist",
-            "--print-json",
-            "-I",
-            &format!("1:{limit}"),
-            "--quiet",
-            "--no-warnings",
-        ])
-        .arg(channel_url)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .output()
-    {
+    let mut cmd = Command::new(ytdlp_path);
+    cmd.args([
+        "--flat-playlist",
+        "--print-json",
+        "-I",
+        &format!("1:{limit}"),
+        "--quiet",
+        "--no-warnings",
+    ])
+    .arg(channel_url)
+    .stdout(Stdio::piped())
+    .stderr(Stdio::inherit());
+    let output = match output_retrying_busy(&mut cmd) {
         Ok(output) => output,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             return Err(anyhow!(
@@ -239,15 +259,26 @@ fn resolve_collision(output_path: &Path, desired_filename: &str, video_id: &str)
 pub(crate) mod test_support {
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// Tests run in parallel threads within one process, so the PID is the
+    /// same for all of them; `SystemTime::now()`'s resolution isn't
+    /// guaranteed to be finer than the gap between two threads calling this
+    /// concurrently, and a collision here previously caused two tests'
+    /// fake `yt-dlp` binaries and fixture files to land in the same
+    /// directory and stomp on each other. A process-wide counter guarantees
+    /// every call gets a distinct suffix regardless of clock resolution.
+    static UNIQUE_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     pub(crate) fn unique_temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "yarrtube-{name}-{}-{}",
+            "yarrtube-{name}-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            UNIQUE_DIR_COUNTER.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&dir).unwrap();
         dir
