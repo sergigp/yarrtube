@@ -96,6 +96,7 @@ mod tests {
                 Quality::High,
                 VideoLimit::new(10).unwrap(),
                 PlaylistPath::new("creators/somechannel").unwrap(),
+                None,
                 fixed_timestamp(),
             ))
             .unwrap();

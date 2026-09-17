@@ -269,6 +269,32 @@ mod tests {
     }
 
     #[test]
+    fn it_should_record_the_duration_reported_by_the_downloader() {
+        let (handler, video_repository, video) =
+            handler_with(true, FakeVideoDownloaderRepository::with_duration(223));
+
+        handler
+            .handle(&payload_for(video.id.as_str()), false)
+            .unwrap();
+
+        let found = video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.duration_seconds, Some(223));
+    }
+
+    #[test]
+    fn it_should_record_no_duration_when_the_downloader_reports_none() {
+        let (handler, video_repository, video) =
+            handler_with(true, FakeVideoDownloaderRepository::new(true));
+
+        handler
+            .handle(&payload_for(video.id.as_str()), false)
+            .unwrap();
+
+        let found = video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.duration_seconds, None);
+    }
+
+    #[test]
     #[cfg(unix)]
     fn it_should_detect_a_real_thumbnail_file_written_by_yt_dlp_alongside_the_video() {
         use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;

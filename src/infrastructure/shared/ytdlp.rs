@@ -40,15 +40,37 @@ pub fn args_for_quality(quality: Quality) -> Vec<String> {
     ]
 }
 
+/// A video's `yt-dlp`-reported download result: the exact filename it
+/// saved, and its duration in whole seconds when one could be determined.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DownloadedVideo {
+    pub filename: String,
+    pub duration_seconds: Option<i64>,
+}
+
+/// Parses `yt-dlp`'s `--print %(duration)s` line into whole seconds.
+/// `yt-dlp` prints `NA` for an unknown duration; an empty line or anything
+/// else unparsable as a number is likewise treated as unknown rather than
+/// failing the download. A fractional value (seen for some extractors) is
+/// truncated to whole seconds.
+fn parse_duration_seconds(line: &str) -> Option<i64> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("na") {
+        return None;
+    }
+    trimmed.parse::<f64>().ok().map(|seconds| seconds as i64)
+}
+
 /// Runs `<ytdlp_path> <args> <video_url>` in `output_path`, saving it under
 /// `desired_filename` (extension chosen by `yt-dlp`). If a file with that
 /// stem already exists in `output_path`, `video_id` is appended to
-/// disambiguate. Asks `yt-dlp` to print the exact filename it saved via
-/// `--print after_move:filename`, in quiet mode so that's the only line on
-/// stdout. Returns `Ok(Some(filename))` on a successful download,
-/// `Ok(None)` for a clean `yt-dlp` failure (non-zero exit). Returns `Err`
-/// only for a systemic problem: no binary at `ytdlp_path`, or a successful
-/// exit that didn't print a parseable filename.
+/// disambiguate. Asks `yt-dlp` to print its duration followed by the exact
+/// filename it saved via `--print %(duration)s --print after_move:filename`,
+/// in quiet mode so those are the only two lines on stdout, filename last.
+/// Returns `Ok(Some(DownloadedVideo))` on a successful download, `Ok(None)`
+/// for a clean `yt-dlp` failure (non-zero exit). Returns `Err` only for a
+/// systemic problem: no binary at `ytdlp_path`, or a successful exit that
+/// didn't print a parseable filename.
 pub fn download_video(
     ytdlp_path: &Path,
     video_url: &str,
@@ -56,7 +78,7 @@ pub fn download_video(
     video_id: &str,
     quality: Quality,
     output_path: &Path,
-) -> Result<Option<String>> {
+) -> Result<Option<DownloadedVideo>> {
     let base = resolve_collision(output_path, desired_filename, video_id);
     let output_template = format!("{base}.%(ext)s");
     let mut args = args_for_quality(quality);
@@ -67,6 +89,8 @@ pub fn download_video(
         "jpg".to_string(),
         "--quiet".to_string(),
         "--no-warnings".to_string(),
+        "--print".to_string(),
+        "%(duration)s".to_string(),
         "--print".to_string(),
         "after_move:filename".to_string(),
     ]);
@@ -101,12 +125,26 @@ pub fn download_video(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    match stdout.lines().next_back().map(str::trim) {
-        Some(filename) if !filename.is_empty() => Ok(Some(filename.to_string())),
-        _ => Err(anyhow!(
-            "yt-dlp exited successfully but did not print an output filename for {video_url}"
-        )),
-    }
+    let lines: Vec<&str> = stdout.lines().collect();
+    let filename = match lines.last().map(|s| s.trim()) {
+        Some(filename) if !filename.is_empty() => filename.to_string(),
+        _ => {
+            return Err(anyhow!(
+                "yt-dlp exited successfully but did not print an output filename for {video_url}"
+            ));
+        }
+    };
+    let duration_seconds = lines
+        .len()
+        .checked_sub(2)
+        .and_then(|idx| lines.get(idx))
+        .copied()
+        .and_then(parse_duration_seconds);
+
+    Ok(Some(DownloadedVideo {
+        filename,
+        duration_seconds,
+    }))
 }
 
 /// One video discovered by `list_channel_videos`, in the order `yt-dlp`
@@ -351,7 +389,7 @@ mod tests {
         let output_dir = unique_temp_dir("ytdlp-output");
         let fake = FakeYtDlp::with_exit_code(0);
 
-        let filename = download_video(
+        let result = download_video(
             &fake.path,
             "https://example.com/video",
             "My Video",
@@ -361,7 +399,13 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(filename, Some(DEFAULT_PRINTED_FILENAME.to_string()));
+        assert_eq!(
+            result,
+            Some(DownloadedVideo {
+                filename: DEFAULT_PRINTED_FILENAME.to_string(),
+                duration_seconds: None,
+            })
+        );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
@@ -413,6 +457,8 @@ mod tests {
             "jpg".to_string(),
             "--quiet".to_string(),
             "--no-warnings".to_string(),
+            "--print".to_string(),
+            "%(duration)s".to_string(),
             "--print".to_string(),
             "after_move:filename".to_string(),
             "https://example.com/video".to_string(),
@@ -477,6 +523,8 @@ mod tests {
             "--quiet".to_string(),
             "--no-warnings".to_string(),
             "--print".to_string(),
+            "%(duration)s".to_string(),
+            "--print".to_string(),
             "after_move:filename".to_string(),
             "https://example.com/video".to_string(),
             "-o".to_string(),
@@ -504,6 +552,98 @@ mod tests {
         );
 
         assert!(result.is_err());
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_parse_the_duration_line_into_whole_seconds() {
+        let fake = test_support::FakeYtDlp::with_stdout("223\nMy Video.mp4\n");
+        let output_dir = test_support::unique_temp_dir("ytdlp-output-duration");
+
+        let result = download_video(
+            &fake.path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+        )
+        .unwrap();
+
+        assert_eq!(
+            result,
+            Some(DownloadedVideo {
+                filename: "My Video.mp4".to_string(),
+                duration_seconds: Some(223),
+            })
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_truncate_a_fractional_duration_to_whole_seconds() {
+        let fake = test_support::FakeYtDlp::with_stdout("223.9\nMy Video.mp4\n");
+        let output_dir = test_support::unique_temp_dir("ytdlp-output-duration-fractional");
+
+        let result = download_video(
+            &fake.path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+        )
+        .unwrap();
+
+        assert_eq!(result.unwrap().duration_seconds, Some(223));
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_treat_an_na_duration_as_none_without_affecting_the_filename() {
+        let fake = test_support::FakeYtDlp::with_stdout("NA\nMy Video.mp4\n");
+        let output_dir = test_support::unique_temp_dir("ytdlp-output-duration-na");
+
+        let result = download_video(
+            &fake.path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.duration_seconds, None);
+        assert_eq!(result.filename, "My Video.mp4");
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_treat_a_missing_duration_line_as_none() {
+        use test_support::{DEFAULT_PRINTED_FILENAME, FakeYtDlp, unique_temp_dir};
+
+        let output_dir = unique_temp_dir("ytdlp-output-duration-missing");
+        let fake = FakeYtDlp::with_exit_code(0);
+
+        let result = download_video(
+            &fake.path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.filename, DEFAULT_PRINTED_FILENAME);
+        assert_eq!(result.duration_seconds, None);
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 

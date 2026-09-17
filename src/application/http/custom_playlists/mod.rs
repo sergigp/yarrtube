@@ -289,6 +289,7 @@ mod tests {
             channel_service: crate::domain::channel::ChannelService::new(
                 Arc::new(crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository::default()),
                 Arc::new(crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository::default()),
                 Arc::new(FakeVideoRepository::default()),
                 Arc::new(FakeChannelVideoRepository::default()),
                 event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,

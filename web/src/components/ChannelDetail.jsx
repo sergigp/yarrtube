@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
-import { fetchChannels, fetchChannelVideos, videoMediaUrl } from '../api'
+import { fetchChannels, fetchChannelVideos, videoMediaUrl, avatarMediaUrl } from '../api'
+import { formatDuration } from '../formatDuration'
 import { Thumbnail } from './Thumbnail'
 import { Beacon } from './Beacon'
 import { Badge } from '@/components/ui/badge'
@@ -55,9 +56,15 @@ function VideoDetail({ channel, video }) {
   return (
     <div className="rounded-lg border border-border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h3 className="min-w-0 flex-1 font-heading text-xl font-semibold text-foreground">
-          {video.title}
-        </h3>
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
+          <Thumbnail
+            src={channel.avatar_filename ? avatarMediaUrl(channel.avatar_filename) : null}
+            className="mt-0.5 size-8 shrink-0 rounded-full object-cover"
+          />
+          <h3 className="min-w-0 flex-1 font-heading text-xl font-semibold text-foreground">
+            {video.title}
+          </h3>
+        </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <Badge variant={video.status === 'DOWNLOADED' ? 'secondary' : 'outline'}>
             {STATUS_LABELS[video.status] ?? video.status}
@@ -159,14 +166,21 @@ export function ChannelDetail() {
                       )}
                       onClick={() => setManualSelection(video)}
                     >
-                      <Thumbnail
-                        src={
-                          video.thumbnail_filename
-                            ? videoMediaUrl(channel.path, video.thumbnail_filename)
-                            : null
-                        }
-                        className="aspect-video w-24 shrink-0 rounded-md object-cover"
-                      />
+                      <div className="relative shrink-0">
+                        <Thumbnail
+                          src={
+                            video.thumbnail_filename
+                              ? videoMediaUrl(channel.path, video.thumbnail_filename)
+                              : null
+                          }
+                          className="aspect-video w-24 rounded-md object-cover"
+                        />
+                        {formatDuration(video.duration_seconds) && (
+                          <span className="absolute right-1 bottom-1 rounded bg-black/75 px-1 py-0.5 text-[10px] font-medium text-white">
+                            {formatDuration(video.duration_seconds)}
+                          </span>
+                        )}
+                      </div>
                       <span
                         className={cn(
                           'min-w-0 flex-1 text-sm leading-snug text-foreground',

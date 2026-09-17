@@ -148,6 +148,7 @@ impl VideoSearcher {
                                 source: VideoSource::Channel(
                                     channel.id.clone(),
                                     channel.path.clone(),
+                                    channel.avatar_filename.clone(),
                                 ),
                             })
                             .collect()

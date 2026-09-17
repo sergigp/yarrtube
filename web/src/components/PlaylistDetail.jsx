@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
 import { fetchPlaylists, fetchVideos, videoMediaUrl, deleteVideoFromCustomPlaylist } from '../api'
+import { formatDuration } from '../formatDuration'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
 import { Beacon } from './Beacon'
@@ -185,14 +186,21 @@ export function PlaylistDetail() {
                       )}
                       onClick={() => setManualSelection(video)}
                     >
-                      <Thumbnail
-                        src={
-                          video.thumbnail_filename
-                            ? videoMediaUrl(playlist.path, video.thumbnail_filename)
-                            : null
-                        }
-                        className="aspect-video w-24 shrink-0 rounded-md object-cover"
-                      />
+                      <div className="relative shrink-0">
+                        <Thumbnail
+                          src={
+                            video.thumbnail_filename
+                              ? videoMediaUrl(playlist.path, video.thumbnail_filename)
+                              : null
+                          }
+                          className="aspect-video w-24 rounded-md object-cover"
+                        />
+                        {formatDuration(video.duration_seconds) && (
+                          <span className="absolute right-1 bottom-1 rounded bg-black/75 px-1 py-0.5 text-[10px] font-medium text-white">
+                            {formatDuration(video.duration_seconds)}
+                          </span>
+                        )}
+                      </div>
                       <span
                         className={cn(
                           'min-w-0 flex-1 text-sm leading-snug text-foreground',

@@ -237,6 +237,7 @@ mod tests {
             Quality::High,
             VideoLimit::new(10).unwrap(),
             PlaylistPath::new("creators/somechannel").unwrap(),
+            None,
             fixed_timestamp(),
         )
     }
@@ -250,6 +251,7 @@ mod tests {
             quality: None,
             filename: None,
             thumbnail_filename: None,
+            duration_seconds: None,
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
         }

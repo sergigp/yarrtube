@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { usePolling } from '../usePolling'
-import { fetchRecentVideos, videoMediaUrl } from '../api'
+import { fetchRecentVideos, videoMediaUrl, avatarMediaUrl } from '../api'
+import { formatDuration } from '../formatDuration'
 import { Thumbnail } from './Thumbnail'
 
 function videoDetailPath(source) {
@@ -25,17 +26,36 @@ function VideoGrid({ videos }) {
             className="group flex flex-col gap-2 no-underline"
             to={`${videoDetailPath(video.source)}${encodeURIComponent(video.id)}`}
           >
-            <Thumbnail
-              src={
-                video.thumbnail_filename
-                  ? videoMediaUrl(video.source.path, video.thumbnail_filename)
-                  : null
-              }
-              className="aspect-video w-full rounded-lg object-cover transition-opacity group-hover:opacity-90"
-            />
-            <span className="line-clamp-2 text-sm leading-snug font-medium text-foreground">
-              {video.title}
-            </span>
+            <div className="relative">
+              <Thumbnail
+                src={
+                  video.thumbnail_filename
+                    ? videoMediaUrl(video.source.path, video.thumbnail_filename)
+                    : null
+                }
+                className="aspect-video w-full rounded-lg object-cover transition-opacity group-hover:opacity-90"
+              />
+              {formatDuration(video.duration_seconds) && (
+                <span className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-xs font-medium text-white">
+                  {formatDuration(video.duration_seconds)}
+                </span>
+              )}
+            </div>
+            <div className="flex items-start gap-2">
+              {video.source.kind === 'channel' && (
+                <Thumbnail
+                  src={
+                    video.source.avatar_filename
+                      ? avatarMediaUrl(video.source.avatar_filename)
+                      : null
+                  }
+                  className="mt-0.5 size-6 shrink-0 rounded-full object-cover"
+                />
+              )}
+              <span className="line-clamp-2 text-sm leading-snug font-medium text-foreground">
+                {video.title}
+              </span>
+            </div>
           </Link>
         </li>
       ))}

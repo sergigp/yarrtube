@@ -12,6 +12,7 @@ pub struct Channel {
     pub quality: Quality,
     pub video_limit: VideoLimit,
     pub path: PlaylistPath,
+    pub avatar_filename: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -24,6 +25,7 @@ impl Channel {
         quality: Quality,
         video_limit: VideoLimit,
         path: PlaylistPath,
+        avatar_filename: Option<String>,
         created_at: DateTime<Utc>,
     ) -> Self {
         Self {
@@ -33,6 +35,7 @@ impl Channel {
             quality,
             video_limit,
             path,
+            avatar_filename,
             created_at,
         }
     }
@@ -57,6 +60,7 @@ mod tests {
             quality,
             video_limit,
             path.clone(),
+            Some("@somechannel.jpg".to_string()),
             created_at,
         );
 
@@ -66,6 +70,26 @@ mod tests {
         assert_eq!(channel.quality, quality);
         assert_eq!(channel.video_limit, video_limit);
         assert_eq!(channel.path, path);
+        assert_eq!(
+            channel.avatar_filename,
+            Some("@somechannel.jpg".to_string())
+        );
         assert_eq!(channel.created_at, created_at);
+    }
+
+    #[test]
+    fn it_should_build_a_channel_with_no_avatar_filename() {
+        let channel = Channel::create(
+            ChannelHandle::new("@somechannel").unwrap(),
+            "Some Channel",
+            "UC123",
+            Quality::High,
+            VideoLimit::new(10).unwrap(),
+            PlaylistPath::new("creators/somechannel").unwrap(),
+            None,
+            DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
+        );
+
+        assert_eq!(channel.avatar_filename, None);
     }
 }

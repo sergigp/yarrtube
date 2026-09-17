@@ -62,6 +62,7 @@ mod tests {
             Quality::High,
             VideoLimit::new(video_limit).unwrap(),
             PlaylistPath::new("creators/somechannel").unwrap(),
+            None,
             fixed_timestamp(),
         )
     }
@@ -380,6 +381,7 @@ mod tests {
                 Quality::High,
                 "My Video.mp4",
                 Some("My Video.jpg".to_string()),
+                None,
                 fixed_timestamp(),
             )
         });
@@ -416,6 +418,7 @@ mod tests {
             v.start_download(fixed_timestamp()).mark_downloaded(
                 Quality::High,
                 "My Video.webm",
+                None,
                 None,
                 fixed_timestamp(),
             )
@@ -500,6 +503,7 @@ mod tests {
                 Quality::High,
                 "My Video.mp4",
                 None,
+                None,
                 fixed_timestamp(),
             )
         });
@@ -530,6 +534,7 @@ mod tests {
                 Quality::High,
                 "My Video.mp4",
                 Some("My Video.jpg".to_string()),
+                None,
                 fixed_timestamp(),
             )
         });
@@ -557,6 +562,7 @@ mod tests {
             v.start_download(fixed_timestamp()).mark_downloaded(
                 Quality::High,
                 "My Video.mp4",
+                None,
                 None,
                 fixed_timestamp(),
             )

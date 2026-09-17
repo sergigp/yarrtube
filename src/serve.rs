@@ -9,6 +9,7 @@ use crate::domain::services::{
 use crate::domain::task::Task;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
+use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FilesystemChannelAvatarRepository;
 use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::{
     ChannelRepository, SqliteChannelRepository,
@@ -56,6 +57,7 @@ const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_DB_PATH: &str = "yarrtube.sqlite3";
 const DEFAULT_RECONCILE_INTERVAL_SECONDS: i64 = 3600;
 const DEFAULT_VIDEOS_PATH: &str = "/videos";
+const DEFAULT_AVATARS_PATH: &str = "avatars";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 const BACKGROUND_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -81,6 +83,17 @@ fn reconcile_interval_seconds() -> i64 {
 
 fn videos_path() -> String {
     std::env::var("YARRTUBE_VIDEOS_PATH").unwrap_or_else(|_| DEFAULT_VIDEOS_PATH.to_string())
+}
+
+/// Container-local and un-mounted, unlike `videos_path()` — see design.md's
+/// "Avatar bytes are downloaded and written to a new container-local
+/// `avatars/` directory" decision: it lives alongside the (also
+/// container-local, un-mounted) SQLite database, not under the mounted
+/// videos root.
+fn avatars_path() -> PathBuf {
+    std::env::var("YARRTUBE_AVATARS_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(DEFAULT_AVATARS_PATH))
 }
 
 fn run_startup_ytdlp_update() {
@@ -221,6 +234,7 @@ fn build_application() -> Result<Application> {
     let channel_service = ChannelService::new(
         channel_repository.clone(),
         Arc::new(YoutubeApiChannelRepository::new(youtube_api_key())),
+        Arc::new(FilesystemChannelAvatarRepository::new(avatars_path())),
         video_repository.clone(),
         channel_video_repository.clone(),
         event_publisher.clone() as Arc<dyn EventPublisher>,
@@ -373,6 +387,7 @@ async fn serve_http(port: u16, state: AppState) -> Result<()> {
         .route("/status", get(status))
         .nest("/api", http::api_router(state))
         .nest_service("/media", ServeDir::new(videos_path()))
+        .nest_service("/avatars", ServeDir::new(avatars_path()))
         .fallback(serve_spa);
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
         .await
@@ -449,6 +464,12 @@ mod tests {
     fn media_router(root: &std::path::Path) -> Router {
         Router::new()
             .nest_service("/media", ServeDir::new(root))
+            .fallback(serve_spa)
+    }
+
+    fn avatars_router(root: &std::path::Path) -> Router {
+        Router::new()
+            .nest_service("/avatars", ServeDir::new(root))
             .fallback(serve_spa)
     }
 
@@ -572,6 +593,48 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri(format!("/media/..%2f{secret_name}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_ne!(response.status(), StatusCode::OK);
+
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::remove_file(&secret_path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_should_serve_a_known_file_under_the_mounted_avatars_root() {
+        let root = unique_temp_dir("avatars-known-file");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("@somechannel.jpg"), b"fake avatar bytes").unwrap();
+
+        let response = get(avatars_router(&root), "/avatars/@somechannel.jpg").await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(bytes.as_ref(), b"fake avatar bytes");
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_should_not_serve_a_file_outside_the_avatars_root_via_path_traversal() {
+        let root = unique_temp_dir("avatars-traversal-root");
+        std::fs::create_dir_all(&root).unwrap();
+        let secret_name = format!(
+            "yarrtube-serve-test-avatars-secret-{}.txt",
+            std::process::id()
+        );
+        let secret_path = root.parent().unwrap().join(&secret_name);
+        std::fs::write(&secret_path, b"outside the root").unwrap();
+
+        let response = avatars_router(&root)
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/avatars/..%2f{secret_name}"))
                     .body(Body::empty())
                     .unwrap(),
             )

@@ -1,14 +1,16 @@
 use crate::domain::shared::Quality;
 use crate::infrastructure::shared::ytdlp;
+pub use crate::infrastructure::shared::ytdlp::DownloadedVideo;
 use std::path::{Path, PathBuf};
 
 /// Downloads a single video via `yt-dlp`, injected into `VideoDownloader` for
 /// the event-driven download path.
 pub trait VideoDownloaderRepository: Send + Sync {
-    /// Returns `Ok(Some(filename))` with the exact filename `yt-dlp` saved
-    /// on a successful download, `Ok(None)` for a clean `yt-dlp` failure
-    /// (non-zero exit). Returns `Err` only for a systemic problem (e.g.
-    /// `yt-dlp` missing from `PATH`, or an unparseable `--print` output).
+    /// Returns `Ok(Some(DownloadedVideo))` with the exact filename `yt-dlp`
+    /// saved (and its duration, when known) on a successful download,
+    /// `Ok(None)` for a clean `yt-dlp` failure (non-zero exit). Returns
+    /// `Err` only for a systemic problem (e.g. `yt-dlp` missing from
+    /// `PATH`, or an unparseable `--print` output).
     fn download(
         &self,
         video_url: &str,
@@ -16,7 +18,7 @@ pub trait VideoDownloaderRepository: Send + Sync {
         video_id: &str,
         quality: Quality,
         output_dir: &Path,
-    ) -> anyhow::Result<Option<String>>;
+    ) -> anyhow::Result<Option<DownloadedVideo>>;
 }
 
 /// Invokes `yt-dlp` at `ytdlp_path`, the same configured path `update-ytdlp`
@@ -39,7 +41,7 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
         video_id: &str,
         quality: Quality,
         output_dir: &Path,
-    ) -> anyhow::Result<Option<String>> {
+    ) -> anyhow::Result<Option<DownloadedVideo>> {
         ytdlp::ensure_output_dir(output_dir)?;
         ytdlp::download_video(
             &self.ytdlp_path,
@@ -55,7 +57,7 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
 #[cfg(test)]
 #[derive(Default)]
 pub struct FakeVideoDownloaderRepository {
-    pub(crate) result: std::sync::Mutex<Option<String>>,
+    pub(crate) result: std::sync::Mutex<Option<DownloadedVideo>>,
     #[allow(clippy::type_complexity)]
     pub(crate) calls: std::sync::Mutex<Vec<(String, String, String, Quality, std::path::PathBuf)>>,
 }
@@ -64,7 +66,21 @@ pub struct FakeVideoDownloaderRepository {
 impl FakeVideoDownloaderRepository {
     pub fn new(succeeds: bool) -> Self {
         Self {
-            result: std::sync::Mutex::new(succeeds.then(|| "fake-output.mp4".to_string())),
+            result: std::sync::Mutex::new(succeeds.then(|| DownloadedVideo {
+                filename: "fake-output.mp4".to_string(),
+                duration_seconds: None,
+            })),
+            calls: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Succeeds with `duration_seconds` recorded alongside the fake filename.
+    pub fn with_duration(duration_seconds: i64) -> Self {
+        Self {
+            result: std::sync::Mutex::new(Some(DownloadedVideo {
+                filename: "fake-output.mp4".to_string(),
+                duration_seconds: Some(duration_seconds),
+            })),
             calls: std::sync::Mutex::new(Vec::new()),
         }
     }
@@ -79,7 +95,7 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
         video_id: &str,
         quality: Quality,
         output_dir: &Path,
-    ) -> anyhow::Result<Option<String>> {
+    ) -> anyhow::Result<Option<DownloadedVideo>> {
         self.calls.lock().unwrap().push((
             video_url.to_string(),
             desired_filename.to_string(),
@@ -114,7 +130,10 @@ mod tests {
 
         assert_eq!(
             result,
-            Some(test_support::DEFAULT_PRINTED_FILENAME.to_string())
+            Some(DownloadedVideo {
+                filename: test_support::DEFAULT_PRINTED_FILENAME.to_string(),
+                duration_seconds: None,
+            })
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
