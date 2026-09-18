@@ -1,9 +1,26 @@
-# Yarrtube
+<!-- LOGO -->
+<h1>
+<p align="center">
+  <img src="doc/logo.png" alt="Logo" width="256">
+</h1>
+  <p align="center">
+    Minimalistic YouTube synchronizer built on top of <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>
+    <br />
+    <a href="#about">About</a>
+    ·
+    <a href="doc/INSTALLATION.md">Installation</a>
+    ·
+    <a href="doc/DEVELOPMENT.md">Developing</a>
+    ·
+    <a href="doc/ARCHITECTURE.md">Architecture</a>
+    <br />
+    <img src="doc/screenshot.jpeg" alt="screehnshot" width="600"/>
+  </p>
+</p>
 
-<img src="doc/yarr.png" alt="yarr" width="100"/>
-<img src="doc/screenshot.jpeg" alt="screehnshot" width="600"/>
+# About
 
-Yarrtube is a minimalistic YouTube synchronizer built on top of [yt-dlp](https://github.com/yt-dlp/yt-dlp). It watches tracked Youtube playlists and channels and automatically downloads the new videos published.
+Yarrtube watches tracked Youtube playlists and channels and automatically downloads the new videos published.
 
 Yarrtube is mainly thought to be installed on your NAS via Docker with the rest of your media stack (Plex, Jellyfin, etc.) but it can also be installed on any laptop.
 
@@ -16,9 +33,3 @@ Yarrtube is mainly thought to be installed on your NAS via Docker with the rest 
 - **Coming soon** custom playlists that let you create playlists not coupled to Youtube ones.
 - **Coming soon** browser extensions to add videos to custom playlists directly from Youtube
 - **Coming soon** extended support for Plex Collections.
-
-# Getting Started
-
-- [Installation and Configuration](doc/INSTALLATION.md)
-- [Development](doc/DEVELOPMENT.md)
-- [Architecture](doc/ARCHITECTURE.md)
