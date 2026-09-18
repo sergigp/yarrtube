@@ -1,8 +1,13 @@
 use crate::domain::shared::{Quality, VideoRecordId};
+use crate::domain::video::Video;
 use crate::domain::video::thumbnail_filename::expected_thumbnail_filename;
 use crate::domain::video::video_filename::VideoFilename;
+use crate::domain::video_metadata::{build_video_metadata, resolve_sorttitle};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadataRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::path::Path;
@@ -18,21 +23,76 @@ pub struct VideoDownloader {
     video_repository: Arc<dyn VideoRepository>,
     video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
+    playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
+    youtube_metadata_repository: Arc<dyn YoutubeMetadataRepository>,
+    video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     clock: Arc<dyn Clock>,
 }
 
 impl VideoDownloader {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
         video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
+        playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
+        youtube_metadata_repository: Arc<dyn YoutubeMetadataRepository>,
+        video_metadata_repository: Arc<dyn VideoMetadataRepository>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             video_repository,
             video_downloader_repository,
             video_file_repository,
+            playlist_video_repository,
+            youtube_metadata_repository,
+            video_metadata_repository,
             clock,
+        }
+    }
+
+    /// Fetches `video`'s YouTube metadata, resolves its `sorttitle`, and
+    /// saves its `movie.nfo` — see design.md's "Failure handling: skip the
+    /// save entirely, never fail the download" decision. Any failure
+    /// anywhere in this sequence (the YouTube fetch, the playlist-position
+    /// lookup, or the save itself) is logged and swallowed rather than
+    /// propagated: metadata generation never fails or retries the download
+    /// itself, and a skipped/failed attempt self-heals on the next
+    /// reconcile pass (see `VideoReconciler`/`ChannelVideoReconciler`).
+    fn generate_metadata(&self, video: &Video, video_dir: &Path, thumbnail_filename: Option<&str>) {
+        let metadata = match self.youtube_metadata_repository.find(&video.youtube_id) {
+            Ok(Some(metadata)) => metadata,
+            Ok(None) => {
+                warn!(video_id = %video.id, "no YouTube metadata found for video, skipping metadata generation");
+                return;
+            }
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to fetch YouTube metadata, skipping metadata generation");
+                return;
+            }
+        };
+
+        let playlist_position = match self.playlist_video_repository.find_by_video(&video.id) {
+            Ok(playlist_video) => playlist_video.and_then(|pv| pv.position),
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to look up playlist position, falling back to publish-date sorttitle");
+                None
+            }
+        };
+        let sorttitle =
+            resolve_sorttitle(&metadata.title, metadata.published_at, playlist_position);
+        let video_metadata = build_video_metadata(
+            &video.youtube_id,
+            &metadata,
+            sorttitle,
+            thumbnail_filename.map(str::to_string),
+        );
+
+        if let Err(e) = self
+            .video_metadata_repository
+            .save(&video.id, &video_metadata, video_dir)
+        {
+            warn!(video_id = %video.id, error = %e, "failed to save video metadata");
         }
     }
 
@@ -75,14 +135,20 @@ impl VideoDownloader {
                     .any(|f| f == &expected_thumbnail)
                     .then(|| format!("{}/{}", downloaded.folder, expected_thumbnail));
                 let filename = format!("{}/{}", downloaded.folder, downloaded.filename);
-                self.video_repository.update(&started.mark_downloaded(
+                let downloaded_video = started.mark_downloaded(
                     quality,
                     filename,
-                    thumbnail_filename,
+                    thumbnail_filename.clone(),
                     downloaded.duration_seconds,
                     self.clock.now(),
-                ))?;
+                );
+                self.video_repository.update(&downloaded_video)?;
                 info!(video_id = %video_id, "video downloaded");
+                let thumb_basename = thumbnail_filename
+                    .as_deref()
+                    .and_then(|f| Path::new(f).file_name())
+                    .and_then(|f| f.to_str());
+                self.generate_metadata(&downloaded_video, &video_dir, thumb_basename);
                 Ok(())
             }
             Ok(None) => {

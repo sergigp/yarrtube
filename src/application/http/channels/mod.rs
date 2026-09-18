@@ -146,6 +146,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
     use crate::infrastructure::repositories::youtube_channel_repository::{
         FakeYoutubeChannelRepository, ResolvedChannel, YoutubeChannelRepository,
@@ -153,6 +154,7 @@ mod tests {
     use crate::infrastructure::repositories::youtube_channel_videos_repository::{
         ChannelVideoListing, FakeChannelVideosRepository,
     };
+    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
 
@@ -219,6 +221,8 @@ mod tests {
             video_repository.clone(),
             playlist_video_repository.clone(),
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
             event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
             task_repository.clone(),
             Arc::new(FakeVideoFileRepository::default()),
@@ -262,6 +266,8 @@ mod tests {
             Arc::new(FakeVideoRepository::default()),
             channel_video_repository.clone(),
             Arc::new(FakeChannelVideosRepository::with_videos(channel_videos)),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
             event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
             task_repository,
             Arc::new(FakeVideoFileRepository::default()),

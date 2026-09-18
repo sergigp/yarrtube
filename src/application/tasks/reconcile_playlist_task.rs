@@ -41,9 +41,11 @@ mod tests {
         FakePlaylistVideoRepository, PlaylistVideoRepository,
     };
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         FakeVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::{
         FakeYoutubePlaylistItemsRepository, YoutubePlaylistItem,
     };
@@ -98,6 +100,8 @@ mod tests {
             Arc::new(FakeYoutubePlaylistItemsRepository {
                 videos: std::sync::Mutex::new(current_videos),
             }),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
             event_publisher.clone(),
             task_repository.clone(),
             video_file_repository.clone(),
@@ -267,6 +271,8 @@ mod tests {
             video_repository.clone(),
             playlist_video_repository.clone(),
             youtube_playlist_items_repository.clone(),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
             Arc::new(FakeEventPublisher::default()),
             Arc::new(FakeTaskRepository::default()),
             Arc::new(FakeVideoFileRepository::default()),

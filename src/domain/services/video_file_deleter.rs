@@ -32,7 +32,7 @@ impl VideoFileDeleter {
     /// container. `output_dir` is the container's already-resolved output
     /// directory. Each recorded path is reduced to its `top_level_entry()`
     /// before deleting, so a new-style video's whole folder (owning its file,
-    /// thumbnail, and `meta.nfo` together) is removed as one unit, while a
+    /// thumbnail, and `movie.nfo` together) is removed as one unit, while a
     /// legacy flat video's file and thumbnail are still deleted individually
     /// exactly as before. No-ops (without erroring) for either entry it has
     /// no recorded filename for, or no matching entry is found, so the task

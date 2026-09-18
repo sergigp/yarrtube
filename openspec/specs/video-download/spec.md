@@ -64,13 +64,6 @@ The system SHALL save a downloaded video's file inside a dedicated per-video fol
 - **WHEN** a video was downloaded before per-video folders were introduced, and its recorded file still exists at its original flat location directly under the playlist's or channel's output directory
 - **THEN** the system continues to treat that file as valid and does not require it to be moved into a per-video folder
 
-### Requirement: Metadata File Placeholder
-The system SHALL create an empty `meta.nfo` file in a video's own folder whenever that video's download succeeds. This change does not define any content for that file — populating it is left to a future change.
-
-#### Scenario: Video downloaded successfully
-- **WHEN** a video download completes successfully
-- **THEN** an empty `meta.nfo` file exists in that video's own folder
-
 ### Requirement: Download Skipped For a Deleted Playlist
 The system SHALL NOT attempt to download a video, or treat it as an error, when the download is attempted after the video's owning playlist or channel no longer exists.
 

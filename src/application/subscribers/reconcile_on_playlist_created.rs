@@ -44,7 +44,9 @@ mod tests {
     };
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
 
     use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
@@ -61,6 +63,8 @@ mod tests {
             Arc::new(FakeVideoRepository::default()),
             Arc::new(FakePlaylistVideoRepository::default()),
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
             Arc::new(FakeEventPublisher::default()),
             task_repository.clone(),
             Arc::new(FakeVideoFileRepository::default()),

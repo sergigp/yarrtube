@@ -45,11 +45,13 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         FakeVideoRepository, VideoRepository,
     };
     use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
     use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
+    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
 
@@ -128,6 +130,8 @@ mod tests {
             Arc::new(FakeVideoRepository::default()),
             channel_video_repository,
             Arc::new(FakeChannelVideosRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
             event_publisher.clone() as Arc<dyn EventPublisher>,
             task_repository.clone(),
             Arc::new(FakeVideoFileRepository::default()),
@@ -140,6 +144,8 @@ mod tests {
             video_repository.clone(),
             playlist_video_repository.clone(),
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
             event_publisher.clone() as Arc<dyn EventPublisher>,
             task_repository.clone(),
             Arc::new(FakeVideoFileRepository::default()),

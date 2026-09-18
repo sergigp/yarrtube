@@ -45,9 +45,24 @@ mod tests {
 
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
 
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
+    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use std::sync::Arc;
+
+    fn fake_metadata_deps() -> (
+        Arc<FakePlaylistVideoRepository>,
+        Arc<FakeYoutubeMetadataRepository>,
+        Arc<FakeVideoMetadataRepository>,
+    ) {
+        (
+            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        )
+    }
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
@@ -84,11 +99,16 @@ mod tests {
             video_repository.save(&video).unwrap();
         }
         let video_file_repository = Arc::new(video_file_repository);
+        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
+            fake_metadata_deps();
 
         let video_downloader = VideoDownloader::new(
             video_repository.clone(),
             Arc::new(downloader),
             video_file_repository.clone(),
+            playlist_video_repository,
+            youtube_metadata_repository,
+            video_metadata_repository,
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -163,11 +183,16 @@ mod tests {
         let video = Video::create(VideoId::new("yt1").unwrap(), messy_title, fixed_timestamp());
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
+            fake_metadata_deps();
 
         let video_downloader = VideoDownloader::new(
             video_repository,
             downloader.clone(),
             Arc::new(FakeVideoFileRepository::default()),
+            playlist_video_repository,
+            youtube_metadata_repository,
+            video_metadata_repository,
             Arc::new(FixedClock(fixed_timestamp())),
         );
         let handler = DownloadVideoTask::new(video_downloader);
@@ -193,11 +218,16 @@ mod tests {
         let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
+            fake_metadata_deps();
 
         let video_downloader = VideoDownloader::new(
             video_repository,
             downloader.clone(),
             Arc::new(FakeVideoFileRepository::default()),
+            playlist_video_repository,
+            youtube_metadata_repository,
+            video_metadata_repository,
             Arc::new(FixedClock(fixed_timestamp())),
         );
         let handler = DownloadVideoTask::new(video_downloader);
@@ -298,6 +328,80 @@ mod tests {
     }
 
     #[test]
+    fn it_should_save_video_metadata_when_the_youtube_metadata_fetch_succeeds() {
+        use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadata;
+
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let video_metadata_repository = Arc::new(FakeVideoMetadataRepository::default());
+        let youtube_metadata_repository = Arc::new(FakeYoutubeMetadataRepository {
+            metadata: Some(YoutubeMetadata {
+                title: "My Video".to_string(),
+                description: "A description".to_string(),
+                channel_title: "My Channel".to_string(),
+                published_at: fixed_timestamp(),
+                tags: Vec::new(),
+                category_id: None,
+            }),
+        });
+
+        let video_downloader = VideoDownloader::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::default()),
+            youtube_metadata_repository,
+            video_metadata_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let handler = DownloadVideoTask::new(video_downloader);
+
+        handler
+            .handle(&payload_for(video.id.as_str()), false)
+            .unwrap();
+
+        let found = video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.status, VideoStatus::Downloaded);
+        assert!(
+            video_metadata_repository
+                .entries
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(id, _)| *id == video.id)
+        );
+    }
+
+    #[test]
+    fn it_should_still_mark_the_video_downloaded_and_save_no_metadata_when_the_youtube_metadata_fetch_fails()
+     {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let video_metadata_repository = Arc::new(FakeVideoMetadataRepository::default());
+
+        let video_downloader = VideoDownloader::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            video_metadata_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let handler = DownloadVideoTask::new(video_downloader);
+
+        handler
+            .handle(&payload_for(video.id.as_str()), false)
+            .unwrap();
+
+        let found = video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.status, VideoStatus::Downloaded);
+        assert!(video_metadata_repository.entries.lock().unwrap().is_empty());
+    }
+
+    #[test]
     #[cfg(unix)]
     fn it_should_detect_a_real_thumbnail_file_written_by_yt_dlp_alongside_the_video() {
         use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
@@ -310,11 +414,16 @@ mod tests {
         let video_repository = Arc::new(FakeVideoRepository::default());
         let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
         video_repository.save(&video).unwrap();
+        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
+            fake_metadata_deps();
 
         let video_downloader = VideoDownloader::new(
             video_repository.clone(),
             Arc::new(YtDlpVideoDownloaderRepository::new(fake.path.clone())),
             Arc::new(FilesystemVideoFileRepository),
+            playlist_video_repository,
+            youtube_metadata_repository,
+            video_metadata_repository,
             Arc::new(FixedClock(fixed_timestamp())),
         );
         let handler = DownloadVideoTask::new(video_downloader);

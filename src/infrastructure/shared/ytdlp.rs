@@ -69,17 +69,20 @@ fn parse_duration_seconds(line: &str) -> Option<i64> {
 /// on collision by appending `video_id`, the same way a filename collision
 /// used to be resolved — see `resolve_folder_collision`), and reused as the
 /// saved file's base name too (extension chosen by `yt-dlp`). Creates that
-/// folder and an empty `meta.nfo` placeholder inside it before invoking
-/// `yt-dlp`. Asks `yt-dlp` to print its duration followed by the exact
-/// filename it saved via `--print %(duration)s --print after_move:filename`,
-/// in quiet mode so those are the only two lines on stdout, filename last;
-/// since `yt-dlp` runs with the video's folder as its working directory,
-/// that printed filename is bare (relative to the video's own folder).
+/// folder before invoking `yt-dlp`. This is a pure process-invocation layer
+/// with no YouTube API or XML knowledge — the video's `movie.nfo` metadata
+/// sidecar is generated separately, after a successful download, by
+/// `VideoDownloader` (see the `video-metadata` capability). Asks `yt-dlp` to
+/// print its duration followed by the exact filename it saved via
+/// `--print %(duration)s --print after_move:filename`, in quiet mode so
+/// those are the only two lines on stdout, filename last; since `yt-dlp`
+/// runs with the video's folder as its working directory, that printed
+/// filename is bare (relative to the video's own folder).
 /// Returns `Ok(Some(DownloadedVideo))` on a successful download, `Ok(None)`
 /// for a clean `yt-dlp` failure (non-zero exit). Returns `Err` only for a
 /// systemic problem: no binary at `ytdlp_path`, a failure creating the
-/// video's folder or its `meta.nfo`, or a successful exit that didn't print
-/// a parseable filename. On any of these non-success outcomes, the video's
+/// video's folder, or a successful exit that didn't print a parseable
+/// filename. On any of these non-success outcomes, the video's
 /// folder (created up front, before it's known whether the download will
 /// succeed) is removed again before returning, so a subsequent retry's
 /// folder-collision check finds no stale entry and reuses the exact same
@@ -96,8 +99,6 @@ pub fn download_video(
     let folder = resolve_folder_collision(output_path, desired_filename, video_id);
     let video_dir = output_path.join(&folder);
     ensure_output_dir(&video_dir)?;
-    std::fs::write(video_dir.join("meta.nfo"), b"")
-        .map_err(|e| anyhow!("Failed to write meta.nfo in {video_dir:?}: {e}"))?;
 
     let output_template = format!("{folder}.%(ext)s");
     let mut args = args_for_quality(quality);
@@ -554,7 +555,6 @@ mod tests {
         assert_eq!(fake.captured_args(), expected);
         assert_eq!(result.folder, "My Video");
         assert!(output_dir.join("My Video").is_dir());
-        assert!(output_dir.join("My Video").join("meta.nfo").is_file());
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
@@ -623,12 +623,6 @@ mod tests {
         assert_eq!(fake.captured_args(), expected);
         assert_eq!(result.folder, "My Video [vid1]");
         assert!(output_dir.join("My Video [vid1]").is_dir());
-        assert!(
-            output_dir
-                .join("My Video [vid1]")
-                .join("meta.nfo")
-                .is_file()
-        );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
@@ -677,31 +671,6 @@ mod tests {
                 duration_seconds: Some(223),
             })
         );
-        std::fs::remove_dir_all(&output_dir).unwrap();
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn it_should_write_an_empty_meta_nfo_file_in_the_video_folder() {
-        use test_support::{FakeYtDlp, unique_temp_dir};
-
-        let output_dir = unique_temp_dir("ytdlp-output-meta-nfo");
-        let fake = FakeYtDlp::with_exit_code(0);
-
-        let result = download_video(
-            &fake.path,
-            "https://example.com/video",
-            "My Video",
-            "vid1",
-            Quality::High,
-            &output_dir,
-        )
-        .unwrap()
-        .unwrap();
-
-        let meta_nfo_path = output_dir.join(&result.folder).join("meta.nfo");
-        assert!(meta_nfo_path.is_file());
-        assert_eq!(std::fs::read(&meta_nfo_path).unwrap(), Vec::<u8>::new());
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 

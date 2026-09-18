@@ -10,5 +10,5 @@ pub mod video_status;
 pub use errors::{AddVideoToCustomPlaylistError, ListVideosError, RemoveVideoFromPlaylistError};
 pub use recent_video::{RecentVideo, VideoSource};
 pub use video::Video;
-pub use video_output_entry::top_level_entry;
+pub use video_output_entry::{top_level_entry, video_dir_for_filename};
 pub use video_status::VideoStatus;
