@@ -14,6 +14,8 @@
     <a href="doc/DEVELOPMENT.md">Developing</a>
     ·
     <a href="doc/ARCHITECTURE.md">Architecture</a>
+    ·
+    <a href="doc/ARCHITECTURE.md">License</a>
     <br />
     <img src="doc/screenshot.jpeg" alt="Yarrtube web UI screenshot" width="600"/>
   </p>
