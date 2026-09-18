@@ -114,7 +114,10 @@ mod tests {
         let found = video_repository.find(&video.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::Downloaded);
         assert_eq!(found.quality, Some(Quality::High));
-        assert_eq!(found.filename, Some("fake-output.mp4".to_string()));
+        assert_eq!(
+            found.filename,
+            Some("fake-output/fake-output.mp4".to_string())
+        );
     }
 
     #[test]
@@ -248,7 +251,7 @@ mod tests {
         let found = video_repository.find(&video.id).unwrap().unwrap();
         assert_eq!(
             found.thumbnail_filename,
-            Some("fake-output.jpg".to_string())
+            Some("fake-output/fake-output.jpg".to_string())
         );
     }
 
@@ -326,8 +329,11 @@ mod tests {
         handler.handle(&payload, false).unwrap();
 
         let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(found.filename, Some("My Video.mp4".to_string()));
-        assert_eq!(found.thumbnail_filename, Some("My Video.jpg".to_string()));
+        assert_eq!(found.filename, Some("My Video/My Video.mp4".to_string()));
+        assert_eq!(
+            found.thumbnail_filename,
+            Some("My Video/My Video.jpg".to_string())
+        );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 }

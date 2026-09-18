@@ -67,15 +67,17 @@ impl VideoDownloader {
         match outcome {
             Ok(Some(downloaded)) => {
                 let expected_thumbnail = expected_thumbnail_filename(&downloaded.filename);
+                let video_dir = output_dir.join(&downloaded.folder);
                 let thumbnail_filename = self
                     .video_file_repository
-                    .list(output_dir)?
+                    .list(&video_dir)?
                     .iter()
                     .any(|f| f == &expected_thumbnail)
-                    .then_some(expected_thumbnail);
+                    .then(|| format!("{}/{}", downloaded.folder, expected_thumbnail));
+                let filename = format!("{}/{}", downloaded.folder, downloaded.filename);
                 self.video_repository.update(&started.mark_downloaded(
                     quality,
-                    downloaded.filename,
+                    filename,
                     thumbnail_filename,
                     downloaded.duration_seconds,
                     self.clock.now(),

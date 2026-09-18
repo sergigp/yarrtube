@@ -3,7 +3,7 @@ use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::DomainEvent;
 use crate::domain::shared::VideoId;
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoStatus};
+use crate::domain::video::{Video, VideoStatus, top_level_entry};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -221,15 +221,17 @@ impl ChannelVideoReconciler {
             .iter()
             .filter(|v| v.status == VideoStatus::Downloaded)
             .collect();
-        let protected_filenames: HashSet<&str> = downloaded
+        let protected_top_level: HashSet<&str> = downloaded
             .iter()
             .flat_map(|v| [v.filename.as_deref(), v.thumbnail_filename.as_deref()])
             .flatten()
+            .map(top_level_entry)
             .collect();
 
         for video in &downloaded {
             let healthy = video.filename.as_deref().is_some_and(|filename| {
-                files.iter().any(|f| f == filename)
+                self.video_file_repository
+                    .file_exists(&output_dir, filename)
                     && Path::new(filename)
                         .extension()
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("mp4"))
@@ -280,7 +282,7 @@ impl ChannelVideoReconciler {
         }
 
         for file in &files {
-            if protected_filenames.contains(file.as_str()) {
+            if protected_top_level.contains(file.as_str()) {
                 continue;
             }
             if self.video_file_repository.delete(&output_dir, file)? {
@@ -289,5 +291,205 @@ impl ChannelVideoReconciler {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::channel::VideoLimit;
+    use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::playlist::PlaylistPath;
+    use crate::domain::shared::{Quality, VideoId};
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
+    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+    use crate::infrastructure::repositories::youtube_channel_videos_repository::{
+        ChannelVideoListing, FakeChannelVideosRepository,
+    };
+    use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use chrono::{DateTime, Utc};
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    struct Harness {
+        reconciler: ChannelVideoReconciler,
+        video_repository: Arc<FakeVideoRepository>,
+        task_repository: Arc<FakeTaskRepository>,
+        video_file_repository: Arc<FakeVideoFileRepository>,
+    }
+
+    fn harness(
+        channel: &Channel,
+        video: &Video,
+        video_file_repository: FakeVideoFileRepository,
+    ) -> Harness {
+        let channel_repository = Arc::new(FakeChannelRepository::default());
+        channel_repository.insert(channel).unwrap();
+
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        video_repository.save(video).unwrap();
+
+        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                channel.id.clone(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        channel_video_repository.register_youtube_id(&video.id, &video.youtube_id);
+
+        let task_repository = Arc::new(FakeTaskRepository::default());
+        let video_file_repository = Arc::new(video_file_repository);
+        let channel_videos_repository = Arc::new(FakeChannelVideosRepository::with_videos(vec![
+            ChannelVideoListing {
+                youtube_id: video.youtube_id.as_str().to_string(),
+                title: video.title.clone(),
+                position: 0,
+            },
+        ]));
+
+        let reconciler = ChannelVideoReconciler::new(
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository,
+            channel_videos_repository,
+            Arc::new(FakeEventPublisher::default()),
+            task_repository.clone(),
+            video_file_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        );
+
+        Harness {
+            reconciler,
+            video_repository,
+            task_repository,
+            video_file_repository,
+        }
+    }
+
+    fn channel() -> Channel {
+        Channel::create(
+            ChannelHandle::new("@mychannel").unwrap(),
+            "My Channel",
+            "UC1",
+            Quality::High,
+            VideoLimit::new(10).unwrap(),
+            PlaylistPath::new("my-channel").unwrap(),
+            None,
+            fixed_timestamp(),
+        )
+    }
+
+    fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
+        Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp()).mark_downloaded(
+            Quality::High,
+            filename,
+            thumbnail_filename.map(str::to_string),
+            None,
+            fixed_timestamp(),
+        )
+    }
+
+    #[test]
+    fn it_should_judge_a_new_style_video_healthy_via_file_exists_without_a_top_level_listing() {
+        let channel = channel();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        let harness = harness(
+            &channel,
+            &video,
+            FakeVideoFileRepository::with_file_exists(true),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(channel.id.clone())
+            .unwrap();
+
+        let found = harness.video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.status, VideoStatus::Downloaded);
+        assert!(harness.task_repository.scheduled.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_judge_a_legacy_flat_video_healthy_via_file_exists() {
+        let channel = channel();
+        let video = downloaded_video("My Video.mp4", None);
+        let harness = harness(
+            &channel,
+            &video,
+            FakeVideoFileRepository::with_file_exists(true),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(channel.id.clone())
+            .unwrap();
+
+        let found = harness.video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.status, VideoStatus::Downloaded);
+        assert!(harness.task_repository.scheduled.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_not_sweep_a_healthy_new_style_videos_folder_as_orphaned() {
+        let channel = channel();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        let video_file_repository = FakeVideoFileRepository {
+            file_exists_result: std::sync::Mutex::new(Some(true)),
+            list_result: std::sync::Mutex::new(Some(Ok(vec!["My Video".to_string()]))),
+            ..Default::default()
+        };
+        let harness = harness(&channel, &video, video_file_repository);
+
+        harness
+            .reconciler
+            .force_reconcile(channel.id.clone())
+            .unwrap();
+
+        assert!(
+            harness
+                .video_file_repository
+                .deleted_calls
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn it_should_sweep_a_genuinely_orphaned_folder_during_reconciliation() {
+        let channel = channel();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        let video_file_repository = FakeVideoFileRepository {
+            file_exists_result: std::sync::Mutex::new(Some(true)),
+            list_result: std::sync::Mutex::new(Some(Ok(vec![
+                "My Video".to_string(),
+                "Orphan Video".to_string(),
+            ]))),
+            ..Default::default()
+        };
+        let harness = harness(&channel, &video, video_file_repository);
+
+        harness
+            .reconciler
+            .force_reconcile(channel.id.clone())
+            .unwrap();
+
+        let deleted_calls = harness.video_file_repository.deleted_calls.lock().unwrap();
+        let deleted_names: Vec<&str> = deleted_calls
+            .iter()
+            .map(|(_, name)| name.as_str())
+            .collect();
+        assert_eq!(deleted_names, vec!["Orphan Video"]);
     }
 }
