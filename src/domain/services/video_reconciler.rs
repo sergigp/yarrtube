@@ -1,18 +1,21 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::{Playlist, PlaylistKind};
 use crate::domain::playlist_video::PlaylistVideo;
-use crate::domain::shared::{PlaylistId, VideoId};
+use crate::domain::shared::{PlaylistId, VideoId, VideoRecordId};
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoStatus};
+use crate::domain::video::{Video, VideoStatus, top_level_entry, video_dir_for_filename};
+use crate::domain::video_metadata::{build_video_metadata, resolve_sorttitle};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
+use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadataRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubePlaylistItemsRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
@@ -25,6 +28,8 @@ pub struct VideoReconciler {
     video_repository: Arc<dyn VideoRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     youtube_playlist_items_repository: Arc<dyn YoutubePlaylistItemsRepository>,
+    youtube_metadata_repository: Arc<dyn YoutubeMetadataRepository>,
+    video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     task_repository: Arc<dyn TaskRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
@@ -40,6 +45,8 @@ impl VideoReconciler {
         video_repository: Arc<dyn VideoRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         youtube_playlist_items_repository: Arc<dyn YoutubePlaylistItemsRepository>,
+        youtube_metadata_repository: Arc<dyn YoutubeMetadataRepository>,
+        video_metadata_repository: Arc<dyn VideoMetadataRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         task_repository: Arc<dyn TaskRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
@@ -52,12 +59,57 @@ impl VideoReconciler {
             video_repository,
             playlist_video_repository,
             youtube_playlist_items_repository,
+            youtube_metadata_repository,
+            video_metadata_repository,
             event_publisher,
             task_repository,
             video_file_repository,
             clock,
             reconcile_interval_seconds,
             videos_path: videos_path.into(),
+        }
+    }
+
+    /// Regenerates `video`'s metadata (fetch `YoutubeMetadata`, resolve
+    /// `sorttitle`, build `VideoMetadata`, save) the same way
+    /// `VideoDownloader::download` does at download time. Any failure is
+    /// logged and swallowed — a `Downloaded` video's status and file are
+    /// never touched by this, and a repeated failure simply tries again on
+    /// the next reconcile pass. `playlist_position` is `None` for a
+    /// custom-playlist video, resolving `sorttitle` via publish date.
+    fn generate_metadata(&self, video: &Video, output_dir: &Path, playlist_position: Option<i64>) {
+        let Some(filename) = video.filename.as_deref() else {
+            return;
+        };
+        let metadata = match self.youtube_metadata_repository.find(&video.youtube_id) {
+            Ok(Some(metadata)) => metadata,
+            Ok(None) => {
+                warn!(video_id = %video.id, "no YouTube metadata found for video, skipping metadata repair");
+                return;
+            }
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to fetch YouTube metadata during reconcile, skipping metadata repair");
+                return;
+            }
+        };
+
+        let thumbnail_filename = video
+            .thumbnail_filename
+            .as_deref()
+            .and_then(|f| Path::new(f).file_name())
+            .and_then(|f| f.to_str())
+            .map(str::to_string);
+        let sorttitle =
+            resolve_sorttitle(&metadata.title, metadata.published_at, playlist_position);
+        let video_metadata =
+            build_video_metadata(&video.youtube_id, &metadata, sorttitle, thumbnail_filename);
+        let video_dir = video_dir_for_filename(output_dir, filename);
+
+        if let Err(e) = self
+            .video_metadata_repository
+            .save(&video.id, &video_metadata, &video_dir)
+        {
+            warn!(video_id = %video.id, error = %e, "failed to save video metadata during reconcile");
         }
     }
 
@@ -234,40 +286,52 @@ impl VideoReconciler {
             .iter()
             .filter(|v| v.status == VideoStatus::Downloaded)
             .collect();
-        let protected_filenames: HashSet<&str> = downloaded
+        let protected_top_level: HashSet<&str> = downloaded
             .iter()
             .flat_map(|v| [v.filename.as_deref(), v.thumbnail_filename.as_deref()])
             .flatten()
+            .map(top_level_entry)
             .collect();
+        let playlist_position_by_video: HashMap<&VideoRecordId, Option<i64>> =
+            stored_playlist_videos
+                .iter()
+                .map(|pv| (&pv.video_id, pv.position))
+                .collect();
 
         for video in &downloaded {
             let healthy = video.filename.as_deref().is_some_and(|filename| {
-                files.iter().any(|f| f == filename)
+                self.video_file_repository
+                    .file_exists(&output_dir, filename)
                     && Path::new(filename)
                         .extension()
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("mp4"))
             });
-            if healthy {
+            if !healthy {
+                let now = self.clock.now();
+                warn!(
+                    playlist_id = %playlist.id,
+                    video_id = %video.youtube_id,
+                    filename = video.filename.as_deref().unwrap_or(""),
+                    "downloaded video's file is missing or not mp4, resetting for redownload"
+                );
+                let reset = (*video).clone().reset_for_redownload(now);
+                self.video_repository.update(&reset)?;
+                self.task_repository.schedule(
+                    &Task::DownloadVideo {
+                        video_id: video.id.as_str().to_string(),
+                        quality: playlist.quality.as_str().to_string(),
+                        output_dir: output_dir.to_string_lossy().to_string(),
+                    },
+                    now,
+                )?;
                 continue;
             }
 
-            let now = self.clock.now();
-            warn!(
-                playlist_id = %playlist.id,
-                video_id = %video.youtube_id,
-                filename = video.filename.as_deref().unwrap_or(""),
-                "downloaded video's file is missing or not mp4, resetting for redownload"
-            );
-            let reset = (*video).clone().reset_for_redownload(now);
-            self.video_repository.update(&reset)?;
-            self.task_repository.schedule(
-                &Task::DownloadVideo {
-                    video_id: video.id.as_str().to_string(),
-                    quality: playlist.quality.as_str().to_string(),
-                    output_dir: output_dir.to_string_lossy().to_string(),
-                },
-                now,
-            )?;
+            if self.video_metadata_repository.find(&video.id)?.is_some() {
+                continue;
+            }
+            let playlist_position = playlist_position_by_video.get(&video.id).copied().flatten();
+            self.generate_metadata(video, &output_dir, playlist_position);
         }
 
         for video in stored_videos
@@ -293,7 +357,7 @@ impl VideoReconciler {
         }
 
         for file in &files {
-            if protected_filenames.contains(file.as_str()) {
+            if protected_top_level.contains(file.as_str()) {
                 continue;
             }
             if self.video_file_repository.delete(&output_dir, file)? {
@@ -302,5 +366,316 @@ impl VideoReconciler {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::playlist::{PlaylistKind, PlaylistName, PlaylistPath};
+    use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::shared::{Quality, VideoId};
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
+    use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
+    use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use chrono::{DateTime, Utc};
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    struct Harness {
+        reconciler: VideoReconciler,
+        video_repository: Arc<FakeVideoRepository>,
+        task_repository: Arc<FakeTaskRepository>,
+        video_file_repository: Arc<FakeVideoFileRepository>,
+        video_metadata_repository: Arc<FakeVideoMetadataRepository>,
+    }
+
+    fn harness(
+        playlist: &Playlist,
+        video: &Video,
+        video_file_repository: FakeVideoFileRepository,
+    ) -> Harness {
+        harness_with_metadata(
+            playlist,
+            video,
+            None,
+            video_file_repository,
+            FakeYoutubeMetadataRepository::default(),
+            FakeVideoMetadataRepository::default(),
+        )
+    }
+
+    /// Like `harness`, but also lets a test seed the video's playlist
+    /// position and inject specific `YoutubeMetadataRepository`/
+    /// `VideoMetadataRepository` fakes, for exercising the metadata-repair
+    /// loop.
+    fn harness_with_metadata(
+        playlist: &Playlist,
+        video: &Video,
+        playlist_position: Option<i64>,
+        video_file_repository: FakeVideoFileRepository,
+        youtube_metadata_repository: FakeYoutubeMetadataRepository,
+        video_metadata_repository: FakeVideoMetadataRepository,
+    ) -> Harness {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository.insert(playlist).unwrap();
+
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        video_repository.save(video).unwrap();
+
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let playlist_video = match playlist_position {
+            Some(position) => PlaylistVideo::create_with_position(
+                playlist.id.clone(),
+                video.id.clone(),
+                position,
+                fixed_timestamp(),
+            ),
+            None => PlaylistVideo::create(playlist.id.clone(), video.id.clone(), fixed_timestamp()),
+        };
+        playlist_video_repository.save(&playlist_video).unwrap();
+
+        let task_repository = Arc::new(FakeTaskRepository::default());
+        let video_file_repository = Arc::new(video_file_repository);
+        let video_metadata_repository = Arc::new(video_metadata_repository);
+
+        let reconciler = VideoReconciler::new(
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository,
+            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(youtube_metadata_repository),
+            video_metadata_repository.clone(),
+            Arc::new(FakeEventPublisher::default()),
+            task_repository.clone(),
+            video_file_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        );
+
+        Harness {
+            reconciler,
+            video_repository,
+            task_repository,
+            video_file_repository,
+            video_metadata_repository,
+        }
+    }
+
+    fn custom_playlist() -> Playlist {
+        Playlist::create(
+            PlaylistId::new("PL1").unwrap(),
+            PlaylistName::new("My Playlist").unwrap(),
+            PlaylistPath::new("my-playlist").unwrap(),
+            Quality::High,
+            PlaylistKind::Custom,
+            fixed_timestamp(),
+        )
+    }
+
+    fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
+        Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp()).mark_downloaded(
+            Quality::High,
+            filename,
+            thumbnail_filename.map(str::to_string),
+            None,
+            fixed_timestamp(),
+        )
+    }
+
+    #[test]
+    fn it_should_judge_a_new_style_video_healthy_via_file_exists_without_a_top_level_listing() {
+        let playlist = custom_playlist();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        let harness = harness(
+            &playlist,
+            &video,
+            FakeVideoFileRepository::with_file_exists(true),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(playlist.id.clone())
+            .unwrap();
+
+        let found = harness.video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.status, VideoStatus::Downloaded);
+        assert!(harness.task_repository.scheduled.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_judge_a_legacy_flat_video_healthy_via_file_exists() {
+        let playlist = custom_playlist();
+        let video = downloaded_video("My Video.mp4", None);
+        let harness = harness(
+            &playlist,
+            &video,
+            FakeVideoFileRepository::with_file_exists(true),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(playlist.id.clone())
+            .unwrap();
+
+        let found = harness.video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.status, VideoStatus::Downloaded);
+        assert!(harness.task_repository.scheduled.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_not_sweep_a_healthy_new_style_videos_folder_as_orphaned() {
+        let playlist = custom_playlist();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        let video_file_repository = FakeVideoFileRepository {
+            file_exists_result: std::sync::Mutex::new(Some(true)),
+            list_result: std::sync::Mutex::new(Some(Ok(vec!["My Video".to_string()]))),
+            ..Default::default()
+        };
+        let harness = harness(&playlist, &video, video_file_repository);
+
+        harness
+            .reconciler
+            .force_reconcile(playlist.id.clone())
+            .unwrap();
+
+        assert!(
+            harness
+                .video_file_repository
+                .deleted_calls
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn it_should_sweep_a_genuinely_orphaned_folder_during_reconciliation() {
+        let playlist = custom_playlist();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        let video_file_repository = FakeVideoFileRepository {
+            file_exists_result: std::sync::Mutex::new(Some(true)),
+            list_result: std::sync::Mutex::new(Some(Ok(vec![
+                "My Video".to_string(),
+                "Orphan Video".to_string(),
+            ]))),
+            ..Default::default()
+        };
+        let harness = harness(&playlist, &video, video_file_repository);
+
+        harness
+            .reconciler
+            .force_reconcile(playlist.id.clone())
+            .unwrap();
+
+        let deleted_calls = harness.video_file_repository.deleted_calls.lock().unwrap();
+        let deleted_names: Vec<&str> = deleted_calls
+            .iter()
+            .map(|(_, name)| name.as_str())
+            .collect();
+        assert_eq!(deleted_names, vec!["Orphan Video"]);
+    }
+
+    fn fake_youtube_metadata(title: &str) -> FakeYoutubeMetadataRepository {
+        FakeYoutubeMetadataRepository {
+            metadata: Some(
+                crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadata {
+                    title: title.to_string(),
+                    description: "A description".to_string(),
+                    channel_title: "My Channel".to_string(),
+                    published_at: fixed_timestamp(),
+                    tags: Vec::new(),
+                    category_id: None,
+                },
+            ),
+        }
+    }
+
+    #[test]
+    fn it_should_regenerate_metadata_for_a_healthy_downloaded_video_with_no_recorded_metadata() {
+        let playlist = custom_playlist();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        let harness = harness_with_metadata(
+            &playlist,
+            &video,
+            Some(3),
+            FakeVideoFileRepository::with_file_exists(true),
+            fake_youtube_metadata("My Video"),
+            FakeVideoMetadataRepository::default(),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(playlist.id.clone())
+            .unwrap();
+
+        let found = harness.video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.status, VideoStatus::Downloaded);
+        assert!(harness.task_repository.scheduled.lock().unwrap().is_empty());
+        let saved = harness
+            .video_metadata_repository
+            .find(&video.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.sorttitle, "0003 My Video");
+    }
+
+    #[test]
+    fn it_should_leave_already_recorded_metadata_untouched_during_reconcile() {
+        let playlist = custom_playlist();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        let video_metadata_repository = FakeVideoMetadataRepository::default();
+        let existing = crate::domain::video_metadata::VideoMetadata::new(
+            "Stale Title",
+            "Stale plot",
+            "Stale Channel",
+            "Stale Channel",
+            "2020-01-01",
+            2020,
+            None,
+            Vec::new(),
+            "yt1",
+            None,
+            "0000 Stale Title",
+        );
+        video_metadata_repository
+            .save(
+                &video.id,
+                &existing,
+                Path::new("/videos/my-playlist/My Video"),
+            )
+            .unwrap();
+        let harness = harness_with_metadata(
+            &playlist,
+            &video,
+            Some(3),
+            FakeVideoFileRepository::with_file_exists(true),
+            // A fake that would produce different metadata if it were
+            // (wrongly) called again — proving the row above is untouched.
+            fake_youtube_metadata("Fresh Title"),
+            video_metadata_repository,
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(playlist.id.clone())
+            .unwrap();
+
+        let saved = harness
+            .video_metadata_repository
+            .find(&video.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.title, "Stale Title");
     }
 }

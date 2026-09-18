@@ -7,3 +7,4 @@ pub mod services;
 pub mod shared;
 pub mod task;
 pub mod video;
+pub mod video_metadata;

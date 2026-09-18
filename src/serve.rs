@@ -22,10 +22,12 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Sqlit
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
 };
+use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
 use crate::infrastructure::repositories::task_executor::TaskExecutor;
 use crate::infrastructure::repositories::youtube_channel_repository::YoutubeApiChannelRepository;
 use crate::infrastructure::repositories::youtube_channel_videos_repository::YtDlpChannelVideosRepository;
+use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeApiMetadataRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubeApiPlaylistItemsRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
@@ -254,12 +256,20 @@ fn build_application() -> Result<Application> {
     let event_publisher = event_publisher as Arc<dyn EventPublisher>;
     let task_repository = task_repository as Arc<dyn TaskRepository>;
     let video_file_repository = Arc::new(FilesystemVideoFileRepository);
+    let youtube_metadata_repository =
+        Arc::new(YoutubeApiMetadataRepository::new(youtube_api_key()));
+    let video_metadata_repository = Arc::new(
+        SqliteVideoMetadataRepository::new(open_connection()?)
+            .context("failed to initialize video metadata repository")?,
+    );
 
     let video_reconciler = VideoReconciler::new(
         playlist_repository.clone(),
         video_repository.clone(),
         playlist_video_repository.clone(),
         Arc::new(YoutubeApiPlaylistItemsRepository::new(youtube_api_key())),
+        youtube_metadata_repository.clone(),
+        video_metadata_repository.clone(),
         event_publisher.clone(),
         task_repository.clone(),
         video_file_repository.clone(),
@@ -272,6 +282,8 @@ fn build_application() -> Result<Application> {
         video_repository.clone(),
         channel_video_repository.clone(),
         Arc::new(YtDlpChannelVideosRepository::new(target_path())),
+        youtube_metadata_repository.clone(),
+        video_metadata_repository.clone(),
         event_publisher.clone(),
         task_repository.clone(),
         video_file_repository.clone(),
@@ -283,6 +295,9 @@ fn build_application() -> Result<Application> {
         video_repository.clone(),
         Arc::new(YtDlpVideoDownloaderRepository::new(target_path())),
         video_file_repository.clone(),
+        playlist_video_repository.clone(),
+        youtube_metadata_repository.clone(),
+        video_metadata_repository.clone(),
         Arc::new(SystemClock),
     );
     let video_file_deleter = VideoFileDeleter::new(video_file_repository, videos_path());

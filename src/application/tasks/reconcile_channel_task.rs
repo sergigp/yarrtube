@@ -41,10 +41,12 @@ mod tests {
     };
     use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
     use crate::infrastructure::repositories::youtube_channel_videos_repository::{
         ChannelVideoListing, FakeChannelVideosRepository,
     };
+    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
@@ -114,6 +116,8 @@ mod tests {
             video_repository.clone(),
             channel_video_repository.clone(),
             Arc::new(FakeChannelVideosRepository::with_videos(current_videos)),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
             event_publisher.clone(),
             task_repository.clone(),
             video_file_repository.clone(),
@@ -301,6 +305,8 @@ mod tests {
             video_repository.clone(),
             channel_video_repository.clone(),
             Arc::new(FakeChannelVideosRepository::failing()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
             event_publisher.clone(),
             Arc::new(FakeTaskRepository::default()),
             Arc::new(FakeVideoFileRepository::default()),

@@ -67,6 +67,7 @@ impl FakeVideoDownloaderRepository {
     pub fn new(succeeds: bool) -> Self {
         Self {
             result: std::sync::Mutex::new(succeeds.then(|| DownloadedVideo {
+                folder: "fake-output".to_string(),
                 filename: "fake-output.mp4".to_string(),
                 duration_seconds: None,
             })),
@@ -78,6 +79,7 @@ impl FakeVideoDownloaderRepository {
     pub fn with_duration(duration_seconds: i64) -> Self {
         Self {
             result: std::sync::Mutex::new(Some(DownloadedVideo {
+                folder: "fake-output".to_string(),
                 filename: "fake-output.mp4".to_string(),
                 duration_seconds: Some(duration_seconds),
             })),
@@ -131,6 +133,7 @@ mod tests {
         assert_eq!(
             result,
             Some(DownloadedVideo {
+                folder: "My Video".to_string(),
                 filename: test_support::DEFAULT_PRINTED_FILENAME.to_string(),
                 duration_seconds: None,
             })

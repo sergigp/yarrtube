@@ -150,3 +150,17 @@ may be recovered this way.
 #### Scenario: Permanently errored video found during reconcile
 - **WHEN** a reconcile pass finds a video whose status is permanently errored
 - **THEN** the system resets that video to PENDING, clears its recorded filename and quality, and triggers a fresh download of it
+
+### Requirement: Missing Metadata Recovery (Channels)
+The system SHALL, for every channel, regenerate a downloaded video's
+metadata during a reconcile pass whenever that video is recorded as
+successfully downloaded but has no metadata recorded as populated for it,
+without re-downloading the video's file.
+
+#### Scenario: Downloaded video has no recorded metadata
+- **WHEN** a reconcile pass finds a video belonging to the channel that is recorded as downloaded but has no metadata recorded as populated
+- **THEN** the system attempts to generate that video's metadata again, without re-downloading its file
+
+#### Scenario: Downloaded video already has recorded metadata
+- **WHEN** a reconcile pass finds a video belonging to the channel that is recorded as downloaded and already has metadata recorded as populated
+- **THEN** the system does not attempt to regenerate its metadata

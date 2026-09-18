@@ -7,6 +7,8 @@
 .env
 
 *.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
 
 # Persistent local video storage used by scripts/run-local.sh
 /videos

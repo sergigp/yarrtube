@@ -24,7 +24,8 @@ export function fetchTasks() {
 
 export function videoMediaUrl(playlistPath, filename) {
   const encodedPath = playlistPath.split('/').map(encodeURIComponent).join('/')
-  return `/media/${encodedPath}/${encodeURIComponent(filename)}`
+  const encodedFilename = filename.split('/').map(encodeURIComponent).join('/')
+  return `/media/${encodedPath}/${encodedFilename}`
 }
 
 export function avatarMediaUrl(filename) {
