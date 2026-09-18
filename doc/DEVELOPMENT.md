@@ -1,12 +1,12 @@
 # Development guide
 
-*In progress...*
+_In progress..._
 
 ## Local setup
 
 1. Copy `.env.example` to `.env` and fill in `YOUTUBE_API_KEY`.
 2. Install [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) and set up `YTDLP_PATH` in `.env` file.
-3. Run the script located in `./scripts/run_local.sh
+3. Run the script located in `./scripts/run-local.sh`
 
 ## Testing & linting
 
