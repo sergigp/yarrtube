@@ -18,10 +18,16 @@ RUN cargo build --release --locked
 # not the only source. Kept in its own stage so `curl` never lands in the
 # final runtime image.
 FROM debian:bookworm-slim AS ytdlp-fetch
+ARG TARGETARCH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -fL -o /tmp/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
+RUN case "${TARGETARCH}" in \
+      amd64) YTDLP_SUFFIX="" ;; \
+      arm64) YTDLP_SUFFIX="_aarch64" ;; \
+      *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fL -o /tmp/yt-dlp "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux${YTDLP_SUFFIX}" \
     && chmod +x /tmp/yt-dlp
 
 FROM debian:bookworm-slim AS runtime
