@@ -48,7 +48,8 @@ services:
       - /path/on/host/videos:/videos
 ```
 
-> **Note:** set `PUID`/`PGID` to the numeric user/group ID that should own
+> [!NOTE]
+> Set `PUID`/`PGID` to the numeric user/group ID that should own
 > downloaded files on the host (run `id <user>` on the host to find them) —
 > the same convention used by `linuxserver.io`/`hotio` images.
 
