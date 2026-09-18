@@ -499,14 +499,22 @@ mod tests {
             .fallback(serve_spa)
     }
 
+    /// Tests run in parallel threads within one process, so the PID is the
+    /// same for all of them, and `SystemTime::now()`'s resolution isn't
+    /// guaranteed to be finer than the gap between two threads calling this
+    /// concurrently. A process-wide counter guarantees every call gets a
+    /// distinct suffix regardless of clock resolution.
+    static UNIQUE_DIR_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
     fn unique_temp_dir(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
-            "yarrtube-serve-test-{label}-{}-{}",
+            "yarrtube-serve-test-{label}-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            UNIQUE_DIR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ))
     }
 
