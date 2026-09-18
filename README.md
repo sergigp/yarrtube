@@ -4,7 +4,7 @@
   <img src="doc/logo.png" alt="Logo" width="256">
 </h1>
   <p align="center">
-    Minimalistic YouTube synchronizer built on top of [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+    Minimalistic YouTube synchronizer built on top of <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a>
     <br />
     <a href="#about">About</a>
     ·
@@ -13,8 +13,9 @@
     <a href="doc/DEVELOPMENT.md">Developing</a>
     ·
     <a href="doc/ARCHITECTURE.md">Architecture</a>
+    <br />
+    <img src="doc/screenshot.jpeg" alt="screehnshot" width="600"/>
   </p>
-  <img src="doc/screenshot.jpeg" alt="screehnshot" width="600"/>
 </p>
 
 # About
