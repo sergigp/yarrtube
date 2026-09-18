@@ -2,7 +2,6 @@
 <h1>
 <p align="center">
   <img src="doc/logo.png" alt="Logo" width="256">
-  <br>Yarrtube
 </h1>
   <p align="center">
     Minimalistic YouTube synchronizer built on top of [yt-dlp](https://github.com/yt-dlp/yt-dlp)
@@ -15,11 +14,10 @@
     ·
     <a href="doc/ARCHITECTURE.md">Architecture</a>
   </p>
+  <img src="doc/screenshot.jpeg" alt="screehnshot" width="600"/>
 </p>
 
 # About
-
-<img src="doc/screenshot.jpeg" alt="screehnshot" width="600"/>
 
 Yarrtube watches tracked Youtube playlists and channels and automatically downloads the new videos published.
 
