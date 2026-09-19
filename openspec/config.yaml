@@ -13,7 +13,7 @@ operations:
 rules:
   design:
     - |
-      On fot of design.md add these four sections what will be used as an overview of the design:
+      On top of design.md add these four sections what will be used as an overview of the design:
       ## Files
       Every file created or changed, one line each on why it lives there.
       ## Types & Signatures

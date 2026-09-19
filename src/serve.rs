@@ -3,8 +3,8 @@ use crate::application::{subscribers, tasks};
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
     ChannelVideoReconciler, CustomPlaylistVideoAdder, CustomPlaylistVideoRemover, PlaylistCreator,
-    PlaylistDeleter, PlaylistSearcher, TaskViewSearcher, VideoDownloader, VideoFileDeleter,
-    VideoReconciler, VideoSearcher,
+    PlaylistDeleter, PlaylistSearcher, TaskViewSearcher, ThumbnailFetcher, VideoDownloader,
+    VideoFileDeleter, VideoReconciler, VideoSearcher,
 };
 use crate::domain::task::Task;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -263,6 +263,11 @@ fn build_application() -> Result<Application> {
             .context("failed to initialize video metadata repository")?,
     );
 
+    let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
+        video_repository.clone(),
+        Arc::new(YtDlpVideoDownloaderRepository::new(target_path())),
+        Arc::new(SystemClock),
+    ));
     let video_reconciler = VideoReconciler::new(
         playlist_repository.clone(),
         video_repository.clone(),
@@ -273,6 +278,7 @@ fn build_application() -> Result<Application> {
         event_publisher.clone(),
         task_repository.clone(),
         video_file_repository.clone(),
+        thumbnail_fetcher.clone(),
         Arc::new(SystemClock),
         reconcile_interval_seconds(),
         videos_path(),
@@ -287,6 +293,7 @@ fn build_application() -> Result<Application> {
         event_publisher.clone(),
         task_repository.clone(),
         video_file_repository.clone(),
+        thumbnail_fetcher.clone(),
         Arc::new(SystemClock),
         reconcile_interval_seconds(),
         videos_path(),
@@ -307,7 +314,9 @@ fn build_application() -> Result<Application> {
         playlist_video_repository.clone(),
         Arc::new(YoutubeApiVideoRepository::new(youtube_api_key())),
         event_publisher.clone(),
+        thumbnail_fetcher,
         Arc::new(SystemClock),
+        videos_path(),
     );
     let custom_playlist_video_remover = CustomPlaylistVideoRemover::new(
         playlist_repository.clone(),

@@ -180,6 +180,7 @@ mod tests {
     use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
 
     use crate::infrastructure::repositories::youtube_video_repository::{
         FakeYoutubeVideoRepository, YoutubeVideo,
@@ -207,7 +208,34 @@ mod tests {
         Arc<FakeEventPublisher>,
         Arc<FakePlaylistVideoRepository>,
     ) {
+        let (router, events, playlist_videos, _thumbnail_downloader) =
+            test_router_with_thumbnail_downloader(
+                playlist_repository,
+                video_repository,
+                youtube_video,
+                FakeVideoDownloaderRepository::default(),
+            );
+        (router, events, playlist_videos)
+    }
+
+    fn test_router_with_thumbnail_downloader(
+        playlist_repository: Arc<FakePlaylistRepository>,
+        video_repository: Arc<FakeVideoRepository>,
+        youtube_video: Option<YoutubeVideo>,
+        thumbnail_downloader: FakeVideoDownloaderRepository,
+    ) -> (
+        axum::Router,
+        Arc<FakeEventPublisher>,
+        Arc<FakePlaylistVideoRepository>,
+        Arc<FakeVideoDownloaderRepository>,
+    ) {
         let event_publisher = Arc::new(FakeEventPublisher::default());
+        let thumbnail_downloader = Arc::new(thumbnail_downloader);
+        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
+            video_repository.clone(),
+            thumbnail_downloader.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
         let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
         let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
             Arc::new(FakeTaskRepository::default()),
@@ -241,6 +269,7 @@ mod tests {
             event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
             Arc::new(FakeTaskRepository::default()),
             Arc::new(FakeVideoFileRepository::default()),
+            thumbnail_fetcher.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
@@ -253,7 +282,9 @@ mod tests {
                 video: youtube_video,
             }),
             event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
+            thumbnail_fetcher.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
         );
         let custom_playlist_video_remover =
             crate::domain::services::CustomPlaylistVideoRemover::new(
@@ -279,6 +310,7 @@ mod tests {
             event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
             Arc::new(FakeTaskRepository::default()),
             Arc::new(FakeVideoFileRepository::default()),
+            thumbnail_fetcher,
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
@@ -312,7 +344,12 @@ mod tests {
             )
             .with_state(state);
         let router = Router::new().nest("/api", inner);
-        (router, event_publisher, playlist_video_repository)
+        (
+            router,
+            event_publisher,
+            playlist_video_repository,
+            thumbnail_downloader,
+        )
     }
 
     async fn body_json(response: Response) -> serde_json::Value {
@@ -544,6 +581,41 @@ mod tests {
         let stored = video_repository.videos.lock().unwrap();
         assert_eq!(stored.len(), 1);
         assert_eq!(stored[0].title, "My Video");
+        assert_eq!(
+            *events.published.lock().unwrap(),
+            vec![DomainEvent::VideoAddedToPlaylist {
+                playlist_id: "PL1".to_string(),
+                video_id: stored[0].id.as_str().to_string(),
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_still_succeed_and_publish_when_the_thumbnail_fetch_fails() {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        playlist_repository.insert(&custom_playlist("PL1")).unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let (router, events, _playlist_videos, thumbnail_downloader) =
+            test_router_with_thumbnail_downloader(
+                playlist_repository,
+                video_repository.clone(),
+                Some(YoutubeVideo {
+                    video_id: "vid1".to_string(),
+                    title: "My Video".to_string(),
+                }),
+                FakeVideoDownloaderRepository::default().with_thumbnail_error(),
+            );
+
+        let response = router
+            .oneshot(add_video_request("PL1", "vid1"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(thumbnail_downloader.thumbnail_calls_count(), 1);
+        let stored = video_repository.videos.lock().unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].thumbnail_filename, None);
         assert_eq!(
             *events.published.lock().unwrap(),
             vec![DomainEvent::VideoAddedToPlaylist {

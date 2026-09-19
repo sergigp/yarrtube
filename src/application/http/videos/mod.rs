@@ -192,6 +192,11 @@ mod tests {
             event_publisher.clone() as Arc<dyn EventPublisher>,
             Arc::new(FixedClock(fixed_timestamp())),
         );
+        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
+            video_repository.clone(),
+            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
         let channel_video_reconciler = crate::domain::services::ChannelVideoReconciler::new(
             channel_repository.clone(),
             video_repository.clone(),
@@ -202,6 +207,7 @@ mod tests {
             event_publisher.clone() as Arc<dyn EventPublisher>,
             Arc::new(FakeTaskRepository::default()),
             Arc::new(FakeVideoFileRepository::default()),
+            thumbnail_fetcher.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
@@ -216,6 +222,7 @@ mod tests {
             event_publisher.clone() as Arc<dyn EventPublisher>,
             Arc::new(FakeTaskRepository::default()),
             Arc::new(FakeVideoFileRepository::default()),
+            thumbnail_fetcher.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
@@ -226,7 +233,9 @@ mod tests {
             playlist_video_repository.clone(),
             Arc::new(FakeYoutubeVideoRepository::default()),
             event_publisher.clone() as Arc<dyn EventPublisher>,
+            thumbnail_fetcher,
             Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
         );
         let custom_playlist_video_remover =
             crate::domain::services::CustomPlaylistVideoRemover::new(

@@ -1,6 +1,7 @@
 use crate::domain::shared::{Quality, VideoRecordId};
 use crate::domain::video::Video;
 use crate::domain::video::thumbnail_filename::expected_thumbnail_filename;
+use crate::domain::video::top_level_entry;
 use crate::domain::video::video_filename::VideoFilename;
 use crate::domain::video_metadata::{build_video_metadata, resolve_sorttitle};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -114,6 +115,7 @@ impl VideoDownloader {
         let filename = VideoFilename::from_title(&video.title);
         let started = video.start_download(self.clock.now());
         self.video_repository.update(&started)?;
+        let existing_folder = started.thumbnail_filename.as_deref().map(top_level_entry);
 
         info!(video_id = %video_id, "downloading video");
         let outcome = self.video_downloader_repository.download(
@@ -122,6 +124,7 @@ impl VideoDownloader {
             started.youtube_id.as_str(),
             quality,
             output_dir,
+            existing_folder,
         );
 
         match outcome {
