@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { openAddDialog, submitPlaylist, dialogErrorText } from '../helpers/addDialog.js'
 import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
-import { syncItem, deleteItem } from '../helpers/sidebar.js'
+import { syncItem, deleteItem, sectionRows } from '../helpers/sidebar.js'
 
 const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
 const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'yarrtube smoke tests'
@@ -20,6 +20,7 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   // Follow it into the detail view and wait for the download to finish.
   await sidebarLink.click()
   await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 120_000 })
+  const videoTitle = await page.locator('main h3').first().innerText()
 
   // Thumbnail + duration render in the detail view's video list.
   const detailListItem = page.locator('ul li', { has: page.locator('img') }).first()
@@ -52,7 +53,10 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
 
   // Delete from the sidebar; it disappears from both the sidebar and home feed.
   await deleteItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
-  await expect(page.locator('h3:text-is("Playlists") ~ ul').getByText(PLAYLIST_NAME)).toHaveCount(0)
+  await expect(sectionRows(page, 'Playlists')).toHaveCount(0)
   await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
-  await expect(page.getByRole('link').filter({ hasText: PLAYLIST_NAME })).toHaveCount(0)
+  // The home feed only ever renders video titles, never the playlist's own
+  // name, so check the actual video is gone rather than a string that would
+  // never have appeared there in the first place.
+  await expect(page.getByText(videoTitle, { exact: true })).toHaveCount(0)
 })

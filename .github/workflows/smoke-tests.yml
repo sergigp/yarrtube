@@ -40,9 +40,6 @@ jobs:
           cache: npm
           cache-dependency-path: smoke-tests/package-lock.json
 
-      - name: Install Playwright browsers
-        run: npx --prefix smoke-tests playwright install --with-deps chromium
-
       - name: Run smoke tests
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}

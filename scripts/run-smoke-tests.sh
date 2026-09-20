@@ -58,6 +58,9 @@ wait_for_status() {
 echo "==> building $IMAGE_TAG"
 docker build -t "$IMAGE_TAG" "$REPO_ROOT"
 
+# In case a previous run was killed before its cleanup trap could fire.
+docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
 TMP_DIR="$(mktemp -d /tmp/yarrtube-smoke.XXXXXX)"
 mkdir -p "$TMP_DIR/videos" "$TMP_DIR/data"
 
@@ -83,6 +86,7 @@ fi
 
 echo "==> installing smoke-tests dependencies"
 npm --prefix "$REPO_ROOT/smoke-tests" ci
+npx --prefix "$REPO_ROOT/smoke-tests" playwright install --with-deps chromium
 
 echo "==> running Playwright suite"
 BASE_URL="http://localhost:$PORT" \

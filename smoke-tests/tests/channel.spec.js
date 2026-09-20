@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { openAddDialog, submitChannel, dialogErrorText } from '../helpers/addDialog.js'
 import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
-import { syncItem, deleteItem } from '../helpers/sidebar.js'
+import { syncItem, deleteItem, sectionRows } from '../helpers/sidebar.js'
 
 const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 const VIDEO_LIMIT = process.env.SMOKE_CHANNEL_VIDEO_LIMIT ?? '1'
@@ -36,7 +36,11 @@ test('channel lifecycle: add, download, play, sync, invalid handle error, delete
 
   // Delete from the sidebar; it disappears from both the sidebar and home feed.
   await deleteItem(page, { section: 'Channels', name: CHANNEL_HANDLE })
-  await expect(page.locator('h3:text-is("Channels") ~ ul li')).toHaveCount(0)
+  await expect(sectionRows(page, 'Channels')).toHaveCount(0)
+  // The sidebar also hides its list on a fetch error, so an empty list alone
+  // wouldn't distinguish "deleted" from "broken" — check for the explicit
+  // empty-state text instead.
+  await expect(page.locator('h3:text-is("Channels") ~ p', { hasText: 'None tracked yet.' })).toBeVisible()
   await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
   await expect(page.getByText(videoTitle, { exact: true })).toHaveCount(0)
 })
