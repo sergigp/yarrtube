@@ -8,11 +8,14 @@ name: Smoke tests
 #   - secrets.YOUTUBE_API_KEY: a YouTube Data API v3 key, added as a repo
 #     secret (Settings > Secrets and variables > Actions). Only ever
 #     referenced here, never printed.
+#
+# Manual trigger only: GitHub-hosted runners' shared IPs consistently hit
+# YouTube's "Sign in to confirm you're not a bot" bot-detection, so this
+# doesn't run automatically on PRs/pushes. Run it locally instead via
+# ./scripts/run-smoke-tests.sh (see smoke-tests/README.md), or trigger this
+# workflow manually if running from an IP YouTube doesn't flag.
 
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
