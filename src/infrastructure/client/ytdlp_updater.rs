@@ -7,15 +7,23 @@ use std::path::{Path, PathBuf};
 const RELEASES_API_URL: &str = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest";
 const DEFAULT_YTDLP_PATH: &str = "/app/bin/yt-dlp";
 
-/// The standalone-binary release asset name for the current platform (the
+/// The standalone-binary release asset name for the given platform (the
 /// production Docker image is always Linux, but `serve`/`update-ytdlp` also
 /// run directly on a developer's machine — see `scripts/run-local.sh` —
 /// where downloading the Linux asset would silently replace a working local
-/// `yt-dlp` with one that can't execute).
-fn asset_name_for_platform() -> &'static str {
-    match std::env::consts::OS {
+/// `yt-dlp` with one that can't execute). Linux additionally distinguishes
+/// arm64: an x86_64 binary run there needs emulation the container/host may
+/// not have (e.g. Docker Desktop's Rosetta layer on Apple Silicon), so the
+/// startup self-update would otherwise clobber a correct arm64 binary — such
+/// as the one the Dockerfile's `ytdlp-fetch` stage already fetches for the
+/// same architecture — with one that can't run.
+fn asset_name_for_platform(os: &str, arch: &str) -> &'static str {
+    match os {
         "macos" => "yt-dlp_macos",
-        _ => "yt-dlp_linux",
+        _ => match arch {
+            "aarch64" => "yt-dlp_linux_aarch64",
+            _ => "yt-dlp_linux",
+        },
     }
 }
 
@@ -63,7 +71,7 @@ fn update(target_path: &Path) -> Result<()> {
 /// returns the download URL of its standalone binary asset for the current
 /// platform.
 fn latest_binary_url() -> Result<String> {
-    let asset_name = asset_name_for_platform();
+    let asset_name = asset_name_for_platform(std::env::consts::OS, std::env::consts::ARCH);
     let client = reqwest::blocking::Client::new();
     let response = client
         .get(RELEASES_API_URL)
@@ -165,6 +173,25 @@ impl YtdlpUpdater for FakeYtdlpUpdater {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn it_should_pick_the_macos_asset_regardless_of_architecture() {
+        assert_eq!(asset_name_for_platform("macos", "aarch64"), "yt-dlp_macos");
+        assert_eq!(asset_name_for_platform("macos", "x86_64"), "yt-dlp_macos");
+    }
+
+    #[test]
+    fn it_should_pick_the_linux_aarch64_asset_on_arm64() {
+        assert_eq!(
+            asset_name_for_platform("linux", "aarch64"),
+            "yt-dlp_linux_aarch64"
+        );
+    }
+
+    #[test]
+    fn it_should_pick_the_linux_x86_64_asset_by_default() {
+        assert_eq!(asset_name_for_platform("linux", "x86_64"), "yt-dlp_linux");
+    }
 
     #[test]
     #[cfg(unix)]

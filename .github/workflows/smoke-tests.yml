@@ -1,0 +1,65 @@
+name: Smoke tests
+
+# Fixtures used by this workflow (see smoke-tests/README.md for how to
+# maintain them):
+#   - SMOKE_PLAYLIST_ID: id of the maintainer-owned public "yarrtube-smoke-tests"
+#     YouTube playlist (must keep containing the Creative-Commons "Big Buck
+#     Bunny" video).
+#   - secrets.YOUTUBE_API_KEY: a YouTube Data API v3 key, added as a repo
+#     secret (Settings > Secrets and variables > Actions). Only ever
+#     referenced here, never printed.
+#
+# Manual trigger only: GitHub-hosted runners' shared IPs consistently hit
+# YouTube's "Sign in to confirm you're not a bot" bot-detection, so this
+# doesn't run automatically on PRs/pushes. Run it locally instead via
+# ./scripts/run-smoke-tests.sh (see smoke-tests/README.md), or trigger this
+# workflow manually if running from an IP YouTube doesn't flag.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: smoke-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SMOKE_PLAYLIST_ID: PLXWRoRTUXjks
+  SMOKE_PLAYLIST_NAME: yarrtube smoke tests
+  SMOKE_CHANNEL_HANDLE: "@BlenderOfficial"
+  SMOKE_CHANNEL_VIDEO_LIMIT: 1
+
+jobs:
+  smoke-tests:
+    name: Dockerized Playwright smoke suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: smoke-tests/package-lock.json
+
+      - name: Run smoke tests
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: ./scripts/run-smoke-tests.sh
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-tests-results
+          path: smoke-tests/test-results
+          retention-days: 7
+
+      - name: Upload container log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-tests-container-log
+          path: smoke-tests/container.log
+          retention-days: 7

@@ -19,3 +19,9 @@
 # Built by `npm run build` in web/, required to exist before `cargo build`
 web/dist/
 web/node_modules/
+
+# smoke-tests Playwright project
+smoke-tests/node_modules/
+smoke-tests/test-results/
+smoke-tests/playwright-report/
+smoke-tests/container.log
