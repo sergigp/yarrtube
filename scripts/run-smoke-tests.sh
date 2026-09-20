@@ -20,7 +20,8 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
 fi
 
 : "${YOUTUBE_API_KEY:?YOUTUBE_API_KEY must be set (in the environment or $REPO_ROOT/.env)}"
-: "${SMOKE_PLAYLIST_ID:?SMOKE_PLAYLIST_ID must be set — the id of the maintainer-owned \"yarrtube-smoke-tests\" YouTube playlist (see smoke-tests/README.md)}"
+# The maintainer-owned "yarrtube-smoke-tests" playlist (see smoke-tests/README.md).
+SMOKE_PLAYLIST_ID="${SMOKE_PLAYLIST_ID:-PLXWRoRTUXjks}"
 SMOKE_PLAYLIST_NAME="${SMOKE_PLAYLIST_NAME:-yarrtube smoke tests}"
 SMOKE_CHANNEL_HANDLE="${SMOKE_CHANNEL_HANDLE:-@BlenderOfficial}"
 SMOKE_CHANNEL_VIDEO_LIMIT="${SMOKE_CHANNEL_VIDEO_LIMIT:-1}"

@@ -29,17 +29,15 @@ test doubles. That requires:
   and variables > Actions > New repository secret) — never printed or
   logged.
 - **`SMOKE_PLAYLIST_ID`**: the id of a public, maintainer-owned YouTube
-  playlist containing the Creative-Commons "Big Buck Bunny" video. Currently
-  `PLXWRoRTUXjks` (https://www.youtube.com/playlist?list=PLXWRoRTUXjks),
-  hardcoded as the default in `.github/workflows/smoke-tests.yml`; override
-  locally via the env var if you use a different one. If the playlist's
-  contents ever change, the playlist test's download assertions may need to
-  change with it.
+  playlist containing the Creative-Commons "Big Buck Bunny" video. If the
+  playlist's contents ever change, the playlist test's download assertions
+  may need to change with it.
 
 Optional overrides (defaults shown):
 
 | Env var                      | Default                 |
 | ----------------------------- | ------------------------ |
+| `SMOKE_PLAYLIST_ID`           | `PLXWRoRTUXjks` (https://www.youtube.com/playlist?list=PLXWRoRTUXjks) |
 | `SMOKE_PLAYLIST_NAME`         | `yarrtube smoke tests`  |
 | `SMOKE_CHANNEL_HANDLE`        | `@BlenderOfficial`      |
 | `SMOKE_CHANNEL_VIDEO_LIMIT`   | `1`                      |
@@ -72,6 +70,6 @@ Then, against an already-running yarrtube instance:
 
 ```bash
 BASE_URL=http://localhost:8080 \
-  YOUTUBE_API_KEY=... SMOKE_PLAYLIST_ID=... \
+  YOUTUBE_API_KEY=... \
   npm --prefix smoke-tests test
 ```
