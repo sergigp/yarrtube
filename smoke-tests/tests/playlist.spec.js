@@ -22,8 +22,10 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 120_000 })
   const videoTitle = await page.locator('main h3').first().innerText()
 
-  // Thumbnail + duration render in the detail view's video list.
-  const detailListItem = page.locator('ul li', { has: page.locator('img') }).first()
+  // Thumbnail + duration render in the detail view's video list. Scoped to
+  // `main` so a leftover sidebar row (e.g. a channel avatar, if a previous
+  // test left one behind) can never be picked up instead.
+  const detailListItem = page.locator('main ul li', { has: page.locator('img') }).first()
   await expect(detailListItem.locator('img')).toBeVisible()
   await expect(detailListItem.getByText(/^\d+:\d{2}(:\d{2})?$/)).toBeVisible()
 
