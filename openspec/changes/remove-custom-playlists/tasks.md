@@ -1,7 +1,7 @@
 ## 1. Domain layer
 
 - [x] 1.1 Drop the `Custom` variant from `PlaylistKind` (`src/domain/playlist/playlist_kind.rs`): remove its parse/`as_str`/`Display` arms; update `it_should_parse_each_valid_kind_value` to drop the `"custom"` case and confirm `PlaylistKind::new("custom")` now returns the existing invalid-value error
-- [ ] 1.2 Delete `src/domain/services/custom_playlist_video_adder.rs` and `src/domain/services/custom_playlist_video_remover.rs`, and their `mod`/`pub use` lines in `src/domain/services/mod.rs`
+- [x] 1.2 Delete `src/domain/services/custom_playlist_video_adder.rs` and `src/domain/services/custom_playlist_video_remover.rs`, and their `mod`/`pub use` lines in `src/domain/services/mod.rs`
 - [ ] 1.3 Remove `PlaylistCreator::create_custom` from `src/domain/services/playlist_creator.rs`; drop the `it_should_be_true_when_the_colliding_playlist_is_of_the_other_kind` test and switch remaining `path_used_by_another_playlist` tests to `PlaylistKind::YoutubeLinked`; verify with `cargo test playlist_creator`
 - [ ] 1.4 Simplify `VideoReconciler::run_reconcile_pass` (`src/domain/services/video_reconciler.rs`) to always call `sync_playlist_membership`, dropping the `PlaylistKind` check and its now-unused import; delete any test seeding a `Custom` playlist to assert a no-op reconcile; verify with `cargo test video_reconciler`
 - [ ] 1.5 Delete `CreateCustomPlaylistError` from `src/domain/playlist/errors.rs` and its export in `src/domain/playlist/mod.rs`

@@ -1,6 +1,4 @@
 pub mod channel_video_reconciler;
-pub mod custom_playlist_video_adder;
-pub mod custom_playlist_video_remover;
 pub mod playlist_creator;
 pub mod playlist_deleter;
 pub mod playlist_searcher;
@@ -12,8 +10,6 @@ pub mod video_reconciler;
 pub mod video_searcher;
 
 pub use channel_video_reconciler::ChannelVideoReconciler;
-pub use custom_playlist_video_adder::CustomPlaylistVideoAdder;
-pub use custom_playlist_video_remover::CustomPlaylistVideoRemover;
 pub use playlist_creator::{CreatePlaylistOutcome, PlaylistCreator};
 pub use playlist_deleter::PlaylistDeleter;
 pub use playlist_searcher::PlaylistSearcher;
