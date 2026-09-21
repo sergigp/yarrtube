@@ -120,7 +120,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_resolve_sorttitle_from_the_publish_date_for_a_custom_playlist_video() {
+    fn it_should_resolve_sorttitle_from_the_publish_date_when_no_position_is_given() {
         let sorttitle = resolve_sorttitle("My Video", published_at(), None);
 
         assert_eq!(sorttitle, "20240102 My Video");

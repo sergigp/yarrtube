@@ -1,5 +1,5 @@
 use crate::domain::event::DomainEvent;
-use crate::domain::playlist::{Playlist, PlaylistKind};
+use crate::domain::playlist::Playlist;
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::services::thumbnail_fetcher::ThumbnailFetcher;
 use crate::domain::shared::{PlaylistId, VideoId, VideoRecordId};
@@ -81,8 +81,8 @@ impl VideoReconciler {
     /// `VideoDownloader::download` does at download time. Any failure is
     /// logged and swallowed — a `Downloaded` video's status and file are
     /// never touched by this, and a repeated failure simply tries again on
-    /// the next reconcile pass. `playlist_position` is `None` for a
-    /// custom-playlist video, resolving `sorttitle` via publish date.
+    /// the next reconcile pass. `playlist_position` is `None` when no
+    /// position is recorded, resolving `sorttitle` via publish date instead.
     fn generate_metadata(&self, video: &Video, output_dir: &Path, playlist_position: Option<i64>) {
         let Some(filename) = video.filename.as_deref() else {
             return;
@@ -159,15 +159,13 @@ impl VideoReconciler {
         self.run_reconcile_pass(&playlist)
     }
 
-    /// Diffs membership against YouTube when `playlist` is `YoutubeLinked`
-    /// (a no-op for `Custom`), then always reconciles the filesystem against
-    /// recorded downloads. Shared by `reconcile` and `force_reconcile`.
+    /// Diffs membership against YouTube, then reconciles the filesystem
+    /// against recorded downloads. Shared by `reconcile` and
+    /// `force_reconcile`.
     fn run_reconcile_pass(&self, playlist: &Playlist) -> anyhow::Result<()> {
         info!(playlist_id = %playlist.id, kind = %playlist.kind, "reconciling playlist");
 
-        if playlist.kind == PlaylistKind::YoutubeLinked {
-            self.sync_playlist_membership(playlist)?;
-        }
+        self.sync_playlist_membership(playlist)?;
 
         self.reconcile_filesystem(playlist)
     }
@@ -488,6 +486,7 @@ mod tests {
         video_repository.save(video).unwrap();
 
         let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let position = playlist_position.unwrap_or(0);
         let playlist_video = match playlist_position {
             Some(position) => PlaylistVideo::create_with_position(
                 playlist.id.clone(),
@@ -498,6 +497,12 @@ mod tests {
             None => PlaylistVideo::create(playlist.id.clone(), video.id.clone(), fixed_timestamp()),
         };
         playlist_video_repository.save(&playlist_video).unwrap();
+        // Registers the seeded video as an existing member of the playlist's
+        // YouTube-side listing below, so `sync_playlist_membership` (which
+        // now always runs, even for these filesystem-reconciliation-focused
+        // fixtures) leaves it alone instead of treating it as removed from
+        // YouTube and deleting it before `reconcile_filesystem` ever sees it.
+        playlist_video_repository.register_youtube_id(&video.id, &video.youtube_id);
 
         let task_repository = Arc::new(FakeTaskRepository::default());
         let video_file_repository = Arc::new(video_file_repository);
@@ -513,7 +518,15 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeYoutubePlaylistItemsRepository {
+                videos: std::sync::Mutex::new(vec![
+                    crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubePlaylistItem {
+                        video_id: video.youtube_id.as_str().to_string(),
+                        title: video.title.clone(),
+                        position,
+                    },
+                ]),
+            }),
             Arc::new(youtube_metadata_repository),
             video_metadata_repository.clone(),
             Arc::new(FakeEventPublisher::default()),
@@ -535,17 +548,6 @@ mod tests {
         }
     }
 
-    fn custom_playlist() -> Playlist {
-        Playlist::create(
-            PlaylistId::new("PL1").unwrap(),
-            PlaylistName::new("My Playlist").unwrap(),
-            PlaylistPath::new("my-playlist").unwrap(),
-            Quality::High,
-            PlaylistKind::Custom,
-            fixed_timestamp(),
-        )
-    }
-
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp()).mark_downloaded(
             Quality::High,
@@ -558,7 +560,7 @@ mod tests {
 
     #[test]
     fn it_should_judge_a_new_style_video_healthy_via_file_exists_without_a_top_level_listing() {
-        let playlist = custom_playlist();
+        let playlist = youtube_linked_playlist();
         let video = downloaded_video("My Video/My Video.mp4", None);
         let harness = harness(
             &playlist,
@@ -578,7 +580,7 @@ mod tests {
 
     #[test]
     fn it_should_judge_a_legacy_flat_video_healthy_via_file_exists() {
-        let playlist = custom_playlist();
+        let playlist = youtube_linked_playlist();
         let video = downloaded_video("My Video.mp4", None);
         let harness = harness(
             &playlist,
@@ -598,7 +600,7 @@ mod tests {
 
     #[test]
     fn it_should_not_sweep_a_healthy_new_style_videos_folder_as_orphaned() {
-        let playlist = custom_playlist();
+        let playlist = youtube_linked_playlist();
         let video = downloaded_video("My Video/My Video.mp4", None);
         let video_file_repository = FakeVideoFileRepository {
             file_exists_result: std::sync::Mutex::new(Some(true)),
@@ -624,7 +626,7 @@ mod tests {
 
     #[test]
     fn it_should_sweep_a_genuinely_orphaned_folder_during_reconciliation() {
-        let playlist = custom_playlist();
+        let playlist = youtube_linked_playlist();
         let video = downloaded_video("My Video/My Video.mp4", None);
         let video_file_repository = FakeVideoFileRepository {
             file_exists_result: std::sync::Mutex::new(Some(true)),
@@ -666,7 +668,7 @@ mod tests {
 
     #[test]
     fn it_should_regenerate_metadata_for_a_healthy_downloaded_video_with_no_recorded_metadata() {
-        let playlist = custom_playlist();
+        let playlist = youtube_linked_playlist();
         let video = downloaded_video("My Video/My Video.mp4", None);
         let harness = harness_with_metadata(
             &playlist,
@@ -695,7 +697,7 @@ mod tests {
 
     #[test]
     fn it_should_leave_already_recorded_metadata_untouched_during_reconcile() {
-        let playlist = custom_playlist();
+        let playlist = youtube_linked_playlist();
         let video = downloaded_video("My Video/My Video.mp4", None);
         let video_metadata_repository = FakeVideoMetadataRepository::default();
         let existing = crate::domain::video_metadata::VideoMetadata::new(
@@ -754,9 +756,9 @@ mod tests {
     }
 
     /// Wires a `VideoReconciler` directly (rather than via `harness`, which
-    /// seeds a `Custom` playlist with an already-stored video) so these
-    /// tests can exercise `sync_playlist_membership`'s newly-added-video
-    /// path against an empty `VideoRepository`.
+    /// seeds a playlist with an already-stored video) so these tests can
+    /// exercise `sync_playlist_membership`'s newly-added-video path against
+    /// an empty `VideoRepository`.
     #[allow(clippy::type_complexity)]
     fn membership_harness(
         playlist: &Playlist,
@@ -876,7 +878,7 @@ mod tests {
 
     #[test]
     fn it_should_protect_a_pending_videos_prefetched_thumbnail_folder_from_the_orphan_sweep() {
-        let playlist = custom_playlist();
+        let playlist = youtube_linked_playlist();
         let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
             .with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
         let video_file_repository = FakeVideoFileRepository {
@@ -903,7 +905,7 @@ mod tests {
 
     #[test]
     fn it_should_fetch_a_missing_thumbnail_during_reconcile() {
-        let playlist = custom_playlist();
+        let playlist = youtube_linked_playlist();
         let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
         let downloader = FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
             FetchedThumbnail {
@@ -936,7 +938,7 @@ mod tests {
 
     #[test]
     fn it_should_not_refetch_a_thumbnail_the_video_already_has() {
-        let playlist = custom_playlist();
+        let playlist = youtube_linked_playlist();
         let video = downloaded_video("My Video/My Video.mp4", Some("My Video/My Video.jpg"));
         let harness = harness_with_thumbnail_downloader(
             &playlist,
@@ -964,7 +966,7 @@ mod tests {
         // fetch a thumbnail for it (its own redownload will bring one) or,
         // worse, persist a stale copy of the video over the reset — see
         // design.md's Non-Goals.
-        let playlist = custom_playlist();
+        let playlist = youtube_linked_playlist();
         let video = downloaded_video("My Video/My Video.mp4", None);
         let harness = harness_with_thumbnail_downloader(
             &playlist,
@@ -999,7 +1001,7 @@ mod tests {
         // `None` and a concurrent recovery-pass fetch would collide with the
         // in-progress download's own folder, spawning a stray sibling folder
         // that then gets permanently protected from the orphan sweep.
-        let playlist = custom_playlist();
+        let playlist = youtube_linked_playlist();
         let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
             .start_download(fixed_timestamp());
         let harness = harness_with_thumbnail_downloader(

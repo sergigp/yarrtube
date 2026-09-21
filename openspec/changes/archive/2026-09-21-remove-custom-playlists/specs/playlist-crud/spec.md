@@ -1,8 +1,4 @@
-## Purpose
-
-Lets a caller create, delete, and list the playlists the daemon tracks, so a future scheduler has a persisted set of playlists to query and download from.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Create Playlist
 The system SHALL provide an HTTP endpoint that creates a playlist given a `playlist` value that is either a YouTube playlist ID or a YouTube playlist URL, a name, a storage path, and a quality tier (`high`, `mid`, or `low`). The system SHALL extract the playlist ID from the `playlist` value when it is a URL, confirms the resulting YouTube playlist ID corresponds to an existing, accessible YouTube playlist before persisting, and stores the playlist with kind `youtube_linked`, that ID, path, quality, and a system-generated creation timestamp.
@@ -59,6 +55,34 @@ Every playlist created through this endpoint has kind `youtube_linked`.
 - **WHEN** a request supplies a `playlist` value whose extracted playlist ID does not correspond to an existing, accessible YouTube playlist
 - **THEN** the system rejects the request without persisting anything and returns a bad request with a meaningful error description
 
+## REMOVED Requirements
+
+### Requirement: Playlist Path Uniqueness
+**Reason**: Described uniqueness across two playlist kinds. Only one kind
+exists now; replaced by "Unique Playlist Paths".
+**Migration**: See this capability's "Unique Playlist Paths" requirement.
+
+### Requirement: Delete Playlist
+**Reason**: Its "Deleting a custom playlist" scenario described a kind
+that no longer exists; replaced by "Delete a Playlist".
+**Migration**: See this capability's "Delete a Playlist" requirement. The
+HTTP contract (`DELETE /playlists/{id}`) is unchanged.
+
+### Requirement: List Playlists
+**Reason**: Its "Playlists of both kinds exist" scenario described a kind
+that no longer exists; replaced by "List All Playlists".
+**Migration**: See this capability's "List All Playlists" requirement. The
+HTTP contract (`GET /playlists`) is unchanged.
+
+### Requirement: Playlist Deletion Publishes a Domain Event
+**Reason**: Its "Existing custom playlist deleted" scenario described a
+kind that no longer exists; replaced by "Playlist Deletion Publishes an
+Event".
+**Migration**: See this capability's "Playlist Deletion Publishes an
+Event" requirement. The published event is unchanged.
+
+## ADDED Requirements
+
 ### Requirement: Unique Playlist Paths
 The system SHALL reject a request to create a playlist whose storage path is already used by a different existing playlist.
 
@@ -95,17 +119,6 @@ The system SHALL provide an HTTP endpoint that returns every currently stored pl
 #### Scenario: No playlists exist
 - **WHEN** no playlists have been created
 - **THEN** the system returns an empty list rather than an error
-
-### Requirement: Playlist Creation Publishes a Domain Event
-The system SHALL publish a PlaylistCreated domain event, containing the playlist's ID, whenever a playlist is newly created — and SHALL NOT publish it when creation is a no-op because the playlist already existed.
-
-#### Scenario: New playlist created
-- **WHEN** a create-playlist request results in a new playlist being persisted
-- **THEN** the system publishes a PlaylistCreated event containing that playlist's ID
-
-#### Scenario: Playlist already existed
-- **WHEN** a create-playlist request identifies a playlist ID that already exists in storage
-- **THEN** the system does not publish a PlaylistCreated event
 
 ### Requirement: Playlist Deletion Publishes an Event
 The system SHALL publish a PlaylistDeleted domain event, containing the playlist's ID and its storage path, whenever a playlist is successfully deleted. The path travels with the event because the playlist record itself no longer exists by the time anything reacts to it.

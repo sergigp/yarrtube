@@ -1,5 +1,5 @@
 use crate::domain::event::DomainEvent;
-use crate::domain::playlist::errors::{CreateCustomPlaylistError, CreatePlaylistError};
+use crate::domain::playlist::errors::CreatePlaylistError;
 use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
 use crate::domain::shared::{PlaylistId, Quality};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -8,7 +8,6 @@ use crate::infrastructure::shared::domain_events::event_publisher::EventPublishe
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
 use tracing::info;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CreatePlaylistOutcome {
@@ -16,8 +15,7 @@ pub enum CreatePlaylistOutcome {
     AlreadyExisted(Playlist),
 }
 
-/// Creates playlists, either backed by a YouTube playlist or as a custom
-/// (YouTube-less) playlist.
+/// Creates playlists backed by a YouTube playlist.
 #[derive(Clone)]
 pub struct PlaylistCreator {
     repository: Arc<dyn PlaylistRepository>,
@@ -81,48 +79,6 @@ impl PlaylistCreator {
         info!(playlist_id = %playlist.id, name = %playlist.name, "created playlist");
         Ok(CreatePlaylistOutcome::Created(playlist))
     }
-
-    /// Creates a playlist with no YouTube playlist behind it: the caller
-    /// supplies the ID (a well-formed, unused UUID) directly, and no YouTube
-    /// API request is made.
-    pub fn create_custom(
-        &self,
-        id: PlaylistId,
-        name: PlaylistName,
-        path: PlaylistPath,
-        quality: Quality,
-    ) -> Result<Playlist, CreateCustomPlaylistError> {
-        if let Err(e) = Uuid::parse_str(id.as_str()) {
-            return Err(CreateCustomPlaylistError::InvalidId(id, e.to_string()));
-        }
-
-        match self.repository.find(&id) {
-            Ok(Some(_)) => return Err(CreateCustomPlaylistError::AlreadyExists(id)),
-            Ok(None) => {}
-            Err(e) => return Err(CreateCustomPlaylistError::Repository(e)),
-        }
-
-        let playlists = self
-            .repository
-            .list()
-            .map_err(CreateCustomPlaylistError::Repository)?;
-        if path_used_by_another_playlist(&playlists, &id, &path) {
-            return Err(CreateCustomPlaylistError::PathAlreadyInUse(path));
-        }
-
-        let now = self.clock.now();
-        let playlist = Playlist::create(id, name, path, quality, PlaylistKind::Custom, now);
-        self.repository
-            .insert(&playlist)
-            .map_err(CreateCustomPlaylistError::Repository)?;
-        self.event_publisher
-            .publish(&DomainEvent::PlaylistCreated {
-                playlist_id: playlist.id.as_str().to_string(),
-            })
-            .map_err(CreateCustomPlaylistError::Repository)?;
-        info!(playlist_id = %playlist.id, name = %playlist.name, "created custom playlist");
-        Ok(playlist)
-    }
 }
 
 /// True if some playlist other than `id` already has `path` as its stored
@@ -169,19 +125,6 @@ mod tests {
     #[test]
     fn it_should_be_true_when_a_different_playlist_already_uses_the_path() {
         let playlists = vec![playlist("PL1", "music", PlaylistKind::YoutubeLinked)];
-
-        let used = path_used_by_another_playlist(
-            &playlists,
-            &PlaylistId::new("PL2").unwrap(),
-            &PlaylistPath::new("music").unwrap(),
-        );
-
-        assert!(used);
-    }
-
-    #[test]
-    fn it_should_be_true_when_the_colliding_playlist_is_of_the_other_kind() {
-        let playlists = vec![playlist("PL1", "music", PlaylistKind::Custom)];
 
         let used = path_used_by_another_playlist(
             &playlists,

@@ -17,4 +17,3 @@ pub mod youtube_metadata_repository;
 pub mod youtube_playlist_items_repository;
 pub mod youtube_playlist_repository;
 pub mod youtube_video_downloader_repository;
-pub mod youtube_video_repository;

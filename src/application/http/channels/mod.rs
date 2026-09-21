@@ -158,7 +158,6 @@ mod tests {
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
 
-    use crate::infrastructure::repositories::youtube_video_repository::FakeYoutubeVideoRepository;
     use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use axum::body::{Body, to_bytes};
@@ -231,28 +230,11 @@ mod tests {
             event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
             task_repository.clone(),
             Arc::new(FakeVideoFileRepository::default()),
-            thumbnail_fetcher.clone(),
+            thumbnail_fetcher,
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
         );
-        let custom_playlist_video_adder = crate::domain::services::CustomPlaylistVideoAdder::new(
-            playlist_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeYoutubeVideoRepository::default()),
-            event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
-            thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            "/videos",
-        );
-        let custom_playlist_video_remover =
-            crate::domain::services::CustomPlaylistVideoRemover::new(
-                playlist_repository.clone(),
-                video_repository.clone(),
-                playlist_video_repository.clone(),
-                event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
-            );
         let video_searcher = crate::domain::services::VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
@@ -295,8 +277,6 @@ mod tests {
             playlist_deleter,
             playlist_searcher,
             video_reconciler,
-            custom_playlist_video_adder,
-            custom_playlist_video_remover,
             video_searcher,
             task_view_searcher,
             channel_service,

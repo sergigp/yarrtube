@@ -10,8 +10,7 @@ struct PlaylistCreatedPayload {
 
 /// Reacts to `PlaylistCreated` by running one reconcile pass for the new
 /// playlist, as that event's own processing (not as a separately scheduled
-/// task). Runs the same for either playlist kind — for a `Custom` playlist
-/// this is a harmless no-op since it has no videos or files yet.
+/// task).
 pub struct ReconcileOnPlaylistCreated {
     video_reconciler: VideoReconciler,
 }
@@ -122,41 +121,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![Task::ReconcilePlaylist {
                 playlist_id: "PL1".to_string()
-            }]
-        );
-    }
-
-    #[test]
-    fn it_should_run_a_harmless_no_op_reconcile_pass_for_a_newly_created_custom_playlist() {
-        let playlist_repository = Arc::new(FakePlaylistRepository::default());
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        playlist_repository
-            .insert(&Playlist::create(
-                PlaylistId::new("11111111-1111-1111-1111-111111111111").unwrap(),
-                PlaylistName::new("My Custom Playlist").unwrap(),
-                PlaylistPath::new("custom-playlist").unwrap(),
-                Quality::High,
-                PlaylistKind::Custom,
-                now,
-            ))
-            .unwrap();
-        let (video_reconciler, task_repository) = video_reconciler(playlist_repository);
-        let subscriber = ReconcileOnPlaylistCreated::new(video_reconciler);
-
-        let result =
-            subscriber.handle(r#"{"playlist_id": "11111111-1111-1111-1111-111111111111"}"#);
-
-        assert!(result.is_ok());
-        assert_eq!(
-            task_repository
-                .scheduled
-                .lock()
-                .unwrap()
-                .iter()
-                .map(|(task, _run_at)| task.clone())
-                .collect::<Vec<_>>(),
-            vec![Task::ReconcilePlaylist {
-                playlist_id: "11111111-1111-1111-1111-111111111111".to_string()
             }]
         );
     }
