@@ -209,8 +209,7 @@ fn build_application() -> Result<Application> {
 
     let playlist_video_repository =
         Arc::new(SqlitePlaylistVideoRepository::new(open_connection()?));
-    let channel_video_repository =
-        Arc::new(SqliteChannelVideoRepository::new(open_connection()?));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(open_connection()?));
 
     let task_view_searcher = TaskViewSearcher::new(
         task_repository.clone(),

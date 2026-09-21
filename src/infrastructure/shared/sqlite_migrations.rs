@@ -22,7 +22,9 @@ mod tests {
         apply(&mut conn).unwrap();
 
         let mut stmt = conn
-            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+            )
             .unwrap();
         let mut tables: Vec<String> = stmt
             .query_map([], |row| row.get(0))
@@ -79,9 +81,11 @@ mod tests {
         apply(&mut conn).unwrap();
 
         let name: String = conn
-            .query_row("SELECT name FROM channels WHERE id = '@somechannel'", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT name FROM channels WHERE id = '@somechannel'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         assert_eq!(name, "Some Channel");
     }
