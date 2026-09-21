@@ -53,6 +53,10 @@ impl CustomPlaylistVideoAdder {
         }
     }
 
+    fn output_dir(&self, path: &str) -> std::path::PathBuf {
+        Path::new(&self.videos_path).join(path)
+    }
+
     /// No-ops if the video is already stored for this playlist.
     pub fn add(
         &self,
@@ -94,7 +98,7 @@ impl CustomPlaylistVideoAdder {
         self.playlist_video_repository
             .save(&playlist_video)
             .map_err(AddVideoToCustomPlaylistError::Repository)?;
-        let output_dir = Path::new(&self.videos_path).join(playlist.path.as_str());
+        let output_dir = self.output_dir(playlist.path.as_str());
         self.thumbnail_fetcher.fetch(&video, &output_dir);
         self.event_publisher
             .publish(&DomainEvent::VideoAddedToPlaylist {

@@ -1,4 +1,5 @@
 use crate::domain::video::Video;
+use crate::domain::video::top_level_entry;
 use crate::domain::video::video_filename::VideoFilename;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
@@ -36,17 +37,23 @@ impl ThumbnailFetcher {
     /// one into `output_dir` and persists it via `Video::with_thumbnail` on
     /// success; any failure (a clean "no thumbnail available" outcome, or a
     /// systemic error) is logged and swallowed, leaving `video` untouched.
+    /// A `Downloaded` video already has its own folder recorded via
+    /// `filename` (e.g. a missing-thumbnail recovery pass running against a
+    /// video whose full download already ran) — that folder is reused
+    /// verbatim instead of resolving a fresh, collision-suffixed one.
     pub fn fetch(&self, video: &Video, output_dir: &Path) {
         if video.thumbnail_filename.is_some() {
             return;
         }
 
+        let existing_folder = video.filename.as_deref().map(top_level_entry);
         let filename = VideoFilename::from_title(&video.title);
         let fetched = self.video_downloader_repository.fetch_thumbnail(
             &video.youtube_id.to_url(),
             filename.as_str(),
             video.youtube_id.as_str(),
             output_dir,
+            existing_folder,
         );
 
         match fetched {
@@ -163,5 +170,48 @@ mod tests {
 
         let unchanged = video_repository.find(&video.id).unwrap().unwrap();
         assert_eq!(unchanged, video);
+    }
+
+    #[test]
+    fn it_should_reuse_a_downloaded_videos_folder_for_a_missing_thumbnail_recovery_fetch() {
+        use crate::domain::shared::Quality;
+
+        let video = video().mark_downloaded(
+            Quality::High,
+            "My Video/My Video.mp4",
+            None,
+            None,
+            fixed_timestamp(),
+        );
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        video_repository.save(&video).unwrap();
+        let downloader = Arc::new(
+            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
+                FetchedThumbnail {
+                    folder: "My Video".to_string(),
+                    filename: "My Video.jpg".to_string(),
+                },
+            )),
+        );
+        let fetcher = fetcher(video_repository.clone(), downloader.clone());
+
+        fetcher.fetch(&video, Path::new("/videos/my-playlist"));
+
+        let calls = downloader.thumbnail_calls.lock().unwrap();
+        assert_eq!(calls[0].4, Some("My Video".to_string()));
+    }
+
+    #[test]
+    fn it_should_pass_no_existing_folder_for_a_video_with_no_recorded_filename() {
+        let video = video();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        video_repository.save(&video).unwrap();
+        let downloader = Arc::new(FakeVideoDownloaderRepository::default());
+        let fetcher = fetcher(video_repository.clone(), downloader.clone());
+
+        fetcher.fetch(&video, Path::new("/videos/my-playlist"));
+
+        let calls = downloader.thumbnail_calls.lock().unwrap();
+        assert_eq!(calls[0].4, None);
     }
 }

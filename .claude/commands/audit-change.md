@@ -39,7 +39,6 @@ Always announce: "Auditing change: <name>" and how to override.
    against — and skip step 4a for this run.
 
 2. **Determine the code in scope**
-
    - Start from `design.md`'s `## Files` list — that's the declared scope.
    - Determine the explicit diff range for this change and keep it — reuse it in step
      4, don't let each pass re-derive its own: if there's uncommitted work, that's
@@ -64,41 +63,40 @@ Always announce: "Auditing change: <name>" and how to override.
    message (they don't depend on each other). Give each one the change name, the
    relevant artifact content already read in step 1, and the file scope from step 2.
    Ask each to return structured findings: `{file, line_or_area, summary,
-   category, severity}`.
+category, severity}`.
 
    a. **Contract-adherence** — compare the actual code's types, method signatures,
-      and call flow against `design.md`'s `## Types & Signatures` and `## Call Stack`.
-      Flag: signatures that don't match, calls that don't happen, calls that happen
-      but aren't in the call stack, types missing or renamed without the design being
-      updated. `category: contract`.
+   and call flow against `design.md`'s `## Types & Signatures` and `## Call Stack`.
+   Flag: signatures that don't match, calls that don't happen, calls that happen
+   but aren't in the call stack, types missing or renamed without the design being
+   updated. `category: contract`.
 
    b. **Convention-adherence** — invoke the `/rust-architect` skill's rules and check
-      the changed files against them (layering, naming, fn ordering, port/repository
-      conventions, functional style, deliberate-deviations list). `category:
-      convention`.
+   the changed files against them (layering, naming, fn ordering, port/repository
+   conventions, functional style, deliberate-deviations list). `category:
+   convention`.
 
    c. **Correctness** — invoke the `/code-review` skill at high effort, targeting the
-      explicit range from step 2 (e.g. `<merge-base>...HEAD`, or the uncommitted
-      working tree) — never let it default to "the current diff," which is empty once
-      the change is committed or merged. `category: correctness`.
+   explicit range from step 2 (e.g. `<merge-base>...HEAD`, or the uncommitted
+   working tree) — never let it default to "the current diff," which is empty once
+   the change is committed or merged. `category: correctness`.
 
    d. **Simplification / efficiency** — invoke the `/simplify` skill, targeting the
-      same explicit range from step 2, in review-only mode (do not let it apply fixes
-      itself — this command owns the apply step). `category: simplification`.
+   same explicit range from step 2, in review-only mode (do not let it apply fixes
+   itself — this command owns the apply step). `category: simplification`.
 
    e. **Test strength (mutation testing)** — only if step 3 found `cargo-mutants`
-      installed. Run it scoped to the changed package/files (check `cargo mutants
-      --help` for scoping flags such as `--file`). Report surviving mutants as
-      findings: a mutant that survives means no test caught that behavior change.
-      `category: test-gap`.
+   installed. Run it scoped to the changed package/files (check `cargo mutants
+   --help` for scoping flags such as `--file`). Report surviving mutants as
+   findings: a mutant that survives means no test caught that behavior change.
+   `category: test-gap`.
 
 5. **Aggregate and classify every finding into exactly one lane:**
-
    - **Code-fix** — `correctness`, `convention`, `simplification`, `test-gap`
      findings, and any `contract` finding where the code is simply wrong relative to
      an unchanged, still-correct design.
    - **Plan-gap** — any `contract` finding where the code's deviation looks
-     *intentional or reasonable* (the design missed a case, or an edge case forced a
+     _intentional or reasonable_ (the design missed a case, or an edge case forced a
      different shape than planned). These mean the artifacts are stale, not the code.
 
    When a finding could go either way, say so explicitly in the report and let the
@@ -110,22 +108,25 @@ Always announce: "Auditing change: <name>" and how to override.
    ## Audit: <change-name>
 
    ### Code-fix findings (N)
+
    1. [correctness] <file>:<line> — <summary>
-   ...
+      ...
 
    ### Plan-gap findings (M)
+
    1. [contract] <file> vs design.md — <summary>
-   ...
+      ...
 
    ### Skipped
+
    - Mutation testing: cargo-mutants not installed
    ```
 
+   For each item we should explain very simply and concisely what it is and what are the consequences of not fixing it in terms of behaviour. We should differentiate between "this is wrong" and "this is not perfect".
    Ask: "Apply the code-fix findings directly? Hand the plan-gap findings to
    `/opsx:update` to reconcile the artifacts?" Offer both, together or separately.
 
 7. **On confirmation, act per lane:**
-
    - **Code-fix**: apply directly, minimal and scoped to each finding, same
      discipline as `/opsx:apply` (don't drift into unrelated cleanup).
    - **Plan-gap**: invoke `/opsx:update <name>` inline, passing the plan-gap findings

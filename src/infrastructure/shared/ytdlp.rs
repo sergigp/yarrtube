@@ -119,12 +119,10 @@ pub fn download_video(
     output_path: &Path,
     existing_folder: Option<&str>,
 ) -> Result<Option<DownloadedVideo>> {
-    let folder = match existing_folder {
-        Some(folder) => folder.to_string(),
-        None => resolve_folder_collision(output_path, desired_filename, video_id),
-    };
-    let video_dir = output_path.join(&folder);
-    ensure_output_dir(&video_dir)?;
+    let VideoDir {
+        folder,
+        path: video_dir,
+    } = prepare_video_dir(output_path, desired_filename, video_id, existing_folder)?;
 
     let output_template = format!("{folder}.%(ext)s");
     let mut args = args_for_quality(quality);
@@ -154,32 +152,28 @@ pub fn download_video(
         .current_dir(&video_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
-    let output = match output_retrying_busy(&mut cmd) {
-        Ok(output) => output,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            remove_video_dir_best_effort(&video_dir);
-            return Err(anyhow!(
+    let Some(output) = run_and_cleanup_on_failure(
+        &mut cmd,
+        &video_dir,
+        existing_folder,
+        || {
+            format!(
                 "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
                 ytdlp_path.display()
-            ));
-        }
-        Err(e) => {
-            remove_video_dir_best_effort(&video_dir);
-            return Err(anyhow!("Failed to run yt-dlp for {video_url}: {e}"));
-        }
-    };
-
-    if !output.status.success() {
-        remove_video_dir_best_effort(&video_dir);
+            )
+        },
+        |e| format!("Failed to run yt-dlp for {video_url}: {e}"),
+    )?
+    else {
         return Ok(None);
-    }
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let lines: Vec<&str> = stdout.lines().collect();
     let filename = match lines.last().map(|s| s.trim()) {
         Some(filename) if !filename.is_empty() => filename.to_string(),
         _ => {
-            remove_video_dir_best_effort(&video_dir);
+            remove_video_dir_unless_reused(&video_dir, existing_folder);
             return Err(anyhow!(
                 "yt-dlp exited successfully but did not print an output filename for {video_url}"
             ));
@@ -232,17 +226,22 @@ pub struct FetchedThumbnail {
 /// no binary at `ytdlp_path`, or a failure creating the video's folder.
 /// Mirrors `download_video`'s folder cleanup: on any non-success outcome,
 /// the folder created up front is removed again so a retry reuses the same
-/// folder name instead of seeing a stale collision.
+/// folder name instead of seeing a stale collision — unless `existing_folder`
+/// was given, in which case it's a folder this same video already owns (e.g.
+/// its real download's folder, for a missing-thumbnail recovery pass) and is
+/// never removed by this function.
 pub fn fetch_thumbnail(
     ytdlp_path: &Path,
     video_url: &str,
     desired_filename: &str,
     video_id: &str,
     output_path: &Path,
+    existing_folder: Option<&str>,
 ) -> Result<Option<FetchedThumbnail>> {
-    let folder = resolve_folder_collision(output_path, desired_filename, video_id);
-    let video_dir = output_path.join(&folder);
-    ensure_output_dir(&video_dir)?;
+    let VideoDir {
+        folder,
+        path: video_dir,
+    } = prepare_video_dir(output_path, desired_filename, video_id, existing_folder)?;
 
     let output_template = format!("{folder}.%(ext)s");
     let mut cmd = Command::new(ytdlp_path);
@@ -262,27 +261,21 @@ pub fn fetch_thumbnail(
     .current_dir(&video_dir)
     .stdout(Stdio::piped())
     .stderr(Stdio::inherit());
-    let output = match output_retrying_busy(&mut cmd) {
-        Ok(output) => output,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            remove_video_dir_best_effort(&video_dir);
-            return Err(anyhow!(
+    let Some(output) = run_and_cleanup_on_failure(
+        &mut cmd,
+        &video_dir,
+        existing_folder,
+        || {
+            format!(
                 "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
                 ytdlp_path.display()
-            ));
-        }
-        Err(e) => {
-            remove_video_dir_best_effort(&video_dir);
-            return Err(anyhow!(
-                "Failed to run yt-dlp thumbnail fetch for {video_url}: {e}"
-            ));
-        }
-    };
-
-    if !output.status.success() {
-        remove_video_dir_best_effort(&video_dir);
+            )
+        },
+        |e| format!("Failed to run yt-dlp thumbnail fetch for {video_url}: {e}"),
+    )?
+    else {
         return Ok(None);
-    }
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let printed = stdout.lines().next_back().map(|s| s.trim());
@@ -299,7 +292,7 @@ pub fn fetch_thumbnail(
     match filename {
         Some(filename) => Ok(Some(FetchedThumbnail { folder, filename })),
         None => {
-            remove_video_dir_best_effort(&video_dir);
+            remove_video_dir_unless_reused(&video_dir, existing_folder);
             Ok(None)
         }
     }
@@ -393,6 +386,73 @@ fn resolve_folder_collision(output_path: &Path, desired_folder: &str, video_id: 
     } else {
         desired_folder.to_string()
     }
+}
+
+/// The video's resolved per-video folder (`existing_folder` reused verbatim
+/// when given, otherwise a fresh `resolve_folder_collision` result), created
+/// on disk before either `download_video` or `fetch_thumbnail` invokes
+/// `yt-dlp` inside it.
+struct VideoDir {
+    folder: String,
+    path: std::path::PathBuf,
+}
+
+fn prepare_video_dir(
+    output_path: &Path,
+    desired_filename: &str,
+    video_id: &str,
+    existing_folder: Option<&str>,
+) -> Result<VideoDir> {
+    let folder = match existing_folder {
+        Some(folder) => folder.to_string(),
+        None => resolve_folder_collision(output_path, desired_filename, video_id),
+    };
+    let path = output_path.join(&folder);
+    ensure_output_dir(&path)?;
+    Ok(VideoDir { folder, path })
+}
+
+/// Removes `video_dir`, unless it's a folder reused via `existing_folder`
+/// (one this same video's earlier thumbnail fetch or download already
+/// populated) — reusing it verbatim means it isn't ours to delete on
+/// failure.
+fn remove_video_dir_unless_reused(video_dir: &Path, existing_folder: Option<&str>) {
+    if existing_folder.is_none() {
+        remove_video_dir_best_effort(video_dir);
+    }
+}
+
+/// Runs `cmd` (fully configured: args, stdio, working directory), retrying
+/// on a transient busy error, and cleans up `video_dir` on any failure
+/// unless it was reused via `existing_folder` — see
+/// `remove_video_dir_unless_reused`. Returns `Ok(None)` for a clean `yt-dlp`
+/// failure (non-zero exit) and `Ok(Some(output))` on a successful exit;
+/// `Err` only for a systemic problem (missing binary, spawn failure).
+fn run_and_cleanup_on_failure(
+    cmd: &mut Command,
+    video_dir: &Path,
+    existing_folder: Option<&str>,
+    not_found_msg: impl FnOnce() -> String,
+    other_err_msg: impl FnOnce(&io::Error) -> String,
+) -> Result<Option<std::process::Output>> {
+    let output = match output_retrying_busy(cmd) {
+        Ok(output) => output,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            remove_video_dir_unless_reused(video_dir, existing_folder);
+            return Err(anyhow!(not_found_msg()));
+        }
+        Err(e) => {
+            remove_video_dir_unless_reused(video_dir, existing_folder);
+            return Err(anyhow!(other_err_msg(&e)));
+        }
+    };
+
+    if !output.status.success() {
+        remove_video_dir_unless_reused(video_dir, existing_folder);
+        return Ok(None);
+    }
+
+    Ok(Some(output))
 }
 
 #[cfg(test)]
@@ -949,6 +1009,34 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn it_should_not_remove_a_reused_existing_folder_on_a_failed_download() {
+        use test_support::{FakeYtDlp, unique_temp_dir};
+
+        let output_dir = unique_temp_dir("ytdlp-output-failed-exit-reused-folder");
+        // A thumbnail already fetched into this video's folder ahead of the
+        // download — a failed download attempt must not delete it.
+        std::fs::create_dir_all(output_dir.join("My Video")).unwrap();
+        std::fs::write(output_dir.join("My Video").join("My Video.jpg"), b"thumb").unwrap();
+        let fake = FakeYtDlp::with_exit_code(1);
+
+        let result = download_video(
+            &fake.path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+            Some("My Video"),
+        )
+        .unwrap();
+
+        assert_eq!(result, None);
+        assert!(output_dir.join("My Video").join("My Video.jpg").exists());
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn it_should_return_the_printed_thumbnail_filename_on_success() {
         use test_support::{FakeYtDlp, unique_temp_dir};
 
@@ -961,6 +1049,7 @@ mod tests {
             "My Video",
             "vid1",
             &output_dir,
+            None,
         )
         .unwrap();
 
@@ -989,6 +1078,7 @@ mod tests {
             "My Video",
             "vid1",
             &output_dir,
+            None,
         )
         .unwrap();
 
@@ -1023,6 +1113,7 @@ mod tests {
             "My Video",
             "vid1",
             &output_dir,
+            None,
         )
         .unwrap();
 
@@ -1045,11 +1136,37 @@ mod tests {
             "My Video",
             "vid1",
             &output_dir,
+            None,
         )
         .unwrap();
 
         assert_eq!(result, None);
         assert!(!output_dir.join("My Video").exists());
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_not_remove_a_reused_existing_folder_on_a_clean_failed_exit() {
+        use test_support::{FakeYtDlp, unique_temp_dir};
+
+        let output_dir = unique_temp_dir("ytdlp-thumbnail-failed-exit-reused-folder");
+        std::fs::create_dir_all(output_dir.join("My Video")).unwrap();
+        std::fs::write(output_dir.join("My Video").join("My Video.mp4"), b"video").unwrap();
+        let fake = FakeYtDlp::with_exit_code(1);
+
+        let result = fetch_thumbnail(
+            &fake.path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            &output_dir,
+            Some("My Video"),
+        )
+        .unwrap();
+
+        assert_eq!(result, None);
+        assert!(output_dir.join("My Video").join("My Video.mp4").exists());
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
@@ -1066,6 +1183,7 @@ mod tests {
             "My Video",
             "vid1",
             &output_dir,
+            None,
         );
 
         assert!(result.is_err());
@@ -1087,6 +1205,7 @@ mod tests {
             "My Video",
             "vid1",
             &output_dir,
+            None,
         )
         .unwrap()
         .unwrap();
@@ -1095,6 +1214,37 @@ mod tests {
         assert!(
             fake.captured_args()
                 .contains(&"My Video [vid1].%(ext)s".to_string())
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_use_the_existing_folder_verbatim_for_a_thumbnail_fetch() {
+        use test_support::{FakeYtDlp, unique_temp_dir};
+
+        let output_dir = unique_temp_dir("ytdlp-thumbnail-existing-folder");
+        // An entry already exists at "My Video" — if `fetch_thumbnail` ran its
+        // usual collision check it would suffix the folder with the video ID;
+        // passing `existing_folder` must bypass that check entirely.
+        std::fs::create_dir_all(output_dir.join("My Video")).unwrap();
+        let fake = FakeYtDlp::with_stdout("My Video.jpg\n");
+
+        let result = fetch_thumbnail(
+            &fake.path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            &output_dir,
+            Some("My Video"),
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.folder, "My Video");
+        assert!(
+            fake.captured_args()
+                .contains(&"My Video.%(ext)s".to_string())
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }

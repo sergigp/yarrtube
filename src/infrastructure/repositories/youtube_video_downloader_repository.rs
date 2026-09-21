@@ -28,12 +28,16 @@ pub trait VideoDownloaderRepository: Send + Sync {
     /// Returns `Ok(Some(FetchedThumbnail))` when a thumbnail was fetched,
     /// `Ok(None)` when the video has none to fetch (not an error — see
     /// `video-thumbnails`). Returns `Err` only for a systemic problem.
+    /// `existing_folder` is reused the same way as `download`'s — e.g. a
+    /// `Downloaded` video's already-recorded folder, for a missing-thumbnail
+    /// recovery pass.
     fn fetch_thumbnail(
         &self,
         video_url: &str,
         desired_filename: &str,
         video_id: &str,
         output_dir: &Path,
+        existing_folder: Option<&str>,
     ) -> anyhow::Result<Option<FetchedThumbnail>>;
 }
 
@@ -77,6 +81,7 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
         desired_filename: &str,
         video_id: &str,
         output_dir: &Path,
+        existing_folder: Option<&str>,
     ) -> anyhow::Result<Option<FetchedThumbnail>> {
         ytdlp::ensure_output_dir(output_dir)?;
         ytdlp::fetch_thumbnail(
@@ -85,6 +90,7 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
             desired_filename,
             video_id,
             output_dir,
+            existing_folder,
         )
     }
 }
@@ -104,10 +110,11 @@ pub struct FakeVideoDownloaderRepository {
             Option<String>,
         )>,
     >,
-    pub(crate) thumbnail_result: std::sync::Mutex<Option<FetchedThumbnail>>,
-    pub(crate) thumbnail_error: std::sync::atomic::AtomicBool,
     #[allow(clippy::type_complexity)]
-    pub(crate) thumbnail_calls: std::sync::Mutex<Vec<(String, String, String, std::path::PathBuf)>>,
+    pub(crate) thumbnail_result: std::sync::Mutex<Option<anyhow::Result<Option<FetchedThumbnail>>>>,
+    #[allow(clippy::type_complexity)]
+    pub(crate) thumbnail_calls:
+        std::sync::Mutex<Vec<(String, String, String, std::path::PathBuf, Option<String>)>>,
 }
 
 #[cfg(test)]
@@ -139,16 +146,19 @@ impl FakeVideoDownloaderRepository {
     /// default) mirrors a clean "no thumbnail available" outcome.
     pub fn with_thumbnail_result(self, result: Option<FetchedThumbnail>) -> Self {
         Self {
-            thumbnail_result: std::sync::Mutex::new(result),
+            thumbnail_result: std::sync::Mutex::new(Some(Ok(result))),
             ..self
         }
     }
 
     /// Makes `fetch_thumbnail` return `Err` instead of a configured result.
     pub fn with_thumbnail_error(self) -> Self {
-        self.thumbnail_error
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-        self
+        Self {
+            thumbnail_result: std::sync::Mutex::new(Some(Err(anyhow::anyhow!(
+                "fake thumbnail fetch error"
+            )))),
+            ..self
+        }
     }
 
     pub fn thumbnail_calls_count(&self) -> usize {
@@ -184,20 +194,19 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
         desired_filename: &str,
         video_id: &str,
         output_dir: &Path,
+        existing_folder: Option<&str>,
     ) -> anyhow::Result<Option<FetchedThumbnail>> {
         self.thumbnail_calls.lock().unwrap().push((
             video_url.to_string(),
             desired_filename.to_string(),
             video_id.to_string(),
             output_dir.to_path_buf(),
+            existing_folder.map(str::to_string),
         ));
-        if self
-            .thumbnail_error
-            .load(std::sync::atomic::Ordering::SeqCst)
-        {
-            return Err(anyhow::anyhow!("fake thumbnail fetch error"));
+        match self.thumbnail_result.lock().unwrap().take() {
+            Some(result) => result,
+            None => Ok(None),
         }
-        Ok(self.thumbnail_result.lock().unwrap().clone())
     }
 }
 
@@ -262,7 +271,13 @@ mod tests {
         let output_dir = test_support::unique_temp_dir("video-downloader-repository-thumbnail");
 
         let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
-            .fetch_thumbnail("https://example.com/video", "My Video", "vid1", &output_dir)
+            .fetch_thumbnail(
+                "https://example.com/video",
+                "My Video",
+                "vid1",
+                &output_dir,
+                None,
+            )
             .unwrap();
 
         assert_eq!(

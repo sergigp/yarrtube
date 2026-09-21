@@ -74,6 +74,10 @@ impl VideoReconciler {
         }
     }
 
+    fn output_dir(&self, path: &str) -> std::path::PathBuf {
+        Path::new(&self.videos_path).join(path)
+    }
+
     /// Regenerates `video`'s metadata (fetch `YoutubeMetadata`, resolve
     /// `sorttitle`, build `VideoMetadata`, save) the same way
     /// `VideoDownloader::download` does at download time. Any failure is
@@ -175,7 +179,7 @@ impl VideoReconciler {
     /// stored videos no longer present on YouTube.
     fn sync_playlist_membership(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let id = &playlist.id;
-        let output_dir = Path::new(&self.videos_path).join(playlist.path.as_str());
+        let output_dir = self.output_dir(playlist.path.as_str());
         let current_videos = self
             .youtube_playlist_items_repository
             .list_current_videos(id)?;
@@ -279,7 +283,7 @@ impl VideoReconciler {
     /// is what clears out a stale non-mp4 file once its video has been
     /// redownloaded under a fresh filename.
     fn reconcile_filesystem(&self, playlist: &Playlist) -> anyhow::Result<()> {
-        let output_dir = Path::new(&self.videos_path).join(playlist.path.as_str());
+        let output_dir = self.output_dir(playlist.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
         let stored_playlist_videos = self
             .playlist_video_repository
@@ -311,6 +315,13 @@ impl VideoReconciler {
                 .iter()
                 .map(|pv| (&pv.video_id, pv.position))
                 .collect();
+        // Videos reset for redownload below: their in-memory `stored_videos`
+        // snapshot goes stale the instant the reset is persisted, and their
+        // thumbnail is expected to arrive with their own fresh download (see
+        // design.md's Non-Goals) — so the recovery loop must skip them
+        // rather than fetch a thumbnail for, and persist over, a video
+        // object that no longer matches what's in the database.
+        let mut reset_video_ids: HashSet<&VideoRecordId> = HashSet::new();
 
         for video in &downloaded {
             let healthy = video.filename.as_deref().is_some_and(|filename| {
@@ -330,6 +341,7 @@ impl VideoReconciler {
                 );
                 let reset = (*video).clone().reset_for_redownload(now);
                 self.video_repository.update(&reset)?;
+                reset_video_ids.insert(&video.id);
                 self.task_repository.schedule(
                     &Task::DownloadVideo {
                         video_id: video.id.as_str().to_string(),
@@ -360,6 +372,7 @@ impl VideoReconciler {
             );
             let reset = video.clone().reset_for_redownload(now);
             self.video_repository.update(&reset)?;
+            reset_video_ids.insert(&video.id);
             self.task_repository.schedule(
                 &Task::DownloadVideo {
                     video_id: video.id.as_str().to_string(),
@@ -372,7 +385,7 @@ impl VideoReconciler {
 
         for video in stored_videos
             .iter()
-            .filter(|v| v.thumbnail_filename.is_none())
+            .filter(|v| v.thumbnail_filename.is_none() && !reset_video_ids.contains(&v.id))
         {
             self.thumbnail_fetcher.fetch(video, &output_dir);
         }
@@ -947,5 +960,41 @@ mod tests {
             .unwrap();
 
         assert_eq!(harness.thumbnail_downloader.thumbnail_calls_count(), 0);
+    }
+
+    #[test]
+    fn it_should_not_fetch_a_thumbnail_for_a_video_reset_for_redownload_in_the_same_pass() {
+        // Missing file (default `file_exists` is false) with no recorded
+        // thumbnail: `reconcile_filesystem` resets this video for
+        // redownload. The missing-thumbnail recovery loop must not then
+        // fetch a thumbnail for it (its own redownload will bring one) or,
+        // worse, persist a stale copy of the video over the reset — see
+        // design.md's Non-Goals.
+        let playlist = custom_playlist();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        let harness = harness_with_thumbnail_downloader(
+            &playlist,
+            &video,
+            None,
+            FakeVideoFileRepository::default(),
+            FakeYoutubeMetadataRepository::default(),
+            FakeVideoMetadataRepository::default(),
+            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
+                FetchedThumbnail {
+                    folder: "My Video".to_string(),
+                    filename: "My Video.jpg".to_string(),
+                },
+            )),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(playlist.id.clone())
+            .unwrap();
+
+        assert_eq!(harness.thumbnail_downloader.thumbnail_calls_count(), 0);
+        let found = harness.video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.status, VideoStatus::Pending);
+        assert_eq!(found.filename, None);
     }
 }

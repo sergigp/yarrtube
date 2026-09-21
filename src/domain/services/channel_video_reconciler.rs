@@ -2,7 +2,7 @@ use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::DomainEvent;
 use crate::domain::services::thumbnail_fetcher::ThumbnailFetcher;
-use crate::domain::shared::VideoId;
+use crate::domain::shared::{VideoId, VideoRecordId};
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoStatus, top_level_entry, video_dir_for_filename};
 use crate::domain::video_metadata::{build_video_metadata, resolve_sorttitle};
@@ -73,6 +73,10 @@ impl ChannelVideoReconciler {
             reconcile_interval_seconds,
             videos_path: videos_path.into(),
         }
+    }
+
+    fn output_dir(&self, path: &str) -> std::path::PathBuf {
+        Path::new(&self.videos_path).join(path)
     }
 
     /// Regenerates `video`'s metadata — the channel equivalent of
@@ -167,7 +171,7 @@ impl ChannelVideoReconciler {
     /// current top-N (whether removed on YouTube or aged past the limit).
     fn sync_channel_membership(&self, channel: &Channel) -> anyhow::Result<()> {
         let id = &channel.id;
-        let output_dir = Path::new(&self.videos_path).join(channel.path.as_str());
+        let output_dir = self.output_dir(channel.path.as_str());
         let current_videos = self
             .channel_videos_repository
             .list_current_videos(id, channel.video_limit.value())?;
@@ -262,7 +266,7 @@ impl ChannelVideoReconciler {
     /// that doesn't belong to any currently-`Downloaded` video (an orphan).
     /// Mirrors `VideoReconciler::reconcile_filesystem`.
     fn reconcile_filesystem(&self, channel: &Channel) -> anyhow::Result<()> {
-        let output_dir = Path::new(&self.videos_path).join(channel.path.as_str());
+        let output_dir = self.output_dir(channel.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
         let stored_channel_videos = self
             .channel_video_repository
@@ -289,6 +293,13 @@ impl ChannelVideoReconciler {
             )
             .map(top_level_entry)
             .collect();
+        // Videos reset for redownload below: their in-memory `stored_videos`
+        // snapshot goes stale the instant the reset is persisted, and their
+        // thumbnail is expected to arrive with their own fresh download (see
+        // design.md's Non-Goals) — so the recovery loop must skip them
+        // rather than fetch a thumbnail for, and persist over, a video
+        // object that no longer matches what's in the database.
+        let mut reset_video_ids: HashSet<&VideoRecordId> = HashSet::new();
 
         for video in &downloaded {
             let healthy = video.filename.as_deref().is_some_and(|filename| {
@@ -308,6 +319,7 @@ impl ChannelVideoReconciler {
                 );
                 let reset = (*video).clone().reset_for_redownload(now);
                 self.video_repository.update(&reset)?;
+                reset_video_ids.insert(&video.id);
                 self.task_repository.schedule(
                     &Task::DownloadVideo {
                         video_id: video.id.as_str().to_string(),
@@ -337,6 +349,7 @@ impl ChannelVideoReconciler {
             );
             let reset = video.clone().reset_for_redownload(now);
             self.video_repository.update(&reset)?;
+            reset_video_ids.insert(&video.id);
             self.task_repository.schedule(
                 &Task::DownloadVideo {
                     video_id: video.id.as_str().to_string(),
@@ -349,7 +362,7 @@ impl ChannelVideoReconciler {
 
         for video in stored_videos
             .iter()
-            .filter(|v| v.thumbnail_filename.is_none())
+            .filter(|v| v.thumbnail_filename.is_none() && !reset_video_ids.contains(&v.id))
         {
             self.thumbnail_fetcher.fetch(video, &output_dir);
         }
@@ -912,5 +925,40 @@ mod tests {
             .unwrap();
 
         assert_eq!(harness.thumbnail_downloader.thumbnail_calls_count(), 0);
+    }
+
+    #[test]
+    fn it_should_not_fetch_a_thumbnail_for_a_video_reset_for_redownload_in_the_same_pass() {
+        // Missing file (default `file_exists` is false) with no recorded
+        // thumbnail: `reconcile_filesystem` resets this video for
+        // redownload. The missing-thumbnail recovery loop must not then
+        // fetch a thumbnail for it (its own redownload will bring one) or,
+        // worse, persist a stale copy of the video over the reset — see
+        // design.md's Non-Goals.
+        let channel = channel();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        let harness = harness_with_thumbnail_downloader(
+            &channel,
+            &video,
+            FakeVideoFileRepository::default(),
+            FakeYoutubeMetadataRepository::default(),
+            FakeVideoMetadataRepository::default(),
+            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
+                FetchedThumbnail {
+                    folder: "My Video".to_string(),
+                    filename: "My Video.jpg".to_string(),
+                },
+            )),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(channel.id.clone())
+            .unwrap();
+
+        assert_eq!(harness.thumbnail_downloader.thumbnail_calls_count(), 0);
+        let found = harness.video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.status, VideoStatus::Pending);
+        assert_eq!(found.filename, None);
     }
 }
