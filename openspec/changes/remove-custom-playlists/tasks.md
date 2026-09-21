@@ -7,7 +7,7 @@
 - [x] 1.5 Delete `CreateCustomPlaylistError` from `src/domain/playlist/errors.rs` and its export in `src/domain/playlist/mod.rs`
 - [x] 1.6 Delete `AddVideoToCustomPlaylistError` and `RemoveVideoFromPlaylistError` from `src/domain/video/errors.rs` and their exports in `src/domain/video/mod.rs`
 - [x] 1.7 In `reconcile_on_playlist_created.rs`, delete `it_should_run_a_harmless_no_op_reconcile_pass_for_a_newly_created_custom_playlist`; update its doc comment referencing `Custom` playlists
-- [ ] 1.8 Update any remaining test in `sqlite_playlist_repository.rs` that constructs `PlaylistKind::Custom` to use `PlaylistKind::YoutubeLinked`; verify with `cargo test sqlite_playlist_repository`
+- [x] 1.8 Update any remaining test in `sqlite_playlist_repository.rs` that constructs `PlaylistKind::Custom` to use `PlaylistKind::YoutubeLinked`; verify with `cargo test sqlite_playlist_repository`
 
 ## 2. HTTP layer and wiring
 
