@@ -4,7 +4,7 @@
 - [x] 1.2 Delete `src/domain/services/custom_playlist_video_adder.rs` and `src/domain/services/custom_playlist_video_remover.rs`, and their `mod`/`pub use` lines in `src/domain/services/mod.rs`
 - [x] 1.3 Remove `PlaylistCreator::create_custom` from `src/domain/services/playlist_creator.rs`; drop the `it_should_be_true_when_the_colliding_playlist_is_of_the_other_kind` test and switch remaining `path_used_by_another_playlist` tests to `PlaylistKind::YoutubeLinked`; verify with `cargo test playlist_creator`
 - [x] 1.4 Simplify `VideoReconciler::run_reconcile_pass` (`src/domain/services/video_reconciler.rs`) to always call `sync_playlist_membership`, dropping the `PlaylistKind` check and its now-unused import; delete any test seeding a `Custom` playlist to assert a no-op reconcile; verify with `cargo test video_reconciler`
-- [ ] 1.5 Delete `CreateCustomPlaylistError` from `src/domain/playlist/errors.rs` and its export in `src/domain/playlist/mod.rs`
+- [x] 1.5 Delete `CreateCustomPlaylistError` from `src/domain/playlist/errors.rs` and its export in `src/domain/playlist/mod.rs`
 - [ ] 1.6 Delete `AddVideoToCustomPlaylistError` and `RemoveVideoFromPlaylistError` from `src/domain/video/errors.rs` and their exports in `src/domain/video/mod.rs`
 - [ ] 1.7 In `reconcile_on_playlist_created.rs`, delete `it_should_run_a_harmless_no_op_reconcile_pass_for_a_newly_created_custom_playlist`; update its doc comment referencing `Custom` playlists
 - [ ] 1.8 Update any remaining test in `sqlite_playlist_repository.rs` that constructs `PlaylistKind::Custom` to use `PlaylistKind::YoutubeLinked`; verify with `cargo test sqlite_playlist_repository`

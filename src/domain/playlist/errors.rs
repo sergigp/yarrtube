@@ -45,34 +45,6 @@ impl fmt::Display for CreatePlaylistError {
 impl std::error::Error for CreatePlaylistError {}
 
 #[derive(Debug)]
-pub enum CreateCustomPlaylistError {
-    InvalidId(PlaylistId, String),
-    AlreadyExists(PlaylistId),
-    PathAlreadyInUse(PlaylistPath),
-    Repository(anyhow::Error),
-}
-
-impl fmt::Display for CreateCustomPlaylistError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidId(id, reason) => {
-                write!(f, "playlist id {id} is not a well-formed UUID: {reason}")
-            }
-            Self::AlreadyExists(id) => write!(f, "playlist {id} already exists"),
-            Self::PathAlreadyInUse(path) => {
-                write!(
-                    f,
-                    "playlist path \"{path}\" is already used by another playlist"
-                )
-            }
-            Self::Repository(e) => write!(f, "{e}"),
-        }
-    }
-}
-
-impl std::error::Error for CreateCustomPlaylistError {}
-
-#[derive(Debug)]
 pub enum DeletePlaylistError {
     NotFound(PlaylistId),
     Repository(anyhow::Error),

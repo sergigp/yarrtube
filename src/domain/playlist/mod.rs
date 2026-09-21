@@ -5,7 +5,7 @@ pub mod playlist_kind;
 pub mod playlist_name;
 pub mod playlist_path;
 
-pub use errors::{CreateCustomPlaylistError, CreatePlaylistError, DeletePlaylistError};
+pub use errors::{CreatePlaylistError, DeletePlaylistError};
 pub use playlist::Playlist;
 pub use playlist_kind::PlaylistKind;
 pub use playlist_name::PlaylistName;
