@@ -1,5 +1,4 @@
 pub mod channels;
-pub mod custom_playlists;
 pub mod error;
 pub mod playlists;
 pub mod tasks;
@@ -7,8 +6,8 @@ pub mod videos;
 
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
-    ChannelVideoReconciler, CustomPlaylistVideoAdder, CustomPlaylistVideoRemover, PlaylistCreator,
-    PlaylistDeleter, PlaylistSearcher, TaskViewSearcher, VideoReconciler, VideoSearcher,
+    ChannelVideoReconciler, PlaylistCreator, PlaylistDeleter, PlaylistSearcher, TaskViewSearcher,
+    VideoReconciler, VideoSearcher,
 };
 use axum::Router;
 use axum::routing::{get, post};
@@ -19,8 +18,6 @@ pub struct AppState {
     pub playlist_deleter: PlaylistDeleter,
     pub playlist_searcher: PlaylistSearcher,
     pub video_reconciler: VideoReconciler,
-    pub custom_playlist_video_adder: CustomPlaylistVideoAdder,
-    pub custom_playlist_video_remover: CustomPlaylistVideoRemover,
     pub video_searcher: VideoSearcher,
     pub task_view_searcher: TaskViewSearcher,
     pub channel_service: ChannelService,
@@ -46,18 +43,6 @@ pub fn api_router(state: AppState) -> Router {
             get(videos::list_videos_for_playlist),
         )
         .route("/videos/recent", get(videos::list_recent_videos))
-        .route(
-            "/custom-playlists",
-            post(custom_playlists::create_custom_playlist),
-        )
-        .route(
-            "/custom-playlists/{id}/videos",
-            post(custom_playlists::add_video),
-        )
-        .route(
-            "/custom-playlists/{id}/videos/{video_id}",
-            axum::routing::delete(custom_playlists::remove_video),
-        )
         .route("/tasks", get(tasks::list_tasks))
         .route(
             "/channels",
