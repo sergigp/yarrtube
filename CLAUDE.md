@@ -28,9 +28,7 @@ Run the binary directly for local (non-Docker) development:
 
 This repo uses OpenSpec (`openspec/`) for spec-driven change management —
 proposals and specs live under `openspec/changes/` and `openspec/specs/`
-(one directory per capability: `playlist-crud`, `playlist-sync`,
-`playlist-download`, `task-scheduling`, `domain-events`, `daemon`,
-`status-endpoint`, `container-image`, `ytdlp-self-update`). Use the
+(one directory per capability). Use the
 `openspec-*` / `opsx:*` skills (propose, apply, update, sync-specs, archive,
 explore) when starting, continuing, or finalizing a spec'd change rather than
 editing `openspec/` files by hand.
