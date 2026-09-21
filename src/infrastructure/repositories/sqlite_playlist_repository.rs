@@ -17,23 +17,10 @@ pub struct SqlitePlaylistRepository {
 }
 
 impl SqlitePlaylistRepository {
-    pub fn new(conn: Connection) -> anyhow::Result<Self> {
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS playlists (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                path TEXT NOT NULL,
-                quality TEXT NOT NULL,
-                kind TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )",
-            [],
-        )
-        .inspect_err(|e| tracing::error!(error = %e, "failed to create playlists table"))
-        .context("failed to create playlists table")?;
-        Ok(Self {
+    pub fn new(conn: Connection) -> Self {
+        Self {
             conn: Mutex::new(conn),
-        })
+        }
     }
 }
 
@@ -199,7 +186,9 @@ mod tests {
     use super::*;
 
     fn repo() -> SqlitePlaylistRepository {
-        SqlitePlaylistRepository::new(Connection::open_in_memory().unwrap()).unwrap()
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+        SqlitePlaylistRepository::new(conn)
     }
 
     fn playlist(id: &str, name: &str) -> Playlist {

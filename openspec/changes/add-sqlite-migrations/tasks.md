@@ -7,15 +7,15 @@
 
 ## 2. Wire migrations into startup
 
-- [ ] 2.1 Add `run_startup_migrations()` to `src/serve.rs`, calling `open_connection()` then `sqlite_migrations::apply()`
-- [ ] 2.2 Call `run_startup_migrations()` in `serve::run()` before `build_application()`, returning `ExitCode::FAILURE` on error (same pattern as `build_application()`'s own error handling), and verify with `cargo build`
+- [x] 2.1 Add `run_startup_migrations()` to `src/serve.rs`, calling `open_connection()` then `sqlite_migrations::apply()`
+- [x] 2.2 Call `run_startup_migrations()` in `serve::run()` before `build_application()`, returning `ExitCode::FAILURE` on error (same pattern as `build_application()`'s own error handling), and verify with `cargo build`
 
 ## 3. Remove schema creation from repositories
 
-- [ ] 3.1 Remove the `CREATE TABLE` call and the now-unneeded `anyhow::Result` from `SqliteChannelRepository::new()`, update its call site in `src/serve.rs`, and verify `cargo test sqlite_channel_repository` passes
-- [ ] 3.2 Do the same for `SqlitePlaylistRepository::new()` and verify `cargo test sqlite_playlist_repository` passes
-- [ ] 3.3 Do the same for `SqliteVideoRepository::new()` and verify `cargo test sqlite_video_repository` passes
-- [ ] 3.4 Do the same for `SqliteVideoMetadataRepository::new()` and verify `cargo test sqlite_video_metadata_repository` passes
+- [x] 3.1 Remove the `CREATE TABLE` call and the now-unneeded `anyhow::Result` from `SqliteChannelRepository::new()`, update its call site in `src/serve.rs`, and verify `cargo test sqlite_channel_repository` passes
+- [x] 3.2 Do the same for `SqlitePlaylistRepository::new()` and verify `cargo test sqlite_playlist_repository` passes
+- [x] 3.3 Do the same for `SqliteVideoRepository::new()` and verify `cargo test sqlite_video_repository` passes
+- [x] 3.4 Do the same for `SqliteVideoMetadataRepository::new()` and verify `cargo test sqlite_video_metadata_repository` passes
 - [ ] 3.5 Do the same for `SqlitePlaylistVideoRepository::new()`, update its test `repo()` helper to call `sqlite_migrations::apply()` instead of hand-rolling a partial `videos` table, and verify `cargo test sqlite_playlist_video_repository` passes
 - [ ] 3.6 Do the same for `SqliteChannelVideoRepository::new()`, update its test `repo()` helper to call `sqlite_migrations::apply()` instead of hand-rolling a partial `videos` table, and verify `cargo test sqlite_channel_video_repository` passes
 - [ ] 3.7 Remove both `CREATE TABLE` calls and the lock-only fallibility from `SqliteTaskRepository::new()`, update its call site in `src/serve.rs`, and verify `cargo test sqlite_task_repository` passes
