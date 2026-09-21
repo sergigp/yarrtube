@@ -11,7 +11,7 @@
 
 ## 2. HTTP layer and wiring
 
-- [ ] 2.1 Delete `src/application/http/custom_playlists/` (`mod.rs`, `dto.rs`)
+- [x] 2.1 Delete `src/application/http/custom_playlists/` (`mod.rs`, `dto.rs`)
 - [ ] 2.2 In `src/application/http/mod.rs`, remove the `custom_playlists` module declaration, the three `/custom-playlists*` routes, the `custom_playlist_video_adder`/`custom_playlist_video_remover` imports, and the two corresponding `AppState` fields
 - [ ] 2.3 In `src/serve.rs`, remove construction of `custom_playlist_video_adder` and `custom_playlist_video_remover` and their entries in the `AppState` literal
 - [ ] 2.4 Verify with `cargo build --release` that the binary compiles with no dangling references to the deleted types
