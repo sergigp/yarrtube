@@ -79,6 +79,18 @@ impl Video {
         }
     }
 
+    /// Records a thumbnail fetched independently of, and ahead of, the
+    /// video's full download — see the `video-thumbnails` capability.
+    /// Touches only `thumbnail_filename`/`updated_at`, leaving `status`,
+    /// `filename`, and `quality` exactly as they were.
+    pub fn with_thumbnail(self, thumbnail_filename: impl Into<String>, now: DateTime<Utc>) -> Self {
+        Self {
+            thumbnail_filename: Some(thumbnail_filename.into()),
+            updated_at: now,
+            ..self
+        }
+    }
+
     /// Resets a video back to `Pending`, clearing its recorded filename,
     /// thumbnail filename, and quality, used by filesystem reconciliation
     /// both when a `Downloaded` video's recorded file is missing from disk
@@ -182,6 +194,22 @@ mod tests {
         let video = video().mark_downloaded(Quality::High, "My Video.mp4", None, None, now);
 
         assert_eq!(video.duration_seconds, None);
+    }
+
+    #[test]
+    fn it_should_only_touch_thumbnail_filename_and_updated_at_when_recording_a_thumbnail() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+
+        let video = video().with_thumbnail("My Video/My Video.jpg", now);
+
+        assert_eq!(
+            video.thumbnail_filename,
+            Some("My Video/My Video.jpg".to_string())
+        );
+        assert_eq!(video.updated_at, now);
+        assert_eq!(video.status, VideoStatus::Pending);
+        assert_eq!(video.filename, None);
+        assert_eq!(video.quality, None);
     }
 
     #[test]

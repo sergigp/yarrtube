@@ -1,8 +1,8 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::shared::PlaylistId;
-use crate::domain::video::top_level_entry;
+use crate::domain::video::{resolve_output_dir, top_level_entry};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -86,7 +86,7 @@ impl VideoFileDeleter {
         playlist_id: PlaylistId,
         path: String,
     ) -> anyhow::Result<()> {
-        let output_dir = self.output_dir(&path);
+        let output_dir = resolve_output_dir(&self.videos_path, &path);
         self.video_file_repository
             .delete_dir_recursive(&output_dir)?;
         info!(playlist_id = %playlist_id, path = %path, "deleted playlist output directory");
@@ -101,15 +101,11 @@ impl VideoFileDeleter {
         channel_id: ChannelHandle,
         path: String,
     ) -> anyhow::Result<()> {
-        let output_dir = self.output_dir(&path);
+        let output_dir = resolve_output_dir(&self.videos_path, &path);
         self.video_file_repository
             .delete_dir_recursive(&output_dir)?;
         info!(channel_id = %channel_id, path = %path, "deleted channel output directory");
         Ok(())
-    }
-
-    fn output_dir(&self, path: &str) -> PathBuf {
-        Path::new(&self.videos_path).join(path)
     }
 }
 
@@ -117,6 +113,7 @@ impl VideoFileDeleter {
 mod tests {
     use super::*;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use std::path::PathBuf;
 
     fn deleter(repo: FakeVideoFileRepository) -> (VideoFileDeleter, Arc<FakeVideoFileRepository>) {
         let repo = Arc::new(repo);

@@ -1,9 +1,12 @@
 use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::DomainEvent;
-use crate::domain::shared::VideoId;
+use crate::domain::services::thumbnail_fetcher::ThumbnailFetcher;
+use crate::domain::shared::{VideoId, VideoRecordId};
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoStatus, top_level_entry, video_dir_for_filename};
+use crate::domain::video::{
+    Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
+};
 use crate::domain::video_metadata::{build_video_metadata, resolve_sorttitle};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -34,6 +37,7 @@ pub struct ChannelVideoReconciler {
     event_publisher: Arc<dyn EventPublisher>,
     task_repository: Arc<dyn TaskRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
+    thumbnail_fetcher: Arc<ThumbnailFetcher>,
     clock: Arc<dyn Clock>,
     reconcile_interval_seconds: i64,
     videos_path: String,
@@ -51,6 +55,7 @@ impl ChannelVideoReconciler {
         event_publisher: Arc<dyn EventPublisher>,
         task_repository: Arc<dyn TaskRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
+        thumbnail_fetcher: Arc<ThumbnailFetcher>,
         clock: Arc<dyn Clock>,
         reconcile_interval_seconds: i64,
         videos_path: impl Into<String>,
@@ -65,6 +70,7 @@ impl ChannelVideoReconciler {
             event_publisher,
             task_repository,
             video_file_repository,
+            thumbnail_fetcher,
             clock,
             reconcile_interval_seconds,
             videos_path: videos_path.into(),
@@ -163,6 +169,7 @@ impl ChannelVideoReconciler {
     /// current top-N (whether removed on YouTube or aged past the limit).
     fn sync_channel_membership(&self, channel: &Channel) -> anyhow::Result<()> {
         let id = &channel.id;
+        let output_dir = resolve_output_dir(&self.videos_path, channel.path.as_str());
         let current_videos = self
             .channel_videos_repository
             .list_current_videos(id, channel.video_limit.value())?;
@@ -183,6 +190,7 @@ impl ChannelVideoReconciler {
                     let channel_video =
                         ChannelVideo::create(id.clone(), video.id.clone(), current.position, now);
                     self.channel_video_repository.save(&channel_video)?;
+                    self.thumbnail_fetcher.fetch(&video, &output_dir);
                     info!(
                         channel_id = %id,
                         video_id = %youtube_id,
@@ -256,7 +264,7 @@ impl ChannelVideoReconciler {
     /// that doesn't belong to any currently-`Downloaded` video (an orphan).
     /// Mirrors `VideoReconciler::reconcile_filesystem`.
     fn reconcile_filesystem(&self, channel: &Channel) -> anyhow::Result<()> {
-        let output_dir = Path::new(&self.videos_path).join(channel.path.as_str());
+        let output_dir = resolve_output_dir(&self.videos_path, channel.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
         let stored_channel_videos = self
             .channel_video_repository
@@ -269,12 +277,27 @@ impl ChannelVideoReconciler {
             .iter()
             .filter(|v| v.status == VideoStatus::Downloaded)
             .collect();
+        // Every stored video's thumbnail folder is protected regardless of
+        // status: a `Pending`/`InProgress` video may already have a
+        // pre-fetched thumbnail on disk, ahead of its own download — see
+        // the `video-thumbnails` capability.
         let protected_top_level: HashSet<&str> = downloaded
             .iter()
-            .flat_map(|v| [v.filename.as_deref(), v.thumbnail_filename.as_deref()])
-            .flatten()
+            .filter_map(|v| v.filename.as_deref())
+            .chain(
+                stored_videos
+                    .iter()
+                    .filter_map(|v| v.thumbnail_filename.as_deref()),
+            )
             .map(top_level_entry)
             .collect();
+        // Videos reset for redownload below: their in-memory `stored_videos`
+        // snapshot goes stale the instant the reset is persisted, and their
+        // thumbnail is expected to arrive with their own fresh download (see
+        // design.md's Non-Goals) — so the recovery loop must skip them
+        // rather than fetch a thumbnail for, and persist over, a video
+        // object that no longer matches what's in the database.
+        let mut reset_video_ids: HashSet<&VideoRecordId> = HashSet::new();
 
         for video in &downloaded {
             let healthy = video.filename.as_deref().is_some_and(|filename| {
@@ -294,6 +317,7 @@ impl ChannelVideoReconciler {
                 );
                 let reset = (*video).clone().reset_for_redownload(now);
                 self.video_repository.update(&reset)?;
+                reset_video_ids.insert(&video.id);
                 self.task_repository.schedule(
                     &Task::DownloadVideo {
                         video_id: video.id.as_str().to_string(),
@@ -323,6 +347,7 @@ impl ChannelVideoReconciler {
             );
             let reset = video.clone().reset_for_redownload(now);
             self.video_repository.update(&reset)?;
+            reset_video_ids.insert(&video.id);
             self.task_repository.schedule(
                 &Task::DownloadVideo {
                     video_id: video.id.as_str().to_string(),
@@ -332,6 +357,9 @@ impl ChannelVideoReconciler {
                 now,
             )?;
         }
+
+        self.thumbnail_fetcher
+            .fetch_missing(&stored_videos, &reset_video_ids, &output_dir);
 
         for file in &files {
             if protected_top_level.contains(file.as_str()) {
@@ -363,8 +391,10 @@ mod tests {
         ChannelVideoListing, FakeChannelVideosRepository,
     };
     use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
     use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
     use crate::infrastructure::shared::system_clock::FixedClock;
+    use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
     use chrono::{DateTime, Utc};
 
     fn fixed_timestamp() -> DateTime<Utc> {
@@ -377,6 +407,7 @@ mod tests {
         task_repository: Arc<FakeTaskRepository>,
         video_file_repository: Arc<FakeVideoFileRepository>,
         video_metadata_repository: Arc<FakeVideoMetadataRepository>,
+        thumbnail_downloader: Arc<FakeVideoDownloaderRepository>,
     }
 
     fn harness(
@@ -402,6 +433,28 @@ mod tests {
         video_file_repository: FakeVideoFileRepository,
         youtube_metadata_repository: FakeYoutubeMetadataRepository,
         video_metadata_repository: FakeVideoMetadataRepository,
+    ) -> Harness {
+        harness_with_thumbnail_downloader(
+            channel,
+            video,
+            video_file_repository,
+            youtube_metadata_repository,
+            video_metadata_repository,
+            FakeVideoDownloaderRepository::default(),
+        )
+    }
+
+    /// Like `harness_with_metadata`, but also lets a test inject a specific
+    /// `FakeVideoDownloaderRepository` to exercise the thumbnail-fetch call
+    /// sites (video creation, missing-thumbnail recovery).
+    #[allow(clippy::too_many_arguments)]
+    fn harness_with_thumbnail_downloader(
+        channel: &Channel,
+        video: &Video,
+        video_file_repository: FakeVideoFileRepository,
+        youtube_metadata_repository: FakeYoutubeMetadataRepository,
+        video_metadata_repository: FakeVideoMetadataRepository,
+        thumbnail_downloader: FakeVideoDownloaderRepository,
     ) -> Harness {
         let channel_repository = Arc::new(FakeChannelRepository::default());
         channel_repository.insert(channel).unwrap();
@@ -430,6 +483,13 @@ mod tests {
                 position: 0,
             },
         ]));
+        let thumbnail_downloader = Arc::new(thumbnail_downloader);
+        let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
+            video_repository.clone(),
+            thumbnail_downloader.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_publisher = Arc::new(FakeEventPublisher::default());
 
         let reconciler = ChannelVideoReconciler::new(
             channel_repository,
@@ -438,9 +498,10 @@ mod tests {
             channel_videos_repository,
             Arc::new(youtube_metadata_repository),
             video_metadata_repository.clone(),
-            Arc::new(FakeEventPublisher::default()),
+            event_publisher.clone(),
             task_repository.clone(),
             video_file_repository.clone(),
+            thumbnail_fetcher,
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
@@ -452,6 +513,7 @@ mod tests {
             task_repository,
             video_file_repository,
             video_metadata_repository,
+            thumbnail_downloader,
         }
     }
 
@@ -662,5 +724,267 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(saved.title, "Stale Title");
+    }
+
+    /// Wires a `ChannelVideoReconciler` directly (rather than via `harness`,
+    /// which seeds an already-stored video) so this test can exercise
+    /// `sync_channel_membership`'s newly-added-video path against an empty
+    /// `VideoRepository`.
+    fn membership_harness(
+        channel: &Channel,
+        current_videos: Vec<ChannelVideoListing>,
+        thumbnail_downloader: FakeVideoDownloaderRepository,
+    ) -> (
+        ChannelVideoReconciler,
+        Arc<FakeVideoRepository>,
+        Arc<FakeEventPublisher>,
+        Arc<FakeVideoDownloaderRepository>,
+    ) {
+        let channel_repository = Arc::new(FakeChannelRepository::default());
+        channel_repository.insert(channel).unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let channel_videos_repository =
+            Arc::new(FakeChannelVideosRepository::with_videos(current_videos));
+        let event_publisher = Arc::new(FakeEventPublisher::default());
+        let thumbnail_downloader = Arc::new(thumbnail_downloader);
+        let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
+            video_repository.clone(),
+            thumbnail_downloader.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+
+        let reconciler = ChannelVideoReconciler::new(
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository,
+            channel_videos_repository,
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+            event_publisher.clone(),
+            Arc::new(FakeTaskRepository::default()),
+            Arc::new(FakeVideoFileRepository::default()),
+            thumbnail_fetcher,
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        );
+
+        (
+            reconciler,
+            video_repository,
+            event_publisher,
+            thumbnail_downloader,
+        )
+    }
+
+    #[test]
+    fn it_should_fetch_a_thumbnail_for_a_newly_added_video_before_publishing_its_event() {
+        let channel = channel();
+        let downloader = FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
+            FetchedThumbnail {
+                folder: "My Video".to_string(),
+                filename: "My Video.jpg".to_string(),
+            },
+        ));
+        let (reconciler, video_repository, event_publisher, thumbnail_downloader) =
+            membership_harness(
+                &channel,
+                vec![ChannelVideoListing {
+                    youtube_id: "yt1".to_string(),
+                    title: "My Video".to_string(),
+                    position: 0,
+                }],
+                downloader,
+            );
+
+        reconciler.force_reconcile(channel.id.clone()).unwrap();
+
+        assert_eq!(thumbnail_downloader.thumbnail_calls_count(), 1);
+        let stored = video_repository.videos.lock().unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(
+            stored[0].thumbnail_filename,
+            Some("My Video/My Video.jpg".to_string())
+        );
+        let published = event_publisher.published.lock().unwrap();
+        assert!(matches!(
+            published.as_slice(),
+            [DomainEvent::VideoAddedToChannel { .. }]
+        ));
+    }
+
+    #[test]
+    fn it_should_still_persist_and_publish_when_the_thumbnail_fetch_fails() {
+        let channel = channel();
+        let downloader = FakeVideoDownloaderRepository::default().with_thumbnail_error();
+        let (reconciler, video_repository, event_publisher, _thumbnail_downloader) =
+            membership_harness(
+                &channel,
+                vec![ChannelVideoListing {
+                    youtube_id: "yt1".to_string(),
+                    title: "My Video".to_string(),
+                    position: 0,
+                }],
+                downloader,
+            );
+
+        reconciler.force_reconcile(channel.id.clone()).unwrap();
+
+        let stored = video_repository.videos.lock().unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].thumbnail_filename, None);
+        let published = event_publisher.published.lock().unwrap();
+        assert!(matches!(
+            published.as_slice(),
+            [DomainEvent::VideoAddedToChannel { .. }]
+        ));
+    }
+
+    #[test]
+    fn it_should_protect_a_pending_videos_prefetched_thumbnail_folder_from_the_orphan_sweep() {
+        let channel = channel();
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+            .with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
+        let video_file_repository = FakeVideoFileRepository {
+            file_exists_result: std::sync::Mutex::new(Some(true)),
+            list_result: std::sync::Mutex::new(Some(Ok(vec!["My Video".to_string()]))),
+            ..Default::default()
+        };
+        let harness = harness(&channel, &video, video_file_repository);
+
+        harness
+            .reconciler
+            .force_reconcile(channel.id.clone())
+            .unwrap();
+
+        assert!(
+            harness
+                .video_file_repository
+                .deleted_calls
+                .lock()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn it_should_fetch_a_missing_thumbnail_during_reconcile() {
+        let channel = channel();
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
+        let downloader = FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
+            FetchedThumbnail {
+                folder: "My Video".to_string(),
+                filename: "My Video.jpg".to_string(),
+            },
+        ));
+        let harness = harness_with_thumbnail_downloader(
+            &channel,
+            &video,
+            FakeVideoFileRepository::default(),
+            FakeYoutubeMetadataRepository::default(),
+            FakeVideoMetadataRepository::default(),
+            downloader,
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(channel.id.clone())
+            .unwrap();
+
+        assert_eq!(harness.thumbnail_downloader.thumbnail_calls_count(), 1);
+        let found = harness.video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(
+            found.thumbnail_filename,
+            Some("My Video/My Video.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn it_should_not_refetch_a_thumbnail_the_video_already_has() {
+        let channel = channel();
+        let video = downloaded_video("My Video/My Video.mp4", Some("My Video/My Video.jpg"));
+        let harness = harness_with_thumbnail_downloader(
+            &channel,
+            &video,
+            FakeVideoFileRepository::with_file_exists(true),
+            FakeYoutubeMetadataRepository::default(),
+            FakeVideoMetadataRepository::default(),
+            FakeVideoDownloaderRepository::default(),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(channel.id.clone())
+            .unwrap();
+
+        assert_eq!(harness.thumbnail_downloader.thumbnail_calls_count(), 0);
+    }
+
+    #[test]
+    fn it_should_not_fetch_a_thumbnail_for_a_video_reset_for_redownload_in_the_same_pass() {
+        // Missing file (default `file_exists` is false) with no recorded
+        // thumbnail: `reconcile_filesystem` resets this video for
+        // redownload. The missing-thumbnail recovery loop must not then
+        // fetch a thumbnail for it (its own redownload will bring one) or,
+        // worse, persist a stale copy of the video over the reset — see
+        // design.md's Non-Goals.
+        let channel = channel();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        let harness = harness_with_thumbnail_downloader(
+            &channel,
+            &video,
+            FakeVideoFileRepository::default(),
+            FakeYoutubeMetadataRepository::default(),
+            FakeVideoMetadataRepository::default(),
+            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
+                FetchedThumbnail {
+                    folder: "My Video".to_string(),
+                    filename: "My Video.jpg".to_string(),
+                },
+            )),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(channel.id.clone())
+            .unwrap();
+
+        assert_eq!(harness.thumbnail_downloader.thumbnail_calls_count(), 0);
+        let found = harness.video_repository.find(&video.id).unwrap().unwrap();
+        assert_eq!(found.status, VideoStatus::Pending);
+        assert_eq!(found.filename, None);
+    }
+
+    #[test]
+    fn it_should_not_fetch_a_thumbnail_for_a_video_whose_real_download_is_in_progress() {
+        // A video currently being downloaded by a concurrent `DownloadVideo`
+        // task has no `filename` yet, so `existing_folder` would resolve to
+        // `None` and a concurrent recovery-pass fetch would collide with the
+        // in-progress download's own folder, spawning a stray sibling folder
+        // that then gets permanently protected from the orphan sweep.
+        let channel = channel();
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+            .start_download(fixed_timestamp());
+        let harness = harness_with_thumbnail_downloader(
+            &channel,
+            &video,
+            FakeVideoFileRepository::default(),
+            FakeYoutubeMetadataRepository::default(),
+            FakeVideoMetadataRepository::default(),
+            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
+                FetchedThumbnail {
+                    folder: "My Video".to_string(),
+                    filename: "My Video.jpg".to_string(),
+                },
+            )),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(channel.id.clone())
+            .unwrap();
+
+        assert_eq!(harness.thumbnail_downloader.thumbnail_calls_count(), 0);
     }
 }

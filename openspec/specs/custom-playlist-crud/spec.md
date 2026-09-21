@@ -55,12 +55,14 @@ playlist's ID, whenever a custom playlist is successfully created.
 The system SHALL provide an HTTP endpoint that adds a video to a custom
 playlist, given a YouTube video URL or a bare video ID. It SHALL confirm the
 video exists and is accessible via the YouTube Data API and fetch its title
-from there before persisting anything, then store it with status PENDING
-and publish a `VideoAdded` event.
+from there before persisting anything, then store it with status PENDING,
+attempt a best-effort thumbnail fetch for it (see `video-thumbnails`), and
+publish a `VideoAdded` event. The thumbnail fetch's outcome SHALL NOT delay
+or prevent the video's persistence or the event's publication.
 
 #### Scenario: Successful add
 - **WHEN** a request identifies a custom playlist and supplies a video URL or ID that exists and is accessible on YouTube
-- **THEN** the system stores the video with status PENDING and its YouTube title, and publishes a `VideoAdded` event containing the playlist ID and video ID
+- **THEN** the system stores the video with status PENDING and its YouTube title, attempts to fetch its thumbnail, and publishes a `VideoAdded` event containing the playlist ID and video ID
 
 #### Scenario: Video already a member of the playlist
 - **WHEN** a request identifies a video that is already stored for that playlist
@@ -81,6 +83,10 @@ and publish a `VideoAdded` event.
 #### Scenario: Target playlist is YouTube-linked
 - **WHEN** a request identifies a playlist whose kind is YouTube-linked rather than custom
 - **THEN** the system rejects the request without persisting anything and returns a bad request explaining that video membership for a YouTube-linked playlist cannot be changed manually
+
+#### Scenario: Thumbnail fetch fails
+- **WHEN** a request successfully adds a video but its thumbnail fetch fails
+- **THEN** the system still stores the video and still publishes the `VideoAdded` event, responding to the request as if the fetch had succeeded
 
 ### Requirement: Remove Video From Custom Playlist
 The system SHALL provide an HTTP endpoint that removes a video from a

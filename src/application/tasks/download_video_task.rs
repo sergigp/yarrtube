@@ -203,7 +203,7 @@ mod tests {
 
         let calls = downloader.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
-        let (_, desired_filename, id, _, _) = &calls[0];
+        let (_, desired_filename, id, _, _, _) = &calls[0];
         assert_eq!(
             desired_filename,
             VideoFilename::from_title(messy_title).as_str()
@@ -243,8 +243,69 @@ mod tests {
 
         let calls = downloader.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
-        let (_, _, _, _, output_dir) = &calls[0];
+        let (_, _, _, _, output_dir, _) = &calls[0];
         assert_eq!(output_dir, std::path::Path::new("/videos/a/b/c"));
+    }
+
+    #[test]
+    fn it_should_pass_the_existing_folder_derived_from_the_thumbnail_filename() {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+            .with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
+            fake_metadata_deps();
+
+        let video_downloader = VideoDownloader::new(
+            video_repository,
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            playlist_video_repository,
+            youtube_metadata_repository,
+            video_metadata_repository,
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let handler = DownloadVideoTask::new(video_downloader);
+
+        handler
+            .handle(&payload_for(video.id.as_str()), false)
+            .unwrap();
+
+        let calls = downloader.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        let (_, _, _, _, _, existing_folder) = &calls[0];
+        assert_eq!(existing_folder, &Some("My Video".to_string()));
+    }
+
+    #[test]
+    fn it_should_pass_no_existing_folder_when_the_video_has_no_thumbnail() {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
+            fake_metadata_deps();
+
+        let video_downloader = VideoDownloader::new(
+            video_repository,
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            playlist_video_repository,
+            youtube_metadata_repository,
+            video_metadata_repository,
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let handler = DownloadVideoTask::new(video_downloader);
+
+        handler
+            .handle(&payload_for(video.id.as_str()), false)
+            .unwrap();
+
+        let calls = downloader.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        let (_, _, _, _, _, existing_folder) = &calls[0];
+        assert_eq!(existing_folder, &None);
     }
 
     #[test]

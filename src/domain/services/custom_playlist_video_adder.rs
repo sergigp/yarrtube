@@ -1,8 +1,9 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::PlaylistKind;
 use crate::domain::playlist_video::PlaylistVideo;
+use crate::domain::services::thumbnail_fetcher::ThumbnailFetcher;
 use crate::domain::shared::{PlaylistId, VideoId};
-use crate::domain::video::{AddVideoToCustomPlaylistError, Video};
+use crate::domain::video::{AddVideoToCustomPlaylistError, Video, resolve_output_dir};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -22,17 +23,22 @@ pub struct CustomPlaylistVideoAdder {
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     youtube_video_repository: Arc<dyn YoutubeVideoRepository>,
     event_publisher: Arc<dyn EventPublisher>,
+    thumbnail_fetcher: Arc<ThumbnailFetcher>,
     clock: Arc<dyn Clock>,
+    videos_path: String,
 }
 
 impl CustomPlaylistVideoAdder {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         playlist_repository: Arc<dyn PlaylistRepository>,
         video_repository: Arc<dyn VideoRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         youtube_video_repository: Arc<dyn YoutubeVideoRepository>,
         event_publisher: Arc<dyn EventPublisher>,
+        thumbnail_fetcher: Arc<ThumbnailFetcher>,
         clock: Arc<dyn Clock>,
+        videos_path: impl Into<String>,
     ) -> Self {
         Self {
             playlist_repository,
@@ -40,7 +46,9 @@ impl CustomPlaylistVideoAdder {
             playlist_video_repository,
             youtube_video_repository,
             event_publisher,
+            thumbnail_fetcher,
             clock,
+            videos_path: videos_path.into(),
         }
     }
 
@@ -85,6 +93,8 @@ impl CustomPlaylistVideoAdder {
         self.playlist_video_repository
             .save(&playlist_video)
             .map_err(AddVideoToCustomPlaylistError::Repository)?;
+        let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
+        self.thumbnail_fetcher.fetch(&video, &output_dir);
         self.event_publisher
             .publish(&DomainEvent::VideoAddedToPlaylist {
                 playlist_id: playlist_id.as_str().to_string(),

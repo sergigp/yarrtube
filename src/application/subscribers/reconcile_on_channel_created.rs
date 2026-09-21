@@ -63,9 +63,15 @@ mod tests {
         channel_repository: Arc<dyn ChannelRepository>,
     ) -> (ChannelVideoReconciler, Arc<FakeTaskRepository>) {
         let task_repository = Arc::new(FakeTaskRepository::default());
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
+            video_repository.clone(),
+            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
         let reconciler = ChannelVideoReconciler::new(
             channel_repository,
-            Arc::new(FakeVideoRepository::default()),
+            video_repository,
             Arc::new(FakeChannelVideoRepository::default()),
             Arc::new(FakeChannelVideosRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
@@ -73,6 +79,7 @@ mod tests {
             Arc::new(FakeEventPublisher::default()),
             task_repository.clone(),
             Arc::new(FakeVideoFileRepository::default()),
+            thumbnail_fetcher,
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
