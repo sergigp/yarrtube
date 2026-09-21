@@ -28,23 +28,10 @@ pub struct SqlitePlaylistVideoRepository {
 }
 
 impl SqlitePlaylistVideoRepository {
-    pub fn new(conn: Connection) -> anyhow::Result<Self> {
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS playlist_videos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                playlist_id TEXT NOT NULL,
-                video_id TEXT NOT NULL,
-                position INTEGER,
-                created_at TEXT NOT NULL,
-                UNIQUE (playlist_id, video_id)
-            )",
-            [],
-        )
-        .inspect_err(|e| tracing::error!(error = %e, "failed to create playlist_videos table"))
-        .context("failed to create playlist_videos table")?;
-        Ok(Self {
+    pub fn new(conn: Connection) -> Self {
+        Self {
             conn: Mutex::new(conn),
-        })
+        }
     }
 }
 
@@ -322,22 +309,9 @@ mod tests {
     use crate::domain::video::Video;
 
     fn repo() -> SqlitePlaylistVideoRepository {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute(
-            "CREATE TABLE videos (
-                id TEXT PRIMARY KEY,
-                youtube_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                status TEXT NOT NULL,
-                quality TEXT,
-                filename TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )",
-            [],
-        )
-        .unwrap();
-        SqlitePlaylistVideoRepository::new(conn).unwrap()
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+        SqlitePlaylistVideoRepository::new(conn)
     }
 
     fn playlist_id() -> PlaylistId {

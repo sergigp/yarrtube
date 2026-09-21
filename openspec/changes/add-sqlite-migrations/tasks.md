@@ -16,11 +16,11 @@
 - [x] 3.2 Do the same for `SqlitePlaylistRepository::new()` and verify `cargo test sqlite_playlist_repository` passes
 - [x] 3.3 Do the same for `SqliteVideoRepository::new()` and verify `cargo test sqlite_video_repository` passes
 - [x] 3.4 Do the same for `SqliteVideoMetadataRepository::new()` and verify `cargo test sqlite_video_metadata_repository` passes
-- [ ] 3.5 Do the same for `SqlitePlaylistVideoRepository::new()`, update its test `repo()` helper to call `sqlite_migrations::apply()` instead of hand-rolling a partial `videos` table, and verify `cargo test sqlite_playlist_video_repository` passes
-- [ ] 3.6 Do the same for `SqliteChannelVideoRepository::new()`, update its test `repo()` helper to call `sqlite_migrations::apply()` instead of hand-rolling a partial `videos` table, and verify `cargo test sqlite_channel_video_repository` passes
-- [ ] 3.7 Remove both `CREATE TABLE` calls and the lock-only fallibility from `SqliteTaskRepository::new()`, update its call site in `src/serve.rs`, and verify `cargo test sqlite_task_repository` passes
-- [ ] 3.8 Delete `create_events_table` and `create_domain_events_dead_letter_table` from `event_repository.rs`, remove their calls and the now-unneeded `anyhow::Result` from `SqliteEventRepository::new()`, update its call site in `src/serve.rs`, and verify `cargo test event_repository` passes
-- [ ] 3.9 Remove the `create_events_table` call and the now-unneeded `anyhow::Result` from `SqliteEventPublisher::new()`, update its call site in `src/serve.rs`, and verify `cargo test event_publisher` passes
+- [x] 3.5 Do the same for `SqlitePlaylistVideoRepository::new()`, update its test `repo()` helper to call `sqlite_migrations::apply()` instead of hand-rolling a partial `videos` table, and verify `cargo test sqlite_playlist_video_repository` passes
+- [x] 3.6 Do the same for `SqliteChannelVideoRepository::new()`, update its test `repo()` helper to call `sqlite_migrations::apply()` instead of hand-rolling a partial `videos` table, and verify `cargo test sqlite_channel_video_repository` passes
+- [x] 3.7 Remove both `CREATE TABLE` calls and the lock-only fallibility from `SqliteTaskRepository::new()`, update its call site in `src/serve.rs`, and verify `cargo test sqlite_task_repository` passes
+- [x] 3.8 Delete `create_events_table` and `create_domain_events_dead_letter_table` from `event_repository.rs`, remove their calls and the now-unneeded `anyhow::Result` from `SqliteEventRepository::new()`, update its call site in `src/serve.rs`, and verify `cargo test event_repository` passes
+- [x] 3.9 Remove the `create_events_table` call and the now-unneeded `anyhow::Result` from `SqliteEventPublisher::new()`, update its call site in `src/serve.rs`, and verify `cargo test event_publisher` passes
 
 ## 4. Full verification
 

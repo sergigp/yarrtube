@@ -189,39 +189,28 @@ fn schedule_update_ytdlp_if_absent(
 fn build_application() -> Result<Application> {
     let playlist_repository: Arc<dyn PlaylistRepository> =
         Arc::new(SqlitePlaylistRepository::new(open_connection()?));
-    let event_publisher = Arc::new(
-        SqliteEventPublisher::new(
-            Arc::new(Mutex::new(open_connection()?)),
-            Arc::new(SystemClock),
-        )
-        .context("failed to initialize event publisher")?,
-    );
-    let event_repository = Arc::new(
-        SqliteEventRepository::new(Arc::new(Mutex::new(open_connection()?)))
-            .context("failed to initialize event repository")?,
-    );
+    let event_publisher = Arc::new(SqliteEventPublisher::new(
+        Arc::new(Mutex::new(open_connection()?)),
+        Arc::new(SystemClock),
+    ));
+    let event_repository = Arc::new(SqliteEventRepository::new(Arc::new(Mutex::new(
+        open_connection()?,
+    ))));
 
-    let task_repository = Arc::new(
-        SqliteTaskRepository::new(
-            Arc::new(Mutex::new(open_connection()?)),
-            Arc::new(SystemClock),
-        )
-        .context("failed to initialize task repository")?,
-    );
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        Arc::new(Mutex::new(open_connection()?)),
+        Arc::new(SystemClock),
+    ));
 
     let video_repository = Arc::new(SqliteVideoRepository::new(open_connection()?));
 
     let channel_repository: Arc<dyn ChannelRepository> =
         Arc::new(SqliteChannelRepository::new(open_connection()?));
 
-    let playlist_video_repository = Arc::new(
-        SqlitePlaylistVideoRepository::new(open_connection()?)
-            .context("failed to initialize playlist video repository")?,
-    );
-    let channel_video_repository = Arc::new(
-        SqliteChannelVideoRepository::new(open_connection()?)
-            .context("failed to initialize channel video repository")?,
-    );
+    let playlist_video_repository =
+        Arc::new(SqlitePlaylistVideoRepository::new(open_connection()?));
+    let channel_video_repository =
+        Arc::new(SqliteChannelVideoRepository::new(open_connection()?));
 
     let task_view_searcher = TaskViewSearcher::new(
         task_repository.clone(),

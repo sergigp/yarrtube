@@ -190,14 +190,13 @@ mod tests {
 
     impl Fixture {
         fn new() -> Self {
+            let mut conn = Connection::open_in_memory().unwrap();
+            crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
             Self {
-                task_repository: Arc::new(
-                    SqliteTaskRepository::new(
-                        Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-                        Arc::new(FixedClock(fixed_timestamp())),
-                    )
-                    .unwrap(),
-                ),
+                task_repository: Arc::new(SqliteTaskRepository::new(
+                    Arc::new(Mutex::new(conn)),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
                 playlist_repository: Arc::new(FakePlaylistRepository::default()),
                 channel_repository: Arc::new(FakeChannelRepository::default()),
                 video_repository: Arc::new(FakeVideoRepository::default()),

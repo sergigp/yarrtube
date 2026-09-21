@@ -50,59 +50,13 @@ fn row_to_scheduled_event(row: &Row) -> rusqlite::Result<ScheduledEvent> {
     })
 }
 
-/// Creates the `events` table if it doesn't exist yet. Exposed so
-/// `SqliteEventPublisher` can ensure it exists too, since it writes to this
-/// table without going through `EventRepository`.
-pub(crate) fn create_events_table(conn: &Connection) -> anyhow::Result<()> {
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_type TEXT NOT NULL,
-            payload TEXT NOT NULL,
-            status TEXT NOT NULL,
-            retries INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            last_error TEXT
-        )",
-        [],
-    )
-    .context("failed to create events table")?;
-    Ok(())
-}
-
-fn create_domain_events_dead_letter_table(conn: &Connection) -> anyhow::Result<()> {
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS domain_events_dead_letter (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            original_event_id INTEGER NOT NULL,
-            event_type TEXT NOT NULL,
-            payload TEXT NOT NULL,
-            retries INTEGER NOT NULL,
-            last_error TEXT,
-            created_at TEXT NOT NULL,
-            failed_at TEXT NOT NULL
-        )",
-        [],
-    )
-    .context("failed to create domain_events_dead_letter table")?;
-    Ok(())
-}
-
 pub struct SqliteEventRepository {
     conn: Arc<Mutex<Connection>>,
 }
 
 impl SqliteEventRepository {
-    pub fn new(conn: Arc<Mutex<Connection>>) -> anyhow::Result<Self> {
-        {
-            let guard = conn
-                .lock()
-                .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
-            create_events_table(&guard)?;
-            create_domain_events_dead_letter_table(&guard)?;
-        }
-        Ok(Self { conn })
+    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
     }
 }
 
@@ -274,18 +228,20 @@ mod tests {
     /// Publishes through `SqliteEventPublisher` (sharing the repository's
     /// connection) since `EventRepository` itself no longer writes new rows.
     fn repo_with_one_pending_event() -> (SqliteEventRepository, i64) {
-        let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
-        let publisher =
-            SqliteEventPublisher::new(conn.clone(), Arc::new(FixedClock(now()))).unwrap();
-        let repo = SqliteEventRepository::new(conn).unwrap();
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+        let conn = Arc::new(Mutex::new(conn));
+        let publisher = SqliteEventPublisher::new(conn.clone(), Arc::new(FixedClock(now())));
+        let repo = SqliteEventRepository::new(conn);
         publisher.publish(&event()).unwrap();
         let id = repo.list_eligible().unwrap()[0].id;
         (repo, id)
     }
 
     fn repo() -> SqliteEventRepository {
-        SqliteEventRepository::new(Arc::new(Mutex::new(Connection::open_in_memory().unwrap())))
-            .unwrap()
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+        SqliteEventRepository::new(Arc::new(Mutex::new(conn)))
     }
 
     fn event() -> DomainEvent {

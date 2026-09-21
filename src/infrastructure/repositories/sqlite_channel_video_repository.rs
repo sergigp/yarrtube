@@ -28,23 +28,10 @@ pub struct SqliteChannelVideoRepository {
 }
 
 impl SqliteChannelVideoRepository {
-    pub fn new(conn: Connection) -> anyhow::Result<Self> {
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS channel_videos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                channel_id TEXT NOT NULL,
-                video_id TEXT NOT NULL,
-                position INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                UNIQUE (channel_id, video_id)
-            )",
-            [],
-        )
-        .inspect_err(|e| tracing::error!(error = %e, "failed to create channel_videos table"))
-        .context("failed to create channel_videos table")?;
-        Ok(Self {
+    pub fn new(conn: Connection) -> Self {
+        Self {
             conn: Mutex::new(conn),
-        })
+        }
     }
 }
 
@@ -320,22 +307,9 @@ mod tests {
     use crate::domain::video::Video;
 
     fn repo() -> SqliteChannelVideoRepository {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute(
-            "CREATE TABLE videos (
-                id TEXT PRIMARY KEY,
-                youtube_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                status TEXT NOT NULL,
-                quality TEXT,
-                filename TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )",
-            [],
-        )
-        .unwrap();
-        SqliteChannelVideoRepository::new(conn).unwrap()
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+        SqliteChannelVideoRepository::new(conn)
     }
 
     fn channel_id() -> ChannelHandle {
