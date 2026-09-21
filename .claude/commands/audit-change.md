@@ -23,6 +23,9 @@ Always announce: "Auditing change: <name>" and how to override.
 
 **Steps**
 
+0. **Run all tests**
+   Run all tests, including smoke tests. All tests should pass to continue to step one. If some test is failing investigate what is failing and stop the audit and ask for user input on what to do. If the test that fails is a smoke test, rerun them twice, just to make sure it's not a flaky one. If there is a flaky test that eventually pass mention it in the report as CRITICAL.
+
 1. **Resolve the change and its artifacts**
 
    ```bash
