@@ -3,14 +3,13 @@ use crate::domain::playlist::PlaylistKind;
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::services::thumbnail_fetcher::ThumbnailFetcher;
 use crate::domain::shared::{PlaylistId, VideoId};
-use crate::domain::video::{AddVideoToCustomPlaylistError, Video};
+use crate::domain::video::{AddVideoToCustomPlaylistError, Video, resolve_output_dir};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_repository::YoutubeVideoRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
-use std::path::Path;
 use std::sync::Arc;
 use tracing::info;
 
@@ -51,10 +50,6 @@ impl CustomPlaylistVideoAdder {
             clock,
             videos_path: videos_path.into(),
         }
-    }
-
-    fn output_dir(&self, path: &str) -> std::path::PathBuf {
-        Path::new(&self.videos_path).join(path)
     }
 
     /// No-ops if the video is already stored for this playlist.
@@ -98,7 +93,7 @@ impl CustomPlaylistVideoAdder {
         self.playlist_video_repository
             .save(&playlist_video)
             .map_err(AddVideoToCustomPlaylistError::Repository)?;
-        let output_dir = self.output_dir(playlist.path.as_str());
+        let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
         self.thumbnail_fetcher.fetch(&video, &output_dir);
         self.event_publisher
             .publish(&DomainEvent::VideoAddedToPlaylist {

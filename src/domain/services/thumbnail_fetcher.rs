@@ -1,9 +1,12 @@
+use crate::domain::shared::VideoRecordId;
 use crate::domain::video::Video;
+use crate::domain::video::VideoStatus;
 use crate::domain::video::top_level_entry;
 use crate::domain::video::video_filename::VideoFilename;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
 use crate::infrastructure::shared::system_clock::Clock;
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::warn;
@@ -72,6 +75,30 @@ impl ThumbnailFetcher {
             Err(e) => {
                 warn!(video_id = %video.id, error = %e, "failed to fetch video thumbnail");
             }
+        }
+    }
+
+    /// Missing-thumbnail recovery pass over `videos`, shared by both
+    /// reconcilers' `reconcile_filesystem`. Skips a video with no
+    /// thumbnail if it's in `skip_ids` (just reset for redownload this same
+    /// pass — see `fetch`'s own reasons this must not run for it) or if its
+    /// real download is currently `InProgress` (a concurrent `DownloadVideo`
+    /// task owns its not-yet-recorded output folder; fetching now would
+    /// resolve `existing_folder` to `None` and collide with it, spawning a
+    /// stray sibling folder that then gets permanently protected from the
+    /// orphan sweep).
+    pub fn fetch_missing(
+        &self,
+        videos: &[Video],
+        skip_ids: &HashSet<&VideoRecordId>,
+        output_dir: &Path,
+    ) {
+        for video in videos.iter().filter(|v| {
+            v.thumbnail_filename.is_none()
+                && !skip_ids.contains(&v.id)
+                && v.status != VideoStatus::InProgress
+        }) {
+            self.fetch(video, output_dir);
         }
     }
 }

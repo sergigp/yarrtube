@@ -4,7 +4,9 @@ use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::services::thumbnail_fetcher::ThumbnailFetcher;
 use crate::domain::shared::{PlaylistId, VideoId, VideoRecordId};
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoStatus, top_level_entry, video_dir_for_filename};
+use crate::domain::video::{
+    Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
+};
 use crate::domain::video_metadata::{build_video_metadata, resolve_sorttitle};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -72,10 +74,6 @@ impl VideoReconciler {
             reconcile_interval_seconds,
             videos_path: videos_path.into(),
         }
-    }
-
-    fn output_dir(&self, path: &str) -> std::path::PathBuf {
-        Path::new(&self.videos_path).join(path)
     }
 
     /// Regenerates `video`'s metadata (fetch `YoutubeMetadata`, resolve
@@ -179,7 +177,7 @@ impl VideoReconciler {
     /// stored videos no longer present on YouTube.
     fn sync_playlist_membership(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let id = &playlist.id;
-        let output_dir = self.output_dir(playlist.path.as_str());
+        let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
         let current_videos = self
             .youtube_playlist_items_repository
             .list_current_videos(id)?;
@@ -283,7 +281,7 @@ impl VideoReconciler {
     /// is what clears out a stale non-mp4 file once its video has been
     /// redownloaded under a fresh filename.
     fn reconcile_filesystem(&self, playlist: &Playlist) -> anyhow::Result<()> {
-        let output_dir = self.output_dir(playlist.path.as_str());
+        let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
         let stored_playlist_videos = self
             .playlist_video_repository
@@ -383,12 +381,8 @@ impl VideoReconciler {
             )?;
         }
 
-        for video in stored_videos
-            .iter()
-            .filter(|v| v.thumbnail_filename.is_none() && !reset_video_ids.contains(&v.id))
-        {
-            self.thumbnail_fetcher.fetch(video, &output_dir);
-        }
+        self.thumbnail_fetcher
+            .fetch_missing(&stored_videos, &reset_video_ids, &output_dir);
 
         for file in &files {
             if protected_top_level.contains(file.as_str()) {
@@ -996,5 +990,38 @@ mod tests {
         let found = harness.video_repository.find(&video.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::Pending);
         assert_eq!(found.filename, None);
+    }
+
+    #[test]
+    fn it_should_not_fetch_a_thumbnail_for_a_video_whose_real_download_is_in_progress() {
+        // A video currently being downloaded by a concurrent `DownloadVideo`
+        // task has no `filename` yet, so `existing_folder` would resolve to
+        // `None` and a concurrent recovery-pass fetch would collide with the
+        // in-progress download's own folder, spawning a stray sibling folder
+        // that then gets permanently protected from the orphan sweep.
+        let playlist = custom_playlist();
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+            .start_download(fixed_timestamp());
+        let harness = harness_with_thumbnail_downloader(
+            &playlist,
+            &video,
+            None,
+            FakeVideoFileRepository::default(),
+            FakeYoutubeMetadataRepository::default(),
+            FakeVideoMetadataRepository::default(),
+            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
+                FetchedThumbnail {
+                    folder: "My Video".to_string(),
+                    filename: "My Video.jpg".to_string(),
+                },
+            )),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(playlist.id.clone())
+            .unwrap();
+
+        assert_eq!(harness.thumbnail_downloader.thumbnail_calls_count(), 0);
     }
 }

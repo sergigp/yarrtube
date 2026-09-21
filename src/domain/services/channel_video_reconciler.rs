@@ -4,7 +4,9 @@ use crate::domain::event::DomainEvent;
 use crate::domain::services::thumbnail_fetcher::ThumbnailFetcher;
 use crate::domain::shared::{VideoId, VideoRecordId};
 use crate::domain::task::Task;
-use crate::domain::video::{Video, VideoStatus, top_level_entry, video_dir_for_filename};
+use crate::domain::video::{
+    Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
+};
 use crate::domain::video_metadata::{build_video_metadata, resolve_sorttitle};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -73,10 +75,6 @@ impl ChannelVideoReconciler {
             reconcile_interval_seconds,
             videos_path: videos_path.into(),
         }
-    }
-
-    fn output_dir(&self, path: &str) -> std::path::PathBuf {
-        Path::new(&self.videos_path).join(path)
     }
 
     /// Regenerates `video`'s metadata — the channel equivalent of
@@ -171,7 +169,7 @@ impl ChannelVideoReconciler {
     /// current top-N (whether removed on YouTube or aged past the limit).
     fn sync_channel_membership(&self, channel: &Channel) -> anyhow::Result<()> {
         let id = &channel.id;
-        let output_dir = self.output_dir(channel.path.as_str());
+        let output_dir = resolve_output_dir(&self.videos_path, channel.path.as_str());
         let current_videos = self
             .channel_videos_repository
             .list_current_videos(id, channel.video_limit.value())?;
@@ -266,7 +264,7 @@ impl ChannelVideoReconciler {
     /// that doesn't belong to any currently-`Downloaded` video (an orphan).
     /// Mirrors `VideoReconciler::reconcile_filesystem`.
     fn reconcile_filesystem(&self, channel: &Channel) -> anyhow::Result<()> {
-        let output_dir = self.output_dir(channel.path.as_str());
+        let output_dir = resolve_output_dir(&self.videos_path, channel.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
         let stored_channel_videos = self
             .channel_video_repository
@@ -360,12 +358,8 @@ impl ChannelVideoReconciler {
             )?;
         }
 
-        for video in stored_videos
-            .iter()
-            .filter(|v| v.thumbnail_filename.is_none() && !reset_video_ids.contains(&v.id))
-        {
-            self.thumbnail_fetcher.fetch(video, &output_dir);
-        }
+        self.thumbnail_fetcher
+            .fetch_missing(&stored_videos, &reset_video_ids, &output_dir);
 
         for file in &files {
             if protected_top_level.contains(file.as_str()) {
@@ -960,5 +954,37 @@ mod tests {
         let found = harness.video_repository.find(&video.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::Pending);
         assert_eq!(found.filename, None);
+    }
+
+    #[test]
+    fn it_should_not_fetch_a_thumbnail_for_a_video_whose_real_download_is_in_progress() {
+        // A video currently being downloaded by a concurrent `DownloadVideo`
+        // task has no `filename` yet, so `existing_folder` would resolve to
+        // `None` and a concurrent recovery-pass fetch would collide with the
+        // in-progress download's own folder, spawning a stray sibling folder
+        // that then gets permanently protected from the orphan sweep.
+        let channel = channel();
+        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+            .start_download(fixed_timestamp());
+        let harness = harness_with_thumbnail_downloader(
+            &channel,
+            &video,
+            FakeVideoFileRepository::default(),
+            FakeYoutubeMetadataRepository::default(),
+            FakeVideoMetadataRepository::default(),
+            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
+                FetchedThumbnail {
+                    folder: "My Video".to_string(),
+                    filename: "My Video.jpg".to_string(),
+                },
+            )),
+        );
+
+        harness
+            .reconciler
+            .force_reconcile(channel.id.clone())
+            .unwrap();
+
+        assert_eq!(harness.thumbnail_downloader.thumbnail_calls_count(), 0);
     }
 }

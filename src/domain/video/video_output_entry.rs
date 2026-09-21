@@ -24,6 +24,13 @@ pub fn video_dir_for_filename(output_dir: &Path, filename: &str) -> PathBuf {
     }
 }
 
+/// Resolves a playlist's/channel's output directory: `videos_path` joined
+/// with its recorded `path`. Shared by every service that reads or writes
+/// to a container's directory on disk.
+pub fn resolve_output_dir(videos_path: &str, path: &str) -> PathBuf {
+    Path::new(videos_path).join(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
