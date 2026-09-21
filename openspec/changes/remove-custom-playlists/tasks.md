@@ -30,4 +30,4 @@
 - [x] 5.1 Run `cargo fmt --all -- --check`
 - [x] 5.2 Run `cargo clippy --all-targets --all-features --locked -- -D warnings`
 - [x] 5.3 Run `cargo test --locked` and confirm the full suite passes with no lingering references to removed custom-playlist types
-- [ ] 5.4 Run `scripts/run-local.sh`, confirm the server starts, `GET /playlists` still returns `kind: "youtube_linked"` for existing playlists, and `POST /custom-playlists` now 404s (route no longer exists)
+- [x] 5.4 Run `scripts/run-local.sh`, confirm the server starts, `GET /playlists` still returns `kind: "youtube_linked"` for existing playlists, and `POST /custom-playlists` now 404s (route no longer exists) — server started, `GET /playlists` confirmed returning `kind: "youtube_linked"`; `POST /custom-playlists` returns 200 with the SPA `index.html`, not a 404 — this app has a pre-existing catch-all `.fallback(serve_spa)` that serves the SPA for *any* unmatched path (verified identical for a route that never existed), so the route is confirmed gone, just not via a 404
