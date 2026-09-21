@@ -2,13 +2,11 @@ import { useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
-import { fetchPlaylists, fetchVideos, videoMediaUrl, deleteVideoFromCustomPlaylist } from '../api'
+import { fetchPlaylists, fetchVideos, videoMediaUrl } from '../api'
 import { formatDuration } from '../formatDuration'
-import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
 import { Beacon } from './Beacon'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 const STATUS_MESSAGES = {
@@ -52,9 +50,7 @@ function VideoStatusIndicator({ status }) {
   )
 }
 
-function VideoDetail({ playlist, video, onDeleted }) {
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const canDelete = playlist.kind === 'custom'
+function VideoDetail({ playlist, video }) {
   const path = video.filename ? `${playlist.path}/${video.filename}` : playlist.path
 
   return (
@@ -80,23 +76,7 @@ function VideoDetail({ playlist, video, onDeleted }) {
         >
           Open on YouTube
         </a>
-        {canDelete && (
-          <Button variant="destructive" size="sm" onClick={() => setConfirmOpen(true)}>
-            Delete
-          </Button>
-        )}
       </div>
-
-      <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title={`Delete "${video.title}"?`}
-        description="This removes the video's record and, if downloaded, its file."
-        onConfirm={async () => {
-          await deleteVideoFromCustomPlaylist(playlist.id, video.id)
-          onDeleted?.()
-        }}
-      />
     </div>
   )
 }
@@ -157,11 +137,7 @@ export function PlaylistDetail() {
           </div>
 
           {selectedVideo ? (
-            <VideoDetail
-              playlist={playlist}
-              video={selectedVideo}
-              onDeleted={() => setManualSelection(null)}
-            />
+            <VideoDetail playlist={playlist} video={selectedVideo} />
           ) : (
             <p className="text-sm text-muted-foreground">No video selected.</p>
           )}

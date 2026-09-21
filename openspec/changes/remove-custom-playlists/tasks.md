@@ -18,8 +18,8 @@
 
 ## 3. Web UI
 
-- [ ] 3.1 Remove `deleteVideoFromCustomPlaylist` from `web/src/api.js`
-- [ ] 3.2 In `web/src/components/PlaylistDetail.jsx`, remove the `canDelete`/`kind === 'custom'` check, the Delete button, and the `ConfirmDialog` it guarded (and the now-unused import of `deleteVideoFromCustomPlaylist`); verify the playlist detail view still renders a video without a Delete button
+- [x] 3.1 Remove `deleteVideoFromCustomPlaylist` from `web/src/api.js`
+- [x] 3.2 In `web/src/components/PlaylistDetail.jsx`, remove the `canDelete`/`kind === 'custom'` check, the Delete button, and the `ConfirmDialog` it guarded (and the now-unused import of `deleteVideoFromCustomPlaylist`); verify the playlist detail view still renders a video without a Delete button
 
 ## 4. Docs
 
