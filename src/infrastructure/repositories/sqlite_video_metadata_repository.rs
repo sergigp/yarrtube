@@ -31,30 +31,10 @@ pub struct SqliteVideoMetadataRepository {
 }
 
 impl SqliteVideoMetadataRepository {
-    pub fn new(conn: Connection) -> anyhow::Result<Self> {
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS video_metadata (
-                video_id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                plot TEXT NOT NULL,
-                studio TEXT NOT NULL,
-                director TEXT NOT NULL,
-                premiered TEXT NOT NULL,
-                year INTEGER NOT NULL,
-                genre TEXT,
-                tags TEXT NOT NULL,
-                uniqueid TEXT NOT NULL,
-                thumb TEXT,
-                sorttitle TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )",
-            [],
-        )
-        .inspect_err(|e| tracing::error!(error = %e, "failed to create video_metadata table"))
-        .context("failed to create video_metadata table")?;
-        Ok(Self {
+    pub fn new(conn: Connection) -> Self {
+        Self {
             conn: Mutex::new(conn),
-        })
+        }
     }
 
     fn write_movie_nfo(metadata: &VideoMetadata, video_dir: &Path) -> anyhow::Result<()> {
@@ -217,7 +197,9 @@ mod tests {
     }
 
     fn repo() -> SqliteVideoMetadataRepository {
-        SqliteVideoMetadataRepository::new(Connection::open_in_memory().unwrap()).unwrap()
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+        SqliteVideoMetadataRepository::new(conn)
     }
 
     fn unique_temp_dir(name: &str) -> std::path::PathBuf {

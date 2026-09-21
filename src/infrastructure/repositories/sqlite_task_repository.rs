@@ -81,49 +81,8 @@ pub struct SqliteTaskRepository {
 }
 
 impl SqliteTaskRepository {
-    pub fn new(conn: Arc<Mutex<Connection>>, clock: Arc<dyn Clock>) -> anyhow::Result<Self> {
-        {
-            let guard = conn
-                .lock()
-                .inspect_err(|_| tracing::error!("database lock poisoned"))
-                .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
-            guard
-                .execute(
-                    "CREATE TABLE IF NOT EXISTS tasks (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        task_type TEXT NOT NULL,
-                        payload TEXT NOT NULL,
-                        status TEXT NOT NULL,
-                        retries INTEGER NOT NULL DEFAULT 0,
-                        run_at TEXT NOT NULL,
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT NOT NULL,
-                        last_error TEXT
-                    )",
-                    [],
-                )
-                .inspect_err(|e| tracing::error!(error = %e, "failed to create tasks table"))
-                .context("failed to create tasks table")?;
-            guard
-                .execute(
-                    "CREATE TABLE IF NOT EXISTS tasks_dead_letter (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        original_task_id INTEGER NOT NULL,
-                        task_type TEXT NOT NULL,
-                        payload TEXT NOT NULL,
-                        retries INTEGER NOT NULL,
-                        last_error TEXT,
-                        created_at TEXT NOT NULL,
-                        failed_at TEXT NOT NULL
-                    )",
-                    [],
-                )
-                .inspect_err(
-                    |e| tracing::error!(error = %e, "failed to create tasks_dead_letter table"),
-                )
-                .context("failed to create tasks_dead_letter table")?;
-        }
-        Ok(Self { conn, clock })
+    pub fn new(conn: Arc<Mutex<Connection>>, clock: Arc<dyn Clock>) -> Self {
+        Self { conn, clock }
     }
 
     fn list_where(&self, predicate: &str) -> anyhow::Result<Vec<ScheduledTask>> {
@@ -372,11 +331,9 @@ mod tests {
     use crate::infrastructure::shared::system_clock::FixedClock;
 
     fn repo_with_clock(now: DateTime<Utc>) -> SqliteTaskRepository {
-        SqliteTaskRepository::new(
-            Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-            Arc::new(FixedClock(now)),
-        )
-        .unwrap()
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+        SqliteTaskRepository::new(Arc::new(Mutex::new(conn)), Arc::new(FixedClock(now)))
     }
 
     fn repo() -> SqliteTaskRepository {

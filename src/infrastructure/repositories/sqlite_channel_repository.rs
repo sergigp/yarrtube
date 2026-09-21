@@ -18,25 +18,10 @@ pub struct SqliteChannelRepository {
 }
 
 impl SqliteChannelRepository {
-    pub fn new(conn: Connection) -> anyhow::Result<Self> {
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS channels (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                youtube_channel_id TEXT NOT NULL,
-                quality TEXT NOT NULL,
-                video_limit INTEGER NOT NULL,
-                path TEXT NOT NULL,
-                avatar_filename TEXT,
-                created_at TEXT NOT NULL
-            )",
-            [],
-        )
-        .inspect_err(|e| tracing::error!(error = %e, "failed to create channels table"))
-        .context("failed to create channels table")?;
-        Ok(Self {
+    pub fn new(conn: Connection) -> Self {
+        Self {
             conn: Mutex::new(conn),
-        })
+        }
     }
 }
 
@@ -247,7 +232,9 @@ mod tests {
     use super::*;
 
     fn repo() -> SqliteChannelRepository {
-        SqliteChannelRepository::new(Connection::open_in_memory().unwrap()).unwrap()
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+        SqliteChannelRepository::new(conn)
     }
 
     fn channel(id: &str, name: &str) -> Channel {

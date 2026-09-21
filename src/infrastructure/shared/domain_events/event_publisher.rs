@@ -1,5 +1,4 @@
 use crate::domain::event::DomainEvent;
-use crate::infrastructure::shared::domain_events::event_repository::create_events_table;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -17,14 +16,8 @@ pub struct SqliteEventPublisher {
 }
 
 impl SqliteEventPublisher {
-    pub fn new(conn: Arc<Mutex<Connection>>, clock: Arc<dyn Clock>) -> anyhow::Result<Self> {
-        {
-            let guard = conn
-                .lock()
-                .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
-            create_events_table(&guard)?;
-        }
-        Ok(Self { conn, clock })
+    pub fn new(conn: Arc<Mutex<Connection>>, clock: Arc<dyn Clock>) -> Self {
+        Self { conn, clock }
     }
 }
 

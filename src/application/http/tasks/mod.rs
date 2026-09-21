@@ -214,13 +214,12 @@ mod tests {
     }
 
     fn sqlite_repo() -> Arc<dyn TaskRepository> {
-        Arc::new(
-            SqliteTaskRepository::new(
-                Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )
-            .unwrap(),
-        )
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+        Arc::new(SqliteTaskRepository::new(
+            Arc::new(Mutex::new(conn)),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ))
     }
 
     fn request() -> Request<Body> {

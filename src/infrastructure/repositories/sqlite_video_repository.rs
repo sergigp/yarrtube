@@ -22,27 +22,10 @@ pub struct SqliteVideoRepository {
 }
 
 impl SqliteVideoRepository {
-    pub fn new(conn: Connection) -> anyhow::Result<Self> {
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS videos (
-                id TEXT PRIMARY KEY,
-                youtube_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                status TEXT NOT NULL,
-                quality TEXT,
-                filename TEXT,
-                thumbnail_filename TEXT,
-                duration_seconds INTEGER,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )",
-            [],
-        )
-        .inspect_err(|e| tracing::error!(error = %e, "failed to create videos table"))
-        .context("failed to create videos table")?;
-        Ok(Self {
+    pub fn new(conn: Connection) -> Self {
+        Self {
             conn: Mutex::new(conn),
-        })
+        }
     }
 }
 
@@ -246,7 +229,9 @@ mod tests {
     use super::*;
 
     fn repo() -> SqliteVideoRepository {
-        SqliteVideoRepository::new(Connection::open_in_memory().unwrap()).unwrap()
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+        SqliteVideoRepository::new(conn)
     }
 
     fn video(title: &str, now: DateTime<Utc>) -> Video {

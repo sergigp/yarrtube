@@ -9,6 +9,7 @@ FROM rust:slim-bookworm AS build
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+COPY migrations ./migrations
 COPY --from=web-build /web/dist ./web/dist
 RUN cargo build --release --locked
 

@@ -38,6 +38,7 @@ use crate::infrastructure::shared::domain_events::event_publisher::{
 use crate::infrastructure::shared::domain_events::event_repository::{
     EventRepository, SqliteEventRepository,
 };
+use crate::infrastructure::shared::sqlite_migrations;
 use crate::infrastructure::shared::system_clock::{Clock, SystemClock};
 use crate::infrastructure::shared::web_assets::WebAssets;
 use anyhow::{Context, Result};
@@ -146,6 +147,13 @@ fn open_connection() -> Result<rusqlite::Connection> {
     Ok(conn)
 }
 
+/// Applies pending schema migrations once at startup, before any repository
+/// opens its own connection (see `build_application`).
+fn run_startup_migrations() -> Result<()> {
+    let mut conn = open_connection().context("failed to open database for migrations")?;
+    sqlite_migrations::apply(&mut conn)
+}
+
 struct Application {
     state: AppState,
     event_consumer: Arc<DomainEventsConsumer>,
@@ -179,48 +187,29 @@ fn schedule_update_ytdlp_if_absent(
 }
 
 fn build_application() -> Result<Application> {
-    let playlist_repository: Arc<dyn PlaylistRepository> = Arc::new(
-        SqlitePlaylistRepository::new(open_connection()?)
-            .context("failed to initialize playlist repository")?,
-    );
-    let event_publisher = Arc::new(
-        SqliteEventPublisher::new(
-            Arc::new(Mutex::new(open_connection()?)),
-            Arc::new(SystemClock),
-        )
-        .context("failed to initialize event publisher")?,
-    );
-    let event_repository = Arc::new(
-        SqliteEventRepository::new(Arc::new(Mutex::new(open_connection()?)))
-            .context("failed to initialize event repository")?,
-    );
+    let playlist_repository: Arc<dyn PlaylistRepository> =
+        Arc::new(SqlitePlaylistRepository::new(open_connection()?));
+    let event_publisher = Arc::new(SqliteEventPublisher::new(
+        Arc::new(Mutex::new(open_connection()?)),
+        Arc::new(SystemClock),
+    ));
+    let event_repository = Arc::new(SqliteEventRepository::new(Arc::new(Mutex::new(
+        open_connection()?,
+    ))));
 
-    let task_repository = Arc::new(
-        SqliteTaskRepository::new(
-            Arc::new(Mutex::new(open_connection()?)),
-            Arc::new(SystemClock),
-        )
-        .context("failed to initialize task repository")?,
-    );
+    let task_repository = Arc::new(SqliteTaskRepository::new(
+        Arc::new(Mutex::new(open_connection()?)),
+        Arc::new(SystemClock),
+    ));
 
-    let video_repository = Arc::new(
-        SqliteVideoRepository::new(open_connection()?)
-            .context("failed to initialize video repository")?,
-    );
+    let video_repository = Arc::new(SqliteVideoRepository::new(open_connection()?));
 
-    let channel_repository: Arc<dyn ChannelRepository> = Arc::new(
-        SqliteChannelRepository::new(open_connection()?)
-            .context("failed to initialize channel repository")?,
-    );
+    let channel_repository: Arc<dyn ChannelRepository> =
+        Arc::new(SqliteChannelRepository::new(open_connection()?));
 
-    let playlist_video_repository = Arc::new(
-        SqlitePlaylistVideoRepository::new(open_connection()?)
-            .context("failed to initialize playlist video repository")?,
-    );
-    let channel_video_repository = Arc::new(
-        SqliteChannelVideoRepository::new(open_connection()?)
-            .context("failed to initialize channel video repository")?,
-    );
+    let playlist_video_repository =
+        Arc::new(SqlitePlaylistVideoRepository::new(open_connection()?));
+    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(open_connection()?));
 
     let task_view_searcher = TaskViewSearcher::new(
         task_repository.clone(),
@@ -258,10 +247,8 @@ fn build_application() -> Result<Application> {
     let video_file_repository = Arc::new(FilesystemVideoFileRepository);
     let youtube_metadata_repository =
         Arc::new(YoutubeApiMetadataRepository::new(youtube_api_key()));
-    let video_metadata_repository = Arc::new(
-        SqliteVideoMetadataRepository::new(open_connection()?)
-            .context("failed to initialize video metadata repository")?,
-    );
+    let video_metadata_repository =
+        Arc::new(SqliteVideoMetadataRepository::new(open_connection()?));
 
     let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
         video_repository.clone(),
@@ -462,6 +449,11 @@ pub fn run() -> ExitCode {
     run_startup_ytdlp_update();
     run_startup_database_check();
     run_startup_youtube_api_key_check();
+
+    if let Err(e) = run_startup_migrations() {
+        error!(error = %e, "failed to apply database migrations");
+        return ExitCode::FAILURE;
+    }
 
     let app = match build_application() {
         Ok(app) => app,
