@@ -25,5 +25,5 @@
 ## 4. Full verification
 
 - [x] 4.1 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, and `cargo test --locked`, and confirm all pass
-- [ ] 4.2 Run `scripts/run-local.sh` against a fresh `yarrtube.sqlite3`, confirm all tables are created and the app serves normally
-- [ ] 4.3 Run `scripts/run-local.sh` against a copy of a pre-migration `yarrtube.sqlite3` (schema created by the old per-repository `CREATE TABLE IF NOT EXISTS` calls, with existing rows), confirm startup succeeds, no data is lost, and the app serves normally
+- [x] 4.2 Run `scripts/run-local.sh` against a fresh `yarrtube.sqlite3`, confirm all tables are created and the app serves normally
+- [x] 4.3 Run `scripts/run-local.sh` against a copy of a pre-migration `yarrtube.sqlite3` (schema created by the old per-repository `CREATE TABLE IF NOT EXISTS` calls, with existing rows), confirm startup succeeds, no data is lost, and the app serves normally
