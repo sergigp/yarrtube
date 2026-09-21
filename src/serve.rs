@@ -2,9 +2,8 @@ use crate::application::http::{self, AppState};
 use crate::application::{subscribers, tasks};
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
-    ChannelVideoReconciler, CustomPlaylistVideoAdder, CustomPlaylistVideoRemover, PlaylistCreator,
-    PlaylistDeleter, PlaylistSearcher, TaskViewSearcher, ThumbnailFetcher, VideoDownloader,
-    VideoFileDeleter, VideoReconciler, VideoSearcher,
+    ChannelVideoReconciler, PlaylistCreator, PlaylistDeleter, PlaylistSearcher, TaskViewSearcher,
+    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoReconciler, VideoSearcher,
 };
 use crate::domain::task::Task;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -31,7 +30,6 @@ use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeApi
 use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubeApiPlaylistItemsRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
-use crate::infrastructure::repositories::youtube_video_repository::YoutubeApiVideoRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::{
     EventPublisher, SqliteEventPublisher,
 };
@@ -295,22 +293,6 @@ fn build_application() -> Result<Application> {
         Arc::new(SystemClock),
     );
     let video_file_deleter = VideoFileDeleter::new(video_file_repository, videos_path());
-    let custom_playlist_video_adder = CustomPlaylistVideoAdder::new(
-        playlist_repository.clone(),
-        video_repository.clone(),
-        playlist_video_repository.clone(),
-        Arc::new(YoutubeApiVideoRepository::new(youtube_api_key())),
-        event_publisher.clone(),
-        thumbnail_fetcher,
-        Arc::new(SystemClock),
-        videos_path(),
-    );
-    let custom_playlist_video_remover = CustomPlaylistVideoRemover::new(
-        playlist_repository.clone(),
-        video_repository.clone(),
-        playlist_video_repository.clone(),
-        event_publisher.clone(),
-    );
     let video_searcher = VideoSearcher::new(
         playlist_repository.clone(),
         playlist_video_repository,
@@ -361,8 +343,6 @@ fn build_application() -> Result<Application> {
             playlist_deleter,
             playlist_searcher,
             video_reconciler,
-            custom_playlist_video_adder,
-            custom_playlist_video_remover,
             video_searcher,
             task_view_searcher,
             channel_service,
