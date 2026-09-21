@@ -81,8 +81,8 @@ impl VideoReconciler {
     /// `VideoDownloader::download` does at download time. Any failure is
     /// logged and swallowed — a `Downloaded` video's status and file are
     /// never touched by this, and a repeated failure simply tries again on
-    /// the next reconcile pass. `playlist_position` is `None` for a
-    /// custom-playlist video, resolving `sorttitle` via publish date.
+    /// the next reconcile pass. `playlist_position` is `None` when no
+    /// position is recorded, resolving `sorttitle` via publish date instead.
     fn generate_metadata(&self, video: &Video, output_dir: &Path, playlist_position: Option<i64>) {
         let Some(filename) = video.filename.as_deref() else {
             return;

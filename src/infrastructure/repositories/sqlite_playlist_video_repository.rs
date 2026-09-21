@@ -17,7 +17,7 @@ pub trait PlaylistVideoRepository: Send + Sync {
     /// surrogate ID rather than a `(playlist_id, youtube_video_id)` pair.
     fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<PlaylistVideo>>;
     /// Ordered by position (YouTube-defined order), with no-position rows
-    /// (custom-playlist additions) sorted last, by insertion order.
+    /// sorted last, by insertion order.
     fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>>;
     fn delete(&self, playlist_id: &PlaylistId, youtube_video_id: &VideoId) -> anyhow::Result<()>;
     fn delete_all_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<()>;

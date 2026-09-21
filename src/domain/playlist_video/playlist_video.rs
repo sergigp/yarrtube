@@ -14,8 +14,7 @@ pub struct PlaylistVideo {
 }
 
 impl PlaylistVideo {
-    /// A video added without a YouTube-defined position (e.g. to a custom
-    /// playlist).
+    /// A video added without a YouTube-defined position.
     pub fn create(playlist_id: PlaylistId, video_id: VideoRecordId, now: DateTime<Utc>) -> Self {
         Self {
             id: 0,
