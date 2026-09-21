@@ -41,6 +41,4 @@ It doesn't aim to compete with anything. If you want a full-featured archiver, p
 - Track entire channels and download new videos when they are published!
 - Minimalistic webapp to see the videos from the browser in both desktop and mobile.
 - Basic support for Plex, Kodi and Jellyfin.
-- **Coming soon** custom playlists that let you create playlists not coupled to Youtube ones.
-- **Coming soon** browser extensions to add videos to custom playlists directly from Youtube
 - **Coming soon** extended support for Plex Collections.

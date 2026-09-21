@@ -23,7 +23,7 @@
 
 ## 4. Docs
 
-- [ ] 4.1 Remove the two "Coming soon: custom playlists..." lines from `README.md`
+- [x] 4.1 Remove the two "Coming soon: custom playlists..." lines from `README.md`
 
 ## 5. Verification
 
