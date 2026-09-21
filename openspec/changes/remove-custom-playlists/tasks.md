@@ -27,7 +27,7 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Run `cargo fmt --all -- --check`
+- [x] 5.1 Run `cargo fmt --all -- --check`
 - [ ] 5.2 Run `cargo clippy --all-targets --all-features --locked -- -D warnings`
 - [ ] 5.3 Run `cargo test --locked` and confirm the full suite passes with no lingering references to removed custom-playlist types
 - [ ] 5.4 Run `scripts/run-local.sh`, confirm the server starts, `GET /playlists` still returns `kind: "youtube_linked"` for existing playlists, and `POST /custom-playlists` now 404s (route no longer exists)

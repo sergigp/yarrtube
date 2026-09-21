@@ -162,6 +162,18 @@ mod tests {
         video
     }
 
+    /// The YouTube-side listing entry matching what `seed_member`'s default
+    /// `"vid1"`/`"My Video"`/position-0 member looks like on YouTube, so
+    /// `sync_playlist_membership` (which now always runs) leaves a
+    /// `seed_member`-seeded video alone instead of treating it as removed.
+    fn member_youtube_item() -> YoutubePlaylistItem {
+        YoutubePlaylistItem {
+            video_id: "vid1".to_string(),
+            title: "My Video".to_string(),
+            position: 0,
+        }
+    }
+
     #[test]
     fn it_should_no_op_when_the_playlist_no_longer_exists() {
         let (handler, event_publisher, video_repository, _playlist_videos, task_repository, _files) =
@@ -422,31 +434,11 @@ mod tests {
     }
 
     #[test]
-    fn it_should_skip_the_membership_diff_for_a_custom_playlist() {
-        let (handler, event_publisher, video_repository, _playlist_videos, task_repository, _files) =
-            handler_with(
-                PlaylistKind::Custom,
-                vec![YoutubePlaylistItem {
-                    video_id: "vid1".to_string(),
-                    title: "One".to_string(),
-                    position: 0,
-                }],
-                FakeVideoFileRepository::default(),
-            );
-
-        handler.handle(&payload_for("PL1"), false).unwrap();
-
-        assert!(video_repository.videos.lock().unwrap().is_empty());
-        assert!(event_publisher.published.lock().unwrap().is_empty());
-        assert_eq!(task_repository.scheduled.lock().unwrap().len(), 1);
-    }
-
-    #[test]
     fn it_should_heal_a_downloaded_video_whose_file_is_missing() {
         let (handler, _events, video_repository, playlist_videos, task_repository, _files) =
             handler_with(
-                PlaylistKind::Custom,
-                Vec::new(),
+                PlaylistKind::YoutubeLinked,
+                vec![member_youtube_item()],
                 FakeVideoFileRepository::with_listing(Vec::new()),
             );
         seed_member(
@@ -486,8 +478,8 @@ mod tests {
     fn it_should_heal_a_downloaded_video_whose_file_is_present_but_not_mp4() {
         let (handler, _events, video_repository, playlist_videos, task_repository, _files) =
             handler_with(
-                PlaylistKind::Custom,
-                Vec::new(),
+                PlaylistKind::YoutubeLinked,
+                vec![member_youtube_item()],
                 FakeVideoFileRepository::with_listing(vec!["My Video.webm".to_string()]),
             );
         seed_member(
@@ -525,7 +517,7 @@ mod tests {
     #[test]
     fn it_should_delete_an_orphaned_file() {
         let (handler, _events, _videos, _playlist_videos, _tasks, files) = handler_with(
-            PlaylistKind::Custom,
+            PlaylistKind::YoutubeLinked,
             Vec::new(),
             FakeVideoFileRepository::with_listing(vec!["orphan.mp4".to_string()]),
         );
@@ -541,8 +533,8 @@ mod tests {
     fn it_should_recover_a_permanently_errored_video() {
         let (handler, _events, video_repository, playlist_videos, task_repository, _files) =
             handler_with(
-                PlaylistKind::Custom,
-                Vec::new(),
+                PlaylistKind::YoutubeLinked,
+                vec![member_youtube_item()],
                 FakeVideoFileRepository::with_listing(Vec::new()),
             );
         seed_member(
@@ -575,8 +567,8 @@ mod tests {
     #[test]
     fn it_should_recover_a_video_again_after_it_errors_again_post_recovery() {
         let (handler, _events, video_repository, playlist_videos, _tasks, _files) = handler_with(
-            PlaylistKind::Custom,
-            Vec::new(),
+            PlaylistKind::YoutubeLinked,
+            vec![member_youtube_item()],
             FakeVideoFileRepository::with_listing(Vec::new()),
         );
         seed_member(
@@ -609,8 +601,8 @@ mod tests {
     #[test]
     fn it_should_leave_a_matching_file_alone() {
         let (handler, _events, video_repository, playlist_videos, _tasks, files) = handler_with(
-            PlaylistKind::Custom,
-            Vec::new(),
+            PlaylistKind::YoutubeLinked,
+            vec![member_youtube_item()],
             FakeVideoFileRepository::with_listing(vec!["My Video.mp4".to_string()]),
         );
         seed_member(
@@ -639,8 +631,8 @@ mod tests {
     #[test]
     fn it_should_leave_a_matching_thumbnail_file_alone() {
         let (handler, _events, video_repository, playlist_videos, _tasks, files) = handler_with(
-            PlaylistKind::Custom,
-            Vec::new(),
+            PlaylistKind::YoutubeLinked,
+            vec![member_youtube_item()],
             FakeVideoFileRepository::with_listing(vec![
                 "My Video.mp4".to_string(),
                 "My Video.jpg".to_string(),
@@ -670,8 +662,8 @@ mod tests {
     #[test]
     fn it_should_delete_an_unrecorded_stray_thumbnail_file() {
         let (handler, _events, video_repository, playlist_videos, _tasks, files) = handler_with(
-            PlaylistKind::Custom,
-            Vec::new(),
+            PlaylistKind::YoutubeLinked,
+            vec![member_youtube_item()],
             FakeVideoFileRepository::with_listing(vec![
                 "My Video.mp4".to_string(),
                 "stray.jpg".to_string(),

@@ -486,6 +486,7 @@ mod tests {
         video_repository.save(video).unwrap();
 
         let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let position = playlist_position.unwrap_or(0);
         let playlist_video = match playlist_position {
             Some(position) => PlaylistVideo::create_with_position(
                 playlist.id.clone(),
@@ -496,6 +497,12 @@ mod tests {
             None => PlaylistVideo::create(playlist.id.clone(), video.id.clone(), fixed_timestamp()),
         };
         playlist_video_repository.save(&playlist_video).unwrap();
+        // Registers the seeded video as an existing member of the playlist's
+        // YouTube-side listing below, so `sync_playlist_membership` (which
+        // now always runs, even for these filesystem-reconciliation-focused
+        // fixtures) leaves it alone instead of treating it as removed from
+        // YouTube and deleting it before `reconcile_filesystem` ever sees it.
+        playlist_video_repository.register_youtube_id(&video.id, &video.youtube_id);
 
         let task_repository = Arc::new(FakeTaskRepository::default());
         let video_file_repository = Arc::new(video_file_repository);
@@ -511,7 +518,15 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+            Arc::new(FakeYoutubePlaylistItemsRepository {
+                videos: std::sync::Mutex::new(vec![
+                    crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubePlaylistItem {
+                        video_id: video.youtube_id.as_str().to_string(),
+                        title: video.title.clone(),
+                        position,
+                    },
+                ]),
+            }),
             Arc::new(youtube_metadata_repository),
             video_metadata_repository.clone(),
             Arc::new(FakeEventPublisher::default()),
