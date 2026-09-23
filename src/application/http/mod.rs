@@ -1,13 +1,16 @@
 pub mod channels;
+pub mod directories;
 pub mod error;
 pub mod playlists;
 pub mod tasks;
+#[cfg(test)]
+pub mod test_support;
 pub mod videos;
 
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
-    ChannelVideoReconciler, PlaylistCreator, PlaylistDeleter, PlaylistSearcher, TaskViewSearcher,
-    VideoReconciler, VideoSearcher,
+    ChannelVideoReconciler, DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistSearcher,
+    TaskViewSearcher, VideoReconciler, VideoSearcher,
 };
 use axum::Router;
 use axum::routing::{get, post};
@@ -22,10 +25,16 @@ pub struct AppState {
     pub task_view_searcher: TaskViewSearcher,
     pub channel_service: ChannelService,
     pub channel_video_reconciler: ChannelVideoReconciler,
+    pub directory_searcher: DirectorySearcher,
+    /// The absolute configured videos root, carried in the adapter layer as
+    /// the subscribers already do, so no domain type has to know a filesystem
+    /// location. Reported on every directory listing.
+    pub videos_root: String,
 }
 
 pub fn api_router(state: AppState) -> Router {
     Router::new()
+        .route("/directories", get(directories::list_directories))
         .route(
             "/playlists",
             post(playlists::create_playlist).get(playlists::list_playlists),

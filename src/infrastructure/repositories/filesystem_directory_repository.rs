@@ -37,7 +37,15 @@ impl FilesystemDirectoryRepository {
                 self.videos_root
             )
         })?;
-        let Some(resolved) = canonicalize(&root.join(path.as_str()))? else {
+        // The root path is spelled out rather than joined: joining the empty
+        // string yields a trailing-separator path that only happens to
+        // resolve back to the root.
+        let target = if path.is_root() {
+            root.clone()
+        } else {
+            root.join(path.as_str())
+        };
+        let Some(resolved) = canonicalize(&target)? else {
             return Ok(None);
         };
 

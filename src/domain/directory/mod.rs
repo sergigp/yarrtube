@@ -5,4 +5,4 @@ pub mod errors;
 
 pub use directory::Directory;
 pub use directory_path::DirectoryPath;
-pub use errors::{DirectoryPathError, ListDirectoriesError};
+pub use errors::ListDirectoriesError;

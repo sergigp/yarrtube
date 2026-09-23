@@ -18,13 +18,13 @@ Follow `/rust-architect` conventions for every Rust task, and end each task with
 
 ## 4. Listing Endpoint
 
-- [ ] 4.1 Add `src/application/http/directories/dto.rs` with `ListDirectoriesQuery`, `DirectoryEntryResponse`, `DirectoryResponse` (carrying `root`, `path`, `entries`), and `DirectoryResponse::new(videos_root, directory)`; verify `cargo build` succeeds.
-- [ ] 4.2 Add `src/application/http/directories/mod.rs` with `list_directories`, defaulting a missing `path` to `DirectoryPath::root()` and mapping outcomes to 200, 400 on an invalid path, 404 on not found, and 500 on a repository failure; verify the module compiles.
-- [ ] 4.3 Add `directory_searcher` and `videos_root` to `AppState` and route `GET /directories` in `src/application/http/mod.rs`; verify the seven behavior tests in design.md's test plan pass against a fake `DirectoryRepository`, including `it_should_report_the_videos_root_on_every_successful_listing`.
+- [x] 4.1 Add `src/application/http/directories/dto.rs` with `ListDirectoriesQuery`, `DirectoryEntryResponse`, `DirectoryResponse` (carrying `root`, `path`, `entries`), and `DirectoryResponse::new(videos_root, directory)`; verify `cargo build` succeeds.
+- [x] 4.2 Add `src/application/http/directories/mod.rs` with `list_directories`, defaulting a missing `path` to `DirectoryPath::root()` and mapping outcomes to 200, 400 on an invalid path, 404 on not found, and 500 on a repository failure; verify the module compiles.
+- [x] 4.3 Add `directory_searcher` and `videos_root` to `AppState` and route `GET /directories` in `src/application/http/mod.rs`; verify the seven behavior tests in design.md's test plan pass against a fake `DirectoryRepository`, including `it_should_report_the_videos_root_on_every_successful_listing`.
 
 ## 5. Daemon Startup
 
-- [ ] 5.1 Add `DEFAULT_STORAGE_DIRECTORIES` and `run_startup_storage_directories_check` to `src/serve.rs`, creating each default directory under the videos root, leaving existing ones and their contents alone, and logging and continuing on failure; verify the three `serve.rs` tests in design.md's test plan pass.
+- [x] 5.1 Add `DEFAULT_STORAGE_DIRECTORIES` and `run_startup_storage_directories_check` to `src/serve.rs`, creating each default directory under the videos root, leaving existing ones and their contents alone, and logging and continuing on failure; verify the three `serve.rs` tests in design.md's test plan pass.
 - [ ] 5.2 Call the startup check alongside the existing startup checks and wire `FilesystemDirectoryRepository` and `DirectorySearcher` into `build_application`; verify `scripts/run-local.sh` starts and `curl 'localhost:8080/api/directories'` returns `root`, `path`, and the seeded `playlists` and `channels` entries.
 
 ## 6. Add Dialog
