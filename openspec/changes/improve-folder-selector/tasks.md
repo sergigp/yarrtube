@@ -25,7 +25,7 @@ Follow `/rust-architect` conventions for every Rust task, and end each task with
 ## 5. Daemon Startup
 
 - [x] 5.1 Add `DEFAULT_STORAGE_DIRECTORIES` and `run_startup_storage_directories_check` to `src/serve.rs`, creating each default directory under the videos root, leaving existing ones and their contents alone, and logging and continuing on failure; verify the three `serve.rs` tests in design.md's test plan pass.
-- [ ] 5.2 Call the startup check alongside the existing startup checks and wire `FilesystemDirectoryRepository` and `DirectorySearcher` into `build_application`; verify `scripts/run-local.sh` starts and `curl 'localhost:8080/api/directories'` returns `root`, `path`, and the seeded `playlists` and `channels` entries.
+- [x] 5.2 Call the startup check alongside the existing startup checks and wire `FilesystemDirectoryRepository` and `DirectorySearcher` into `build_application`; verify `scripts/run-local.sh` starts and `curl 'localhost:8080/api/directories'` returns `root`, `path`, and the seeded `playlists` and `channels` entries.
 
 ## 6. Add Dialog
 
