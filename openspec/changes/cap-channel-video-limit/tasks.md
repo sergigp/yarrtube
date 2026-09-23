@@ -15,7 +15,7 @@ Follow `/rust-architect` conventions for every Rust task (value object rules are
 
 ## 4. Web UI
 
-- [ ] 4.1 Add `max="1000"` to the video limit `<Input>` in `web/src/components/AddDialog.jsx`, next to `min="1"`. Verify `npm run build` and `npm run lint` succeed in `web/`, and check in the dev server that entering 1001 marks the field invalid and blocks submission.
+- [x] 4.1 Add `max="1000"` to the video limit `<Input>` in `web/src/components/AddDialog.jsx`, next to `min="1"`. Verify `npm run build` and `npm run lint` succeed in `web/`, and check in the dev server that entering 1001 marks the field invalid and blocks submission.
 
 ## 5. Verification
 
