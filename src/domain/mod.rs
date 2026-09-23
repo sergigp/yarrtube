@@ -1,5 +1,6 @@
 pub mod channel;
 pub mod channel_video;
+pub mod directory;
 pub mod event;
 pub mod playlist;
 pub mod playlist_video;

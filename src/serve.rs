@@ -2,13 +2,15 @@ use crate::application::http::{self, AppState};
 use crate::application::{subscribers, tasks};
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
-    ChannelVideoReconciler, PlaylistCreator, PlaylistDeleter, PlaylistSearcher, TaskViewSearcher,
-    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoReconciler, VideoSearcher,
+    ChannelVideoReconciler, DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistSearcher,
+    TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoReconciler,
+    VideoSearcher,
 };
 use crate::domain::task::Task;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FilesystemChannelAvatarRepository;
+use crate::infrastructure::repositories::filesystem_directory_repository::FilesystemDirectoryRepository;
 use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::{
     ChannelRepository, SqliteChannelRepository,
@@ -60,6 +62,10 @@ const DEFAULT_RECONCILE_INTERVAL_SECONDS: i64 = 3600;
 const DEFAULT_RETRY_BASE_DELAY_SECONDS: i64 = 150;
 const DEFAULT_VIDEOS_PATH: &str = "/videos";
 const DEFAULT_AVATARS_PATH: &str = "avatars";
+/// The parent directories the add dialog's folder browser defaults to, seeded
+/// under the videos root at startup so the browser is never empty on a fresh
+/// install.
+const DEFAULT_STORAGE_DIRECTORIES: &[&str] = &["playlists", "channels"];
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 const BACKGROUND_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -125,6 +131,33 @@ fn run_startup_database_check() {
         Ok(()) => info!("database check succeeded"),
         Err(e) => error!(error = %e, "database check failed"),
     }
+}
+
+/// Ensures the default parent storage directories exist under the videos
+/// root. A directory that already exists is left untouched, contents and all,
+/// since `create_dir_all` succeeds on one that is already there.
+///
+/// A failure is logged and skipped rather than fatal, consistent with the
+/// other startup checks, so a read-only or not-yet-ready mount does not take
+/// the service down.
+fn create_default_storage_directories(path: &std::path::Path) {
+    DEFAULT_STORAGE_DIRECTORIES
+        .iter()
+        .map(|name| path.join(name))
+        .map(|dir| (std::fs::create_dir_all(&dir), dir))
+        .for_each(|(result, dir)| match result {
+            Ok(()) => info!(directory = ?dir, "default storage directory is present"),
+            Err(e) => {
+                error!(directory = ?dir, error = %e, "failed to create default storage directory")
+            }
+        });
+}
+
+/// Runs at daemon startup rather than at image build time: the videos root is
+/// a mount point, and a host directory mounted there at container start
+/// replaces the path entirely, masking anything the image created under it.
+fn run_startup_storage_directories_check() {
+    create_default_storage_directories(std::path::Path::new(&videos_path()));
 }
 
 fn youtube_api_key() -> String {
@@ -239,6 +272,9 @@ fn build_application() -> Result<Application> {
         event_publisher.clone() as Arc<dyn EventPublisher>,
     );
     let playlist_searcher = PlaylistSearcher::new(playlist_repository.clone());
+    let directory_searcher = DirectorySearcher::new(Arc::new(FilesystemDirectoryRepository::new(
+        PathBuf::from(videos_path()),
+    )));
     let channel_service = ChannelService::new(
         channel_repository.clone(),
         Arc::new(YoutubeApiChannelRepository::new(youtube_api_key())),
@@ -356,6 +392,8 @@ fn build_application() -> Result<Application> {
             task_view_searcher,
             channel_service,
             channel_video_reconciler,
+            directory_searcher,
+            videos_root: videos_path(),
         },
         event_consumer,
         task_executor,
@@ -438,6 +476,7 @@ pub fn run() -> ExitCode {
     run_startup_ytdlp_update();
     run_startup_database_check();
     run_startup_youtube_api_key_check();
+    run_startup_storage_directories_check();
 
     if let Err(e) = run_startup_migrations() {
         error!(error = %e, "failed to apply database migrations");
@@ -740,6 +779,50 @@ mod tests {
         fn dead_letter(&self, _task: &crate::domain::task::DeadLetteredTask) -> anyhow::Result<()> {
             unimplemented!("not exercised by the seeding guard")
         }
+    }
+
+    #[test]
+    fn it_should_create_the_default_storage_directories_on_an_empty_videos_root() {
+        let videos_root = unique_temp_dir("storage-directories-empty");
+        std::fs::create_dir_all(&videos_root).unwrap();
+
+        create_default_storage_directories(&videos_root);
+
+        assert!(videos_root.join("playlists").is_dir());
+        assert!(videos_root.join("channels").is_dir());
+        std::fs::remove_dir_all(&videos_root).unwrap();
+    }
+
+    #[test]
+    fn it_should_leave_existing_default_storage_directories_and_their_contents_untouched() {
+        let videos_root = unique_temp_dir("storage-directories-existing");
+        std::fs::create_dir_all(videos_root.join("playlists/music")).unwrap();
+        std::fs::write(videos_root.join("playlists/music/My Video.mp4"), b"bytes").unwrap();
+
+        create_default_storage_directories(&videos_root);
+
+        assert!(videos_root.join("playlists/music").is_dir());
+        assert_eq!(
+            std::fs::read(videos_root.join("playlists/music/My Video.mp4")).unwrap(),
+            b"bytes"
+        );
+        assert!(videos_root.join("channels").is_dir());
+        std::fs::remove_dir_all(&videos_root).unwrap();
+    }
+
+    #[test]
+    fn it_should_continue_starting_up_on_a_directory_creation_failure() {
+        // A regular file where the videos root should be: every
+        // `create_dir_all` under it fails, the way a read-only mount would.
+        let videos_root = unique_temp_dir("storage-directories-failure").join("not-a-directory");
+        std::fs::create_dir_all(videos_root.parent().unwrap()).unwrap();
+        std::fs::write(&videos_root, b"").unwrap();
+
+        create_default_storage_directories(&videos_root);
+
+        assert!(!videos_root.join("playlists").exists());
+        assert!(!videos_root.join("channels").exists());
+        std::fs::remove_dir_all(videos_root.parent().unwrap()).unwrap();
     }
 
     fn run_at() -> DateTime<Utc> {

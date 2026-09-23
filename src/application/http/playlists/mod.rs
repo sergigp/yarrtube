@@ -247,6 +247,10 @@ mod tests {
             video_repository.clone(),
         );
         let state = AppState {
+            directory_searcher: crate::domain::services::DirectorySearcher::new(Arc::new(
+                crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository::default(),
+            )),
+            videos_root: "/videos".to_string(),
             playlist_creator: crate::domain::services::PlaylistCreator::new(
                 repository.clone(),
                 Arc::new(FakeYoutubePlaylistRepository {
@@ -927,6 +931,10 @@ mod tests {
         );
         let playlist_searcher = crate::domain::services::PlaylistSearcher::new(playlist_repository);
         let state = AppState {
+            directory_searcher: crate::domain::services::DirectorySearcher::new(Arc::new(
+                crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository::default(),
+            )),
+            videos_root: "/videos".to_string(),
             playlist_creator,
             playlist_deleter,
             playlist_searcher,
@@ -1053,6 +1061,10 @@ mod tests {
             video_repository.clone(),
         );
         let state = AppState {
+            directory_searcher: crate::domain::services::DirectorySearcher::new(Arc::new(
+                crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository::default(),
+            )),
+            videos_root: "/videos".to_string(),
             playlist_creator: crate::domain::services::PlaylistCreator::new(
                 repository.clone(),
                 Arc::new(FakeYoutubePlaylistRepository { exists: true }),

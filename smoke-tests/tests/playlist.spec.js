@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { openAddDialog, submitPlaylist, dialogErrorText } from '../helpers/addDialog.js'
+import { openAddDialog, submitPlaylist, fillPlaylist } from '../helpers/addDialog.js'
 import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
 import { syncItem, deleteItem, sectionRows } from '../helpers/sidebar.js'
 
@@ -40,18 +40,18 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   // Sync from the sidebar completes without an error dialog/alert.
   await syncItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
 
-  // A different (fake) source id with the same name auto-derives the same
-  // path as the already-tracked playlist, tripping the path-conflict error
-  // and auto-expanding Advanced options. Resubmitting the *same* id instead
-  // would just be treated as an idempotent "already exists", not a conflict.
+  // The same name auto-derives the same folder under the same default
+  // parent as the already-tracked playlist. That conflict is now caught in
+  // the dialog, before submission, so the preview reports it and the submit
+  // button stays disabled — there is no rejected request to recover from.
   await openAddDialog(page)
-  await submitPlaylist(page, { url: 'not-a-real-playlist-id-path-conflict-check', name: PLAYLIST_NAME })
-  await expect(dialogErrorText(page)).toBeVisible()
-  await expect(page.getByRole('dialog').getByRole('button', { name: /Advanced options/ })).toHaveAttribute(
-    'aria-expanded',
-    'true',
-  )
-  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
+  const dialog = await fillPlaylist(page, {
+    url: 'not-a-real-playlist-id-path-conflict-check',
+    name: PLAYLIST_NAME,
+  })
+  await expect(dialog.getByText(/Already used by/)).toBeVisible()
+  await expect(dialog.getByRole('button', { name: /^Create Playlist/ })).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Close' }).click()
 
   // Delete from the sidebar; it disappears from both the sidebar and home feed.
   await deleteItem(page, { section: 'Playlists', name: PLAYLIST_NAME })

@@ -273,6 +273,10 @@ mod tests {
             "/videos",
         );
         let state = AppState {
+            directory_searcher: crate::domain::services::DirectorySearcher::new(Arc::new(
+                crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository::default(),
+            )),
+            videos_root: "/videos".to_string(),
             playlist_creator,
             playlist_deleter,
             playlist_searcher,
