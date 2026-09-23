@@ -9,6 +9,29 @@ operations:
     guidance:
       - Invoke the /rust-architect skill and follow its conventions when implementing Rust code
       - End every task with a commit
+      - |
+        Walking skeleton task: create only the structure and wiring described in the task.
+        Do not implement real logic yet, even if it looks trivial. If building the skeleton
+        shows that design.md's types, signatures or call stack are wrong, stop and propose
+        an artifact update (/opsx:update) before continuing.
+      - |
+        Every TDD task is exactly one red-green-refactor cycle, done in this order:
+        1. RED — Write only the one test named in the task, following /rust-architect's
+           testing conventions (behaviour tests drive the application entry point with
+           fakes; infrastructure tests use the real dependency). Run it and confirm it FAILS
+           on an assertion. A compile error or panic is not a valid red: first add whatever
+           compiling stub code the test needs, then re-run until it fails on the assertion.
+           If it passes immediately, the behaviour already exists: tell the user and ask
+           whether to keep the test and skip the cycle.
+        2. GREEN — Make the smallest production-code change that makes this test pass.
+           Do not add behaviour that no failing test requires yet; later tasks will drive it.
+           Run the full test suite (`cargo test --locked`); everything must pass.
+        3. REFACTOR — Clean up only the code touched in this cycle (duplication, naming,
+           structure per /rust-architect) without changing behaviour. Re-run the full suite;
+           everything must still pass. Skip this step if nothing needs cleaning.
+        Then mark the task done.
+      - Never write production logic before a failing test that requires it, and never
+        write more than one new test per cycle.
 
 rules:
   design:
@@ -24,9 +47,39 @@ rules:
       ## Call Stack
       For each main flow: what calls what, top to bottom. And what are the call parameters.
       ## Test Plan
-      Test case names and what each one asserts, before any of them exist.
+      The ordered list of TDD cycles. Two groups, in this order:
+      1. Behaviour tests (application layer: HTTP handler, event subscriber, or task),
+         ordered from simplest/happy path to edge cases and errors.
+      2. Infrastructure tests, one group per real adapter the change adds or changes.
+      For each: test name (`it_should_...`) and what it asserts. One test = one cycle.
     - Be very concise — no prose narration, no alternatives-considered
       discussion, no rationale paragraphs, unless a decision is genuinely
       non-obvious and needs one sentence to avoid it being "fixed" later
     - Follow /rust-architect's layering and naming conventions when naming
       files, types, and methods in the contract
+  tasks:
+    - |
+      Structure tasks.md as a vertical slice built outside-in. Do NOT group tasks by
+      layer (domain / application / infrastructure). Use exactly these sections, in order:
+
+      ## 1. Walking skeleton
+      One task that creates every file, type and signature from design.md
+      (## Files, ## Types & Signatures) across all layers, wired end-to-end
+      (route/subscriber/task registered, dependencies constructed in the composition root),
+      plus the fakes for any new or changed ports. Bodies return trivial hardcoded values
+      (e.g. `Ok(())`, empty `Vec`, `None`, a fixed response) — never `todo!()` or
+      `unimplemented!()`. Done when: `cargo build` succeeds and all existing tests pass.
+      No new behaviour and no new tests in this task.
+
+      ## 2. Behaviour (TDD)
+      One task per behaviour test from design.md's Test Plan, in the same order.
+      Task text: the test name + the behaviour it drives. Each task is one
+      red-green-refactor cycle (see apply guidance).
+
+      ## 3. Infrastructure adapters (TDD)
+      One task per infrastructure test from the Test Plan, grouped by adapter. Each
+      replaces skeleton stub code in a real adapter via one red-green-refactor cycle.
+
+      ## 4. Verification
+      cargo test, fmt, clippy, and manual check via smoke tests running scripts/run-smoke-test.sh or manually running scripts/run-local.sh when the change
+      is user-visible.
