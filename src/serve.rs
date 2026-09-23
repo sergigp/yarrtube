@@ -38,9 +38,9 @@ use crate::infrastructure::shared::domain_events::event_publisher::{
 use crate::infrastructure::shared::domain_events::event_repository::{
     EventRepository, SqliteEventRepository,
 };
-use crate::infrastructure::shared::sqlite_migrations;
 use crate::infrastructure::shared::system_clock::{Clock, SystemClock};
 use crate::infrastructure::shared::web_assets::WebAssets;
+use crate::infrastructure::shared::{sqlite_connection, sqlite_migrations};
 use anyhow::{Context, Result};
 use axum::Router;
 use axum::http::{StatusCode, Uri, header};
@@ -170,20 +170,8 @@ fn run_startup_youtube_api_key_check() {
     }
 }
 
-/// Opens a connection to the shared database file. Each repository gets its
-/// own connection (see `build_application`), so WAL mode lets readers on one
-/// connection proceed while another holds the write lock, and `busy_timeout`
-/// makes SQLite retry internally for up to 5s instead of immediately
-/// returning `SQLITE_BUSY` ("database is locked") when two connections
-/// briefly contend for the write lock.
 fn open_connection() -> Result<rusqlite::Connection> {
-    let conn = rusqlite::Connection::open(db_path())
-        .with_context(|| format!("failed to open database at {:?}", db_path()))?;
-    conn.pragma_update(None, "journal_mode", "WAL")
-        .context("failed to enable WAL journal mode")?;
-    conn.busy_timeout(std::time::Duration::from_secs(5))
-        .context("failed to set busy timeout")?;
-    Ok(conn)
+    sqlite_connection::open(&db_path())
 }
 
 /// Applies pending schema migrations once at startup, before any repository

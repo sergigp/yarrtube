@@ -27,6 +27,21 @@ impl SqliteVideoRepository {
             conn: Mutex::new(conn),
         }
     }
+
+    /// Every stored video, for tests asserting the table's whole final state;
+    /// the port itself has no use case that lists all videos.
+    #[cfg(test)]
+    pub fn list(&self) -> anyhow::Result<Vec<Video>> {
+        let ids: Vec<String> = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare("SELECT id FROM videos ORDER BY rowid ASC")?;
+            stmt.query_map([], |row| row.get(0))?
+                .collect::<Result<_, _>>()?
+        };
+        ids.into_iter()
+            .map(|id| Ok(self.find(&VideoRecordId::new(id)?)?.unwrap()))
+            .collect()
+    }
 }
 
 impl VideoRepository for SqliteVideoRepository {
