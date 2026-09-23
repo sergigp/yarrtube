@@ -21,7 +21,7 @@ test('channel lifecycle: add, download, play, sync, invalid handle error, delete
   // fixed title is asserted, since the channel's newest video can change;
   // instead the actual title is read back to check the home feed later.
   await sidebarLink.click()
-  await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 120_000 })
+  await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 240_000 })
   const videoTitle = await page.locator('main h3').first().innerText()
   await assertVideoPlays(page)
 

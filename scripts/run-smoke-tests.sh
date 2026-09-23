@@ -72,6 +72,7 @@ docker run -d --name "$CONTAINER_NAME" \
   -e "YARRTUBE_PORT=$PORT" \
   -e YARRTUBE_DB_PATH=/data/yarrtube.sqlite3 \
   -e YARRTUBE_VIDEOS_PATH=/videos \
+  -e "YARRTUBE_RETRY_BASE_DELAY_SECONDS=${SMOKE_RETRY_BASE_DELAY_SECONDS:-10}" \
   -v "$TMP_DIR/videos:/videos" \
   -v "$TMP_DIR/data:/data" \
   "$IMAGE_TAG" >/dev/null
