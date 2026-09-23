@@ -1,8 +1,10 @@
 pub mod dto;
 
-use super::AppState;
-use super::error::error_response;
+use super::VideosRoot;
+use super::blocking::run_blocking;
+use super::error::ApiError;
 use crate::domain::directory::{DirectoryPath, ListDirectoriesError};
+use crate::domain::services::DirectorySearcher;
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
@@ -10,42 +12,55 @@ use axum::response::{IntoResponse, Response};
 use dto::{DirectoryResponse, ListDirectoriesQuery};
 
 pub async fn list_directories(
-    State(state): State<AppState>,
+    State(directory_searcher): State<DirectorySearcher>,
+    State(VideosRoot(videos_root)): State<VideosRoot>,
     Query(query): Query<ListDirectoriesQuery>,
-) -> Response {
+) -> Result<Response, ApiError> {
     let path = match query.path {
         None => DirectoryPath::root(),
-        Some(path) => match DirectoryPath::new(path) {
-            Ok(path) => path,
-            Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-        },
+        Some(path) => DirectoryPath::new(path).map_err(ApiError::bad_request)?,
     };
 
-    match state.directory_searcher.list(&path) {
-        Ok(directory) => (
+    match run_blocking(move || directory_searcher.list(&path)).await? {
+        Ok(directory) => Ok((
             StatusCode::OK,
-            Json(DirectoryResponse::new(&state.videos_root, directory)),
+            Json(DirectoryResponse::new(&videos_root, directory)),
         )
-            .into_response(),
-        Err(e @ ListDirectoriesError::NotFound(_)) => {
-            error_response(StatusCode::NOT_FOUND, e.to_string())
-        }
-        Err(e @ ListDirectoriesError::Repository(_)) => {
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        }
+            .into_response()),
+        Err(e @ ListDirectoriesError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
+        Err(e @ ListDirectoriesError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::http::test_support::test_router_with_directories;
     use crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository;
+    use axum::Router;
     use axum::body::{Body, to_bytes};
+    use axum::extract::FromRef;
     use axum::http::Request;
+    use axum::routing::get;
+    use std::sync::Arc;
     use tower::ServiceExt;
 
     const VIDEOS_ROOT: &str = "/videos";
+
+    #[derive(Clone, FromRef)]
+    struct TestState {
+        directory_searcher: DirectorySearcher,
+        videos_root: VideosRoot,
+    }
+
+    fn test_router(repository: FakeDirectoryRepository) -> Router {
+        let state = TestState {
+            directory_searcher: DirectorySearcher::new(Arc::new(repository)),
+            videos_root: VideosRoot(VIDEOS_ROOT.to_string()),
+        };
+        Router::new()
+            .route("/api/directories", get(list_directories))
+            .with_state(state)
+    }
 
     async fn body_json(response: Response) -> serde_json::Value {
         let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -53,7 +68,7 @@ mod tests {
     }
 
     async fn list(repository: FakeDirectoryRepository, uri: &str) -> Response {
-        test_router_with_directories(repository, VIDEOS_ROOT)
+        test_router(repository)
             .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
             .await
             .unwrap()

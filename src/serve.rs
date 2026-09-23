@@ -1,4 +1,4 @@
-use crate::application::http::{self, AppState};
+use crate::application::http::{self, AppState, VideosRoot};
 use crate::application::{subscribers, tasks};
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
@@ -393,7 +393,7 @@ fn build_application() -> Result<Application> {
             channel_service,
             channel_video_reconciler,
             directory_searcher,
-            videos_root: videos_path(),
+            videos_root: VideosRoot(videos_path()),
         },
         event_consumer,
         task_executor,
@@ -432,7 +432,7 @@ async fn heartbeat_loop() {
 }
 
 async fn serve_http(port: u16, state: AppState) -> Result<()> {
-    let app = Router::new()
+    let router = Router::new()
         .route("/status", get(status))
         .nest("/api", http::api_router(state))
         .nest_service("/media", ServeDir::new(videos_path()))
@@ -442,7 +442,7 @@ async fn serve_http(port: u16, state: AppState) -> Result<()> {
         .await
         .with_context(|| format!("failed to bind HTTP server on port {port}"))?;
     info!(port, "HTTP server listening on 0.0.0.0");
-    axum::serve(listener, app)
+    axum::serve(listener, router)
         .await
         .context("HTTP server failed")?;
     Ok(())

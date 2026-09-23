@@ -1,8 +1,9 @@
 pub mod dto;
 
-use super::AppState;
-use super::error::error_response;
+use super::blocking::run_blocking;
+use super::error::ApiError;
 use crate::domain::channel::ChannelHandle;
+use crate::domain::services::VideoSearcher;
 use crate::domain::shared::PlaylistId;
 use crate::domain::video::ListVideosError;
 use axum::Json;
@@ -22,83 +23,53 @@ pub struct ListRecentVideosQuery {
 }
 
 pub async fn list_videos_for_playlist(
-    State(state): State<AppState>,
+    State(video_searcher): State<VideoSearcher>,
     Path(playlist_id): Path<String>,
-) -> Response {
-    let playlist_id = match PlaylistId::new(playlist_id) {
-        Ok(id) => id,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
+) -> Result<Response, ApiError> {
+    let playlist_id = PlaylistId::new(playlist_id).map_err(ApiError::bad_request)?;
 
-    match state.video_searcher.list(&playlist_id) {
-        Ok(videos) => {
-            let response: Vec<VideoResponse> =
-                videos.into_iter().map(VideoResponse::from).collect();
-            (StatusCode::OK, Json(response)).into_response()
-        }
-        Err(e @ ListVideosError::PlaylistNotFound(_)) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Err(e @ ListVideosError::ChannelNotFound(_)) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Err(e @ ListVideosError::Repository(_)) => {
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        }
-    }
+    let videos = run_blocking(move || video_searcher.list(&playlist_id))
+        .await?
+        .map_err(list_videos_error)?;
+    let response: Vec<VideoResponse> = videos.into_iter().map(VideoResponse::from).collect();
+    Ok((StatusCode::OK, Json(response)).into_response())
 }
 
 pub async fn list_videos_for_channel(
-    State(state): State<AppState>,
+    State(video_searcher): State<VideoSearcher>,
     Path(handle): Path<String>,
-) -> Response {
-    let channel_id = match ChannelHandle::new(handle) {
-        Ok(id) => id,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
+) -> Result<Response, ApiError> {
+    let channel_id = ChannelHandle::new(handle).map_err(ApiError::bad_request)?;
 
-    match state.video_searcher.list_for_channel(&channel_id) {
-        Ok(videos) => {
-            let response: Vec<VideoResponse> =
-                videos.into_iter().map(VideoResponse::from).collect();
-            (StatusCode::OK, Json(response)).into_response()
-        }
-        Err(e @ ListVideosError::PlaylistNotFound(_)) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Err(e @ ListVideosError::ChannelNotFound(_)) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Err(e @ ListVideosError::Repository(_)) => {
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        }
-    }
+    let videos = run_blocking(move || video_searcher.list_for_channel(&channel_id))
+        .await?
+        .map_err(list_videos_error)?;
+    let response: Vec<VideoResponse> = videos.into_iter().map(VideoResponse::from).collect();
+    Ok((StatusCode::OK, Json(response)).into_response())
 }
 
 pub async fn list_recent_videos(
-    State(state): State<AppState>,
+    State(video_searcher): State<VideoSearcher>,
     Query(query): Query<ListRecentVideosQuery>,
-) -> Response {
+) -> Result<Response, ApiError> {
     let limit = query
         .limit
         .unwrap_or(DEFAULT_RECENT_VIDEOS_LIMIT)
         .min(MAX_RECENT_VIDEOS_LIMIT);
 
-    match state.video_searcher.list_recent(limit) {
-        Ok(videos) => {
-            let response: Vec<RecentVideoResponse> =
-                videos.into_iter().map(RecentVideoResponse::from).collect();
-            (StatusCode::OK, Json(response)).into_response()
-        }
-        Err(e @ ListVideosError::PlaylistNotFound(_)) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Err(e @ ListVideosError::ChannelNotFound(_)) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Err(e @ ListVideosError::Repository(_)) => {
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        }
+    let videos = run_blocking(move || video_searcher.list_recent(limit))
+        .await?
+        .map_err(list_videos_error)?;
+    let response: Vec<RecentVideoResponse> =
+        videos.into_iter().map(RecentVideoResponse::from).collect();
+    Ok((StatusCode::OK, Json(response)).into_response())
+}
+
+fn list_videos_error(error: ListVideosError) -> ApiError {
+    match error {
+        e @ ListVideosError::PlaylistNotFound(_) => ApiError::bad_request(e),
+        e @ ListVideosError::ChannelNotFound(_) => ApiError::bad_request(e),
+        e @ ListVideosError::Repository(_) => ApiError::internal(e),
     }
 }
 
@@ -111,8 +82,6 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, VideoId};
     use crate::domain::video::Video;
-    use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
-    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, FakeChannelRepository,
     };
@@ -125,21 +94,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         FakePlaylistVideoRepository, PlaylistVideoRepository,
     };
-    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
-    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         FakeVideoRepository, VideoRepository,
     };
-    use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
-    use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
-    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
-    use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
-    use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
-
-    use crate::infrastructure::shared::domain_events::event_publisher::{
-        EventPublisher, FakeEventPublisher,
-    };
-    use crate::infrastructure::shared::system_clock::FixedClock;
     use axum::Router;
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
@@ -159,100 +116,19 @@ mod tests {
         channel_video_repository: Arc<FakeChannelVideoRepository>,
         video_repository: Arc<FakeVideoRepository>,
     ) -> axum::Router {
-        let event_publisher = Arc::new(FakeEventPublisher::default());
-        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
-            Arc::new(FakeTaskRepository::default()),
-            playlist_repository.clone(),
-            channel_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            channel_video_repository.clone(),
-        );
-        let playlist_creator = crate::domain::services::PlaylistCreator::new(
-            playlist_repository.clone(),
-            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
-            event_publisher.clone() as Arc<dyn EventPublisher>,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let playlist_deleter = crate::domain::services::PlaylistDeleter::new(
-            playlist_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            event_publisher.clone() as Arc<dyn EventPublisher>,
-        );
-        let playlist_searcher =
-            crate::domain::services::PlaylistSearcher::new(playlist_repository.clone());
-        let channel_service = crate::domain::channel::ChannelService::new(
-            channel_repository.clone(),
-            Arc::new(FakeYoutubeChannelRepository { resolved: None }),
-            Arc::new(FakeChannelAvatarRepository::default()),
-            video_repository.clone(),
-            channel_video_repository.clone(),
-            event_publisher.clone() as Arc<dyn EventPublisher>,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
-            video_repository.clone(),
-            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let channel_video_reconciler = crate::domain::services::ChannelVideoReconciler::new(
-            channel_repository.clone(),
-            video_repository.clone(),
-            channel_video_repository.clone(),
-            Arc::new(FakeChannelVideosRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher.clone() as Arc<dyn EventPublisher>,
-            Arc::new(FakeTaskRepository::default()),
-            Arc::new(FakeVideoFileRepository::default()),
-            thumbnail_fetcher.clone(),
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        );
-        let video_reconciler = crate::domain::services::VideoReconciler::new(
-            playlist_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher.clone() as Arc<dyn EventPublisher>,
-            Arc::new(FakeTaskRepository::default()),
-            Arc::new(FakeVideoFileRepository::default()),
-            thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        );
-        let video_searcher = crate::domain::services::VideoSearcher::new(
+        let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
             channel_repository,
             channel_video_repository,
             video_repository,
         );
-        let state = AppState {
-            directory_searcher: crate::domain::services::DirectorySearcher::new(Arc::new(
-                crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository::default(),
-            )),
-            videos_root: "/videos".to_string(),
-            playlist_creator,
-            playlist_deleter,
-            playlist_searcher,
-            video_reconciler,
-            video_searcher,
-            task_view_searcher,
-            channel_service,
-            channel_video_reconciler,
-        };
-        let inner = Router::new()
+        let api = Router::new()
             .route("/playlists/{id}/videos", get(list_videos_for_playlist))
             .route("/channels/{handle}/videos", get(list_videos_for_channel))
             .route("/videos/recent", get(list_recent_videos))
-            .with_state(state);
-        Router::new().nest("/api", inner)
+            .with_state(video_searcher);
+        Router::new().nest("/api", api)
     }
 
     async fn body_json(response: Response) -> serde_json::Value {

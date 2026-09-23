@@ -1,10 +1,10 @@
+pub mod blocking;
 pub mod channels;
 pub mod directories;
 pub mod error;
 pub mod playlists;
 pub mod tasks;
-#[cfg(test)]
-pub mod test_support;
+pub mod validation;
 pub mod videos;
 
 use crate::domain::channel::ChannelService;
@@ -13,9 +13,16 @@ use crate::domain::services::{
     TaskViewSearcher, VideoReconciler, VideoSearcher,
 };
 use axum::Router;
+use axum::extract::FromRef;
 use axum::routing::{get, post};
 
+/// The absolute configured videos root, carried in the adapter layer as the
+/// subscribers already do, so no domain type has to know a filesystem
+/// location. Reported on every directory listing.
 #[derive(Clone)]
+pub struct VideosRoot(pub String);
+
+#[derive(Clone, FromRef)]
 pub struct AppState {
     pub playlist_creator: PlaylistCreator,
     pub playlist_deleter: PlaylistDeleter,
@@ -26,10 +33,7 @@ pub struct AppState {
     pub channel_service: ChannelService,
     pub channel_video_reconciler: ChannelVideoReconciler,
     pub directory_searcher: DirectorySearcher,
-    /// The absolute configured videos root, carried in the adapter layer as
-    /// the subscribers already do, so no domain type has to know a filesystem
-    /// location. Reported on every directory listing.
-    pub videos_root: String,
+    pub videos_root: VideosRoot,
 }
 
 pub fn api_router(state: AppState) -> Router {
@@ -70,4 +74,168 @@ pub fn api_router(state: AppState) -> Router {
             get(videos::list_videos_for_channel),
         )
         .with_state(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::services::ThumbnailFetcher;
+    use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
+    use crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository;
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+    use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
+    use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
+    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
+    use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
+    use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use axum::body::Body;
+    use axum::http::{Method, Request, StatusCode};
+    use chrono::{DateTime, Utc};
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn app_state() -> AppState {
+        let playlist_repository = Arc::new(FakePlaylistRepository::default());
+        let channel_repository = Arc::new(FakeChannelRepository::default());
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let task_repository = Arc::new(FakeTaskRepository::default());
+        let event_publisher = Arc::new(FakeEventPublisher::default());
+        let clock = Arc::new(FixedClock(fixed_timestamp()));
+        let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::default()),
+            clock.clone(),
+        ));
+
+        AppState {
+            playlist_creator: PlaylistCreator::new(
+                playlist_repository.clone(),
+                Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+                event_publisher.clone(),
+                clock.clone(),
+            ),
+            playlist_deleter: PlaylistDeleter::new(
+                playlist_repository.clone(),
+                video_repository.clone(),
+                playlist_video_repository.clone(),
+                event_publisher.clone(),
+            ),
+            playlist_searcher: PlaylistSearcher::new(playlist_repository.clone()),
+            video_reconciler: VideoReconciler::new(
+                playlist_repository.clone(),
+                video_repository.clone(),
+                playlist_video_repository.clone(),
+                Arc::new(FakeYoutubePlaylistItemsRepository::default()),
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FakeVideoMetadataRepository::default()),
+                event_publisher.clone(),
+                task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                thumbnail_fetcher.clone(),
+                clock.clone(),
+                3600,
+                "/videos",
+            ),
+            video_searcher: VideoSearcher::new(
+                playlist_repository.clone(),
+                playlist_video_repository.clone(),
+                channel_repository.clone(),
+                channel_video_repository.clone(),
+                video_repository.clone(),
+            ),
+            task_view_searcher: TaskViewSearcher::new(
+                task_repository.clone(),
+                playlist_repository,
+                channel_repository.clone(),
+                video_repository.clone(),
+                playlist_video_repository,
+                channel_video_repository.clone(),
+            ),
+            channel_service: ChannelService::new(
+                channel_repository.clone(),
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
+                video_repository.clone(),
+                channel_video_repository.clone(),
+                event_publisher.clone(),
+                clock.clone(),
+            ),
+            channel_video_reconciler: ChannelVideoReconciler::new(
+                channel_repository,
+                video_repository,
+                channel_video_repository,
+                Arc::new(FakeChannelVideosRepository::default()),
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FakeVideoMetadataRepository::default()),
+                event_publisher,
+                task_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                thumbnail_fetcher,
+                clock,
+                3600,
+                "/videos",
+            ),
+            directory_searcher: DirectorySearcher::new(Arc::new(
+                FakeDirectoryRepository::with_directories(&[("", &[])]),
+            )),
+            videos_root: VideosRoot("/videos".to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn it_should_route_every_api_endpoint_to_a_handler() {
+        let router = api_router(app_state());
+        let endpoints = [
+            (Method::GET, "/directories"),
+            (Method::POST, "/playlists"),
+            (Method::GET, "/playlists"),
+            (Method::DELETE, "/playlists/PL1"),
+            (Method::POST, "/playlists/PL1/reconcile"),
+            (Method::GET, "/playlists/PL1/videos"),
+            (Method::GET, "/videos/recent"),
+            (Method::GET, "/tasks"),
+            (Method::POST, "/channels"),
+            (Method::GET, "/channels"),
+            (Method::DELETE, "/channels/@somechannel"),
+            (Method::POST, "/channels/@somechannel/reconcile"),
+            (Method::GET, "/channels/@somechannel/videos"),
+        ];
+
+        for (method, uri) in endpoints {
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method.clone())
+                        .uri(uri)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_ne!(response.status(), StatusCode::NOT_FOUND, "{method} {uri}");
+            assert_ne!(
+                response.status(),
+                StatusCode::METHOD_NOT_ALLOWED,
+                "{method} {uri}"
+            );
+        }
+    }
 }

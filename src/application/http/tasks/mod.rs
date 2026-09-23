@@ -1,21 +1,23 @@
 pub mod dto;
 
-use super::AppState;
-use super::error::error_response;
+use super::blocking::run_blocking;
+use super::error::ApiError;
+use crate::domain::services::TaskViewSearcher;
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use dto::TaskResponse;
 
-pub async fn list_tasks(State(state): State<AppState>) -> Response {
-    let views = match state.task_view_searcher.search_all_pending() {
-        Ok(views) => views,
-        Err(e) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-    };
+pub async fn list_tasks(
+    State(task_view_searcher): State<TaskViewSearcher>,
+) -> Result<Response, ApiError> {
+    let views = run_blocking(move || task_view_searcher.search_all_pending())
+        .await?
+        .map_err(ApiError::internal)?;
 
     let response: Vec<TaskResponse> = views.into_iter().map(TaskResponse::from).collect();
-    (StatusCode::OK, Json(response)).into_response()
+    Ok((StatusCode::OK, Json(response)).into_response())
 }
 
 #[cfg(test)]
@@ -28,8 +30,6 @@ mod tests {
     use crate::domain::shared::{PlaylistId, Quality, VideoId, VideoRecordId};
     use crate::domain::task::Task;
     use crate::domain::video::Video;
-    use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
-    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, FakeChannelRepository,
     };
@@ -45,18 +45,8 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         FakeVideoRepository, VideoRepository,
-    };
-    use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
-    use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
-    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
-    use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
-    use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
-
-    use crate::infrastructure::shared::domain_events::event_publisher::{
-        EventPublisher, FakeEventPublisher,
     };
     use crate::infrastructure::shared::system_clock::FixedClock;
     use axum::Router;
@@ -83,7 +73,6 @@ mod tests {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn test_router_with(
         task_repository: Arc<dyn TaskRepository>,
         playlist_repository: Arc<FakePlaylistRepository>,
@@ -92,104 +81,17 @@ mod tests {
         playlist_video_repository: Arc<FakePlaylistVideoRepository>,
         channel_video_repository: Arc<FakeChannelVideoRepository>,
     ) -> axum::Router {
-        let event_publisher = Arc::new(FakeEventPublisher::default());
-        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
-            task_repository.clone(),
-            playlist_repository.clone(),
-            channel_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            channel_video_repository.clone(),
-        );
-        let playlist_creator = crate::domain::services::PlaylistCreator::new(
-            playlist_repository.clone(),
-            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
-            event_publisher.clone() as Arc<dyn EventPublisher>,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let playlist_deleter = crate::domain::services::PlaylistDeleter::new(
-            playlist_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            event_publisher.clone() as Arc<dyn EventPublisher>,
-        );
-        let playlist_searcher =
-            crate::domain::services::PlaylistSearcher::new(playlist_repository.clone());
-        let channel_service = crate::domain::channel::ChannelService::new(
-            channel_repository.clone(),
-            Arc::new(FakeYoutubeChannelRepository { resolved: None }),
-            Arc::new(FakeChannelAvatarRepository::default()),
-            Arc::new(FakeVideoRepository::default()),
-            channel_video_repository.clone(),
-            event_publisher.clone() as Arc<dyn EventPublisher>,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let channel_thumbnail_video_repository = Arc::new(FakeVideoRepository::default());
-        let channel_thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
-            channel_thumbnail_video_repository.clone(),
-            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let channel_video_reconciler = crate::domain::services::ChannelVideoReconciler::new(
-            channel_repository,
-            channel_thumbnail_video_repository,
-            channel_video_repository,
-            Arc::new(FakeChannelVideosRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher.clone() as Arc<dyn EventPublisher>,
-            task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            channel_thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        );
-        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
-            video_repository.clone(),
-            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let video_reconciler = crate::domain::services::VideoReconciler::new(
-            playlist_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher.clone() as Arc<dyn EventPublisher>,
-            task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        );
-        let video_searcher = crate::domain::services::VideoSearcher::new(
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository,
             playlist_repository,
-            playlist_video_repository,
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::default()),
+            channel_repository,
             video_repository,
+            playlist_video_repository,
+            channel_video_repository,
         );
-        let state = AppState {
-            directory_searcher: crate::domain::services::DirectorySearcher::new(Arc::new(
-                crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository::default(),
-            )),
-            videos_root: "/videos".to_string(),
-            playlist_creator,
-            playlist_deleter,
-            playlist_searcher,
-            video_reconciler,
-            video_searcher,
-            task_view_searcher,
-            channel_service,
-            channel_video_reconciler,
-        };
-        let inner = Router::new()
-            .route("/tasks", get(list_tasks))
-            .with_state(state);
-        Router::new().nest("/api", inner)
+        Router::new()
+            .route("/api/tasks", get(list_tasks))
+            .with_state(task_view_searcher)
     }
 
     async fn body_json(response: Response) -> serde_json::Value {
