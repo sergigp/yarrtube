@@ -23,7 +23,7 @@ use axum::routing::{get, post};
 pub struct VideosRoot(pub String);
 
 #[derive(Clone, FromRef)]
-pub struct AppState {
+pub struct ApiServices {
     pub playlist_creator: PlaylistCreator,
     pub playlist_deleter: PlaylistDeleter,
     pub playlist_searcher: PlaylistSearcher,
@@ -36,7 +36,7 @@ pub struct AppState {
     pub videos_root: VideosRoot,
 }
 
-pub fn api_router(state: AppState) -> Router {
+pub fn api_router(api_services: ApiServices) -> Router {
     Router::new()
         .route("/directories", get(directories::list_directories))
         .route(
@@ -73,7 +73,7 @@ pub fn api_router(state: AppState) -> Router {
             "/channels/{handle}/videos",
             get(videos::list_videos_for_channel),
         )
-        .with_state(state)
+        .with_state(api_services)
 }
 
 #[cfg(test)]
@@ -109,7 +109,7 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn app_state(db: &TestDatabase) -> AppState {
+    fn api_services(db: &TestDatabase) -> ApiServices {
         let clock = Arc::new(FixedClock(fixed_timestamp()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
@@ -131,7 +131,7 @@ mod tests {
             clock.clone(),
         ));
 
-        AppState {
+        ApiServices {
             playlist_creator: PlaylistCreator::new(
                 playlist_repository.clone(),
                 Arc::new(FakeYoutubePlaylistRepository { exists: true }),
@@ -209,7 +209,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_route_every_api_endpoint_to_a_handler() {
         let db = TestDatabase::new();
-        let router = api_router(app_state(&db));
+        let router = api_router(api_services(&db));
         let endpoints = [
             (Method::GET, "/directories"),
             (Method::POST, "/playlists"),

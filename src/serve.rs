@@ -1,4 +1,4 @@
-use crate::application::http::{self, AppState, VideosRoot};
+use crate::application::http::{self, ApiServices, VideosRoot};
 use crate::application::{subscribers, tasks};
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
@@ -8,37 +8,12 @@ use crate::domain::services::{
 };
 use crate::domain::task::Task;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
+use crate::infrastructure::infrastructure_container::{
+    InfrastructureContainer, InfrastructureSettings,
+};
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
-use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FilesystemChannelAvatarRepository;
-use crate::infrastructure::repositories::filesystem_directory_repository::FilesystemDirectoryRepository;
-use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
-use crate::infrastructure::repositories::sqlite_channel_repository::{
-    ChannelRepository, SqliteChannelRepository,
-};
-use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
-use crate::infrastructure::repositories::sqlite_playlist_repository::{
-    PlaylistRepository, SqlitePlaylistRepository,
-};
-use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
-use crate::infrastructure::repositories::sqlite_task_repository::{
-    SqliteTaskRepository, TaskRepository,
-};
-use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
-use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
+use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_executor::TaskExecutor;
-use crate::infrastructure::repositories::youtube_channel_repository::YoutubeApiChannelRepository;
-use crate::infrastructure::repositories::youtube_channel_videos_repository::YtDlpChannelVideosRepository;
-use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeApiMetadataRepository;
-use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubeApiPlaylistItemsRepository;
-use crate::infrastructure::repositories::youtube_playlist_repository::YoutubeApiPlaylistRepository;
-use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
-use crate::infrastructure::shared::domain_events::event_publisher::{
-    EventPublisher, SqliteEventPublisher,
-};
-use crate::infrastructure::shared::domain_events::event_repository::{
-    EventRepository, SqliteEventRepository,
-};
-use crate::infrastructure::shared::system_clock::{Clock, SystemClock};
 use crate::infrastructure::shared::web_assets::WebAssets;
 use crate::infrastructure::shared::{sqlite_connection, sqlite_migrations};
 use anyhow::{Context, Result};
@@ -49,7 +24,7 @@ use axum::routing::get;
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use tower_http::services::ServeDir;
 use tracing::{error, info, warn};
@@ -170,21 +145,12 @@ fn run_startup_youtube_api_key_check() {
     }
 }
 
-fn open_connection() -> Result<rusqlite::Connection> {
-    sqlite_connection::open(&db_path())
-}
-
 /// Applies pending schema migrations once at startup, before any repository
-/// opens its own connection (see `build_application`).
+/// opens its own connection (see `build_infrastructure`).
 fn run_startup_migrations() -> Result<()> {
-    let mut conn = open_connection().context("failed to open database for migrations")?;
+    let mut conn =
+        sqlite_connection::open(&db_path()).context("failed to open database for migrations")?;
     sqlite_migrations::apply(&mut conn)
-}
-
-struct Application {
-    state: AppState,
-    event_consumer: Arc<DomainEventsConsumer>,
-    task_executor: Arc<TaskExecutor>,
 }
 
 /// Seeds the recurring `update_ytdlp` task chain at `run_at`, unless a
@@ -213,179 +179,169 @@ fn schedule_update_ytdlp_if_absent(
     Ok(())
 }
 
-fn build_application() -> Result<Application> {
-    let playlist_repository: Arc<dyn PlaylistRepository> =
-        Arc::new(SqlitePlaylistRepository::new(open_connection()?));
-    let event_publisher = Arc::new(SqliteEventPublisher::new(
-        Arc::new(Mutex::new(open_connection()?)),
-        Arc::new(SystemClock),
-    ));
-    let event_repository = Arc::new(SqliteEventRepository::new(Arc::new(Mutex::new(
-        open_connection()?,
-    ))));
+fn build_infrastructure() -> Result<InfrastructureContainer> {
+    InfrastructureContainer::new(InfrastructureSettings {
+        db_path: db_path(),
+        youtube_api_key: youtube_api_key(),
+        videos_path: PathBuf::from(videos_path()),
+        avatars_path: avatars_path(),
+        ytdlp_path: target_path(),
+    })
+}
 
-    let task_repository = Arc::new(SqliteTaskRepository::new(
-        Arc::new(Mutex::new(open_connection()?)),
-        Arc::new(SystemClock),
-    ));
-
-    let video_repository = Arc::new(SqliteVideoRepository::new(open_connection()?));
-
-    let channel_repository: Arc<dyn ChannelRepository> =
-        Arc::new(SqliteChannelRepository::new(open_connection()?));
-
-    let playlist_video_repository =
-        Arc::new(SqlitePlaylistVideoRepository::new(open_connection()?));
-    let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(open_connection()?));
-
-    let task_view_searcher = TaskViewSearcher::new(
-        task_repository.clone(),
-        playlist_repository.clone(),
-        channel_repository.clone(),
-        video_repository.clone(),
-        playlist_video_repository.clone(),
-        channel_video_repository.clone(),
-    );
-
-    let playlist_creator = PlaylistCreator::new(
-        playlist_repository.clone(),
-        Arc::new(YoutubeApiPlaylistRepository::new(youtube_api_key())),
-        event_publisher.clone() as Arc<dyn EventPublisher>,
-        Arc::new(SystemClock),
-    );
-    let playlist_deleter = PlaylistDeleter::new(
-        playlist_repository.clone(),
-        video_repository.clone(),
-        playlist_video_repository.clone(),
-        event_publisher.clone() as Arc<dyn EventPublisher>,
-    );
-    let playlist_searcher = PlaylistSearcher::new(playlist_repository.clone());
-    let directory_searcher = DirectorySearcher::new(Arc::new(FilesystemDirectoryRepository::new(
-        PathBuf::from(videos_path()),
-    )));
-    let channel_service = ChannelService::new(
-        channel_repository.clone(),
-        Arc::new(YoutubeApiChannelRepository::new(youtube_api_key())),
-        Arc::new(FilesystemChannelAvatarRepository::new(avatars_path())),
-        video_repository.clone(),
-        channel_video_repository.clone(),
-        event_publisher.clone() as Arc<dyn EventPublisher>,
-        Arc::new(SystemClock),
-    );
-    let event_publisher = event_publisher as Arc<dyn EventPublisher>;
-    let task_repository = task_repository as Arc<dyn TaskRepository>;
-    let video_file_repository = Arc::new(FilesystemVideoFileRepository);
-    let youtube_metadata_repository =
-        Arc::new(YoutubeApiMetadataRepository::new(youtube_api_key()));
-    let video_metadata_repository =
-        Arc::new(SqliteVideoMetadataRepository::new(open_connection()?));
-
-    let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
-        video_repository.clone(),
-        Arc::new(YtDlpVideoDownloaderRepository::new(target_path())),
-        Arc::new(SystemClock),
-    ));
-    let video_reconciler = VideoReconciler::new(
-        playlist_repository.clone(),
-        video_repository.clone(),
-        playlist_video_repository.clone(),
-        Arc::new(YoutubeApiPlaylistItemsRepository::new(youtube_api_key())),
-        youtube_metadata_repository.clone(),
-        video_metadata_repository.clone(),
-        event_publisher.clone(),
-        task_repository.clone(),
-        video_file_repository.clone(),
-        thumbnail_fetcher.clone(),
-        Arc::new(SystemClock),
-        reconcile_interval_seconds(),
-        videos_path(),
-    );
-    let channel_video_reconciler = ChannelVideoReconciler::new(
-        channel_repository.clone(),
-        video_repository.clone(),
-        channel_video_repository.clone(),
-        Arc::new(YtDlpChannelVideosRepository::new(target_path())),
-        youtube_metadata_repository.clone(),
-        video_metadata_repository.clone(),
-        event_publisher.clone(),
-        task_repository.clone(),
-        video_file_repository.clone(),
-        thumbnail_fetcher.clone(),
-        Arc::new(SystemClock),
-        reconcile_interval_seconds(),
-        videos_path(),
-    );
-    let video_downloader = VideoDownloader::new(
-        video_repository.clone(),
-        Arc::new(YtDlpVideoDownloaderRepository::new(target_path())),
-        video_file_repository.clone(),
-        playlist_video_repository.clone(),
-        youtube_metadata_repository.clone(),
-        video_metadata_repository.clone(),
-        Arc::new(SystemClock),
-    );
-    let video_file_deleter = VideoFileDeleter::new(video_file_repository, videos_path());
-    let video_searcher = VideoSearcher::new(
-        playlist_repository.clone(),
-        playlist_video_repository,
-        channel_repository.clone(),
-        channel_video_repository.clone(),
-        video_repository,
-    );
-
-    let event_consumer = Arc::new(DomainEventsConsumer::new(
-        event_repository as Arc<dyn EventRepository>,
-        subscribers::registry(
-            video_reconciler.clone(),
-            channel_video_reconciler.clone(),
-            playlist_repository,
-            channel_repository,
-            task_repository.clone(),
-            Arc::new(SystemClock),
-            videos_path(),
-        ),
-        Arc::new(SystemClock),
-    ));
-    let task_executor = Arc::new(TaskExecutor::new(
-        task_repository.clone(),
-        tasks::registry(
-            video_reconciler.clone(),
-            channel_video_reconciler.clone(),
-            video_downloader.clone(),
-            video_file_deleter.clone(),
-            task_repository.clone(),
-            Arc::new(SystemClock),
-            Arc::new(RealYtdlpUpdater),
-            target_path(),
-        ),
-        Arc::new(SystemClock),
-        retry_base_delay_seconds(),
-    ));
+/// Must run before the task executor starts polling: requeues tasks a
+/// previous run left `running` and seeds the recurring yt-dlp self-update.
+fn prepare_task_queue(
+    infrastructure: &InfrastructureContainer,
+    task_executor: &TaskExecutor,
+) -> Result<()> {
     task_executor
         .recover_stuck_tasks()
         .context("failed to recover tasks left running from a previous run")?;
 
-    let update_ytdlp_first_run_at = SystemClock.now()
+    let update_ytdlp_first_run_at = infrastructure.clock.now()
         + chrono::Duration::seconds(tasks::update_ytdlp_task::UPDATE_INTERVAL_SECONDS);
-    schedule_update_ytdlp_if_absent(task_repository.as_ref(), update_ytdlp_first_run_at)
-        .context("failed to schedule the recurring yt-dlp self-update task")?;
+    schedule_update_ytdlp_if_absent(
+        infrastructure.task_repository.as_ref(),
+        update_ytdlp_first_run_at,
+    )
+    .context("failed to schedule the recurring yt-dlp self-update task")
+}
 
-    Ok(Application {
-        state: AppState {
-            playlist_creator,
-            playlist_deleter,
-            playlist_searcher,
-            video_reconciler,
-            video_searcher,
-            task_view_searcher,
-            channel_service,
-            channel_video_reconciler,
-            directory_searcher,
-            videos_root: VideosRoot(videos_path()),
-        },
-        event_consumer,
-        task_executor,
-    })
+fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
+    ApiServices {
+        playlist_creator: PlaylistCreator::new(
+            infrastructure.playlist_repository.clone(),
+            infrastructure.youtube_playlist_repository.clone(),
+            infrastructure.event_publisher.clone(),
+            infrastructure.clock.clone(),
+        ),
+        playlist_deleter: PlaylistDeleter::new(
+            infrastructure.playlist_repository.clone(),
+            infrastructure.video_repository.clone(),
+            infrastructure.playlist_video_repository.clone(),
+            infrastructure.event_publisher.clone(),
+        ),
+        playlist_searcher: PlaylistSearcher::new(infrastructure.playlist_repository.clone()),
+        video_reconciler: video_reconciler(infrastructure),
+        video_searcher: VideoSearcher::new(
+            infrastructure.playlist_repository.clone(),
+            infrastructure.playlist_video_repository.clone(),
+            infrastructure.channel_repository.clone(),
+            infrastructure.channel_video_repository.clone(),
+            infrastructure.video_repository.clone(),
+        ),
+        task_view_searcher: TaskViewSearcher::new(
+            infrastructure.task_repository.clone(),
+            infrastructure.playlist_repository.clone(),
+            infrastructure.channel_repository.clone(),
+            infrastructure.video_repository.clone(),
+            infrastructure.playlist_video_repository.clone(),
+            infrastructure.channel_video_repository.clone(),
+        ),
+        channel_service: ChannelService::new(
+            infrastructure.channel_repository.clone(),
+            infrastructure.youtube_channel_repository.clone(),
+            infrastructure.channel_avatar_repository.clone(),
+            infrastructure.video_repository.clone(),
+            infrastructure.channel_video_repository.clone(),
+            infrastructure.event_publisher.clone(),
+            infrastructure.clock.clone(),
+        ),
+        channel_video_reconciler: channel_video_reconciler(infrastructure),
+        directory_searcher: DirectorySearcher::new(infrastructure.directory_repository.clone()),
+        videos_root: VideosRoot(videos_path()),
+    }
+}
+
+fn event_consumer(infrastructure: &InfrastructureContainer) -> DomainEventsConsumer {
+    DomainEventsConsumer::new(
+        infrastructure.event_repository.clone(),
+        subscribers::registry(
+            video_reconciler(infrastructure),
+            channel_video_reconciler(infrastructure),
+            infrastructure.playlist_repository.clone(),
+            infrastructure.channel_repository.clone(),
+            infrastructure.task_repository.clone(),
+            infrastructure.clock.clone(),
+            videos_path(),
+        ),
+        infrastructure.clock.clone(),
+    )
+}
+
+fn task_executor(infrastructure: &InfrastructureContainer) -> TaskExecutor {
+    TaskExecutor::new(
+        infrastructure.task_repository.clone(),
+        tasks::registry(
+            video_reconciler(infrastructure),
+            channel_video_reconciler(infrastructure),
+            video_downloader(infrastructure),
+            VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
+            infrastructure.task_repository.clone(),
+            infrastructure.clock.clone(),
+            infrastructure.ytdlp_updater.clone(),
+            target_path(),
+        ),
+        infrastructure.clock.clone(),
+        retry_base_delay_seconds(),
+    )
+}
+
+fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler {
+    VideoReconciler::new(
+        infrastructure.playlist_repository.clone(),
+        infrastructure.video_repository.clone(),
+        infrastructure.playlist_video_repository.clone(),
+        infrastructure.youtube_playlist_items_repository.clone(),
+        infrastructure.youtube_metadata_repository.clone(),
+        infrastructure.video_metadata_repository.clone(),
+        infrastructure.event_publisher.clone(),
+        infrastructure.task_repository.clone(),
+        infrastructure.video_file_repository.clone(),
+        thumbnail_fetcher(infrastructure),
+        infrastructure.clock.clone(),
+        reconcile_interval_seconds(),
+        videos_path(),
+    )
+}
+
+fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> ChannelVideoReconciler {
+    ChannelVideoReconciler::new(
+        infrastructure.channel_repository.clone(),
+        infrastructure.video_repository.clone(),
+        infrastructure.channel_video_repository.clone(),
+        infrastructure.channel_videos_repository.clone(),
+        infrastructure.youtube_metadata_repository.clone(),
+        infrastructure.video_metadata_repository.clone(),
+        infrastructure.event_publisher.clone(),
+        infrastructure.task_repository.clone(),
+        infrastructure.video_file_repository.clone(),
+        thumbnail_fetcher(infrastructure),
+        infrastructure.clock.clone(),
+        reconcile_interval_seconds(),
+        videos_path(),
+    )
+}
+
+fn video_downloader(infrastructure: &InfrastructureContainer) -> VideoDownloader {
+    VideoDownloader::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.video_downloader_repository.clone(),
+        infrastructure.video_file_repository.clone(),
+        infrastructure.playlist_video_repository.clone(),
+        infrastructure.youtube_metadata_repository.clone(),
+        infrastructure.video_metadata_repository.clone(),
+        infrastructure.clock.clone(),
+    )
+}
+
+fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailFetcher> {
+    Arc::new(ThumbnailFetcher::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.video_downloader_repository.clone(),
+        infrastructure.clock.clone(),
+    ))
 }
 
 async fn status() -> StatusCode {
@@ -419,10 +375,10 @@ async fn heartbeat_loop() {
     }
 }
 
-async fn serve_http(port: u16, state: AppState) -> Result<()> {
+async fn serve_http(port: u16, api_services: ApiServices) -> Result<()> {
     let router = Router::new()
         .route("/status", get(status))
-        .nest("/api", http::api_router(state))
+        .nest("/api", http::api_router(api_services))
         .nest_service("/media", ServeDir::new(videos_path()))
         .nest_service("/avatars", ServeDir::new(avatars_path()))
         .fallback(serve_spa);
@@ -436,12 +392,15 @@ async fn serve_http(port: u16, state: AppState) -> Result<()> {
     Ok(())
 }
 
-async fn run_async(app: Application) -> ExitCode {
+async fn run_async(
+    infrastructure: InfrastructureContainer,
+    task_executor: Arc<TaskExecutor>,
+) -> ExitCode {
     tokio::spawn(heartbeat_loop());
-    tokio::spawn(app.event_consumer.run(BACKGROUND_POLL_INTERVAL));
-    tokio::spawn(app.task_executor.run(BACKGROUND_POLL_INTERVAL));
+    tokio::spawn(Arc::new(event_consumer(&infrastructure)).run(BACKGROUND_POLL_INTERVAL));
+    tokio::spawn(task_executor.run(BACKGROUND_POLL_INTERVAL));
 
-    if let Err(e) = serve_http(port(), app.state).await {
+    if let Err(e) = serve_http(port(), api_services(&infrastructure)).await {
         error!(error = %e, "HTTP server failed");
         return ExitCode::FAILURE;
     }
@@ -471,13 +430,18 @@ pub fn run() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let app = match build_application() {
-        Ok(app) => app,
+    let infrastructure = match build_infrastructure() {
+        Ok(infrastructure) => infrastructure,
         Err(e) => {
-            error!(error = %e, "failed to initialize application state");
+            error!(error = %e, "failed to initialize infrastructure");
             return ExitCode::FAILURE;
         }
     };
+    let task_executor = Arc::new(task_executor(&infrastructure));
+    if let Err(e) = prepare_task_queue(&infrastructure, &task_executor) {
+        error!(error = %e, "failed to prepare the task queue");
+        return ExitCode::FAILURE;
+    }
 
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -490,7 +454,7 @@ pub fn run() -> ExitCode {
         }
     };
 
-    runtime.block_on(run_async(app))
+    runtime.block_on(run_async(infrastructure, task_executor))
 }
 
 #[cfg(test)]
@@ -498,6 +462,7 @@ mod tests {
     use super::*;
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
+    use std::sync::Mutex;
     use tower::ServiceExt;
 
     fn spa_router() -> Router {

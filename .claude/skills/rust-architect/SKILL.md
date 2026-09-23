@@ -39,7 +39,7 @@ src/
       <use_case>.rs         # one domain service per use case, e.g. widget_creator.rs
   application/              # every external entry point (adapters), one subfolder per interface
     http/  (or grpc/, etc.)
-      mod.rs                 # AppState + router wiring only (+ the route smoke test)
+      mod.rs                 # ApiServices + router wiring only (+ the route smoke test)
       error.rs               # ApiError + From<ValidationError>
       blocking.rs            # run_blocking
       validation.rs          # required() + shared missing-field messages
@@ -76,7 +76,7 @@ src/
 
 ## HTTP Handlers
 
-- A handler extracts only the service(s) it uses (`State<PlaylistCreator>`), never the whole `AppState`. `AppState` derives `FromRef` so axum resolves the sub-state.
+- A handler extracts only the service(s) it uses (`State<PlaylistCreator>`), never the whole `ApiServices`. `ApiServices` derives `FromRef` so axum resolves the sub-state.
 - Handlers return typed results, never an opaque `Response`: `Result<(StatusCode, Json<T>), ApiError>` when the status varies, `Result<Json<T>, ApiError>` for a plain 200, `Result<StatusCode, ApiError>` for bodiless responses.
 - Every failure is an `ApiError` (status + message, rendered as `{"error": ...}`). Input is validated with `?` only: VOs via `From<ValidationError>`, missing fields via `required(request.field, MISSING_X)?` (`http/validation.rs`).
 - Domain errors are mapped explicitly per variant (`Err(e @ CreateChannelError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e))`), no catch-all arm. A mapping repeated across handlers gets one small function.
