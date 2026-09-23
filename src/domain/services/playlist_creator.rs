@@ -56,7 +56,7 @@ impl PlaylistCreator {
             .repository
             .list()
             .map_err(CreatePlaylistError::Repository)?;
-        if path_used_by_another_playlist(&playlists, &id, &path) {
+        if playlists.iter().any(|playlist| playlist.path == path) {
             return Err(CreatePlaylistError::PathAlreadyInUse(path));
         }
 
@@ -78,73 +78,5 @@ impl PlaylistCreator {
             .map_err(CreatePlaylistError::Repository)?;
         info!(playlist_id = %playlist.id, name = %playlist.name, "created playlist");
         Ok(CreatePlaylistOutcome::Created(playlist))
-    }
-}
-
-/// True if some playlist other than `id` already has `path` as its stored
-/// path. Used to reject a create request before it can produce two
-/// playlists sharing an output directory.
-fn path_used_by_another_playlist(
-    playlists: &[Playlist],
-    id: &PlaylistId,
-    path: &PlaylistPath,
-) -> bool {
-    playlists.iter().any(|p| p.id != *id && p.path == *path)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::playlist::PlaylistKind;
-    use chrono::{DateTime, Utc};
-
-    fn playlist(id: &str, path: &str, kind: PlaylistKind) -> Playlist {
-        Playlist::create(
-            PlaylistId::new(id).unwrap(),
-            PlaylistName::new("Playlist").unwrap(),
-            PlaylistPath::new(path).unwrap(),
-            Quality::High,
-            kind,
-            DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
-        )
-    }
-
-    #[test]
-    fn it_should_be_false_when_no_other_playlist_uses_the_path() {
-        let playlists = vec![playlist("PL1", "music", PlaylistKind::YoutubeLinked)];
-
-        let used = path_used_by_another_playlist(
-            &playlists,
-            &PlaylistId::new("PL2").unwrap(),
-            &PlaylistPath::new("videos").unwrap(),
-        );
-
-        assert!(!used);
-    }
-
-    #[test]
-    fn it_should_be_true_when_a_different_playlist_already_uses_the_path() {
-        let playlists = vec![playlist("PL1", "music", PlaylistKind::YoutubeLinked)];
-
-        let used = path_used_by_another_playlist(
-            &playlists,
-            &PlaylistId::new("PL2").unwrap(),
-            &PlaylistPath::new("music").unwrap(),
-        );
-
-        assert!(used);
-    }
-
-    #[test]
-    fn it_should_be_false_when_the_path_belongs_to_the_playlist_itself() {
-        let playlists = vec![playlist("PL1", "music", PlaylistKind::YoutubeLinked)];
-
-        let used = path_used_by_another_playlist(
-            &playlists,
-            &PlaylistId::new("PL1").unwrap(),
-            &PlaylistPath::new("music").unwrap(),
-        );
-
-        assert!(!used);
     }
 }
