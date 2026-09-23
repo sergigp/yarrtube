@@ -5,7 +5,7 @@ Lets a caller create, delete, and list the YouTube channels the daemon tracks by
 ## Requirements
 
 ### Requirement: Create Channel
-The system SHALL provide an HTTP endpoint that creates a channel given a `channel` value that is either a YouTube channel handle (e.g. `@somechannel`) or a YouTube channel URL carrying a handle (e.g. `https://www.youtube.com/@somechannel`), a quality tier (`high`, `mid`, or `low`), a video limit that is a positive integer number of the channel's most recent videos to keep synced, and a storage path. The system SHALL extract the handle from the `channel` value when it is a URL, resolve that handle against the YouTube Data API to confirm it corresponds to an existing, accessible channel and to obtain that channel's immutable YouTube channel ID and display title, and store the channel with the handle as its ID, the resolved title as its name, the resolved immutable channel ID, the quality, the video limit, the path, and a system-generated creation timestamp.
+The system SHALL provide an HTTP endpoint that creates a channel given a `channel` value that is either a YouTube channel handle (e.g. `@somechannel`) or a YouTube channel URL carrying a handle (e.g. `https://www.youtube.com/@somechannel`), a quality tier (`high`, `mid`, or `low`), a video limit that is an integer from 1 to 1000 inclusive, the number of the channel's most recent videos to keep synced, and a storage path. The system SHALL extract the handle from the `channel` value when it is a URL, resolve that handle against the YouTube Data API to confirm it corresponds to an existing, accessible channel and to obtain that channel's immutable YouTube channel ID and display title, and store the channel with the handle as its ID, the resolved title as its name, the resolved immutable channel ID, the quality, the video limit, the path, and a system-generated creation timestamp.
 
 The stored ID is the handle, not the immutable channel ID, so the HTTP surface stays human-readable (e.g. `DELETE /channels/@somechannel`). The immutable ID is stored alongside it because a handle can be changed later by the channel's owner, while the immutable ID cannot.
 
@@ -60,8 +60,16 @@ The storage path identifies where the channel's videos are saved, relative to th
 - **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request with a meaningful error description
 
 #### Scenario: Missing or invalid video limit
-- **WHEN** a request omits the video limit, or supplies a value that is not a positive integer
+- **WHEN** a request omits the video limit, or supplies a value that is not an integer from 1 to 1000 inclusive
 - **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request with a meaningful error description
+
+#### Scenario: Video limit above the maximum
+- **WHEN** a request supplies a video limit greater than 1000, including values too large to fit in 32 bits
+- **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request whose error description states the accepted range of 1 to 1000 and the value received
+
+#### Scenario: Video limit at the bounds
+- **WHEN** a request supplies a video limit of exactly 1 or exactly 1000, with every other field valid
+- **THEN** the system persists the channel with that exact video limit and returns it unchanged
 
 #### Scenario: Missing or invalid path
 - **WHEN** a request omits path, supplies an empty path, or supplies a path that is absolute, contains a `..` segment, or contains an empty segment (e.g. leading/trailing/doubled `/`)
