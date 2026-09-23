@@ -39,7 +39,7 @@ src/
       <use_case>.rs         # one domain service per use case, e.g. widget_creator.rs
   application/              # every external entry point (adapters), one subfolder per interface
     http/  (or grpc/, etc.)
-      mod.rs                 # ApiServices + router wiring only (+ the route smoke test)
+      mod.rs                 # ApiServices + router wiring only
       error.rs               # ApiError + From<ValidationError>
       blocking.rs            # run_blocking
       validation.rs          # required() + shared missing-field messages
@@ -97,7 +97,7 @@ Acceptance and behaviour tests follow the same rules for persistence and test do
 
 This tests the domain logic and the validations at application level. We will place this tests in application (for example in http controllers or event subscribers) and the test will be the type of "I receive this request and I expect this response and these collateral effects". In the case of event subscribers we will send events and assert the final state of the repositories. Very similar for Tasks, we will create tasks and assert the final state of the repositories.
 
-HTTP acceptance tests call the handler function directly with only the service it uses, not through a `Router`. A small helper per handler unwraps the `Json` (`create(service, request) -> Result<(StatusCode, ChannelResponse), ApiError>`). Route wiring is covered once, by the smoke test on `api_router`.
+HTTP acceptance tests call the handler function directly with only the service it uses, not through a `Router`. A small helper per handler unwraps the `Json` (`create(service, request) -> Result<(StatusCode, ChannelResponse), ApiError>`). Route wiring (paths, methods, which handler each route reaches) is covered by the Playwright suite in `smoke-tests/`, not by Rust tests: every route the UI calls must be exercised by some spec there.
 
 Every test has the same 7 steps, top to bottom and inline: `TestDatabase` + repositories/fakes → seed them → build the service with `Service::new(..)` → build the request → call the handler → assert the response → assert side effects (repositories, outbox events, scheduled tasks, fake state).
 
