@@ -43,6 +43,7 @@ Optional overrides (defaults shown):
 | `SMOKE_CHANNEL_VIDEO_LIMIT`   | `1`                      |
 | `YARRTUBE_PORT`               | `8080`                   |
 | `SMOKE_READY_TIMEOUT_SECONDS` | `120`                    |
+| `SMOKE_RETRY_BASE_DELAY_SECONDS` | `10`                  |
 
 ## What's covered
 

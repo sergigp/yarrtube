@@ -1,20 +1,22 @@
 use crate::domain::shared::Quality;
 use crate::infrastructure::shared::ytdlp;
-pub use crate::infrastructure::shared::ytdlp::{DownloadedVideo, FetchedThumbnail};
+pub use crate::infrastructure::shared::ytdlp::{DownloadAttempt, FetchedThumbnail};
 use std::path::{Path, PathBuf};
 
 /// Downloads a single video (or just its thumbnail) via `yt-dlp`, injected
 /// into `VideoDownloader`/`ThumbnailFetcher` for the event-driven download
 /// path.
 pub trait VideoDownloaderRepository: Send + Sync {
-    /// Returns `Ok(Some(DownloadedVideo))` with the exact filename `yt-dlp`
-    /// saved (and its duration, when known) on a successful download,
-    /// `Ok(None)` for a clean `yt-dlp` failure (non-zero exit). Returns
-    /// `Err` only for a systemic problem (e.g. `yt-dlp` missing from
-    /// `PATH`, or an unparseable `--print` output). `existing_folder`, when
-    /// `Some`, is reused verbatim as the video's per-video output folder
-    /// instead of resolving a fresh one — see `video-download`'s "Video's
-    /// thumbnail was already fetched ahead of its download" scenario.
+    /// Returns `Ok(DownloadAttempt::Succeeded(..))` with the exact filename
+    /// `yt-dlp` saved (and its duration, when known) on a successful
+    /// download, `Ok(DownloadAttempt::Failed { stderr })` for a clean
+    /// `yt-dlp` failure (non-zero exit), carrying `yt-dlp`'s reported error
+    /// text when it reported one. Returns `Err` only for a systemic problem
+    /// (e.g. `yt-dlp` missing from `PATH`, or an unparseable `--print`
+    /// output). `existing_folder`, when `Some`, is reused verbatim as the
+    /// video's per-video output folder instead of resolving a fresh one —
+    /// see `video-download`'s "Video's thumbnail was already fetched ahead
+    /// of its download" scenario.
     fn download(
         &self,
         video_url: &str,
@@ -23,7 +25,7 @@ pub trait VideoDownloaderRepository: Send + Sync {
         quality: Quality,
         output_dir: &Path,
         existing_folder: Option<&str>,
-    ) -> anyhow::Result<Option<DownloadedVideo>>;
+    ) -> anyhow::Result<DownloadAttempt>;
 
     /// Returns `Ok(Some(FetchedThumbnail))` when a thumbnail was fetched,
     /// `Ok(None)` when the video has none to fetch (not an error — see
@@ -62,7 +64,7 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
         quality: Quality,
         output_dir: &Path,
         existing_folder: Option<&str>,
-    ) -> anyhow::Result<Option<DownloadedVideo>> {
+    ) -> anyhow::Result<DownloadAttempt> {
         ytdlp::ensure_output_dir(output_dir)?;
         ytdlp::download_video(
             &self.ytdlp_path,
@@ -96,9 +98,11 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
 }
 
 #[cfg(test)]
-#[derive(Default)]
+use crate::infrastructure::shared::ytdlp::DownloadedVideo;
+
+#[cfg(test)]
 pub struct FakeVideoDownloaderRepository {
-    pub(crate) result: std::sync::Mutex<Option<DownloadedVideo>>,
+    pub(crate) result: std::sync::Mutex<DownloadAttempt>,
     #[allow(clippy::type_complexity)]
     pub(crate) calls: std::sync::Mutex<
         Vec<(
@@ -118,28 +122,41 @@ pub struct FakeVideoDownloaderRepository {
 }
 
 #[cfg(test)]
+impl Default for FakeVideoDownloaderRepository {
+    fn default() -> Self {
+        Self::with_result(DownloadAttempt::Failed { stderr: None })
+    }
+}
+
+#[cfg(test)]
 impl FakeVideoDownloaderRepository {
     pub fn new(succeeds: bool) -> Self {
-        Self {
-            result: std::sync::Mutex::new(succeeds.then(|| DownloadedVideo {
+        if succeeds {
+            Self::with_result(DownloadAttempt::Succeeded(DownloadedVideo {
                 folder: "fake-output".to_string(),
                 filename: "fake-output.mp4".to_string(),
                 duration_seconds: None,
-            })),
-            ..Default::default()
+            }))
+        } else {
+            Self::with_result(DownloadAttempt::Failed { stderr: None })
         }
     }
 
     /// Succeeds with `duration_seconds` recorded alongside the fake filename.
     pub fn with_duration(duration_seconds: i64) -> Self {
-        Self {
-            result: std::sync::Mutex::new(Some(DownloadedVideo {
-                folder: "fake-output".to_string(),
-                filename: "fake-output.mp4".to_string(),
-                duration_seconds: Some(duration_seconds),
-            })),
-            ..Default::default()
-        }
+        Self::with_result(DownloadAttempt::Succeeded(DownloadedVideo {
+            folder: "fake-output".to_string(),
+            filename: "fake-output.mp4".to_string(),
+            duration_seconds: Some(duration_seconds),
+        }))
+    }
+
+    /// Fails the download, carrying `stderr` as the reported `yt-dlp`
+    /// error text.
+    pub fn with_failed_stderr(stderr: &str) -> Self {
+        Self::with_result(DownloadAttempt::Failed {
+            stderr: Some(stderr.to_string()),
+        })
     }
 
     /// Configures the result `fetch_thumbnail` returns; `None` (the
@@ -164,6 +181,15 @@ impl FakeVideoDownloaderRepository {
     pub fn thumbnail_calls_count(&self) -> usize {
         self.thumbnail_calls.lock().unwrap().len()
     }
+
+    fn with_result(result: DownloadAttempt) -> Self {
+        Self {
+            result: std::sync::Mutex::new(result),
+            calls: Default::default(),
+            thumbnail_result: Default::default(),
+            thumbnail_calls: Default::default(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -176,7 +202,7 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
         quality: Quality,
         output_dir: &Path,
         existing_folder: Option<&str>,
-    ) -> anyhow::Result<Option<DownloadedVideo>> {
+    ) -> anyhow::Result<DownloadAttempt> {
         self.calls.lock().unwrap().push((
             video_url.to_string(),
             desired_filename.to_string(),
@@ -234,7 +260,7 @@ mod tests {
 
         assert_eq!(
             result,
-            Some(DownloadedVideo {
+            DownloadAttempt::Succeeded(DownloadedVideo {
                 folder: "My Video".to_string(),
                 filename: test_support::DEFAULT_PRINTED_FILENAME.to_string(),
                 duration_seconds: None,
@@ -245,11 +271,20 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_map_a_failed_yt_dlp_process_to_none() {
-        let fake = test_support::FakeYtDlp::with_exit_code(1);
-        let output_dir = test_support::unique_temp_dir("video-downloader-repository");
+    fn it_should_map_a_failed_yt_dlp_process_to_a_failed_attempt_with_its_stderr() {
+        use std::os::unix::fs::PermissionsExt;
 
-        let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
+        let output_dir = test_support::unique_temp_dir("video-downloader-repository");
+        let bin_dir = test_support::unique_temp_dir("video-downloader-repository-fake-bin");
+        let script_path = bin_dir.join("yt-dlp");
+        std::fs::write(
+            &script_path,
+            "#!/bin/sh\nprintf '%s\\n' 'HTTP Error 403: Forbidden' >&2\nexit 1\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let result = YtDlpVideoDownloaderRepository::new(script_path)
             .download(
                 "https://example.com/video",
                 "My Video",
@@ -260,8 +295,14 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(result, None);
+        assert_eq!(
+            result,
+            DownloadAttempt::Failed {
+                stderr: Some("HTTP Error 403: Forbidden".to_string())
+            }
+        );
         std::fs::remove_dir_all(&output_dir).unwrap();
+        std::fs::remove_dir_all(&bin_dir).unwrap();
     }
 
     #[test]

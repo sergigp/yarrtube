@@ -15,6 +15,7 @@ pub struct TaskExecutor {
     repository: Arc<dyn TaskRepository>,
     handlers: HandlerRegistry,
     clock: Arc<dyn Clock>,
+    base_retry_delay_seconds: i64,
 }
 
 impl TaskExecutor {
@@ -22,11 +23,13 @@ impl TaskExecutor {
         repository: Arc<dyn TaskRepository>,
         handlers: HandlerRegistry,
         clock: Arc<dyn Clock>,
+        base_retry_delay_seconds: i64,
     ) -> Self {
         Self {
             repository,
             handlers,
             clock,
+            base_retry_delay_seconds,
         }
     }
 
@@ -55,7 +58,11 @@ impl TaskExecutor {
                 }
                 Err(e) => {
                     let error = e.to_string();
-                    match running.fail(error.clone(), self.clock.now()) {
+                    match running.fail(
+                        error.clone(),
+                        self.clock.now(),
+                        self.base_retry_delay_seconds,
+                    ) {
                         TaskFailureOutcome::Retry(retried) => {
                             warn!(
                                 task_id = id,
@@ -95,6 +102,7 @@ impl TaskExecutor {
             match task.fail(
                 "recovered as a failed attempt after an unclean shutdown",
                 self.clock.now(),
+                self.base_retry_delay_seconds,
             ) {
                 TaskFailureOutcome::Retry(retried) => self.repository.update(&retried)?,
                 TaskFailureOutcome::DeadLetter(dead) => self.repository.dead_letter(&dead)?,
@@ -235,6 +243,8 @@ mod tests {
         Arc::new(FixedClock(now()))
     }
 
+    const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
+
     #[test]
     fn it_should_dispatch_an_eligible_task_and_delete_it_on_success() {
         let repository = Arc::new(FakeTaskRepository::seeded("reconcile_playlist"));
@@ -245,6 +255,7 @@ mod tests {
                 ..Default::default()
             }),
             clock(),
+            TEST_BASE_RETRY_DELAY_SECONDS,
         );
 
         executor.poll_once().unwrap();
@@ -265,6 +276,7 @@ mod tests {
                 ..Default::default()
             }),
             clock(),
+            TEST_BASE_RETRY_DELAY_SECONDS,
         );
 
         executor.poll_once().unwrap();
@@ -290,6 +302,7 @@ mod tests {
                 ..Default::default()
             }),
             clock(),
+            TEST_BASE_RETRY_DELAY_SECONDS,
         );
 
         executor.poll_once().unwrap();
@@ -309,7 +322,8 @@ mod tests {
         let handler = Arc::new(FakeHandler::default());
         let mut handlers: HandlerRegistry = HashMap::new();
         handlers.insert("reconcile_playlist".to_string(), handler.clone());
-        let executor = TaskExecutor::new(repository, handlers, clock());
+        let executor =
+            TaskExecutor::new(repository, handlers, clock(), TEST_BASE_RETRY_DELAY_SECONDS);
 
         executor.poll_once().unwrap();
 
@@ -328,7 +342,8 @@ mod tests {
         let handler = Arc::new(FakeHandler::default());
         let mut handlers: HandlerRegistry = HashMap::new();
         handlers.insert("reconcile_playlist".to_string(), handler.clone());
-        let executor = TaskExecutor::new(repository, handlers, clock());
+        let executor =
+            TaskExecutor::new(repository, handlers, clock(), TEST_BASE_RETRY_DELAY_SECONDS);
 
         executor.poll_once().unwrap();
 
@@ -353,6 +368,7 @@ mod tests {
                 ..Default::default()
             }),
             clock(),
+            TEST_BASE_RETRY_DELAY_SECONDS,
         );
 
         executor.recover_stuck_tasks().unwrap();
@@ -378,6 +394,7 @@ mod tests {
                 ..Default::default()
             }),
             clock(),
+            TEST_BASE_RETRY_DELAY_SECONDS,
         );
 
         executor.recover_stuck_tasks().unwrap();

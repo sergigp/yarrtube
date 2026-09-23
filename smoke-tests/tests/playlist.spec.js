@@ -19,7 +19,7 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
 
   // Follow it into the detail view and wait for the download to finish.
   await sidebarLink.click()
-  await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 120_000 })
+  await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 240_000 })
   const videoTitle = await page.locator('main h3').first().innerText()
 
   // Thumbnail + duration render in the detail view's video list. Scoped to

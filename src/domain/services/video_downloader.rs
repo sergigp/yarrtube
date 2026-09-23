@@ -9,7 +9,9 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadataRepository;
-use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
+use crate::infrastructure::repositories::youtube_video_downloader_repository::{
+    DownloadAttempt, VideoDownloaderRepository,
+};
 use crate::infrastructure::shared::system_clock::Clock;
 use std::path::Path;
 use std::sync::Arc;
@@ -128,7 +130,7 @@ impl VideoDownloader {
         );
 
         match outcome {
-            Ok(Some(downloaded)) => {
+            Ok(DownloadAttempt::Succeeded(downloaded)) => {
                 let expected_thumbnail = expected_thumbnail_filename(&downloaded.filename);
                 let video_dir = output_dir.join(&downloaded.folder);
                 let thumbnail_filename = self
@@ -154,17 +156,17 @@ impl VideoDownloader {
                 self.generate_metadata(&downloaded_video, &video_dir, thumb_basename);
                 Ok(())
             }
-            Ok(None) => {
+            Ok(DownloadAttempt::Failed { stderr }) => {
                 let updated = if is_last_attempt {
                     started.mark_errored(self.clock.now())
                 } else {
                     started.mark_errored_retrying(self.clock.now())
                 };
                 self.video_repository.update(&updated)?;
-                warn!(video_id = %video_id, "yt-dlp reported a failed download");
-                Err(anyhow::anyhow!(
-                    "yt-dlp failed to download video {video_id}"
-                ))
+                let error_message =
+                    stderr.unwrap_or_else(|| format!("yt-dlp failed to download video {video_id}"));
+                warn!(video_id = %video_id, error = %error_message, "yt-dlp reported a failed download");
+                Err(anyhow::anyhow!(error_message))
             }
             Err(e) => {
                 let updated = if is_last_attempt {

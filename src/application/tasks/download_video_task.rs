@@ -154,6 +154,18 @@ mod tests {
     }
 
     #[test]
+    fn it_should_record_yt_dlps_actual_error_message_when_a_download_fails() {
+        let (handler, _video_repository, video) = handler_with(
+            true,
+            FakeVideoDownloaderRepository::with_failed_stderr("HTTP Error 403: Forbidden"),
+        );
+
+        let result = handler.handle(&payload_for(video.id.as_str()), false);
+
+        assert_eq!(result.unwrap_err().to_string(), "HTTP Error 403: Forbidden");
+    }
+
+    #[test]
     fn it_should_mark_the_video_errored_when_the_download_fails_on_the_last_attempt() {
         let (handler, video_repository, video) =
             handler_with(true, FakeVideoDownloaderRepository::new(false));

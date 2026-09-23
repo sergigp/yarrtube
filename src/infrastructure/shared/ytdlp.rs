@@ -73,6 +73,15 @@ pub struct DownloadedVideo {
     pub duration_seconds: Option<i64>,
 }
 
+/// The outcome of a `download_video` attempt: either a `DownloadedVideo`, or
+/// a clean `yt-dlp` failure (non-zero exit) carrying whatever text `yt-dlp`
+/// wrote to its stderr, trimmed and `None` if it wrote nothing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DownloadAttempt {
+    Succeeded(DownloadedVideo),
+    Failed { stderr: Option<String> },
+}
+
 /// Parses `yt-dlp`'s `--print %(duration)s` line into whole seconds.
 /// `yt-dlp` prints `NA` for an unknown duration; an empty line or anything
 /// else unparsable as a number is likewise treated as unknown rather than
@@ -100,11 +109,12 @@ fn parse_duration_seconds(line: &str) -> Option<i64> {
 /// those are the only two lines on stdout, filename last; since `yt-dlp`
 /// runs with the video's folder as its working directory, that printed
 /// filename is bare (relative to the video's own folder).
-/// Returns `Ok(Some(DownloadedVideo))` on a successful download, `Ok(None)`
-/// for a clean `yt-dlp` failure (non-zero exit). Returns `Err` only for a
-/// systemic problem: no binary at `ytdlp_path`, a failure creating the
-/// video's folder, or a successful exit that didn't print a parseable
-/// filename. On any of these non-success outcomes, the video's
+/// Returns `Ok(DownloadAttempt::Succeeded(..))` on a successful download,
+/// `Ok(DownloadAttempt::Failed { stderr })` for a clean `yt-dlp` failure
+/// (non-zero exit), carrying whatever `yt-dlp` wrote to its stderr. Returns
+/// `Err` only for a systemic problem: no binary at `ytdlp_path`, a failure
+/// creating the video's folder, or a successful exit that didn't print a
+/// parseable filename. On any of these non-success outcomes, the video's
 /// folder (created up front, before it's known whether the download will
 /// succeed) is removed again before returning, so a subsequent retry's
 /// folder-collision check finds no stale entry and reuses the exact same
@@ -118,7 +128,7 @@ pub fn download_video(
     quality: Quality,
     output_path: &Path,
     existing_folder: Option<&str>,
-) -> Result<Option<DownloadedVideo>> {
+) -> Result<DownloadAttempt> {
     let VideoDir {
         folder,
         path: video_dir,
@@ -151,8 +161,8 @@ pub fn download_video(
         .arg(&output_template)
         .current_dir(&video_dir)
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit());
-    let Some(output) = run_and_cleanup_on_failure(
+        .stderr(Stdio::piped());
+    let output = match run_and_cleanup_on_failure(
         &mut cmd,
         &video_dir,
         existing_folder,
@@ -163,9 +173,9 @@ pub fn download_video(
             )
         },
         |e| format!("Failed to run yt-dlp for {video_url}: {e}"),
-    )?
-    else {
-        return Ok(None);
+    )? {
+        RunOutcome::Success(output) => output,
+        RunOutcome::CleanFailure { stderr } => return Ok(DownloadAttempt::Failed { stderr }),
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -186,7 +196,7 @@ pub fn download_video(
         .copied()
         .and_then(parse_duration_seconds);
 
-    Ok(Some(DownloadedVideo {
+    Ok(DownloadAttempt::Succeeded(DownloadedVideo {
         folder,
         filename,
         duration_seconds,
@@ -261,7 +271,7 @@ pub fn fetch_thumbnail(
     .current_dir(&video_dir)
     .stdout(Stdio::piped())
     .stderr(Stdio::inherit());
-    let Some(output) = run_and_cleanup_on_failure(
+    let output = match run_and_cleanup_on_failure(
         &mut cmd,
         &video_dir,
         existing_folder,
@@ -272,9 +282,9 @@ pub fn fetch_thumbnail(
             )
         },
         |e| format!("Failed to run yt-dlp thumbnail fetch for {video_url}: {e}"),
-    )?
-    else {
-        return Ok(None);
+    )? {
+        RunOutcome::Success(output) => output,
+        RunOutcome::CleanFailure { .. } => return Ok(None),
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -422,19 +432,33 @@ fn remove_video_dir_unless_reused(video_dir: &Path, existing_folder: Option<&str
     }
 }
 
+/// The outcome of running a fully-configured `yt-dlp` invocation:
+/// `Success` carries the process's output for the caller to parse,
+/// `CleanFailure` a non-zero exit with whatever text `yt-dlp` wrote to its
+/// (possibly piped, possibly inherited) stderr, trimmed and `None` if empty.
+enum RunOutcome {
+    Success(std::process::Output),
+    CleanFailure { stderr: Option<String> },
+}
+
+/// Trims `stderr`, treating an all-whitespace/empty result as "no message".
+fn trimmed_stderr(stderr: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(stderr).trim().to_string();
+    (!text.is_empty()).then_some(text)
+}
+
 /// Runs `cmd` (fully configured: args, stdio, working directory), retrying
 /// on a transient busy error, and cleans up `video_dir` on any failure
 /// unless it was reused via `existing_folder` — see
-/// `remove_video_dir_unless_reused`. Returns `Ok(None)` for a clean `yt-dlp`
-/// failure (non-zero exit) and `Ok(Some(output))` on a successful exit;
-/// `Err` only for a systemic problem (missing binary, spawn failure).
+/// `remove_video_dir_unless_reused`. Returns `Err` only for a systemic
+/// problem (missing binary, spawn failure).
 fn run_and_cleanup_on_failure(
     cmd: &mut Command,
     video_dir: &Path,
     existing_folder: Option<&str>,
     not_found_msg: impl FnOnce() -> String,
     other_err_msg: impl FnOnce(&io::Error) -> String,
-) -> Result<Option<std::process::Output>> {
+) -> Result<RunOutcome> {
     let output = match output_retrying_busy(cmd) {
         Ok(output) => output,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
@@ -449,10 +473,12 @@ fn run_and_cleanup_on_failure(
 
     if !output.status.success() {
         remove_video_dir_unless_reused(video_dir, existing_folder);
-        return Ok(None);
+        return Ok(RunOutcome::CleanFailure {
+            stderr: trimmed_stderr(&output.stderr),
+        });
     }
 
-    Ok(Some(output))
+    Ok(RunOutcome::Success(output))
 }
 
 #[cfg(test)]
@@ -612,6 +638,17 @@ pub(crate) mod test_support {
 mod tests {
     use super::*;
 
+    fn unwrap_succeeded(attempt: DownloadAttempt) -> DownloadedVideo {
+        match attempt {
+            DownloadAttempt::Succeeded(video) => video,
+            DownloadAttempt::Failed { stderr } => {
+                panic!(
+                    "expected a successful download attempt, got Failed {{ stderr: {stderr:?} }}"
+                )
+            }
+        }
+    }
+
     #[test]
     #[cfg(unix)]
     fn it_should_return_the_printed_filename_on_success() {
@@ -633,7 +670,7 @@ mod tests {
 
         assert_eq!(
             result,
-            Some(DownloadedVideo {
+            DownloadAttempt::Succeeded(DownloadedVideo {
                 folder: "My Video".to_string(),
                 filename: DEFAULT_PRINTED_FILENAME.to_string(),
                 duration_seconds: None,
@@ -644,13 +681,50 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_return_none_on_a_clean_failed_exit() {
+    fn it_should_return_the_stderr_text_on_a_clean_failed_exit() {
+        use std::os::unix::fs::PermissionsExt;
+        use test_support::unique_temp_dir;
+
+        let output_dir = unique_temp_dir("ytdlp-output-stderr");
+        let bin_dir = unique_temp_dir("fake-ytdlp-bin-stderr");
+        let script_path = bin_dir.join("yt-dlp");
+        std::fs::write(
+            &script_path,
+            "#!/bin/sh\nprintf '%s\\n' 'HTTP Error 403: Forbidden' >&2\nexit 1\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let result = download_video(
+            &script_path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            result,
+            DownloadAttempt::Failed {
+                stderr: Some("HTTP Error 403: Forbidden".to_string())
+            }
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+        std::fs::remove_dir_all(&bin_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_return_no_stderr_text_when_yt_dlp_writes_nothing_to_stderr() {
         use test_support::{FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-output");
         let fake = FakeYtDlp::with_exit_code(1);
 
-        let filename = download_video(
+        let result = download_video(
             &fake.path,
             "https://example.com/video",
             "My Video",
@@ -661,7 +735,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(filename, None);
+        assert_eq!(result, DownloadAttempt::Failed { stderr: None });
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
@@ -707,17 +781,18 @@ mod tests {
         .unwrap();
 
         let succeeding = FakeYtDlp::with_exit_code(0);
-        let result = download_video(
-            &succeeding.path,
-            "https://example.com/video",
-            "My Video",
-            "vid1",
-            Quality::High,
-            &output_dir,
-            None,
-        )
-        .unwrap()
-        .unwrap();
+        let result = unwrap_succeeded(
+            download_video(
+                &succeeding.path,
+                "https://example.com/video",
+                "My Video",
+                "vid1",
+                Quality::High,
+                &output_dir,
+                None,
+            )
+            .unwrap(),
+        );
 
         assert_eq!(result.folder, "My Video");
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -731,17 +806,18 @@ mod tests {
         let output_dir = unique_temp_dir("ytdlp-output-no-collision");
         let fake = FakeYtDlp::with_exit_code(0);
 
-        let result = download_video(
-            &fake.path,
-            "https://example.com/video",
-            "My Video",
-            "vid1",
-            Quality::High,
-            &output_dir,
-            None,
-        )
-        .unwrap()
-        .unwrap();
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                "My Video",
+                "vid1",
+                Quality::High,
+                &output_dir,
+                None,
+            )
+            .unwrap(),
+        );
 
         let mut expected = args_for_quality(Quality::High);
         expected.extend([
@@ -801,17 +877,18 @@ mod tests {
         std::fs::create_dir_all(output_dir.join("My Video")).unwrap();
         let fake = FakeYtDlp::with_exit_code(0);
 
-        let result = download_video(
-            &fake.path,
-            "https://example.com/video",
-            "My Video",
-            "vid1",
-            Quality::High,
-            &output_dir,
-            None,
-        )
-        .unwrap()
-        .unwrap();
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                "My Video",
+                "vid1",
+                Quality::High,
+                &output_dir,
+                None,
+            )
+            .unwrap(),
+        );
 
         let mut expected = args_for_quality(Quality::High);
         expected.extend([
@@ -863,24 +940,26 @@ mod tests {
         let fake = test_support::FakeYtDlp::with_stdout("223\nMy Video.mp4\n");
         let output_dir = test_support::unique_temp_dir("ytdlp-output-duration");
 
-        let result = download_video(
-            &fake.path,
-            "https://example.com/video",
-            "My Video",
-            "vid1",
-            Quality::High,
-            &output_dir,
-            None,
-        )
-        .unwrap();
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                "My Video",
+                "vid1",
+                Quality::High,
+                &output_dir,
+                None,
+            )
+            .unwrap(),
+        );
 
         assert_eq!(
             result,
-            Some(DownloadedVideo {
+            DownloadedVideo {
                 folder: "My Video".to_string(),
                 filename: "My Video.mp4".to_string(),
                 duration_seconds: Some(223),
-            })
+            }
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
@@ -891,18 +970,20 @@ mod tests {
         let fake = test_support::FakeYtDlp::with_stdout("223.9\nMy Video.mp4\n");
         let output_dir = test_support::unique_temp_dir("ytdlp-output-duration-fractional");
 
-        let result = download_video(
-            &fake.path,
-            "https://example.com/video",
-            "My Video",
-            "vid1",
-            Quality::High,
-            &output_dir,
-            None,
-        )
-        .unwrap();
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                "My Video",
+                "vid1",
+                Quality::High,
+                &output_dir,
+                None,
+            )
+            .unwrap(),
+        );
 
-        assert_eq!(result.unwrap().duration_seconds, Some(223));
+        assert_eq!(result.duration_seconds, Some(223));
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
@@ -912,17 +993,18 @@ mod tests {
         let fake = test_support::FakeYtDlp::with_stdout("NA\nMy Video.mp4\n");
         let output_dir = test_support::unique_temp_dir("ytdlp-output-duration-na");
 
-        let result = download_video(
-            &fake.path,
-            "https://example.com/video",
-            "My Video",
-            "vid1",
-            Quality::High,
-            &output_dir,
-            None,
-        )
-        .unwrap()
-        .unwrap();
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                "My Video",
+                "vid1",
+                Quality::High,
+                &output_dir,
+                None,
+            )
+            .unwrap(),
+        );
 
         assert_eq!(result.duration_seconds, None);
         assert_eq!(result.filename, "My Video.mp4");
@@ -937,17 +1019,18 @@ mod tests {
         let output_dir = unique_temp_dir("ytdlp-output-duration-missing");
         let fake = FakeYtDlp::with_exit_code(0);
 
-        let result = download_video(
-            &fake.path,
-            "https://example.com/video",
-            "My Video",
-            "vid1",
-            Quality::High,
-            &output_dir,
-            None,
-        )
-        .unwrap()
-        .unwrap();
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                "My Video",
+                "vid1",
+                Quality::High,
+                &output_dir,
+                None,
+            )
+            .unwrap(),
+        );
 
         assert_eq!(result.filename, DEFAULT_PRINTED_FILENAME);
         assert_eq!(result.duration_seconds, None);
@@ -987,17 +1070,18 @@ mod tests {
         std::fs::create_dir_all(output_dir.join("My Video")).unwrap();
         let fake = FakeYtDlp::with_exit_code(0);
 
-        let result = download_video(
-            &fake.path,
-            "https://example.com/video",
-            "My Video",
-            "vid1",
-            Quality::High,
-            &output_dir,
-            Some("My Video"),
-        )
-        .unwrap()
-        .unwrap();
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                "My Video",
+                "vid1",
+                Quality::High,
+                &output_dir,
+                Some("My Video"),
+            )
+            .unwrap(),
+        );
 
         assert_eq!(result.folder, "My Video");
         assert!(
@@ -1030,7 +1114,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, None);
+        assert_eq!(result, DownloadAttempt::Failed { stderr: None });
         assert!(output_dir.join("My Video").join("My Video.jpg").exists());
         std::fs::remove_dir_all(&output_dir).unwrap();
     }

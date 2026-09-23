@@ -346,11 +346,13 @@ mod tests {
         }
     }
 
+    const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
+
     /// Mirrors what `TaskExecutor` does on a dispatch failure: read the task,
     /// let it decide retry vs. dead-letter, then persist that decision.
     fn apply_failure(repo: &SqliteTaskRepository, id: i64, error: &str) {
         let scheduled = repo.find(id).unwrap().unwrap();
-        match scheduled.fail(error, repo.clock.now()) {
+        match scheduled.fail(error, repo.clock.now(), TEST_BASE_RETRY_DELAY_SECONDS) {
             TaskFailureOutcome::Retry(retried) => repo.update(&retried).unwrap(),
             TaskFailureOutcome::DeadLetter(dead) => repo.dead_letter(&dead).unwrap(),
         }
@@ -462,7 +464,10 @@ mod tests {
         assert_eq!(
             found.run_at,
             now + chrono::Duration::seconds(
-                crate::domain::task::scheduled_task::retry_delay_seconds(1)
+                crate::domain::task::scheduled_task::retry_delay_seconds(
+                    1,
+                    TEST_BASE_RETRY_DELAY_SECONDS
+                )
             )
         );
         assert_eq!(found.retries, 1);
@@ -482,6 +487,7 @@ mod tests {
         match running.into_iter().next().unwrap().fail(
             "recovered as a failed attempt after an unclean shutdown",
             repo.clock.now(),
+            TEST_BASE_RETRY_DELAY_SECONDS,
         ) {
             TaskFailureOutcome::Retry(retried) => repo.update(&retried).unwrap(),
             TaskFailureOutcome::DeadLetter(_) => panic!("expected a retry outcome"),
@@ -510,6 +516,7 @@ mod tests {
         match running.into_iter().next().unwrap().fail(
             "recovered as a failed attempt after an unclean shutdown",
             repo.clock.now(),
+            TEST_BASE_RETRY_DELAY_SECONDS,
         ) {
             TaskFailureOutcome::Retry(_) => panic!("expected a dead-letter outcome"),
             TaskFailureOutcome::DeadLetter(dead) => repo.dead_letter(&dead).unwrap(),

@@ -5,9 +5,10 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 2 : 0,
-  // Lifecycle tests wait up to 120s for a real yt-dlp download to finish,
-  // on top of the dialog/sync/delete steps around it.
-  timeout: 180_000,
+  // Lifecycle tests wait up to 240s for a real yt-dlp download to finish
+  // (enough to cover a couple of retries at the smoke suite's short retry
+  // base delay), on top of the dialog/sync/delete steps around it.
+  timeout: 300_000,
   reporter: 'list',
   use: {
     baseURL: process.env.BASE_URL ?? 'http://localhost:8080',

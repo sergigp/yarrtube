@@ -45,6 +45,17 @@ The system SHALL automatically retry a failed video download a bounded number of
 - **WHEN** a video download has failed on every allowed attempt
 - **THEN** the system stops attempting that download within that attempt sequence, though the video may be attempted again later by playlist or channel reconciliation
 
+### Requirement: Download Failure Reason Is Recorded
+The system SHALL record `yt-dlp`'s actual reported error text as a failed download attempt's failure reason, when `yt-dlp` reported one, instead of a generic message that does not distinguish one failure cause from another.
+
+#### Scenario: yt-dlp reports a specific error
+- **WHEN** a video download attempt fails and `yt-dlp` reported an error message on its standard error stream
+- **THEN** that exact message is recorded as the attempt's failure reason
+
+#### Scenario: yt-dlp fails without reporting a message
+- **WHEN** a video download attempt fails and `yt-dlp` reported no error message
+- **THEN** a generic failure reason is recorded instead
+
 ### Requirement: Per-Playlist Output Directory
 The system SHALL save a downloaded video's file inside a dedicated per-video folder, itself located under a directory determined by its owning playlist's or channel's configured storage path, within a single configured root directory. A storage path may contain multiple segments, producing nested subdirectories. The per-video folder's name SHALL be derived the same way the video's filename is derived (its sanitized title, disambiguated on collision — see the `video-naming` capability), so the video's file, its thumbnail, and its metadata file all live together in one folder per video. When a thumbnail was already fetched for the video ahead of its download (see `video-thumbnails`), the download SHALL reuse that same per-video folder rather than deciding a new one.
 

@@ -57,6 +57,7 @@ use tracing_subscriber::filter::LevelFilter;
 const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_DB_PATH: &str = "yarrtube.sqlite3";
 const DEFAULT_RECONCILE_INTERVAL_SECONDS: i64 = 3600;
+const DEFAULT_RETRY_BASE_DELAY_SECONDS: i64 = 150;
 const DEFAULT_VIDEOS_PATH: &str = "/videos";
 const DEFAULT_AVATARS_PATH: &str = "avatars";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
@@ -80,6 +81,13 @@ fn reconcile_interval_seconds() -> i64 {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(DEFAULT_RECONCILE_INTERVAL_SECONDS)
+}
+
+fn retry_base_delay_seconds() -> i64 {
+    std::env::var("YARRTUBE_RETRY_BASE_DELAY_SECONDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_RETRY_BASE_DELAY_SECONDS)
 }
 
 fn videos_path() -> String {
@@ -327,6 +335,7 @@ fn build_application() -> Result<Application> {
             target_path(),
         ),
         Arc::new(SystemClock),
+        retry_base_delay_seconds(),
     ));
     task_executor
         .recover_stuck_tasks()
