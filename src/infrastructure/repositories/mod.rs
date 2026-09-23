@@ -1,6 +1,7 @@
 pub mod domain_events_consumer;
 pub mod event_subscriber;
 pub mod filesystem_channel_avatar_repository;
+pub mod filesystem_directory_repository;
 pub mod filesystem_video_file_repository;
 pub mod sqlite_channel_repository;
 pub mod sqlite_channel_video_repository;

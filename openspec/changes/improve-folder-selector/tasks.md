@@ -2,15 +2,15 @@ Follow `/rust-architect` conventions for every Rust task, and end each task with
 
 ## 1. Directory Aggregate
 
-- [ ] 1.1 Add `src/domain/directory/directory_path.rs` with `DirectoryPath` (`new`, `root`, `as_str`, `is_root`, `Display`), rejecting absolute paths, `..` segments, and empty segments, with the empty path meaning the videos root; verify the six `directory_path.rs` unit tests in design.md's test plan pass.
-- [ ] 1.2 Add `src/domain/directory/directory.rs` with the `Directory` entity (`path`, `subdirectories`) and `src/domain/directory/errors.rs` with `DirectoryPathError` and `ListDirectoriesError`; verify `cargo build` succeeds.
-- [ ] 1.3 Add `src/domain/directory/mod.rs` re-exporting the three types and register the module in `src/domain/mod.rs`; verify `cargo build` succeeds.
+- [x] 1.1 Add `src/domain/directory/directory_path.rs` with `DirectoryPath` (`new`, `root`, `as_str`, `is_root`, `Display`), rejecting absolute paths, `..` segments, and empty segments, with the empty path meaning the videos root; verify the six `directory_path.rs` unit tests in design.md's test plan pass.
+- [x] 1.2 Add `src/domain/directory/directory.rs` with the `Directory` entity (`path`, `subdirectories`) and `src/domain/directory/errors.rs` with `DirectoryPathError` and `ListDirectoriesError`; verify `cargo build` succeeds.
+- [x] 1.3 Add `src/domain/directory/mod.rs` re-exporting the three types and register the module in `src/domain/mod.rs`; verify `cargo build` succeeds.
 
 ## 2. Filesystem Adapter
 
-- [ ] 2.1 Add `src/infrastructure/repositories/filesystem_directory_repository.rs` with the `DirectoryRepository` port and `FilesystemDirectoryRepository::new(videos_root)`, listing one level only, keeping directories, omitting regular files and dot-prefixed names, ordered deterministically; verify `it_should_list_only_subdirectories_on_a_directory_containing_files_and_directories`, `it_should_omit_dot_prefixed_subdirectories`, and `it_should_return_entries_in_a_deterministic_order` pass.
-- [ ] 2.2 Enforce confinement by canonicalizing the joined path and checking it against the canonicalized videos root, returning `Ok(None)` for a missing path, a regular file, and a path resolving outside the root alike; verify `it_should_return_none_on_a_missing_directory`, `it_should_return_none_on_a_path_that_is_a_regular_file`, `it_should_return_none_on_a_symlink_resolving_outside_the_videos_root`, and `it_should_list_the_target_on_a_symlink_resolving_inside_the_videos_root` pass.
-- [ ] 2.3 Register the module in `src/infrastructure/repositories/mod.rs`; verify `cargo build` succeeds.
+- [x] 2.1 Add `src/infrastructure/repositories/filesystem_directory_repository.rs` with the `DirectoryRepository` port and `FilesystemDirectoryRepository::new(videos_root)`, listing one level only, keeping directories, omitting regular files and dot-prefixed names, ordered deterministically; verify `it_should_list_only_subdirectories_on_a_directory_containing_files_and_directories`, `it_should_omit_dot_prefixed_subdirectories`, and `it_should_return_entries_in_a_deterministic_order` pass.
+- [x] 2.2 Enforce confinement by canonicalizing the joined path and checking it against the canonicalized videos root, returning `Ok(None)` for a missing path, a regular file, and a path resolving outside the root alike; verify `it_should_return_none_on_a_missing_directory`, `it_should_return_none_on_a_path_that_is_a_regular_file`, `it_should_return_none_on_a_symlink_resolving_outside_the_videos_root`, and `it_should_list_the_target_on_a_symlink_resolving_inside_the_videos_root` pass.
+- [x] 2.3 Register the module in `src/infrastructure/repositories/mod.rs`; verify `cargo build` succeeds.
 
 ## 3. Directory Searcher
 
