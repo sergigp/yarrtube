@@ -20,4 +20,4 @@ Follow `/rust-architect` conventions for every Rust task (value object rules are
 ## 5. Verification
 
 - [x] 5.1 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cargo test --locked`; verify all three succeed.
-- [ ] 5.2 With `scripts/run-local.sh` running, `POST /channels` with `video_limit: 4294967306`. Verify the response is a 400 with body `{"error": "Video limit must be between 1 and 1000 (got 4294967306)"}`, and that `GET /channels` still returns 200 with no new channel.
+- [x] 5.2 With `scripts/run-local.sh` running, `POST /api/channels` with `video_limit: 4294967306`. Verify the response is a 400 with body `{"error": "Video limit must be between 1 and 1000 (got 4294967306)"}`, and that `GET /api/channels` still returns 200 with no new channel.
