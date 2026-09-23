@@ -1,17 +1,22 @@
 use crate::domain::shared::ValidationError;
 use std::fmt;
 
+const MAX_VIDEO_LIMIT: u32 = 1000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VideoLimit(u32);
 
 impl VideoLimit {
     pub fn new(value: i64) -> Result<Self, ValidationError> {
-        if value <= 0 {
-            return Err(ValidationError(format!(
-                "Video limit must be a positive integer (got {value})"
-            )));
-        }
-        Ok(Self(value as u32))
+        u32::try_from(value)
+            .ok()
+            .filter(|limit| (1..=MAX_VIDEO_LIMIT).contains(limit))
+            .map(Self)
+            .ok_or_else(|| {
+                ValidationError(format!(
+                    "Video limit must be between 1 and {MAX_VIDEO_LIMIT} (got {value})"
+                ))
+            })
     }
 
     pub fn value(&self) -> u32 {
@@ -44,7 +49,7 @@ mod tests {
         assert_eq!(
             VideoLimit::new(0),
             Err(ValidationError(
-                "Video limit must be a positive integer (got 0)".to_string()
+                "Video limit must be between 1 and 1000 (got 0)".to_string()
             ))
         );
     }
@@ -54,7 +59,7 @@ mod tests {
         assert_eq!(
             VideoLimit::new(-5),
             Err(ValidationError(
-                "Video limit must be a positive integer (got -5)".to_string()
+                "Video limit must be between 1 and 1000 (got -5)".to_string()
             ))
         );
     }

@@ -2,7 +2,7 @@ Follow `/rust-architect` conventions for every Rust task (value object rules are
 
 ## 1. Value Object
 
-- [ ] 1.1 In `src/domain/channel/video_limit.rs`, add `const MAX_VIDEO_LIMIT: i64 = 1000`, make `VideoLimit::new` reject any value outside `1..=MAX_VIDEO_LIMIT` with `ValidationError("Video limit must be between 1 and 1000 (got N)")`, and replace the `value as u32` cast with `u32::try_from`; verify `cargo build` succeeds and `grep -n " as u32" src/domain/channel/video_limit.rs` finds nothing.
+- [x] 1.1 In `src/domain/channel/video_limit.rs`, add `const MAX_VIDEO_LIMIT: i64 = 1000`, make `VideoLimit::new` reject any value outside `1..=MAX_VIDEO_LIMIT` with `ValidationError("Video limit must be between 1 and 1000 (got N)")`, and replace the `value as u32` cast with `u32::try_from`; verify `cargo build` succeeds and `grep -n " as u32" src/domain/channel/video_limit.rs` finds nothing.
 - [ ] 1.2 Update the `video_limit.rs` tests to assert exact results: `Ok(VideoLimit(1))` for 1 and `Ok(VideoLimit(1000))` for 1000, and `Err(ValidationError("Video limit must be between 1 and 1000 (got N)"))` for 0, -5, 1001, 4294967296 and 4294967306. The last two are the wrapping values from the bug. Verify `cargo test video_limit` passes.
 
 ## 2. Persistence Boundary
