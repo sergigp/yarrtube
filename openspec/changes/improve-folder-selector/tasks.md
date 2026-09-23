@@ -37,10 +37,10 @@ Follow `/rust-architect` conventions for every Rust task, and end each task with
 
 ## 7. Smoke Tests
 
-- [ ] 7.1 Update `smoke-tests/helpers/addDialog.js` to drive the parent browser and folder name instead of the path field; verify the existing playlist and channel specs pass unchanged otherwise.
-- [ ] 7.2 Add the six `smoke-tests/` cases from design.md's test plan, covering a browsed parent, a staged parent, breadcrumb navigation to a sibling, the create-folder step selecting an existing directory, a blocked occupied destination, and a rejected folder name containing a slash; verify the suite passes.
+- [x] 7.1 Update `smoke-tests/helpers/addDialog.js` to drive the parent browser and folder name instead of the path field; verify the existing playlist and channel specs pass unchanged otherwise.
+- [x] 7.2 Add the six `smoke-tests/` cases from design.md's test plan, covering a browsed parent, a staged parent, breadcrumb navigation to a sibling, the create-folder step selecting an existing directory, a blocked occupied destination, and a rejected folder name containing a slash; verify the suite passes.
 
 ## 8. Verification
 
-- [ ] 8.1 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, and `cargo test --locked`; verify all three succeed with no warnings.
-- [ ] 8.2 Run the daemon against a videos root holding directories yarrtube did not create and walk both cases from the design's call stack end to end; verify videos download into the previewed destination and no unintended directory appears under the videos root.
+- [x] 8.1 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, and `cargo test --locked`; verify all three succeed with no warnings.
+- [x] 8.2 Run the daemon against a videos root holding directories yarrtube did not create and walk both cases from the design's call stack end to end; verify videos download into the previewed destination and no unintended directory appears under the videos root.
