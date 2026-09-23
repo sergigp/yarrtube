@@ -74,24 +74,48 @@ src/
 
 # Testing
 
-We have mainly two types of tests: **behavior tests** and **infrastructure tests**. The first ones are the most important, they test the domain logic and they should be fast and isolated. The second ones are slower and they test the integration with external systems as real as possible. Our goal is to couple our tests as much as possible to behaviour instead of implementation, so we can refactor the code without breaking the tests.
+Tests are classified by **where they enter the code**, not by what they fake. Our goal is to couple our tests as much as possible to behaviour instead of implementation, so we can refactor the code without breaking the tests.
+
+- **Acceptance tests**: enter through an application adapter (HTTP handler, event subscriber, task). The default and by far the most numerous kind.
+- **Behaviour tests**: enter through a domain service directly. The exception, reserved for domain logic too complex to cover through an adapter (e.g. the reconcilers).
+- **Value object tests**: exhaustive validation rules, one file per value object.
+- **Infrastructure tests**: a single adapter (repository, client) against its real dependency.
+
+Acceptance and behaviour tests follow the same rules for persistence and test doubles (see below): persistence is real, only external dependencies are faked. The Playwright suite in `smoke-tests/` is the true end-to-end layer (real binary, real browser) and lives outside these conventions.
+
+## Acceptance Tests
+
+This tests the domain logic and the validations at application level. We will place this tests in application (for example in http controllers or event subscribers) and the test will be the type of "I receive this HTTP request and I expect this response and these collateral effects". We will send HTTP requests and assert HTTP responses and the final state of the repositories. In the case of event subscribers we will send events and assert the final state of the repositories. Very similar for Tasks, we will create tasks and assert the final state of the repositories.
+
+Tests whose request is rejected before reaching the service (validation 4XX) don't need a database: their `any_<service>()` helper builds repositories on an unmigrated in-memory connection (`Connection::open_in_memory()`), so a request that wrongly got through fails loudly instead of passing.
 
 ## Behaviour Tests
 
-This tests the domain logic and the validations at application level. We will place this tests in application (for example in http controllers or event subscribers) and the test will be the type of "I receive this HTTP request and I expect this response and these collateral effects". All of this will be using Fake implementations of the ports that the domain service uses. We will send HTTP requests and assert HTTP responses and final state of fake repositories. In the case of event subscribers we will send events and assert the final state of fake repositories. Very similar for Tasks, we will create tasks and assert the final state of fake repositories.
+Ideally we should not tests domain services at all because the logic there is tested from acceptance tests. There could be exceptions for very complex domain logic that is hard to test from application layer, but this should be the exception and not the rule. When one is justified, it calls the domain service directly and asserts its result plus the final state of the repositories, under the same persistence and fakes rules as acceptance tests: a behaviour test is never a reason to keep a fake of our own persistence alive. Before adding one, check the acceptance tests of the adapters calling that service don't already cover it.
 
-The fakes will be hand-written and will be as simple as possible, they will not use any mocking library. The fakes will be state-based, for example a fake repository backed by a `Mutex<Vec<Entity>>`.
-Ideally we should not have tests in domain folder as all logic there is tested from application layer tests. There could be exceptions for very complex domain logic that is hard to test from application layer, but this should be the exception and not the rule.
+## Persistence and Test Doubles
 
-**Value objects are the deliberate exception.** Each value object's validation rules are tested exhaustively in its own file (every accepted and rejected input, asserting the exact `Ok(vo)` / `Err(ValidationError(message))`). Application-layer tests must not repeat those rules: per endpoint, one invalid-value test proves the `ValidationError` → 4XX mapping, plus tests for the adapter's own checks (e.g. a required field missing from the request). Services take value objects as parameters, so the type system already guarantees a handler validates before calling the domain.
+**Persistence is real, not faked.** Because our database is an embedded SQLite file, which is fast, cheap to create and _is_ the production engine, acceptance and behaviour tests wire the real `Sqlite*` repositories against a fresh database per test instead of fakes. This catches SQL, row-mapping, ordering, upsert and constraint bugs that a hand-written fake silently re-implements (and drifts from). Concretely:
 
-Clock and Domain Event Publisher are treated like ports, so we will use fakes for them too. The fake clock will be a simple `Mutex<Instant>` and the fake domain event publisher will be a `Mutex<Vec<DomainEvent>>`.
+- Every test starts with `let db = TestDatabase::new();` (`infrastructure/shared/sqlite_connection.rs`): a freshly migrated database file in its own temp directory, removed when the test ends, so tests run in parallel without sharing state. No pool of pre-migrated databases: migrating a fresh one costs a few milliseconds.
+- Each repository gets its own connection, `SqliteXRepository::new(db.connection())` (or `db.shared_connection()` for the ones taking `Arc<Mutex<Connection>>`), opened with the same `sqlite_connection::open` as production (WAL, busy timeout), so tests exercise the real multi-connection setup.
+- Seed and assert through the port traits (`insert`, `list`, `find`, `list_for_...`), never through raw SQL. When a whole-table assertion needs a read the port doesn't have (e.g. listing every video), add a `#[cfg(test)]` inherent method on the SQLite implementation rather than widening the port for tests.
+- Storage-assigned values (autoincrement ids) are deterministic in a fresh database, so assert them as real values (`ChannelVideo { id: 1, ..ChannelVideo::create(..) }`) rather than masking them.
+- Domain events are asserted through the real outbox: the real `SqliteEventPublisher` writes them, and the test reads them back with `SqliteEventRepository::list_eligible()`, comparing against the expected `ScheduledEvent` rows (a `pending_event(id, DomainEvent)` helper builds them). Scheduled tasks likewise through the real `SqliteTaskRepository` (`list_non_completed()`).
+
+**Fakes are for everything else**: out-of-process or side-effecting dependencies (external APIs such as YouTube, `yt-dlp`, outbound HTTP, and, for now, filesystem-backed ports). The fakes will be hand-written and will be as simple as possible, they will not use any mocking library. The fakes will be state-based, for example a fake backed by a `Mutex<Vec<T>>`, and may offer constructors for failure scenarios (e.g. `failing()`, `unavailable()`).
+
+The Clock is treated like a port and faked (`FixedClock`) so time is deterministic; it is also what makes stored timestamps (e.g. event `created_at`) assertable.
+
+## Value Object Tests
+
+Each value object's validation rules are tested exhaustively in its own file (every accepted and rejected input, asserting the exact `Ok(vo)` / `Err(ValidationError(message))`). Acceptance tests must not repeat those rules: per endpoint, one invalid-value test proves the `ValidationError` → 4XX mapping, plus tests for the adapter's own checks (e.g. a required field missing from the request). Services take value objects as parameters, so the type system already guarantees a handler validates before calling the domain.
 
 ## Infrastructure Tests
 
 Infrastructure tests use the real dependency, colocated with the code. Some examples:
 
-- Embedded engine (e.g. SQLite) -> a real in-memory instance, not a container, in-memory _is_ the real engine.
+- Embedded engine (e.g. SQLite) -> a real instance, not a container. Since acceptance tests already exercise the SQLite repositories end to end, their own tests focus on what acceptance tests don't reach: row-mapping edge cases, ordering, conflict handling.
 - Networked service (Postgres, Kafka, Redis...) -> testcontainers.
 - Outbound HTTP dependency -> the real HTTP client against a fake/mock server, not a container.
 
