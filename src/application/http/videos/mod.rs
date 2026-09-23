@@ -24,7 +24,7 @@ pub async fn list_videos_for_playlist(
     State(video_searcher): State<VideoSearcher>,
     Path(playlist_id): Path<String>,
 ) -> Result<Json<Vec<VideoResponse>>, ApiError> {
-    let playlist_id = PlaylistId::new(playlist_id).map_err(ApiError::bad_request)?;
+    let playlist_id = PlaylistId::new(playlist_id)?;
 
     let videos = run_blocking(move || video_searcher.list(&playlist_id))
         .await?
@@ -36,7 +36,7 @@ pub async fn list_videos_for_channel(
     State(video_searcher): State<VideoSearcher>,
     Path(handle): Path<String>,
 ) -> Result<Json<Vec<VideoResponse>>, ApiError> {
-    let channel_id = ChannelHandle::new(handle).map_err(ApiError::bad_request)?;
+    let channel_id = ChannelHandle::new(handle)?;
 
     let videos = run_blocking(move || video_searcher.list_for_channel(&channel_id))
         .await?
@@ -99,11 +99,20 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_the_playlists_videos() {
-        let repositories = Repositories::with_playlist("PL1");
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
-        repositories.add_to_playlist("PL1", &video);
+        save_playlist_video(&video_repository, &playlist_video_repository, "PL1", &video);
+        let video_searcher = VideoSearcher::new(
+            playlist_repository_with(&[playlist("PL1")]),
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
 
-        let response = list_for_playlist(repositories, "PL1").await;
+        let response = list_for_playlist(video_searcher, "PL1").await;
 
         assert_eq!(
             response,
@@ -113,7 +122,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_the_download_details_of_a_downloaded_video() {
-        let repositories = Repositories::with_playlist("PL1");
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
             .start_download(fixed_timestamp())
             .mark_downloaded(
@@ -123,9 +134,16 @@ mod tests {
                 Some(223),
                 fixed_timestamp(),
             );
-        repositories.add_to_playlist("PL1", &video);
+        save_playlist_video(&video_repository, &playlist_video_repository, "PL1", &video);
+        let video_searcher = VideoSearcher::new(
+            playlist_repository_with(&[playlist("PL1")]),
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
 
-        let response = list_for_playlist(repositories, "PL1").await;
+        let response = list_for_playlist(video_searcher, "PL1").await;
 
         assert_eq!(
             response,
@@ -142,16 +160,17 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_videos_ordered_by_playlist_position() {
-        let repositories = Repositories::with_playlist("PL1");
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
         for (youtube_id, title, position) in [
             ("vid_third", "Third", 2),
             ("vid_first", "First", 0),
             ("vid_second", "Second", 1),
         ] {
             let video = Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp());
-            repositories.videos.save(&video).unwrap();
-            repositories
-                .playlist_videos
+            video_repository.save(&video).unwrap();
+            playlist_video_repository
                 .save(&PlaylistVideo::create_with_position(
                     PlaylistId::new("PL1").unwrap(),
                     video.id.clone(),
@@ -160,8 +179,15 @@ mod tests {
                 ))
                 .unwrap();
         }
+        let video_searcher = VideoSearcher::new(
+            playlist_repository_with(&[playlist("PL1")]),
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
 
-        let response = list_for_playlist(repositories, "PL1").await;
+        let response = list_for_playlist(video_searcher, "PL1").await;
 
         assert_eq!(
             response,
@@ -175,14 +201,32 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_an_empty_list_when_the_playlist_has_no_videos() {
-        let response = list_for_playlist(Repositories::with_playlist("PL1"), "PL1").await;
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let video_searcher = VideoSearcher::new(
+            playlist_repository_with(&[playlist("PL1")]),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
 
         assert_eq!(response, Ok(vec![]));
     }
 
     #[tokio::test]
     async fn it_should_return_400_when_the_playlist_does_not_exist() {
-        let response = list_for_playlist(Repositories::default(), "PL404").await;
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let video_searcher = VideoSearcher::new(
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
+
+        let response = list_for_playlist(video_searcher, "PL404").await;
 
         assert_eq!(
             response,
@@ -191,16 +235,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_return_400_when_the_playlist_id_is_invalid() {
+        let response = list_for_playlist(any_video_searcher(), "   ").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "YouTube playlist ID must not be empty"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_return_the_channels_videos_ordered_by_recency() {
-        let repositories = Repositories::with_channel(channel("@somechannel", None));
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let channel_video_repository =
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
         for (youtube_id, title, position) in
             [("vid_newest", "Newest", 0), ("vid_oldest", "Oldest", 1)]
         {
             let video = Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp());
-            repositories.add_to_channel("@somechannel", &video, position);
+            save_channel_video(
+                &video_repository,
+                &channel_video_repository,
+                "@somechannel",
+                &video,
+                position,
+            );
         }
+        let video_searcher = VideoSearcher::new(
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            channel_repository_with(&[channel("@somechannel", None)]),
+            channel_video_repository,
+            video_repository,
+        );
 
-        let response = list_for_channel(repositories, "@somechannel").await;
+        let response = list_for_channel(video_searcher, "@somechannel").await;
 
         assert_eq!(
             response,
@@ -213,18 +284,32 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_an_empty_list_when_the_channel_has_no_videos() {
-        let response = list_for_channel(
-            Repositories::with_channel(channel("@somechannel", None)),
-            "@somechannel",
-        )
-        .await;
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let video_searcher = VideoSearcher::new(
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            channel_repository_with(&[channel("@somechannel", None)]),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
+
+        let response = list_for_channel(video_searcher, "@somechannel").await;
 
         assert_eq!(response, Ok(vec![]));
     }
 
     #[tokio::test]
     async fn it_should_return_400_when_the_channel_does_not_exist() {
-        let response = list_for_channel(Repositories::default(), "@missing").await;
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let video_searcher = VideoSearcher::new(
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
+
+        let response = list_for_channel(video_searcher, "@missing").await;
 
         assert_eq!(
             response,
@@ -233,24 +318,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_return_400_when_the_channel_handle_is_invalid() {
+        let response = list_for_channel(any_video_searcher(), "somechannel").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Channel handle must start with \"@\" (got \"somechannel\")"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_return_an_empty_list_when_no_downloaded_videos_exist() {
-        let response = list_recent(Repositories::default(), None).await;
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let video_searcher = VideoSearcher::new(
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
+
+        let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
 
         assert_eq!(response, Ok(vec![]));
     }
 
     #[tokio::test]
     async fn it_should_combine_and_sort_recent_videos_from_playlists_and_channels() {
-        let repositories = Repositories::with_playlist("PL1");
-        repositories
-            .channels
-            .insert(&channel("@somechannel", None))
-            .unwrap();
-        repositories.add_to_playlist(
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+        let channel_video_repository =
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
             "PL1",
             &downloaded_video("vid_from_playlist", "From Playlist", None, 100),
         );
-        repositories.add_to_channel(
+        save_channel_video(
+            &video_repository,
+            &channel_video_repository,
             "@somechannel",
             &downloaded_video(
                 "vid_from_channel",
@@ -260,8 +370,15 @@ mod tests {
             ),
             0,
         );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository_with(&[playlist("PL1")]),
+            playlist_video_repository,
+            channel_repository_with(&[channel("@somechannel", None)]),
+            channel_video_repository,
+            video_repository,
+        );
 
-        let response = list_recent(repositories, None).await;
+        let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
 
         assert_eq!(
             response,
@@ -281,7 +398,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_include_the_duration_of_a_recent_video() {
-        let repositories = Repositories::with_playlist("PL1");
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
             .mark_downloaded(
                 Quality::High,
@@ -290,9 +409,16 @@ mod tests {
                 Some(223),
                 fixed_timestamp(),
             );
-        repositories.add_to_playlist("PL1", &video);
+        save_playlist_video(&video_repository, &playlist_video_repository, "PL1", &video);
+        let video_searcher = VideoSearcher::new(
+            playlist_repository_with(&[playlist("PL1")]),
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
 
-        let response = list_recent(repositories, None).await;
+        let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
 
         assert_eq!(
             response,
@@ -305,15 +431,25 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_include_the_channel_avatar_filename_in_a_recent_videos_source() {
-        let repositories =
-            Repositories::with_channel(channel("@somechannel", Some("@somechannel.jpg")));
-        repositories.add_to_channel(
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let channel_video_repository =
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
+        save_channel_video(
+            &video_repository,
+            &channel_video_repository,
             "@somechannel",
             &downloaded_video("vid1", "My Video", None, 100),
             0,
         );
+        let video_searcher = VideoSearcher::new(
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            channel_repository_with(&[channel("@somechannel", Some("@somechannel.jpg"))]),
+            channel_video_repository,
+            video_repository,
+        );
 
-        let response = list_recent(repositories, None).await;
+        let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
 
         assert_eq!(
             response,
@@ -327,8 +463,12 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_exclude_non_downloaded_videos_from_recent() {
-        let repositories = Repositories::with_playlist("PL1");
-        repositories.add_to_playlist(
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
             "PL1",
             &Video::create(
                 VideoId::new("vid_pending").unwrap(),
@@ -336,32 +476,49 @@ mod tests {
                 fixed_timestamp(),
             ),
         );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository_with(&[playlist("PL1")]),
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
 
-        let response = list_recent(repositories, None).await;
+        let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
 
         assert_eq!(response, Ok(vec![]));
     }
 
     #[tokio::test]
     async fn it_should_list_a_video_tracked_by_two_sources_once_per_source() {
-        let repositories = Repositories::with_playlist("PL1");
-        repositories
-            .channels
-            .insert(&channel("@somechannel", None))
-            .unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+        let channel_video_repository =
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
         let shared = downloaded_video("vid_shared", "Shared", None, 100);
-        repositories.add_to_playlist("PL1", &shared);
-        repositories
-            .channel_videos
-            .save(&ChannelVideo::create(
-                ChannelHandle::new("@somechannel").unwrap(),
-                shared.id.clone(),
-                0,
-                fixed_timestamp(),
-            ))
-            .unwrap();
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            &shared,
+        );
+        save_channel_video(
+            &video_repository,
+            &channel_video_repository,
+            "@somechannel",
+            &shared,
+            0,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository_with(&[playlist("PL1")]),
+            playlist_video_repository,
+            channel_repository_with(&[channel("@somechannel", None)]),
+            channel_video_repository,
+            video_repository,
+        );
 
-        let response = list_recent(repositories, None).await;
+        let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
 
         assert_eq!(
             response,
@@ -374,132 +531,139 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_apply_the_default_limit_of_20_when_omitted() {
-        let repositories = repositories_with_numbered_videos(25);
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+        save_numbered_playlist_videos(&video_repository, &playlist_video_repository, 25);
+        let video_searcher = VideoSearcher::new(
+            playlist_repository_with(&[playlist("PL1")]),
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
 
-        let response = list_recent(repositories, None).await;
+        let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
 
         assert_eq!(response, Ok(numbered_recent_videos((5..25).rev())));
     }
 
     #[tokio::test]
     async fn it_should_narrow_the_result_with_an_explicit_limit() {
-        let repositories = repositories_with_numbered_videos(3);
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+        save_numbered_playlist_videos(&video_repository, &playlist_video_repository, 3);
+        let video_searcher = VideoSearcher::new(
+            playlist_repository_with(&[playlist("PL1")]),
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
 
-        let response = list_recent(repositories, Some(2)).await;
+        let response = list_recent(video_searcher, ListRecentVideosQuery { limit: Some(2) }).await;
 
         assert_eq!(response, Ok(numbered_recent_videos((1..3).rev())));
     }
 
     #[tokio::test]
     async fn it_should_cap_the_limit_at_100() {
-        let repositories = repositories_with_numbered_videos(105);
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+        save_numbered_playlist_videos(&video_repository, &playlist_video_repository, 105);
+        let video_searcher = VideoSearcher::new(
+            playlist_repository_with(&[playlist("PL1")]),
+            playlist_video_repository,
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        );
 
-        let response = list_recent(repositories, Some(1000)).await;
+        let response =
+            list_recent(video_searcher, ListRecentVideosQuery { limit: Some(1000) }).await;
 
         assert_eq!(response, Ok(numbered_recent_videos((5..105).rev())));
     }
 
-    #[derive(Default)]
-    struct Repositories {
-        playlists: FakePlaylistRepository,
-        playlist_videos: FakePlaylistVideoRepository,
-        channels: FakeChannelRepository,
-        channel_videos: FakeChannelVideoRepository,
-        videos: FakeVideoRepository,
+    /// A searcher for tests whose request is rejected before reaching it.
+    fn any_video_searcher() -> VideoSearcher {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        VideoSearcher::new(
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelRepository::default()),
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            video_repository,
+        )
     }
 
-    impl Repositories {
-        fn with_playlist(id: &str) -> Self {
-            let repositories = Self::default();
-            repositories.playlists.insert(&playlist(id)).unwrap();
-            repositories
+    fn playlist_repository_with(playlists: &[Playlist]) -> Arc<FakePlaylistRepository> {
+        let repository = FakePlaylistRepository::default();
+        for playlist in playlists {
+            repository.insert(playlist).unwrap();
         }
-
-        fn with_channel(channel: Channel) -> Self {
-            let repositories = Self::default();
-            repositories.channels.insert(&channel).unwrap();
-            repositories
-        }
-
-        fn add_to_playlist(&self, playlist_id: &str, video: &Video) {
-            self.videos.save(video).unwrap();
-            self.playlist_videos
-                .save(&PlaylistVideo::create(
-                    PlaylistId::new(playlist_id).unwrap(),
-                    video.id.clone(),
-                    fixed_timestamp(),
-                ))
-                .unwrap();
-        }
-
-        fn add_to_channel(&self, handle: &str, video: &Video, position: i64) {
-            self.videos.save(video).unwrap();
-            self.channel_videos
-                .save(&ChannelVideo::create(
-                    ChannelHandle::new(handle).unwrap(),
-                    video.id.clone(),
-                    position,
-                    fixed_timestamp(),
-                ))
-                .unwrap();
-        }
-
-        fn into_video_searcher(self) -> VideoSearcher {
-            VideoSearcher::new(
-                Arc::new(self.playlists),
-                Arc::new(self.playlist_videos),
-                Arc::new(self.channels),
-                Arc::new(self.channel_videos),
-                Arc::new(self.videos),
-            )
-        }
+        Arc::new(repository)
     }
 
-    async fn list_for_playlist(
-        repositories: Repositories,
+    fn channel_repository_with(channels: &[Channel]) -> Arc<FakeChannelRepository> {
+        let repository = FakeChannelRepository::default();
+        for channel in channels {
+            repository.insert(channel).unwrap();
+        }
+        Arc::new(repository)
+    }
+
+    fn save_playlist_video(
+        video_repository: &FakeVideoRepository,
+        playlist_video_repository: &FakePlaylistVideoRepository,
         playlist_id: &str,
-    ) -> Result<Vec<VideoResponse>, ApiError> {
-        list_videos_for_playlist(
-            State(repositories.into_video_searcher()),
-            Path(playlist_id.to_string()),
-        )
-        .await
-        .map(|Json(videos)| videos)
+        video: &Video,
+    ) {
+        video_repository.save(video).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                PlaylistId::new(playlist_id).unwrap(),
+                video.id.clone(),
+                fixed_timestamp(),
+            ))
+            .unwrap();
     }
 
-    async fn list_for_channel(
-        repositories: Repositories,
+    fn save_channel_video(
+        video_repository: &FakeVideoRepository,
+        channel_video_repository: &FakeChannelVideoRepository,
         handle: &str,
-    ) -> Result<Vec<VideoResponse>, ApiError> {
-        list_videos_for_channel(
-            State(repositories.into_video_searcher()),
-            Path(handle.to_string()),
-        )
-        .await
-        .map(|Json(videos)| videos)
+        video: &Video,
+        position: i64,
+    ) {
+        video_repository.save(video).unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                ChannelHandle::new(handle).unwrap(),
+                video.id.clone(),
+                position,
+                fixed_timestamp(),
+            ))
+            .unwrap();
     }
 
-    async fn list_recent(
-        repositories: Repositories,
-        limit: Option<usize>,
-    ) -> Result<Vec<RecentVideoResponse>, ApiError> {
-        list_recent_videos(
-            State(repositories.into_video_searcher()),
-            Query(ListRecentVideosQuery { limit }),
-        )
-        .await
-        .map(|Json(videos)| videos)
-    }
-
-    fn repositories_with_numbered_videos(count: i64) -> Repositories {
-        let repositories = Repositories::with_playlist("PL1");
+    /// Saves `count` downloaded videos to playlist `PL1`, video `i` created
+    /// `i` seconds after the epoch so recency order is the reverse of `i`.
+    fn save_numbered_playlist_videos(
+        video_repository: &FakeVideoRepository,
+        playlist_video_repository: &FakePlaylistVideoRepository,
+        count: i64,
+    ) {
         for i in 0..count {
-            repositories.add_to_playlist(
+            save_playlist_video(
+                video_repository,
+                playlist_video_repository,
                 "PL1",
                 &downloaded_video(&format!("vid{i}"), &format!("Video {i}"), None, i),
             );
         }
-        repositories
     }
 
     fn numbered_recent_videos(numbers: impl Iterator<Item = i64>) -> Vec<RecentVideoResponse> {
@@ -598,5 +762,32 @@ mod tests {
             None,
             created_at,
         )
+    }
+
+    async fn list_for_playlist(
+        video_searcher: VideoSearcher,
+        playlist_id: &str,
+    ) -> Result<Vec<VideoResponse>, ApiError> {
+        list_videos_for_playlist(State(video_searcher), Path(playlist_id.to_string()))
+            .await
+            .map(|Json(videos)| videos)
+    }
+
+    async fn list_for_channel(
+        video_searcher: VideoSearcher,
+        handle: &str,
+    ) -> Result<Vec<VideoResponse>, ApiError> {
+        list_videos_for_channel(State(video_searcher), Path(handle.to_string()))
+            .await
+            .map(|Json(videos)| videos)
+    }
+
+    async fn list_recent(
+        video_searcher: VideoSearcher,
+        query: ListRecentVideosQuery,
+    ) -> Result<Vec<RecentVideoResponse>, ApiError> {
+        list_recent_videos(State(video_searcher), Query(query))
+            .await
+            .map(|Json(videos)| videos)
     }
 }

@@ -40,31 +40,29 @@ mod tests {
         FakePlaylistVideoRepository, PlaylistVideoRepository,
     };
     use crate::infrastructure::repositories::sqlite_task_repository::{
-        SqliteTaskRepository, TaskRepository,
+        FakeTaskRepository, TaskRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_repository::{
         FakeVideoRepository, VideoRepository,
     };
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
-    use rusqlite::Connection;
     use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
-
-    #[tokio::test]
-    async fn it_should_return_non_completed_tasks() {
-        let tasks = task_repository_with(&[Task::ReconcilePlaylist {
-            playlist_id: "PL1".to_string(),
-        }]);
-
-        let response = list(task_view_searcher(tasks, Repositories::default())).await;
-
-        assert_eq!(response, Ok(vec![pending_task("reconcile_playlist", &[])]));
-    }
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn it_should_return_an_empty_list_when_no_tasks_exist() {
-        let response = list(task_view_searcher(sqlite_repo(), Repositories::default())).await;
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[]),
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
+
+        let response = list(task_view_searcher).await;
 
         assert_eq!(response, Ok(vec![]));
     }
@@ -72,43 +70,74 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_a_pending_task_whose_run_at_is_in_the_future() {
         let future = fixed_timestamp() + chrono::Duration::seconds(60);
-        let tasks = sqlite_repo();
-        tasks
-            .schedule(
-                &Task::ReconcilePlaylist {
-                    playlist_id: "PL1".to_string(),
-                },
-                future,
-            )
+        let task_repository = task_repository_with(&[]);
+        task_repository
+            .schedule(&Task::UpdateYtdlp, future)
             .unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository,
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
 
-        let response = list(task_view_searcher(tasks, Repositories::default())).await;
+        let response = list(task_view_searcher).await;
 
         assert_eq!(
             response,
             Ok(vec![TaskResponse {
                 run_at: future,
-                ..pending_task("reconcile_playlist", &[])
+                ..pending_task("update_ytdlp", &[])
+            }])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_include_a_running_task() {
+        let task_repository = task_repository_with(&[Task::UpdateYtdlp]);
+        let running = task_repository.list_non_completed().unwrap()[0]
+            .clone()
+            .start(fixed_timestamp());
+        task_repository.update(&running).unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository,
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
+
+        let response = list(task_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![TaskResponse {
+                status: "running".to_string(),
+                ..pending_task("update_ytdlp", &[])
             }])
         );
     }
 
     #[tokio::test]
     async fn it_should_include_the_playlist_name_for_a_pending_reconcile_playlist_task() {
-        let tasks = task_repository_with(&[Task::ReconcilePlaylist {
-            playlist_id: "PL1".to_string(),
-        }]);
-        let playlists = FakePlaylistRepository::default();
-        playlists.insert(&playlist("PL1", "My Playlist")).unwrap();
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[Task::ReconcilePlaylist {
+                playlist_id: "PL1".to_string(),
+            }]),
+            playlist_repository_with(&[playlist("PL1", "My Playlist")]),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
 
-        let response = list(task_view_searcher(
-            tasks,
-            Repositories {
-                playlists,
-                ..Repositories::default()
-            },
-        ))
-        .await;
+        let response = list(task_view_searcher).await;
 
         assert_eq!(
             response,
@@ -120,23 +149,39 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_channel_name_for_a_pending_reconcile_channel_task() {
-        let tasks = task_repository_with(&[Task::ReconcileChannel {
-            channel_id: "@somechannel".to_string(),
-        }]);
-        let channels = FakeChannelRepository::default();
-        channels
-            .insert(&channel("@somechannel", "Some Channel"))
-            .unwrap();
+    async fn it_should_return_an_empty_payload_when_the_referenced_playlist_no_longer_exists() {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[Task::ReconcilePlaylist {
+                playlist_id: "PL1".to_string(),
+            }]),
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
 
-        let response = list(task_view_searcher(
-            tasks,
-            Repositories {
-                channels,
-                ..Repositories::default()
-            },
-        ))
-        .await;
+        let response = list(task_view_searcher).await;
+
+        assert_eq!(response, Ok(vec![pending_task("reconcile_playlist", &[])]));
+    }
+
+    #[tokio::test]
+    async fn it_should_include_the_channel_name_for_a_pending_reconcile_channel_task() {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[Task::ReconcileChannel {
+                channel_id: "@somechannel".to_string(),
+            }]),
+            Arc::new(FakePlaylistRepository::default()),
+            channel_repository_with(&[channel("@somechannel", "Some Channel")]),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
+
+        let response = list(task_view_searcher).await;
 
         assert_eq!(
             response,
@@ -148,36 +193,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_return_an_empty_payload_when_the_referenced_channel_no_longer_exists() {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[Task::ReconcileChannel {
+                channel_id: "@somechannel".to_string(),
+            }]),
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
+
+        let response = list(task_view_searcher).await;
+
+        assert_eq!(response, Ok(vec![pending_task("reconcile_channel", &[])]));
+    }
+
+    #[tokio::test]
     async fn it_should_include_the_video_title_and_playlist_name_for_a_pending_download_video_task()
     {
-        let tasks = task_repository_with(&[Task::DownloadVideo {
-            video_id: "rec1".to_string(),
-            quality: "high".to_string(),
-            output_dir: "/videos/my-playlist".to_string(),
-        }]);
-        let playlists = FakePlaylistRepository::default();
-        playlists.insert(&playlist("PL1", "My Playlist")).unwrap();
-        let videos = FakeVideoRepository::default();
-        videos.save(&video("rec1", "My Video")).unwrap();
-        let playlist_videos = FakePlaylistVideoRepository::default();
-        playlist_videos
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+        video_repository.save(&video("rec1", "My Video")).unwrap();
+        playlist_video_repository
             .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
                 VideoRecordId::new("rec1").unwrap(),
                 fixed_timestamp(),
             ))
             .unwrap();
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[download_video_task("rec1")]),
+            playlist_repository_with(&[playlist("PL1", "My Playlist")]),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            playlist_video_repository,
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
 
-        let response = list(task_view_searcher(
-            tasks,
-            Repositories {
-                playlists,
-                videos,
-                playlist_videos,
-                ..Repositories::default()
-            },
-        ))
-        .await;
+        let response = list(task_view_searcher).await;
 
         assert_eq!(
             response,
@@ -194,19 +251,11 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_video_title_and_channel_name_for_a_channel_owned_download_video_task()
      {
-        let tasks = task_repository_with(&[Task::DownloadVideo {
-            video_id: "rec1".to_string(),
-            quality: "high".to_string(),
-            output_dir: "/videos/somechannel".to_string(),
-        }]);
-        let channels = FakeChannelRepository::default();
-        channels
-            .insert(&channel("@somechannel", "Some Channel"))
-            .unwrap();
-        let videos = FakeVideoRepository::default();
-        videos.save(&video("rec1", "My Video")).unwrap();
-        let channel_videos = FakeChannelVideoRepository::default();
-        channel_videos
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let channel_video_repository =
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
+        video_repository.save(&video("rec1", "My Video")).unwrap();
+        channel_video_repository
             .save(&ChannelVideo::create(
                 ChannelHandle::new("@somechannel").unwrap(),
                 VideoRecordId::new("rec1").unwrap(),
@@ -214,17 +263,16 @@ mod tests {
                 fixed_timestamp(),
             ))
             .unwrap();
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[download_video_task("rec1")]),
+            Arc::new(FakePlaylistRepository::default()),
+            channel_repository_with(&[channel("@somechannel", "Some Channel")]),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository)),
+            channel_video_repository,
+        );
 
-        let response = list(task_view_searcher(
-            tasks,
-            Repositories {
-                channels,
-                videos,
-                channel_videos,
-                ..Repositories::default()
-            },
-        ))
-        .await;
+        let response = list(task_view_searcher).await;
 
         assert_eq!(
             response,
@@ -239,14 +287,40 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_filename_for_a_pending_delete_video_file_task() {
-        let tasks = task_repository_with(&[Task::DeleteVideoFile {
-            filename: Some("My Video.mp4".to_string()),
-            thumbnail_filename: Some("My Video.jpg".to_string()),
-            output_dir: "/videos/music".to_string(),
-        }]);
+    async fn it_should_return_an_empty_payload_when_a_download_video_task_references_an_untracked_video()
+     {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[download_video_task("rec1")]),
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
 
-        let response = list(task_view_searcher(tasks, Repositories::default())).await;
+        let response = list(task_view_searcher).await;
+
+        assert_eq!(response, Ok(vec![pending_task("download_video", &[])]));
+    }
+
+    #[tokio::test]
+    async fn it_should_include_the_filename_for_a_pending_delete_video_file_task() {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[Task::DeleteVideoFile {
+                filename: Some("My Video.mp4".to_string()),
+                thumbnail_filename: Some("My Video.jpg".to_string()),
+                output_dir: "/videos/music".to_string(),
+            }]),
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
+
+        let response = list(task_view_searcher).await;
 
         assert_eq!(
             response,
@@ -258,13 +332,43 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_path_for_a_pending_delete_playlist_files_task() {
-        let tasks = task_repository_with(&[Task::DeletePlaylistFiles {
-            playlist_id: "PL1".to_string(),
-            path: "music/chill".to_string(),
-        }]);
+    async fn it_should_return_an_empty_payload_for_a_delete_video_file_task_with_no_recorded_filename()
+     {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[Task::DeleteVideoFile {
+                filename: None,
+                thumbnail_filename: None,
+                output_dir: "/videos/music".to_string(),
+            }]),
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
 
-        let response = list(task_view_searcher(tasks, Repositories::default())).await;
+        let response = list(task_view_searcher).await;
+
+        assert_eq!(response, Ok(vec![pending_task("delete_video_file", &[])]));
+    }
+
+    #[tokio::test]
+    async fn it_should_include_the_path_for_a_pending_delete_playlist_files_task() {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[Task::DeletePlaylistFiles {
+                playlist_id: "PL1".to_string(),
+                path: "music/chill".to_string(),
+            }]),
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
+
+        let response = list(task_view_searcher).await;
 
         assert_eq!(
             response,
@@ -277,12 +381,20 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_include_the_path_for_a_pending_delete_channel_files_task() {
-        let tasks = task_repository_with(&[Task::DeleteChannelFiles {
-            channel_id: "@somechannel".to_string(),
-            path: "creators/somechannel".to_string(),
-        }]);
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[Task::DeleteChannelFiles {
+                channel_id: "@somechannel".to_string(),
+                path: "creators/somechannel".to_string(),
+            }]),
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
 
-        let response = list(task_view_searcher(tasks, Repositories::default())).await;
+        let response = list(task_view_searcher).await;
 
         assert_eq!(
             response,
@@ -294,42 +406,52 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_ok_and_an_empty_payload_when_the_referenced_playlist_no_longer_exists()
-     {
-        let tasks = task_repository_with(&[Task::ReconcilePlaylist {
-            playlist_id: "PL1".to_string(),
-        }]);
+    async fn it_should_return_an_empty_payload_for_an_update_ytdlp_task() {
+        let video_repository = Arc::new(FakeVideoRepository::default());
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository_with(&[Task::UpdateYtdlp]),
+            Arc::new(FakePlaylistRepository::default()),
+            Arc::new(FakeChannelRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
+        );
 
-        let response = list(task_view_searcher(tasks, Repositories::default())).await;
+        let response = list(task_view_searcher).await;
 
-        assert_eq!(response, Ok(vec![pending_task("reconcile_playlist", &[])]));
+        assert_eq!(response, Ok(vec![pending_task("update_ytdlp", &[])]));
     }
 
-    #[derive(Default)]
-    struct Repositories {
-        playlists: FakePlaylistRepository,
-        channels: FakeChannelRepository,
-        videos: FakeVideoRepository,
-        playlist_videos: FakePlaylistVideoRepository,
-        channel_videos: FakeChannelVideoRepository,
+    fn task_repository_with(tasks: &[Task]) -> Arc<FakeTaskRepository> {
+        let repository = FakeTaskRepository::new(Arc::new(FixedClock(fixed_timestamp())));
+        for task in tasks {
+            repository.schedule(task, fixed_timestamp()).unwrap();
+        }
+        Arc::new(repository)
     }
 
-    fn task_view_searcher(
-        task_repository: Arc<dyn TaskRepository>,
-        repositories: Repositories,
-    ) -> TaskViewSearcher {
-        TaskViewSearcher::new(
-            task_repository,
-            Arc::new(repositories.playlists),
-            Arc::new(repositories.channels),
-            Arc::new(repositories.videos),
-            Arc::new(repositories.playlist_videos),
-            Arc::new(repositories.channel_videos),
-        )
+    fn playlist_repository_with(playlists: &[Playlist]) -> Arc<FakePlaylistRepository> {
+        let repository = FakePlaylistRepository::default();
+        for playlist in playlists {
+            repository.insert(playlist).unwrap();
+        }
+        Arc::new(repository)
     }
 
-    async fn list(searcher: TaskViewSearcher) -> Result<Vec<TaskResponse>, ApiError> {
-        list_tasks(State(searcher)).await.map(|Json(tasks)| tasks)
+    fn channel_repository_with(channels: &[Channel]) -> Arc<FakeChannelRepository> {
+        let repository = FakeChannelRepository::default();
+        for channel in channels {
+            repository.insert(channel).unwrap();
+        }
+        Arc::new(repository)
+    }
+
+    fn download_video_task(video_id: &str) -> Task {
+        Task::DownloadVideo {
+            video_id: video_id.to_string(),
+            quality: "high".to_string(),
+            output_dir: "/videos/my-playlist".to_string(),
+        }
     }
 
     fn pending_task(task_type: &str, payload: &[(&str, &str)]) -> TaskResponse {
@@ -350,23 +472,6 @@ mod tests {
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
-    }
-
-    fn sqlite_repo() -> Arc<dyn TaskRepository> {
-        let mut conn = Connection::open_in_memory().unwrap();
-        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        Arc::new(SqliteTaskRepository::new(
-            Arc::new(Mutex::new(conn)),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ))
-    }
-
-    fn task_repository_with(tasks: &[Task]) -> Arc<dyn TaskRepository> {
-        let repository = sqlite_repo();
-        for task in tasks {
-            repository.schedule(task, fixed_timestamp()).unwrap();
-        }
-        repository
     }
 
     fn playlist(id: &str, name: &str) -> Playlist {
@@ -406,5 +511,11 @@ mod tests {
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
         }
+    }
+
+    async fn list(task_view_searcher: TaskViewSearcher) -> Result<Vec<TaskResponse>, ApiError> {
+        list_tasks(State(task_view_searcher))
+            .await
+            .map(|Json(tasks)| tasks)
     }
 }

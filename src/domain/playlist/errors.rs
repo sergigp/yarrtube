@@ -2,17 +2,6 @@ use super::playlist_path::PlaylistPath;
 use crate::domain::shared::PlaylistId;
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PlaylistError(pub String);
-
-impl fmt::Display for PlaylistError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl std::error::Error for PlaylistError {}
-
 #[derive(Debug)]
 pub enum CreatePlaylistError {
     YoutubePlaylistNotFound(PlaylistId),

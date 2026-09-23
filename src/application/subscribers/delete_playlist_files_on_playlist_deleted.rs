@@ -76,7 +76,7 @@ mod tests {
             .handle(r#"{"playlist_id": "PL1", "path": "music/chill"}"#)
             .unwrap();
 
-        let scheduled = task_repository.scheduled.lock().unwrap();
+        let scheduled = task_repository.scheduled();
         assert_eq!(
             *scheduled,
             vec![(
@@ -98,6 +98,6 @@ mod tests {
             .handle(r#"{"playlist_id": "", "path": "music/chill"}"#)
             .unwrap();
 
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 }

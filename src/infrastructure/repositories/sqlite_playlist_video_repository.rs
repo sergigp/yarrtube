@@ -5,6 +5,9 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::Mutex;
 
+#[cfg(test)]
+use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+
 pub trait PlaylistVideoRepository: Send + Sync {
     /// Insert-or-replace keyed by `(playlist_id, video_id)`.
     fn save(&self, playlist_video: &PlaylistVideo) -> anyhow::Result<()>;
@@ -208,23 +211,31 @@ fn columns_to_playlist_video(columns: Columns) -> anyhow::Result<PlaylistVideo> 
 }
 
 #[cfg(test)]
-#[derive(Default)]
 pub struct FakePlaylistVideoRepository {
     pub(crate) playlist_videos: Mutex<Vec<PlaylistVideo>>,
-    #[allow(clippy::type_complexity)]
-    pub(crate) youtube_ids: Mutex<std::collections::HashMap<String, VideoId>>,
+    /// The `videos` table this fake joins against, mirroring the SQL
+    /// implementation's join when resolving a YouTube video ID.
+    video_repository: std::sync::Arc<FakeVideoRepository>,
 }
 
 #[cfg(test)]
 impl FakePlaylistVideoRepository {
-    /// Test-only bookkeeping mirroring the SQL implementation's join with
-    /// `videos`: lets the fake resolve `find_by_youtube_video` without a
-    /// real `VideoRepository` alongside it.
-    pub fn register_youtube_id(&self, video_id: &VideoRecordId, youtube_video_id: &VideoId) {
-        self.youtube_ids
+    pub fn new(video_repository: std::sync::Arc<FakeVideoRepository>) -> Self {
+        Self {
+            playlist_videos: Mutex::new(Vec::new()),
+            video_repository,
+        }
+    }
+
+    fn is_youtube_video(&self, playlist_video: &PlaylistVideo, youtube_video_id: &VideoId) -> bool {
+        self.video_repository
+            .videos
             .lock()
             .unwrap()
-            .insert(video_id.as_str().to_string(), youtube_video_id.clone());
+            .iter()
+            .any(|video| {
+                video.id == playlist_video.video_id && video.youtube_id == *youtube_video_id
+            })
     }
 }
 
@@ -247,15 +258,13 @@ impl PlaylistVideoRepository for FakePlaylistVideoRepository {
         playlist_id: &PlaylistId,
         youtube_video_id: &VideoId,
     ) -> anyhow::Result<Option<PlaylistVideo>> {
-        let youtube_ids = self.youtube_ids.lock().unwrap();
         Ok(self
             .playlist_videos
             .lock()
             .unwrap()
             .iter()
             .find(|pv| {
-                pv.playlist_id == *playlist_id
-                    && youtube_ids.get(pv.video_id.as_str()) == Some(youtube_video_id)
+                pv.playlist_id == *playlist_id && self.is_youtube_video(pv, youtube_video_id)
             })
             .cloned())
     }
@@ -286,10 +295,8 @@ impl PlaylistVideoRepository for FakePlaylistVideoRepository {
     }
 
     fn delete(&self, playlist_id: &PlaylistId, youtube_video_id: &VideoId) -> anyhow::Result<()> {
-        let youtube_ids = self.youtube_ids.lock().unwrap();
         self.playlist_videos.lock().unwrap().retain(|pv| {
-            !(pv.playlist_id == *playlist_id
-                && youtube_ids.get(pv.video_id.as_str()) == Some(youtube_video_id))
+            !(pv.playlist_id == *playlist_id && self.is_youtube_video(pv, youtube_video_id))
         });
         Ok(())
     }

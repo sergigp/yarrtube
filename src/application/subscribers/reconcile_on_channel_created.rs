@@ -71,8 +71,8 @@ mod tests {
         ));
         let reconciler = ChannelVideoReconciler::new(
             channel_repository,
-            video_repository,
-            Arc::new(FakeChannelVideoRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakeChannelVideoRepository::new(video_repository)),
             Arc::new(FakeChannelVideosRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(FakeVideoMetadataRepository::default()),
@@ -94,7 +94,7 @@ mod tests {
 
         subscriber.handle(r#"{"channel_id": ""}"#).unwrap();
 
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -121,9 +121,7 @@ mod tests {
 
         assert_eq!(
             task_repository
-                .scheduled
-                .lock()
-                .unwrap()
+                .scheduled()
                 .iter()
                 .map(|(task, _run_at)| task.clone())
                 .collect::<Vec<_>>(),
@@ -141,6 +139,6 @@ mod tests {
         let result = subscriber.handle(r#"{"channel_id": "@missing"}"#);
 
         assert!(result.is_ok());
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 }

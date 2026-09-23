@@ -1,14 +1,14 @@
-use super::errors::VideoIdError;
+use super::errors::ValidationError;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VideoId(String);
 
 impl VideoId {
-    pub fn new(id: impl Into<String>) -> Result<Self, VideoIdError> {
+    pub fn new(id: impl Into<String>) -> Result<Self, ValidationError> {
         let id = id.into();
         if id.trim().is_empty() {
-            return Err(VideoIdError(
+            return Err(ValidationError(
                 "YouTube video ID must not be empty".to_string(),
             ));
         }
@@ -36,19 +36,34 @@ mod tests {
 
     #[test]
     fn it_should_accept_a_non_empty_id() {
-        let id = VideoId::new("vid1").unwrap();
-        assert_eq!(id.as_str(), "vid1");
+        assert_eq!(VideoId::new("vid1"), Ok(VideoId("vid1".to_string())));
     }
 
     #[test]
     fn it_should_reject_an_empty_id() {
-        assert!(VideoId::new("").is_err());
-        assert!(VideoId::new("   ").is_err());
+        assert_eq!(
+            VideoId::new(""),
+            Err(ValidationError(
+                "YouTube video ID must not be empty".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_blank_id() {
+        assert_eq!(
+            VideoId::new("   "),
+            Err(ValidationError(
+                "YouTube video ID must not be empty".to_string()
+            ))
+        );
     }
 
     #[test]
     fn it_should_build_the_youtube_video_url() {
-        let id = VideoId::new("vid1").unwrap();
-        assert_eq!(id.to_url(), "https://www.youtube.com/watch?v=vid1");
+        assert_eq!(
+            VideoId("vid1".to_string()).to_url(),
+            "https://www.youtube.com/watch?v=vid1"
+        );
     }
 }

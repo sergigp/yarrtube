@@ -107,7 +107,8 @@ mod tests {
         }
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
-        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let channel_video_repository =
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
         let task_repository = Arc::new(FakeTaskRepository::default());
         let video_file_repository = Arc::new(video_file_repository);
 
@@ -158,7 +159,6 @@ mod tests {
             fixed_timestamp(),
         ));
         video_repository.videos.lock().unwrap().push(video.clone());
-        channel_video_repository.register_youtube_id(&video.id, &video.youtube_id);
         channel_video_repository
             .channel_videos
             .lock()
@@ -189,7 +189,7 @@ mod tests {
         assert!(events.published.lock().unwrap().is_empty());
         assert!(videos.videos.lock().unwrap().is_empty());
         assert!(channel_videos.channel_videos.lock().unwrap().is_empty());
-        assert!(tasks.scheduled.lock().unwrap().is_empty());
+        assert!(tasks.scheduled().is_empty());
     }
 
     #[test]
@@ -229,7 +229,6 @@ mod tests {
         );
         let existing = Video::create(VideoId::new("yt1").unwrap(), "Original", fixed_timestamp());
         videos.videos.lock().unwrap().push(existing.clone());
-        channel_videos.register_youtube_id(&existing.id, &VideoId::new("yt1").unwrap());
         channel_videos.channel_videos.lock().unwrap().push(
             crate::domain::channel_video::ChannelVideo::create(
                 ChannelHandle::new("@somechannel").unwrap(),
@@ -264,7 +263,6 @@ mod tests {
                 fixed_timestamp(),
             ),
         );
-        channel_videos.register_youtube_id(&existing.id, &VideoId::new("yt_old").unwrap());
 
         handler.handle(&payload_for("@somechannel"), false).unwrap();
 
@@ -289,7 +287,8 @@ mod tests {
         channel_repository.insert(&channel(10)).unwrap();
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
-        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let channel_video_repository =
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
         let existing = Video::create(VideoId::new("yt_old").unwrap(), "Old", fixed_timestamp());
         video_repository
             .videos
@@ -350,7 +349,7 @@ mod tests {
 
         handler.handle(&payload_for("@somechannel"), false).unwrap();
 
-        let scheduled = tasks.scheduled.lock().unwrap();
+        let scheduled = tasks.scheduled();
         assert_eq!(scheduled.len(), 1);
         assert_eq!(
             scheduled[0].0,
@@ -373,7 +372,7 @@ mod tests {
 
         assert!(events.published.lock().unwrap().is_empty());
         assert!(videos.videos.lock().unwrap().is_empty());
-        assert!(tasks.scheduled.lock().unwrap().is_empty());
+        assert!(tasks.scheduled().is_empty());
     }
 
     #[test]
@@ -412,7 +411,7 @@ mod tests {
         assert_eq!(stored[0].thumbnail_filename, None);
         assert_eq!(stored[0].quality, None);
 
-        let scheduled = tasks.scheduled.lock().unwrap();
+        let scheduled = tasks.scheduled();
         assert!(scheduled.iter().any(|(task, _)| *task
             == Task::DownloadVideo {
                 video_id: video.id.as_str().to_string(),
@@ -449,7 +448,7 @@ mod tests {
         assert_eq!(stored[0].filename, None);
         assert_eq!(stored[0].quality, None);
 
-        let scheduled = tasks.scheduled.lock().unwrap();
+        let scheduled = tasks.scheduled();
         assert!(scheduled.iter().any(|(task, _)| *task
             == Task::DownloadVideo {
                 video_id: video.id.as_str().to_string(),
@@ -496,7 +495,7 @@ mod tests {
         assert_eq!(stored[0].filename, None);
         assert_eq!(stored[0].quality, None);
 
-        let scheduled = tasks.scheduled.lock().unwrap();
+        let scheduled = tasks.scheduled();
         assert!(scheduled.iter().any(|(task, _)| *task
             == Task::DownloadVideo {
                 video_id: video.id.as_str().to_string(),

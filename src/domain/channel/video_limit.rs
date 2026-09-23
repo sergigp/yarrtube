@@ -1,13 +1,13 @@
-use super::errors::VideoLimitError;
+use crate::domain::shared::ValidationError;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VideoLimit(u32);
 
 impl VideoLimit {
-    pub fn new(value: i64) -> Result<Self, VideoLimitError> {
+    pub fn new(value: i64) -> Result<Self, ValidationError> {
         if value <= 0 {
-            return Err(VideoLimitError(format!(
+            return Err(ValidationError(format!(
                 "Video limit must be a positive integer (got {value})"
             )));
         }
@@ -31,13 +31,31 @@ mod tests {
 
     #[test]
     fn it_should_accept_a_positive_limit() {
-        let limit = VideoLimit::new(10).unwrap();
-        assert_eq!(limit.value(), 10);
+        assert_eq!(VideoLimit::new(10), Ok(VideoLimit(10)));
     }
 
     #[test]
-    fn it_should_reject_a_zero_or_negative_limit() {
-        assert!(VideoLimit::new(0).is_err());
-        assert!(VideoLimit::new(-5).is_err());
+    fn it_should_accept_a_limit_of_one() {
+        assert_eq!(VideoLimit::new(1), Ok(VideoLimit(1)));
+    }
+
+    #[test]
+    fn it_should_reject_a_zero_limit() {
+        assert_eq!(
+            VideoLimit::new(0),
+            Err(ValidationError(
+                "Video limit must be a positive integer (got 0)".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_negative_limit() {
+        assert_eq!(
+            VideoLimit::new(-5),
+            Err(ValidationError(
+                "Video limit must be a positive integer (got -5)".to_string()
+            ))
+        );
     }
 }

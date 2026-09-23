@@ -85,7 +85,7 @@ mod tests {
 
         handler.handle("{}", false).unwrap();
 
-        let scheduled = task_repository.scheduled.lock().unwrap();
+        let scheduled = task_repository.scheduled();
         assert_eq!(
             *scheduled,
             vec![(
@@ -102,7 +102,7 @@ mod tests {
 
         handler.handle("{}", false).unwrap();
 
-        let scheduled = task_repository.scheduled.lock().unwrap();
+        let scheduled = task_repository.scheduled();
         assert_eq!(
             *scheduled,
             vec![(

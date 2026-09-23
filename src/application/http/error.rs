@@ -1,3 +1,4 @@
+use crate::domain::shared::ValidationError;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -32,6 +33,14 @@ impl ApiError {
 
     pub fn internal(message: impl Display) -> Self {
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, message)
+    }
+}
+
+/// Every value object rejection is the caller's fault: a `400 Bad Request`
+/// carrying the value object's message.
+impl From<ValidationError> for ApiError {
+    fn from(error: ValidationError) -> Self {
+        Self::bad_request(error)
     }
 }
 

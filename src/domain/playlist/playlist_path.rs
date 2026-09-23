@@ -1,4 +1,4 @@
-use super::errors::PlaylistError;
+use crate::domain::shared::ValidationError;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -7,30 +7,32 @@ pub struct PlaylistPath(String);
 const FILESYSTEM_UNSAFE_CHARS: &[char] = &['\\', ':', '*', '?', '"', '<', '>', '|'];
 
 impl PlaylistPath {
-    pub fn new(path: impl Into<String>) -> Result<Self, PlaylistError> {
+    pub fn new(path: impl Into<String>) -> Result<Self, ValidationError> {
         let path = path.into();
         if path.trim().is_empty() {
-            return Err(PlaylistError("Playlist path must not be empty".to_string()));
+            return Err(ValidationError(
+                "Playlist path must not be empty".to_string(),
+            ));
         }
         if path.starts_with('/') {
-            return Err(PlaylistError(
+            return Err(ValidationError(
                 "Playlist path must not be an absolute path".to_string(),
             ));
         }
 
         for segment in path.split('/') {
             if segment.is_empty() {
-                return Err(PlaylistError(
+                return Err(ValidationError(
                     "Playlist path must not contain empty segments".to_string(),
                 ));
             }
             if segment == ".." {
-                return Err(PlaylistError(
+                return Err(ValidationError(
                     "Playlist path must not contain \"..\" segments".to_string(),
                 ));
             }
             if segment.contains(FILESYSTEM_UNSAFE_CHARS) {
-                return Err(PlaylistError(format!(
+                return Err(ValidationError(format!(
                     "Playlist path segments must not contain any of these characters: {}",
                     FILESYSTEM_UNSAFE_CHARS.iter().collect::<String>()
                 )));
@@ -55,43 +57,106 @@ impl fmt::Display for PlaylistPath {
 mod tests {
     use super::*;
 
+    const UNSAFE_CHARACTERS_MESSAGE: &str =
+        "Playlist path segments must not contain any of these characters: \\:*?\"<>|";
+
     #[test]
-    fn it_should_accept_a_valid_single_segment_path() {
-        assert!(PlaylistPath::new("music").is_ok());
+    fn it_should_accept_a_single_segment_path() {
+        assert_eq!(
+            PlaylistPath::new("music"),
+            Ok(PlaylistPath("music".to_string()))
+        );
     }
 
     #[test]
-    fn it_should_accept_a_valid_multi_segment_path() {
-        let path = PlaylistPath::new("a/b/c").unwrap();
-        assert_eq!(path.as_str(), "a/b/c");
+    fn it_should_accept_a_multi_segment_path() {
+        assert_eq!(
+            PlaylistPath::new("a/b/c"),
+            Ok(PlaylistPath("a/b/c".to_string()))
+        );
     }
 
     #[test]
     fn it_should_reject_an_empty_path() {
-        assert!(PlaylistPath::new("").is_err());
-        assert!(PlaylistPath::new("   ").is_err());
+        assert_eq!(
+            PlaylistPath::new(""),
+            Err(error("Playlist path must not be empty"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_blank_path() {
+        assert_eq!(
+            PlaylistPath::new("   "),
+            Err(error("Playlist path must not be empty"))
+        );
     }
 
     #[test]
     fn it_should_reject_an_absolute_path() {
-        assert!(PlaylistPath::new("/a/b").is_err());
-    }
-
-    #[test]
-    fn it_should_reject_a_path_containing_a_parent_traversal_segment() {
-        assert!(PlaylistPath::new("a/../b").is_err());
-        assert!(PlaylistPath::new("..").is_err());
+        assert_eq!(
+            PlaylistPath::new("/a/b"),
+            Err(error("Playlist path must not be an absolute path"))
+        );
     }
 
     #[test]
     fn it_should_reject_a_path_with_an_empty_segment() {
-        assert!(PlaylistPath::new("a//b").is_err());
-        assert!(PlaylistPath::new("a/b/").is_err());
+        assert_eq!(
+            PlaylistPath::new("a//b"),
+            Err(error("Playlist path must not contain empty segments"))
+        );
     }
 
     #[test]
-    fn it_should_reject_a_path_with_filesystem_unsafe_characters() {
-        assert!(PlaylistPath::new("a\\b").is_err());
-        assert!(PlaylistPath::new("a:b").is_err());
+    fn it_should_reject_a_path_with_a_trailing_slash() {
+        assert_eq!(
+            PlaylistPath::new("a/b/"),
+            Err(error("Playlist path must not contain empty segments"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_containing_a_parent_traversal_segment() {
+        assert_eq!(
+            PlaylistPath::new("a/../b"),
+            Err(error("Playlist path must not contain \"..\" segments"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_that_is_a_parent_traversal_segment() {
+        assert_eq!(
+            PlaylistPath::new(".."),
+            Err(error("Playlist path must not contain \"..\" segments"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_with_a_backslash() {
+        assert_eq!(
+            PlaylistPath::new("a\\b"),
+            Err(error(UNSAFE_CHARACTERS_MESSAGE))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_with_a_colon() {
+        assert_eq!(
+            PlaylistPath::new("a:b"),
+            Err(error(UNSAFE_CHARACTERS_MESSAGE))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_with_a_wildcard() {
+        assert_eq!(
+            PlaylistPath::new("music/*"),
+            Err(error(UNSAFE_CHARACTERS_MESSAGE))
+        );
+    }
+
+    fn error(message: &str) -> ValidationError {
+        ValidationError(message.to_string())
     }
 }

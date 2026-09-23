@@ -61,7 +61,8 @@ src/
 ```
 
 - We prefer not generic names: not `entity.rs`, not `value_objects.rs`, not `ports.rs`. A file is named after the single type/concept it holds (`user.rs` holds `User`, `user_id.rs` holds `UserId`).
-- `errors.rs` is the one deliberately generic name: every error type for an aggregate (validation errors, use-case error enums) lives together in one file, not scattered across the files that raise them.
+- `errors.rs` is the one deliberately generic name: every error type for an aggregate (use-case error enums) lives together in one file, not scattered across the files that raise them.
+- Every value object constructor fails with the single shared `ValidationError(String)` (`domain/shared/errors.rs`), never a per-VO error type. The application layer maps it once (e.g. `impl From<ValidationError> for ApiError` → 400), so handlers build VOs with a plain `?`.
 - Every value object gets its own file. Don't bundle multiple value objects into one "value objects" file.
 - A port is named after the concept it fronts, not the one method it happens to expose (`WidgetRepository`, not `WidgetLookup`, even if today it only has an `exists` method). "Repository" is used loosely for "adapter implementing a domain port," not strictly persistence.
 - `infrastructure/repositories/` files are named `<implementation>_<port>.rs` (`sqlite_playlist_repository.rs` implements `PlaylistRepository` with SQLite, `youtube_video_downloader_repository.rs` implements `VideoDownloaderRepository` against YouTube/`yt-dlp`). The prefix signals which technology backs the port. `infrastructure/shared/` and `infrastructure/client/` files are named after the port/thing itself, not this convention, since they aren't per-aggregate repositories.
@@ -81,6 +82,8 @@ This tests the domain logic and the validations at application level. We will pl
 
 The fakes will be hand-written and will be as simple as possible, they will not use any mocking library. The fakes will be state-based, for example a fake repository backed by a `Mutex<Vec<Entity>>`.
 Ideally we should not have tests in domain folder as all logic there is tested from application layer tests. There could be exceptions for very complex domain logic that is hard to test from application layer, but this should be the exception and not the rule.
+
+**Value objects are the deliberate exception.** Each value object's validation rules are tested exhaustively in its own file (every accepted and rejected input, asserting the exact `Ok(vo)` / `Err(ValidationError(message))`). Application-layer tests must not repeat those rules: per endpoint, one invalid-value test proves the `ValidationError` → 4XX mapping, plus tests for the adapter's own checks (e.g. a required field missing from the request). Services take value objects as parameters, so the type system already guarantees a handler validates before calling the domain.
 
 Clock and Domain Event Publisher are treated like ports, so we will use fakes for them too. The fake clock will be a simple `Mutex<Instant>` and the fake domain event publisher will be a `Mutex<Vec<DomainEvent>>`.
 

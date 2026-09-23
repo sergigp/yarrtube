@@ -112,8 +112,10 @@ mod tests {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         let channel_repository = Arc::new(FakeChannelRepository::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
-        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
-        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+        let channel_video_repository =
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
         let task_repository = Arc::new(FakeTaskRepository::default());
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let clock = Arc::new(FixedClock(fixed_timestamp()));

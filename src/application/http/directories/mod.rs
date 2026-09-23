@@ -17,7 +17,7 @@ pub async fn list_directories(
 ) -> Result<Json<DirectoryResponse>, ApiError> {
     let path = match query.path {
         None => DirectoryPath::root(),
-        Some(path) => DirectoryPath::new(path).map_err(ApiError::bad_request)?,
+        Some(path) => DirectoryPath::new(path)?,
     };
 
     match run_blocking(move || directory_searcher.list(&path)).await? {
@@ -38,7 +38,10 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_the_videos_roots_subdirectories_on_a_request_without_a_path() {
-        let response = list(seeded_root(), None).await;
+        let directory_searcher = DirectorySearcher::new(Arc::new(seeded_root()));
+        let query = ListDirectoriesQuery { path: None };
+
+        let response = list(directory_searcher, query).await;
 
         assert_eq!(
             response,
@@ -48,21 +51,35 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_a_nested_directorys_subdirectories() {
-        let response = list(seeded_root(), Some("playlists")).await;
+        let directory_searcher = DirectorySearcher::new(Arc::new(seeded_root()));
+        let query = ListDirectoriesQuery {
+            path: Some("playlists".to_string()),
+        };
+
+        let response = list(directory_searcher, query).await;
 
         assert_eq!(response, Ok(directory_response("playlists", &["music"])));
     }
 
     #[tokio::test]
     async fn it_should_return_an_empty_entry_list_on_a_directory_with_no_subdirectories() {
-        let response = list(seeded_root(), Some("channels")).await;
+        let directory_searcher = DirectorySearcher::new(Arc::new(seeded_root()));
+        let query = ListDirectoriesQuery {
+            path: Some("channels".to_string()),
+        };
+
+        let response = list(directory_searcher, query).await;
 
         assert_eq!(response, Ok(directory_response("channels", &[])));
     }
 
     #[tokio::test]
-    async fn it_should_return_bad_request_on_a_path_with_a_parent_traversal_segment() {
-        let response = list(seeded_root(), Some("playlists/../..")).await;
+    async fn it_should_return_bad_request_on_an_invalid_path() {
+        let query = ListDirectoriesQuery {
+            path: Some("playlists/../..".to_string()),
+        };
+
+        let response = list(any_directory_searcher(), query).await;
 
         assert_eq!(
             response,
@@ -73,20 +90,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_bad_request_on_an_absolute_path() {
-        let response = list(seeded_root(), Some("/etc")).await;
-
-        assert_eq!(
-            response,
-            Err(ApiError::bad_request(
-                "Directory path must not be an absolute path"
-            ))
-        );
-    }
-
-    #[tokio::test]
     async fn it_should_return_not_found_on_a_path_the_repository_cannot_list() {
-        let response = list(seeded_root(), Some("does-not-exist")).await;
+        let directory_searcher = DirectorySearcher::new(Arc::new(seeded_root()));
+        let query = ListDirectoriesQuery {
+            path: Some("does-not-exist".to_string()),
+        };
+
+        let response = list(directory_searcher, query).await;
 
         assert_eq!(
             response,
@@ -99,11 +109,12 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_internal_server_error_on_a_repository_failure() {
-        let response = list(
+        let directory_searcher = DirectorySearcher::new(Arc::new(
             FakeDirectoryRepository::failing("the videos root is unreadable"),
-            None,
-        )
-        .await;
+        ));
+        let query = ListDirectoriesQuery { path: None };
+
+        let response = list(directory_searcher, query).await;
 
         assert_eq!(
             response,
@@ -111,19 +122,17 @@ mod tests {
         );
     }
 
-    async fn list(
-        repository: FakeDirectoryRepository,
-        path: Option<&str>,
-    ) -> Result<DirectoryResponse, ApiError> {
-        list_directories(
-            State(DirectorySearcher::new(Arc::new(repository))),
-            State(VideosRoot(VIDEOS_ROOT.to_string())),
-            Query(ListDirectoriesQuery {
-                path: path.map(str::to_string),
-            }),
-        )
-        .await
-        .map(|Json(directory)| directory)
+    /// A searcher for tests whose request is rejected before reaching it.
+    fn any_directory_searcher() -> DirectorySearcher {
+        DirectorySearcher::new(Arc::new(FakeDirectoryRepository::with_directories(&[])))
+    }
+
+    fn seeded_root() -> FakeDirectoryRepository {
+        FakeDirectoryRepository::with_directories(&[
+            ("", &["channels", "playlists"]),
+            ("playlists", &["music"]),
+            ("channels", &[]),
+        ])
     }
 
     fn directory_response(path: &str, entries: &[&str]) -> DirectoryResponse {
@@ -139,11 +148,16 @@ mod tests {
         }
     }
 
-    fn seeded_root() -> FakeDirectoryRepository {
-        FakeDirectoryRepository::with_directories(&[
-            ("", &["channels", "playlists"]),
-            ("playlists", &["music"]),
-            ("channels", &[]),
-        ])
+    async fn list(
+        directory_searcher: DirectorySearcher,
+        query: ListDirectoriesQuery,
+    ) -> Result<DirectoryResponse, ApiError> {
+        list_directories(
+            State(directory_searcher),
+            State(VideosRoot(VIDEOS_ROOT.to_string())),
+            Query(query),
+        )
+        .await
+        .map(|Json(directory)| directory)
     }
 }

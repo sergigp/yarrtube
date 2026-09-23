@@ -21,12 +21,10 @@ pub async fn create_playlist(
     State(playlist_creator): State<PlaylistCreator>,
     Json(request): Json<CreatePlaylistRequest>,
 ) -> Result<(StatusCode, Json<PlaylistResponse>), ApiError> {
-    let id = PlaylistId::from_url_or_id(request.playlist).map_err(ApiError::bad_request)?;
-    let name = PlaylistName::new(request.name).map_err(ApiError::bad_request)?;
-    let path =
-        PlaylistPath::new(required(request.path, MISSING_PATH)?).map_err(ApiError::bad_request)?;
-    let quality =
-        Quality::new(required(request.quality, MISSING_QUALITY)?).map_err(ApiError::bad_request)?;
+    let id = PlaylistId::from_url_or_id(request.playlist)?;
+    let name = PlaylistName::new(request.name)?;
+    let path = PlaylistPath::new(required(request.path, MISSING_PATH)?)?;
+    let quality = Quality::new(required(request.quality, MISSING_QUALITY)?)?;
 
     let outcome = run_blocking(move || playlist_creator.create(id, name, path, quality)).await?;
 
@@ -48,7 +46,7 @@ pub async fn delete_playlist(
     State(playlist_deleter): State<PlaylistDeleter>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let id = PlaylistId::new(id).map_err(ApiError::bad_request)?;
+    let id = PlaylistId::new(id)?;
 
     match run_blocking(move || playlist_deleter.delete(id)).await? {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
@@ -61,7 +59,7 @@ pub async fn reconcile_playlist(
     State(video_reconciler): State<VideoReconciler>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let id = PlaylistId::new(id).map_err(ApiError::bad_request)?;
+    let id = PlaylistId::new(id)?;
 
     run_blocking(move || video_reconciler.force_reconcile(id))
         .await?
@@ -467,7 +465,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_delete_every_video_record_for_a_deleted_youtube_linked_playlist() {
         let video_repository = Arc::new(FakeVideoRepository::default());
-        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         video_repository.save(&video).unwrap();
         playlist_video_repository
@@ -548,8 +547,8 @@ mod tests {
             .unwrap();
         let (deleter, event_publisher) = playlist_deleter_with_videos(
             repository_with(&[playlist("PL1", "music/chill")]),
-            video_repository,
-            Arc::new(FakePlaylistVideoRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository)),
         );
 
         delete(deleter, "PL1").await.unwrap();
@@ -568,7 +567,7 @@ mod tests {
         )
         .handle(&playlist_deleted_payload)
         .unwrap();
-        let (task, _run_at) = subscriber_task_repository.scheduled.lock().unwrap()[0].clone();
+        let (task, _run_at) = subscriber_task_repository.scheduled()[0].clone();
         DeletePlaylistFilesTask::new(VideoFileDeleter::new(
             Arc::new(FilesystemVideoFileRepository),
             videos_root.to_str().unwrap(),
@@ -603,7 +602,7 @@ mod tests {
             .map(|video| video.youtube_id.as_str().to_string())
             .collect();
         assert_eq!(stored_youtube_ids, vec!["vid1"]);
-        assert_eq!(*task_repository.scheduled.lock().unwrap(), vec![]);
+        assert_eq!(task_repository.scheduled(), vec![]);
     }
 
     #[tokio::test]
@@ -615,7 +614,7 @@ mod tests {
             reconcile(reconciler.clone(), "PL1").await.unwrap();
         }
 
-        assert_eq!(*task_repository.scheduled.lock().unwrap(), vec![]);
+        assert_eq!(task_repository.scheduled(), vec![]);
     }
 
     #[tokio::test]
@@ -633,7 +632,7 @@ mod tests {
         reconcile(reconciler, "PL1").await.unwrap();
 
         assert_eq!(
-            *task_repository.scheduled.lock().unwrap(),
+            task_repository.scheduled(),
             vec![(existing_task, existing_run_at)]
         );
     }
@@ -647,7 +646,7 @@ mod tests {
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(*video_repository.videos.lock().unwrap(), vec![]);
-        assert_eq!(*task_repository.scheduled.lock().unwrap(), vec![]);
+        assert_eq!(task_repository.scheduled(), vec![]);
     }
 
     #[tokio::test]
@@ -690,10 +689,11 @@ mod tests {
     fn playlist_deleter(
         repository: FakePlaylistRepository,
     ) -> (PlaylistDeleter, Arc<FakeEventPublisher>) {
+        let video_repository = Arc::new(FakeVideoRepository::default());
         playlist_deleter_with_videos(
             repository,
-            Arc::new(FakeVideoRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository)),
         )
     }
 
@@ -730,7 +730,7 @@ mod tests {
         let reconciler = VideoReconciler::new(
             Arc::new(repository),
             video_repository.clone(),
-            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
             Arc::new(FakeYoutubePlaylistItemsRepository {
                 videos: Mutex::new(playlist_items),
             }),

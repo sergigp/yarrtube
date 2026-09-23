@@ -103,51 +103,86 @@ fn extension_from_content_type(content_type: Option<&str>) -> &'static str {
     }
 }
 
+/// State-based stand-in for the avatars directory: the avatar files it
+/// holds, each with the URL it was downloaded from. `store` writes
+/// `<handle>.jpg` unless the fake is built to model an unavailable avatar
+/// (`Ok(None)`) or a systemic failure (`Err`).
 #[cfg(test)]
-#[derive(Default)]
 pub struct FakeChannelAvatarRepository {
-    pub(crate) store_result: std::sync::Mutex<Option<anyhow::Result<Option<String>>>>,
-    pub(crate) stored_calls: std::sync::Mutex<Vec<(ChannelHandle, String)>>,
-    pub(crate) deleted_calls: std::sync::Mutex<Vec<String>>,
+    avatars: std::sync::Mutex<Vec<(String, String)>>,
+    download: FakeAvatarDownload,
+}
+
+#[cfg(test)]
+enum FakeAvatarDownload {
+    Succeeds,
+    Unavailable,
+    Fails,
+}
+
+#[cfg(test)]
+impl Default for FakeChannelAvatarRepository {
+    fn default() -> Self {
+        Self::with_avatars(&[])
+    }
 }
 
 #[cfg(test)]
 impl FakeChannelAvatarRepository {
-    pub fn with_stored_filename(filename: &str) -> Self {
+    /// Seeds the directory with `(filename, source_url)` avatar files.
+    pub fn with_avatars(avatars: &[(&str, &str)]) -> Self {
         Self {
-            store_result: std::sync::Mutex::new(Some(Ok(Some(filename.to_string())))),
-            stored_calls: std::sync::Mutex::new(Vec::new()),
-            deleted_calls: std::sync::Mutex::new(Vec::new()),
+            avatars: std::sync::Mutex::new(
+                avatars
+                    .iter()
+                    .map(|(filename, url)| (filename.to_string(), url.to_string()))
+                    .collect(),
+            ),
+            download: FakeAvatarDownload::Succeeds,
         }
     }
 
-    pub fn with_no_avatar() -> Self {
+    pub fn unavailable() -> Self {
         Self {
-            store_result: std::sync::Mutex::new(Some(Ok(None))),
-            stored_calls: std::sync::Mutex::new(Vec::new()),
-            deleted_calls: std::sync::Mutex::new(Vec::new()),
+            download: FakeAvatarDownload::Unavailable,
+            ..Self::default()
         }
+    }
+
+    pub fn failing() -> Self {
+        Self {
+            download: FakeAvatarDownload::Fails,
+            ..Self::default()
+        }
+    }
+
+    /// Every avatar file currently stored, as `(filename, source_url)`.
+    pub fn avatars(&self) -> Vec<(String, String)> {
+        self.avatars.lock().unwrap().clone()
     }
 }
 
 #[cfg(test)]
 impl ChannelAvatarRepository for FakeChannelAvatarRepository {
     fn store(&self, handle: &ChannelHandle, url: &str) -> anyhow::Result<Option<String>> {
-        self.stored_calls
-            .lock()
-            .unwrap()
-            .push((handle.clone(), url.to_string()));
-        match self.store_result.lock().unwrap().take() {
-            Some(result) => result,
-            None => Ok(None),
+        match self.download {
+            FakeAvatarDownload::Unavailable => Ok(None),
+            FakeAvatarDownload::Fails => anyhow::bail!("avatars directory is not writable"),
+            FakeAvatarDownload::Succeeds => {
+                let filename = format!("{}.jpg", handle.as_str());
+                let mut avatars = self.avatars.lock().unwrap();
+                avatars.retain(|(stored, _)| *stored != filename);
+                avatars.push((filename.clone(), url.to_string()));
+                Ok(Some(filename))
+            }
         }
     }
 
     fn delete(&self, filename: &str) -> anyhow::Result<()> {
-        self.deleted_calls
+        self.avatars
             .lock()
             .unwrap()
-            .push(filename.to_string());
+            .retain(|(stored, _)| stored != filename);
         Ok(())
     }
 }

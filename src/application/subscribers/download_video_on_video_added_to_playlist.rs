@@ -121,7 +121,7 @@ mod tests {
             .handle(r#"{"playlist_id": "PL1", "video_id": "rec1"}"#)
             .unwrap();
 
-        let scheduled = task_repository.scheduled.lock().unwrap();
+        let scheduled = task_repository.scheduled();
         assert_eq!(
             *scheduled,
             vec![(
@@ -145,7 +145,7 @@ mod tests {
             .handle(r#"{"playlist_id": "", "video_id": "rec1"}"#)
             .unwrap();
 
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -158,6 +158,6 @@ mod tests {
             .handle(r#"{"playlist_id": "PL404", "video_id": "rec1"}"#)
             .unwrap();
 
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 }

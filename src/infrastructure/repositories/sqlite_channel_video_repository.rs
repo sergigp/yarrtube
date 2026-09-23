@@ -6,6 +6,9 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::Mutex;
 
+#[cfg(test)]
+use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+
 pub trait ChannelVideoRepository: Send + Sync {
     /// Insert-or-replace keyed by `(channel_id, video_id)`.
     fn save(&self, channel_video: &ChannelVideo) -> anyhow::Result<()>;
@@ -208,23 +211,31 @@ fn columns_to_channel_video(columns: Columns) -> anyhow::Result<ChannelVideo> {
 }
 
 #[cfg(test)]
-#[derive(Default)]
 pub struct FakeChannelVideoRepository {
     pub(crate) channel_videos: Mutex<Vec<ChannelVideo>>,
-    #[allow(clippy::type_complexity)]
-    pub(crate) youtube_ids: Mutex<std::collections::HashMap<String, VideoId>>,
+    /// The `videos` table this fake joins against, mirroring the SQL
+    /// implementation's join when resolving a YouTube video ID.
+    video_repository: std::sync::Arc<FakeVideoRepository>,
 }
 
 #[cfg(test)]
 impl FakeChannelVideoRepository {
-    /// Test-only bookkeeping mirroring the SQL implementation's join with
-    /// `videos`: lets the fake resolve `find_by_youtube_video` without a
-    /// real `VideoRepository` alongside it.
-    pub fn register_youtube_id(&self, video_id: &VideoRecordId, youtube_video_id: &VideoId) {
-        self.youtube_ids
+    pub fn new(video_repository: std::sync::Arc<FakeVideoRepository>) -> Self {
+        Self {
+            channel_videos: Mutex::new(Vec::new()),
+            video_repository,
+        }
+    }
+
+    fn is_youtube_video(&self, channel_video: &ChannelVideo, youtube_video_id: &VideoId) -> bool {
+        self.video_repository
+            .videos
             .lock()
             .unwrap()
-            .insert(video_id.as_str().to_string(), youtube_video_id.clone());
+            .iter()
+            .any(|video| {
+                video.id == channel_video.video_id && video.youtube_id == *youtube_video_id
+            })
     }
 }
 
@@ -247,16 +258,12 @@ impl ChannelVideoRepository for FakeChannelVideoRepository {
         channel_id: &ChannelHandle,
         youtube_video_id: &VideoId,
     ) -> anyhow::Result<Option<ChannelVideo>> {
-        let youtube_ids = self.youtube_ids.lock().unwrap();
         Ok(self
             .channel_videos
             .lock()
             .unwrap()
             .iter()
-            .find(|cv| {
-                cv.channel_id == *channel_id
-                    && youtube_ids.get(cv.video_id.as_str()) == Some(youtube_video_id)
-            })
+            .find(|cv| cv.channel_id == *channel_id && self.is_youtube_video(cv, youtube_video_id))
             .cloned())
     }
 
@@ -284,10 +291,8 @@ impl ChannelVideoRepository for FakeChannelVideoRepository {
     }
 
     fn delete(&self, channel_id: &ChannelHandle, youtube_video_id: &VideoId) -> anyhow::Result<()> {
-        let youtube_ids = self.youtube_ids.lock().unwrap();
         self.channel_videos.lock().unwrap().retain(|cv| {
-            !(cv.channel_id == *channel_id
-                && youtube_ids.get(cv.video_id.as_str()) == Some(youtube_video_id))
+            !(cv.channel_id == *channel_id && self.is_youtube_video(cv, youtube_video_id))
         });
         Ok(())
     }
