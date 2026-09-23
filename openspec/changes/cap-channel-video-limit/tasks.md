@@ -7,7 +7,7 @@ Follow `/rust-architect` conventions for every Rust task (value object rules are
 
 ## 2. Persistence Boundary
 
-- [ ] 2.1 Add `it_should_round_trip_the_maximum_video_limit` to `src/infrastructure/repositories/sqlite_channel_repository.rs`: insert a channel with `VideoLimit::new(1000)` into the in-memory SQLite repository and assert `find` returns the whole channel unchanged. Verify the test passes.
+- [x] 2.1 Add `it_should_round_trip_the_maximum_video_limit` to `src/infrastructure/repositories/sqlite_channel_repository.rs`: insert a channel with `VideoLimit::new(1000)` into the in-memory SQLite repository and assert `find` returns the whole channel unchanged. Verify the test passes.
 
 ## 3. HTTP
 
