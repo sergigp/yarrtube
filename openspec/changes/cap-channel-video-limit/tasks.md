@@ -11,7 +11,7 @@ Follow `/rust-architect` conventions for every Rust task (value object rules are
 
 ## 3. HTTP
 
-- [ ] 3.1 Confirm `src/application/http/channels/mod.rs` needs no handler change: the `?` on `VideoLimit::new` already maps `ValidationError` to 400. Verify `cargo test http::channels` passes unchanged. Add no handler test for the range, since the value object covers it.
+- [x] 3.1 Confirm `src/application/http/channels/mod.rs` needs no handler change: the `?` on `VideoLimit::new` already maps `ValidationError` to 400. Verify `cargo test http::channels` passes unchanged. Add no handler test for the range, since the value object covers it.
 
 ## 4. Web UI
 
