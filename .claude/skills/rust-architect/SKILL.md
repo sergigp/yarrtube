@@ -39,8 +39,10 @@ src/
       <use_case>.rs         # one domain service per use case, e.g. widget_creator.rs
   application/              # every external entry point (adapters), one subfolder per interface
     http/  (or grpc/, etc.)
-      mod.rs                 # AppState + router wiring only
-      error.rs               # shared response-mapping helpers
+      mod.rs                 # AppState + router wiring only (+ the route smoke test)
+      error.rs               # ApiError + From<ValidationError>
+      blocking.rs            # run_blocking
+      validation.rs          # required() + shared missing-field messages
       <resource>/
         mod.rs                # handlers only
         dto.rs                # request/response wire types + From<Domain> conversions
@@ -72,6 +74,14 @@ src/
 - **Fn ordering**: within any `impl` block, and among free functions in a file, order is: `new` (if it exists), then every `pub` method or trait-impl method (trait-impl methods are the type's public surface even without the `pub` keyword), then private/helper methods. This applies uniformly, no exceptions — including repositories' `row_to_*` mapping helpers, which go after the trait-impl methods they support, not before.
 - Domain services are call-agnostic: they know nothing about HTTP, CLI, subscribers, or tasks. Adapting any external trigger into a domain call — parsing/validating input, invoking the domain service, mapping its result back — is the application layer's sole responsibility.
 
+## HTTP Handlers
+
+- A handler extracts only the service(s) it uses (`State<PlaylistCreator>`), never the whole `AppState`. `AppState` derives `FromRef` so axum resolves the sub-state.
+- Handlers return typed results, never an opaque `Response`: `Result<(StatusCode, Json<T>), ApiError>` when the status varies, `Result<Json<T>, ApiError>` for a plain 200, `Result<StatusCode, ApiError>` for bodiless responses.
+- Every failure is an `ApiError` (status + message, rendered as `{"error": ...}`). Input is validated with `?` only: VOs via `From<ValidationError>`, missing fields via `required(request.field, MISSING_X)?` (`http/validation.rs`).
+- Domain errors are mapped explicitly per variant (`Err(e @ CreateChannelError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e))`), no catch-all arm. A mapping repeated across handlers gets one small function.
+- Every service call goes through `run_blocking` (`http/blocking.rs`), since services are synchronous (SQLite, blocking HTTP). Don't judge per call whether it's needed.
+
 # Testing
 
 Tests are classified by **where they enter the code**, not by what they fake. Our goal is to couple our tests as much as possible to behaviour instead of implementation, so we can refactor the code without breaking the tests.
@@ -85,9 +95,20 @@ Acceptance and behaviour tests follow the same rules for persistence and test do
 
 ## Acceptance Tests
 
-This tests the domain logic and the validations at application level. We will place this tests in application (for example in http controllers or event subscribers) and the test will be the type of "I receive this HTTP request and I expect this response and these collateral effects". We will send HTTP requests and assert HTTP responses and the final state of the repositories. In the case of event subscribers we will send events and assert the final state of the repositories. Very similar for Tasks, we will create tasks and assert the final state of the repositories.
+This tests the domain logic and the validations at application level. We will place this tests in application (for example in http controllers or event subscribers) and the test will be the type of "I receive this request and I expect this response and these collateral effects". In the case of event subscribers we will send events and assert the final state of the repositories. Very similar for Tasks, we will create tasks and assert the final state of the repositories.
 
-Tests whose request is rejected before reaching the service (validation 4XX) don't need a database: their `any_<service>()` helper builds repositories on an unmigrated in-memory connection (`Connection::open_in_memory()`), so a request that wrongly got through fails loudly instead of passing.
+HTTP acceptance tests call the handler function directly with only the service it uses, not through a `Router`. A small helper per handler unwraps the `Json` (`create(service, request) -> Result<(StatusCode, ChannelResponse), ApiError>`). Route wiring is covered once, by the smoke test on `api_router`.
+
+Every test has the same 7 steps, top to bottom and inline: `TestDatabase` + repositories/fakes → seed them → build the service with `Service::new(..)` → build the request → call the handler → assert the response → assert side effects (repositories, outbox events, scheduled tasks, fake state).
+
+- No fixture structs that bundle fakes/repositories and no `service()` → `service_with()` builder chains. They hide which dependencies a test uses and make it easy to skip asserting them. The one allowed exception is a constructor helper for a service with many ports no test observes: it takes the asserted repositories as parameters and fills in the rest (`channel_video_reconciler(&db, channel_repository, ..)`).
+- Assert whole typed values in one `assert_eq!`: `Ok((StatusCode::CREATED, some_channel_response()))`, `Err(ApiError::bad_request("<exact message>"))`, `repository.list().unwrap() == vec![..]`. Never field by field, never `len()`, never raw JSON (that only re-tests serde).
+- Requests and expected values are built from a valid default overridden with struct update syntax (`CreateChannelRequest { quality: None, ..create_request("@x") }`).
+- Seed state directly into repositories, never by calling another handler: a test only exercises the handler it names.
+- DTO mapping is covered through handler responses, not with standalone DTO tests.
+- Module layout: imports, then every `it_should_*` test, then helpers.
+
+Tests whose request is rejected before reaching the service (validation 4XX) assert the response only and don't need a database: their `any_<service>()` helper builds repositories on an unmigrated in-memory connection (`Connection::open_in_memory()`), so a request that wrongly got through fails loudly instead of passing.
 
 ## Behaviour Tests
 
