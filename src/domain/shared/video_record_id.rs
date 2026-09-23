@@ -1,4 +1,4 @@
-use super::errors::VideoRecordIdError;
+use super::errors::ValidationError;
 use std::fmt;
 use uuid::Uuid;
 
@@ -17,10 +17,10 @@ impl VideoRecordId {
 
     /// Parses a surrogate ID as stored (or as supplied by a caller that
     /// already has one, e.g. a task payload).
-    pub fn new(id: impl Into<String>) -> Result<Self, VideoRecordIdError> {
+    pub fn new(id: impl Into<String>) -> Result<Self, ValidationError> {
         let id = id.into();
         if id.trim().is_empty() {
-            return Err(VideoRecordIdError(
+            return Err(ValidationError(
                 "Video record ID must not be empty".to_string(),
             ));
         }
@@ -44,21 +44,37 @@ mod tests {
 
     #[test]
     fn it_should_generate_distinct_ids() {
-        let a = VideoRecordId::new_generated();
-        let b = VideoRecordId::new_generated();
-
-        assert_ne!(a, b);
+        assert_ne!(
+            VideoRecordId::new_generated(),
+            VideoRecordId::new_generated()
+        );
     }
 
     #[test]
     fn it_should_accept_a_non_empty_id() {
-        let id = VideoRecordId::new("rec1").unwrap();
-        assert_eq!(id.as_str(), "rec1");
+        assert_eq!(
+            VideoRecordId::new("rec1"),
+            Ok(VideoRecordId("rec1".to_string()))
+        );
     }
 
     #[test]
     fn it_should_reject_an_empty_id() {
-        assert!(VideoRecordId::new("").is_err());
-        assert!(VideoRecordId::new("   ").is_err());
+        assert_eq!(
+            VideoRecordId::new(""),
+            Err(ValidationError(
+                "Video record ID must not be empty".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_blank_id() {
+        assert_eq!(
+            VideoRecordId::new("   "),
+            Err(ValidationError(
+                "Video record ID must not be empty".to_string()
+            ))
+        );
     }
 }

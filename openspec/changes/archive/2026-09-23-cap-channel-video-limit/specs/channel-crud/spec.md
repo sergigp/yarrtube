@@ -1,8 +1,4 @@
-## Purpose
-
-Lets a caller create, delete, and list the YouTube channels the daemon tracks by handle, so a future sync capability has a persisted set of channels to poll for new uploads.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Create Channel
 The system SHALL provide an HTTP endpoint that creates a channel given a `channel` value that is either a YouTube channel handle (e.g. `@somechannel`) or a YouTube channel URL carrying a handle (e.g. `https://www.youtube.com/@somechannel`), a quality tier (`high`, `mid`, or `low`), a video limit that is an integer from 1 to 1000 inclusive, the number of the channel's most recent videos to keep synced, and a storage path. The system SHALL extract the handle from the `channel` value when it is a URL, resolve that handle against the YouTube Data API to confirm it corresponds to an existing, accessible channel and to obtain that channel's immutable YouTube channel ID and display title, and store the channel with the handle as its ID, the resolved title as its name, the resolved immutable channel ID, the quality, the video limit, the path, and a system-generated creation timestamp.
@@ -74,58 +70,3 @@ The storage path identifies where the channel's videos are saved, relative to th
 #### Scenario: Missing or invalid path
 - **WHEN** a request omits path, supplies an empty path, or supplies a path that is absolute, contains a `..` segment, or contains an empty segment (e.g. leading/trailing/doubled `/`)
 - **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request with a meaningful error description
-
-### Requirement: Delete Channel
-The system SHALL provide an HTTP endpoint that deletes a previously created channel identified by its handle.
-
-#### Scenario: Successful deletion
-- **WHEN** a request identifies a channel handle that exists in storage
-- **THEN** the system removes it and confirms the deletion
-
-#### Scenario: Deleting a nonexistent channel
-- **WHEN** a request identifies a channel handle that does not exist in storage
-- **THEN** the system reports that nothing was found, makes no change to storage, and returns a bad request with a meaningful error description
-
-### Requirement: List Channels
-The system SHALL provide an HTTP endpoint that returns every currently stored channel.
-
-#### Scenario: Channels exist
-- **WHEN** one or more channels have been created
-- **THEN** the system returns all of them, each with its handle, name, immutable YouTube channel ID, quality, video limit, path, creation timestamp, and avatar filename (when present)
-
-#### Scenario: No channels exist
-- **WHEN** no channels have been created
-- **THEN** the system returns an empty list rather than an error
-
-### Requirement: Channel Avatar Is Recorded
-The system SHALL record, on the channel itself, the local filename of its downloaded avatar image, whenever one was successfully resolved and downloaded during channel creation. A channel whose avatar could not be resolved or downloaded SHALL have no recorded avatar filename.
-
-#### Scenario: Channel created with an avatar
-- **WHEN** channel creation resolves and downloads an avatar image for the channel
-- **THEN** the channel's recorded avatar filename becomes the local filename of that image
-
-#### Scenario: Channel created without an avatar
-- **WHEN** channel creation does not obtain an avatar image, whether because none was available or because downloading it failed
-- **THEN** the channel has no recorded avatar filename
-
-### Requirement: Channel Creation Publishes a Domain Event
-The system SHALL publish a ChannelCreated domain event, containing the channel's handle, whenever a channel is newly created — and SHALL NOT publish it when creation is a no-op because the channel already existed.
-
-#### Scenario: New channel created
-- **WHEN** a create-channel request results in a new channel being persisted
-- **THEN** the system publishes a ChannelCreated event containing that channel's handle
-
-#### Scenario: Channel already existed
-- **WHEN** a create-channel request identifies a handle that already exists in storage
-- **THEN** the system does not publish a ChannelCreated event
-
-### Requirement: Channel Deletion Publishes a Domain Event
-The system SHALL publish a ChannelDeleted domain event, containing the channel's handle, whenever a channel is successfully deleted.
-
-#### Scenario: Existing channel deleted
-- **WHEN** a delete-channel request successfully removes a channel from storage
-- **THEN** the system publishes a ChannelDeleted event containing that channel's handle
-
-#### Scenario: Deleting a nonexistent channel
-- **WHEN** a delete-channel request identifies a handle that does not exist in storage
-- **THEN** the system does not publish a ChannelDeleted event

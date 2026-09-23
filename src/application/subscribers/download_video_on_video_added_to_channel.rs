@@ -120,7 +120,7 @@ mod tests {
             .handle(r#"{"channel_id": "@somechannel", "video_id": "rec1"}"#)
             .unwrap();
 
-        let scheduled = task_repository.scheduled.lock().unwrap();
+        let scheduled = task_repository.scheduled();
         assert_eq!(
             *scheduled,
             vec![(
@@ -144,7 +144,7 @@ mod tests {
             .handle(r#"{"channel_id": "", "video_id": "rec1"}"#)
             .unwrap();
 
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -157,6 +157,6 @@ mod tests {
             .handle(r#"{"channel_id": "@missing", "video_id": "rec1"}"#)
             .unwrap();
 
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 }

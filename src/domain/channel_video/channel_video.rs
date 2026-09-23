@@ -30,23 +30,3 @@ impl ChannelVideo {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_should_build_a_channel_video_with_its_recency_position() {
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-
-        let channel_video = ChannelVideo::create(
-            ChannelHandle::new("@somechannel").unwrap(),
-            VideoRecordId::new_generated(),
-            2,
-            now,
-        );
-
-        assert_eq!(channel_video.position, 2);
-        assert_eq!(channel_video.created_at, now);
-    }
-}

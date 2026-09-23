@@ -245,6 +245,7 @@ export function AddDialog({ open, onOpenChange }) {
                         id="add-channel-video-limit"
                         type="number"
                         min="1"
+                        max="1000"
                         step="1"
                         value={channelForm.video_limit}
                         onChange={setChannelField('video_limit')}

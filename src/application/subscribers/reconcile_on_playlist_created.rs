@@ -65,8 +65,8 @@ mod tests {
         ));
         let video_reconciler = VideoReconciler::new(
             playlist_repository,
-            video_repository,
-            Arc::new(FakePlaylistVideoRepository::default()),
+            video_repository.clone(),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository)),
             Arc::new(FakeYoutubePlaylistItemsRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(FakeVideoMetadataRepository::default()),
@@ -89,7 +89,7 @@ mod tests {
 
         subscriber.handle(r#"{"playlist_id": ""}"#).unwrap();
 
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -113,9 +113,7 @@ mod tests {
 
         assert_eq!(
             task_repository
-                .scheduled
-                .lock()
-                .unwrap()
+                .scheduled()
                 .iter()
                 .map(|(task, _run_at)| task.clone())
                 .collect::<Vec<_>>(),

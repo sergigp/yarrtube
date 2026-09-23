@@ -1,153 +1,110 @@
 pub mod dto;
 
-use super::AppState;
-use super::error::error_response;
+use super::blocking::run_blocking;
+use super::error::ApiError;
+use super::validation::{MISSING_QUALITY, required};
 use crate::domain::channel::{
-    ChannelHandle, CreateChannelError, CreateChannelOutcome, DeleteChannelError, VideoLimit,
+    ChannelHandle, ChannelService, CreateChannelError, CreateChannelOutcome, DeleteChannelError,
+    VideoLimit,
 };
 use crate::domain::playlist::PlaylistPath;
+use crate::domain::services::ChannelVideoReconciler;
 use crate::domain::shared::Quality;
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
 use dto::{ChannelResponse, CreateChannelRequest};
 
+const MISSING_VIDEO_LIMIT: &str = "Video limit must be a positive integer (missing)";
+const MISSING_PATH: &str = "Channel path must not be empty";
+
 pub async fn create_channel(
-    State(state): State<AppState>,
+    State(channel_service): State<ChannelService>,
     Json(request): Json<CreateChannelRequest>,
-) -> Response {
-    let id = match ChannelHandle::from_url_or_handle(request.channel.unwrap_or_default()) {
-        Ok(id) => id,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
-    let quality = match request.quality {
-        None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "Quality must be one of \"high\", \"mid\", or \"low\" (missing)".to_string(),
-            );
-        }
-        Some(quality) => match Quality::new(quality) {
-            Ok(quality) => quality,
-            Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-        },
-    };
-    let video_limit = match request.video_limit {
-        None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "Video limit must be a positive integer (missing)".to_string(),
-            );
-        }
-        Some(video_limit) => match VideoLimit::new(video_limit) {
-            Ok(video_limit) => video_limit,
-            Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-        },
-    };
-    let path = match request.path {
-        None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "Channel path must not be empty".to_string(),
-            );
-        }
-        Some(path) => match PlaylistPath::new(path) {
-            Ok(path) => path,
-            Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-        },
-    };
+) -> Result<(StatusCode, Json<ChannelResponse>), ApiError> {
+    let id = ChannelHandle::from_url_or_handle(request.channel.unwrap_or_default())?;
+    let quality = Quality::new(required(request.quality, MISSING_QUALITY)?)?;
+    let video_limit = VideoLimit::new(required(request.video_limit, MISSING_VIDEO_LIMIT)?)?;
+    let path = PlaylistPath::new(required(request.path, MISSING_PATH)?)?;
 
-    let result = tokio::task::spawn_blocking(move || {
-        state
-            .channel_service
-            .create_channel(id, quality, video_limit, path)
-    })
-    .await;
+    let outcome =
+        run_blocking(move || channel_service.create_channel(id, quality, video_limit, path))
+            .await?;
 
-    match result {
-        Ok(Ok(CreateChannelOutcome::Created(channel))) => {
-            (StatusCode::CREATED, Json(ChannelResponse::from(channel))).into_response()
+    match outcome {
+        Ok(CreateChannelOutcome::Created(channel)) => {
+            Ok((StatusCode::CREATED, Json(ChannelResponse::from(channel))))
         }
-        Ok(Ok(CreateChannelOutcome::AlreadyExisted(channel))) => {
-            (StatusCode::OK, Json(ChannelResponse::from(channel))).into_response()
+        Ok(CreateChannelOutcome::AlreadyExisted(channel)) => {
+            Ok((StatusCode::OK, Json(ChannelResponse::from(channel))))
         }
-        Ok(Err(e @ CreateChannelError::YoutubeChannelNotFound(_))) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Ok(Err(e @ CreateChannelError::Lookup(_))) => {
-            error_response(StatusCode::BAD_GATEWAY, e.to_string())
-        }
-        Ok(Err(e @ CreateChannelError::Repository(_))) => {
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        }
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e @ CreateChannelError::YoutubeChannelNotFound(_)) => Err(ApiError::bad_request(e)),
+        Err(e @ CreateChannelError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e)),
+        Err(e @ CreateChannelError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
 
-pub async fn delete_channel(State(state): State<AppState>, Path(handle): Path<String>) -> Response {
-    let id = match ChannelHandle::new(handle) {
-        Ok(id) => id,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
+pub async fn delete_channel(
+    State(channel_service): State<ChannelService>,
+    Path(handle): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let id = ChannelHandle::new(handle)?;
 
-    match state.channel_service.delete_channel(id) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e @ DeleteChannelError::NotFound(_)) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Err(e @ DeleteChannelError::Repository(_)) => {
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        }
+    match run_blocking(move || channel_service.delete_channel(id)).await? {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(e @ DeleteChannelError::NotFound(_)) => Err(ApiError::bad_request(e)),
+        Err(e @ DeleteChannelError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
 
-pub async fn list_channels(State(state): State<AppState>) -> Response {
-    match state.channel_service.list_channels() {
-        Ok(channels) => {
-            let response: Vec<ChannelResponse> =
-                channels.into_iter().map(ChannelResponse::from).collect();
-            (StatusCode::OK, Json(response)).into_response()
-        }
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-    }
+pub async fn list_channels(
+    State(channel_service): State<ChannelService>,
+) -> Result<Json<Vec<ChannelResponse>>, ApiError> {
+    let channels = run_blocking(move || channel_service.list_channels())
+        .await?
+        .map_err(ApiError::internal)?;
+    Ok(Json(
+        channels.into_iter().map(ChannelResponse::from).collect(),
+    ))
 }
 
 pub async fn reconcile_channel(
-    State(state): State<AppState>,
+    State(channel_video_reconciler): State<ChannelVideoReconciler>,
     Path(handle): Path<String>,
-) -> Response {
-    let id = match ChannelHandle::new(handle) {
-        Ok(id) => id,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
+) -> Result<StatusCode, ApiError> {
+    let id = ChannelHandle::new(handle)?;
 
-    let result =
-        tokio::task::spawn_blocking(move || state.channel_video_reconciler.force_reconcile(id))
-            .await;
+    run_blocking(move || channel_video_reconciler.force_reconcile(id))
+        .await?
+        .map_err(ApiError::internal)?;
 
-    match result {
-        Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
-        Ok(Err(e)) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::http::api_router;
-    use crate::domain::channel::ChannelService;
-    use crate::domain::event::DomainEvent;
+    use crate::domain::channel::Channel;
+    use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::services::ThumbnailFetcher;
+    use crate::domain::shared::VideoId;
+    use crate::domain::video::Video;
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
-    use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
-    use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
-    use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
-    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
-    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
-    use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::{
+        ChannelRepository, SqliteChannelRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, SqliteChannelVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_task_repository::{
+        SqliteTaskRepository, TaskRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        SqliteVideoRepository, VideoRepository,
+    };
     use crate::infrastructure::repositories::youtube_channel_repository::{
         FakeYoutubeChannelRepository, ResolvedChannel, YoutubeChannelRepository,
     };
@@ -155,19 +112,937 @@ mod tests {
         ChannelVideoListing, FakeChannelVideosRepository,
     };
     use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
-    use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
-    use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
-
-    use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_repository::{
+        EventRepository, SqliteEventRepository,
+    };
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use axum::body::{Body, to_bytes};
-    use axum::http::Request;
     use chrono::{DateTime, Utc};
+    use rusqlite::Connection;
     use std::sync::Arc;
-    use tower::ServiceExt;
+
+    const AVATAR_URL: &str = "https://yt3.ggpht.com/avatar.jpg";
+    const OTHER_AVATAR_URL: &str = "https://yt3.ggpht.com/other-avatar.jpg";
+
+    #[tokio::test]
+    async fn it_should_return_201_and_store_the_channel_when_creating_a_new_channel_from_a_bare_handle()
+     {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(service, create_request("@somechannel")).await;
+
+        assert_eq!(response, Ok((StatusCode::CREATED, some_channel_response())));
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, channel_created("@somechannel"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_201_and_store_the_channel_when_creating_a_channel_from_a_url() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(
+            service,
+            create_request("https://www.youtube.com/@somechannel"),
+        )
+        .await;
+
+        assert_eq!(response, Ok((StatusCode::CREATED, some_channel_response())));
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, channel_created("@somechannel"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_store_the_avatar_and_record_its_filename_when_the_channel_has_an_avatar() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel_with_avatar())),
+            avatar_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(service, create_request("@somechannel")).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                ChannelResponse {
+                    avatar_filename: Some("@somechannel.jpg".to_string()),
+                    ..some_channel_response()
+                }
+            ))
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![Channel {
+                avatar_filename: Some("@somechannel.jpg".to_string()),
+                ..channel("@somechannel")
+            }]
+        );
+        assert_eq!(
+            avatar_repository.avatars(),
+            vec![("@somechannel.jpg".to_string(), AVATAR_URL.to_string())]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, channel_created("@somechannel"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_not_store_an_avatar_when_the_channel_has_none() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            avatar_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(service, create_request("@somechannel")).await;
+
+        assert_eq!(response, Ok((StatusCode::CREATED, some_channel_response())));
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+        assert_eq!(avatar_repository.avatars(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_not_record_an_avatar_filename_when_the_avatar_is_unavailable() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let avatar_repository = Arc::new(FakeChannelAvatarRepository::unavailable());
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel_with_avatar())),
+            avatar_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(service, create_request("@somechannel")).await;
+
+        assert_eq!(response, Ok((StatusCode::CREATED, some_channel_response())));
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+        assert_eq!(avatar_repository.avatars(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_still_create_the_channel_without_an_avatar_when_storing_the_avatar_fails() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let avatar_repository = Arc::new(FakeChannelAvatarRepository::failing());
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel_with_avatar())),
+            avatar_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(service, create_request("@somechannel")).await;
+
+        assert_eq!(response, Ok((StatusCode::CREATED, some_channel_response())));
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+        assert_eq!(avatar_repository.avatars(), vec![]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, channel_created("@somechannel"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_200_with_the_existing_channel_and_change_nothing_when_creating_a_channel_that_already_exists()
+     {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let request = CreateChannelRequest {
+            quality: Some("low".to_string()),
+            video_limit: Some(5),
+            path: Some("different/path".to_string()),
+            ..create_request("@somechannel")
+        };
+
+        let response = create(service, request).await;
+
+        assert_eq!(response, Ok((StatusCode::OK, some_channel_response())));
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_record_a_channel_created_event_only_once_for_repeated_creation() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let repeated_request = CreateChannelRequest {
+            quality: Some("low".to_string()),
+            video_limit: Some(5),
+            ..create_request("@somechannel")
+        };
+
+        create(service.clone(), create_request("@somechannel"))
+            .await
+            .unwrap();
+        create(service, repeated_request).await.unwrap();
+
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, channel_created("@somechannel"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_the_channel_value_is_missing() {
+        let request = CreateChannelRequest {
+            channel: None,
+            ..create_request("@somechannel")
+        };
+
+        let response = create(any_channel_service(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Channel handle or URL must not be empty"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_the_channel_value_is_invalid() {
+        let response = create(any_channel_service(), create_request("somechannel")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Channel handle must start with \"@\" (got \"somechannel\")"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_quality_is_missing() {
+        let request = CreateChannelRequest {
+            quality: None,
+            ..create_request("@somechannel")
+        };
+
+        let response = create(any_channel_service(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Quality must be one of \"high\", \"mid\", or \"low\" (missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_video_limit_is_missing() {
+        let request = CreateChannelRequest {
+            video_limit: None,
+            ..create_request("@somechannel")
+        };
+
+        let response = create(any_channel_service(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Video limit must be a positive integer (missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_path_is_missing() {
+        let request = CreateChannelRequest {
+            path: None,
+            ..create_request("@somechannel")
+        };
+
+        let response = create(any_channel_service(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("Channel path must not be empty"))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_and_store_nothing_when_the_youtube_channel_does_not_exist() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(None),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(service, create_request("@missing")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "YouTube channel @missing does not exist or is not accessible"
+            ))
+        );
+        assert_eq!(channel_repository.list().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_502_and_store_nothing_when_the_youtube_lookup_fails() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            Arc::new(FailingYoutubeChannelRepository),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(service, create_request("@somechannel")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                "YouTube API request failed"
+            ))
+        );
+        assert_eq!(channel_repository.list().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_204_remove_the_channel_and_record_a_channel_deleted_event_when_deleting_an_existing_channel()
+     {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            avatar_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = delete(service, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(channel_repository.list().unwrap(), vec![]);
+        assert_eq!(avatar_repository.avatars(), vec![]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, channel_deleted("@somechannel"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_delete_every_video_of_the_deleted_channel_and_keep_other_channels_videos() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        channel_repository
+            .insert(&channel("@otherchannel"))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "yt1",
+            0,
+        );
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "yt2",
+            1,
+        );
+        let (other_video, other_channel_video) = save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@otherchannel",
+            "yt3",
+            0,
+        );
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = delete(service, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@otherchannel")]
+        );
+        assert_eq!(video_repository.list().unwrap(), vec![other_video]);
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@otherchannel"))
+                .unwrap(),
+            vec![other_channel_video]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_delete_the_avatar_file_when_deleting_a_channel_with_a_recorded_avatar() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let avatar_repository = Arc::new(FakeChannelAvatarRepository::with_avatars(&[
+            ("@somechannel.jpg", AVATAR_URL),
+            ("@otherchannel.jpg", OTHER_AVATAR_URL),
+        ]));
+        channel_repository
+            .insert(&Channel {
+                avatar_filename: Some("@somechannel.jpg".to_string()),
+                ..channel("@somechannel")
+            })
+            .unwrap();
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            avatar_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = delete(service, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(channel_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            avatar_repository.avatars(),
+            vec![(
+                "@otherchannel.jpg".to_string(),
+                OTHER_AVATAR_URL.to_string()
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_and_change_nothing_when_deleting_a_missing_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let service = ChannelService::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = delete(service, "@missing").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("channel @missing not found"))
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_deleting_with_an_invalid_handle() {
+        let response = delete(any_channel_service(), "noatsign").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Channel handle must start with \"@\" (got \"noatsign\")"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_an_empty_array_when_no_channels_exist() {
+        let db = TestDatabase::new();
+        let service = ChannelService::new(
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = list(service).await;
+
+        assert_eq!(response, Ok(vec![]));
+    }
+
+    #[tokio::test]
+    async fn it_should_return_all_existing_channels() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let service = ChannelService::new(
+            channel_repository,
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = list(service).await;
+
+        assert_eq!(response, Ok(vec![some_channel_response()]));
+    }
+
+    #[tokio::test]
+    async fn it_should_return_204_and_add_the_listed_videos_when_reconciling_an_existing_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let reconciler = channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            vec![listed_video("yt1", "One", 0)],
+            task_repository.clone(),
+        );
+
+        let response = reconcile(reconciler, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        let videos = video_repository.list().unwrap();
+        let video_id = videos[0].id.clone();
+        assert_eq!(
+            videos,
+            vec![Video {
+                id: video_id.clone(),
+                ..Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp())
+            }]
+        );
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            vec![ChannelVideo {
+                id: 1,
+                ..ChannelVideo::create(
+                    handle("@somechannel"),
+                    video_id.clone(),
+                    0,
+                    fixed_timestamp()
+                )
+            }]
+        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoAddedToChannel {
+                    channel_id: "@somechannel".to_string(),
+                    video_id: video_id.as_str().to_string(),
+                }
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_evict_stored_videos_no_longer_listed_when_reconciling_a_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let (evicted, _) = save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "yt_old",
+            0,
+        );
+        let reconciler = channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Vec::new(),
+            Arc::new(SqliteTaskRepository::new(
+                db.shared_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+        );
+
+        let response = reconcile(reconciler, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoRemovedFromChannel {
+                    channel_id: "@somechannel".to_string(),
+                    video_id: evicted.id.as_str().to_string(),
+                    title: "Video yt_old".to_string(),
+                    filename: None,
+                    thumbnail_filename: None,
+                    was_downloaded: false,
+                }
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_not_add_a_listed_video_twice_on_repeated_reconciles_of_the_same_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let reconciler = channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            vec![listed_video("yt1", "One", 0)],
+            Arc::new(SqliteTaskRepository::new(
+                db.shared_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+        );
+
+        reconcile(reconciler.clone(), "@somechannel").await.unwrap();
+        let videos_after_first_reconcile = video_repository.list().unwrap();
+        let channel_videos_after_first_reconcile = channel_video_repository
+            .list_for_channel(&handle("@somechannel"))
+            .unwrap();
+        let events_after_first_reconcile = event_repository.list_eligible().unwrap();
+        let response = reconcile(reconciler, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            videos_after_first_reconcile
+        );
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            channel_videos_after_first_reconcile
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            events_after_first_reconcile
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_204_and_do_nothing_when_reconciling_a_nonexistent_channel() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let reconciler = channel_video_reconciler(
+            &db,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            vec![listed_video("yt1", "One", 0)],
+            task_repository.clone(),
+        );
+
+        let response = reconcile(reconciler, "@missing").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@missing"))
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_reconciling_with_an_invalid_handle() {
+        let response = reconcile(any_channel_video_reconciler(), "noatsign").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Channel handle must start with \"@\" (got \"noatsign\")"
+            ))
+        );
+    }
+
+    /// A service for tests whose request is rejected before reaching it. Its
+    /// repositories sit on an unmigrated in-memory database, so a request that
+    /// wrongly got through would fail loudly instead of passing.
+    fn any_channel_service() -> ChannelService {
+        ChannelService::new(
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+            Arc::new(SqliteEventPublisher::new(
+                Arc::new(std::sync::Mutex::new(unused_connection())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )
+    }
+
+    /// Builds a reconciler around the repositories a test seeds and asserts;
+    /// the remaining ports (metadata, files, thumbnails) are ones no channel
+    /// reconcile test observes. Events go to `db`'s outbox table.
+    fn channel_video_reconciler(
+        db: &TestDatabase,
+        channel_repository: Arc<SqliteChannelRepository>,
+        video_repository: Arc<SqliteVideoRepository>,
+        channel_video_repository: Arc<SqliteChannelVideoRepository>,
+        listed_videos: Vec<ChannelVideoListing>,
+        task_repository: Arc<SqliteTaskRepository>,
+    ) -> ChannelVideoReconciler {
+        let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        ChannelVideoReconciler::new(
+            channel_repository,
+            video_repository,
+            channel_video_repository,
+            Arc::new(FakeChannelVideosRepository::with_videos(listed_videos)),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            event_publisher(db),
+            task_repository,
+            Arc::new(FakeVideoFileRepository::default()),
+            thumbnail_fetcher,
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        )
+    }
+
+    fn any_channel_video_reconciler() -> ChannelVideoReconciler {
+        let video_repository = Arc::new(SqliteVideoRepository::new(unused_connection()));
+        ChannelVideoReconciler::new(
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            video_repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+            Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
+            Arc::new(SqliteEventPublisher::new(
+                Arc::new(std::sync::Mutex::new(unused_connection())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteTaskRepository::new(
+                Arc::new(std::sync::Mutex::new(unused_connection())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(ThumbnailFetcher::new(
+                video_repository,
+                Arc::new(FakeVideoDownloaderRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        )
+    }
+
+    struct FailingYoutubeChannelRepository;
+
+    impl YoutubeChannelRepository for FailingYoutubeChannelRepository {
+        fn resolve(&self, _handle: &ChannelHandle) -> anyhow::Result<Option<ResolvedChannel>> {
+            anyhow::bail!("YouTube API request failed")
+        }
+    }
+
+    fn unused_connection() -> Connection {
+        Connection::open_in_memory().unwrap()
+    }
+
+    fn event_publisher(db: &TestDatabase) -> Arc<SqliteEventPublisher> {
+        Arc::new(SqliteEventPublisher::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ))
+    }
+
+    /// The outbox row `SqliteEventPublisher` writes for `event`, as read back
+    /// before the consumer has dispatched it.
+    fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+        ScheduledEvent {
+            id,
+            event_type: event.event_type().to_string(),
+            payload: event.payload().to_string(),
+            retries: 0,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
+    }
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn handle(value: &str) -> ChannelHandle {
+        ChannelHandle::new(value).unwrap()
     }
 
     fn resolved_channel() -> ResolvedChannel {
@@ -178,630 +1053,126 @@ mod tests {
         }
     }
 
-    fn test_router_with(
-        lookup: Arc<dyn YoutubeChannelRepository>,
-        channel_videos: Vec<ChannelVideoListing>,
-    ) -> (
-        axum::Router,
-        Arc<FakeEventPublisher>,
-        Arc<FakeChannelVideoRepository>,
-    ) {
-        let event_publisher = Arc::new(FakeEventPublisher::default());
-        let playlist_repository = Arc::new(FakePlaylistRepository::default());
-        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let task_repository = Arc::new(FakeTaskRepository::default());
-        let channel_repository = Arc::new(FakeChannelRepository::default());
-        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
-        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
-            task_repository.clone(),
-            playlist_repository.clone(),
-            channel_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            channel_video_repository.clone(),
-        );
-        let playlist_creator = crate::domain::services::PlaylistCreator::new(
-            playlist_repository.clone(),
-            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
-            event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let playlist_deleter = crate::domain::services::PlaylistDeleter::new(
-            playlist_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
-        );
-        let playlist_searcher =
-            crate::domain::services::PlaylistSearcher::new(playlist_repository.clone());
-        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
-            video_repository.clone(),
-            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let video_reconciler = crate::domain::services::VideoReconciler::new(
-            playlist_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
-            task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        );
-        let video_searcher = crate::domain::services::VideoSearcher::new(
-            playlist_repository,
-            playlist_video_repository,
-            channel_repository.clone(),
-            channel_video_repository.clone(),
-            video_repository.clone(),
-        );
-        let channel_service = ChannelService::new(
-            channel_repository.clone(),
-            lookup,
-            Arc::new(FakeChannelAvatarRepository::default()),
-            video_repository,
-            channel_video_repository.clone(),
-            event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let channel_video_repository_for_reconciler = Arc::new(FakeVideoRepository::default());
-        let channel_thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
-            channel_video_repository_for_reconciler.clone(),
-            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let channel_video_reconciler = crate::domain::services::ChannelVideoReconciler::new(
-            channel_repository,
-            channel_video_repository_for_reconciler,
-            channel_video_repository.clone(),
-            Arc::new(FakeChannelVideosRepository::with_videos(channel_videos)),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher.clone() as Arc<dyn crate::infrastructure::shared::domain_events::event_publisher::EventPublisher>,
-            task_repository,
-            Arc::new(FakeVideoFileRepository::default()),
-            channel_thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        );
-        let state = AppState {
-            directory_searcher: crate::domain::services::DirectorySearcher::new(Arc::new(
-                crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository::default(),
-            )),
-            videos_root: "/videos".to_string(),
-            playlist_creator,
-            playlist_deleter,
-            playlist_searcher,
-            video_reconciler,
-            video_searcher,
-            task_view_searcher,
-            channel_service,
-            channel_video_reconciler,
-        };
-        (
-            axum::Router::new().nest("/api", api_router(state)),
-            event_publisher,
-            channel_video_repository,
-        )
-    }
-
-    fn test_router(resolved: Option<ResolvedChannel>) -> (axum::Router, Arc<FakeEventPublisher>) {
-        let (router, events, _channel_videos) = test_router_with(
-            Arc::new(FakeYoutubeChannelRepository { resolved }),
-            Vec::new(),
-        );
-        (router, events)
-    }
-
-    struct FailingYoutubeChannelRepository;
-
-    impl YoutubeChannelRepository for FailingYoutubeChannelRepository {
-        fn resolve(
-            &self,
-            _handle: &crate::domain::channel::ChannelHandle,
-        ) -> anyhow::Result<Option<ResolvedChannel>> {
-            anyhow::bail!("YouTube API request failed")
+    fn resolved_channel_with_avatar() -> ResolvedChannel {
+        ResolvedChannel {
+            avatar_url: Some(AVATAR_URL.to_string()),
+            ..resolved_channel()
         }
     }
 
-    async fn body_json(response: Response) -> serde_json::Value {
-        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        serde_json::from_slice(&bytes).unwrap()
+    fn resolving(resolved: Option<ResolvedChannel>) -> Arc<dyn YoutubeChannelRepository> {
+        Arc::new(FakeYoutubeChannelRepository { resolved })
     }
 
-    fn create_request(channel: &str, quality: &str, video_limit: i64) -> Request<Body> {
-        create_request_with_path(channel, quality, video_limit, "creators/somechannel")
+    fn channel(channel_handle: &str) -> Channel {
+        Channel::create(
+            handle(channel_handle),
+            "Some Channel",
+            "UC123",
+            Quality::High,
+            VideoLimit::new(10).unwrap(),
+            PlaylistPath::new("creators/somechannel").unwrap(),
+            None,
+            fixed_timestamp(),
+        )
     }
 
-    fn create_request_with_path(
-        channel: &str,
-        quality: &str,
-        video_limit: i64,
-        path: &str,
-    ) -> Request<Body> {
-        Request::builder()
-            .method("POST")
-            .uri("/api/channels")
-            .header("content-type", "application/json")
-            .body(Body::from(
-                serde_json::json!({ "channel": channel, "quality": quality, "video_limit": video_limit, "path": path })
-                    .to_string(),
-            ))
-            .unwrap()
-    }
-
-    fn create_request_body(body: serde_json::Value) -> Request<Body> {
-        Request::builder()
-            .method("POST")
-            .uri("/api/channels")
-            .header("content-type", "application/json")
-            .body(Body::from(body.to_string()))
-            .unwrap()
-    }
-
-    fn delete_request(handle: &str) -> Request<Body> {
-        Request::builder()
-            .method("DELETE")
-            .uri(format!("/api/channels/{handle}"))
-            .body(Body::empty())
-            .unwrap()
-    }
-
-    fn list_request() -> Request<Body> {
-        Request::builder()
-            .method("GET")
-            .uri("/api/channels")
-            .body(Body::empty())
-            .unwrap()
-    }
-
-    fn reconcile_request(handle: &str) -> Request<Body> {
-        Request::builder()
-            .method("POST")
-            .uri(format!("/api/channels/{handle}/reconcile"))
-            .body(Body::empty())
-            .unwrap()
-    }
-
-    #[tokio::test]
-    async fn it_should_return_201_when_creating_a_new_channel_from_a_bare_handle() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request("@somechannel", "high", 10))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let body = body_json(response).await;
-        assert_eq!(body["id"], "@somechannel");
-        assert_eq!(body["name"], "Some Channel");
-        assert_eq!(body["youtube_channel_id"], "UC123");
-        assert_eq!(body["quality"], "high");
-        assert_eq!(body["video_limit"], 10);
-        assert_eq!(body["path"], "creators/somechannel");
-    }
-
-    #[tokio::test]
-    async fn it_should_return_201_when_creating_a_channel_from_a_url() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request_with_path(
-                "https://www.youtube.com/@somechannel",
-                "high",
-                10,
-                "creators/somechannel",
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let body = body_json(response).await;
-        assert_eq!(body["id"], "@somechannel");
-    }
-
-    #[tokio::test]
-    async fn it_should_return_200_when_creating_a_channel_that_already_exists() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-        router
-            .clone()
-            .oneshot(create_request("@somechannel", "high", 10))
-            .await
-            .unwrap();
-
-        let response = router
-            .oneshot(create_request_with_path(
-                "@somechannel",
-                "low",
-                5,
-                "different/path",
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = body_json(response).await;
-        assert_eq!(body["quality"], "high");
-        assert_eq!(body["video_limit"], 10);
-        assert_eq!(body["path"], "creators/somechannel");
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_channel_value_is_missing() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request_body(
-                serde_json::json!({ "quality": "high", "video_limit": 10, "path": "creators/somechannel" }),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_channel_value_is_empty() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request("", "high", 10))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_handle_is_missing_its_leading_at() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request("somechannel", "high", 10))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_url_is_not_a_recognized_youtube_url() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request(
-                "https://example.com/@somechannel",
-                "high",
-                10,
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_youtube_url_is_missing_a_handle() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request(
-                "https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv",
-                "high",
-                10,
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_youtube_channel_does_not_exist() {
-        let (router, _event_publisher) = test_router(None);
-
-        let response = router
-            .oneshot(create_request("@missing", "high", 10))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_502_when_the_youtube_lookup_fails() {
-        let (router, _event_publisher, _channel_videos) =
-            test_router_with(Arc::new(FailingYoutubeChannelRepository), Vec::new());
-
-        let response = router
-            .oneshot(create_request("@somechannel", "high", 10))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_quality_is_missing() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request_body(
-                serde_json::json!({ "channel": "@somechannel", "video_limit": 10, "path": "creators/somechannel" }),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_quality_is_invalid() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request("@somechannel", "ultra", 10))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_video_limit_is_missing() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request_body(
-                serde_json::json!({ "channel": "@somechannel", "quality": "high", "path": "creators/somechannel" }),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_video_limit_is_not_positive() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request("@somechannel", "high", 0))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_path_is_missing() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request_body(
-                serde_json::json!({ "channel": "@somechannel", "quality": "high", "video_limit": 10 }),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_path_is_absolute() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request_with_path(
-                "@somechannel",
-                "high",
-                10,
-                "/absolute/path",
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_path_contains_a_parent_traversal_segment() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request_with_path(
-                "@somechannel",
-                "high",
-                10,
-                "a/../b",
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_path_contains_an_empty_segment() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router
-            .oneshot(create_request_with_path("@somechannel", "high", 10, "a//b"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_record_a_channel_created_event_only_once_for_repeated_creation() {
-        let (router, event_publisher) = test_router(Some(resolved_channel()));
-        router
-            .clone()
-            .oneshot(create_request("@somechannel", "high", 10))
-            .await
-            .unwrap();
-
-        router
-            .oneshot(create_request("@somechannel", "low", 5))
-            .await
-            .unwrap();
-
-        let published = event_publisher.published.lock().unwrap();
-        assert_eq!(
-            *published,
-            vec![DomainEvent::ChannelCreated {
-                channel_id: "@somechannel".to_string()
-            }]
+    /// Saves a video and its channel membership, returning both as stored
+    /// (the channel video with its storage-assigned `id`).
+    fn save_channel_video(
+        video_repository: &dyn VideoRepository,
+        channel_video_repository: &dyn ChannelVideoRepository,
+        channel_handle: &str,
+        youtube_id: &str,
+        position: i64,
+    ) -> (Video, ChannelVideo) {
+        let video = Video::create(
+            VideoId::new(youtube_id).unwrap(),
+            format!("Video {youtube_id}"),
+            fixed_timestamp(),
         );
+        video_repository.save(&video).unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                handle(channel_handle),
+                video.id.clone(),
+                position,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let channel_video = channel_video_repository
+            .find_by_video(&video.id)
+            .unwrap()
+            .unwrap();
+        (video, channel_video)
     }
 
-    #[tokio::test]
-    async fn it_should_return_204_when_deleting_an_existing_channel() {
-        let (router, event_publisher) = test_router(Some(resolved_channel()));
-        router
-            .clone()
-            .oneshot(create_request("@somechannel", "high", 10))
-            .await
-            .unwrap();
-
-        let response = router
-            .oneshot(delete_request("@somechannel"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
-        let published = event_publisher.published.lock().unwrap();
-        assert_eq!(
-            *published,
-            vec![
-                DomainEvent::ChannelCreated {
-                    channel_id: "@somechannel".to_string()
-                },
-                DomainEvent::ChannelDeleted {
-                    channel_id: "@somechannel".to_string(),
-                    path: "creators/somechannel".to_string(),
-                },
-            ]
-        );
+    fn listed_video(youtube_id: &str, title: &str, position: i64) -> ChannelVideoListing {
+        ChannelVideoListing {
+            youtube_id: youtube_id.to_string(),
+            title: title.to_string(),
+            position,
+        }
     }
 
-    #[tokio::test]
-    async fn it_should_return_400_when_deleting_a_missing_channel() {
-        let (router, event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router.oneshot(delete_request("@missing")).await.unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        assert!(event_publisher.published.lock().unwrap().is_empty());
+    fn channel_created(channel_handle: &str) -> DomainEvent {
+        DomainEvent::ChannelCreated {
+            channel_id: channel_handle.to_string(),
+        }
     }
 
-    #[tokio::test]
-    async fn it_should_return_an_empty_array_when_no_channels_exist() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-
-        let response = router.oneshot(list_request()).await.unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = body_json(response).await;
-        assert_eq!(body, serde_json::json!([]));
+    fn channel_deleted(channel_handle: &str) -> DomainEvent {
+        DomainEvent::ChannelDeleted {
+            channel_id: channel_handle.to_string(),
+            path: "creators/somechannel".to_string(),
+        }
     }
 
-    #[tokio::test]
-    async fn it_should_return_all_created_channels() {
-        let (router, _event_publisher) = test_router(Some(resolved_channel()));
-        router
-            .clone()
-            .oneshot(create_request("@somechannel", "high", 10))
-            .await
-            .unwrap();
-
-        let response = router.oneshot(list_request()).await.unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = body_json(response).await;
-        let channels = body.as_array().unwrap();
-        assert_eq!(channels.len(), 1);
-        assert_eq!(channels[0]["id"], "@somechannel");
+    fn create_request(channel: &str) -> CreateChannelRequest {
+        CreateChannelRequest {
+            channel: Some(channel.to_string()),
+            quality: Some("high".to_string()),
+            video_limit: Some(10),
+            path: Some("creators/somechannel".to_string()),
+        }
     }
 
-    #[tokio::test]
-    async fn it_should_return_204_when_reconciling_an_existing_channel() {
-        let (router, _events, _channel_videos) = test_router_with(
-            Arc::new(FakeYoutubeChannelRepository {
-                resolved: Some(resolved_channel()),
-            }),
-            vec![ChannelVideoListing {
-                youtube_id: "yt1".to_string(),
-                title: "One".to_string(),
-                position: 0,
-            }],
-        );
-        router
-            .clone()
-            .oneshot(create_request("@somechannel", "high", 10))
-            .await
-            .unwrap();
-
-        let response = router
-            .oneshot(reconcile_request("@somechannel"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    fn some_channel_response() -> ChannelResponse {
+        ChannelResponse {
+            id: "@somechannel".to_string(),
+            name: "Some Channel".to_string(),
+            youtube_channel_id: "UC123".to_string(),
+            quality: "high".to_string(),
+            video_limit: 10,
+            path: "creators/somechannel".to_string(),
+            avatar_filename: None,
+            created_at: fixed_timestamp(),
+        }
     }
 
-    #[tokio::test]
-    async fn it_should_not_change_the_number_of_pending_reconcile_tasks_on_repeated_reconcile() {
-        let (router, _events, _channel_videos) = test_router_with(
-            Arc::new(FakeYoutubeChannelRepository {
-                resolved: Some(resolved_channel()),
-            }),
-            Vec::new(),
-        );
-        router
-            .clone()
-            .oneshot(create_request("@somechannel", "high", 10))
+    async fn create(
+        service: ChannelService,
+        request: CreateChannelRequest,
+    ) -> Result<(StatusCode, ChannelResponse), ApiError> {
+        create_channel(State(service), Json(request))
             .await
-            .unwrap();
-
-        router
-            .clone()
-            .oneshot(reconcile_request("@somechannel"))
-            .await
-            .unwrap();
-        let response = router
-            .oneshot(reconcile_request("@somechannel"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+            .map(|(status, Json(channel))| (status, channel))
     }
 
-    #[tokio::test]
-    async fn it_should_return_204_and_do_nothing_when_reconciling_a_nonexistent_channel() {
-        let (router, _events) = test_router(Some(resolved_channel()));
-
-        let response = router.oneshot(reconcile_request("@missing")).await.unwrap();
-
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    async fn delete(service: ChannelService, channel_handle: &str) -> Result<StatusCode, ApiError> {
+        delete_channel(State(service), Path(channel_handle.to_string())).await
     }
 
-    #[tokio::test]
-    async fn it_should_return_400_when_reconciling_with_an_invalid_handle() {
-        let (router, _events) = test_router(Some(resolved_channel()));
+    async fn list(service: ChannelService) -> Result<Vec<ChannelResponse>, ApiError> {
+        list_channels(State(service))
+            .await
+            .map(|Json(channels)| channels)
+    }
 
-        let response = router.oneshot(reconcile_request("noatsign")).await.unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    async fn reconcile(
+        reconciler: ChannelVideoReconciler,
+        channel_handle: &str,
+    ) -> Result<StatusCode, ApiError> {
+        reconcile_channel(State(reconciler), Path(channel_handle.to_string())).await
     }
 }

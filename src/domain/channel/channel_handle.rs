@@ -1,20 +1,20 @@
-use super::errors::ChannelHandleError;
+use crate::domain::shared::ValidationError;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ChannelHandle(String);
 
 impl ChannelHandle {
-    pub fn new(handle: impl Into<String>) -> Result<Self, ChannelHandleError> {
+    pub fn new(handle: impl Into<String>) -> Result<Self, ValidationError> {
         let handle = handle.into();
         let trimmed = handle.trim();
         if trimmed.is_empty() {
-            return Err(ChannelHandleError(
+            return Err(ValidationError(
                 "Channel handle must not be empty".to_string(),
             ));
         }
         if !trimmed.starts_with('@') {
-            return Err(ChannelHandleError(format!(
+            return Err(ValidationError(format!(
                 "Channel handle must start with \"@\" (got \"{trimmed}\")"
             )));
         }
@@ -29,7 +29,7 @@ impl ChannelHandle {
     /// carrying a handle (`youtube.com/@name`) into a `ChannelHandle`.
     /// Anything else (an unrecognized host, a legacy `/channel/UC...` URL, a
     /// handle-less URL, an empty value) is rejected.
-    pub fn from_url_or_handle(value: impl Into<String>) -> Result<Self, ChannelHandleError> {
+    pub fn from_url_or_handle(value: impl Into<String>) -> Result<Self, ValidationError> {
         let value = value.into();
         let trimmed = value.trim();
 
@@ -38,7 +38,7 @@ impl ChannelHandle {
             .or_else(|| trimmed.strip_prefix("http://"))
         else {
             if trimmed.is_empty() {
-                return Err(ChannelHandleError(
+                return Err(ValidationError(
                     "Channel handle or URL must not be empty".to_string(),
                 ));
             }
@@ -48,7 +48,7 @@ impl ChannelHandle {
         let (host, rest) = after_scheme.split_once('/').unwrap_or((after_scheme, ""));
 
         if host != "youtube.com" && host != "www.youtube.com" && host != "m.youtube.com" {
-            return Err(ChannelHandleError(format!(
+            return Err(ValidationError(format!(
                 "\"{value}\" is not a recognized YouTube channel URL"
             )));
         }
@@ -59,7 +59,7 @@ impl ChannelHandle {
         if segment.starts_with('@') && segment.len() > 1 {
             Self::new(segment)
         } else {
-            Err(ChannelHandleError(format!(
+            Err(ValidationError(format!(
                 "YouTube URL is missing a channel handle (got \"{value}\")"
             )))
         }
@@ -78,69 +78,171 @@ mod tests {
 
     #[test]
     fn it_should_accept_a_bare_handle() {
-        let handle = ChannelHandle::new("@somechannel").unwrap();
-        assert_eq!(handle.as_str(), "@somechannel");
+        assert_eq!(
+            ChannelHandle::new("@somechannel"),
+            Ok(ChannelHandle("@somechannel".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_trim_surrounding_whitespace_from_a_handle() {
+        assert_eq!(
+            ChannelHandle::new("  @somechannel  "),
+            Ok(ChannelHandle("@somechannel".to_string()))
+        );
     }
 
     #[test]
     fn it_should_reject_an_empty_handle() {
-        assert!(ChannelHandle::new("").is_err());
-        assert!(ChannelHandle::new("   ").is_err());
+        assert_eq!(
+            ChannelHandle::new(""),
+            Err(error("Channel handle must not be empty"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_blank_handle() {
+        assert_eq!(
+            ChannelHandle::new("   "),
+            Err(error("Channel handle must not be empty"))
+        );
     }
 
     #[test]
     fn it_should_reject_a_handle_missing_its_leading_at() {
-        assert!(ChannelHandle::new("somechannel").is_err());
+        assert_eq!(
+            ChannelHandle::new("somechannel"),
+            Err(error(
+                "Channel handle must start with \"@\" (got \"somechannel\")"
+            ))
+        );
     }
 
     #[test]
     fn it_should_accept_a_bare_handle_via_from_url_or_handle() {
-        let handle = ChannelHandle::from_url_or_handle("@somechannel").unwrap();
-        assert_eq!(handle.as_str(), "@somechannel");
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("@somechannel"),
+            Ok(ChannelHandle("@somechannel".to_string()))
+        );
     }
 
     #[test]
-    fn it_should_parse_a_full_youtube_channel_url() {
-        let handle =
-            ChannelHandle::from_url_or_handle("https://www.youtube.com/@somechannel").unwrap();
-        assert_eq!(handle.as_str(), "@somechannel");
+    fn it_should_parse_a_www_youtube_channel_url() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("https://www.youtube.com/@somechannel"),
+            Ok(ChannelHandle("@somechannel".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_parse_a_bare_youtube_channel_url() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("https://youtube.com/@somechannel"),
+            Ok(ChannelHandle("@somechannel".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_parse_a_mobile_youtube_channel_url() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("https://m.youtube.com/@somechannel"),
+            Ok(ChannelHandle("@somechannel".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_parse_an_http_youtube_channel_url() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("http://www.youtube.com/@somechannel"),
+            Ok(ChannelHandle("@somechannel".to_string()))
+        );
     }
 
     #[test]
     fn it_should_parse_a_youtube_channel_url_with_a_trailing_path_segment() {
-        let handle =
-            ChannelHandle::from_url_or_handle("https://youtube.com/@somechannel/videos").unwrap();
-        assert_eq!(handle.as_str(), "@somechannel");
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("https://youtube.com/@somechannel/videos"),
+            Ok(ChannelHandle("@somechannel".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_parse_a_youtube_channel_url_with_a_query_string() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("https://www.youtube.com/@somechannel?si=abc"),
+            Ok(ChannelHandle("@somechannel".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_an_empty_value_via_from_url_or_handle() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle(""),
+            Err(error("Channel handle or URL must not be empty"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_blank_value_via_from_url_or_handle() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("   "),
+            Err(error("Channel handle or URL must not be empty"))
+        );
     }
 
     #[test]
     fn it_should_reject_a_handle_missing_its_leading_at_via_from_url_or_handle() {
-        assert!(ChannelHandle::from_url_or_handle("somechannel").is_err());
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("somechannel"),
+            Err(error(
+                "Channel handle must start with \"@\" (got \"somechannel\")"
+            ))
+        );
     }
 
     #[test]
     fn it_should_reject_an_unrecognized_url() {
-        assert!(ChannelHandle::from_url_or_handle("https://example.com/@somechannel").is_err());
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("https://example.com/@somechannel"),
+            Err(error(
+                "\"https://example.com/@somechannel\" is not a recognized YouTube channel URL"
+            ))
+        );
     }
 
     #[test]
     fn it_should_reject_a_legacy_channel_id_url() {
-        assert!(
+        assert_eq!(
             ChannelHandle::from_url_or_handle(
                 "https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv"
-            )
-            .is_err()
+            ),
+            Err(error(
+                "YouTube URL is missing a channel handle (got \"https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv\")"
+            ))
         );
     }
 
     #[test]
     fn it_should_reject_a_youtube_url_without_a_handle() {
-        assert!(ChannelHandle::from_url_or_handle("https://www.youtube.com/").is_err());
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("https://www.youtube.com/"),
+            Err(error(
+                "YouTube URL is missing a channel handle (got \"https://www.youtube.com/\")"
+            ))
+        );
     }
 
     #[test]
-    fn it_should_reject_an_empty_value_via_from_url_or_handle() {
-        assert!(ChannelHandle::from_url_or_handle("").is_err());
-        assert!(ChannelHandle::from_url_or_handle("   ").is_err());
+    fn it_should_reject_a_youtube_url_with_a_bare_at_sign() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("https://www.youtube.com/@"),
+            Err(error(
+                "YouTube URL is missing a channel handle (got \"https://www.youtube.com/@\")"
+            ))
+        );
+    }
+
+    fn error(message: &str) -> ValidationError {
+        ValidationError(message.to_string())
     }
 }

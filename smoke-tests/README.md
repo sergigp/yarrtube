@@ -57,6 +57,12 @@ Optional overrides (defaults shown):
   newest video can change, plus the invalid-handle error case.
 - **Mobile sidebar** (`tests/mobile-sidebar.spec.js`): opening/closing the
   sidebar at a narrow viewport.
+- **Tasks view** (`tests/tasks.spec.js`): the recurring yt-dlp self-update
+  task the daemon seeds at startup is listed as pending.
+
+Together these are also the only coverage of the HTTP API's route wiring
+(Rust handler tests call handlers directly, bypassing the router), so every
+`/api` route the UI calls should be exercised by at least one spec.
 
 Custom playlists are out of scope — there's no UI entry point for them yet.
 

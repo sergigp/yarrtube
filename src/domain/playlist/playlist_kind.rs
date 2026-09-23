@@ -1,4 +1,4 @@
-use super::errors::PlaylistError;
+use crate::domain::shared::ValidationError;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7,11 +7,11 @@ pub enum PlaylistKind {
 }
 
 impl PlaylistKind {
-    pub fn new(value: impl Into<String>) -> Result<Self, PlaylistError> {
+    pub fn new(value: impl Into<String>) -> Result<Self, ValidationError> {
         let value = value.into();
         match value.as_str() {
             "youtube_linked" => Ok(Self::YoutubeLinked),
-            _ => Err(PlaylistError(format!(
+            _ => Err(ValidationError(format!(
                 "Playlist kind must be \"youtube_linked\" (got \"{value}\")"
             ))),
         }
@@ -35,30 +35,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_should_parse_each_valid_kind_value() {
+    fn it_should_parse_youtube_linked() {
         assert_eq!(
-            PlaylistKind::new("youtube_linked").unwrap(),
-            PlaylistKind::YoutubeLinked
+            PlaylistKind::new("youtube_linked"),
+            Ok(PlaylistKind::YoutubeLinked)
         );
     }
 
     #[test]
-    fn it_should_reject_an_invalid_kind_value_with_a_meaningful_message() {
-        let error = PlaylistKind::new("bogus").unwrap_err();
-
+    fn it_should_reject_an_unknown_kind() {
         assert_eq!(
-            error.to_string(),
-            "Playlist kind must be \"youtube_linked\" (got \"bogus\")"
+            PlaylistKind::new("bogus"),
+            Err(ValidationError(
+                "Playlist kind must be \"youtube_linked\" (got \"bogus\")".to_string()
+            ))
         );
     }
 
     #[test]
-    fn it_should_reject_the_removed_custom_kind_value() {
-        let error = PlaylistKind::new("custom").unwrap_err();
-
+    fn it_should_reject_the_removed_custom_kind() {
         assert_eq!(
-            error.to_string(),
-            "Playlist kind must be \"youtube_linked\" (got \"custom\")"
+            PlaylistKind::new("custom"),
+            Err(ValidationError(
+                "Playlist kind must be \"youtube_linked\" (got \"custom\")".to_string()
+            ))
         );
     }
 }

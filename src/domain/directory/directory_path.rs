@@ -1,4 +1,4 @@
-use super::errors::DirectoryPathError;
+use crate::domain::shared::ValidationError;
 use std::fmt;
 
 /// A path relative to the configured videos root, the empty path meaning the
@@ -8,25 +8,25 @@ use std::fmt;
 pub struct DirectoryPath(String);
 
 impl DirectoryPath {
-    pub fn new(path: impl Into<String>) -> Result<Self, DirectoryPathError> {
+    pub fn new(path: impl Into<String>) -> Result<Self, ValidationError> {
         let path = path.into();
         if path.trim().is_empty() {
             return Ok(Self::root());
         }
         if path.starts_with('/') {
-            return Err(DirectoryPathError(
+            return Err(ValidationError(
                 "Directory path must not be an absolute path".to_string(),
             ));
         }
 
         for segment in path.split('/') {
             if segment.is_empty() {
-                return Err(DirectoryPathError(
+                return Err(ValidationError(
                     "Directory path must not contain empty segments".to_string(),
                 ));
             }
             if segment == ".." {
-                return Err(DirectoryPathError(
+                return Err(ValidationError(
                     "Directory path must not contain \"..\" segments".to_string(),
                 ));
             }
@@ -60,41 +60,77 @@ mod tests {
 
     #[test]
     fn it_should_accept_a_single_segment_path() {
-        let path = DirectoryPath::new("playlists").unwrap();
-
-        assert_eq!(path.as_str(), "playlists");
-        assert!(!path.is_root());
+        assert_eq!(
+            DirectoryPath::new("playlists"),
+            Ok(DirectoryPath("playlists".to_string()))
+        );
     }
 
     #[test]
     fn it_should_accept_a_multi_segment_path() {
-        let path = DirectoryPath::new("playlists/music/chill").unwrap();
-
-        assert_eq!(path.as_str(), "playlists/music/chill");
+        assert_eq!(
+            DirectoryPath::new("playlists/music/chill"),
+            Ok(DirectoryPath("playlists/music/chill".to_string()))
+        );
     }
 
     #[test]
     fn it_should_be_root_on_an_empty_path() {
-        assert!(DirectoryPath::new("").unwrap().is_root());
-        assert!(DirectoryPath::new("   ").unwrap().is_root());
+        assert_eq!(DirectoryPath::new(""), Ok(DirectoryPath::root()));
+    }
+
+    #[test]
+    fn it_should_be_root_on_a_blank_path() {
+        assert_eq!(DirectoryPath::new("   "), Ok(DirectoryPath::root()));
+    }
+
+    #[test]
+    fn it_should_report_only_the_root_as_root() {
         assert!(DirectoryPath::root().is_root());
-        assert_eq!(DirectoryPath::root().as_str(), "");
+        assert!(!DirectoryPath("playlists".to_string()).is_root());
     }
 
     #[test]
     fn it_should_reject_an_absolute_path() {
-        assert!(DirectoryPath::new("/etc").is_err());
-    }
-
-    #[test]
-    fn it_should_reject_a_path_containing_a_parent_traversal_segment() {
-        assert!(DirectoryPath::new("playlists/../..").is_err());
-        assert!(DirectoryPath::new("..").is_err());
+        assert_eq!(
+            DirectoryPath::new("/etc"),
+            Err(error("Directory path must not be an absolute path"))
+        );
     }
 
     #[test]
     fn it_should_reject_a_path_with_an_empty_segment() {
-        assert!(DirectoryPath::new("playlists//music").is_err());
-        assert!(DirectoryPath::new("playlists/music/").is_err());
+        assert_eq!(
+            DirectoryPath::new("playlists//music"),
+            Err(error("Directory path must not contain empty segments"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_with_a_trailing_slash() {
+        assert_eq!(
+            DirectoryPath::new("playlists/music/"),
+            Err(error("Directory path must not contain empty segments"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_containing_a_parent_traversal_segment() {
+        assert_eq!(
+            DirectoryPath::new("playlists/../.."),
+            Err(error("Directory path must not contain \"..\" segments"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_that_is_a_parent_traversal_segment() {
+        assert_eq!(
+            DirectoryPath::new(".."),
+            Err(error("Directory path must not contain \"..\" segments"))
+        );
+    }
+
+    fn error(message: &str) -> ValidationError {
+        ValidationError(message.to_string())
     }
 }

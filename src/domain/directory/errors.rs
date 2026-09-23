@@ -1,17 +1,6 @@
 use super::directory_path::DirectoryPath;
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DirectoryPathError(pub String);
-
-impl fmt::Display for DirectoryPathError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl std::error::Error for DirectoryPathError {}
-
 #[derive(Debug)]
 pub enum ListDirectoriesError {
     NotFound(DirectoryPath),

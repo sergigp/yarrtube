@@ -311,6 +311,20 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_the_maximum_video_limit() {
+        let repo = repo();
+        let channel = Channel {
+            video_limit: VideoLimit::new(1000).unwrap(),
+            ..channel("@somechannel", "Some Channel")
+        };
+        repo.insert(&channel).unwrap();
+
+        let found = repo.find(&channel.id).unwrap();
+
+        assert_eq!(found, Some(channel));
+    }
+
+    #[test]
     fn it_should_fail_when_inserting_a_duplicate_id() {
         let repo = repo();
         let channel = channel("@somechannel", "Some Channel");

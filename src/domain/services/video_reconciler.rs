@@ -485,7 +485,8 @@ mod tests {
         let video_repository = Arc::new(FakeVideoRepository::default());
         video_repository.save(video).unwrap();
 
-        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
         let position = playlist_position.unwrap_or(0);
         let playlist_video = match playlist_position {
             Some(position) => PlaylistVideo::create_with_position(
@@ -497,12 +498,6 @@ mod tests {
             None => PlaylistVideo::create(playlist.id.clone(), video.id.clone(), fixed_timestamp()),
         };
         playlist_video_repository.save(&playlist_video).unwrap();
-        // Registers the seeded video as an existing member of the playlist's
-        // YouTube-side listing below, so `sync_playlist_membership` (which
-        // now always runs, even for these filesystem-reconciliation-focused
-        // fixtures) leaves it alone instead of treating it as removed from
-        // YouTube and deleting it before `reconcile_filesystem` ever sees it.
-        playlist_video_repository.register_youtube_id(&video.id, &video.youtube_id);
 
         let task_repository = Arc::new(FakeTaskRepository::default());
         let video_file_repository = Arc::new(video_file_repository);
@@ -575,7 +570,7 @@ mod tests {
 
         let found = harness.video_repository.find(&video.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::Downloaded);
-        assert!(harness.task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(harness.task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -595,7 +590,7 @@ mod tests {
 
         let found = harness.video_repository.find(&video.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::Downloaded);
-        assert!(harness.task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(harness.task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -686,7 +681,7 @@ mod tests {
 
         let found = harness.video_repository.find(&video.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::Downloaded);
-        assert!(harness.task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(harness.task_repository.scheduled().is_empty());
         let saved = harness
             .video_metadata_repository
             .find(&video.id)
@@ -773,7 +768,8 @@ mod tests {
         let playlist_repository = Arc::new(FakePlaylistRepository::default());
         playlist_repository.insert(playlist).unwrap();
         let video_repository = Arc::new(FakeVideoRepository::default());
-        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
         let youtube_playlist_items_repository = Arc::new(FakeYoutubePlaylistItemsRepository {
             videos: std::sync::Mutex::new(current_videos),
         });

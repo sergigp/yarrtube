@@ -127,7 +127,7 @@ mod tests {
             )
             .unwrap();
 
-        let scheduled = task_repository.scheduled.lock().unwrap();
+        let scheduled = task_repository.scheduled();
         assert_eq!(
             *scheduled,
             vec![(
@@ -153,7 +153,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -168,7 +168,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -183,6 +183,6 @@ mod tests {
             )
             .unwrap();
 
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 }

@@ -74,7 +74,7 @@ mod tests {
             .handle(r#"{"channel_id": "@somechannel", "path": "creators/somechannel"}"#)
             .unwrap();
 
-        let scheduled = task_repository.scheduled.lock().unwrap();
+        let scheduled = task_repository.scheduled();
         assert_eq!(
             *scheduled,
             vec![(
@@ -96,6 +96,6 @@ mod tests {
             .handle(r#"{"channel_id": "", "path": "creators/somechannel"}"#)
             .unwrap();
 
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 }

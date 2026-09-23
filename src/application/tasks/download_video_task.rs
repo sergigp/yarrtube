@@ -52,13 +52,15 @@ mod tests {
     use chrono::{DateTime, Utc};
     use std::sync::Arc;
 
-    fn fake_metadata_deps() -> (
+    fn fake_metadata_deps(
+        video_repository: &Arc<FakeVideoRepository>,
+    ) -> (
         Arc<FakePlaylistVideoRepository>,
         Arc<FakeYoutubeMetadataRepository>,
         Arc<FakeVideoMetadataRepository>,
     ) {
         (
-            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(FakeVideoMetadataRepository::default()),
         )
@@ -100,7 +102,7 @@ mod tests {
         }
         let video_file_repository = Arc::new(video_file_repository);
         let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps();
+            fake_metadata_deps(&video_repository);
 
         let video_downloader = VideoDownloader::new(
             video_repository.clone(),
@@ -196,7 +198,7 @@ mod tests {
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps();
+            fake_metadata_deps(&video_repository);
 
         let video_downloader = VideoDownloader::new(
             video_repository,
@@ -231,7 +233,7 @@ mod tests {
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps();
+            fake_metadata_deps(&video_repository);
 
         let video_downloader = VideoDownloader::new(
             video_repository,
@@ -267,7 +269,7 @@ mod tests {
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps();
+            fake_metadata_deps(&video_repository);
 
         let video_downloader = VideoDownloader::new(
             video_repository,
@@ -297,7 +299,7 @@ mod tests {
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps();
+            fake_metadata_deps(&video_repository);
 
         let video_downloader = VideoDownloader::new(
             video_repository,
@@ -423,7 +425,7 @@ mod tests {
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(true)),
             Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
             youtube_metadata_repository,
             video_metadata_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -458,7 +460,7 @@ mod tests {
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::new(true)),
             Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::default()),
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             video_metadata_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -488,7 +490,7 @@ mod tests {
         let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
         video_repository.save(&video).unwrap();
         let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps();
+            fake_metadata_deps(&video_repository);
 
         let video_downloader = VideoDownloader::new(
             video_repository.clone(),

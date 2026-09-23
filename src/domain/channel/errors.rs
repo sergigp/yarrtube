@@ -1,28 +1,6 @@
 use super::channel_handle::ChannelHandle;
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChannelHandleError(pub String);
-
-impl fmt::Display for ChannelHandleError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl std::error::Error for ChannelHandleError {}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VideoLimitError(pub String);
-
-impl fmt::Display for VideoLimitError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl std::error::Error for VideoLimitError {}
-
 #[derive(Debug)]
 pub enum CreateChannelError {
     YoutubeChannelNotFound(ChannelHandle),

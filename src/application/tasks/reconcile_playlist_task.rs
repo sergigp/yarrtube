@@ -89,7 +89,8 @@ mod tests {
             .unwrap();
         let event_publisher = Arc::new(FakeEventPublisher::default());
         let video_repository = Arc::new(FakeVideoRepository::default());
-        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
         let task_repository = Arc::new(FakeTaskRepository::default());
         let video_file_repository = Arc::new(video_file_repository);
 
@@ -158,7 +159,6 @@ mod tests {
                 fixed_timestamp(),
             ))
             .unwrap();
-        playlist_video_repository.register_youtube_id(&video.id, &video.youtube_id);
         video
     }
 
@@ -187,7 +187,7 @@ mod tests {
 
         assert!(event_publisher.published.lock().unwrap().is_empty());
         assert!(video_repository.videos.lock().unwrap().is_empty());
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -203,7 +203,7 @@ mod tests {
 
         assert!(event_publisher.published.lock().unwrap().is_empty());
         assert!(video_repository.videos.lock().unwrap().is_empty());
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -276,7 +276,8 @@ mod tests {
             ))
             .unwrap();
         let video_repository = Arc::new(FakeVideoRepository::default());
-        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
+        let playlist_video_repository =
+            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
         let youtube_playlist_items_repository = Arc::new(FakeYoutubePlaylistItemsRepository {
             videos: std::sync::Mutex::new(vec![YoutubePlaylistItem {
                 video_id: "vid1".to_string(),
@@ -310,11 +311,6 @@ mod tests {
             .list_for_playlist(&playlist_id())
             .unwrap();
         assert_eq!(stored[0].position, Some(0));
-        // The fake's find-by-youtube-id lookup mirrors the real
-        // repository's join with `videos`, but (unlike SQL) needs to be
-        // told the mapping explicitly since it has no shared video store.
-        let created_video = video_repository.find(&stored[0].video_id).unwrap().unwrap();
-        playlist_video_repository.register_youtube_id(&created_video.id, &created_video.youtube_id);
 
         *youtube_playlist_items_repository.videos.lock().unwrap() = vec![YoutubePlaylistItem {
             video_id: "vid1".to_string(),
@@ -419,7 +415,7 @@ mod tests {
 
         handler.handle(&payload_for("PL1"), false).unwrap();
 
-        let scheduled = task_repository.scheduled.lock().unwrap();
+        let scheduled = task_repository.scheduled();
         assert_eq!(scheduled.len(), 1);
         assert_eq!(
             scheduled[0].0,
@@ -465,7 +461,7 @@ mod tests {
         assert_eq!(stored[0].thumbnail_filename, None);
         assert_eq!(stored[0].quality, None);
 
-        let scheduled = task_repository.scheduled.lock().unwrap();
+        let scheduled = task_repository.scheduled();
         assert!(scheduled.iter().any(|(task, _)| *task
             == Task::DownloadVideo {
                 video_id: stored[0].id.as_str().to_string(),
@@ -505,7 +501,7 @@ mod tests {
         assert_eq!(stored[0].filename, None);
         assert_eq!(stored[0].quality, None);
 
-        let scheduled = task_repository.scheduled.lock().unwrap();
+        let scheduled = task_repository.scheduled();
         assert!(scheduled.iter().any(|(task, _)| *task
             == Task::DownloadVideo {
                 video_id: stored[0].id.as_str().to_string(),
@@ -555,7 +551,7 @@ mod tests {
         assert_eq!(stored[0].filename, None);
         assert_eq!(stored[0].quality, None);
 
-        let scheduled = task_repository.scheduled.lock().unwrap();
+        let scheduled = task_repository.scheduled();
         assert!(scheduled.iter().any(|(task, _)| *task
             == Task::DownloadVideo {
                 video_id: stored[0].id.as_str().to_string(),

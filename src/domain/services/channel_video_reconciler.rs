@@ -462,7 +462,8 @@ mod tests {
         let video_repository = Arc::new(FakeVideoRepository::default());
         video_repository.save(video).unwrap();
 
-        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let channel_video_repository =
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
         channel_video_repository
             .save(&ChannelVideo::create(
                 channel.id.clone(),
@@ -471,7 +472,6 @@ mod tests {
                 fixed_timestamp(),
             ))
             .unwrap();
-        channel_video_repository.register_youtube_id(&video.id, &video.youtube_id);
 
         let task_repository = Arc::new(FakeTaskRepository::default());
         let video_file_repository = Arc::new(video_file_repository);
@@ -557,7 +557,7 @@ mod tests {
 
         let found = harness.video_repository.find(&video.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::Downloaded);
-        assert!(harness.task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(harness.task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -577,7 +577,7 @@ mod tests {
 
         let found = harness.video_repository.find(&video.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::Downloaded);
-        assert!(harness.task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(harness.task_repository.scheduled().is_empty());
     }
 
     #[test]
@@ -667,7 +667,7 @@ mod tests {
 
         let found = harness.video_repository.find(&video.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::Downloaded);
-        assert!(harness.task_repository.scheduled.lock().unwrap().is_empty());
+        assert!(harness.task_repository.scheduled().is_empty());
         let saved = harness
             .video_metadata_repository
             .find(&video.id)
@@ -743,7 +743,8 @@ mod tests {
         let channel_repository = Arc::new(FakeChannelRepository::default());
         channel_repository.insert(channel).unwrap();
         let video_repository = Arc::new(FakeVideoRepository::default());
-        let channel_video_repository = Arc::new(FakeChannelVideoRepository::default());
+        let channel_video_repository =
+            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
         let channel_videos_repository =
             Arc::new(FakeChannelVideosRepository::with_videos(current_videos));
         let event_publisher = Arc::new(FakeEventPublisher::default());

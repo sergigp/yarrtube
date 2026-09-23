@@ -1,1240 +1,1044 @@
 pub mod dto;
 
-use super::AppState;
-use super::error::error_response;
+use super::blocking::run_blocking;
+use super::error::ApiError;
+use super::validation::{MISSING_QUALITY, required};
 use crate::domain::playlist::{
     CreatePlaylistError, DeletePlaylistError, PlaylistName, PlaylistPath,
 };
-use crate::domain::services::CreatePlaylistOutcome;
+use crate::domain::services::{
+    CreatePlaylistOutcome, PlaylistCreator, PlaylistDeleter, PlaylistSearcher, VideoReconciler,
+};
 use crate::domain::shared::{PlaylistId, Quality};
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
 use dto::{CreatePlaylistRequest, PlaylistResponse};
 
+const MISSING_PATH: &str = "Playlist path must not be empty";
+
 pub async fn create_playlist(
-    State(state): State<AppState>,
+    State(playlist_creator): State<PlaylistCreator>,
     Json(request): Json<CreatePlaylistRequest>,
-) -> Response {
-    let id = match PlaylistId::from_url_or_id(request.playlist) {
-        Ok(id) => id,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
-    let name = match PlaylistName::new(request.name) {
-        Ok(name) => name,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
-    let path = match request.path {
-        None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "Playlist path must not be empty".to_string(),
-            );
-        }
-        Some(path) => match PlaylistPath::new(path) {
-            Ok(path) => path,
-            Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-        },
-    };
-    let quality = match request.quality {
-        None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "Quality must be one of \"high\", \"mid\", or \"low\" (missing)".to_string(),
-            );
-        }
-        Some(quality) => match Quality::new(quality) {
-            Ok(quality) => quality,
-            Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-        },
-    };
+) -> Result<(StatusCode, Json<PlaylistResponse>), ApiError> {
+    let id = PlaylistId::from_url_or_id(request.playlist)?;
+    let name = PlaylistName::new(request.name)?;
+    let path = PlaylistPath::new(required(request.path, MISSING_PATH)?)?;
+    let quality = Quality::new(required(request.quality, MISSING_QUALITY)?)?;
 
-    let result =
-        tokio::task::spawn_blocking(move || state.playlist_creator.create(id, name, path, quality))
-            .await;
+    let outcome = run_blocking(move || playlist_creator.create(id, name, path, quality)).await?;
 
-    match result {
-        Ok(Ok(CreatePlaylistOutcome::Created(playlist))) => {
-            (StatusCode::CREATED, Json(PlaylistResponse::from(playlist))).into_response()
+    match outcome {
+        Ok(CreatePlaylistOutcome::Created(playlist)) => {
+            Ok((StatusCode::CREATED, Json(PlaylistResponse::from(playlist))))
         }
-        Ok(Ok(CreatePlaylistOutcome::AlreadyExisted(playlist))) => {
-            (StatusCode::OK, Json(PlaylistResponse::from(playlist))).into_response()
+        Ok(CreatePlaylistOutcome::AlreadyExisted(playlist)) => {
+            Ok((StatusCode::OK, Json(PlaylistResponse::from(playlist))))
         }
-        Ok(Err(e @ CreatePlaylistError::YoutubePlaylistNotFound(_))) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Ok(Err(e @ CreatePlaylistError::PathAlreadyInUse(_))) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Ok(Err(e @ CreatePlaylistError::Lookup(_))) => {
-            error_response(StatusCode::BAD_GATEWAY, e.to_string())
-        }
-        Ok(Err(e @ CreatePlaylistError::Repository(_))) => {
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        }
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err(e @ CreatePlaylistError::YoutubePlaylistNotFound(_)) => Err(ApiError::bad_request(e)),
+        Err(e @ CreatePlaylistError::PathAlreadyInUse(_)) => Err(ApiError::bad_request(e)),
+        Err(e @ CreatePlaylistError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e)),
+        Err(e @ CreatePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
 
-pub async fn delete_playlist(State(state): State<AppState>, Path(id): Path<String>) -> Response {
-    let id = match PlaylistId::new(id) {
-        Ok(id) => id,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
+pub async fn delete_playlist(
+    State(playlist_deleter): State<PlaylistDeleter>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let id = PlaylistId::new(id)?;
 
-    match state.playlist_deleter.delete(id) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e @ DeletePlaylistError::NotFound(_)) => {
-            error_response(StatusCode::BAD_REQUEST, e.to_string())
-        }
-        Err(e @ DeletePlaylistError::Repository(_)) => {
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        }
+    match run_blocking(move || playlist_deleter.delete(id)).await? {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(e @ DeletePlaylistError::NotFound(_)) => Err(ApiError::bad_request(e)),
+        Err(e @ DeletePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
 
-pub async fn reconcile_playlist(State(state): State<AppState>, Path(id): Path<String>) -> Response {
-    let id = match PlaylistId::new(id) {
-        Ok(id) => id,
-        Err(e) => return error_response(StatusCode::BAD_REQUEST, e.to_string()),
-    };
+pub async fn reconcile_playlist(
+    State(video_reconciler): State<VideoReconciler>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let id = PlaylistId::new(id)?;
 
-    let result =
-        tokio::task::spawn_blocking(move || state.video_reconciler.force_reconcile(id)).await;
+    run_blocking(move || video_reconciler.force_reconcile(id))
+        .await?
+        .map_err(ApiError::internal)?;
 
-    match result {
-        Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
-        Ok(Err(e)) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
-pub async fn list_playlists(State(state): State<AppState>) -> Response {
-    match state.playlist_searcher.search_all() {
-        Ok(playlists) => {
-            let response: Vec<PlaylistResponse> =
-                playlists.into_iter().map(PlaylistResponse::from).collect();
-            (StatusCode::OK, Json(response)).into_response()
-        }
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-    }
+pub async fn list_playlists(
+    State(playlist_searcher): State<PlaylistSearcher>,
+) -> Result<Json<Vec<PlaylistResponse>>, ApiError> {
+    let playlists = run_blocking(move || playlist_searcher.search_all())
+        .await?
+        .map_err(ApiError::internal)?;
+    Ok(Json(
+        playlists.into_iter().map(PlaylistResponse::from).collect(),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::http::api_router;
-    use crate::domain::event::DomainEvent;
-    use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
+    use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::playlist::{Playlist, PlaylistKind};
+    use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::services::ThumbnailFetcher;
+    use crate::domain::shared::VideoId;
+    use crate::domain::task::{ScheduledTask, Task, TaskStatus};
+    use crate::domain::video::Video;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
-    use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
-    use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
-    use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
-    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
-    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
-    use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
-    use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
-    use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::{
+        PlaylistRepository, SqlitePlaylistRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+        PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_task_repository::{
+        SqliteTaskRepository, TaskRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        SqliteVideoRepository, VideoRepository,
+    };
     use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
-    use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
-    use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
-
-    use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
+    use crate::infrastructure::repositories::youtube_playlist_items_repository::{
+        FakeYoutubePlaylistItemsRepository, YoutubePlaylistItem,
+    };
+    use crate::infrastructure::repositories::youtube_playlist_repository::{
+        FakeYoutubePlaylistRepository, YoutubePlaylistRepository,
+    };
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_repository::{
+        EventRepository, SqliteEventRepository,
+    };
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use axum::body::{Body, to_bytes};
-    use axum::http::Request;
     use chrono::{DateTime, Utc};
-    use std::sync::Arc;
-    use tower::ServiceExt;
+    use rusqlite::Connection;
+    use std::sync::{Arc, Mutex};
+
+    const DEFAULT_PATH: &str = "music/chill";
+
+    #[tokio::test]
+    async fn it_should_return_201_and_store_the_playlist_when_creating_a_new_playlist() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(playlist_creator, create_request("PL1")).await;
+
+        assert_eq!(
+            response,
+            Ok((StatusCode::CREATED, playlist_response("PL1", DEFAULT_PATH)))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, playlist_created("PL1"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_201_and_store_the_playlist_when_creating_a_playlist_from_a_youtube_url()
+     {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(
+            playlist_creator,
+            create_request("https://www.youtube.com/playlist?list=PL1"),
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Ok((StatusCode::CREATED, playlist_response("PL1", DEFAULT_PATH)))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, playlist_created("PL1"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_200_with_the_existing_playlist_and_change_nothing_when_creating_a_playlist_that_already_exists()
+     {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let request = CreatePlaylistRequest {
+            name: "Different Name".to_string(),
+            path: Some("different/path".to_string()),
+            quality: Some("low".to_string()),
+            ..create_request("PL1")
+        };
+
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((StatusCode::OK, playlist_response("PL1", DEFAULT_PATH)))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_record_a_playlist_created_event_only_once_for_repeated_creation() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        create(playlist_creator.clone(), create_request("PL1"))
+            .await
+            .unwrap();
+        create(playlist_creator, create_request("PL1"))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, playlist_created("PL1"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_the_playlist_value_is_invalid() {
+        let response = create(any_playlist_creator(), create_request("")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Playlist ID or URL must not be empty"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_path_is_missing() {
+        let request = CreatePlaylistRequest {
+            path: None,
+            ..create_request("PL1")
+        };
+
+        let response = create(any_playlist_creator(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("Playlist path must not be empty"))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_quality_is_missing() {
+        let request = CreatePlaylistRequest {
+            quality: None,
+            ..create_request("PL1")
+        };
+
+        let response = create(any_playlist_creator(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Quality must be one of \"high\", \"mid\", or \"low\" (missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_and_store_nothing_when_the_path_is_already_used_by_another_playlist()
+     {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        playlist_repository
+            .insert(&playlist("PL1", "shared/path"))
+            .unwrap();
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let request = CreatePlaylistRequest {
+            path: Some("shared/path".to_string()),
+            ..create_request("PL2")
+        };
+
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "playlist path \"shared/path\" is already used by another playlist"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "shared/path")]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_and_store_nothing_when_the_youtube_playlist_does_not_exist() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository { exists: false }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(playlist_creator, create_request("PL404")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "YouTube playlist PL404 does not exist or is not accessible"
+            ))
+        );
+        assert_eq!(playlist_repository.list().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_502_and_store_nothing_when_the_youtube_lookup_fails() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FailingYoutubePlaylistRepository),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(playlist_creator, create_request("PL1")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                "YouTube API request failed"
+            ))
+        );
+        assert_eq!(playlist_repository.list().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_204_remove_the_playlist_and_record_a_playlist_deleted_event_when_deleting_an_existing_playlist()
+     {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let playlist_deleter = PlaylistDeleter::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            event_publisher(&db),
+        );
+
+        let response = delete(playlist_deleter, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(playlist_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::PlaylistDeleted {
+                    playlist_id: "PL1".to_string(),
+                    path: DEFAULT_PATH.to_string(),
+                }
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_delete_every_video_of_the_deleted_playlist_and_keep_other_playlists_videos()
+    {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        playlist_repository
+            .insert(&playlist("PL2", "music/other"))
+            .unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid1",
+            0,
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid2",
+            1,
+        );
+        let (other_video, other_playlist_video) = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL2",
+            "vid3",
+            0,
+        );
+        let playlist_deleter = PlaylistDeleter::new(
+            playlist_repository.clone(),
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            event_publisher(&db),
+        );
+
+        let response = delete(playlist_deleter, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL2", "music/other")]
+        );
+        assert_eq!(video_repository.list().unwrap(), vec![other_video]);
+        assert_eq!(
+            playlist_video_repository
+                .list_for_playlist(&playlist_id("PL1"))
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(
+            playlist_video_repository
+                .list_for_playlist(&playlist_id("PL2"))
+                .unwrap(),
+            vec![other_playlist_video]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_and_change_nothing_when_deleting_a_missing_playlist() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let playlist_deleter = PlaylistDeleter::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            event_publisher(&db),
+        );
+
+        let response = delete(playlist_deleter, "PL404").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("playlist PL404 not found"))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_deleting_with_an_invalid_playlist_id() {
+        let response = delete(any_playlist_deleter(), " ").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "YouTube playlist ID must not be empty"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_an_empty_array_when_no_playlists_exist() {
+        let db = TestDatabase::new();
+        let playlist_searcher =
+            PlaylistSearcher::new(Arc::new(SqlitePlaylistRepository::new(db.connection())));
+
+        let response = list(playlist_searcher).await;
+
+        assert_eq!(response, Ok(vec![]));
+    }
+
+    #[tokio::test]
+    async fn it_should_return_all_existing_playlists() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository
+            .insert(&playlist("PL1", "music/first"))
+            .unwrap();
+        playlist_repository
+            .insert(&playlist("PL2", "music/second"))
+            .unwrap();
+        let playlist_searcher = PlaylistSearcher::new(playlist_repository);
+
+        let response = list(playlist_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                playlist_response("PL1", "music/first"),
+                playlist_response("PL2", "music/second"),
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_204_and_add_the_listed_videos_when_reconciling_a_playlist() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let task_repository = task_repository(&db);
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let video_reconciler = video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            vec![playlist_item("vid1", "One", 0)],
+            task_repository.clone(),
+        );
+
+        let response = reconcile(video_reconciler, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        let videos = video_repository.list().unwrap();
+        let video_id = videos[0].id.clone();
+        assert_eq!(
+            videos,
+            vec![Video {
+                id: video_id.clone(),
+                ..Video::create(VideoId::new("vid1").unwrap(), "One", fixed_timestamp())
+            }]
+        );
+        assert_eq!(
+            playlist_video_repository
+                .list_for_playlist(&playlist_id("PL1"))
+                .unwrap(),
+            vec![PlaylistVideo {
+                id: 1,
+                ..PlaylistVideo::create_with_position(
+                    playlist_id("PL1"),
+                    video_id.clone(),
+                    0,
+                    fixed_timestamp()
+                )
+            }]
+        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoAddedToPlaylist {
+                    playlist_id: "PL1".to_string(),
+                    video_id: video_id.as_str().to_string(),
+                }
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_remove_stored_videos_no_longer_on_youtube_when_reconciling_a_playlist() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let (removed, _) = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid_old",
+            0,
+        );
+        let video_reconciler = video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            Vec::new(),
+            task_repository(&db),
+        );
+
+        let response = reconcile(video_reconciler, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            playlist_video_repository
+                .list_for_playlist(&playlist_id("PL1"))
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoRemovedFromPlaylist {
+                    playlist_id: "PL1".to_string(),
+                    video_id: removed.id.as_str().to_string(),
+                    title: "Video vid_old".to_string(),
+                    filename: None,
+                    thumbnail_filename: None,
+                    was_downloaded: false,
+                }
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_not_add_a_listed_video_twice_or_schedule_tasks_on_repeated_reconciles() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let task_repository = task_repository(&db);
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let video_reconciler = video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            vec![playlist_item("vid1", "One", 0)],
+            task_repository.clone(),
+        );
+
+        reconcile(video_reconciler.clone(), "PL1").await.unwrap();
+        let videos_after_first_reconcile = video_repository.list().unwrap();
+        let playlist_videos_after_first_reconcile = playlist_video_repository
+            .list_for_playlist(&playlist_id("PL1"))
+            .unwrap();
+        let events_after_first_reconcile = event_repository.list_eligible().unwrap();
+        let response = reconcile(video_reconciler, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            videos_after_first_reconcile
+        );
+        assert_eq!(
+            playlist_video_repository
+                .list_for_playlist(&playlist_id("PL1"))
+                .unwrap(),
+            playlist_videos_after_first_reconcile
+        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            events_after_first_reconcile
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_leave_an_existing_pending_reconcile_task_untouched() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let task_repository = task_repository(&db);
+        let existing_task = Task::ReconcilePlaylist {
+            playlist_id: "PL1".to_string(),
+        };
+        let existing_run_at = fixed_timestamp() + chrono::Duration::seconds(1800);
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        task_repository
+            .schedule(&existing_task, existing_run_at)
+            .unwrap();
+        let video_reconciler = video_reconciler(
+            &db,
+            playlist_repository,
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Vec::new(),
+            task_repository.clone(),
+        );
+
+        let response = reconcile(video_reconciler, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &existing_task, existing_run_at)]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_return_204_and_do_nothing_when_reconciling_a_nonexistent_playlist() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let task_repository = task_repository(&db);
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let video_reconciler = video_reconciler(
+            &db,
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            vec![playlist_item("vid1", "One", 0)],
+            task_repository.clone(),
+        );
+
+        let response = reconcile(video_reconciler, "PL404").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            playlist_video_repository
+                .list_for_playlist(&playlist_id("PL404"))
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_return_400_when_reconciling_with_an_invalid_playlist_id() {
+        let response = reconcile(any_video_reconciler(), " ").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "YouTube playlist ID must not be empty"
+            ))
+        );
+    }
+
+    /// A creator for tests whose request is rejected before reaching it. Its
+    /// repositories sit on an unmigrated in-memory database, so a request that
+    /// wrongly got through would fail loudly instead of passing.
+    fn any_playlist_creator() -> PlaylistCreator {
+        PlaylistCreator::new(
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            unused_event_publisher(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )
+    }
+
+    /// A deleter for tests whose request is rejected before reaching it (see
+    /// `any_playlist_creator`).
+    fn any_playlist_deleter() -> PlaylistDeleter {
+        PlaylistDeleter::new(
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+            unused_event_publisher(),
+        )
+    }
+
+    /// Builds a reconciler around the repositories a test seeds and asserts;
+    /// the remaining ports (metadata, files, thumbnails) are ones no playlist
+    /// reconcile test observes. Events go to `db`'s outbox table.
+    fn video_reconciler(
+        db: &TestDatabase,
+        playlist_repository: Arc<SqlitePlaylistRepository>,
+        video_repository: Arc<SqliteVideoRepository>,
+        playlist_video_repository: Arc<SqlitePlaylistVideoRepository>,
+        playlist_items: Vec<YoutubePlaylistItem>,
+        task_repository: Arc<SqliteTaskRepository>,
+    ) -> VideoReconciler {
+        let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        VideoReconciler::new(
+            playlist_repository,
+            video_repository,
+            playlist_video_repository,
+            Arc::new(FakeYoutubePlaylistItemsRepository {
+                videos: Mutex::new(playlist_items),
+            }),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            event_publisher(db),
+            task_repository,
+            Arc::new(FakeVideoFileRepository::default()),
+            thumbnail_fetcher,
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        )
+    }
+
+    /// A reconciler for tests whose request is rejected before reaching it
+    /// (see `any_playlist_creator`).
+    fn any_video_reconciler() -> VideoReconciler {
+        let video_repository = Arc::new(SqliteVideoRepository::new(unused_connection()));
+        VideoReconciler::new(
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            video_repository.clone(),
+            Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+            Arc::new(FakeYoutubePlaylistItemsRepository {
+                videos: Mutex::new(Vec::new()),
+            }),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
+            unused_event_publisher(),
+            Arc::new(SqliteTaskRepository::new(
+                Arc::new(Mutex::new(unused_connection())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(ThumbnailFetcher::new(
+                video_repository,
+                Arc::new(FakeVideoDownloaderRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        )
+    }
+
+    struct FailingYoutubePlaylistRepository;
+
+    impl YoutubePlaylistRepository for FailingYoutubePlaylistRepository {
+        fn exists(&self, _id: &PlaylistId) -> anyhow::Result<bool> {
+            anyhow::bail!("YouTube API request failed")
+        }
+    }
+
+    fn unused_connection() -> Connection {
+        Connection::open_in_memory().unwrap()
+    }
+
+    fn unused_event_publisher() -> Arc<SqliteEventPublisher> {
+        Arc::new(SqliteEventPublisher::new(
+            Arc::new(Mutex::new(unused_connection())),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ))
+    }
+
+    fn event_publisher(db: &TestDatabase) -> Arc<SqliteEventPublisher> {
+        Arc::new(SqliteEventPublisher::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ))
+    }
+
+    fn task_repository(db: &TestDatabase) -> Arc<SqliteTaskRepository> {
+        Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ))
+    }
+
+    /// The outbox row `SqliteEventPublisher` writes for `event`, as read back
+    /// before the consumer has dispatched it.
+    fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+        ScheduledEvent {
+            id,
+            event_type: event.event_type().to_string(),
+            payload: event.payload().to_string(),
+            retries: 0,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
+    }
+
+    /// The row `SqliteTaskRepository::schedule` writes for `task`, as read
+    /// back before the executor has picked it up.
+    fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
+        ScheduledTask {
+            id,
+            task_type: task.task_type().to_string(),
+            payload: task.payload().to_string(),
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
+    }
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    /// Builds a fresh `ChannelVideoReconciler` wired to unrelated fakes —
-    /// these tests don't exercise channel reconciliation, they just need
-    /// `AppState` to construct.
-    fn channel_video_reconciler(
-        event_publisher: Arc<FakeEventPublisher>,
-    ) -> crate::domain::services::ChannelVideoReconciler {
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
-            video_repository.clone(),
-            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        crate::domain::services::ChannelVideoReconciler::new(
-            Arc::new(FakeChannelRepository::default()),
-            video_repository,
-            Arc::new(FakeChannelVideoRepository::default()),
-            Arc::new(FakeChannelVideosRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher,
-            Arc::new(FakeTaskRepository::default()),
-            Arc::new(FakeVideoFileRepository::default()),
-            thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
+    fn playlist_id(id: &str) -> PlaylistId {
+        PlaylistId::new(id).unwrap()
+    }
+
+    fn playlist(id: &str, path: &str) -> Playlist {
+        Playlist::create(
+            playlist_id(id),
+            PlaylistName::new("My Playlist").unwrap(),
+            PlaylistPath::new(path).unwrap(),
+            Quality::High,
+            PlaylistKind::YoutubeLinked,
+            fixed_timestamp(),
         )
     }
 
-    fn test_router(
-        repository: FakePlaylistRepository,
-        youtube_exists: bool,
-    ) -> (
-        axum::Router,
-        Arc<FakePlaylistRepository>,
-        Arc<FakeEventPublisher>,
-    ) {
-        let (router, repository, event_publisher, _video_repository, _playlist_video_repository) =
-            test_router_with_videos(repository, youtube_exists, FakeVideoRepository::default());
-        (router, repository, event_publisher)
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn test_router_with_videos(
-        repository: FakePlaylistRepository,
-        youtube_exists: bool,
-        video_repository: FakeVideoRepository,
-    ) -> (
-        axum::Router,
-        Arc<FakePlaylistRepository>,
-        Arc<FakeEventPublisher>,
-        Arc<FakeVideoRepository>,
-        Arc<FakePlaylistVideoRepository>,
-    ) {
-        let repository = Arc::new(repository);
-        let video_repository = Arc::new(video_repository);
-        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
-        let event_publisher = Arc::new(FakeEventPublisher::default());
-        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
-            Arc::new(FakeTaskRepository::default()),
-            repository.clone(),
-            Arc::new(FakeChannelRepository::default()),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeChannelVideoRepository::default()),
+    /// Saves a video and its playlist membership, returning both as stored
+    /// (the playlist video with its storage-assigned `id`).
+    fn save_playlist_video(
+        video_repository: &dyn VideoRepository,
+        playlist_video_repository: &dyn PlaylistVideoRepository,
+        playlist: &str,
+        youtube_id: &str,
+        position: i64,
+    ) -> (Video, PlaylistVideo) {
+        let video = Video::create(
+            VideoId::new(youtube_id).unwrap(),
+            format!("Video {youtube_id}"),
+            fixed_timestamp(),
         );
-        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
-            video_repository.clone(),
-            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let video_reconciler = crate::domain::services::VideoReconciler::new(
-            repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher.clone(),
-            Arc::new(FakeTaskRepository::default()),
-            Arc::new(FakeVideoFileRepository::default()),
-            thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        );
-        let video_searcher = crate::domain::services::VideoSearcher::new(
-            repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::default()),
-            video_repository.clone(),
-        );
-        let state = AppState {
-            directory_searcher: crate::domain::services::DirectorySearcher::new(Arc::new(
-                crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository::default(),
-            )),
-            videos_root: "/videos".to_string(),
-            playlist_creator: crate::domain::services::PlaylistCreator::new(
-                repository.clone(),
-                Arc::new(FakeYoutubePlaylistRepository {
-                    exists: youtube_exists,
-                }),
-                event_publisher.clone(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            ),
-            playlist_deleter: crate::domain::services::PlaylistDeleter::new(
-                repository.clone(),
-                video_repository.clone(),
-                playlist_video_repository.clone(),
-                event_publisher.clone(),
-            ),
-            playlist_searcher: crate::domain::services::PlaylistSearcher::new(repository.clone()),
-            video_reconciler,
-            video_searcher,
-            task_view_searcher,
-            channel_service: crate::domain::channel::ChannelService::new(
-                Arc::new(FakeChannelRepository::default()),
-                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
-                Arc::new(FakeChannelAvatarRepository::default()),
-                Arc::new(FakeVideoRepository::default()),
-                Arc::new(FakeChannelVideoRepository::default()),
-                event_publisher.clone(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            ),
-            channel_video_reconciler: channel_video_reconciler(event_publisher.clone()),
-        };
-        (
-            axum::Router::new().nest("/api", api_router(state)),
-            repository,
-            event_publisher,
-            video_repository,
-            playlist_video_repository,
-        )
-    }
-
-    async fn body_json(response: Response) -> serde_json::Value {
-        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        serde_json::from_slice(&bytes).unwrap()
-    }
-
-    const DEFAULT_PATH: &str = "music/chill";
-
-    fn create_request(id: &str, name: &str) -> Request<Body> {
-        create_request_with(id, name, DEFAULT_PATH, "high")
-    }
-
-    fn create_request_with(id: &str, name: &str, path: &str, quality: &str) -> Request<Body> {
-        Request::builder()
-            .method("POST")
-            .uri("/api/playlists")
-            .header("content-type", "application/json")
-            .body(Body::from(
-                serde_json::json!({ "playlist": id, "name": name, "path": path, "quality": quality })
-                    .to_string(),
-            ))
-            .unwrap()
-    }
-
-    fn create_request_with_quality(id: &str, name: &str, quality: &str) -> Request<Body> {
-        create_request_with(id, name, DEFAULT_PATH, quality)
-    }
-
-    fn create_request_with_path(id: &str, name: &str, path: &str) -> Request<Body> {
-        create_request_with(id, name, path, "high")
-    }
-
-    fn create_request_missing_quality(id: &str, name: &str) -> Request<Body> {
-        Request::builder()
-            .method("POST")
-            .uri("/api/playlists")
-            .header("content-type", "application/json")
-            .body(Body::from(
-                serde_json::json!({ "playlist": id, "name": name, "path": DEFAULT_PATH })
-                    .to_string(),
-            ))
-            .unwrap()
-    }
-
-    fn create_request_missing_path(id: &str, name: &str) -> Request<Body> {
-        Request::builder()
-            .method("POST")
-            .uri("/api/playlists")
-            .header("content-type", "application/json")
-            .body(Body::from(
-                serde_json::json!({ "playlist": id, "name": name, "quality": "high" }).to_string(),
-            ))
-            .unwrap()
-    }
-
-    #[tokio::test]
-    async fn it_should_return_201_when_creating_a_new_playlist() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request("PL1", "My Playlist"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let body = body_json(response).await;
-        assert_eq!(body["id"], "PL1");
-        assert_eq!(body["name"], "My Playlist");
-        assert_eq!(body["path"], DEFAULT_PATH);
-        assert_eq!(body["quality"], "high");
-        assert_eq!(body["kind"], "youtube_linked");
-        assert_eq!(
-            body["created_at"],
-            fixed_timestamp().to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
-        );
-    }
-
-    #[tokio::test]
-    async fn it_should_return_200_when_creating_a_playlist_that_already_exists() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-        router
-            .clone()
-            .oneshot(create_request("PL1", "Original Name"))
-            .await
-            .unwrap();
-
-        let response = router
-            .oneshot(create_request("PL1", "Different Name"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = body_json(response).await;
-        assert_eq!(body["name"], "Original Name");
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_name_is_invalid() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router.oneshot(create_request("PL1", "")).await.unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_path_is_missing() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request_missing_path("PL1", "My Playlist"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_path_is_absolute() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request_with_path(
-                "PL1",
-                "My Playlist",
-                "/absolute/path",
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_path_contains_a_parent_traversal_segment() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request_with_path("PL1", "My Playlist", "a/../b"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_path_contains_an_empty_segment() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request_with_path("PL1", "My Playlist", "a//b"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_path_is_already_used_by_another_playlist() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-        router
-            .clone()
-            .oneshot(create_request_with_path("PL1", "First", "shared/path"))
-            .await
-            .unwrap();
-
-        let response = router
-            .oneshot(create_request_with_path("PL2", "Second", "shared/path"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_keep_the_existing_path_when_creating_a_duplicate_with_a_different_path() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-        router
-            .clone()
-            .oneshot(create_request_with_path(
-                "PL1",
-                "My Playlist",
-                "original/path",
-            ))
-            .await
-            .unwrap();
-
-        let response = router
-            .oneshot(create_request_with_path(
-                "PL1",
-                "My Playlist",
-                "different/path",
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = body_json(response).await;
-        assert_eq!(body["path"], "original/path");
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_quality_is_missing() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request_missing_quality("PL1", "My Playlist"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_quality_is_invalid() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request_with_quality("PL1", "My Playlist", "ultra"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_keep_the_existing_quality_when_creating_a_duplicate_with_a_different_quality()
-     {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-        router
-            .clone()
-            .oneshot(create_request_with_quality("PL1", "My Playlist", "high"))
-            .await
-            .unwrap();
-
-        let response = router
-            .oneshot(create_request_with_quality("PL1", "My Playlist", "low"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = body_json(response).await;
-        assert_eq!(body["quality"], "high");
-    }
-
-    #[tokio::test]
-    async fn it_should_return_201_when_creating_a_playlist_from_a_youtube_url() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request(
-                "https://www.youtube.com/playlist?list=PL1",
-                "My Playlist",
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let body = body_json(response).await;
-        assert_eq!(body["id"], "PL1");
-    }
-
-    #[tokio::test]
-    async fn it_should_return_201_when_creating_a_playlist_from_a_watch_url_with_a_list_param() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request(
-                "https://youtube.com/watch?v=vid1&list=PL1",
-                "My Playlist",
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let body = body_json(response).await;
-        assert_eq!(body["id"], "PL1");
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_url_is_not_a_recognized_youtube_url() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request(
-                "https://example.com/playlist?list=PL1",
-                "My Playlist",
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_youtube_url_is_missing_the_list_parameter() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request(
-                "https://www.youtube.com/watch?v=vid1",
-                "My Playlist",
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_playlist_value_is_empty() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(create_request("", "My Playlist"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_the_youtube_playlist_does_not_exist() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), false);
-
-        let response = router
-            .oneshot(create_request("PL404", "My Playlist"))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_record_a_playlist_created_event_only_once_for_repeated_creation() {
-        let (router, _repository, event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-        router
-            .clone()
-            .oneshot(create_request("PL1", "First"))
-            .await
-            .unwrap();
-
-        router
-            .oneshot(create_request("PL1", "First Again"))
-            .await
-            .unwrap();
-
-        let published = event_publisher.published.lock().unwrap();
-        assert_eq!(
-            *published,
-            vec![DomainEvent::PlaylistCreated {
-                playlist_id: "PL1".to_string()
-            }]
-        );
-    }
-
-    #[tokio::test]
-    async fn it_should_return_204_when_deleting_an_existing_playlist() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-        router
-            .clone()
-            .oneshot(create_request("PL1", "My Playlist"))
-            .await
-            .unwrap();
-
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .method("DELETE")
-                    .uri("/api/playlists/PL1")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
-    }
-
-    #[tokio::test]
-    async fn it_should_record_a_playlist_deleted_event_on_successful_deletion() {
-        let (router, _repository, event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-        router
-            .clone()
-            .oneshot(create_request("PL1", "My Playlist"))
-            .await
-            .unwrap();
-
-        router
-            .oneshot(
-                Request::builder()
-                    .method("DELETE")
-                    .uri("/api/playlists/PL1")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let published = event_publisher.published.lock().unwrap();
-        assert_eq!(
-            *published,
-            vec![
-                DomainEvent::PlaylistCreated {
-                    playlist_id: "PL1".to_string()
-                },
-                DomainEvent::PlaylistDeleted {
-                    playlist_id: "PL1".to_string(),
-                    path: DEFAULT_PATH.to_string(),
-                },
-            ]
-        );
-    }
-
-    #[tokio::test]
-    async fn it_should_delete_every_video_record_for_a_deleted_youtube_linked_playlist() {
-        use crate::domain::playlist_video::PlaylistVideo;
-        use crate::domain::shared::VideoId;
-        use crate::domain::video::Video;
-        use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
-        use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-
-        let (router, _repository, _event_publisher, video_repository, playlist_video_repository) =
-            test_router_with_videos(
-                FakePlaylistRepository::default(),
-                true,
-                FakeVideoRepository::default(),
-            );
-        router
-            .clone()
-            .oneshot(create_request("PL1", "My Playlist"))
-            .await
-            .unwrap();
-        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         video_repository.save(&video).unwrap();
         playlist_video_repository
-            .save(&PlaylistVideo::create(
-                PlaylistId::new("PL1").unwrap(),
+            .save(&PlaylistVideo::create_with_position(
+                playlist_id(playlist),
                 video.id.clone(),
+                position,
                 fixed_timestamp(),
             ))
             .unwrap();
-
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .method("DELETE")
-                    .uri("/api/playlists/PL1")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
+        let playlist_video = playlist_video_repository
+            .find_by_video(&video.id)
+            .unwrap()
             .unwrap();
-
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
-        assert!(video_repository.videos.lock().unwrap().is_empty());
-        assert!(
-            playlist_video_repository
-                .list_for_playlist(&PlaylistId::new("PL1").unwrap())
-                .unwrap()
-                .is_empty()
-        );
+        (video, playlist_video)
     }
 
-    #[tokio::test]
-    async fn it_should_return_400_when_deleting_a_missing_playlist() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .method("DELETE")
-                    .uri("/api/playlists/PL404")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_an_empty_array_when_no_playlists_exist() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .method("GET")
-                    .uri("/api/playlists")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = body_json(response).await;
-        assert_eq!(body, serde_json::json!([]));
-    }
-
-    #[tokio::test]
-    async fn it_should_return_all_created_playlists() {
-        let (router, _repository, _event_publisher) =
-            test_router(FakePlaylistRepository::default(), true);
-        router
-            .clone()
-            .oneshot(create_request_with_path("PL1", "First", "music/first"))
-            .await
-            .unwrap();
-        router
-            .clone()
-            .oneshot(create_request_with_path("PL2", "Second", "music/second"))
-            .await
-            .unwrap();
-
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .method("GET")
-                    .uri("/api/playlists")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = body_json(response).await;
-        let playlists = body.as_array().unwrap();
-        assert_eq!(playlists.len(), 2);
-        for playlist in playlists {
-            assert_eq!(playlist["quality"], "high");
-            assert_eq!(playlist["kind"], "youtube_linked");
+    fn playlist_item(video_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {
+        YoutubePlaylistItem {
+            video_id: video_id.to_string(),
+            title: title.to_string(),
+            position,
         }
     }
 
-    #[tokio::test]
-    async fn it_should_delete_the_playlist_output_directory_from_disk_when_the_playlist_is_deleted()
-    {
-        use crate::application::subscribers::delete_playlist_files_on_playlist_deleted::DeletePlaylistFilesOnPlaylistDeleted;
-        use crate::application::tasks::delete_playlist_files_task::DeletePlaylistFilesTask;
-        use crate::domain::shared::VideoId;
-        use crate::domain::video::Video;
-        use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
-        use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
-        use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-        use crate::infrastructure::repositories::task_handler::TaskHandler;
-        use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
+    fn playlist_created(playlist_id: &str) -> DomainEvent {
+        DomainEvent::PlaylistCreated {
+            playlist_id: playlist_id.to_string(),
+        }
+    }
 
-        let videos_root = unique_temp_dir("cascade-delete-playlist-e2e");
-        let output_dir = videos_root.join("music/chill");
-        std::fs::create_dir_all(&output_dir).unwrap();
-        std::fs::write(output_dir.join("My Video.mp4"), b"fake video bytes").unwrap();
+    fn create_request(playlist: &str) -> CreatePlaylistRequest {
+        CreatePlaylistRequest {
+            playlist: playlist.to_string(),
+            name: "My Playlist".to_string(),
+            path: Some(DEFAULT_PATH.to_string()),
+            quality: Some("high".to_string()),
+        }
+    }
 
-        let playlist_repository = Arc::new(FakePlaylistRepository::default());
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
-        video_repository
-            .save(
-                &Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
-                    .start_download(fixed_timestamp())
-                    .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp()),
-            )
-            .unwrap();
-        let event_publisher = Arc::new(FakeEventPublisher::default());
-        let video_file_deleter = crate::domain::services::VideoFileDeleter::new(
-            Arc::new(FilesystemVideoFileRepository),
-            videos_root.to_str().unwrap(),
-        );
-        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
-            video_repository.clone(),
-            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let video_reconciler = crate::domain::services::VideoReconciler::new(
-            playlist_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeYoutubePlaylistItemsRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher.clone(),
-            Arc::new(FakeTaskRepository::default()),
-            Arc::new(FilesystemVideoFileRepository),
-            thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            videos_root.to_str().unwrap(),
-        );
-        let video_searcher = crate::domain::services::VideoSearcher::new(
-            playlist_repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::default()),
-            video_repository.clone(),
-        );
-        let playlist_creator = crate::domain::services::PlaylistCreator::new(
-            playlist_repository.clone(),
-            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
-            event_publisher.clone(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let playlist_deleter = crate::domain::services::PlaylistDeleter::new(
-            playlist_repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            event_publisher.clone(),
-        );
-        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
-            Arc::new(FakeTaskRepository::default()),
-            playlist_repository.clone(),
-            Arc::new(FakeChannelRepository::default()),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeChannelVideoRepository::default()),
-        );
-        let playlist_searcher = crate::domain::services::PlaylistSearcher::new(playlist_repository);
-        let state = AppState {
-            directory_searcher: crate::domain::services::DirectorySearcher::new(Arc::new(
-                crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository::default(),
-            )),
-            videos_root: "/videos".to_string(),
-            playlist_creator,
-            playlist_deleter,
-            playlist_searcher,
-            video_reconciler,
-            video_searcher,
-            task_view_searcher,
-            channel_service: crate::domain::channel::ChannelService::new(
-                Arc::new(FakeChannelRepository::default()),
-                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
-                Arc::new(FakeChannelAvatarRepository::default()),
-                Arc::new(FakeVideoRepository::default()),
-                Arc::new(FakeChannelVideoRepository::default()),
-                event_publisher.clone(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            ),
-            channel_video_reconciler: channel_video_reconciler(event_publisher.clone()),
-        };
-        let router = axum::Router::new().nest("/api", api_router(state));
+    fn playlist_response(id: &str, path: &str) -> PlaylistResponse {
+        PlaylistResponse {
+            id: id.to_string(),
+            name: "My Playlist".to_string(),
+            path: path.to_string(),
+            quality: "high".to_string(),
+            kind: "youtube_linked".to_string(),
+            created_at: fixed_timestamp(),
+        }
+    }
 
-        router
-            .clone()
-            .oneshot(create_request_with_path(
-                "PL1",
-                "My Playlist",
-                "music/chill",
-            ))
+    async fn create(
+        playlist_creator: PlaylistCreator,
+        request: CreatePlaylistRequest,
+    ) -> Result<(StatusCode, PlaylistResponse), ApiError> {
+        create_playlist(State(playlist_creator), Json(request))
             .await
-            .unwrap();
-        router
-            .oneshot(
-                Request::builder()
-                    .method("DELETE")
-                    .uri("/api/playlists/PL1")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .map(|(status, Json(playlist))| (status, playlist))
+    }
+
+    async fn delete(playlist_deleter: PlaylistDeleter, id: &str) -> Result<StatusCode, ApiError> {
+        delete_playlist(State(playlist_deleter), Path(id.to_string())).await
+    }
+
+    async fn list(playlist_searcher: PlaylistSearcher) -> Result<Vec<PlaylistResponse>, ApiError> {
+        list_playlists(State(playlist_searcher))
             .await
-            .unwrap();
-
-        let playlist_deleted_payload = event_publisher
-            .published
-            .lock()
-            .unwrap()
-            .last()
-            .unwrap()
-            .payload()
-            .to_string();
-
-        let subscriber_task_repository = Arc::new(FakeTaskRepository::default());
-        DeletePlaylistFilesOnPlaylistDeleted::new(
-            subscriber_task_repository.clone(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        )
-        .handle(&playlist_deleted_payload)
-        .unwrap();
-        let scheduled = subscriber_task_repository.scheduled.lock().unwrap();
-        let (task, _run_at) = scheduled[0].clone();
-        drop(scheduled);
-
-        DeletePlaylistFilesTask::new(video_file_deleter)
-            .handle(&task.payload().to_string(), false)
-            .unwrap();
-
-        assert!(!output_dir.exists());
-
-        std::fs::remove_dir_all(&videos_root).ok();
+            .map(|Json(playlists)| playlists)
     }
 
-    fn reconcile_request(id: &str) -> Request<Body> {
-        Request::builder()
-            .method("POST")
-            .uri(format!("/api/playlists/{id}/reconcile"))
-            .body(Body::empty())
-            .unwrap()
-    }
-
-    fn test_router_for_reconcile(
-        repository: FakePlaylistRepository,
-        playlist_items: FakeYoutubePlaylistItemsRepository,
-        video_file_repository: FakeVideoFileRepository,
-    ) -> (
-        axum::Router,
-        Arc<FakeVideoRepository>,
-        Arc<FakeTaskRepository>,
-    ) {
-        let repository = Arc::new(repository);
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let playlist_video_repository = Arc::new(FakePlaylistVideoRepository::default());
-        let task_repository = Arc::new(FakeTaskRepository::default());
-        let event_publisher = Arc::new(FakeEventPublisher::default());
-        let task_view_searcher = crate::domain::services::TaskViewSearcher::new(
-            task_repository.clone(),
-            repository.clone(),
-            Arc::new(FakeChannelRepository::default()),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeChannelVideoRepository::default()),
-        );
-        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
-            video_repository.clone(),
-            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let video_reconciler = crate::domain::services::VideoReconciler::new(
-            repository.clone(),
-            video_repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(playlist_items),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher.clone(),
-            task_repository.clone(),
-            Arc::new(video_file_repository),
-            thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        );
-        let video_searcher = crate::domain::services::VideoSearcher::new(
-            repository.clone(),
-            playlist_video_repository.clone(),
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::default()),
-            video_repository.clone(),
-        );
-        let state = AppState {
-            directory_searcher: crate::domain::services::DirectorySearcher::new(Arc::new(
-                crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository::default(),
-            )),
-            videos_root: "/videos".to_string(),
-            playlist_creator: crate::domain::services::PlaylistCreator::new(
-                repository.clone(),
-                Arc::new(FakeYoutubePlaylistRepository { exists: true }),
-                event_publisher.clone(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            ),
-            playlist_deleter: crate::domain::services::PlaylistDeleter::new(
-                repository.clone(),
-                video_repository.clone(),
-                playlist_video_repository,
-                event_publisher.clone(),
-            ),
-            playlist_searcher: crate::domain::services::PlaylistSearcher::new(repository),
-            video_reconciler,
-            video_searcher,
-            task_view_searcher,
-            channel_service: crate::domain::channel::ChannelService::new(
-                Arc::new(FakeChannelRepository::default()),
-                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
-                Arc::new(FakeChannelAvatarRepository::default()),
-                Arc::new(FakeVideoRepository::default()),
-                Arc::new(FakeChannelVideoRepository::default()),
-                event_publisher.clone(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            ),
-            channel_video_reconciler: channel_video_reconciler(event_publisher),
-        };
-        (
-            axum::Router::new().nest("/api", api_router(state)),
-            video_repository,
-            task_repository,
-        )
-    }
-
-    #[tokio::test]
-    async fn it_should_return_204_and_apply_membership_changes_when_reconciling_a_youtube_linked_playlist()
-     {
-        use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
-        use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubePlaylistItem;
-
-        let repository = FakePlaylistRepository::default();
-        repository
-            .insert(&crate::domain::playlist::Playlist::create(
-                PlaylistId::new("PL1").unwrap(),
-                crate::domain::playlist::PlaylistName::new("My Playlist").unwrap(),
-                crate::domain::playlist::PlaylistPath::new("music/chill").unwrap(),
-                Quality::High,
-                crate::domain::playlist::PlaylistKind::YoutubeLinked,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let (router, video_repository, task_repository) = test_router_for_reconcile(
-            repository,
-            FakeYoutubePlaylistItemsRepository {
-                videos: std::sync::Mutex::new(vec![YoutubePlaylistItem {
-                    video_id: "vid1".to_string(),
-                    title: "One".to_string(),
-                    position: 0,
-                }]),
-            },
-            FakeVideoFileRepository::default(),
-        );
-
-        let response = router.oneshot(reconcile_request("PL1")).await.unwrap();
-
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
-        let stored = video_repository.videos.lock().unwrap();
-        assert_eq!(stored.len(), 1);
-        assert_eq!(stored[0].youtube_id.as_str(), "vid1");
-        drop(stored);
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn it_should_not_schedule_any_task_when_reconciling_repeatedly_on_demand() {
-        use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
-
-        let repository = FakePlaylistRepository::default();
-        repository
-            .insert(&crate::domain::playlist::Playlist::create(
-                PlaylistId::new("PL1").unwrap(),
-                crate::domain::playlist::PlaylistName::new("My Playlist").unwrap(),
-                crate::domain::playlist::PlaylistPath::new("music/chill").unwrap(),
-                Quality::High,
-                crate::domain::playlist::PlaylistKind::YoutubeLinked,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let (router, _video_repository, task_repository) = test_router_for_reconcile(
-            repository,
-            FakeYoutubePlaylistItemsRepository::default(),
-            FakeVideoFileRepository::default(),
-        );
-
-        router
-            .clone()
-            .oneshot(reconcile_request("PL1"))
-            .await
-            .unwrap();
-        router
-            .clone()
-            .oneshot(reconcile_request("PL1"))
-            .await
-            .unwrap();
-        router.oneshot(reconcile_request("PL1")).await.unwrap();
-
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn it_should_leave_an_existing_pending_reconcile_task_untouched() {
-        use crate::domain::task::Task;
-        use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
-        use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
-
-        let repository = FakePlaylistRepository::default();
-        repository
-            .insert(&crate::domain::playlist::Playlist::create(
-                PlaylistId::new("PL1").unwrap(),
-                crate::domain::playlist::PlaylistName::new("My Playlist").unwrap(),
-                crate::domain::playlist::PlaylistPath::new("music/chill").unwrap(),
-                Quality::High,
-                crate::domain::playlist::PlaylistKind::YoutubeLinked,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        let (router, _video_repository, task_repository) = test_router_for_reconcile(
-            repository,
-            FakeYoutubePlaylistItemsRepository::default(),
-            FakeVideoFileRepository::default(),
-        );
-        let existing_task = Task::ReconcilePlaylist {
-            playlist_id: "PL1".to_string(),
-        };
-        let existing_run_at = fixed_timestamp() + chrono::Duration::seconds(1800);
-        task_repository
-            .schedule(&existing_task, existing_run_at)
-            .unwrap();
-
-        router.oneshot(reconcile_request("PL1")).await.unwrap();
-
-        let scheduled = task_repository.scheduled.lock().unwrap();
-        assert_eq!(*scheduled, vec![(existing_task, existing_run_at)]);
-    }
-
-    #[tokio::test]
-    async fn it_should_return_204_and_do_nothing_when_reconciling_a_nonexistent_playlist() {
-        let (router, video_repository, task_repository) = test_router_for_reconcile(
-            FakePlaylistRepository::default(),
-            FakeYoutubePlaylistItemsRepository::default(),
-            FakeVideoFileRepository::default(),
-        );
-
-        let response = router.oneshot(reconcile_request("PL404")).await.unwrap();
-
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
-        assert!(video_repository.videos.lock().unwrap().is_empty());
-        assert!(task_repository.scheduled.lock().unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn it_should_return_400_when_reconciling_with_an_invalid_playlist_id() {
-        let (router, _video_repository, _task_repository) = test_router_for_reconcile(
-            FakePlaylistRepository::default(),
-            FakeYoutubePlaylistItemsRepository::default(),
-            FakeVideoFileRepository::default(),
-        );
-
-        let response = router.oneshot(reconcile_request("%20")).await.unwrap();
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    async fn reconcile(
+        video_reconciler: VideoReconciler,
+        id: &str,
+    ) -> Result<StatusCode, ApiError> {
+        reconcile_playlist(State(video_reconciler), Path(id.to_string())).await
     }
 }
