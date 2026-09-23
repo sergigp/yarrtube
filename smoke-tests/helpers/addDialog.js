@@ -11,7 +11,7 @@ async function openAdvancedOptions(dialog) {
 }
 
 export async function openFolderBrowser(dialog) {
-  const toggle = dialog.getByRole('button', { name: /^(Change|Done)$/ })
+  const toggle = dialog.getByRole('button', { name: 'Parent folder' })
   if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
     await toggle.click()
   }

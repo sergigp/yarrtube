@@ -144,9 +144,12 @@ export function AddDialog({ open, onOpenChange }) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {/* The location controls make this dialog tall enough to outgrow a short
           viewport, and `DialogContent` is centered with no height cap, so
-          without the max-height the submit button can end up off-screen. */}
+          without the max-height the submit button can end up off-screen.
+          `overflow-x-hidden` is not redundant: capping one axis makes CSS
+          compute the other to `auto`, which would let a long path scroll the
+          dialog sideways. */}
       <DialogContent
-        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md"
+        className="max-h-[calc(100dvh-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-md"
         onPointerDownOutside={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
       >
