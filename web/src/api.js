@@ -22,6 +22,17 @@ export function fetchTasks() {
   return request('/tasks')
 }
 
+/**
+ * Lists the immediate subdirectories of `path`, relative to the configured
+ * videos root; an empty or omitted `path` lists the root itself. Resolves to
+ * `{ root, path, entries }`, where `root` is the absolute videos root the
+ * add dialog's destination preview is built from.
+ */
+export function fetchDirectories(path) {
+  const query = path ? `?path=${encodeURIComponent(path)}` : ''
+  return request(`/directories${query}`)
+}
+
 export function videoMediaUrl(playlistPath, filename) {
   const encodedPath = playlistPath.split('/').map(encodeURIComponent).join('/')
   const encodedFilename = filename.split('/').map(encodeURIComponent).join('/')

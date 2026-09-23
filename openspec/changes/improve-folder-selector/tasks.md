@@ -29,11 +29,11 @@ Follow `/rust-architect` conventions for every Rust task, and end each task with
 
 ## 6. Add Dialog
 
-- [ ] 6.1 Add `fetchDirectories(path)` to `web/src/api.js` calling `GET /api/directories`; verify a listing renders in the browser console against the local daemon.
-- [ ] 6.2 Add `web/src/components/LocationField.jsx` with the collapsed parent display and reveal control, a breadcrumb whose every ancestor is selectable, the one-level listing, and occupied entries marked with the playlist or channel name from `fetchPlaylists`/`fetchChannels`; verify browsing from `playlists/` up to the root and back down works against the local daemon.
-- [ ] 6.3 Add the create-folder step to `LocationField`, staging a parent that does not exist without any request or write, showing it as empty, and descending into an existing directory when the given name matches one; verify adopting `kids` at the root stages it and adopting an existing `playlists` descends instead.
-- [ ] 6.4 Add the folder name input and destination preview to `LocationField`, rejecting `/` and an empty name, naming every directory in the destination that will be created, and blocking submission when the destination is occupied; verify `/videos/kids/$name` names both new directories and an occupied destination blocks the submit button.
-- [ ] 6.5 Use `LocationField` in `web/src/components/AddDialog.jsx` for both modes, submitting the composed relative path, removing the free-text path field and the conflict auto-expand, and leaving quality and video limit in "Advanced options"; verify creating a playlist and a channel through the dialog stores the expected path.
+- [x] 6.1 Add `fetchDirectories(path)` to `web/src/api.js` calling `GET /api/directories`; verify a listing renders in the browser console against the local daemon.
+- [x] 6.2 Add `web/src/components/LocationField.jsx` with the collapsed parent display and reveal control, a breadcrumb whose every ancestor is selectable, the one-level listing, and occupied entries marked with the playlist or channel name from `fetchPlaylists`/`fetchChannels`; verify browsing from `playlists/` up to the root and back down works against the local daemon.
+- [x] 6.3 Add the create-folder step to `LocationField`, staging a parent that does not exist without any request or write, showing it as empty, and descending into an existing directory when the given name matches one; verify adopting `kids` at the root stages it and adopting an existing `playlists` descends instead.
+- [x] 6.4 Add the folder name input and destination preview to `LocationField`, rejecting `/` and an empty name, naming every directory in the destination that will be created, and blocking submission when the destination is occupied; verify `/videos/kids/$name` names both new directories and an occupied destination blocks the submit button.
+- [x] 6.5 Use `LocationField` in `web/src/components/AddDialog.jsx` for both modes, submitting the composed relative path, removing the free-text path field and the conflict auto-expand, and leaving quality and video limit in "Advanced options"; verify creating a playlist and a channel through the dialog stores the expected path.
 
 ## 7. Smoke Tests
 
