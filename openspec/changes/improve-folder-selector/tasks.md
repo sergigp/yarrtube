@@ -14,7 +14,7 @@ Follow `/rust-architect` conventions for every Rust task, and end each task with
 
 ## 3. Directory Searcher
 
-- [ ] 3.1 Add `src/domain/services/directory_searcher.rs` with `DirectorySearcher::list` mapping the port's `Ok(None)` to `ListDirectoriesError::NotFound` and a port failure to `ListDirectoriesError::Repository`, and register plus re-export it in `src/domain/services/mod.rs`; verify `cargo build` succeeds.
+- [x] 3.1 Add `src/domain/services/directory_searcher.rs` with `DirectorySearcher::list` mapping the port's `Ok(None)` to `ListDirectoriesError::NotFound` and a port failure to `ListDirectoriesError::Repository`, and register plus re-export it in `src/domain/services/mod.rs`; verify `cargo build` succeeds.
 
 ## 4. Listing Endpoint
 
