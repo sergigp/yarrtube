@@ -83,20 +83,21 @@ mod tests {
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_directory_repository::FakeDirectoryRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::sqlite_channel_repository::FakeChannelRepository;
-    use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
-    use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
-    use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
-    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
-    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
-    use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
     use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
     use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::FakeYoutubePlaylistItemsRepository;
     use crate::infrastructure::repositories::youtube_playlist_repository::FakeYoutubePlaylistRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
-    use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use axum::body::Body;
     use axum::http::{Method, Request, StatusCode};
@@ -108,17 +109,22 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn app_state() -> AppState {
-        let playlist_repository = Arc::new(FakePlaylistRepository::default());
-        let channel_repository = Arc::new(FakeChannelRepository::default());
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let playlist_video_repository =
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
-        let channel_video_repository =
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
-        let task_repository = Arc::new(FakeTaskRepository::default());
-        let event_publisher = Arc::new(FakeEventPublisher::default());
+    fn app_state(db: &TestDatabase) -> AppState {
         let clock = Arc::new(FixedClock(fixed_timestamp()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            clock.clone(),
+        ));
+        let event_publisher = Arc::new(SqliteEventPublisher::new(
+            db.shared_connection(),
+            clock.clone(),
+        ));
         let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::default()),
@@ -145,7 +151,7 @@ mod tests {
                 playlist_video_repository.clone(),
                 Arc::new(FakeYoutubePlaylistItemsRepository::default()),
                 Arc::new(FakeYoutubeMetadataRepository::default()),
-                Arc::new(FakeVideoMetadataRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
                 event_publisher.clone(),
                 task_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
@@ -184,7 +190,7 @@ mod tests {
                 channel_video_repository,
                 Arc::new(FakeChannelVideosRepository::default()),
                 Arc::new(FakeYoutubeMetadataRepository::default()),
-                Arc::new(FakeVideoMetadataRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
                 event_publisher,
                 task_repository,
                 Arc::new(FakeVideoFileRepository::default()),
@@ -202,7 +208,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_route_every_api_endpoint_to_a_handler() {
-        let router = api_router(app_state());
+        let db = TestDatabase::new();
+        let router = api_router(app_state(&db));
         let endpoints = [
             (Method::GET, "/directories"),
             (Method::POST, "/playlists"),
