@@ -79,36 +79,46 @@ mod tests {
     use crate::domain::shared::{Quality, VideoId};
     use crate::domain::video::Video;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
-        ChannelRepository, FakeChannelRepository,
+        ChannelRepository, SqliteChannelRepository,
     };
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
-        ChannelVideoRepository, FakeChannelVideoRepository,
+        ChannelVideoRepository, SqliteChannelVideoRepository,
     };
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
-        FakePlaylistRepository, PlaylistRepository,
+        PlaylistRepository, SqlitePlaylistRepository,
     };
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
-        FakePlaylistVideoRepository, PlaylistVideoRepository,
+        PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_repository::{
-        FakeVideoRepository, VideoRepository,
+        SqliteVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use chrono::{DateTime, Utc};
     use dto::RecentVideoSourceResponse;
+    use rusqlite::Connection;
     use std::sync::Arc;
 
     #[tokio::test]
     async fn it_should_return_the_playlists_videos() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
-        save_playlist_video(&video_repository, &playlist_video_repository, "PL1", &video);
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video,
+        );
         let video_searcher = VideoSearcher::new(
-            playlist_repository_with(&[playlist("PL1")]),
+            playlist_repository,
             playlist_video_repository,
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -122,9 +132,12 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_the_download_details_of_a_downloaded_video() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
             .start_download(fixed_timestamp())
             .mark_downloaded(
@@ -134,12 +147,17 @@ mod tests {
                 Some(223),
                 fixed_timestamp(),
             );
-        save_playlist_video(&video_repository, &playlist_video_repository, "PL1", &video);
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video,
+        );
         let video_searcher = VideoSearcher::new(
-            playlist_repository_with(&[playlist("PL1")]),
+            playlist_repository,
             playlist_video_repository,
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -160,9 +178,12 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_videos_ordered_by_playlist_position() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
         for (youtube_id, title, position) in [
             ("vid_third", "Third", 2),
             ("vid_first", "First", 0),
@@ -180,10 +201,10 @@ mod tests {
                 .unwrap();
         }
         let video_searcher = VideoSearcher::new(
-            playlist_repository_with(&[playlist("PL1")]),
+            playlist_repository,
             playlist_video_repository,
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -201,12 +222,15 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_an_empty_list_when_the_playlist_has_no_videos() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
         let video_searcher = VideoSearcher::new(
-            playlist_repository_with(&[playlist("PL1")]),
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            playlist_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -217,12 +241,14 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_the_playlist_does_not_exist() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+
         let video_searcher = VideoSearcher::new(
-            Arc::new(FakePlaylistRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -248,25 +274,29 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_the_channels_videos_ordered_by_recency() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let channel_video_repository =
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
         for (youtube_id, title, position) in
             [("vid_newest", "Newest", 0), ("vid_oldest", "Oldest", 1)]
         {
             let video = Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp());
             save_channel_video(
-                &video_repository,
-                &channel_video_repository,
+                video_repository.as_ref(),
+                channel_video_repository.as_ref(),
                 "@somechannel",
                 &video,
                 position,
             );
         }
         let video_searcher = VideoSearcher::new(
-            Arc::new(FakePlaylistRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
-            channel_repository_with(&[channel("@somechannel", None)]),
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            channel_repository,
             channel_video_repository,
             video_repository,
         );
@@ -284,12 +314,17 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_an_empty_list_when_the_channel_has_no_videos() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
         let video_searcher = VideoSearcher::new(
-            Arc::new(FakePlaylistRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
-            channel_repository_with(&[channel("@somechannel", None)]),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            channel_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -300,12 +335,14 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_400_when_the_channel_does_not_exist() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+
         let video_searcher = VideoSearcher::new(
-            Arc::new(FakePlaylistRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -331,12 +368,14 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_return_an_empty_list_when_no_downloaded_videos_exist() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+
         let video_searcher = VideoSearcher::new(
-            Arc::new(FakePlaylistRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -347,20 +386,26 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_combine_and_sort_recent_videos_from_playlists_and_channels() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
-        let channel_video_repository =
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
         save_playlist_video(
-            &video_repository,
-            &playlist_video_repository,
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
             "PL1",
             &downloaded_video("vid_from_playlist", "From Playlist", None, 100),
         );
         save_channel_video(
-            &video_repository,
-            &channel_video_repository,
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
             "@somechannel",
             &downloaded_video(
                 "vid_from_channel",
@@ -371,9 +416,9 @@ mod tests {
             0,
         );
         let video_searcher = VideoSearcher::new(
-            playlist_repository_with(&[playlist("PL1")]),
+            playlist_repository,
             playlist_video_repository,
-            channel_repository_with(&[channel("@somechannel", None)]),
+            channel_repository,
             channel_video_repository,
             video_repository,
         );
@@ -398,9 +443,12 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_include_the_duration_of_a_recent_video() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
             .mark_downloaded(
                 Quality::High,
@@ -409,12 +457,17 @@ mod tests {
                 Some(223),
                 fixed_timestamp(),
             );
-        save_playlist_video(&video_repository, &playlist_video_repository, "PL1", &video);
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video,
+        );
         let video_searcher = VideoSearcher::new(
-            playlist_repository_with(&[playlist("PL1")]),
+            playlist_repository,
             playlist_video_repository,
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -431,20 +484,24 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_include_the_channel_avatar_filename_in_a_recent_videos_source() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let channel_video_repository =
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        channel_repository
+            .insert(&channel("@somechannel", Some("@somechannel.jpg")))
+            .unwrap();
         save_channel_video(
-            &video_repository,
-            &channel_video_repository,
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
             "@somechannel",
             &downloaded_video("vid1", "My Video", None, 100),
             0,
         );
         let video_searcher = VideoSearcher::new(
-            Arc::new(FakePlaylistRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
-            channel_repository_with(&[channel("@somechannel", Some("@somechannel.jpg"))]),
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            channel_repository,
             channel_video_repository,
             video_repository,
         );
@@ -463,12 +520,15 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_exclude_non_downloaded_videos_from_recent() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
-            &video_repository,
-            &playlist_video_repository,
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
             "PL1",
             &Video::create(
                 VideoId::new("vid_pending").unwrap(),
@@ -477,10 +537,10 @@ mod tests {
             ),
         );
         let video_searcher = VideoSearcher::new(
-            playlist_repository_with(&[playlist("PL1")]),
+            playlist_repository,
             playlist_video_repository,
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -491,29 +551,35 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_list_a_video_tracked_by_two_sources_once_per_source() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
-        let channel_video_repository =
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
         let shared = downloaded_video("vid_shared", "Shared", None, 100);
         save_playlist_video(
-            &video_repository,
-            &playlist_video_repository,
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
             "PL1",
             &shared,
         );
         save_channel_video(
-            &video_repository,
-            &channel_video_repository,
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
             "@somechannel",
             &shared,
             0,
         );
         let video_searcher = VideoSearcher::new(
-            playlist_repository_with(&[playlist("PL1")]),
+            playlist_repository,
             playlist_video_repository,
-            channel_repository_with(&[channel("@somechannel", None)]),
+            channel_repository,
             channel_video_repository,
             video_repository,
         );
@@ -531,15 +597,22 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_apply_the_default_limit_of_20_when_omitted() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
-        save_numbered_playlist_videos(&video_repository, &playlist_video_repository, 25);
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_numbered_playlist_videos(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            25,
+        );
         let video_searcher = VideoSearcher::new(
-            playlist_repository_with(&[playlist("PL1")]),
+            playlist_repository,
             playlist_video_repository,
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -550,15 +623,22 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_narrow_the_result_with_an_explicit_limit() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
-        save_numbered_playlist_videos(&video_repository, &playlist_video_repository, 3);
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_numbered_playlist_videos(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            3,
+        );
         let video_searcher = VideoSearcher::new(
-            playlist_repository_with(&[playlist("PL1")]),
+            playlist_repository,
             playlist_video_repository,
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -569,15 +649,22 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_cap_the_limit_at_100() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone()));
-        save_numbered_playlist_videos(&video_repository, &playlist_video_repository, 105);
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_numbered_playlist_videos(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            105,
+        );
         let video_searcher = VideoSearcher::new(
-            playlist_repository_with(&[playlist("PL1")]),
+            playlist_repository,
             playlist_video_repository,
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
         );
 
@@ -587,37 +674,26 @@ mod tests {
         assert_eq!(response, Ok(numbered_recent_videos((5..105).rev())));
     }
 
-    /// A searcher for tests whose request is rejected before reaching it.
+    /// A searcher for tests whose request is rejected before reaching it. Its
+    /// repositories sit on an unmigrated in-memory database, so a request that
+    /// wrongly got through would fail loudly instead of passing.
     fn any_video_searcher() -> VideoSearcher {
-        let video_repository = Arc::new(FakeVideoRepository::default());
         VideoSearcher::new(
-            Arc::new(FakePlaylistRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
-            Arc::new(FakeChannelRepository::default()),
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone())),
-            video_repository,
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+            Arc::new(SqliteVideoRepository::new(unused_connection())),
         )
     }
 
-    fn playlist_repository_with(playlists: &[Playlist]) -> Arc<FakePlaylistRepository> {
-        let repository = FakePlaylistRepository::default();
-        for playlist in playlists {
-            repository.insert(playlist).unwrap();
-        }
-        Arc::new(repository)
-    }
-
-    fn channel_repository_with(channels: &[Channel]) -> Arc<FakeChannelRepository> {
-        let repository = FakeChannelRepository::default();
-        for channel in channels {
-            repository.insert(channel).unwrap();
-        }
-        Arc::new(repository)
+    fn unused_connection() -> Connection {
+        Connection::open_in_memory().unwrap()
     }
 
     fn save_playlist_video(
-        video_repository: &FakeVideoRepository,
-        playlist_video_repository: &FakePlaylistVideoRepository,
+        video_repository: &dyn VideoRepository,
+        playlist_video_repository: &dyn PlaylistVideoRepository,
         playlist_id: &str,
         video: &Video,
     ) {
@@ -632,8 +708,8 @@ mod tests {
     }
 
     fn save_channel_video(
-        video_repository: &FakeVideoRepository,
-        channel_video_repository: &FakeChannelVideoRepository,
+        video_repository: &dyn VideoRepository,
+        channel_video_repository: &dyn ChannelVideoRepository,
         handle: &str,
         video: &Video,
         position: i64,
@@ -652,8 +728,8 @@ mod tests {
     /// Saves `count` downloaded videos to playlist `PL1`, video `i` created
     /// `i` seconds after the epoch so recency order is the reverse of `i`.
     fn save_numbered_playlist_videos(
-        video_repository: &FakeVideoRepository,
-        playlist_video_repository: &FakePlaylistVideoRepository,
+        video_repository: &dyn VideoRepository,
+        playlist_video_repository: &dyn PlaylistVideoRepository,
         count: i64,
     ) {
         for i in 0..count {
