@@ -45,6 +45,11 @@ mod tests {
     }
 
     #[test]
+    fn it_should_accept_the_maximum_limit() {
+        assert_eq!(VideoLimit::new(1000), Ok(VideoLimit(1000)));
+    }
+
+    #[test]
     fn it_should_reject_a_zero_limit() {
         assert_eq!(
             VideoLimit::new(0),
@@ -60,6 +65,36 @@ mod tests {
             VideoLimit::new(-5),
             Err(ValidationError(
                 "Video limit must be between 1 and 1000 (got -5)".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_limit_above_the_maximum() {
+        assert_eq!(
+            VideoLimit::new(1001),
+            Err(ValidationError(
+                "Video limit must be between 1 and 1000 (got 1001)".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_limit_that_would_wrap_to_zero_in_32_bits() {
+        assert_eq!(
+            VideoLimit::new(4_294_967_296),
+            Err(ValidationError(
+                "Video limit must be between 1 and 1000 (got 4294967296)".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_limit_that_would_wrap_to_a_valid_limit_in_32_bits() {
+        assert_eq!(
+            VideoLimit::new(4_294_967_306),
+            Err(ValidationError(
+                "Video limit must be between 1 and 1000 (got 4294967306)".to_string()
             ))
         );
     }
