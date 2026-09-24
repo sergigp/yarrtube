@@ -131,32 +131,276 @@ impl TaskExecutor {
 mod tests {
     use super::*;
     use crate::domain::task::{DeadLetteredTask, ScheduledTask, Task, TaskStatus};
+    use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use std::sync::Mutex;
 
-    #[derive(Default)]
-    struct FakeTaskRepository {
-        tasks: Mutex<Vec<ScheduledTask>>,
-        running: Mutex<Vec<ScheduledTask>>,
-        updated: Mutex<Vec<ScheduledTask>>,
-        deleted: Mutex<Vec<i64>>,
-        dead_lettered: Mutex<Vec<DeadLetteredTask>>,
+    #[test]
+    fn it_should_dispatch_an_eligible_task_and_delete_it_on_success() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::succeeding());
+        task_repository.schedule(&task(), now()).unwrap();
+        let executor = TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+        );
+
+        let result = executor.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            vec![false]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            Vec::<ScheduledTask>::new()
+        );
+        assert_eq!(
+            task_repository.list_dead_lettered().unwrap(),
+            Vec::<DeadLetteredTask>::new()
+        );
     }
+
+    #[test]
+    fn it_should_retry_a_task_whose_handler_fails() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::failing());
+        task_repository.schedule(&task(), now()).unwrap();
+        let executor = TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+        );
+
+        let result = executor.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            vec![false]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![ScheduledTask {
+                retries: 1,
+                run_at: now() + chrono::Duration::seconds(450),
+                last_error: Some("handler failed".to_string()),
+                ..pending_task(0)
+            }]
+        );
+        assert_eq!(
+            task_repository.list_dead_lettered().unwrap(),
+            Vec::<DeadLetteredTask>::new()
+        );
+    }
+
+    #[test]
+    fn it_should_dead_letter_a_task_whose_handler_fails_on_the_fifth_attempt() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::failing());
+        task_repository.schedule(&task(), now()).unwrap();
+        task_repository.update(&pending_task(4)).unwrap();
+        let executor = TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+        );
+
+        let result = executor.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            vec![true]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            Vec::<ScheduledTask>::new()
+        );
+        assert_eq!(
+            task_repository.list_dead_lettered().unwrap(),
+            vec![dead_lettered_task("handler failed")]
+        );
+    }
+
+    #[test]
+    fn it_should_tell_the_handler_this_is_not_the_last_attempt_when_retries_remain() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::succeeding());
+        task_repository.schedule(&task(), now()).unwrap();
+        task_repository.update(&pending_task(3)).unwrap();
+        let executor = TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+        );
+
+        let result = executor.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            vec![false]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            Vec::<ScheduledTask>::new()
+        );
+    }
+
+    #[test]
+    fn it_should_tell_the_handler_this_is_the_last_attempt_when_no_retries_remain() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::succeeding());
+        task_repository.schedule(&task(), now()).unwrap();
+        task_repository.update(&pending_task(4)).unwrap();
+        let executor = TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+        );
+
+        let result = executor.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            vec![true]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            Vec::<ScheduledTask>::new()
+        );
+    }
+
+    #[test]
+    fn it_should_retry_a_task_recovered_as_running_from_a_previous_process() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::succeeding());
+        task_repository.schedule(&task(), now()).unwrap();
+        task_repository
+            .update(&pending_task(0).start(now()))
+            .unwrap();
+        let executor = TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+        );
+
+        let result = executor.recover_stuck_tasks();
+
+        assert!(result.is_ok());
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            Vec::<bool>::new()
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![ScheduledTask {
+                retries: 1,
+                run_at: now() + chrono::Duration::seconds(450),
+                last_error: Some(
+                    "recovered as a failed attempt after an unclean shutdown".to_string()
+                ),
+                ..pending_task(0)
+            }]
+        );
+        assert_eq!(
+            task_repository.list_dead_lettered().unwrap(),
+            Vec::<DeadLetteredTask>::new()
+        );
+    }
+
+    #[test]
+    fn it_should_dead_letter_a_recovered_running_task_once_the_attempt_limit_is_exceeded() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::succeeding());
+        task_repository.schedule(&task(), now()).unwrap();
+        task_repository
+            .update(&pending_task(4).start(now()))
+            .unwrap();
+        let executor = TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+        );
+
+        let result = executor.recover_stuck_tasks();
+
+        assert!(result.is_ok());
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            Vec::<bool>::new()
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            Vec::<ScheduledTask>::new()
+        );
+        assert_eq!(
+            task_repository.list_dead_lettered().unwrap(),
+            vec![dead_lettered_task(
+                "recovered as a failed attempt after an unclean shutdown"
+            )]
+        );
+    }
+
+    const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
 
     fn now() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn scheduled_task(id: i64, task_type: &str, retries: i64) -> ScheduledTask {
+    fn task() -> Task {
+        Task::ReconcilePlaylist {
+            playlist_id: "PL1".to_string(),
+        }
+    }
+
+    /// The row `schedule(&task(), now())` stores as id 1, with `retries`.
+    fn pending_task(retries: i64) -> ScheduledTask {
         ScheduledTask {
-            id,
-            task_type: task_type.to_string(),
-            payload: Task::ReconcilePlaylist {
-                playlist_id: "PL1".to_string(),
-            }
-            .payload()
-            .to_string(),
+            id: 1,
+            task_type: task().task_type().to_string(),
+            payload: task().payload().to_string(),
             status: TaskStatus::Pending,
             retries,
             run_at: now(),
@@ -166,58 +410,43 @@ mod tests {
         }
     }
 
-    impl FakeTaskRepository {
-        fn seeded(task_type: &str) -> Self {
-            Self::seeded_with_retries(task_type, 0)
-        }
-
-        fn seeded_with_retries(task_type: &str, retries: i64) -> Self {
-            let repo = Self::default();
-            repo.tasks
-                .lock()
-                .unwrap()
-                .push(scheduled_task(1, task_type, retries));
-            repo
+    fn dead_lettered_task(last_error: &str) -> DeadLetteredTask {
+        DeadLetteredTask {
+            original_task_id: 1,
+            task_type: task().task_type().to_string(),
+            payload: task().payload().to_string(),
+            retries: 5,
+            last_error: last_error.to_string(),
+            created_at: now(),
+            failed_at: now(),
         }
     }
 
-    impl TaskRepository for FakeTaskRepository {
-        fn schedule(&self, _task: &Task, _run_at: DateTime<Utc>) -> anyhow::Result<()> {
-            unimplemented!("not exercised by the executor")
-        }
-
-        fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {
-            Ok(self.tasks.lock().unwrap().clone())
-        }
-
-        fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {
-            Ok(self.running.lock().unwrap().clone())
-        }
-
-        fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
-            unimplemented!("not exercised by the executor")
-        }
-
-        fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {
-            self.updated.lock().unwrap().push(task.clone());
-            Ok(())
-        }
-
-        fn delete(&self, id: i64) -> anyhow::Result<()> {
-            self.deleted.lock().unwrap().push(id);
-            Ok(())
-        }
-
-        fn dead_letter(&self, task: &DeadLetteredTask) -> anyhow::Result<()> {
-            self.dead_lettered.lock().unwrap().push(task.clone());
-            Ok(())
-        }
+    fn registry(handler: Arc<FakeHandler>) -> HandlerRegistry {
+        let mut registry: HandlerRegistry = HashMap::new();
+        registry.insert(task().task_type().to_string(), handler);
+        registry
     }
 
-    #[derive(Default)]
     struct FakeHandler {
         fails: bool,
         received_is_last_attempt: Mutex<Vec<bool>>,
+    }
+
+    impl FakeHandler {
+        fn succeeding() -> Self {
+            Self {
+                fails: false,
+                received_is_last_attempt: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn failing() -> Self {
+            Self {
+                fails: true,
+                received_is_last_attempt: Mutex::new(Vec::new()),
+            }
+        }
     }
 
     impl TaskHandler for FakeHandler {
@@ -231,177 +460,5 @@ mod tests {
             }
             Ok(())
         }
-    }
-
-    fn registry(handler: FakeHandler) -> HandlerRegistry {
-        let mut registry: HandlerRegistry = HashMap::new();
-        registry.insert("reconcile_playlist".to_string(), Arc::new(handler));
-        registry
-    }
-
-    fn clock() -> Arc<dyn Clock> {
-        Arc::new(FixedClock(now()))
-    }
-
-    const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
-
-    #[test]
-    fn it_should_dispatch_an_eligible_task_and_delete_it_on_success() {
-        let repository = Arc::new(FakeTaskRepository::seeded("reconcile_playlist"));
-        let executor = TaskExecutor::new(
-            repository.clone(),
-            registry(FakeHandler {
-                fails: false,
-                ..Default::default()
-            }),
-            clock(),
-            TEST_BASE_RETRY_DELAY_SECONDS,
-        );
-
-        executor.poll_once().unwrap();
-
-        let updated = repository.updated.lock().unwrap();
-        assert_eq!(updated.len(), 1);
-        assert_eq!(updated[0].status, TaskStatus::Running);
-        assert_eq!(*repository.deleted.lock().unwrap(), vec![1]);
-    }
-
-    #[test]
-    fn it_should_retry_a_task_whose_handler_fails() {
-        let repository = Arc::new(FakeTaskRepository::seeded("reconcile_playlist"));
-        let executor = TaskExecutor::new(
-            repository.clone(),
-            registry(FakeHandler {
-                fails: true,
-                ..Default::default()
-            }),
-            clock(),
-            TEST_BASE_RETRY_DELAY_SECONDS,
-        );
-
-        executor.poll_once().unwrap();
-
-        let updated = repository.updated.lock().unwrap();
-        assert_eq!(updated.len(), 2);
-        assert_eq!(updated[1].status, TaskStatus::Pending);
-        assert_eq!(updated[1].retries, 1);
-        assert!(repository.deleted.lock().unwrap().is_empty());
-        assert!(repository.dead_lettered.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn it_should_dead_letter_a_task_whose_handler_fails_on_the_fifth_attempt() {
-        let repository = Arc::new(FakeTaskRepository::seeded_with_retries(
-            "reconcile_playlist",
-            4,
-        ));
-        let executor = TaskExecutor::new(
-            repository.clone(),
-            registry(FakeHandler {
-                fails: true,
-                ..Default::default()
-            }),
-            clock(),
-            TEST_BASE_RETRY_DELAY_SECONDS,
-        );
-
-        executor.poll_once().unwrap();
-
-        let dead_lettered = repository.dead_lettered.lock().unwrap();
-        assert_eq!(dead_lettered.len(), 1);
-        assert_eq!(dead_lettered[0].retries, 5);
-        assert!(repository.deleted.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn it_should_tell_the_handler_this_is_not_the_last_attempt_when_retries_remain() {
-        let repository = Arc::new(FakeTaskRepository::seeded_with_retries(
-            "reconcile_playlist",
-            3,
-        ));
-        let handler = Arc::new(FakeHandler::default());
-        let mut handlers: HandlerRegistry = HashMap::new();
-        handlers.insert("reconcile_playlist".to_string(), handler.clone());
-        let executor =
-            TaskExecutor::new(repository, handlers, clock(), TEST_BASE_RETRY_DELAY_SECONDS);
-
-        executor.poll_once().unwrap();
-
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            vec![false]
-        );
-    }
-
-    #[test]
-    fn it_should_tell_the_handler_this_is_the_last_attempt_when_no_retries_remain() {
-        let repository = Arc::new(FakeTaskRepository::seeded_with_retries(
-            "reconcile_playlist",
-            4,
-        ));
-        let handler = Arc::new(FakeHandler::default());
-        let mut handlers: HandlerRegistry = HashMap::new();
-        handlers.insert("reconcile_playlist".to_string(), handler.clone());
-        let executor =
-            TaskExecutor::new(repository, handlers, clock(), TEST_BASE_RETRY_DELAY_SECONDS);
-
-        executor.poll_once().unwrap();
-
-        assert_eq!(
-            *handler.received_is_last_attempt.lock().unwrap(),
-            vec![true]
-        );
-    }
-
-    #[test]
-    fn it_should_retry_a_task_recovered_as_running_from_a_previous_process() {
-        let repository = Arc::new(FakeTaskRepository::default());
-        repository
-            .running
-            .lock()
-            .unwrap()
-            .push(scheduled_task(1, "reconcile_playlist", 0));
-        let executor = TaskExecutor::new(
-            repository.clone(),
-            registry(FakeHandler {
-                fails: false,
-                ..Default::default()
-            }),
-            clock(),
-            TEST_BASE_RETRY_DELAY_SECONDS,
-        );
-
-        executor.recover_stuck_tasks().unwrap();
-
-        let updated = repository.updated.lock().unwrap();
-        assert_eq!(updated.len(), 1);
-        assert_eq!(updated[0].status, TaskStatus::Pending);
-        assert_eq!(updated[0].retries, 1);
-    }
-
-    #[test]
-    fn it_should_dead_letter_a_recovered_running_task_once_the_attempt_limit_is_exceeded() {
-        let repository = Arc::new(FakeTaskRepository::default());
-        repository
-            .running
-            .lock()
-            .unwrap()
-            .push(scheduled_task(1, "reconcile_playlist", 4));
-        let executor = TaskExecutor::new(
-            repository.clone(),
-            registry(FakeHandler {
-                fails: false,
-                ..Default::default()
-            }),
-            clock(),
-            TEST_BASE_RETRY_DELAY_SECONDS,
-        );
-
-        executor.recover_stuck_tasks().unwrap();
-
-        let dead_lettered = repository.dead_lettered.lock().unwrap();
-        assert_eq!(dead_lettered.len(), 1);
-        assert_eq!(dead_lettered[0].retries, 5);
-        assert!(repository.updated.lock().unwrap().is_empty());
     }
 }

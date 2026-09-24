@@ -75,6 +75,42 @@ impl SqliteEventRepository {
         .optional()
         .context("failed to find event")
     }
+
+    /// Every row in the dead-letter table, which `EventRepository` cannot read.
+    #[cfg(test)]
+    pub fn list_dead_lettered(&self) -> anyhow::Result<Vec<DeadLetteredEvent>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT original_event_id, event_type, payload, retries, last_error, created_at, failed_at
+                 FROM domain_events_dead_letter ORDER BY id ASC",
+            )
+            .context("failed to prepare dead-lettered events query")?;
+        let rows = stmt
+            .query_map([], |row| {
+                let created_at: String = row.get(5)?;
+                let failed_at: String = row.get(6)?;
+                Ok(DeadLetteredEvent {
+                    original_event_id: row.get(0)?,
+                    event_type: row.get(1)?,
+                    payload: row.get(2)?,
+                    retries: row.get(3)?,
+                    last_error: row.get(4)?,
+                    created_at: DateTime::parse_from_rfc3339(&created_at)
+                        .unwrap()
+                        .with_timezone(&Utc),
+                    failed_at: DateTime::parse_from_rfc3339(&failed_at)
+                        .unwrap()
+                        .with_timezone(&Utc),
+                })
+            })
+            .context("failed to list dead-lettered events")?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .context("failed to read dead-lettered event row")
+    }
 }
 
 impl EventRepository for SqliteEventRepository {
@@ -152,62 +188,6 @@ impl EventRepository for SqliteEventRepository {
         .context("failed to delete event after moving to dead letter")?;
         tx.commit()
             .context("failed to commit dead-letter transaction")?;
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-#[derive(Default)]
-pub struct FakeEventRepository {
-    pub(crate) events: Mutex<Vec<ScheduledEvent>>,
-    pub(crate) updated: Mutex<Vec<ScheduledEvent>>,
-    pub(crate) deleted: Mutex<Vec<i64>>,
-    pub(crate) dead_lettered: Mutex<Vec<DeadLetteredEvent>>,
-}
-
-#[cfg(test)]
-impl FakeEventRepository {
-    pub fn seeded(event_type: &str) -> Self {
-        Self::seeded_with_retries(event_type, 0)
-    }
-
-    pub fn seeded_with_retries(event_type: &str, retries: i64) -> Self {
-        let repo = Self::default();
-        repo.events.lock().unwrap().push(ScheduledEvent {
-            id: 1,
-            event_type: event_type.to_string(),
-            payload: DomainEvent::PlaylistCreated {
-                playlist_id: "PL1".to_string(),
-            }
-            .payload()
-            .to_string(),
-            retries,
-            created_at: DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
-            updated_at: DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
-            last_error: None,
-        });
-        repo
-    }
-}
-
-#[cfg(test)]
-impl EventRepository for FakeEventRepository {
-    fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledEvent>> {
-        Ok(self.events.lock().unwrap().clone())
-    }
-
-    fn update(&self, event: &ScheduledEvent) -> anyhow::Result<()> {
-        self.updated.lock().unwrap().push(event.clone());
-        Ok(())
-    }
-
-    fn delete(&self, id: i64) -> anyhow::Result<()> {
-        self.deleted.lock().unwrap().push(id);
-        Ok(())
-    }
-
-    fn dead_letter(&self, event: &DeadLetteredEvent) -> anyhow::Result<()> {
-        self.dead_lettered.lock().unwrap().push(event.clone());
         Ok(())
     }
 }

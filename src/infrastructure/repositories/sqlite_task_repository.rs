@@ -119,6 +119,42 @@ impl SqliteTaskRepository {
         .optional()
         .context("failed to find task")
     }
+
+    /// Every row in the dead-letter table, which `TaskRepository` cannot read.
+    #[cfg(test)]
+    pub fn list_dead_lettered(&self) -> anyhow::Result<Vec<DeadLetteredTask>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT original_task_id, task_type, payload, retries, last_error, created_at, failed_at
+                 FROM tasks_dead_letter ORDER BY id ASC",
+            )
+            .context("failed to prepare dead-lettered tasks query")?;
+        let rows = stmt
+            .query_map([], |row| {
+                let created_at: String = row.get(5)?;
+                let failed_at: String = row.get(6)?;
+                Ok(DeadLetteredTask {
+                    original_task_id: row.get(0)?,
+                    task_type: row.get(1)?,
+                    payload: row.get(2)?,
+                    retries: row.get(3)?,
+                    last_error: row.get(4)?,
+                    created_at: DateTime::parse_from_rfc3339(&created_at)
+                        .unwrap()
+                        .with_timezone(&Utc),
+                    failed_at: DateTime::parse_from_rfc3339(&failed_at)
+                        .unwrap()
+                        .with_timezone(&Utc),
+                })
+            })
+            .context("failed to list dead-lettered tasks")?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .context("failed to read dead-lettered task row")
+    }
 }
 
 impl TaskRepository for SqliteTaskRepository {

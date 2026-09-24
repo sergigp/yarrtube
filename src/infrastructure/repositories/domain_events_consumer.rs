@@ -105,19 +105,222 @@ impl DomainEventsConsumer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::shared::domain_events::event_repository::FakeEventRepository;
+    use crate::domain::event::{DeadLetteredEvent, DomainEvent, ScheduledEvent};
+    use crate::infrastructure::shared::domain_events::event_publisher::{
+        EventPublisher, SqliteEventPublisher,
+    };
+    use crate::infrastructure::shared::domain_events::event_repository::SqliteEventRepository;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use std::sync::Mutex;
+
+    #[test]
+    fn it_should_invoke_the_single_registered_subscriber_and_delete_the_event() {
+        let db = TestDatabase::new();
+        let event_publisher =
+            SqliteEventPublisher::new(db.shared_connection(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.shared_connection()));
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = Arc::new(FakeSubscriber::succeeding("sub1", calls.clone()));
+        event_publisher.publish(&event()).unwrap();
+        let mut subscribers: SubscriberRegistry = HashMap::new();
+        subscribers.insert(event().event_type().to_string(), vec![subscriber]);
+        let consumer = DomainEventsConsumer::new(
+            event_repository.clone(),
+            subscribers,
+            Arc::new(FixedClock(now())),
+        );
+
+        let result = consumer.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(*calls.lock().unwrap(), vec!["sub1"]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            Vec::<ScheduledEvent>::new()
+        );
+        assert_eq!(
+            event_repository.list_dead_lettered().unwrap(),
+            Vec::<DeadLetteredEvent>::new()
+        );
+    }
+
+    #[test]
+    fn it_should_invoke_every_registered_subscriber() {
+        let db = TestDatabase::new();
+        let event_publisher =
+            SqliteEventPublisher::new(db.shared_connection(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.shared_connection()));
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let sub1 = Arc::new(FakeSubscriber::succeeding("sub1", calls.clone()));
+        let sub2 = Arc::new(FakeSubscriber::succeeding("sub2", calls.clone()));
+        event_publisher.publish(&event()).unwrap();
+        let mut subscribers: SubscriberRegistry = HashMap::new();
+        subscribers.insert(event().event_type().to_string(), vec![sub1, sub2]);
+        let consumer = DomainEventsConsumer::new(
+            event_repository.clone(),
+            subscribers,
+            Arc::new(FixedClock(now())),
+        );
+
+        let result = consumer.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(*calls.lock().unwrap(), vec!["sub1", "sub2"]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            Vec::<ScheduledEvent>::new()
+        );
+    }
+
+    #[test]
+    fn it_should_retry_the_whole_event_when_one_subscriber_fails() {
+        let db = TestDatabase::new();
+        let event_publisher =
+            SqliteEventPublisher::new(db.shared_connection(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.shared_connection()));
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let failing = Arc::new(FakeSubscriber::failing("failing", calls.clone()));
+        let succeeding = Arc::new(FakeSubscriber::succeeding("succeeding", calls.clone()));
+        event_publisher.publish(&event()).unwrap();
+        let mut subscribers: SubscriberRegistry = HashMap::new();
+        subscribers.insert(event().event_type().to_string(), vec![failing, succeeding]);
+        let consumer = DomainEventsConsumer::new(
+            event_repository.clone(),
+            subscribers,
+            Arc::new(FixedClock(now())),
+        );
+
+        let result = consumer.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(*calls.lock().unwrap(), vec!["failing", "succeeding"]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![ScheduledEvent {
+                retries: 1,
+                last_error: Some("failing failed".to_string()),
+                ..pending_event(0)
+            }]
+        );
+        assert_eq!(
+            event_repository.list_dead_lettered().unwrap(),
+            Vec::<DeadLetteredEvent>::new()
+        );
+    }
+
+    #[test]
+    fn it_should_dead_letter_an_event_that_fails_on_the_fifth_attempt() {
+        let db = TestDatabase::new();
+        let event_publisher =
+            SqliteEventPublisher::new(db.shared_connection(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.shared_connection()));
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let failing = Arc::new(FakeSubscriber::failing("failing", calls.clone()));
+        event_publisher.publish(&event()).unwrap();
+        event_repository.update(&pending_event(4)).unwrap();
+        let mut subscribers: SubscriberRegistry = HashMap::new();
+        subscribers.insert(event().event_type().to_string(), vec![failing]);
+        let consumer = DomainEventsConsumer::new(
+            event_repository.clone(),
+            subscribers,
+            Arc::new(FixedClock(now())),
+        );
+
+        let result = consumer.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(*calls.lock().unwrap(), vec!["failing"]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            Vec::<ScheduledEvent>::new()
+        );
+        assert_eq!(
+            event_repository.list_dead_lettered().unwrap(),
+            vec![DeadLetteredEvent {
+                original_event_id: 1,
+                event_type: event().event_type().to_string(),
+                payload: event().payload().to_string(),
+                retries: 5,
+                last_error: "failing failed".to_string(),
+                created_at: now(),
+                failed_at: now(),
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_mark_an_event_with_no_registered_subscribers_as_done() {
+        let db = TestDatabase::new();
+        let event_publisher =
+            SqliteEventPublisher::new(db.shared_connection(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.shared_connection()));
+        event_publisher.publish(&event()).unwrap();
+        let consumer = DomainEventsConsumer::new(
+            event_repository.clone(),
+            HashMap::new(),
+            Arc::new(FixedClock(now())),
+        );
+
+        let result = consumer.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            Vec::<ScheduledEvent>::new()
+        );
+        assert_eq!(
+            event_repository.list_dead_lettered().unwrap(),
+            Vec::<DeadLetteredEvent>::new()
+        );
+    }
 
     fn now() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
+    fn event() -> DomainEvent {
+        DomainEvent::PlaylistCreated {
+            playlist_id: "PL1".to_string(),
+        }
+    }
+
+    /// The row `publish(&event())` stores as id 1, with `retries`.
+    fn pending_event(retries: i64) -> ScheduledEvent {
+        ScheduledEvent {
+            id: 1,
+            event_type: event().event_type().to_string(),
+            payload: event().payload().to_string(),
+            retries,
+            created_at: now(),
+            updated_at: now(),
+            last_error: None,
+        }
+    }
+
     struct FakeSubscriber {
-        calls: Arc<Mutex<Vec<String>>>,
         name: &'static str,
         fails: bool,
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl FakeSubscriber {
+        fn succeeding(name: &'static str, calls: Arc<Mutex<Vec<String>>>) -> Self {
+            Self {
+                name,
+                fails: false,
+                calls,
+            }
+        }
+
+        fn failing(name: &'static str, calls: Arc<Mutex<Vec<String>>>) -> Self {
+            Self {
+                name,
+                fails: true,
+                calls,
+            }
+        }
     }
 
     impl EventSubscriber for FakeSubscriber {
@@ -128,111 +331,5 @@ mod tests {
             }
             Ok(())
         }
-    }
-
-    fn clock() -> Arc<dyn Clock> {
-        Arc::new(FixedClock(now()))
-    }
-
-    #[test]
-    fn it_should_invoke_the_single_registered_subscriber_and_delete_the_event() {
-        let repository = Arc::new(FakeEventRepository::seeded("playlist_created"));
-        let calls = Arc::new(Mutex::new(Vec::new()));
-        let subscriber = Arc::new(FakeSubscriber {
-            calls: calls.clone(),
-            name: "sub1",
-            fails: false,
-        });
-        let mut subscribers: SubscriberRegistry = HashMap::new();
-        subscribers.insert("playlist_created".to_string(), vec![subscriber]);
-        let consumer = DomainEventsConsumer::new(repository.clone(), subscribers, clock());
-
-        consumer.poll_once().unwrap();
-
-        assert_eq!(*calls.lock().unwrap(), vec!["sub1"]);
-        assert_eq!(*repository.deleted.lock().unwrap(), vec![1]);
-    }
-
-    #[test]
-    fn it_should_invoke_every_registered_subscriber() {
-        let repository = Arc::new(FakeEventRepository::seeded("playlist_created"));
-        let calls = Arc::new(Mutex::new(Vec::new()));
-        let sub1 = Arc::new(FakeSubscriber {
-            calls: calls.clone(),
-            name: "sub1",
-            fails: false,
-        });
-        let sub2 = Arc::new(FakeSubscriber {
-            calls: calls.clone(),
-            name: "sub2",
-            fails: false,
-        });
-        let mut subscribers: SubscriberRegistry = HashMap::new();
-        subscribers.insert("playlist_created".to_string(), vec![sub1, sub2]);
-        let consumer = DomainEventsConsumer::new(repository, subscribers, clock());
-
-        consumer.poll_once().unwrap();
-
-        assert_eq!(*calls.lock().unwrap(), vec!["sub1", "sub2"]);
-    }
-
-    #[test]
-    fn it_should_retry_the_whole_event_when_one_subscriber_fails() {
-        let repository = Arc::new(FakeEventRepository::seeded("playlist_created"));
-        let calls = Arc::new(Mutex::new(Vec::new()));
-        let failing = Arc::new(FakeSubscriber {
-            calls: calls.clone(),
-            name: "failing",
-            fails: true,
-        });
-        let succeeding = Arc::new(FakeSubscriber {
-            calls: calls.clone(),
-            name: "succeeding",
-            fails: false,
-        });
-        let mut subscribers: SubscriberRegistry = HashMap::new();
-        subscribers.insert("playlist_created".to_string(), vec![failing, succeeding]);
-        let consumer = DomainEventsConsumer::new(repository.clone(), subscribers, clock());
-
-        consumer.poll_once().unwrap();
-
-        assert_eq!(*calls.lock().unwrap(), vec!["failing", "succeeding"]);
-        let updated = repository.updated.lock().unwrap();
-        assert_eq!(updated.len(), 1);
-        assert_eq!(updated[0].retries, 1);
-        assert!(repository.deleted.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn it_should_dead_letter_an_event_that_fails_on_the_fifth_attempt() {
-        let repository = Arc::new(FakeEventRepository::seeded_with_retries(
-            "playlist_created",
-            4,
-        ));
-        let calls = Arc::new(Mutex::new(Vec::new()));
-        let failing = Arc::new(FakeSubscriber {
-            calls: calls.clone(),
-            name: "failing",
-            fails: true,
-        });
-        let mut subscribers: SubscriberRegistry = HashMap::new();
-        subscribers.insert("playlist_created".to_string(), vec![failing]);
-        let consumer = DomainEventsConsumer::new(repository.clone(), subscribers, clock());
-
-        consumer.poll_once().unwrap();
-
-        let dead_lettered = repository.dead_lettered.lock().unwrap();
-        assert_eq!(dead_lettered.len(), 1);
-        assert_eq!(dead_lettered[0].retries, 5);
-    }
-
-    #[test]
-    fn it_should_mark_an_event_with_no_registered_subscribers_as_done() {
-        let repository = Arc::new(FakeEventRepository::seeded("unregistered_type"));
-        let consumer = DomainEventsConsumer::new(repository.clone(), HashMap::new(), clock());
-
-        consumer.poll_once().unwrap();
-
-        assert_eq!(*repository.deleted.lock().unwrap(), vec![1]);
     }
 }
