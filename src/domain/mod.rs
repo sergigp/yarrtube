@@ -4,7 +4,6 @@ pub mod directory;
 pub mod event;
 pub mod playlist;
 pub mod playlist_video;
-pub mod services;
 pub mod shared;
 pub mod task;
 pub mod video;

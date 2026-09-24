@@ -7,11 +7,15 @@ pub mod tasks;
 pub mod validation;
 pub mod videos;
 
-use crate::domain::services::{
-    ChannelCreator, ChannelDeleter, ChannelSearcher, ChannelVideoReconciler, DirectorySearcher,
-    PlaylistCreator, PlaylistDeleter, PlaylistSearcher, PlaylistVideoReconciler, TaskViewSearcher,
-    VideoSearcher,
+use crate::domain::channel::{
+    ChannelCreator, ChannelDeleter, ChannelSearcher, ChannelVideoReconciler,
 };
+use crate::domain::directory::DirectorySearcher;
+use crate::domain::playlist::{
+    PlaylistCreator, PlaylistDeleter, PlaylistSearcher, PlaylistVideoReconciler,
+};
+use crate::domain::task::TaskViewSearcher;
+use crate::domain::video::VideoSearcher;
 use axum::Router;
 use axum::extract::FromRef;
 use axum::routing::{get, post};

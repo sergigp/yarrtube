@@ -1,4 +1,4 @@
-use crate::domain::services::{PlaylistVideoReconciler, PlaylistVideoReconcilerApi};
+use crate::domain::playlist::{PlaylistVideoReconciler, PlaylistVideoReconcilerApi};
 use crate::domain::shared::PlaylistId;
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use serde::Deserialize;
@@ -37,9 +37,9 @@ impl EventSubscriber for ReconcileOnPlaylistCreated {
 mod tests {
     use super::*;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
-    use crate::domain::services::ThumbnailFetcher;
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
+    use crate::domain::video::ThumbnailFetcher;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         PlaylistRepository, SqlitePlaylistRepository,

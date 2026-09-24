@@ -1,6 +1,6 @@
-use crate::domain::services::{VideoDownloader, VideoDownloaderApi};
 use crate::domain::shared::{Quality, VideoRecordId};
 use crate::domain::task::Task;
+use crate::domain::video::{VideoDownloader, VideoDownloaderApi};
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use std::path::Path;
 

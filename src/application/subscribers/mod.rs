@@ -7,7 +7,8 @@ pub mod download_video_on_video_added_to_playlist;
 pub mod reconcile_on_channel_created;
 pub mod reconcile_on_playlist_created;
 
-use crate::domain::services::{ChannelVideoReconciler, PlaylistVideoReconciler};
+use crate::domain::channel::ChannelVideoReconciler;
+use crate::domain::playlist::PlaylistVideoReconciler;
 use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;

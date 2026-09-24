@@ -1,10 +1,14 @@
 use crate::application::http::{self, ApiServices, VideosRoot};
 use crate::application::{subscribers, tasks};
-use crate::domain::services::{
-    ChannelCreator, ChannelDeleter, ChannelSearcher, ChannelVideoReconciler, DirectorySearcher,
-    PlaylistCreator, PlaylistDeleter, PlaylistSearcher, PlaylistVideoReconciler, TaskViewSearcher,
-    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher,
+use crate::domain::channel::{
+    ChannelCreator, ChannelDeleter, ChannelSearcher, ChannelVideoReconciler,
 };
+use crate::domain::directory::DirectorySearcher;
+use crate::domain::playlist::{
+    PlaylistCreator, PlaylistDeleter, PlaylistSearcher, PlaylistVideoReconciler,
+};
+use crate::domain::task::TaskViewSearcher;
+use crate::domain::video::{ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher};
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::infrastructure_container::{
     InfrastructureContainer, InfrastructureSettings,

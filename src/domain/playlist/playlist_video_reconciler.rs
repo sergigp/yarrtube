@@ -1,11 +1,11 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::Playlist;
 use crate::domain::playlist_video::PlaylistVideo;
-use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
 use crate::domain::shared::{PlaylistId, VideoId, VideoRecordId};
 use crate::domain::task::Task;
 use crate::domain::video::{
-    Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
+    ThumbnailFetcher, ThumbnailFetcherApi, Video, VideoStatus, resolve_output_dir, top_level_entry,
+    video_dir_for_filename,
 };
 use crate::domain::video_metadata::{build_video_metadata, resolve_sorttitle};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;

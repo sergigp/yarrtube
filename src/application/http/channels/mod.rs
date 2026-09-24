@@ -3,12 +3,12 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::{MISSING_QUALITY, required};
-use crate::domain::channel::{ChannelHandle, CreateChannelError, DeleteChannelError, VideoLimit};
-use crate::domain::playlist::PlaylistPath;
-use crate::domain::services::{
-    ChannelCreator, ChannelCreatorApi, ChannelDeleter, ChannelDeleterApi, ChannelSearcher,
-    ChannelSearcherApi, ChannelVideoReconciler, ChannelVideoReconcilerApi, CreateChannelOutcome,
+use crate::domain::channel::{
+    ChannelCreator, ChannelCreatorApi, ChannelDeleter, ChannelDeleterApi, ChannelHandle,
+    ChannelSearcher, ChannelSearcherApi, ChannelVideoReconciler, ChannelVideoReconcilerApi,
+    CreateChannelError, CreateChannelOutcome, DeleteChannelError, VideoLimit,
 };
+use crate::domain::playlist::PlaylistPath;
 use crate::domain::shared::Quality;
 use axum::Json;
 use axum::extract::{Path, State};
@@ -86,9 +86,8 @@ mod tests {
     use crate::domain::channel::Channel;
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
-    use crate::domain::services::ThumbnailFetcher;
     use crate::domain::shared::VideoId;
-    use crate::domain::video::Video;
+    use crate::domain::video::{ThumbnailFetcher, Video};
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
