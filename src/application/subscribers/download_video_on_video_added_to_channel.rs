@@ -81,7 +81,7 @@ mod tests {
     use std::sync::Mutex;
 
     #[test]
-    fn it_should_schedule_a_download_video_task_with_the_channels_quality_and_output_dir() {
+    fn it_should_schedule_the_download() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_when_the_payload_channel_id_is_invalid() {
+    fn it_should_skip_if_invalid_channel_id_provided() {
         let result = handle(
             &any_subscriber(),
             r#"{"channel_id": "", "video_id": "rec1"}"#,
@@ -131,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_when_the_channel_no_longer_exists() {
+    fn it_should_skip_if_channel_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),

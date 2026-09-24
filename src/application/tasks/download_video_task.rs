@@ -61,7 +61,7 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn it_should_mark_the_video_downloaded_on_success() {
+    fn it_should_download_the_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = my_video();
@@ -91,7 +91,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_mark_the_video_errored_retrying_when_the_download_fails_with_retries_left() {
+    fn it_should_retry_a_failed_download() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = my_video();
@@ -122,7 +122,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_record_yt_dlps_actual_error_message_when_a_download_fails() {
+    fn it_should_record_the_download_error() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = my_video();
@@ -152,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_mark_the_video_errored_when_the_download_fails_on_the_last_attempt() {
+    fn it_should_mark_errored_after_last_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = my_video();
@@ -183,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_when_the_video_no_longer_exists() {
+    fn it_should_skip_if_video_is_gone() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
@@ -204,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_pass_the_sanitized_title_as_the_desired_filename_to_the_downloader() {
+    fn it_should_use_the_sanitized_title_as_filename() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = Video::create(
@@ -237,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_pass_the_output_dir_from_the_payload_straight_through() {
+    fn it_should_download_into_the_payload_output_dir() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = my_video();
@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_pass_the_existing_folder_derived_from_the_thumbnail_filename() {
+    fn it_should_reuse_the_existing_video_folder() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
@@ -301,7 +301,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_pass_no_existing_folder_when_the_video_has_no_thumbnail() {
+    fn it_should_use_no_existing_folder_without_thumbnail() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = my_video();
@@ -326,7 +326,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_when_the_payload_video_id_is_invalid() {
+    fn it_should_skip_if_invalid_video_id_provided() {
         let result = run(&any_task(), &payload_for(""), false);
 
         assert_eq!(result, Ok(()));
@@ -343,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_record_the_thumbnail_filename_when_one_was_written() {
+    fn it_should_record_the_thumbnail_filename() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = my_video();
@@ -375,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_record_no_thumbnail_filename_when_none_was_written() {
+    fn it_should_record_no_thumbnail_if_none_written() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = my_video();
@@ -405,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_record_the_duration_reported_by_the_downloader() {
+    fn it_should_record_the_duration() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = my_video();
@@ -435,7 +435,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_record_no_duration_when_the_downloader_reports_none() {
+    fn it_should_record_no_duration_if_unknown() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video = my_video();
@@ -465,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_save_video_metadata_when_the_youtube_metadata_fetch_succeeds() {
+    fn it_should_save_youtube_metadata() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video_metadata_repository = Arc::new(FakeVideoMetadataRepository::default());
@@ -522,8 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_still_mark_the_video_downloaded_and_save_no_metadata_when_the_youtube_metadata_fetch_fails()
-     {
+    fn it_should_download_even_if_metadata_fetch_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let video_metadata_repository = Arc::new(FakeVideoMetadataRepository::default());

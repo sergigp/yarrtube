@@ -127,8 +127,7 @@ mod tests {
     const OTHER_AVATAR_URL: &str = "https://yt3.ggpht.com/other-avatar.jpg";
 
     #[tokio::test]
-    async fn it_should_return_201_and_store_the_channel_when_creating_a_new_channel_from_a_bare_handle()
-     {
+    async fn it_should_create_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -156,7 +155,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_201_and_store_the_channel_when_creating_a_channel_from_a_url() {
+    async fn it_should_create_a_channel_from_a_youtube_url() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -188,7 +187,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_store_the_avatar_and_record_its_filename_when_the_channel_has_an_avatar() {
+    async fn it_should_store_the_channel_avatar() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
@@ -233,7 +232,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_not_store_an_avatar_when_the_channel_has_none() {
+    async fn it_should_skip_avatar_if_channel_has_none() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
@@ -258,7 +257,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_not_record_an_avatar_filename_when_the_avatar_is_unavailable() {
+    async fn it_should_skip_avatar_if_unavailable() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::unavailable());
@@ -283,7 +282,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_still_create_the_channel_without_an_avatar_when_storing_the_avatar_fails() {
+    async fn it_should_create_the_channel_even_if_avatar_storage_fails() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::failing());
@@ -313,8 +312,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_200_with_the_existing_channel_and_change_nothing_when_creating_a_channel_that_already_exists()
-     {
+    async fn it_should_return_the_existing_channel_if_already_created() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -346,7 +344,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_record_a_channel_created_event_only_once_for_repeated_creation() {
+    async fn it_should_publish_channel_created_only_once() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -381,7 +379,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_the_channel_value_is_missing() {
+    async fn it_should_fail_to_create_if_channel_missing() {
         let request = CreateChannelRequest {
             channel: None,
             ..create_request("@somechannel")
@@ -398,7 +396,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_the_channel_value_is_invalid() {
+    async fn it_should_fail_to_create_if_invalid_channel_provided() {
         let response = create(any_channel_service(), create_request("somechannel")).await;
 
         assert_eq!(
@@ -410,7 +408,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_quality_is_missing() {
+    async fn it_should_fail_to_create_if_quality_missing() {
         let request = CreateChannelRequest {
             quality: None,
             ..create_request("@somechannel")
@@ -427,7 +425,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_video_limit_is_missing() {
+    async fn it_should_fail_to_create_if_video_limit_missing() {
         let request = CreateChannelRequest {
             video_limit: None,
             ..create_request("@somechannel")
@@ -444,7 +442,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_path_is_missing() {
+    async fn it_should_fail_to_create_if_path_missing() {
         let request = CreateChannelRequest {
             path: None,
             ..create_request("@somechannel")
@@ -459,7 +457,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_and_store_nothing_when_the_youtube_channel_does_not_exist() {
+    async fn it_should_fail_to_create_if_channel_not_found_on_youtube() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -486,7 +484,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_502_and_store_nothing_when_the_youtube_lookup_fails() {
+    async fn it_should_fail_to_create_if_youtube_lookup_fails() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -514,8 +512,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_204_remove_the_channel_and_record_a_channel_deleted_event_when_deleting_an_existing_channel()
-     {
+    async fn it_should_delete_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
@@ -543,7 +540,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_delete_every_video_of_the_deleted_channel_and_keep_other_channels_videos() {
+    async fn it_should_delete_only_the_deleted_channel_videos() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -606,7 +603,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_delete_the_avatar_file_when_deleting_a_channel_with_a_recorded_avatar() {
+    async fn it_should_delete_the_channel_avatar() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::with_avatars(&[
@@ -643,7 +640,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_and_change_nothing_when_deleting_a_missing_channel() {
+    async fn it_should_fail_to_delete_a_missing_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -672,7 +669,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_deleting_with_an_invalid_handle() {
+    async fn it_should_fail_to_delete_if_invalid_handle_provided() {
         let response = delete(any_channel_service(), "noatsign").await;
 
         assert_eq!(
@@ -684,7 +681,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_an_empty_array_when_no_channels_exist() {
+    async fn it_should_list_no_channels() {
         let db = TestDatabase::new();
         let service = ChannelService::new(
             Arc::new(SqliteChannelRepository::new(db.connection())),
@@ -702,7 +699,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_all_existing_channels() {
+    async fn it_should_list_all_channels() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
@@ -722,7 +719,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_204_and_add_the_listed_videos_when_reconciling_an_existing_channel() {
+    async fn it_should_add_new_videos_on_reconcile() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -782,7 +779,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_evict_stored_videos_no_longer_listed_when_reconciling_a_channel() {
+    async fn it_should_evict_videos_no_longer_listed_on_reconcile() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -835,7 +832,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_not_add_a_listed_video_twice_on_repeated_reconciles_of_the_same_channel() {
+    async fn it_should_be_idempotent_on_repeated_reconciles() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -880,7 +877,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_204_and_do_nothing_when_reconciling_a_nonexistent_channel() {
+    async fn it_should_ignore_reconcile_of_a_missing_channel() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
@@ -913,7 +910,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_reconciling_with_an_invalid_handle() {
+    async fn it_should_fail_to_reconcile_if_invalid_handle_provided() {
         let response = reconcile(any_channel_video_reconciler(), "noatsign").await;
 
         assert_eq!(

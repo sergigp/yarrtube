@@ -62,7 +62,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     #[test]
-    fn it_should_reconcile_the_playlist_named_in_the_payload() {
+    fn it_should_reconcile_the_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
@@ -94,14 +94,14 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_when_the_payload_playlist_id_is_invalid() {
+    fn it_should_skip_if_invalid_playlist_id_provided() {
         let result = handle(&any_subscriber(), r#"{"playlist_id": ""}"#);
 
         assert_eq!(result, Ok(()));
     }
 
     #[test]
-    fn it_should_no_op_when_the_playlist_no_longer_exists() {
+    fn it_should_skip_if_playlist_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),

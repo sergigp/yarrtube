@@ -59,7 +59,7 @@ mod tests {
     use std::sync::Mutex;
 
     #[test]
-    fn it_should_schedule_a_delete_channel_files_task_with_the_right_payload() {
+    fn it_should_schedule_channel_files_deletion() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -89,7 +89,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_when_the_payload_channel_id_is_invalid() {
+    fn it_should_skip_if_invalid_channel_id_provided() {
         let result = handle(
             &any_subscriber(),
             r#"{"channel_id": "", "path": "creators/somechannel"}"#,

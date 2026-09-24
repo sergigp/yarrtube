@@ -54,7 +54,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_when_the_video_has_no_recorded_filename() {
+    fn it_should_skip_if_video_has_no_filename() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::new(Ok(true)));
         let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
             video_file_repository.clone(),
@@ -85,7 +85,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_when_no_matching_file_is_found() {
+    fn it_should_skip_if_video_file_not_found() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::new(Ok(false)));
         let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
             video_file_repository.clone(),
@@ -102,7 +102,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_delete_the_video_file_and_its_thumbnail_file() {
+    fn it_should_delete_the_video_and_thumbnail_files() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::new(Ok(true)));
         let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
             video_file_repository.clone(),
@@ -122,7 +122,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_the_thumbnail_half_when_the_video_has_no_recorded_thumbnail_filename() {
+    fn it_should_skip_thumbnail_if_none_recorded() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::new(Ok(true)));
         let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
             video_file_repository.clone(),
@@ -139,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_without_erroring_when_no_matching_thumbnail_file_is_found() {
+    fn it_should_skip_thumbnail_if_file_not_found() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::new(Ok(false)));
         let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
             video_file_repository.clone(),

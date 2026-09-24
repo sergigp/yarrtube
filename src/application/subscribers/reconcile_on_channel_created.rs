@@ -65,7 +65,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     #[test]
-    fn it_should_reconcile_the_channel_named_in_the_payload() {
+    fn it_should_reconcile_the_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
@@ -97,14 +97,14 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_when_the_payload_channel_id_is_invalid() {
+    fn it_should_skip_if_invalid_channel_id_provided() {
         let result = handle(&any_subscriber(), r#"{"channel_id": ""}"#);
 
         assert_eq!(result, Ok(()));
     }
 
     #[test]
-    fn it_should_no_op_when_the_channel_no_longer_exists() {
+    fn it_should_skip_if_channel_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),

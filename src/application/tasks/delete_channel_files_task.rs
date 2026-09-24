@@ -35,7 +35,7 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn it_should_recursively_delete_the_channel_output_directory() {
+    fn it_should_delete_the_channel_directory() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let task = DeleteChannelFilesTask::new(VideoFileDeleter::new(
             video_file_repository.clone(),
@@ -52,7 +52,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_when_the_payload_channel_id_is_invalid() {
+    fn it_should_skip_if_invalid_channel_id_provided() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let task = DeleteChannelFilesTask::new(VideoFileDeleter::new(
             video_file_repository.clone(),

@@ -100,7 +100,7 @@ mod tests {
     use std::sync::Arc;
 
     #[tokio::test]
-    async fn it_should_return_the_playlists_videos() {
+    async fn it_should_list_playlist_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
@@ -131,7 +131,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_the_download_details_of_a_downloaded_video() {
+    async fn it_should_include_download_details_of_downloaded_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
@@ -177,7 +177,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_videos_ordered_by_playlist_position() {
+    async fn it_should_list_playlist_videos_by_position() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
@@ -221,7 +221,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_an_empty_list_when_the_playlist_has_no_videos() {
+    async fn it_should_list_no_videos_for_an_empty_playlist() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
@@ -240,7 +240,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_the_playlist_does_not_exist() {
+    async fn it_should_fail_if_playlist_not_found() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
 
@@ -261,7 +261,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_the_playlist_id_is_invalid() {
+    async fn it_should_fail_if_invalid_playlist_id_provided() {
         let response = list_for_playlist(any_video_searcher(), "   ").await;
 
         assert_eq!(
@@ -273,7 +273,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_the_channels_videos_ordered_by_recency() {
+    async fn it_should_list_channel_videos_by_recency() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
@@ -313,7 +313,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_an_empty_list_when_the_channel_has_no_videos() {
+    async fn it_should_list_no_videos_for_an_empty_channel() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
@@ -334,7 +334,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_the_channel_does_not_exist() {
+    async fn it_should_fail_if_channel_not_found() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
 
@@ -355,7 +355,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_the_channel_handle_is_invalid() {
+    async fn it_should_fail_if_invalid_handle_provided() {
         let response = list_for_channel(any_video_searcher(), "somechannel").await;
 
         assert_eq!(
@@ -367,7 +367,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_an_empty_list_when_no_downloaded_videos_exist() {
+    async fn it_should_list_no_recent_videos_if_nothing_downloaded() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
 
@@ -385,7 +385,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_combine_and_sort_recent_videos_from_playlists_and_channels() {
+    async fn it_should_merge_recent_videos_from_playlists_and_channels() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
@@ -442,7 +442,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_duration_of_a_recent_video() {
+    async fn it_should_include_duration_in_recent_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
@@ -483,7 +483,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_channel_avatar_filename_in_a_recent_videos_source() {
+    async fn it_should_include_channel_avatar_in_recent_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
@@ -519,7 +519,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_exclude_non_downloaded_videos_from_recent() {
+    async fn it_should_exclude_not_downloaded_videos_from_recent() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
@@ -550,7 +550,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_list_a_video_tracked_by_two_sources_once_per_source() {
+    async fn it_should_list_a_recent_video_once_per_source() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
@@ -596,7 +596,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_apply_the_default_limit_of_20_when_omitted() {
+    async fn it_should_default_recent_limit_to_20() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
@@ -622,7 +622,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_narrow_the_result_with_an_explicit_limit() {
+    async fn it_should_honor_an_explicit_recent_limit() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
@@ -648,7 +648,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_cap_the_limit_at_100() {
+    async fn it_should_cap_recent_limit_at_100() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =

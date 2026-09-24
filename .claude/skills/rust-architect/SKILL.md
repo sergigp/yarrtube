@@ -144,7 +144,12 @@ Keep tests in `#[cfg(test)] mod tests` in the same file as the code they test by
 
 ## Testing Opinions
 
-- Test naming: `it_should_<expected outcome>_on_<condition>` — drop the `_on_...` part when there's no meaningful precondition beyond "given valid input" (`it_should_build_the_widget_url`). This naming focuses on behaviour instead of implementation.
+- Test naming: `it_should_<behaviour>[_if_<condition>]`, short enough to read at a glance — drop the `_if_...` part when there's no meaningful precondition beyond "given valid input". This naming focuses on behaviour instead of implementation.
+  - Name the behaviour, not the mechanics: no HTTP status codes, event/task type names, or "and store nothing / change nothing" side-effect lists — the asserts carry those details.
+  - Happy path is the verb: `it_should_create_a_channel`, `it_should_list_all_playlists`, `it_should_download_the_video`.
+  - Errors use `fail`: `it_should_fail_to_create_if_path_missing`, `it_should_fail_if_invalid_handle_provided`.
+  - Tolerated no-ops use `skip` / `ignore`: `it_should_skip_if_playlist_is_gone`, `it_should_ignore_reconcile_of_a_missing_channel`.
+  - When one test module covers several handlers, keep the operation in the name so it stays unambiguous (`fail_to_delete_…` vs `fail_to_reconcile_…`).
 - Tests should be as deterministic as possible. In the case of time we will use a fake clock that we can control. This will behave as a regular port.
 
 # Other Opinions

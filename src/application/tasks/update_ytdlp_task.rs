@@ -68,7 +68,7 @@ mod tests {
     use chrono::{DateTime, Utc};
 
     #[test]
-    fn it_should_reschedule_the_next_occurrence_when_the_update_succeeds() {
+    fn it_should_reschedule_after_success() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -95,7 +95,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_reschedule_the_next_occurrence_when_the_update_fails() {
+    fn it_should_reschedule_after_failure() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),

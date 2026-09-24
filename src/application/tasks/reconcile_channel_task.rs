@@ -69,7 +69,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     #[test]
-    fn it_should_no_op_when_the_channel_no_longer_exists() {
+    fn it_should_skip_if_channel_is_gone() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -105,7 +105,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_persist_a_video_within_the_top_n_and_publish_an_event() {
+    fn it_should_add_new_videos_within_the_limit() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_refresh_the_title_and_position_of_an_already_stored_video() {
+    fn it_should_refresh_existing_videos() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -225,7 +225,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_evict_a_video_that_ages_out_of_the_top_n() {
+    fn it_should_evict_videos_beyond_the_limit() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -285,7 +285,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_leave_stored_videos_untouched_when_yt_dlp_fails() {
+    fn it_should_keep_videos_if_listing_fails() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -331,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_always_schedule_the_next_reconcile_even_with_no_changes() {
+    fn it_should_always_schedule_the_next_reconcile() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_no_op_when_the_payload_channel_id_is_invalid() {
+    fn it_should_skip_if_invalid_channel_id_provided() {
         let result = run(&any_task(), &payload_for(""));
 
         assert_eq!(result, Ok(()));
@@ -379,7 +379,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_heal_a_downloaded_video_whose_file_is_missing() {
+    fn it_should_redownload_videos_with_missing_file() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -433,7 +433,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_heal_a_downloaded_video_whose_file_is_present_but_not_mp4() {
+    fn it_should_redownload_videos_with_non_mp4_file() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -489,7 +489,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_delete_an_orphaned_file() {
+    fn it_should_delete_orphaned_files() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -522,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_recover_a_permanently_errored_video() {
+    fn it_should_retry_permanently_errored_videos() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -578,7 +578,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_leave_a_matching_file_alone() {
+    fn it_should_keep_matching_files() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -617,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_leave_a_matching_thumbnail_file_alone() {
+    fn it_should_keep_matching_thumbnails() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -657,7 +657,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_delete_an_unrecorded_stray_thumbnail_file() {
+    fn it_should_delete_stray_thumbnails() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));

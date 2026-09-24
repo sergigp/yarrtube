@@ -52,7 +52,7 @@ mod tests {
     use std::sync::Arc;
 
     #[tokio::test]
-    async fn it_should_return_an_empty_list_when_no_tasks_exist() {
+    async fn it_should_list_no_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -73,7 +73,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_a_pending_task_whose_run_at_is_in_the_future() {
+    async fn it_should_include_future_pending_tasks() {
         let db = TestDatabase::new();
         let future = fixed_timestamp() + chrono::Duration::seconds(60);
         let task_repository = Arc::new(SqliteTaskRepository::new(
@@ -104,7 +104,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_a_running_task() {
+    async fn it_should_include_running_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -138,7 +138,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_playlist_name_for_a_pending_reconcile_playlist_task() {
+    async fn it_should_include_playlist_name_in_reconcile_playlist_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -177,7 +177,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_an_empty_payload_when_the_referenced_playlist_no_longer_exists() {
+    async fn it_should_omit_details_if_playlist_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -206,7 +206,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_channel_name_for_a_pending_reconcile_channel_task() {
+    async fn it_should_include_channel_name_in_reconcile_channel_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -245,7 +245,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_an_empty_payload_when_the_referenced_channel_no_longer_exists() {
+    async fn it_should_omit_details_if_channel_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -274,8 +274,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_video_title_and_playlist_name_for_a_pending_download_video_task()
-    {
+    async fn it_should_include_video_and_playlist_in_download_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -323,8 +322,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_video_title_and_channel_name_for_a_channel_owned_download_video_task()
-     {
+    async fn it_should_include_video_and_channel_in_download_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -372,8 +370,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_an_empty_payload_when_a_download_video_task_references_an_untracked_video()
-     {
+    async fn it_should_omit_details_if_video_is_untracked() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -397,7 +394,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_filename_for_a_pending_delete_video_file_task() {
+    async fn it_should_include_filename_in_delete_video_file_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -434,8 +431,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_an_empty_payload_for_a_delete_video_file_task_with_no_recorded_filename()
-     {
+    async fn it_should_omit_details_if_video_has_no_filename() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -466,7 +462,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_path_for_a_pending_delete_playlist_files_task() {
+    async fn it_should_include_path_in_delete_playlist_files_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -502,7 +498,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_the_path_for_a_pending_delete_channel_files_task() {
+    async fn it_should_include_path_in_delete_channel_files_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -538,7 +534,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_an_empty_payload_for_an_update_ytdlp_task() {
+    async fn it_should_omit_details_for_update_ytdlp_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),

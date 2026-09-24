@@ -124,7 +124,7 @@ mod tests {
     const DEFAULT_PATH: &str = "music/chill";
 
     #[tokio::test]
-    async fn it_should_return_201_and_store_the_playlist_when_creating_a_new_playlist() {
+    async fn it_should_create_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -152,8 +152,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_201_and_store_the_playlist_when_creating_a_playlist_from_a_youtube_url()
-     {
+    async fn it_should_create_a_playlist_from_a_youtube_url() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -185,8 +184,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_200_with_the_existing_playlist_and_change_nothing_when_creating_a_playlist_that_already_exists()
-     {
+    async fn it_should_return_the_existing_playlist_if_already_created() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -220,7 +218,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_record_a_playlist_created_event_only_once_for_repeated_creation() {
+    async fn it_should_publish_playlist_created_only_once() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -249,7 +247,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_the_playlist_value_is_invalid() {
+    async fn it_should_fail_to_create_if_invalid_playlist_provided() {
         let response = create(any_playlist_creator(), create_request("")).await;
 
         assert_eq!(
@@ -261,7 +259,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_path_is_missing() {
+    async fn it_should_fail_to_create_if_path_missing() {
         let request = CreatePlaylistRequest {
             path: None,
             ..create_request("PL1")
@@ -276,7 +274,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_quality_is_missing() {
+    async fn it_should_fail_to_create_if_quality_missing() {
         let request = CreatePlaylistRequest {
             quality: None,
             ..create_request("PL1")
@@ -293,8 +291,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_and_store_nothing_when_the_path_is_already_used_by_another_playlist()
-     {
+    async fn it_should_fail_to_create_if_path_already_in_use() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -328,7 +325,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_and_store_nothing_when_the_youtube_playlist_does_not_exist() {
+    async fn it_should_fail_to_create_if_playlist_not_found_on_youtube() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -352,7 +349,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_502_and_store_nothing_when_the_youtube_lookup_fails() {
+    async fn it_should_fail_to_create_if_youtube_lookup_fails() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -377,8 +374,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_204_remove_the_playlist_and_record_a_playlist_deleted_event_when_deleting_an_existing_playlist()
-     {
+    async fn it_should_delete_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -409,8 +405,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_delete_every_video_of_the_deleted_playlist_and_keep_other_playlists_videos()
-    {
+    async fn it_should_delete_only_the_deleted_playlist_videos() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -473,7 +468,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_and_change_nothing_when_deleting_a_missing_playlist() {
+    async fn it_should_fail_to_delete_a_missing_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
@@ -501,7 +496,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_deleting_with_an_invalid_playlist_id() {
+    async fn it_should_fail_to_delete_if_invalid_playlist_id_provided() {
         let response = delete(any_playlist_deleter(), " ").await;
 
         assert_eq!(
@@ -513,7 +508,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_an_empty_array_when_no_playlists_exist() {
+    async fn it_should_list_no_playlists() {
         let db = TestDatabase::new();
         let playlist_searcher =
             PlaylistSearcher::new(Arc::new(SqlitePlaylistRepository::new(db.connection())));
@@ -524,7 +519,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_all_existing_playlists() {
+    async fn it_should_list_all_playlists() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         playlist_repository
@@ -547,7 +542,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_204_and_add_the_listed_videos_when_reconciling_a_playlist() {
+    async fn it_should_add_new_videos_on_reconcile() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -607,7 +602,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_remove_stored_videos_no_longer_on_youtube_when_reconciling_a_playlist() {
+    async fn it_should_remove_videos_gone_from_youtube_on_reconcile() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -660,7 +655,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_not_add_a_listed_video_twice_or_schedule_tasks_on_repeated_reconciles() {
+    async fn it_should_be_idempotent_on_repeated_reconciles() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -707,7 +702,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_leave_an_existing_pending_reconcile_task_untouched() {
+    async fn it_should_not_reschedule_an_already_pending_reconcile() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let task_repository = task_repository(&db);
@@ -740,7 +735,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_204_and_do_nothing_when_reconciling_a_nonexistent_playlist() {
+    async fn it_should_ignore_reconcile_of_a_missing_playlist() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let playlist_video_repository =
@@ -771,7 +766,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_400_when_reconciling_with_an_invalid_playlist_id() {
+    async fn it_should_fail_to_reconcile_if_invalid_playlist_id_provided() {
         let response = reconcile(any_video_reconciler(), " ").await;
 
         assert_eq!(

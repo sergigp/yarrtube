@@ -37,7 +37,7 @@ mod tests {
     const VIDEOS_ROOT: &str = "/videos";
 
     #[tokio::test]
-    async fn it_should_return_the_videos_roots_subdirectories_on_a_request_without_a_path() {
+    async fn it_should_list_root_subdirectories_by_default() {
         let directory_searcher = DirectorySearcher::new(Arc::new(seeded_root()));
         let query = ListDirectoriesQuery { path: None };
 
@@ -50,7 +50,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_a_nested_directorys_subdirectories() {
+    async fn it_should_list_nested_subdirectories() {
         let directory_searcher = DirectorySearcher::new(Arc::new(seeded_root()));
         let query = ListDirectoriesQuery {
             path: Some("playlists".to_string()),
@@ -62,7 +62,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_an_empty_entry_list_on_a_directory_with_no_subdirectories() {
+    async fn it_should_list_no_entries_for_a_leaf_directory() {
         let directory_searcher = DirectorySearcher::new(Arc::new(seeded_root()));
         let query = ListDirectoriesQuery {
             path: Some("channels".to_string()),
@@ -74,7 +74,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_bad_request_on_an_invalid_path() {
+    async fn it_should_fail_if_invalid_path_provided() {
         let query = ListDirectoriesQuery {
             path: Some("playlists/../..".to_string()),
         };
@@ -90,7 +90,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_not_found_on_a_path_the_repository_cannot_list() {
+    async fn it_should_fail_if_path_not_found() {
         let directory_searcher = DirectorySearcher::new(Arc::new(seeded_root()));
         let query = ListDirectoriesQuery {
             path: Some("does-not-exist".to_string()),
@@ -108,7 +108,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_return_internal_server_error_on_a_repository_failure() {
+    async fn it_should_fail_if_repository_fails() {
         let directory_searcher = DirectorySearcher::new(Arc::new(
             FakeDirectoryRepository::failing("the videos root is unreadable"),
         ));
