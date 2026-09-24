@@ -178,10 +178,6 @@ impl FakeVideoDownloaderRepository {
         }
     }
 
-    pub fn thumbnail_calls_count(&self) -> usize {
-        self.thumbnail_calls.lock().unwrap().len()
-    }
-
     fn with_result(result: DownloadAttempt) -> Self {
         Self {
             result: std::sync::Mutex::new(result),

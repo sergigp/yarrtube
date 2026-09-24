@@ -6,9 +6,6 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::Mutex;
 
-#[cfg(test)]
-use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
-
 pub trait ChannelVideoRepository: Send + Sync {
     /// Insert-or-replace keyed by `(channel_id, video_id)`.
     fn save(&self, channel_video: &ChannelVideo) -> anyhow::Result<()>;
@@ -208,102 +205,6 @@ fn columns_to_channel_video(columns: Columns) -> anyhow::Result<ChannelVideo> {
             .context("failed to parse stored created_at")?
             .with_timezone(&Utc),
     })
-}
-
-#[cfg(test)]
-pub struct FakeChannelVideoRepository {
-    pub(crate) channel_videos: Mutex<Vec<ChannelVideo>>,
-    /// The `videos` table this fake joins against, mirroring the SQL
-    /// implementation's join when resolving a YouTube video ID.
-    video_repository: std::sync::Arc<FakeVideoRepository>,
-}
-
-#[cfg(test)]
-impl FakeChannelVideoRepository {
-    pub fn new(video_repository: std::sync::Arc<FakeVideoRepository>) -> Self {
-        Self {
-            channel_videos: Mutex::new(Vec::new()),
-            video_repository,
-        }
-    }
-
-    fn is_youtube_video(&self, channel_video: &ChannelVideo, youtube_video_id: &VideoId) -> bool {
-        self.video_repository
-            .videos
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|video| {
-                video.id == channel_video.video_id && video.youtube_id == *youtube_video_id
-            })
-    }
-}
-
-#[cfg(test)]
-impl ChannelVideoRepository for FakeChannelVideoRepository {
-    fn save(&self, channel_video: &ChannelVideo) -> anyhow::Result<()> {
-        let mut channel_videos = self.channel_videos.lock().unwrap();
-        if let Some(existing) = channel_videos.iter_mut().find(|cv| {
-            cv.channel_id == channel_video.channel_id && cv.video_id == channel_video.video_id
-        }) {
-            *existing = channel_video.clone();
-        } else {
-            channel_videos.push(channel_video.clone());
-        }
-        Ok(())
-    }
-
-    fn find_by_youtube_video(
-        &self,
-        channel_id: &ChannelHandle,
-        youtube_video_id: &VideoId,
-    ) -> anyhow::Result<Option<ChannelVideo>> {
-        Ok(self
-            .channel_videos
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|cv| cv.channel_id == *channel_id && self.is_youtube_video(cv, youtube_video_id))
-            .cloned())
-    }
-
-    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<ChannelVideo>> {
-        Ok(self
-            .channel_videos
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|cv| cv.video_id == *video_id)
-            .cloned())
-    }
-
-    fn list_for_channel(&self, channel_id: &ChannelHandle) -> anyhow::Result<Vec<ChannelVideo>> {
-        let mut channel_videos: Vec<ChannelVideo> = self
-            .channel_videos
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|cv| cv.channel_id == *channel_id)
-            .cloned()
-            .collect();
-        channel_videos.sort_by_key(|cv| cv.position);
-        Ok(channel_videos)
-    }
-
-    fn delete(&self, channel_id: &ChannelHandle, youtube_video_id: &VideoId) -> anyhow::Result<()> {
-        self.channel_videos.lock().unwrap().retain(|cv| {
-            !(cv.channel_id == *channel_id && self.is_youtube_video(cv, youtube_video_id))
-        });
-        Ok(())
-    }
-
-    fn delete_all_for_channel(&self, channel_id: &ChannelHandle) -> anyhow::Result<()> {
-        self.channel_videos
-            .lock()
-            .unwrap()
-            .retain(|cv| cv.channel_id != *channel_id);
-        Ok(())
-    }
 }
 
 #[cfg(test)]

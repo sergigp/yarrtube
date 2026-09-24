@@ -5,9 +5,6 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::Mutex;
 
-#[cfg(test)]
-use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
-
 pub trait PlaylistVideoRepository: Send + Sync {
     /// Insert-or-replace keyed by `(playlist_id, video_id)`.
     fn save(&self, playlist_video: &PlaylistVideo) -> anyhow::Result<()>;
@@ -208,106 +205,6 @@ fn columns_to_playlist_video(columns: Columns) -> anyhow::Result<PlaylistVideo> 
             .context("failed to parse stored created_at")?
             .with_timezone(&Utc),
     })
-}
-
-#[cfg(test)]
-pub struct FakePlaylistVideoRepository {
-    pub(crate) playlist_videos: Mutex<Vec<PlaylistVideo>>,
-    /// The `videos` table this fake joins against, mirroring the SQL
-    /// implementation's join when resolving a YouTube video ID.
-    video_repository: std::sync::Arc<FakeVideoRepository>,
-}
-
-#[cfg(test)]
-impl FakePlaylistVideoRepository {
-    pub fn new(video_repository: std::sync::Arc<FakeVideoRepository>) -> Self {
-        Self {
-            playlist_videos: Mutex::new(Vec::new()),
-            video_repository,
-        }
-    }
-
-    fn is_youtube_video(&self, playlist_video: &PlaylistVideo, youtube_video_id: &VideoId) -> bool {
-        self.video_repository
-            .videos
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|video| {
-                video.id == playlist_video.video_id && video.youtube_id == *youtube_video_id
-            })
-    }
-}
-
-#[cfg(test)]
-impl PlaylistVideoRepository for FakePlaylistVideoRepository {
-    fn save(&self, playlist_video: &PlaylistVideo) -> anyhow::Result<()> {
-        let mut playlist_videos = self.playlist_videos.lock().unwrap();
-        if let Some(existing) = playlist_videos.iter_mut().find(|pv| {
-            pv.playlist_id == playlist_video.playlist_id && pv.video_id == playlist_video.video_id
-        }) {
-            *existing = playlist_video.clone();
-        } else {
-            playlist_videos.push(playlist_video.clone());
-        }
-        Ok(())
-    }
-
-    fn find_by_youtube_video(
-        &self,
-        playlist_id: &PlaylistId,
-        youtube_video_id: &VideoId,
-    ) -> anyhow::Result<Option<PlaylistVideo>> {
-        Ok(self
-            .playlist_videos
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|pv| {
-                pv.playlist_id == *playlist_id && self.is_youtube_video(pv, youtube_video_id)
-            })
-            .cloned())
-    }
-
-    fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<PlaylistVideo>> {
-        Ok(self
-            .playlist_videos
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|pv| pv.video_id == *video_id)
-            .cloned())
-    }
-
-    fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>> {
-        let mut playlist_videos: Vec<PlaylistVideo> = self
-            .playlist_videos
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|pv| pv.playlist_id == *playlist_id)
-            .cloned()
-            .collect();
-        playlist_videos.sort_by(|a, b| {
-            (a.position.is_none(), a.position, a.id).cmp(&(b.position.is_none(), b.position, b.id))
-        });
-        Ok(playlist_videos)
-    }
-
-    fn delete(&self, playlist_id: &PlaylistId, youtube_video_id: &VideoId) -> anyhow::Result<()> {
-        self.playlist_videos.lock().unwrap().retain(|pv| {
-            !(pv.playlist_id == *playlist_id && self.is_youtube_video(pv, youtube_video_id))
-        });
-        Ok(())
-    }
-
-    fn delete_all_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<()> {
-        self.playlist_videos
-            .lock()
-            .unwrap()
-            .retain(|pv| pv.playlist_id != *playlist_id);
-        Ok(())
-    }
 }
 
 #[cfg(test)]

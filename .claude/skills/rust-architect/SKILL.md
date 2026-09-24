@@ -87,7 +87,7 @@ src/
 Tests are classified by **where they enter the code**, not by what they fake. Our goal is to couple our tests as much as possible to behaviour instead of implementation, so we can refactor the code without breaking the tests.
 
 - **Acceptance tests**: enter through an application adapter (HTTP handler, event subscriber, task). The default and by far the most numerous kind.
-- **Behaviour tests**: enter through a domain service directly. The exception, reserved for domain logic too complex to cover through an adapter (e.g. the reconcilers).
+- **Behaviour tests**: enter through a domain service directly. The exception, reserved for domain logic too complex to cover through an adapter.
 - **Value object tests**: exhaustive validation rules, one file per value object.
 - **Infrastructure tests**: a single adapter (repository, client) against its real dependency.
 
@@ -101,12 +101,14 @@ HTTP acceptance tests call the handler function directly with only the service i
 
 Every test has the same 7 steps, top to bottom and inline: `TestDatabase` + repositories/fakes → seed them → build the service with `Service::new(..)` → build the request → call the handler → assert the response → assert side effects (repositories, outbox events, scheduled tasks, fake state).
 
-- No fixture structs that bundle fakes/repositories and no `service()` → `service_with()` builder chains. They hide which dependencies a test uses and make it easy to skip asserting them. The one allowed exception is a constructor helper for a service with many ports no test observes: it takes the asserted repositories as parameters and fills in the rest (`channel_video_reconciler(&db, channel_repository, ..)`).
+- No fixture structs that bundle fakes/repositories and no `service()` → `service_with()` builder chains. They hide which dependencies a test uses and make it easy to skip asserting them. The one allowed exception is a constructor helper for a service with many ports no test observes: it takes the asserted repositories as parameters and fills in the rest (`channel_video_reconciler(&db, channel_repository, ..)`). A test that observes one of the ports the helper fills in builds the service inline with `Service::new(..)` instead of growing the helper or adding a second one.
 - Assert whole typed values in one `assert_eq!`: `Ok((StatusCode::CREATED, some_channel_response()))`, `Err(ApiError::bad_request("<exact message>"))`, `repository.list().unwrap() == vec![..]`. Never field by field, never `len()`, never raw JSON (that only re-tests serde).
 - Requests and expected values are built from a valid default overridden with struct update syntax (`CreateChannelRequest { quality: None, ..create_request("@x") }`).
 - Seed state directly into repositories, never by calling another handler: a test only exercises the handler it names.
 - DTO mapping is covered through handler responses, not with standalone DTO tests.
 - Module layout: imports, then every `it_should_*` test, then helpers.
+
+A domain service reached from several adapters (e.g. the reconcilers, called from a task, a subscriber and an HTTP handler) has its logic tested exhaustively through one primary adapter, the one that does the recurring work (the task). Every other adapter tests only what differs for it (e.g. `force_reconcile` not rescheduling, error mapping) plus one happy path proving the service is wired. When an adapter's call path starts to diverge inside the service, the tests for that difference go in that adapter.
 
 Tests whose request is rejected before reaching the service (validation 4XX) assert the response only and don't need a database: their `any_<service>()` helper builds repositories on an unmigrated in-memory connection (`Connection::open_in_memory()`), so a request that wrongly got through fails loudly instead of passing.
 
