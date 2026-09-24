@@ -6,13 +6,11 @@ use crate::domain::services::{
     PlaylistVideoReconciler, TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter,
     VideoSearcher,
 };
-use crate::domain::task::Task;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::infrastructure_container::{
     InfrastructureContainer, InfrastructureSettings,
 };
 use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
-use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_executor::TaskExecutor;
 use crate::infrastructure::shared::web_assets::WebAssets;
 use crate::infrastructure::shared::{sqlite_connection, sqlite_migrations};
@@ -21,7 +19,6 @@ use axum::Router;
 use axum::http::{StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -153,32 +150,6 @@ fn run_startup_migrations() -> Result<()> {
     sqlite_migrations::apply(&mut conn)
 }
 
-/// Seeds the recurring `update_ytdlp` task chain at `run_at`, unless a
-/// non-terminal (`pending` or `running`) one is already scheduled — a
-/// restarted daemon must not stack up additional hourly self-update chains
-/// alongside one that already self-perpetuates forever.
-fn schedule_update_ytdlp_if_absent(
-    task_repository: &dyn TaskRepository,
-    run_at: DateTime<Utc>,
-) -> Result<()> {
-    let existing = task_repository
-        .list_non_completed()?
-        .into_iter()
-        .find(|task| task.task_type == Task::UpdateYtdlp.task_type());
-
-    match existing {
-        Some(task) => info!(
-            task_id = task.id,
-            "recurring yt-dlp self-update task already scheduled, skipping seed"
-        ),
-        None => {
-            task_repository.schedule(&Task::UpdateYtdlp, run_at)?;
-            info!(run_at = %run_at, "scheduled recurring yt-dlp self-update task");
-        }
-    }
-    Ok(())
-}
-
 fn build_infrastructure() -> Result<InfrastructureContainer> {
     InfrastructureContainer::new(InfrastructureSettings {
         db_path: db_path(),
@@ -201,7 +172,7 @@ fn prepare_task_queue(
 
     let update_ytdlp_first_run_at = infrastructure.clock.now()
         + chrono::Duration::seconds(tasks::update_ytdlp_task::UPDATE_INTERVAL_SECONDS);
-    schedule_update_ytdlp_if_absent(
+    tasks::update_ytdlp_task::schedule_update_ytdlp_if_absent(
         infrastructure.task_repository.as_ref(),
         update_ytdlp_first_run_at,
     )
@@ -462,7 +433,6 @@ mod tests {
     use super::*;
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
-    use std::sync::Mutex;
     use tower::ServiceExt;
 
     fn spa_router() -> Router {
@@ -680,60 +650,6 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
-    use crate::domain::task::{ScheduledTask, TaskStatus};
-
-    #[derive(Default)]
-    struct FakeTaskRepository {
-        non_completed: Vec<ScheduledTask>,
-        scheduled: Mutex<Vec<Task>>,
-    }
-
-    fn non_completed_task(id: i64, task_type: &str, status: TaskStatus) -> ScheduledTask {
-        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
-        ScheduledTask {
-            id,
-            task_type: task_type.to_string(),
-            payload: "{}".to_string(),
-            status,
-            retries: 0,
-            run_at: now,
-            created_at: now,
-            updated_at: now,
-            last_error: None,
-        }
-    }
-
-    impl TaskRepository for FakeTaskRepository {
-        fn schedule(&self, task: &Task, _run_at: DateTime<Utc>) -> anyhow::Result<()> {
-            self.scheduled.lock().unwrap().push(task.clone());
-            Ok(())
-        }
-
-        fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {
-            unimplemented!("not exercised by the seeding guard")
-        }
-
-        fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {
-            unimplemented!("not exercised by the seeding guard")
-        }
-
-        fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
-            Ok(self.non_completed.clone())
-        }
-
-        fn update(&self, _task: &ScheduledTask) -> anyhow::Result<()> {
-            unimplemented!("not exercised by the seeding guard")
-        }
-
-        fn delete(&self, _id: i64) -> anyhow::Result<()> {
-            unimplemented!("not exercised by the seeding guard")
-        }
-
-        fn dead_letter(&self, _task: &crate::domain::task::DeadLetteredTask) -> anyhow::Result<()> {
-            unimplemented!("not exercised by the seeding guard")
-        }
-    }
-
     #[test]
     fn it_should_create_the_default_storage_directories_on_an_empty_videos_root() {
         let videos_root = unique_temp_dir("storage-directories-empty");
@@ -776,60 +692,5 @@ mod tests {
         assert!(!videos_root.join("playlists").exists());
         assert!(!videos_root.join("channels").exists());
         std::fs::remove_dir_all(videos_root.parent().unwrap()).unwrap();
-    }
-
-    fn run_at() -> DateTime<Utc> {
-        DateTime::<Utc>::from_timestamp(1_700_003_600, 0).unwrap()
-    }
-
-    #[test]
-    fn it_should_schedule_the_recurring_task_when_none_is_non_completed() {
-        let repository = FakeTaskRepository::default();
-
-        schedule_update_ytdlp_if_absent(&repository, run_at()).unwrap();
-
-        let scheduled = repository.scheduled.lock().unwrap();
-        assert_eq!(scheduled.as_slice(), [Task::UpdateYtdlp]);
-    }
-
-    #[test]
-    fn it_should_skip_scheduling_when_a_pending_update_ytdlp_task_already_exists() {
-        let repository = FakeTaskRepository {
-            non_completed: vec![non_completed_task(1, "update_ytdlp", TaskStatus::Pending)],
-            ..Default::default()
-        };
-
-        schedule_update_ytdlp_if_absent(&repository, run_at()).unwrap();
-
-        assert!(repository.scheduled.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn it_should_skip_scheduling_when_a_running_update_ytdlp_task_already_exists() {
-        let repository = FakeTaskRepository {
-            non_completed: vec![non_completed_task(1, "update_ytdlp", TaskStatus::Running)],
-            ..Default::default()
-        };
-
-        schedule_update_ytdlp_if_absent(&repository, run_at()).unwrap();
-
-        assert!(repository.scheduled.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn it_should_schedule_when_only_other_task_types_are_non_completed() {
-        let repository = FakeTaskRepository {
-            non_completed: vec![non_completed_task(
-                1,
-                "reconcile_playlist",
-                TaskStatus::Pending,
-            )],
-            ..Default::default()
-        };
-
-        schedule_update_ytdlp_if_absent(&repository, run_at()).unwrap();
-
-        let scheduled = repository.scheduled.lock().unwrap();
-        assert_eq!(scheduled.as_slice(), [Task::UpdateYtdlp]);
     }
 }

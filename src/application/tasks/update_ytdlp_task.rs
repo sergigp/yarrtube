@@ -3,6 +3,7 @@ use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use crate::infrastructure::shared::system_clock::Clock;
+use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -11,11 +12,12 @@ use tracing::{error, info};
 pub const UPDATE_INTERVAL_SECONDS: i64 = 3600;
 
 /// Recurring hourly `yt-dlp` self-update, reachable only via the task queue
-/// (seeded once at daemon startup, see `serve.rs`). Always reschedules its
-/// next occurrence, whether or not this attempt succeeded — a failed update
-/// is not a permanent failure of a unit of work, unlike `download_video`, so
-/// this never goes through `ScheduledTask::fail`/dead-letter (see
-/// design.md's "Recurring self-update task" decision).
+/// (seeded once at daemon startup by `schedule_update_ytdlp_if_absent`).
+/// Always reschedules its next occurrence, whether or not this attempt
+/// succeeded — a failed update is not a permanent failure of a unit of work,
+/// unlike `download_video`, so this never goes through
+/// `ScheduledTask::fail`/dead-letter (see design.md's "Recurring self-update
+/// task" decision).
 pub struct UpdateYtdlpTask {
     updater: Arc<dyn YtdlpUpdater>,
     ytdlp_path: PathBuf,
@@ -57,6 +59,32 @@ impl TaskHandler for UpdateYtdlpTask {
     }
 }
 
+/// Seeds the recurring `update_ytdlp` task chain at `run_at`, unless a
+/// non-terminal (`pending` or `running`) one is already scheduled — a
+/// restarted daemon must not stack up additional hourly self-update chains
+/// alongside one that already self-perpetuates forever.
+pub fn schedule_update_ytdlp_if_absent(
+    task_repository: &dyn TaskRepository,
+    run_at: DateTime<Utc>,
+) -> anyhow::Result<()> {
+    let existing = task_repository
+        .list_non_completed()?
+        .into_iter()
+        .find(|task| task.task_type == Task::UpdateYtdlp.task_type());
+
+    match existing {
+        Some(task) => info!(
+            task_id = task.id,
+            "recurring yt-dlp self-update task already scheduled, skipping seed"
+        ),
+        None => {
+            task_repository.schedule(&Task::UpdateYtdlp, run_at)?;
+            info!(run_at = %run_at, "scheduled recurring yt-dlp self-update task");
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -65,7 +93,6 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use chrono::{DateTime, Utc};
 
     #[test]
     fn it_should_reschedule_after_success() {
@@ -121,6 +148,97 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_seed_the_task_when_none_is_scheduled() {
+        let db = TestDatabase::new();
+        let task_repository = SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let result = schedule_update_ytdlp_if_absent(&task_repository, seed_run_at());
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &Task::UpdateYtdlp, seed_run_at())]
+        );
+    }
+
+    #[test]
+    fn it_should_not_seed_if_one_is_pending() {
+        let db = TestDatabase::new();
+        let task_repository = SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        task_repository
+            .schedule(&Task::UpdateYtdlp, fixed_timestamp())
+            .unwrap();
+
+        let result = schedule_update_ytdlp_if_absent(&task_repository, seed_run_at());
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &Task::UpdateYtdlp, fixed_timestamp())]
+        );
+    }
+
+    #[test]
+    fn it_should_not_seed_if_one_is_running() {
+        let db = TestDatabase::new();
+        let task_repository = SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        task_repository
+            .schedule(&Task::UpdateYtdlp, fixed_timestamp())
+            .unwrap();
+        task_repository
+            .update(
+                &pending_task(1, &Task::UpdateYtdlp, fixed_timestamp()).start(fixed_timestamp()),
+            )
+            .unwrap();
+
+        let result = schedule_update_ytdlp_if_absent(&task_repository, seed_run_at());
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![ScheduledTask {
+                status: TaskStatus::Running,
+                ..pending_task(1, &Task::UpdateYtdlp, fixed_timestamp())
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_seed_if_only_other_task_types_are_scheduled() {
+        let db = TestDatabase::new();
+        let task_repository = SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let reconcile_playlist = Task::ReconcilePlaylist {
+            playlist_id: "PL1".to_string(),
+        };
+        task_repository
+            .schedule(&reconcile_playlist, fixed_timestamp())
+            .unwrap();
+
+        let result = schedule_update_ytdlp_if_absent(&task_repository, seed_run_at());
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &reconcile_playlist, fixed_timestamp()),
+                pending_task(2, &Task::UpdateYtdlp, seed_run_at()),
+            ]
+        );
+    }
+
     fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
@@ -137,6 +255,10 @@ mod tests {
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn seed_run_at() -> DateTime<Utc> {
+        fixed_timestamp() + chrono::Duration::seconds(UPDATE_INTERVAL_SECONDS)
     }
 
     fn run(task: &UpdateYtdlpTask, payload: &str) -> Result<(), String> {
