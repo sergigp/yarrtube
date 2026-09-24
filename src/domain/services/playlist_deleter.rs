@@ -1,4 +1,5 @@
 use crate::domain::event::DomainEvent;
+use crate::domain::playlist::Playlist;
 use crate::domain::playlist::errors::DeletePlaylistError;
 use crate::domain::shared::PlaylistId;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -39,15 +40,29 @@ pub trait PlaylistDeleterApi: Send + Sync {
 
 impl PlaylistDeleterApi for PlaylistDeleter {
     fn delete(&self, id: PlaylistId) -> Result<(), DeletePlaylistError> {
-        let playlist = match self.repository.find(&id) {
-            Ok(Some(playlist)) => playlist,
-            Ok(None) => return Err(DeletePlaylistError::NotFound(id)),
-            Err(e) => return Err(DeletePlaylistError::Repository(e)),
-        };
+        let playlist = self.find_playlist(&id)?;
+        self.delete_playlist_videos(&id)?;
+        self.delete_and_publish(&id, &playlist)?;
+        info!(playlist_id = %id, "deleted playlist");
+        Ok(())
+    }
+}
 
+impl PlaylistDeleter {
+    fn find_playlist(&self, id: &PlaylistId) -> Result<Playlist, DeletePlaylistError> {
+        match self.repository.find(id) {
+            Ok(Some(playlist)) => Ok(playlist),
+            Ok(None) => Err(DeletePlaylistError::NotFound(id.clone())),
+            Err(e) => Err(DeletePlaylistError::Repository(e)),
+        }
+    }
+
+    /// Deletes each `PlaylistVideo`'s owned `Video` row, then the
+    /// `PlaylistVideo` rows themselves.
+    fn delete_playlist_videos(&self, id: &PlaylistId) -> Result<(), DeletePlaylistError> {
         let playlist_videos = self
             .playlist_video_repository
-            .list_for_playlist(&id)
+            .list_for_playlist(id)
             .map_err(DeletePlaylistError::Repository)?;
         for playlist_video in &playlist_videos {
             self.video_repository
@@ -55,19 +70,23 @@ impl PlaylistDeleterApi for PlaylistDeleter {
                 .map_err(DeletePlaylistError::Repository)?;
         }
         self.playlist_video_repository
-            .delete_all_for_playlist(&id)
-            .map_err(DeletePlaylistError::Repository)?;
+            .delete_all_for_playlist(id)
+            .map_err(DeletePlaylistError::Repository)
+    }
 
+    fn delete_and_publish(
+        &self,
+        id: &PlaylistId,
+        playlist: &Playlist,
+    ) -> Result<(), DeletePlaylistError> {
         self.repository
-            .delete(&id)
+            .delete(id)
             .map_err(DeletePlaylistError::Repository)?;
         self.event_publisher
             .publish(&DomainEvent::PlaylistDeleted {
                 playlist_id: id.as_str().to_string(),
                 path: playlist.path.as_str().to_string(),
             })
-            .map_err(DeletePlaylistError::Repository)?;
-        info!(playlist_id = %id, "deleted playlist");
-        Ok(())
+            .map_err(DeletePlaylistError::Repository)
     }
 }

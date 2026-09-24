@@ -4,7 +4,9 @@ use crate::domain::video::VideoStatus;
 use crate::domain::video::top_level_entry;
 use crate::domain::video::video_filename::VideoFilename;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
+use crate::infrastructure::repositories::youtube_video_downloader_repository::{
+    FetchedThumbnail, VideoDownloaderRepository,
+};
 use crate::infrastructure::shared::system_clock::Clock;
 use std::collections::HashSet;
 use std::path::Path;
@@ -71,29 +73,9 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
             return;
         }
 
-        let existing_folder = video.filename.as_deref().map(top_level_entry);
-        let filename = VideoFilename::from_title(&video.title);
-        let fetched = self.video_downloader_repository.fetch_thumbnail(
-            &video.youtube_id.to_url(),
-            filename.as_str(),
-            video.youtube_id.as_str(),
-            output_dir,
-            existing_folder,
-        );
-
-        match fetched {
-            Ok(Some(fetched)) => {
-                let thumbnail_filename = format!("{}/{}", fetched.folder, fetched.filename);
-                let updated = video
-                    .clone()
-                    .with_thumbnail(thumbnail_filename, self.clock.now());
-                if let Err(e) = self.video_repository.update(&updated) {
-                    warn!(video_id = %video.id, error = %e, "failed to persist fetched thumbnail");
-                }
-            }
-            Ok(None) => {
-                warn!(video_id = %video.id, "no thumbnail available for video");
-            }
+        match self.fetch_thumbnail(video, output_dir) {
+            Ok(Some(fetched)) => self.record_thumbnail(video, fetched),
+            Ok(None) => warn!(video_id = %video.id, "no thumbnail available for video"),
             Err(e) => {
                 warn!(video_id = %video.id, error = %e, "failed to fetch video thumbnail");
             }
@@ -112,6 +94,35 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
                 && v.status != VideoStatus::InProgress
         }) {
             self.fetch(video, output_dir);
+        }
+    }
+}
+
+impl ThumbnailFetcher {
+    /// Reuses `video`'s already-recorded folder, if any.
+    fn fetch_thumbnail(
+        &self,
+        video: &Video,
+        output_dir: &Path,
+    ) -> anyhow::Result<Option<FetchedThumbnail>> {
+        let existing_folder = video.filename.as_deref().map(top_level_entry);
+        let filename = VideoFilename::from_title(&video.title);
+        self.video_downloader_repository.fetch_thumbnail(
+            &video.youtube_id.to_url(),
+            filename.as_str(),
+            video.youtube_id.as_str(),
+            output_dir,
+            existing_folder,
+        )
+    }
+
+    fn record_thumbnail(&self, video: &Video, fetched: FetchedThumbnail) {
+        let thumbnail_filename = format!("{}/{}", fetched.folder, fetched.filename);
+        let updated = video
+            .clone()
+            .with_thumbnail(thumbnail_filename, self.clock.now());
+        if let Err(e) = self.video_repository.update(&updated) {
+            warn!(video_id = %video.id, error = %e, "failed to persist fetched thumbnail");
         }
     }
 }

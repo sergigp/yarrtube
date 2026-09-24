@@ -4,7 +4,9 @@ use crate::domain::playlist::PlaylistPath;
 use crate::domain::shared::Quality;
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::ChannelAvatarRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
-use crate::infrastructure::repositories::youtube_channel_repository::YoutubeChannelRepository;
+use crate::infrastructure::repositories::youtube_channel_repository::{
+    ResolvedChannel, YoutubeChannelRepository,
+};
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
@@ -63,30 +65,12 @@ impl ChannelCreatorApi for ChannelCreator {
         video_limit: VideoLimit,
         path: PlaylistPath,
     ) -> Result<CreateChannelOutcome, CreateChannelError> {
-        match self.repository.find(&id) {
-            Ok(Some(existing)) => return Ok(CreateChannelOutcome::AlreadyExisted(existing)),
-            Ok(None) => {}
-            Err(e) => return Err(CreateChannelError::Repository(e)),
+        if let Some(existing) = self.find_existing(&id)? {
+            return Ok(CreateChannelOutcome::AlreadyExisted(existing));
         }
 
-        let resolved = match self.lookup.resolve(&id) {
-            Ok(Some(resolved)) => resolved,
-            Ok(None) => return Err(CreateChannelError::YoutubeChannelNotFound(id)),
-            Err(e) => return Err(CreateChannelError::Lookup(e)),
-        };
-
-        let avatar_filename =
-            resolved
-                .avatar_url
-                .and_then(|url| match self.avatar_repository.store(&id, &url) {
-                    Ok(filename) => filename,
-                    Err(e) => {
-                        warn!(channel_id = %id, error = %e, "failed to store channel avatar");
-                        None
-                    }
-                });
-
-        let now = self.clock.now();
+        let resolved = self.resolve_on_youtube(&id)?;
+        let avatar_filename = self.store_avatar(&id, resolved.avatar_url);
         let channel = Channel::create(
             id,
             resolved.title,
@@ -95,10 +79,46 @@ impl ChannelCreatorApi for ChannelCreator {
             video_limit,
             path,
             avatar_filename,
-            now,
+            self.clock.now(),
         );
+        self.insert_and_publish(&channel)?;
+        Ok(CreateChannelOutcome::Created(channel))
+    }
+}
+
+impl ChannelCreator {
+    fn find_existing(&self, id: &ChannelHandle) -> Result<Option<Channel>, CreateChannelError> {
         self.repository
-            .insert(&channel)
+            .find(id)
+            .map_err(CreateChannelError::Repository)
+    }
+
+    fn resolve_on_youtube(
+        &self,
+        id: &ChannelHandle,
+    ) -> Result<ResolvedChannel, CreateChannelError> {
+        match self.lookup.resolve(id) {
+            Ok(Some(resolved)) => Ok(resolved),
+            Ok(None) => Err(CreateChannelError::YoutubeChannelNotFound(id.clone())),
+            Err(e) => Err(CreateChannelError::Lookup(e)),
+        }
+    }
+
+    /// Best-effort: a failure to store the avatar is logged and the channel
+    /// is created without one.
+    fn store_avatar(&self, id: &ChannelHandle, avatar_url: Option<String>) -> Option<String> {
+        avatar_url.and_then(|url| match self.avatar_repository.store(id, &url) {
+            Ok(filename) => filename,
+            Err(e) => {
+                warn!(channel_id = %id, error = %e, "failed to store channel avatar");
+                None
+            }
+        })
+    }
+
+    fn insert_and_publish(&self, channel: &Channel) -> Result<(), CreateChannelError> {
+        self.repository
+            .insert(channel)
             .map_err(CreateChannelError::Repository)?;
         self.event_publisher
             .publish(&DomainEvent::ChannelCreated {
@@ -106,6 +126,6 @@ impl ChannelCreatorApi for ChannelCreator {
             })
             .map_err(CreateChannelError::Repository)?;
         info!(channel_id = %channel.id, name = %channel.name, "created channel");
-        Ok(CreateChannelOutcome::Created(channel))
+        Ok(())
     }
 }

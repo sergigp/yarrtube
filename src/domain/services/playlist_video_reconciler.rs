@@ -101,18 +101,7 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
         };
 
         self.run_reconcile_pass(&playlist)?;
-
-        let now = self.clock.now();
-        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
-        self.task_repository.schedule(
-            &Task::ReconcilePlaylist {
-                playlist_id: id.as_str().to_string(),
-            },
-            next_run_at,
-        )?;
-        info!(playlist_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of playlist");
-
-        Ok(())
+        self.schedule_next_reconcile(&id)
     }
 
     fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
@@ -126,6 +115,20 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
 }
 
 impl PlaylistVideoReconciler {
+    fn schedule_next_reconcile(&self, id: &PlaylistId) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
+        self.task_repository.schedule(
+            &Task::ReconcilePlaylist {
+                playlist_id: id.as_str().to_string(),
+            },
+            next_run_at,
+        )?;
+        info!(playlist_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of playlist");
+
+        Ok(())
+    }
+
     /// Regenerates `video`'s metadata (fetch `YoutubeMetadata`, resolve
     /// `sorttitle`, build `VideoMetadata`, save) the same way
     /// `VideoDownloader::download` does at download time. Any failure is

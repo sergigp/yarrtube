@@ -78,6 +78,8 @@ src/
   3. `impl <Service>Api for <Service>` with the implementation of those operations.
   4. A second inherent `impl <Service>` holding every private helper, never `pub`.
 
+  Guideline (not a hard rule): every public operation (block 3) should read at a glance — aim for **10–15 lines of body** after `rustfmt`. It reads as a sequence of named steps (`let channel = self.find_channel(&id)?; self.delete_channel_videos(&id)?; ...`), each step a private helper in block 4 named for *what* it does. Lookup-or-fail `match`es, multi-arm outcome handling, event building and repeated `map_err` chains are the usual candidates to extract. When two arms or two operations share logic (e.g. marking a failed download as errored), extract it once rather than shrinking each copy. Exceptions are fine for genuinely complex flows (e.g. reconciliation) where splitting further would scatter one coherent algorithm across helpers that only make sense together — prefer readability over the line count.
+
   Callers keep depending on the concrete service type (`State<PlaylistCreator>`, `video_downloader: VideoDownloader`) and just `use` the `…Api` trait to call it; the trait exists to make the contract readable, not to add dynamic dispatch. Supporting types the service returns (e.g. an outcome enum) and constants go above the struct.
 
   ```rust

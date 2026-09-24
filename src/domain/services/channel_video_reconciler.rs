@@ -97,18 +97,7 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
         };
 
         self.run_reconcile_pass(&channel)?;
-
-        let now = self.clock.now();
-        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
-        self.task_repository.schedule(
-            &Task::ReconcileChannel {
-                channel_id: id.as_str().to_string(),
-            },
-            next_run_at,
-        )?;
-        info!(channel_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of channel");
-
-        Ok(())
+        self.schedule_next_reconcile(&id)
     }
 
     fn force_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
@@ -122,6 +111,20 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
 }
 
 impl ChannelVideoReconciler {
+    fn schedule_next_reconcile(&self, id: &ChannelHandle) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
+        self.task_repository.schedule(
+            &Task::ReconcileChannel {
+                channel_id: id.as_str().to_string(),
+            },
+            next_run_at,
+        )?;
+        info!(channel_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of channel");
+
+        Ok(())
+    }
+
     /// Regenerates `video`'s metadata — the channel equivalent of
     /// `PlaylistVideoReconciler::generate_metadata`. A channel-tracked video's
     /// `sorttitle` always resolves via publish date: `ChannelVideo.position`

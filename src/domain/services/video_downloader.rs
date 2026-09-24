@@ -10,7 +10,7 @@ use crate::infrastructure::repositories::sqlite_video_metadata_repository::Video
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadataRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-    DownloadAttempt, VideoDownloaderRepository,
+    DownloadAttempt, DownloadedVideo, VideoDownloaderRepository,
 };
 use crate::infrastructure::shared::system_clock::Clock;
 use std::path::Path;
@@ -81,75 +81,124 @@ impl VideoDownloaderApi for VideoDownloader {
             return Ok(());
         };
 
-        let filename = VideoFilename::from_title(&video.title);
         let started = video.start_download(self.clock.now());
         self.video_repository.update(&started)?;
-        let existing_folder = started.thumbnail_filename.as_deref().map(top_level_entry);
-
-        info!(video_id = %video_id, "downloading video");
-        let outcome = self.video_downloader_repository.download(
-            &started.youtube_id.to_url(),
-            filename.as_str(),
-            started.youtube_id.as_str(),
-            quality,
-            output_dir,
-            existing_folder,
-        );
-
-        match outcome {
+        match self.run_download(&started, quality, output_dir) {
             Ok(DownloadAttempt::Succeeded(downloaded)) => {
-                let expected_thumbnail = expected_thumbnail_filename(&downloaded.filename);
-                let video_dir = output_dir.join(&downloaded.folder);
-                let thumbnail_filename = self
-                    .video_file_repository
-                    .list(&video_dir)?
-                    .iter()
-                    .any(|f| f == &expected_thumbnail)
-                    .then(|| format!("{}/{}", downloaded.folder, expected_thumbnail));
-                let filename = format!("{}/{}", downloaded.folder, downloaded.filename);
-                let downloaded_video = started.mark_downloaded(
-                    quality,
-                    filename,
-                    thumbnail_filename.clone(),
-                    downloaded.duration_seconds,
-                    self.clock.now(),
-                );
-                self.video_repository.update(&downloaded_video)?;
-                info!(video_id = %video_id, "video downloaded");
-                let thumb_basename = thumbnail_filename
-                    .as_deref()
-                    .and_then(|f| Path::new(f).file_name())
-                    .and_then(|f| f.to_str());
-                self.generate_metadata(&downloaded_video, &video_dir, thumb_basename);
-                Ok(())
+                self.record_downloaded(started, downloaded, quality, output_dir)
             }
             Ok(DownloadAttempt::Failed { stderr }) => {
-                let updated = if is_last_attempt {
-                    started.mark_errored(self.clock.now())
-                } else {
-                    started.mark_errored_retrying(self.clock.now())
-                };
-                self.video_repository.update(&updated)?;
-                let error_message =
-                    stderr.unwrap_or_else(|| format!("yt-dlp failed to download video {video_id}"));
-                warn!(video_id = %video_id, error = %error_message, "yt-dlp reported a failed download");
-                Err(anyhow::anyhow!(error_message))
+                self.record_failed(started, stderr, is_last_attempt)
             }
-            Err(e) => {
-                let updated = if is_last_attempt {
-                    started.mark_errored(self.clock.now())
-                } else {
-                    started.mark_errored_retrying(self.clock.now())
-                };
-                self.video_repository.update(&updated)?;
-                error!(video_id = %video_id, error = %e, "video download errored");
-                Err(e)
-            }
+            Err(e) => self.record_errored(started, e, is_last_attempt),
         }
     }
 }
 
 impl VideoDownloader {
+    /// Reuses the folder a thumbnail fetched ahead of the download already
+    /// created, if any.
+    fn run_download(
+        &self,
+        video: &Video,
+        quality: Quality,
+        output_dir: &Path,
+    ) -> anyhow::Result<DownloadAttempt> {
+        let filename = VideoFilename::from_title(&video.title);
+        let existing_folder = video.thumbnail_filename.as_deref().map(top_level_entry);
+        info!(video_id = %video.id, "downloading video");
+        self.video_downloader_repository.download(
+            &video.youtube_id.to_url(),
+            filename.as_str(),
+            video.youtube_id.as_str(),
+            quality,
+            output_dir,
+            existing_folder,
+        )
+    }
+
+    fn record_downloaded(
+        &self,
+        started: Video,
+        downloaded: DownloadedVideo,
+        quality: Quality,
+        output_dir: &Path,
+    ) -> anyhow::Result<()> {
+        let video_dir = output_dir.join(&downloaded.folder);
+        let thumbnail_filename = self.find_downloaded_thumbnail(&video_dir, &downloaded)?;
+        let filename = format!("{}/{}", downloaded.folder, downloaded.filename);
+        let downloaded_video = started.mark_downloaded(
+            quality,
+            filename,
+            thumbnail_filename.clone(),
+            downloaded.duration_seconds,
+            self.clock.now(),
+        );
+        self.video_repository.update(&downloaded_video)?;
+        info!(video_id = %downloaded_video.id, "video downloaded");
+        let thumb_basename = thumbnail_filename
+            .as_deref()
+            .and_then(|f| Path::new(f).file_name())
+            .and_then(|f| f.to_str());
+        self.generate_metadata(&downloaded_video, &video_dir, thumb_basename);
+        Ok(())
+    }
+
+    /// The `<folder>/<thumbnail>` path of the thumbnail `yt-dlp` wrote next
+    /// to the downloaded video, if it wrote one.
+    fn find_downloaded_thumbnail(
+        &self,
+        video_dir: &Path,
+        downloaded: &DownloadedVideo,
+    ) -> anyhow::Result<Option<String>> {
+        let expected_thumbnail = expected_thumbnail_filename(&downloaded.filename);
+        Ok(self
+            .video_file_repository
+            .list(video_dir)?
+            .iter()
+            .any(|f| f == &expected_thumbnail)
+            .then(|| format!("{}/{}", downloaded.folder, expected_thumbnail)))
+    }
+
+    /// A clean `yt-dlp` failure: marks the video errored and returns
+    /// `yt-dlp`'s reported error so the task queue retries/dead-letters it.
+    fn record_failed(
+        &self,
+        started: Video,
+        stderr: Option<String>,
+        is_last_attempt: bool,
+    ) -> anyhow::Result<()> {
+        let video_id = started.id.clone();
+        self.mark_errored(started, is_last_attempt)?;
+        let error_message =
+            stderr.unwrap_or_else(|| format!("yt-dlp failed to download video {video_id}"));
+        warn!(video_id = %video_id, error = %error_message, "yt-dlp reported a failed download");
+        Err(anyhow::anyhow!(error_message))
+    }
+
+    /// A systemic download error: marks the video errored and propagates
+    /// the error so the task queue retries/dead-letters it.
+    fn record_errored(
+        &self,
+        started: Video,
+        error: anyhow::Error,
+        is_last_attempt: bool,
+    ) -> anyhow::Result<()> {
+        let video_id = started.id.clone();
+        self.mark_errored(started, is_last_attempt)?;
+        error!(video_id = %video_id, error = %error, "video download errored");
+        Err(error)
+    }
+
+    fn mark_errored(&self, started: Video, is_last_attempt: bool) -> anyhow::Result<()> {
+        let updated = if is_last_attempt {
+            started.mark_errored(self.clock.now())
+        } else {
+            started.mark_errored_retrying(self.clock.now())
+        };
+        self.video_repository.update(&updated)
+    }
+
     /// Fetches `video`'s YouTube metadata, resolves its `sorttitle`, and
     /// saves its `movie.nfo` — see design.md's "Failure handling: skip the
     /// save entirely, never fail the download" decision. Any failure
