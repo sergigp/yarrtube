@@ -7,7 +7,8 @@ use crate::domain::playlist::{
     CreatePlaylistError, DeletePlaylistError, PlaylistName, PlaylistPath,
 };
 use crate::domain::services::{
-    CreatePlaylistOutcome, PlaylistCreator, PlaylistDeleter, PlaylistSearcher, VideoReconciler,
+    CreatePlaylistOutcome, PlaylistCreator, PlaylistDeleter, PlaylistSearcher,
+    PlaylistVideoReconciler,
 };
 use crate::domain::shared::{PlaylistId, Quality};
 use axum::Json;
@@ -56,12 +57,12 @@ pub async fn delete_playlist(
 }
 
 pub async fn reconcile_playlist(
-    State(video_reconciler): State<VideoReconciler>,
+    State(playlist_video_reconciler): State<PlaylistVideoReconciler>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     let id = PlaylistId::new(id)?;
 
-    run_blocking(move || video_reconciler.force_reconcile(id))
+    run_blocking(move || playlist_video_reconciler.force_reconcile(id))
         .await?
         .map_err(ApiError::internal)?;
 
@@ -553,7 +554,7 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
-        let video_reconciler = video_reconciler(
+        let playlist_video_reconciler = playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -562,7 +563,7 @@ mod tests {
             task_repository.clone(),
         );
 
-        let response = reconcile(video_reconciler, "PL1").await;
+        let response = reconcile(playlist_video_reconciler, "PL1").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         let videos = video_repository.list().unwrap();
@@ -619,7 +620,7 @@ mod tests {
             "vid_old",
             0,
         );
-        let video_reconciler = video_reconciler(
+        let playlist_video_reconciler = playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -628,7 +629,7 @@ mod tests {
             task_repository(&db),
         );
 
-        let response = reconcile(video_reconciler, "PL1").await;
+        let response = reconcile(playlist_video_reconciler, "PL1").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -666,7 +667,7 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
-        let video_reconciler = video_reconciler(
+        let playlist_video_reconciler = playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -675,13 +676,15 @@ mod tests {
             task_repository.clone(),
         );
 
-        reconcile(video_reconciler.clone(), "PL1").await.unwrap();
+        reconcile(playlist_video_reconciler.clone(), "PL1")
+            .await
+            .unwrap();
         let videos_after_first_reconcile = video_repository.list().unwrap();
         let playlist_videos_after_first_reconcile = playlist_video_repository
             .list_for_playlist(&playlist_id("PL1"))
             .unwrap();
         let events_after_first_reconcile = event_repository.list_eligible().unwrap();
-        let response = reconcile(video_reconciler, "PL1").await;
+        let response = reconcile(playlist_video_reconciler, "PL1").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(
@@ -716,7 +719,7 @@ mod tests {
         task_repository
             .schedule(&existing_task, existing_run_at)
             .unwrap();
-        let video_reconciler = video_reconciler(
+        let playlist_video_reconciler = playlist_video_reconciler(
             &db,
             playlist_repository,
             Arc::new(SqliteVideoRepository::new(db.connection())),
@@ -725,7 +728,7 @@ mod tests {
             task_repository.clone(),
         );
 
-        let response = reconcile(video_reconciler, "PL1").await;
+        let response = reconcile(playlist_video_reconciler, "PL1").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(
@@ -742,7 +745,7 @@ mod tests {
             Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
         let task_repository = task_repository(&db);
         let event_repository = SqliteEventRepository::new(db.shared_connection());
-        let video_reconciler = video_reconciler(
+        let playlist_video_reconciler = playlist_video_reconciler(
             &db,
             Arc::new(SqlitePlaylistRepository::new(db.connection())),
             video_repository.clone(),
@@ -751,7 +754,7 @@ mod tests {
             task_repository.clone(),
         );
 
-        let response = reconcile(video_reconciler, "PL404").await;
+        let response = reconcile(playlist_video_reconciler, "PL404").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(video_repository.list().unwrap(), vec![]);
@@ -767,7 +770,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_fail_to_reconcile_if_invalid_playlist_id_provided() {
-        let response = reconcile(any_video_reconciler(), " ").await;
+        let response = reconcile(any_playlist_video_reconciler(), " ").await;
 
         assert_eq!(
             response,
@@ -803,20 +806,20 @@ mod tests {
     /// Builds a reconciler around the repositories a test seeds and asserts;
     /// the remaining ports (metadata, files, thumbnails) are ones no playlist
     /// reconcile test observes. Events go to `db`'s outbox table.
-    fn video_reconciler(
+    fn playlist_video_reconciler(
         db: &TestDatabase,
         playlist_repository: Arc<SqlitePlaylistRepository>,
         video_repository: Arc<SqliteVideoRepository>,
         playlist_video_repository: Arc<SqlitePlaylistVideoRepository>,
         playlist_items: Vec<YoutubePlaylistItem>,
         task_repository: Arc<SqliteTaskRepository>,
-    ) -> VideoReconciler {
+    ) -> PlaylistVideoReconciler {
         let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::default()),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        VideoReconciler::new(
+        PlaylistVideoReconciler::new(
             playlist_repository,
             video_repository,
             playlist_video_repository,
@@ -837,9 +840,9 @@ mod tests {
 
     /// A reconciler for tests whose request is rejected before reaching it
     /// (see `any_playlist_creator`).
-    fn any_video_reconciler() -> VideoReconciler {
+    fn any_playlist_video_reconciler() -> PlaylistVideoReconciler {
         let video_repository = Arc::new(SqliteVideoRepository::new(unused_connection()));
-        VideoReconciler::new(
+        PlaylistVideoReconciler::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             video_repository.clone(),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
@@ -1031,9 +1034,9 @@ mod tests {
     }
 
     async fn reconcile(
-        video_reconciler: VideoReconciler,
+        playlist_video_reconciler: PlaylistVideoReconciler,
         id: &str,
     ) -> Result<StatusCode, ApiError> {
-        reconcile_playlist(State(video_reconciler), Path(id.to_string())).await
+        reconcile_playlist(State(playlist_video_reconciler), Path(id.to_string())).await
     }
 }

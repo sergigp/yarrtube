@@ -1,4 +1,4 @@
-use crate::domain::services::VideoReconciler;
+use crate::domain::services::PlaylistVideoReconciler;
 use crate::domain::shared::PlaylistId;
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
@@ -6,12 +6,14 @@ use crate::infrastructure::repositories::task_handler::TaskHandler;
 /// Runs every subsequent reconcile for a playlist (the first one is
 /// triggered by `subscribers::reconcile_on_playlist_created` instead).
 pub struct ReconcilePlaylistTask {
-    video_reconciler: VideoReconciler,
+    playlist_video_reconciler: PlaylistVideoReconciler,
 }
 
 impl ReconcilePlaylistTask {
-    pub fn new(video_reconciler: VideoReconciler) -> Self {
-        Self { video_reconciler }
+    pub fn new(playlist_video_reconciler: PlaylistVideoReconciler) -> Self {
+        Self {
+            playlist_video_reconciler,
+        }
     }
 }
 
@@ -21,7 +23,7 @@ impl TaskHandler for ReconcilePlaylistTask {
         let Ok(playlist_id) = PlaylistId::new(playlist_id) else {
             return Ok(());
         };
-        self.video_reconciler.reconcile(playlist_id)
+        self.playlist_video_reconciler.reconcile(playlist_id)
     }
 }
 
@@ -78,7 +80,7 @@ mod tests {
         ));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -129,7 +131,7 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.shared_connection());
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -203,7 +205,7 @@ mod tests {
             &existing,
             0,
         );
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -246,7 +248,7 @@ mod tests {
             &existing,
             0,
         );
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -290,7 +292,7 @@ mod tests {
             &_stale,
             0,
         );
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -356,7 +358,7 @@ mod tests {
             &pending,
             1,
         );
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -411,7 +413,7 @@ mod tests {
         ));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -450,7 +452,7 @@ mod tests {
             &video,
             0,
         );
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -506,7 +508,7 @@ mod tests {
             &video,
             0,
         );
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -555,7 +557,7 @@ mod tests {
             "orphan.mp4".to_string(),
         ]));
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -596,7 +598,7 @@ mod tests {
             &video,
             0,
         );
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -652,7 +654,7 @@ mod tests {
             &video,
             0,
         );
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -703,7 +705,7 @@ mod tests {
             &video,
             0,
         );
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -743,7 +745,7 @@ mod tests {
             &video,
             0,
         );
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -783,7 +785,7 @@ mod tests {
             &_video,
             0,
         );
-        let task = ReconcilePlaylistTask::new(video_reconciler(
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             video_repository.clone(),
@@ -806,7 +808,7 @@ mod tests {
     /// configures or asserts; the remaining ports (YouTube metadata, video
     /// metadata, thumbnails) are ones no reconcile test here observes. Events
     /// go to `db`'s outbox table.
-    fn video_reconciler(
+    fn playlist_video_reconciler(
         db: &TestDatabase,
         playlist_repository: Arc<SqlitePlaylistRepository>,
         video_repository: Arc<SqliteVideoRepository>,
@@ -814,13 +816,13 @@ mod tests {
         playlist_items: Vec<YoutubePlaylistItem>,
         task_repository: Arc<SqliteTaskRepository>,
         video_file_repository: Arc<FakeVideoFileRepository>,
-    ) -> VideoReconciler {
+    ) -> PlaylistVideoReconciler {
         let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::default()),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        VideoReconciler::new(
+        PlaylistVideoReconciler::new(
             playlist_repository,
             video_repository,
             playlist_video_repository,
@@ -848,7 +850,7 @@ mod tests {
     /// passing.
     fn any_task() -> ReconcilePlaylistTask {
         let video_repository = Arc::new(SqliteVideoRepository::new(unused_connection()));
-        ReconcilePlaylistTask::new(VideoReconciler::new(
+        ReconcilePlaylistTask::new(PlaylistVideoReconciler::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             video_repository.clone(),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),

@@ -25,7 +25,7 @@ use tracing::{info, warn};
 
 /// Reconciles a channel's stored videos against its current `video_limit`
 /// most recent uploads on YouTube, and its output directory against
-/// recorded downloads — the channel equivalent of `VideoReconciler`.
+/// recorded downloads — the channel equivalent of `PlaylistVideoReconciler`.
 #[derive(Clone)]
 pub struct ChannelVideoReconciler {
     channel_repository: Arc<dyn ChannelRepository>,
@@ -78,7 +78,7 @@ impl ChannelVideoReconciler {
     }
 
     /// Regenerates `video`'s metadata — the channel equivalent of
-    /// `VideoReconciler::generate_metadata`. A channel-tracked video's
+    /// `PlaylistVideoReconciler::generate_metadata`. A channel-tracked video's
     /// `sorttitle` always resolves via publish date: `ChannelVideo.position`
     /// is a recency rank, never passed in as a playlist position.
     fn generate_metadata(&self, video: &Video, output_dir: &Path) {
@@ -262,7 +262,7 @@ impl ChannelVideoReconciler {
     /// download. Also resets any `Errored` video (one that permanently
     /// exhausted its download retries) the same way. Also deletes a file
     /// that doesn't belong to any currently-`Downloaded` video (an orphan).
-    /// Mirrors `VideoReconciler::reconcile_filesystem`.
+    /// Mirrors `PlaylistVideoReconciler::reconcile_filesystem`.
     fn reconcile_filesystem(&self, channel: &Channel) -> anyhow::Result<()> {
         let output_dir = resolve_output_dir(&self.videos_path, channel.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;

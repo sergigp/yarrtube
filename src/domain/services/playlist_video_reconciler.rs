@@ -26,7 +26,7 @@ use tracing::{debug, info, warn};
 /// Reconciles a playlist's stored videos against YouTube membership and its
 /// output directory against recorded downloads.
 #[derive(Clone)]
-pub struct VideoReconciler {
+pub struct PlaylistVideoReconciler {
     playlist_repository: Arc<dyn PlaylistRepository>,
     video_repository: Arc<dyn VideoRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
@@ -42,7 +42,7 @@ pub struct VideoReconciler {
     videos_path: String,
 }
 
-impl VideoReconciler {
+impl PlaylistVideoReconciler {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         playlist_repository: Arc<dyn PlaylistRepository>,
@@ -420,7 +420,7 @@ mod tests {
     }
 
     struct Harness {
-        reconciler: VideoReconciler,
+        reconciler: PlaylistVideoReconciler,
         video_repository: Arc<FakeVideoRepository>,
         task_repository: Arc<FakeTaskRepository>,
         video_file_repository: Arc<FakeVideoFileRepository>,
@@ -509,7 +509,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
 
-        let reconciler = VideoReconciler::new(
+        let reconciler = PlaylistVideoReconciler::new(
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,
@@ -750,7 +750,7 @@ mod tests {
         )
     }
 
-    /// Wires a `VideoReconciler` directly (rather than via `harness`, which
+    /// Wires a `PlaylistVideoReconciler` directly (rather than via `harness`, which
     /// seeds a playlist with an already-stored video) so these tests can
     /// exercise `sync_playlist_membership`'s newly-added-video path against
     /// an empty `VideoRepository`.
@@ -760,7 +760,7 @@ mod tests {
         current_videos: Vec<crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubePlaylistItem>,
         thumbnail_downloader: FakeVideoDownloaderRepository,
     ) -> (
-        VideoReconciler,
+        PlaylistVideoReconciler,
         Arc<FakeVideoRepository>,
         Arc<FakeEventPublisher>,
         Arc<FakeVideoDownloaderRepository>,
@@ -781,7 +781,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
 
-        let reconciler = VideoReconciler::new(
+        let reconciler = PlaylistVideoReconciler::new(
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,

@@ -3,7 +3,7 @@ use crate::application::{subscribers, tasks};
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
     ChannelVideoReconciler, DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistSearcher,
-    TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoReconciler,
+    PlaylistVideoReconciler, TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter,
     VideoSearcher,
 };
 use crate::domain::task::Task;
@@ -223,7 +223,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.event_publisher.clone(),
         ),
         playlist_searcher: PlaylistSearcher::new(infrastructure.playlist_repository.clone()),
-        video_reconciler: video_reconciler(infrastructure),
+        playlist_video_reconciler: playlist_video_reconciler(infrastructure),
         video_searcher: VideoSearcher::new(
             infrastructure.playlist_repository.clone(),
             infrastructure.playlist_video_repository.clone(),
@@ -258,7 +258,7 @@ fn event_consumer(infrastructure: &InfrastructureContainer) -> DomainEventsConsu
     DomainEventsConsumer::new(
         infrastructure.event_repository.clone(),
         subscribers::registry(
-            video_reconciler(infrastructure),
+            playlist_video_reconciler(infrastructure),
             channel_video_reconciler(infrastructure),
             infrastructure.playlist_repository.clone(),
             infrastructure.channel_repository.clone(),
@@ -274,7 +274,7 @@ fn task_executor(infrastructure: &InfrastructureContainer) -> TaskExecutor {
     TaskExecutor::new(
         infrastructure.task_repository.clone(),
         tasks::registry(
-            video_reconciler(infrastructure),
+            playlist_video_reconciler(infrastructure),
             channel_video_reconciler(infrastructure),
             video_downloader(infrastructure),
             VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
@@ -288,8 +288,8 @@ fn task_executor(infrastructure: &InfrastructureContainer) -> TaskExecutor {
     )
 }
 
-fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler {
-    VideoReconciler::new(
+fn playlist_video_reconciler(infrastructure: &InfrastructureContainer) -> PlaylistVideoReconciler {
+    PlaylistVideoReconciler::new(
         infrastructure.playlist_repository.clone(),
         infrastructure.video_repository.clone(),
         infrastructure.playlist_video_repository.clone(),

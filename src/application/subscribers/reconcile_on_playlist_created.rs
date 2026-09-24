@@ -1,4 +1,4 @@
-use crate::domain::services::VideoReconciler;
+use crate::domain::services::PlaylistVideoReconciler;
 use crate::domain::shared::PlaylistId;
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use serde::Deserialize;
@@ -12,12 +12,14 @@ struct PlaylistCreatedPayload {
 /// playlist, as that event's own processing (not as a separately scheduled
 /// task).
 pub struct ReconcileOnPlaylistCreated {
-    video_reconciler: VideoReconciler,
+    playlist_video_reconciler: PlaylistVideoReconciler,
 }
 
 impl ReconcileOnPlaylistCreated {
-    pub fn new(video_reconciler: VideoReconciler) -> Self {
-        Self { video_reconciler }
+    pub fn new(playlist_video_reconciler: PlaylistVideoReconciler) -> Self {
+        Self {
+            playlist_video_reconciler,
+        }
     }
 }
 
@@ -27,7 +29,7 @@ impl EventSubscriber for ReconcileOnPlaylistCreated {
         let Ok(playlist_id) = PlaylistId::new(payload.playlist_id) else {
             return Ok(());
         };
-        self.video_reconciler.reconcile(playlist_id)
+        self.playlist_video_reconciler.reconcile(playlist_id)
     }
 }
 
@@ -71,7 +73,7 @@ mod tests {
         ));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let subscriber = ReconcileOnPlaylistCreated::new(video_reconciler(
+        let subscriber = ReconcileOnPlaylistCreated::new(playlist_video_reconciler(
             &db,
             playlist_repository,
             task_repository.clone(),
@@ -108,7 +110,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
-        let subscriber = ReconcileOnPlaylistCreated::new(video_reconciler(
+        let subscriber = ReconcileOnPlaylistCreated::new(playlist_video_reconciler(
             &db,
             Arc::new(SqlitePlaylistRepository::new(db.connection())),
             task_repository.clone(),
@@ -124,18 +126,18 @@ mod tests {
     /// Builds a reconciler around the repositories a test seeds and asserts;
     /// the remaining ports (YouTube, metadata, files, thumbnails) are ones no
     /// test here observes. Events go to `db`'s outbox table.
-    fn video_reconciler(
+    fn playlist_video_reconciler(
         db: &TestDatabase,
         playlist_repository: Arc<SqlitePlaylistRepository>,
         task_repository: Arc<SqliteTaskRepository>,
-    ) -> VideoReconciler {
+    ) -> PlaylistVideoReconciler {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
         let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::default()),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        VideoReconciler::new(
+        PlaylistVideoReconciler::new(
             playlist_repository,
             video_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
@@ -160,7 +162,7 @@ mod tests {
     /// passing.
     fn any_subscriber() -> ReconcileOnPlaylistCreated {
         let video_repository = Arc::new(SqliteVideoRepository::new(unused_connection()));
-        ReconcileOnPlaylistCreated::new(VideoReconciler::new(
+        ReconcileOnPlaylistCreated::new(PlaylistVideoReconciler::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             video_repository.clone(),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),

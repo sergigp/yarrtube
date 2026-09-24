@@ -7,7 +7,7 @@ pub mod reconcile_playlist_task;
 pub mod update_ytdlp_task;
 
 use crate::domain::services::{
-    ChannelVideoReconciler, VideoDownloader, VideoFileDeleter, VideoReconciler,
+    ChannelVideoReconciler, PlaylistVideoReconciler, VideoDownloader, VideoFileDeleter,
 };
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -28,7 +28,7 @@ use update_ytdlp_task::UpdateYtdlpTask;
 /// task executor at composition time.
 #[allow(clippy::too_many_arguments)]
 pub fn registry(
-    video_reconciler: VideoReconciler,
+    playlist_video_reconciler: PlaylistVideoReconciler,
     channel_video_reconciler: ChannelVideoReconciler,
     video_downloader: VideoDownloader,
     video_file_deleter: VideoFileDeleter,
@@ -40,7 +40,7 @@ pub fn registry(
     let mut registry: HandlerRegistry = HashMap::new();
     registry.insert(
         "reconcile_playlist".to_string(),
-        Arc::new(ReconcilePlaylistTask::new(video_reconciler)),
+        Arc::new(ReconcilePlaylistTask::new(playlist_video_reconciler)),
     );
     registry.insert(
         "reconcile_channel".to_string(),

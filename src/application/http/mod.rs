@@ -10,7 +10,7 @@ pub mod videos;
 use crate::domain::channel::ChannelService;
 use crate::domain::services::{
     ChannelVideoReconciler, DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistSearcher,
-    TaskViewSearcher, VideoReconciler, VideoSearcher,
+    PlaylistVideoReconciler, TaskViewSearcher, VideoSearcher,
 };
 use axum::Router;
 use axum::extract::FromRef;
@@ -27,7 +27,7 @@ pub struct ApiServices {
     pub playlist_creator: PlaylistCreator,
     pub playlist_deleter: PlaylistDeleter,
     pub playlist_searcher: PlaylistSearcher,
-    pub video_reconciler: VideoReconciler,
+    pub playlist_video_reconciler: PlaylistVideoReconciler,
     pub video_searcher: VideoSearcher,
     pub task_view_searcher: TaskViewSearcher,
     pub channel_service: ChannelService,

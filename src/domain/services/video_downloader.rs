@@ -61,7 +61,7 @@ impl VideoDownloader {
     /// lookup, or the save itself) is logged and swallowed rather than
     /// propagated: metadata generation never fails or retries the download
     /// itself, and a skipped/failed attempt self-heals on the next
-    /// reconcile pass (see `VideoReconciler`/`ChannelVideoReconciler`).
+    /// reconcile pass (see `PlaylistVideoReconciler`/`ChannelVideoReconciler`).
     fn generate_metadata(&self, video: &Video, video_dir: &Path, thumbnail_filename: Option<&str>) {
         let metadata = match self.youtube_metadata_repository.find(&video.youtube_id) {
             Ok(Some(metadata)) => metadata,
