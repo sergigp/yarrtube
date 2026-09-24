@@ -31,145 +31,859 @@ impl TaskHandler for ReconcileChannelTask {
 mod tests {
     use super::*;
     use crate::domain::channel::{Channel, VideoLimit};
-    use crate::domain::event::DomainEvent;
+    use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::PlaylistPath;
+    use crate::domain::services::ThumbnailFetcher;
     use crate::domain::shared::{Quality, VideoId};
-    use crate::domain::video::{Video, VideoStatus};
+    use crate::domain::task::{ScheduledTask, TaskStatus};
+    use crate::domain::video::Video;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
-        ChannelRepository, FakeChannelRepository,
+        ChannelRepository, SqliteChannelRepository,
     };
-    use crate::infrastructure::repositories::sqlite_channel_video_repository::FakeChannelVideoRepository;
-    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
-    use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
-    use crate::infrastructure::repositories::sqlite_video_repository::FakeVideoRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, SqliteChannelVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_task_repository::{
+        SqliteTaskRepository, TaskRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        SqliteVideoRepository, VideoRepository,
+    };
     use crate::infrastructure::repositories::youtube_channel_videos_repository::{
         ChannelVideoListing, FakeChannelVideosRepository,
     };
     use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
-    use crate::infrastructure::shared::domain_events::event_publisher::FakeEventPublisher;
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_repository::{
+        EventRepository, SqliteEventRepository,
+    };
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
-    use std::sync::Arc;
+    use rusqlite::Connection;
+    use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
 
-    fn fixed_timestamp() -> DateTime<Utc> {
-        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    #[test]
+    fn it_should_no_op_when_the_channel_no_longer_exists() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
-    fn channel(video_limit: i64) -> Channel {
+    #[test]
+    fn it_should_persist_a_video_within_the_top_n_and_publish_an_event() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "One", 0),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        let videos = video_repository.list().unwrap();
+        let video_id = videos[0].id.clone();
+        assert_eq!(
+            videos,
+            vec![Video {
+                id: video_id.clone(),
+                ..Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp())
+            }]
+        );
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            vec![ChannelVideo {
+                id: 1,
+                ..ChannelVideo::create(
+                    handle("@somechannel"),
+                    video_id.clone(),
+                    0,
+                    fixed_timestamp()
+                )
+            }]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![next_reconcile(1)]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoAddedToChannel {
+                    channel_id: "@somechannel".to_string(),
+                    video_id: video_id.as_str().to_string(),
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_refresh_the_title_and_position_of_an_already_stored_video() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let existing = Video::create(VideoId::new("yt1").unwrap(), "Original", fixed_timestamp());
+        let existing_channel_video = save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &existing,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "Renamed", 2),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                title: "Renamed".to_string(),
+                ..existing
+            }]
+        );
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            vec![ChannelVideo {
+                position: 2,
+                ..existing_channel_video
+            }]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_evict_a_video_that_ages_out_of_the_top_n() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        channel_repository
+            .insert(&Channel {
+                video_limit: VideoLimit::new(1).unwrap(),
+                ..channel("@somechannel")
+            })
+            .unwrap();
+        let existing = Video::create(VideoId::new("yt_old").unwrap(), "Old", fixed_timestamp());
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &existing,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            vec![]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoRemovedFromChannel {
+                    channel_id: "@somechannel".to_string(),
+                    video_id: existing.id.as_str().to_string(),
+                    title: "Old".to_string(),
+                    filename: None,
+                    thumbnail_filename: None,
+                    was_downloaded: false,
+                }
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_leave_stored_videos_untouched_when_yt_dlp_fails() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let existing = Video::create(VideoId::new("yt_old").unwrap(), "Old", fixed_timestamp());
+        let existing_channel_video = save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &existing,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::failing()),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(
+            result,
+            Err("yt-dlp failed to list channel videos".to_string())
+        );
+        assert_eq!(video_repository.list().unwrap(), vec![existing]);
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            vec![existing_channel_video]
+        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_always_schedule_the_next_reconcile_even_with_no_changes() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![next_reconcile(1)]
+        );
+    }
+
+    #[test]
+    fn it_should_no_op_when_the_payload_channel_id_is_invalid() {
+        let result = run(&any_task(), &payload_for(""));
+
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn it_should_reject_a_malformed_payload() {
+        let result = run(&any_task(), "not json");
+
+        assert_eq!(
+            result,
+            Err("invalid reconcile_channel payload: expected ident at line 1 column 2".to_string())
+        );
+    }
+
+    #[test]
+    fn it_should_heal_a_downloaded_video_whose_file_is_missing() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(Vec::new()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = downloaded_video("My Video.mp4", Some("My Video.jpg"));
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &video,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.clone().reset_for_redownload(fixed_timestamp())]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(
+                    1,
+                    &Task::DownloadVideo {
+                        video_id: video.id.as_str().to_string(),
+                        quality: "high".to_string(),
+                        output_dir: "/videos/creators/somechannel".to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+                next_reconcile(2),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_heal_a_downloaded_video_whose_file_is_present_but_not_mp4() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
+            "My Video.webm".to_string(),
+        ]));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = downloaded_video("My Video.webm", None);
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &video,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.clone().reset_for_redownload(fixed_timestamp())]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(
+                    1,
+                    &Task::DownloadVideo {
+                        video_id: video.id.as_str().to_string(),
+                        quality: "high".to_string(),
+                        output_dir: "/videos/creators/somechannel".to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+                next_reconcile(2),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_delete_an_orphaned_file() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
+            "orphan.mp4".to_string(),
+        ]));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *video_file_repository.deleted_calls.lock().unwrap(),
+            vec![deleted("orphan.mp4")]
+        );
+    }
+
+    #[test]
+    fn it_should_recover_a_permanently_errored_video() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(Vec::new()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = my_video()
+            .start_download(fixed_timestamp())
+            .mark_errored(fixed_timestamp());
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &video,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.clone().reset_for_redownload(fixed_timestamp())]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(
+                    1,
+                    &Task::DownloadVideo {
+                        video_id: video.id.as_str().to_string(),
+                        quality: "high".to_string(),
+                        output_dir: "/videos/creators/somechannel".to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+                next_reconcile(2),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_leave_a_matching_file_alone() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
+            "My Video.mp4".to_string(),
+        ]));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = downloaded_video("My Video.mp4", None);
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &video,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+    }
+
+    #[test]
+    fn it_should_leave_a_matching_thumbnail_file_alone() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
+            "My Video.mp4".to_string(),
+            "My Video.jpg".to_string(),
+        ]));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = downloaded_video("My Video.mp4", Some("My Video.jpg"));
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &video,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+    }
+
+    #[test]
+    fn it_should_delete_an_unrecorded_stray_thumbnail_file() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
+            "My Video.mp4".to_string(),
+            "stray.jpg".to_string(),
+        ]));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = downloaded_video("My Video.mp4", None);
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &video,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *video_file_repository.deleted_calls.lock().unwrap(),
+            vec![deleted("stray.jpg")]
+        );
+    }
+
+    /// Builds a reconciler around the repositories and fakes a test seeds,
+    /// configures or asserts; the remaining ports (YouTube metadata, video
+    /// metadata, thumbnails) are ones no reconcile test here observes. Events
+    /// go to `db`'s outbox table.
+    fn channel_video_reconciler(
+        db: &TestDatabase,
+        channel_repository: Arc<SqliteChannelRepository>,
+        video_repository: Arc<SqliteVideoRepository>,
+        channel_video_repository: Arc<SqliteChannelVideoRepository>,
+        channel_videos_repository: Arc<FakeChannelVideosRepository>,
+        task_repository: Arc<SqliteTaskRepository>,
+        video_file_repository: Arc<FakeVideoFileRepository>,
+    ) -> ChannelVideoReconciler {
+        let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        ChannelVideoReconciler::new(
+            channel_repository,
+            video_repository,
+            channel_video_repository,
+            channel_videos_repository,
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteEventPublisher::new(
+                db.shared_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            task_repository,
+            video_file_repository,
+            thumbnail_fetcher,
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        )
+    }
+
+    /// A task for tests whose payload is rejected before reaching the
+    /// reconciler. Its repositories sit on an unmigrated in-memory database,
+    /// so a payload that wrongly got through would fail loudly instead of
+    /// passing.
+    fn any_task() -> ReconcileChannelTask {
+        let video_repository = Arc::new(SqliteVideoRepository::new(unused_connection()));
+        ReconcileChannelTask::new(ChannelVideoReconciler::new(
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            video_repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+            Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
+            Arc::new(SqliteEventPublisher::new(
+                Arc::new(Mutex::new(unused_connection())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(SqliteTaskRepository::new(
+                Arc::new(Mutex::new(unused_connection())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(ThumbnailFetcher::new(
+                video_repository,
+                Arc::new(FakeVideoDownloaderRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        ))
+    }
+
+    fn unused_connection() -> Connection {
+        Connection::open_in_memory().unwrap()
+    }
+
+    /// Saves a video and its `@somechannel` membership at position 0,
+    /// returning the membership as stored (with its storage-assigned `id`).
+    fn save_channel_video(
+        video_repository: &dyn VideoRepository,
+        channel_video_repository: &dyn ChannelVideoRepository,
+        video: &Video,
+    ) -> ChannelVideo {
+        video_repository.save(video).unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                handle("@somechannel"),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        channel_video_repository
+            .find_by_video(&video.id)
+            .unwrap()
+            .unwrap()
+    }
+
+    fn channel(channel_handle: &str) -> Channel {
         Channel::create(
-            ChannelHandle::new("@somechannel").unwrap(),
+            handle(channel_handle),
             "Some Channel",
             "UC123",
             Quality::High,
-            VideoLimit::new(video_limit).unwrap(),
+            VideoLimit::new(10).unwrap(),
             PlaylistPath::new("creators/somechannel").unwrap(),
             None,
             fixed_timestamp(),
         )
     }
 
-    #[allow(clippy::type_complexity)]
-    fn handler_with(
-        seed_channel: Option<Channel>,
-        current_videos: Vec<ChannelVideoListing>,
-    ) -> (
-        ReconcileChannelTask,
-        Arc<FakeEventPublisher>,
-        Arc<FakeVideoRepository>,
-        Arc<FakeChannelVideoRepository>,
-        Arc<FakeTaskRepository>,
-    ) {
-        let (handler, events, videos, channel_videos, tasks, _files) = handler_with_files(
-            seed_channel,
-            current_videos,
-            FakeVideoFileRepository::default(),
-        );
-        (handler, events, videos, channel_videos, tasks)
+    fn my_video() -> Video {
+        Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }
 
-    #[allow(clippy::type_complexity)]
-    fn handler_with_files(
-        seed_channel: Option<Channel>,
-        current_videos: Vec<ChannelVideoListing>,
-        video_file_repository: FakeVideoFileRepository,
-    ) -> (
-        ReconcileChannelTask,
-        Arc<FakeEventPublisher>,
-        Arc<FakeVideoRepository>,
-        Arc<FakeChannelVideoRepository>,
-        Arc<FakeTaskRepository>,
-        Arc<FakeVideoFileRepository>,
-    ) {
-        let channel_repository = Arc::new(FakeChannelRepository::default());
-        if let Some(channel) = seed_channel {
-            channel_repository.insert(&channel).unwrap();
+    fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
+        my_video()
+            .start_download(fixed_timestamp())
+            .mark_downloaded(
+                Quality::High,
+                filename,
+                thumbnail_filename.map(str::to_string),
+                None,
+                fixed_timestamp(),
+            )
+    }
+
+    fn listed_video(youtube_id: &str, title: &str, position: i64) -> ChannelVideoListing {
+        ChannelVideoListing {
+            youtube_id: youtube_id.to_string(),
+            title: title.to_string(),
+            position,
         }
-        let event_publisher = Arc::new(FakeEventPublisher::default());
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let channel_video_repository =
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
-        let task_repository = Arc::new(FakeTaskRepository::default());
-        let video_file_repository = Arc::new(video_file_repository);
+    }
 
-        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
-            video_repository.clone(),
-            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let reconciler = ChannelVideoReconciler::new(
-            channel_repository,
-            video_repository.clone(),
-            channel_video_repository.clone(),
-            Arc::new(FakeChannelVideosRepository::with_videos(current_videos)),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher.clone(),
-            task_repository.clone(),
-            video_file_repository.clone(),
-            thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        );
-
+    /// The `(output_dir, entry)` pair the fake records for one delete call.
+    fn deleted(entry: &str) -> (PathBuf, String) {
         (
-            ReconcileChannelTask::new(reconciler),
-            event_publisher,
-            video_repository,
-            channel_video_repository,
-            task_repository,
-            video_file_repository,
+            PathBuf::from("/videos/creators/somechannel"),
+            entry.to_string(),
         )
     }
 
-    /// Seeds a stored video already a member of `@somechannel`, returning
-    /// the created `Video` (its surrogate id is needed by several tests to
-    /// build expected task payloads).
-    fn seed_member(
-        video_repository: &FakeVideoRepository,
-        channel_video_repository: &FakeChannelVideoRepository,
-        youtube_id: &str,
-        title: &str,
-        transform: impl FnOnce(Video) -> Video,
-    ) -> Video {
-        let video = transform(Video::create(
-            VideoId::new(youtube_id).unwrap(),
-            title,
-            fixed_timestamp(),
-        ));
-        video_repository.videos.lock().unwrap().push(video.clone());
-        channel_video_repository
-            .channel_videos
-            .lock()
-            .unwrap()
-            .push(crate::domain::channel_video::ChannelVideo::create(
-                ChannelHandle::new("@somechannel").unwrap(),
-                video.id.clone(),
-                0,
-                fixed_timestamp(),
-            ));
-        video
+    fn next_reconcile(id: i64) -> ScheduledTask {
+        pending_task(
+            id,
+            &Task::ReconcileChannel {
+                channel_id: "@somechannel".to_string(),
+            },
+            fixed_timestamp() + chrono::Duration::seconds(3600),
+        )
+    }
+
+    fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
+        ScheduledTask {
+            id,
+            task_type: task.task_type().to_string(),
+            payload: task.payload().to_string(),
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
+    }
+
+    /// The outbox row `SqliteEventPublisher` writes for `event`, as read back
+    /// before the consumer has dispatched it.
+    fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+        ScheduledEvent {
+            id,
+            event_type: event.event_type().to_string(),
+            payload: event.payload().to_string(),
+            retries: 0,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
+    }
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn handle(value: &str) -> ChannelHandle {
+        ChannelHandle::new(value).unwrap()
     }
 
     fn payload_for(channel_id: &str) -> String {
@@ -180,415 +894,7 @@ mod tests {
         .to_string()
     }
 
-    #[test]
-    fn it_should_no_op_when_the_channel_no_longer_exists() {
-        let (handler, events, videos, channel_videos, tasks) = handler_with(None, Vec::new());
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        assert!(events.published.lock().unwrap().is_empty());
-        assert!(videos.videos.lock().unwrap().is_empty());
-        assert!(channel_videos.channel_videos.lock().unwrap().is_empty());
-        assert!(tasks.scheduled().is_empty());
-    }
-
-    #[test]
-    fn it_should_persist_a_video_within_the_top_n_and_publish_an_event() {
-        let (handler, events, videos, _channel_videos, _tasks) = handler_with(
-            Some(channel(10)),
-            vec![ChannelVideoListing {
-                youtube_id: "yt1".to_string(),
-                title: "One".to_string(),
-                position: 0,
-            }],
-        );
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        let stored = videos.videos.lock().unwrap();
-        assert_eq!(stored.len(), 1);
-        assert_eq!(stored[0].status, VideoStatus::Pending);
-        assert_eq!(
-            *events.published.lock().unwrap(),
-            vec![DomainEvent::VideoAddedToChannel {
-                channel_id: "@somechannel".to_string(),
-                video_id: stored[0].id.as_str().to_string(),
-            }]
-        );
-    }
-
-    #[test]
-    fn it_should_refresh_the_title_and_position_of_an_already_stored_video() {
-        let (handler, events, videos, channel_videos, _tasks) = handler_with(
-            Some(channel(10)),
-            vec![ChannelVideoListing {
-                youtube_id: "yt1".to_string(),
-                title: "Renamed".to_string(),
-                position: 2,
-            }],
-        );
-        let existing = Video::create(VideoId::new("yt1").unwrap(), "Original", fixed_timestamp());
-        videos.videos.lock().unwrap().push(existing.clone());
-        channel_videos.channel_videos.lock().unwrap().push(
-            crate::domain::channel_video::ChannelVideo::create(
-                ChannelHandle::new("@somechannel").unwrap(),
-                existing.id.clone(),
-                0,
-                fixed_timestamp(),
-            ),
-        );
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        let stored = videos.videos.lock().unwrap();
-        assert_eq!(stored.len(), 1);
-        assert_eq!(stored[0].title, "Renamed");
-        let stored_channel_videos = channel_videos.channel_videos.lock().unwrap();
-        assert_eq!(stored_channel_videos.len(), 1);
-        assert_eq!(stored_channel_videos[0].position, 2);
-        assert!(events.published.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn it_should_evict_a_video_that_ages_out_of_the_top_n() {
-        let (handler, events, videos, channel_videos, _tasks) =
-            handler_with(Some(channel(1)), Vec::new());
-        let existing = Video::create(VideoId::new("yt_old").unwrap(), "Old", fixed_timestamp());
-        videos.videos.lock().unwrap().push(existing.clone());
-        channel_videos.channel_videos.lock().unwrap().push(
-            crate::domain::channel_video::ChannelVideo::create(
-                ChannelHandle::new("@somechannel").unwrap(),
-                existing.id.clone(),
-                0,
-                fixed_timestamp(),
-            ),
-        );
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        assert!(videos.videos.lock().unwrap().is_empty());
-        assert!(channel_videos.channel_videos.lock().unwrap().is_empty());
-        assert_eq!(
-            *events.published.lock().unwrap(),
-            vec![DomainEvent::VideoRemovedFromChannel {
-                channel_id: "@somechannel".to_string(),
-                video_id: existing.id.as_str().to_string(),
-                title: "Old".to_string(),
-                filename: None,
-                thumbnail_filename: None,
-                was_downloaded: false,
-            }]
-        );
-    }
-
-    #[test]
-    fn it_should_leave_stored_videos_untouched_when_yt_dlp_fails() {
-        let channel_repository = Arc::new(FakeChannelRepository::default());
-        channel_repository.insert(&channel(10)).unwrap();
-        let event_publisher = Arc::new(FakeEventPublisher::default());
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let channel_video_repository =
-            Arc::new(FakeChannelVideoRepository::new(video_repository.clone()));
-        let existing = Video::create(VideoId::new("yt_old").unwrap(), "Old", fixed_timestamp());
-        video_repository
-            .videos
-            .lock()
-            .unwrap()
-            .push(existing.clone());
-        channel_video_repository
-            .channel_videos
-            .lock()
-            .unwrap()
-            .push(crate::domain::channel_video::ChannelVideo::create(
-                ChannelHandle::new("@somechannel").unwrap(),
-                existing.id.clone(),
-                0,
-                fixed_timestamp(),
-            ));
-        let thumbnail_fetcher = Arc::new(crate::domain::services::ThumbnailFetcher::new(
-            video_repository.clone(),
-            Arc::new(crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository::default()),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let reconciler = ChannelVideoReconciler::new(
-            channel_repository,
-            video_repository.clone(),
-            channel_video_repository.clone(),
-            Arc::new(FakeChannelVideosRepository::failing()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(FakeVideoMetadataRepository::default()),
-            event_publisher.clone(),
-            Arc::new(FakeTaskRepository::default()),
-            Arc::new(FakeVideoFileRepository::default()),
-            thumbnail_fetcher,
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        );
-        let handler = ReconcileChannelTask::new(reconciler);
-
-        let result = handler.handle(&payload_for("@somechannel"), false);
-
-        assert!(result.is_err());
-        assert_eq!(video_repository.videos.lock().unwrap().len(), 1);
-        assert_eq!(
-            channel_video_repository
-                .channel_videos
-                .lock()
-                .unwrap()
-                .len(),
-            1
-        );
-        assert!(event_publisher.published.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn it_should_always_schedule_the_next_reconcile_even_with_no_changes() {
-        let (handler, _events, _videos, _channel_videos, tasks) =
-            handler_with(Some(channel(10)), Vec::new());
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        let scheduled = tasks.scheduled();
-        assert_eq!(scheduled.len(), 1);
-        assert_eq!(
-            scheduled[0].0,
-            Task::ReconcileChannel {
-                channel_id: "@somechannel".to_string()
-            }
-        );
-        assert_eq!(
-            scheduled[0].1,
-            fixed_timestamp() + chrono::Duration::seconds(3600)
-        );
-    }
-
-    #[test]
-    fn it_should_no_op_when_the_payload_channel_id_is_invalid() {
-        let (handler, events, videos, _channel_videos, tasks) =
-            handler_with(Some(channel(10)), Vec::new());
-
-        handler.handle(&payload_for(""), false).unwrap();
-
-        assert!(events.published.lock().unwrap().is_empty());
-        assert!(videos.videos.lock().unwrap().is_empty());
-        assert!(tasks.scheduled().is_empty());
-    }
-
-    #[test]
-    fn it_should_reject_a_malformed_payload() {
-        let (handler, ..) = handler_with(Some(channel(10)), Vec::new());
-
-        assert!(handler.handle("not json", false).is_err());
-    }
-
-    #[test]
-    fn it_should_heal_a_downloaded_video_whose_file_is_missing() {
-        let (handler, _events, videos, channel_videos, tasks, _files) = handler_with_files(
-            Some(channel(10)),
-            vec![ChannelVideoListing {
-                youtube_id: "yt1".to_string(),
-                title: "My Video".to_string(),
-                position: 0,
-            }],
-            FakeVideoFileRepository::with_listing(Vec::new()),
-        );
-        let video = seed_member(&videos, &channel_videos, "yt1", "My Video", |v| {
-            v.start_download(fixed_timestamp()).mark_downloaded(
-                Quality::High,
-                "My Video.mp4",
-                Some("My Video.jpg".to_string()),
-                None,
-                fixed_timestamp(),
-            )
-        });
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        let stored = videos.videos.lock().unwrap();
-        assert_eq!(stored[0].status, VideoStatus::Pending);
-        assert_eq!(stored[0].filename, None);
-        assert_eq!(stored[0].thumbnail_filename, None);
-        assert_eq!(stored[0].quality, None);
-
-        let scheduled = tasks.scheduled();
-        assert!(scheduled.iter().any(|(task, _)| *task
-            == Task::DownloadVideo {
-                video_id: video.id.as_str().to_string(),
-                quality: "high".to_string(),
-                output_dir: "/videos/creators/somechannel".to_string(),
-            }));
-    }
-
-    #[test]
-    fn it_should_heal_a_downloaded_video_whose_file_is_present_but_not_mp4() {
-        let (handler, _events, videos, channel_videos, tasks, _files) = handler_with_files(
-            Some(channel(10)),
-            vec![ChannelVideoListing {
-                youtube_id: "yt1".to_string(),
-                title: "My Video".to_string(),
-                position: 0,
-            }],
-            FakeVideoFileRepository::with_listing(vec!["My Video.webm".to_string()]),
-        );
-        let video = seed_member(&videos, &channel_videos, "yt1", "My Video", |v| {
-            v.start_download(fixed_timestamp()).mark_downloaded(
-                Quality::High,
-                "My Video.webm",
-                None,
-                None,
-                fixed_timestamp(),
-            )
-        });
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        let stored = videos.videos.lock().unwrap();
-        assert_eq!(stored[0].status, VideoStatus::Pending);
-        assert_eq!(stored[0].filename, None);
-        assert_eq!(stored[0].quality, None);
-
-        let scheduled = tasks.scheduled();
-        assert!(scheduled.iter().any(|(task, _)| *task
-            == Task::DownloadVideo {
-                video_id: video.id.as_str().to_string(),
-                quality: "high".to_string(),
-                output_dir: "/videos/creators/somechannel".to_string(),
-            }));
-    }
-
-    #[test]
-    fn it_should_delete_an_orphaned_file() {
-        let (handler, _events, _videos, _channel_videos, _tasks, files) = handler_with_files(
-            Some(channel(10)),
-            Vec::new(),
-            FakeVideoFileRepository::with_listing(vec!["orphan.mp4".to_string()]),
-        );
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        let calls = files.deleted_calls.lock().unwrap();
-        assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].1, "orphan.mp4");
-    }
-
-    #[test]
-    fn it_should_recover_a_permanently_errored_video() {
-        let (handler, _events, videos, channel_videos, tasks, _files) = handler_with_files(
-            Some(channel(10)),
-            vec![ChannelVideoListing {
-                youtube_id: "yt1".to_string(),
-                title: "My Video".to_string(),
-                position: 0,
-            }],
-            FakeVideoFileRepository::with_listing(Vec::new()),
-        );
-        let video = seed_member(&videos, &channel_videos, "yt1", "My Video", |v| {
-            v.start_download(fixed_timestamp())
-                .mark_errored(fixed_timestamp())
-        });
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        let stored = videos.videos.lock().unwrap();
-        assert_eq!(stored[0].status, VideoStatus::Pending);
-        assert_eq!(stored[0].filename, None);
-        assert_eq!(stored[0].quality, None);
-
-        let scheduled = tasks.scheduled();
-        assert!(scheduled.iter().any(|(task, _)| *task
-            == Task::DownloadVideo {
-                video_id: video.id.as_str().to_string(),
-                quality: "high".to_string(),
-                output_dir: "/videos/creators/somechannel".to_string(),
-            }));
-    }
-
-    #[test]
-    fn it_should_leave_a_matching_file_alone() {
-        let (handler, _events, videos, channel_videos, _tasks, files) = handler_with_files(
-            Some(channel(10)),
-            vec![ChannelVideoListing {
-                youtube_id: "yt1".to_string(),
-                title: "My Video".to_string(),
-                position: 0,
-            }],
-            FakeVideoFileRepository::with_listing(vec!["My Video.mp4".to_string()]),
-        );
-        seed_member(&videos, &channel_videos, "yt1", "My Video", |v| {
-            v.start_download(fixed_timestamp()).mark_downloaded(
-                Quality::High,
-                "My Video.mp4",
-                None,
-                None,
-                fixed_timestamp(),
-            )
-        });
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        assert!(files.deleted_calls.lock().unwrap().is_empty());
-        let stored = videos.videos.lock().unwrap();
-        assert_eq!(stored[0].status, VideoStatus::Downloaded);
-    }
-
-    #[test]
-    fn it_should_leave_a_matching_thumbnail_file_alone() {
-        let (handler, _events, videos, channel_videos, _tasks, files) = handler_with_files(
-            Some(channel(10)),
-            vec![ChannelVideoListing {
-                youtube_id: "yt1".to_string(),
-                title: "My Video".to_string(),
-                position: 0,
-            }],
-            FakeVideoFileRepository::with_listing(vec![
-                "My Video.mp4".to_string(),
-                "My Video.jpg".to_string(),
-            ]),
-        );
-        seed_member(&videos, &channel_videos, "yt1", "My Video", |v| {
-            v.start_download(fixed_timestamp()).mark_downloaded(
-                Quality::High,
-                "My Video.mp4",
-                Some("My Video.jpg".to_string()),
-                None,
-                fixed_timestamp(),
-            )
-        });
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        assert!(files.deleted_calls.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn it_should_delete_an_unrecorded_stray_thumbnail_file() {
-        let (handler, _events, videos, channel_videos, _tasks, files) = handler_with_files(
-            Some(channel(10)),
-            vec![ChannelVideoListing {
-                youtube_id: "yt1".to_string(),
-                title: "My Video".to_string(),
-                position: 0,
-            }],
-            FakeVideoFileRepository::with_listing(vec![
-                "My Video.mp4".to_string(),
-                "stray.jpg".to_string(),
-            ]),
-        );
-        seed_member(&videos, &channel_videos, "yt1", "My Video", |v| {
-            v.start_download(fixed_timestamp()).mark_downloaded(
-                Quality::High,
-                "My Video.mp4",
-                None,
-                None,
-                fixed_timestamp(),
-            )
-        });
-
-        handler.handle(&payload_for("@somechannel"), false).unwrap();
-
-        let calls = files.deleted_calls.lock().unwrap();
-        assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].1, "stray.jpg");
+    fn run(task: &ReconcileChannelTask, payload: &str) -> Result<(), String> {
+        task.handle(payload, false).map_err(|e| e.to_string())
     }
 }

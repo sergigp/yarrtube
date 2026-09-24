@@ -31,7 +31,65 @@ impl TaskHandler for DeleteChannelFilesTask {
 mod tests {
     use super::*;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use std::path::PathBuf;
     use std::sync::Arc;
+
+    #[test]
+    fn it_should_recursively_delete_the_channel_output_directory() {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let task = DeleteChannelFilesTask::new(VideoFileDeleter::new(
+            video_file_repository.clone(),
+            "/videos",
+        ));
+
+        let result = run(&task, &payload_for("@somechannel", "creators/somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![PathBuf::from("/videos/creators/somechannel")]
+        );
+    }
+
+    #[test]
+    fn it_should_no_op_when_the_payload_channel_id_is_invalid() {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let task = DeleteChannelFilesTask::new(VideoFileDeleter::new(
+            video_file_repository.clone(),
+            "/videos",
+        ));
+
+        let result = run(&task, &payload_for("", "creators/somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            Vec::<PathBuf>::new()
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_malformed_payload() {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let task = DeleteChannelFilesTask::new(VideoFileDeleter::new(
+            video_file_repository.clone(),
+            "/videos",
+        ));
+
+        let result = run(&task, "not json");
+
+        assert_eq!(
+            result,
+            Err(
+                "invalid delete_channel_files payload: expected ident at line 1 column 2"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            Vec::<PathBuf>::new()
+        );
+    }
 
     fn payload_for(channel_id: &str, path: &str) -> String {
         Task::DeleteChannelFiles {
@@ -42,52 +100,7 @@ mod tests {
         .to_string()
     }
 
-    fn handler() -> (DeleteChannelFilesTask, Arc<FakeVideoFileRepository>) {
-        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video_file_deleter = VideoFileDeleter::new(video_file_repository.clone(), "/videos");
-
-        (
-            DeleteChannelFilesTask::new(video_file_deleter),
-            video_file_repository,
-        )
-    }
-
-    #[test]
-    fn it_should_recursively_delete_the_channel_output_directory() {
-        let (handler, video_file_repository) = handler();
-
-        handler
-            .handle(&payload_for("@somechannel", "creators/somechannel"), false)
-            .unwrap();
-
-        let deleted = video_file_repository.deleted_dirs.lock().unwrap();
-        assert_eq!(
-            *deleted,
-            vec![std::path::PathBuf::from("/videos/creators/somechannel")]
-        );
-    }
-
-    #[test]
-    fn it_should_no_op_when_the_payload_channel_id_is_invalid() {
-        let (handler, video_file_repository) = handler();
-
-        handler
-            .handle(&payload_for("", "creators/somechannel"), false)
-            .unwrap();
-
-        assert!(
-            video_file_repository
-                .deleted_dirs
-                .lock()
-                .unwrap()
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn it_should_reject_a_malformed_payload() {
-        let (handler, _video_file_repository) = handler();
-
-        assert!(handler.handle("not json", false).is_err());
+    fn run(task: &DeleteChannelFilesTask, payload: &str) -> Result<(), String> {
+        task.handle(payload, false).map_err(|e| e.to_string())
     }
 }

@@ -60,55 +60,86 @@ impl TaskHandler for UpdateYtdlpTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::infrastructure::client::ytdlp_updater::FakeYtdlpUpdater;
-    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
+    use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
 
-    fn fixed_timestamp() -> DateTime<Utc> {
-        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
-    }
-
-    fn handler_with(succeeds: bool, task_repository: Arc<FakeTaskRepository>) -> UpdateYtdlpTask {
-        UpdateYtdlpTask::new(
-            Arc::new(FakeYtdlpUpdater { succeeds }),
-            PathBuf::from("/app/bin/yt-dlp"),
-            task_repository,
-            Arc::new(FixedClock(fixed_timestamp())),
-        )
-    }
-
     #[test]
     fn it_should_reschedule_the_next_occurrence_when_the_update_succeeds() {
-        let task_repository = Arc::new(FakeTaskRepository::default());
-        let handler = handler_with(true, task_repository.clone());
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let task = UpdateYtdlpTask::new(
+            Arc::new(FakeYtdlpUpdater { succeeds: true }),
+            PathBuf::from("/app/bin/yt-dlp"),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
-        handler.handle("{}", false).unwrap();
+        let result = run(&task, "{}");
 
-        let scheduled = task_repository.scheduled();
+        assert_eq!(result, Ok(()));
         assert_eq!(
-            *scheduled,
-            vec![(
-                Task::UpdateYtdlp,
-                fixed_timestamp() + chrono::Duration::seconds(UPDATE_INTERVAL_SECONDS)
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::UpdateYtdlp,
+                fixed_timestamp() + chrono::Duration::seconds(UPDATE_INTERVAL_SECONDS),
             )]
         );
     }
 
     #[test]
     fn it_should_reschedule_the_next_occurrence_when_the_update_fails() {
-        let task_repository = Arc::new(FakeTaskRepository::default());
-        let handler = handler_with(false, task_repository.clone());
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let task = UpdateYtdlpTask::new(
+            Arc::new(FakeYtdlpUpdater { succeeds: false }),
+            PathBuf::from("/app/bin/yt-dlp"),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
-        handler.handle("{}", false).unwrap();
+        let result = run(&task, "{}");
 
-        let scheduled = task_repository.scheduled();
+        assert_eq!(result, Ok(()));
         assert_eq!(
-            *scheduled,
-            vec![(
-                Task::UpdateYtdlp,
-                fixed_timestamp() + chrono::Duration::seconds(UPDATE_INTERVAL_SECONDS)
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::UpdateYtdlp,
+                fixed_timestamp() + chrono::Duration::seconds(UPDATE_INTERVAL_SECONDS),
             )]
         );
+    }
+
+    fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
+        ScheduledTask {
+            id,
+            task_type: task.task_type().to_string(),
+            payload: task.payload().to_string(),
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
+    }
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn run(task: &UpdateYtdlpTask, payload: &str) -> Result<(), String> {
+        task.handle(payload, false).map_err(|e| e.to_string())
     }
 }

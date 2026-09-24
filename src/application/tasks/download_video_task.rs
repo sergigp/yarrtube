@@ -34,40 +34,642 @@ impl TaskHandler for DownloadVideoTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::video::video_filename::VideoFilename;
-    use crate::domain::video::{Video, VideoStatus};
-
     use crate::domain::shared::VideoId;
-    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::sqlite_video_repository::{
-        FakeVideoRepository, VideoRepository,
+    use crate::domain::video::Video;
+    use crate::domain::video_metadata::VideoMetadata;
+    use crate::infrastructure::repositories::filesystem_video_file_repository::{
+        FakeVideoFileRepository, FilesystemVideoFileRepository, VideoFileRepository,
     };
-
-    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
-
-    use crate::infrastructure::repositories::sqlite_playlist_video_repository::FakePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::FakeVideoMetadataRepository;
-    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        SqliteVideoRepository, VideoRepository,
+    };
+    use crate::infrastructure::repositories::youtube_metadata_repository::{
+        FakeYoutubeMetadataRepository, YoutubeMetadata,
+    };
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::{
+        FakeVideoDownloaderRepository, VideoDownloaderRepository, YtDlpVideoDownloaderRepository,
+    };
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
+    #[cfg(unix)]
+    use crate::infrastructure::shared::ytdlp::test_support::{FakeYtDlp, unique_temp_dir};
     use chrono::{DateTime, Utc};
+    use rusqlite::Connection;
+    use std::path::PathBuf;
     use std::sync::Arc;
 
-    fn fake_metadata_deps(
-        video_repository: &Arc<FakeVideoRepository>,
-    ) -> (
-        Arc<FakePlaylistVideoRepository>,
-        Arc<FakeYoutubeMetadataRepository>,
-        Arc<FakeVideoMetadataRepository>,
-    ) {
-        (
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
+    #[test]
+    fn it_should_mark_the_video_downloaded_on_success() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.start_download(fixed_timestamp()).mark_downloaded(
+                Quality::High,
+                "fake-output/fake-output.mp4",
+                None,
+                None,
+                fixed_timestamp(),
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_mark_the_video_errored_retrying_when_the_download_fails_with_retries_left() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(false)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(
+            result,
+            Err(format!("yt-dlp failed to download video {}", video.id))
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .start_download(fixed_timestamp())
+                    .mark_errored_retrying(fixed_timestamp())
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_record_yt_dlps_actual_error_message_when_a_download_fails() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::with_failed_stderr(
+                "HTTP Error 403: Forbidden",
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Err("HTTP Error 403: Forbidden".to_string()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .start_download(fixed_timestamp())
+                    .mark_errored_retrying(fixed_timestamp())
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_mark_the_video_errored_when_the_download_fails_on_the_last_attempt() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(false)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), true);
+
+        assert_eq!(
+            result,
+            Err(format!("yt-dlp failed to download video {}", video.id))
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .start_download(fixed_timestamp())
+                    .mark_errored(fixed_timestamp())
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_no_op_when_the_video_no_longer_exists() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(my_video().id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_pass_the_sanitized_title_as_the_desired_filename_to_the_downloader() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = Video::create(
+            VideoId::new("yt1").unwrap(),
+            "My: Messy / Title?",
+            fixed_timestamp(),
+        );
+        video_repository.save(&video).unwrap();
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *downloader.calls.lock().unwrap(),
+            vec![download_call(
+                "My- Messy - Title-",
+                "/videos/my-playlist",
+                None
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_pass_the_output_dir_from_the_payload_straight_through() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(
+            &task,
+            &Task::DownloadVideo {
+                video_id: video.id.as_str().to_string(),
+                quality: "high".to_string(),
+                output_dir: "/videos/a/b/c".to_string(),
+            }
+            .payload()
+            .to_string(),
+            false,
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *downloader.calls.lock().unwrap(),
+            vec![download_call("My Video", "/videos/a/b/c", None)]
+        );
+    }
+
+    #[test]
+    fn it_should_pass_the_existing_folder_derived_from_the_thumbnail_filename() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *downloader.calls.lock().unwrap(),
+            vec![download_call(
+                "My Video",
+                "/videos/my-playlist",
+                Some("My Video")
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_pass_no_existing_folder_when_the_video_has_no_thumbnail() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *downloader.calls.lock().unwrap(),
+            vec![download_call("My Video", "/videos/my-playlist", None)]
+        );
+    }
+
+    #[test]
+    fn it_should_no_op_when_the_payload_video_id_is_invalid() {
+        let result = run(&any_task(), &payload_for(""), false);
+
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn it_should_reject_a_malformed_payload() {
+        let result = run(&any_task(), "not json", false);
+
+        assert_eq!(
+            result,
+            Err("invalid download_video payload: expected ident at line 1 column 2".to_string())
+        );
+    }
+
+    #[test]
+    fn it_should_record_the_thumbnail_filename_when_one_was_written() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::with_listing(vec![
+                "fake-output.jpg".to_string(),
+            ])),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.start_download(fixed_timestamp()).mark_downloaded(
+                Quality::High,
+                "fake-output/fake-output.mp4",
+                Some("fake-output/fake-output.jpg".to_string()),
+                None,
+                fixed_timestamp(),
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_record_no_thumbnail_filename_when_none_was_written() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.start_download(fixed_timestamp()).mark_downloaded(
+                Quality::High,
+                "fake-output/fake-output.mp4",
+                None,
+                None,
+                fixed_timestamp(),
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_record_the_duration_reported_by_the_downloader() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::with_duration(223)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.start_download(fixed_timestamp()).mark_downloaded(
+                Quality::High,
+                "fake-output/fake-output.mp4",
+                None,
+                Some(223),
+                fixed_timestamp(),
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_record_no_duration_when_the_downloader_reports_none() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.start_download(fixed_timestamp()).mark_downloaded(
+                Quality::High,
+                "fake-output/fake-output.mp4",
+                None,
+                None,
+                fixed_timestamp(),
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_save_video_metadata_when_the_youtube_metadata_fetch_succeeds() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_metadata_repository = Arc::new(FakeVideoMetadataRepository::default());
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            video_metadata_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "fake-output/fake-output.mp4",
+                        None,
+                        None,
+                        fixed_timestamp(),
+                    )
+            ]
+        );
+        assert_eq!(
+            *video_metadata_repository.entries.lock().unwrap(),
+            vec![(
+                video.id.clone(),
+                VideoMetadata::new(
+                    "My Video",
+                    "A description",
+                    "My Channel",
+                    "My Channel",
+                    "2023-11-14",
+                    2023,
+                    None,
+                    Vec::new(),
+                    "yt1",
+                    None,
+                    "20231114 My Video",
+                )
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_still_mark_the_video_downloaded_and_save_no_metadata_when_the_youtube_metadata_fetch_fails()
+     {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_metadata_repository = Arc::new(FakeVideoMetadataRepository::default());
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            video_metadata_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.start_download(fixed_timestamp()).mark_downloaded(
+                Quality::High,
+                "fake-output/fake-output.mp4",
+                None,
+                None,
+                fixed_timestamp(),
+            )]
+        );
+        assert_eq!(*video_metadata_repository.entries.lock().unwrap(), vec![]);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_detect_a_real_thumbnail_file_written_by_yt_dlp_alongside_the_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let output_dir = unique_temp_dir("download-video-task-thumbnail-e2e");
+        let fake_yt_dlp =
+            FakeYtDlp::with_downloaded_files("My Video.mp4", &["My Video.mp4", "My Video.jpg"]);
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(YtDlpVideoDownloaderRepository::new(
+                fake_yt_dlp.path.clone(),
+            )),
+            Arc::new(FilesystemVideoFileRepository),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+        ));
+        let payload = Task::DownloadVideo {
+            video_id: video.id.as_str().to_string(),
+            quality: "high".to_string(),
+            output_dir: output_dir.to_string_lossy().to_string(),
+        }
+        .payload()
+        .to_string();
+
+        let result = run(&task, &payload, false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.start_download(fixed_timestamp()).mark_downloaded(
+                Quality::High,
+                "My Video/My Video.mp4",
+                Some("My Video/My Video.jpg".to_string()),
+                None,
+                fixed_timestamp(),
+            )]
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    /// Builds a downloader around the ports a test seeds, configures or
+    /// asserts; the playlist membership lookup (only used to pick a metadata
+    /// sorttitle) and the clock are ones no test here varies.
+    fn video_downloader(
+        db: &TestDatabase,
+        video_repository: Arc<SqliteVideoRepository>,
+        video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+        video_file_repository: Arc<dyn VideoFileRepository>,
+        youtube_metadata_repository: Arc<FakeYoutubeMetadataRepository>,
+        video_metadata_repository: Arc<FakeVideoMetadataRepository>,
+    ) -> VideoDownloader {
+        VideoDownloader::new(
+            video_repository,
+            video_downloader_repository,
+            video_file_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            youtube_metadata_repository,
+            video_metadata_repository,
+            Arc::new(FixedClock(fixed_timestamp())),
         )
     }
 
-    fn fixed_timestamp() -> DateTime<Utc> {
-        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    /// A task for tests whose payload is rejected before reaching the
+    /// downloader. Its repositories sit on an unmigrated in-memory database,
+    /// so a payload that wrongly got through would fail loudly instead of
+    /// passing.
+    fn any_task() -> DownloadVideoTask {
+        DownloadVideoTask::new(VideoDownloader::new(
+            Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeVideoMetadataRepository::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ))
+    }
+
+    fn unused_connection() -> Connection {
+        Connection::open_in_memory().unwrap()
+    }
+
+    fn my_video() -> Video {
+        Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+    }
+
+    fn youtube_metadata() -> YoutubeMetadata {
+        YoutubeMetadata {
+            title: "My Video".to_string(),
+            description: "A description".to_string(),
+            channel_title: "My Channel".to_string(),
+            published_at: fixed_timestamp(),
+            tags: Vec::new(),
+            category_id: None,
+        }
+    }
+
+    /// One call as `FakeVideoDownloaderRepository` records it, for the
+    /// `yt1` video at high quality.
+    fn download_call(
+        desired_filename: &str,
+        output_dir: &str,
+        existing_folder: Option<&str>,
+    ) -> (String, String, String, Quality, PathBuf, Option<String>) {
+        (
+            "https://www.youtube.com/watch?v=yt1".to_string(),
+            desired_filename.to_string(),
+            "yt1".to_string(),
+            Quality::High,
+            PathBuf::from(output_dir),
+            existing_folder.map(str::to_string),
+        )
     }
 
     fn payload_for(video_id: &str) -> String {
@@ -80,444 +682,12 @@ mod tests {
         .to_string()
     }
 
-    fn handler_with(
-        seed_video: bool,
-        downloader: FakeVideoDownloaderRepository,
-    ) -> (DownloadVideoTask, Arc<FakeVideoRepository>, Video) {
-        handler_with_files(seed_video, downloader, FakeVideoFileRepository::default()).0
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn handler_with_files(
-        seed_video: bool,
-        downloader: FakeVideoDownloaderRepository,
-        video_file_repository: FakeVideoFileRepository,
-    ) -> (
-        (DownloadVideoTask, Arc<FakeVideoRepository>, Video),
-        Arc<FakeVideoFileRepository>,
-    ) {
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
-        if seed_video {
-            video_repository.save(&video).unwrap();
-        }
-        let video_file_repository = Arc::new(video_file_repository);
-        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps(&video_repository);
-
-        let video_downloader = VideoDownloader::new(
-            video_repository.clone(),
-            Arc::new(downloader),
-            video_file_repository.clone(),
-            playlist_video_repository,
-            youtube_metadata_repository,
-            video_metadata_repository,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-
-        (
-            (
-                DownloadVideoTask::new(video_downloader),
-                video_repository,
-                video,
-            ),
-            video_file_repository,
-        )
-    }
-
-    #[test]
-    fn it_should_mark_the_video_downloaded_on_success() {
-        let (handler, video_repository, video) =
-            handler_with(true, FakeVideoDownloaderRepository::new(true));
-
-        handler
-            .handle(&payload_for(video.id.as_str()), false)
-            .unwrap();
-
-        let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(found.status, VideoStatus::Downloaded);
-        assert_eq!(found.quality, Some(Quality::High));
-        assert_eq!(
-            found.filename,
-            Some("fake-output/fake-output.mp4".to_string())
-        );
-    }
-
-    #[test]
-    fn it_should_mark_the_video_errored_retrying_when_the_download_fails_with_retries_left() {
-        let (handler, video_repository, video) =
-            handler_with(true, FakeVideoDownloaderRepository::new(false));
-
-        let result = handler.handle(&payload_for(video.id.as_str()), false);
-
-        assert!(result.is_err());
-        let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(found.status, VideoStatus::ErroredRetrying);
-        assert_eq!(found.quality, None);
-    }
-
-    #[test]
-    fn it_should_record_yt_dlps_actual_error_message_when_a_download_fails() {
-        let (handler, _video_repository, video) = handler_with(
-            true,
-            FakeVideoDownloaderRepository::with_failed_stderr("HTTP Error 403: Forbidden"),
-        );
-
-        let result = handler.handle(&payload_for(video.id.as_str()), false);
-
-        assert_eq!(result.unwrap_err().to_string(), "HTTP Error 403: Forbidden");
-    }
-
-    #[test]
-    fn it_should_mark_the_video_errored_when_the_download_fails_on_the_last_attempt() {
-        let (handler, video_repository, video) =
-            handler_with(true, FakeVideoDownloaderRepository::new(false));
-
-        let result = handler.handle(&payload_for(video.id.as_str()), true);
-
-        assert!(result.is_err());
-        let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(found.status, VideoStatus::Errored);
-        assert_eq!(found.quality, None);
-    }
-
-    #[test]
-    fn it_should_no_op_when_the_video_no_longer_exists() {
-        let (handler, _video_repository, video) =
-            handler_with(false, FakeVideoDownloaderRepository::new(true));
-
-        let result = handler.handle(&payload_for(video.id.as_str()), false);
-
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn it_should_pass_the_sanitized_title_as_the_desired_filename_to_the_downloader() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let messy_title = "My: Messy / Title?";
-        let video = Video::create(VideoId::new("yt1").unwrap(), messy_title, fixed_timestamp());
-        video_repository.save(&video).unwrap();
-        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
-        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps(&video_repository);
-
-        let video_downloader = VideoDownloader::new(
-            video_repository,
-            downloader.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            playlist_video_repository,
-            youtube_metadata_repository,
-            video_metadata_repository,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let handler = DownloadVideoTask::new(video_downloader);
-
-        handler
-            .handle(&payload_for(video.id.as_str()), false)
-            .unwrap();
-
-        let calls = downloader.calls.lock().unwrap();
-        assert_eq!(calls.len(), 1);
-        let (_, desired_filename, id, _, _, _) = &calls[0];
-        assert_eq!(
-            desired_filename,
-            VideoFilename::from_title(messy_title).as_str()
-        );
-        assert_ne!(desired_filename, messy_title);
-        assert_eq!(id, "yt1");
-    }
-
-    #[test]
-    fn it_should_pass_the_output_dir_from_the_payload_straight_through() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
-        video_repository.save(&video).unwrap();
-        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
-        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps(&video_repository);
-
-        let video_downloader = VideoDownloader::new(
-            video_repository,
-            downloader.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            playlist_video_repository,
-            youtube_metadata_repository,
-            video_metadata_repository,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let handler = DownloadVideoTask::new(video_downloader);
-
-        let payload = Task::DownloadVideo {
-            video_id: video.id.as_str().to_string(),
-            quality: "high".to_string(),
-            output_dir: "/videos/a/b/c".to_string(),
-        }
-        .payload()
-        .to_string();
-        handler.handle(&payload, false).unwrap();
-
-        let calls = downloader.calls.lock().unwrap();
-        assert_eq!(calls.len(), 1);
-        let (_, _, _, _, output_dir, _) = &calls[0];
-        assert_eq!(output_dir, std::path::Path::new("/videos/a/b/c"));
-    }
-
-    #[test]
-    fn it_should_pass_the_existing_folder_derived_from_the_thumbnail_filename() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
-            .with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
-        video_repository.save(&video).unwrap();
-        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
-        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps(&video_repository);
-
-        let video_downloader = VideoDownloader::new(
-            video_repository,
-            downloader.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            playlist_video_repository,
-            youtube_metadata_repository,
-            video_metadata_repository,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let handler = DownloadVideoTask::new(video_downloader);
-
-        handler
-            .handle(&payload_for(video.id.as_str()), false)
-            .unwrap();
-
-        let calls = downloader.calls.lock().unwrap();
-        assert_eq!(calls.len(), 1);
-        let (_, _, _, _, _, existing_folder) = &calls[0];
-        assert_eq!(existing_folder, &Some("My Video".to_string()));
-    }
-
-    #[test]
-    fn it_should_pass_no_existing_folder_when_the_video_has_no_thumbnail() {
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
-        video_repository.save(&video).unwrap();
-        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
-        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps(&video_repository);
-
-        let video_downloader = VideoDownloader::new(
-            video_repository,
-            downloader.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            playlist_video_repository,
-            youtube_metadata_repository,
-            video_metadata_repository,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let handler = DownloadVideoTask::new(video_downloader);
-
-        handler
-            .handle(&payload_for(video.id.as_str()), false)
-            .unwrap();
-
-        let calls = downloader.calls.lock().unwrap();
-        assert_eq!(calls.len(), 1);
-        let (_, _, _, _, _, existing_folder) = &calls[0];
-        assert_eq!(existing_folder, &None);
-    }
-
-    #[test]
-    fn it_should_no_op_when_the_payload_video_id_is_invalid() {
-        let (handler, video_repository, video) =
-            handler_with(true, FakeVideoDownloaderRepository::new(true));
-
-        handler.handle(&payload_for(""), false).unwrap();
-
-        let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(found.status, VideoStatus::Pending);
-    }
-
-    #[test]
-    fn it_should_reject_a_malformed_payload() {
-        let (handler, _video_repository, _video) =
-            handler_with(true, FakeVideoDownloaderRepository::new(true));
-
-        assert!(handler.handle("not json", false).is_err());
-    }
-
-    #[test]
-    fn it_should_record_the_thumbnail_filename_when_one_was_written() {
-        let ((handler, video_repository, video), _files) = handler_with_files(
-            true,
-            FakeVideoDownloaderRepository::new(true),
-            FakeVideoFileRepository::with_listing(vec!["fake-output.jpg".to_string()]),
-        );
-
-        handler
-            .handle(&payload_for(video.id.as_str()), false)
-            .unwrap();
-
-        let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(
-            found.thumbnail_filename,
-            Some("fake-output/fake-output.jpg".to_string())
-        );
-    }
-
-    #[test]
-    fn it_should_record_no_thumbnail_filename_when_none_was_written() {
-        let ((handler, video_repository, video), _files) = handler_with_files(
-            true,
-            FakeVideoDownloaderRepository::new(true),
-            FakeVideoFileRepository::with_listing(Vec::new()),
-        );
-
-        handler
-            .handle(&payload_for(video.id.as_str()), false)
-            .unwrap();
-
-        let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(found.thumbnail_filename, None);
-    }
-
-    #[test]
-    fn it_should_record_the_duration_reported_by_the_downloader() {
-        let (handler, video_repository, video) =
-            handler_with(true, FakeVideoDownloaderRepository::with_duration(223));
-
-        handler
-            .handle(&payload_for(video.id.as_str()), false)
-            .unwrap();
-
-        let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(found.duration_seconds, Some(223));
-    }
-
-    #[test]
-    fn it_should_record_no_duration_when_the_downloader_reports_none() {
-        let (handler, video_repository, video) =
-            handler_with(true, FakeVideoDownloaderRepository::new(true));
-
-        handler
-            .handle(&payload_for(video.id.as_str()), false)
-            .unwrap();
-
-        let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(found.duration_seconds, None);
-    }
-
-    #[test]
-    fn it_should_save_video_metadata_when_the_youtube_metadata_fetch_succeeds() {
-        use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadata;
-
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
-        video_repository.save(&video).unwrap();
-        let video_metadata_repository = Arc::new(FakeVideoMetadataRepository::default());
-        let youtube_metadata_repository = Arc::new(FakeYoutubeMetadataRepository {
-            metadata: Some(YoutubeMetadata {
-                title: "My Video".to_string(),
-                description: "A description".to_string(),
-                channel_title: "My Channel".to_string(),
-                published_at: fixed_timestamp(),
-                tags: Vec::new(),
-                category_id: None,
-            }),
-        });
-
-        let video_downloader = VideoDownloader::new(
-            video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::new(true)),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
-            youtube_metadata_repository,
-            video_metadata_repository.clone(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let handler = DownloadVideoTask::new(video_downloader);
-
-        handler
-            .handle(&payload_for(video.id.as_str()), false)
-            .unwrap();
-
-        let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(found.status, VideoStatus::Downloaded);
-        assert!(
-            video_metadata_repository
-                .entries
-                .lock()
-                .unwrap()
-                .iter()
-                .any(|(id, _)| *id == video.id)
-        );
-    }
-
-    #[test]
-    fn it_should_still_mark_the_video_downloaded_and_save_no_metadata_when_the_youtube_metadata_fetch_fails()
-     {
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
-        video_repository.save(&video).unwrap();
-        let video_metadata_repository = Arc::new(FakeVideoMetadataRepository::default());
-
-        let video_downloader = VideoDownloader::new(
-            video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::new(true)),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakePlaylistVideoRepository::new(video_repository.clone())),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            video_metadata_repository.clone(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let handler = DownloadVideoTask::new(video_downloader);
-
-        handler
-            .handle(&payload_for(video.id.as_str()), false)
-            .unwrap();
-
-        let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(found.status, VideoStatus::Downloaded);
-        assert!(video_metadata_repository.entries.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn it_should_detect_a_real_thumbnail_file_written_by_yt_dlp_alongside_the_video() {
-        use crate::infrastructure::repositories::filesystem_video_file_repository::FilesystemVideoFileRepository;
-        use crate::infrastructure::repositories::youtube_video_downloader_repository::YtDlpVideoDownloaderRepository;
-        use crate::infrastructure::shared::ytdlp::test_support::{FakeYtDlp, unique_temp_dir};
-
-        let output_dir = unique_temp_dir("download-video-task-thumbnail-e2e");
-        let fake =
-            FakeYtDlp::with_downloaded_files("My Video.mp4", &["My Video.mp4", "My Video.jpg"]);
-        let video_repository = Arc::new(FakeVideoRepository::default());
-        let video = Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp());
-        video_repository.save(&video).unwrap();
-        let (playlist_video_repository, youtube_metadata_repository, video_metadata_repository) =
-            fake_metadata_deps(&video_repository);
-
-        let video_downloader = VideoDownloader::new(
-            video_repository.clone(),
-            Arc::new(YtDlpVideoDownloaderRepository::new(fake.path.clone())),
-            Arc::new(FilesystemVideoFileRepository),
-            playlist_video_repository,
-            youtube_metadata_repository,
-            video_metadata_repository,
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-        let handler = DownloadVideoTask::new(video_downloader);
-
-        let payload = Task::DownloadVideo {
-            video_id: video.id.as_str().to_string(),
-            quality: "high".to_string(),
-            output_dir: output_dir.to_string_lossy().to_string(),
-        }
-        .payload()
-        .to_string();
-        handler.handle(&payload, false).unwrap();
-
-        let found = video_repository.find(&video.id).unwrap().unwrap();
-        assert_eq!(found.filename, Some("My Video/My Video.mp4".to_string()));
-        assert_eq!(
-            found.thumbnail_filename,
-            Some("My Video/My Video.jpg".to_string())
-        );
-        std::fs::remove_dir_all(&output_dir).unwrap();
+    fn run(task: &DownloadVideoTask, payload: &str, is_last_attempt: bool) -> Result<(), String> {
+        task.handle(payload, is_last_attempt)
+            .map_err(|e| e.to_string())
     }
 }
