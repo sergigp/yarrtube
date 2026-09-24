@@ -3,7 +3,7 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use crate::domain::channel::ChannelHandle;
-use crate::domain::services::VideoSearcher;
+use crate::domain::services::{VideoSearcher, VideoSearcherApi};
 use crate::domain::shared::PlaylistId;
 use crate::domain::video::ListVideosError;
 use axum::Json;

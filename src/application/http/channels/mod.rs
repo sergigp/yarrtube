@@ -3,12 +3,12 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::{MISSING_QUALITY, required};
-use crate::domain::channel::{
-    ChannelHandle, ChannelService, CreateChannelError, CreateChannelOutcome, DeleteChannelError,
-    VideoLimit,
-};
+use crate::domain::channel::{ChannelHandle, CreateChannelError, DeleteChannelError, VideoLimit};
 use crate::domain::playlist::PlaylistPath;
-use crate::domain::services::ChannelVideoReconciler;
+use crate::domain::services::{
+    ChannelCreator, ChannelCreatorApi, ChannelDeleter, ChannelDeleterApi, ChannelSearcher,
+    ChannelSearcherApi, ChannelVideoReconciler, ChannelVideoReconcilerApi, CreateChannelOutcome,
+};
 use crate::domain::shared::Quality;
 use axum::Json;
 use axum::extract::{Path, State};
@@ -19,7 +19,7 @@ const MISSING_VIDEO_LIMIT: &str = "Video limit must be a positive integer (missi
 const MISSING_PATH: &str = "Channel path must not be empty";
 
 pub async fn create_channel(
-    State(channel_service): State<ChannelService>,
+    State(channel_creator): State<ChannelCreator>,
     Json(request): Json<CreateChannelRequest>,
 ) -> Result<(StatusCode, Json<ChannelResponse>), ApiError> {
     let id = ChannelHandle::from_url_or_handle(request.channel.unwrap_or_default())?;
@@ -28,8 +28,7 @@ pub async fn create_channel(
     let path = PlaylistPath::new(required(request.path, MISSING_PATH)?)?;
 
     let outcome =
-        run_blocking(move || channel_service.create_channel(id, quality, video_limit, path))
-            .await?;
+        run_blocking(move || channel_creator.create(id, quality, video_limit, path)).await?;
 
     match outcome {
         Ok(CreateChannelOutcome::Created(channel)) => {
@@ -45,12 +44,12 @@ pub async fn create_channel(
 }
 
 pub async fn delete_channel(
-    State(channel_service): State<ChannelService>,
+    State(channel_deleter): State<ChannelDeleter>,
     Path(handle): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     let id = ChannelHandle::new(handle)?;
 
-    match run_blocking(move || channel_service.delete_channel(id)).await? {
+    match run_blocking(move || channel_deleter.delete(id)).await? {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e @ DeleteChannelError::NotFound(_)) => Err(ApiError::bad_request(e)),
         Err(e @ DeleteChannelError::Repository(_)) => Err(ApiError::internal(e)),
@@ -58,9 +57,9 @@ pub async fn delete_channel(
 }
 
 pub async fn list_channels(
-    State(channel_service): State<ChannelService>,
+    State(channel_searcher): State<ChannelSearcher>,
 ) -> Result<Json<Vec<ChannelResponse>>, ApiError> {
-    let channels = run_blocking(move || channel_service.list_channels())
+    let channels = run_blocking(move || channel_searcher.search_all())
         .await?
         .map_err(ApiError::internal)?;
     Ok(Json(
@@ -131,17 +130,15 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
-        let service = ChannelService::new(
+        let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
             Arc::new(FakeChannelAvatarRepository::default()),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let response = create(service, create_request("@somechannel")).await;
+        let response = create(channel_creator, create_request("@somechannel")).await;
 
         assert_eq!(response, Ok((StatusCode::CREATED, some_channel_response())));
         assert_eq!(
@@ -159,18 +156,16 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
-        let service = ChannelService::new(
+        let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
             Arc::new(FakeChannelAvatarRepository::default()),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
         let response = create(
-            service,
+            channel_creator,
             create_request("https://www.youtube.com/@somechannel"),
         )
         .await;
@@ -192,17 +187,15 @@ mod tests {
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
         let event_repository = SqliteEventRepository::new(db.shared_connection());
-        let service = ChannelService::new(
+        let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel_with_avatar())),
             avatar_repository.clone(),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let response = create(service, create_request("@somechannel")).await;
+        let response = create(channel_creator, create_request("@somechannel")).await;
 
         assert_eq!(
             response,
@@ -236,17 +229,15 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
-        let service = ChannelService::new(
+        let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
             avatar_repository.clone(),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let response = create(service, create_request("@somechannel")).await;
+        let response = create(channel_creator, create_request("@somechannel")).await;
 
         assert_eq!(response, Ok((StatusCode::CREATED, some_channel_response())));
         assert_eq!(
@@ -261,17 +252,15 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::unavailable());
-        let service = ChannelService::new(
+        let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel_with_avatar())),
             avatar_repository.clone(),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let response = create(service, create_request("@somechannel")).await;
+        let response = create(channel_creator, create_request("@somechannel")).await;
 
         assert_eq!(response, Ok((StatusCode::CREATED, some_channel_response())));
         assert_eq!(
@@ -287,17 +276,15 @@ mod tests {
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::failing());
         let event_repository = SqliteEventRepository::new(db.shared_connection());
-        let service = ChannelService::new(
+        let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel_with_avatar())),
             avatar_repository.clone(),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let response = create(service, create_request("@somechannel")).await;
+        let response = create(channel_creator, create_request("@somechannel")).await;
 
         assert_eq!(response, Ok((StatusCode::CREATED, some_channel_response())));
         assert_eq!(
@@ -317,12 +304,10 @@ mod tests {
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let service = ChannelService::new(
+        let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
             Arc::new(FakeChannelAvatarRepository::default()),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -333,7 +318,7 @@ mod tests {
             ..create_request("@somechannel")
         };
 
-        let response = create(service, request).await;
+        let response = create(channel_creator, request).await;
 
         assert_eq!(response, Ok((StatusCode::OK, some_channel_response())));
         assert_eq!(
@@ -348,12 +333,10 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
-        let service = ChannelService::new(
+        let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
             Arc::new(FakeChannelAvatarRepository::default()),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -363,10 +346,10 @@ mod tests {
             ..create_request("@somechannel")
         };
 
-        create(service.clone(), create_request("@somechannel"))
+        create(channel_creator.clone(), create_request("@somechannel"))
             .await
             .unwrap();
-        create(service, repeated_request).await.unwrap();
+        create(channel_creator, repeated_request).await.unwrap();
 
         assert_eq!(
             channel_repository.list().unwrap(),
@@ -385,7 +368,7 @@ mod tests {
             ..create_request("@somechannel")
         };
 
-        let response = create(any_channel_service(), request).await;
+        let response = create(any_channel_creator(), request).await;
 
         assert_eq!(
             response,
@@ -397,7 +380,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_fail_to_create_if_invalid_channel_provided() {
-        let response = create(any_channel_service(), create_request("somechannel")).await;
+        let response = create(any_channel_creator(), create_request("somechannel")).await;
 
         assert_eq!(
             response,
@@ -414,7 +397,7 @@ mod tests {
             ..create_request("@somechannel")
         };
 
-        let response = create(any_channel_service(), request).await;
+        let response = create(any_channel_creator(), request).await;
 
         assert_eq!(
             response,
@@ -431,7 +414,7 @@ mod tests {
             ..create_request("@somechannel")
         };
 
-        let response = create(any_channel_service(), request).await;
+        let response = create(any_channel_creator(), request).await;
 
         assert_eq!(
             response,
@@ -448,7 +431,7 @@ mod tests {
             ..create_request("@somechannel")
         };
 
-        let response = create(any_channel_service(), request).await;
+        let response = create(any_channel_creator(), request).await;
 
         assert_eq!(
             response,
@@ -461,17 +444,15 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
-        let service = ChannelService::new(
+        let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(None),
             Arc::new(FakeChannelAvatarRepository::default()),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let response = create(service, create_request("@missing")).await;
+        let response = create(channel_creator, create_request("@missing")).await;
 
         assert_eq!(
             response,
@@ -488,17 +469,15 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
-        let service = ChannelService::new(
+        let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             Arc::new(FailingYoutubeChannelRepository),
             Arc::new(FakeChannelAvatarRepository::default()),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let response = create(service, create_request("@somechannel")).await;
+        let response = create(channel_creator, create_request("@somechannel")).await;
 
         assert_eq!(
             response,
@@ -518,17 +497,15 @@ mod tests {
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
         let event_repository = SqliteEventRepository::new(db.shared_connection());
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let service = ChannelService::new(
+        let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
-            resolving(Some(resolved_channel())),
-            avatar_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            avatar_repository.clone(),
             event_publisher(&db),
-            Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let response = delete(service, "@somechannel").await;
+        let response = delete(channel_deleter, "@somechannel").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(channel_repository.list().unwrap(), vec![]);
@@ -570,17 +547,15 @@ mod tests {
             "yt3",
             0,
         );
-        let service = ChannelService::new(
+        let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
-            resolving(Some(resolved_channel())),
-            Arc::new(FakeChannelAvatarRepository::default()),
             video_repository.clone(),
             channel_video_repository.clone(),
+            Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
-            Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let response = delete(service, "@somechannel").await;
+        let response = delete(channel_deleter, "@somechannel").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(
@@ -616,17 +591,15 @@ mod tests {
                 ..channel("@somechannel")
             })
             .unwrap();
-        let service = ChannelService::new(
+        let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
-            resolving(Some(resolved_channel())),
-            avatar_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            avatar_repository.clone(),
             event_publisher(&db),
-            Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let response = delete(service, "@somechannel").await;
+        let response = delete(channel_deleter, "@somechannel").await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(channel_repository.list().unwrap(), vec![]);
@@ -645,17 +618,15 @@ mod tests {
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let event_repository = SqliteEventRepository::new(db.shared_connection());
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let service = ChannelService::new(
+        let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
-            resolving(Some(resolved_channel())),
-            Arc::new(FakeChannelAvatarRepository::default()),
             Arc::new(SqliteVideoRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
-            Arc::new(FixedClock(fixed_timestamp())),
         );
 
-        let response = delete(service, "@missing").await;
+        let response = delete(channel_deleter, "@missing").await;
 
         assert_eq!(
             response,
@@ -670,7 +641,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_fail_to_delete_if_invalid_handle_provided() {
-        let response = delete(any_channel_service(), "noatsign").await;
+        let response = delete(any_channel_deleter(), "noatsign").await;
 
         assert_eq!(
             response,
@@ -683,17 +654,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_no_channels() {
         let db = TestDatabase::new();
-        let service = ChannelService::new(
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            resolving(Some(resolved_channel())),
-            Arc::new(FakeChannelAvatarRepository::default()),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
-            event_publisher(&db),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
+        let channel_searcher =
+            ChannelSearcher::new(Arc::new(SqliteChannelRepository::new(db.connection())));
 
-        let response = list(service).await;
+        let response = list(channel_searcher).await;
 
         assert_eq!(response, Ok(vec![]));
     }
@@ -703,17 +667,9 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let service = ChannelService::new(
-            channel_repository,
-            resolving(Some(resolved_channel())),
-            Arc::new(FakeChannelAvatarRepository::default()),
-            Arc::new(SqliteVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
-            event_publisher(&db),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
+        let channel_searcher = ChannelSearcher::new(channel_repository);
 
-        let response = list(service).await;
+        let response = list(channel_searcher).await;
 
         assert_eq!(response, Ok(vec![some_channel_response()]));
     }
@@ -921,21 +877,28 @@ mod tests {
         );
     }
 
-    /// A service for tests whose request is rejected before reaching it. Its
+    /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
-    fn any_channel_service() -> ChannelService {
-        ChannelService::new(
+    fn any_channel_creator() -> ChannelCreator {
+        ChannelCreator::new(
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             resolving(Some(resolved_channel())),
             Arc::new(FakeChannelAvatarRepository::default()),
+            unused_event_publisher(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )
+    }
+
+    /// A deleter for tests whose request is rejected before reaching it (see
+    /// `any_channel_creator`).
+    fn any_channel_deleter() -> ChannelDeleter {
+        ChannelDeleter::new(
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
             Arc::new(SqliteVideoRepository::new(unused_connection())),
             Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
-            Arc::new(SqliteEventPublisher::new(
-                Arc::new(std::sync::Mutex::new(unused_connection())),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            unused_event_publisher(),
         )
     }
 
@@ -981,10 +944,7 @@ mod tests {
             Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
-            Arc::new(SqliteEventPublisher::new(
-                Arc::new(std::sync::Mutex::new(unused_connection())),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
+            unused_event_publisher(),
             Arc::new(SqliteTaskRepository::new(
                 Arc::new(std::sync::Mutex::new(unused_connection())),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -1011,6 +971,13 @@ mod tests {
 
     fn unused_connection() -> Connection {
         Connection::open_in_memory().unwrap()
+    }
+
+    fn unused_event_publisher() -> Arc<SqliteEventPublisher> {
+        Arc::new(SqliteEventPublisher::new(
+            Arc::new(std::sync::Mutex::new(unused_connection())),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ))
     }
 
     fn event_publisher(db: &TestDatabase) -> Arc<SqliteEventPublisher> {
@@ -1148,20 +1115,23 @@ mod tests {
     }
 
     async fn create(
-        service: ChannelService,
+        channel_creator: ChannelCreator,
         request: CreateChannelRequest,
     ) -> Result<(StatusCode, ChannelResponse), ApiError> {
-        create_channel(State(service), Json(request))
+        create_channel(State(channel_creator), Json(request))
             .await
             .map(|(status, Json(channel))| (status, channel))
     }
 
-    async fn delete(service: ChannelService, channel_handle: &str) -> Result<StatusCode, ApiError> {
-        delete_channel(State(service), Path(channel_handle.to_string())).await
+    async fn delete(
+        channel_deleter: ChannelDeleter,
+        channel_handle: &str,
+    ) -> Result<StatusCode, ApiError> {
+        delete_channel(State(channel_deleter), Path(channel_handle.to_string())).await
     }
 
-    async fn list(service: ChannelService) -> Result<Vec<ChannelResponse>, ApiError> {
-        list_channels(State(service))
+    async fn list(channel_searcher: ChannelSearcher) -> Result<Vec<ChannelResponse>, ApiError> {
+        list_channels(State(channel_searcher))
             .await
             .map(|Json(channels)| channels)
     }

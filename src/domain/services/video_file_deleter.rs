@@ -24,7 +24,9 @@ impl VideoFileDeleter {
             videos_path: videos_path.into(),
         }
     }
+}
 
+pub trait VideoFileDeleterApi: Send + Sync {
     /// Deletes a removed video's downloaded file, and its thumbnail file if
     /// any, from disk, scheduled by
     /// `subscribers::delete_video_file_on_video_removed_from_playlist`/
@@ -37,7 +39,37 @@ impl VideoFileDeleter {
     /// exactly as before. No-ops (without erroring) for either entry it has
     /// no recorded filename for, or no matching entry is found, so the task
     /// is safe to retry.
-    pub fn delete_video_file(
+    fn delete_video_file(
+        &self,
+        filename: Option<String>,
+        thumbnail_filename: Option<String>,
+        output_dir: &Path,
+    ) -> anyhow::Result<()>;
+
+    /// Recursively deletes a deleted playlist's output directory from disk,
+    /// scheduled by `subscribers::delete_playlist_files_on_playlist_deleted`
+    /// whenever a playlist is deleted. The playlist row is already gone by
+    /// the time this runs, so `path` travels with the task instead of being
+    /// looked up. Safe to do unconditionally because playlist paths are
+    /// unique, so nothing else lives at that path.
+    fn delete_playlist_video_files(
+        &self,
+        playlist_id: PlaylistId,
+        path: String,
+    ) -> anyhow::Result<()>;
+
+    /// Recursively deletes a deleted channel's output directory from disk,
+    /// scheduled by `subscribers::delete_channel_files_on_channel_deleted`
+    /// whenever a channel is deleted. Mirrors `delete_playlist_video_files`.
+    fn delete_channel_video_files(
+        &self,
+        channel_id: ChannelHandle,
+        path: String,
+    ) -> anyhow::Result<()>;
+}
+
+impl VideoFileDeleterApi for VideoFileDeleter {
+    fn delete_video_file(
         &self,
         filename: Option<String>,
         thumbnail_filename: Option<String>,
@@ -75,13 +107,7 @@ impl VideoFileDeleter {
         Ok(())
     }
 
-    /// Recursively deletes a deleted playlist's output directory from disk,
-    /// scheduled by `subscribers::delete_playlist_files_on_playlist_deleted`
-    /// whenever a playlist is deleted. The playlist row is already gone by
-    /// the time this runs, so `path` travels with the task instead of being
-    /// looked up. Safe to do unconditionally because playlist paths are
-    /// unique, so nothing else lives at that path.
-    pub fn delete_playlist_video_files(
+    fn delete_playlist_video_files(
         &self,
         playlist_id: PlaylistId,
         path: String,
@@ -93,10 +119,7 @@ impl VideoFileDeleter {
         Ok(())
     }
 
-    /// Recursively deletes a deleted channel's output directory from disk,
-    /// scheduled by `subscribers::delete_channel_files_on_channel_deleted`
-    /// whenever a channel is deleted. Mirrors `delete_playlist_video_files`.
-    pub fn delete_channel_video_files(
+    fn delete_channel_video_files(
         &self,
         channel_id: ChannelHandle,
         path: String,

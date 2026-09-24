@@ -34,10 +34,25 @@ impl VideoSearcher {
             video_repository,
         }
     }
+}
 
+pub trait VideoSearcherApi: Send + Sync {
     /// Lists every video recorded for a playlist, confirming the playlist
     /// exists first, ordered by playlist position.
-    pub fn list(&self, playlist_id: &PlaylistId) -> Result<Vec<Video>, ListVideosError> {
+    fn list(&self, playlist_id: &PlaylistId) -> Result<Vec<Video>, ListVideosError>;
+
+    /// Lists every video recorded for a channel, confirming the channel
+    /// exists first, ordered by recency (most recent first).
+    fn list_for_channel(&self, channel_id: &ChannelHandle) -> Result<Vec<Video>, ListVideosError>;
+
+    /// Lists downloaded videos across every tracked playlist and channel,
+    /// newest sync first, truncated to `limit`. A video tracked by more than
+    /// one source appears once per source.
+    fn list_recent(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
+}
+
+impl VideoSearcherApi for VideoSearcher {
+    fn list(&self, playlist_id: &PlaylistId) -> Result<Vec<Video>, ListVideosError> {
         self.playlist_repository
             .find(playlist_id)
             .map_err(ListVideosError::Repository)?
@@ -54,12 +69,7 @@ impl VideoSearcher {
             .map_err(ListVideosError::Repository)
     }
 
-    /// Lists every video recorded for a channel, confirming the channel
-    /// exists first, ordered by recency (most recent first).
-    pub fn list_for_channel(
-        &self,
-        channel_id: &ChannelHandle,
-    ) -> Result<Vec<Video>, ListVideosError> {
+    fn list_for_channel(&self, channel_id: &ChannelHandle) -> Result<Vec<Video>, ListVideosError> {
         self.channel_repository
             .find(channel_id)
             .map_err(ListVideosError::Repository)?
@@ -76,10 +86,7 @@ impl VideoSearcher {
             .map_err(ListVideosError::Repository)
     }
 
-    /// Lists downloaded videos across every tracked playlist and channel,
-    /// newest sync first, truncated to `limit`. A video tracked by more than
-    /// one source appears once per source.
-    pub fn list_recent(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
+    fn list_recent(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
         let mut recent = self.recent_from_playlists()?;
         recent.extend(self.recent_from_channels()?);
 
@@ -87,7 +94,9 @@ impl VideoSearcher {
         recent.truncate(limit);
         Ok(recent)
     }
+}
 
+impl VideoSearcher {
     fn recent_from_playlists(&self) -> Result<Vec<RecentVideo>, ListVideosError> {
         let playlists = self
             .playlist_repository

@@ -42,15 +42,23 @@ impl TaskViewSearcher {
             channel_video_repository,
         }
     }
+}
 
-    pub fn search_all_pending(&self) -> anyhow::Result<Vec<TaskView>> {
+pub trait TaskViewSearcherApi: Send + Sync {
+    fn search_all_pending(&self) -> anyhow::Result<Vec<TaskView>>;
+}
+
+impl TaskViewSearcherApi for TaskViewSearcher {
+    fn search_all_pending(&self) -> anyhow::Result<Vec<TaskView>> {
         self.task_repository
             .list_non_completed()?
             .into_iter()
             .map(|task| self.to_view(task))
             .collect()
     }
+}
 
+impl TaskViewSearcher {
     fn to_view(&self, task: ScheduledTask) -> anyhow::Result<TaskView> {
         let payload = self.resolve_payload(&task)?;
         Ok(TaskView {

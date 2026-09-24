@@ -12,8 +12,14 @@ impl DirectorySearcher {
     pub fn new(repository: Arc<dyn DirectoryRepository>) -> Self {
         Self { repository }
     }
+}
 
-    pub fn list(&self, path: &DirectoryPath) -> Result<Directory, ListDirectoriesError> {
+pub trait DirectorySearcherApi: Send + Sync {
+    fn list(&self, path: &DirectoryPath) -> Result<Directory, ListDirectoriesError>;
+}
+
+impl DirectorySearcherApi for DirectorySearcher {
+    fn list(&self, path: &DirectoryPath) -> Result<Directory, ListDirectoriesError> {
         match self.repository.list(path) {
             Ok(Some(directory)) => Ok(directory),
             Ok(None) => Err(ListDirectoriesError::NotFound(path.clone())),

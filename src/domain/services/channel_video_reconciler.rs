@@ -1,7 +1,7 @@
 use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::DomainEvent;
-use crate::domain::services::thumbnail_fetcher::ThumbnailFetcher;
+use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
 use crate::domain::shared::{VideoId, VideoRecordId};
 use crate::domain::task::Task;
 use crate::domain::video::{
@@ -76,7 +76,52 @@ impl ChannelVideoReconciler {
             videos_path: videos_path.into(),
         }
     }
+}
 
+pub trait ChannelVideoReconcilerApi: Send + Sync {
+    /// Runs one reconcile pass for a channel and reschedules the next
+    /// recurring pass — no-ops entirely if the channel no longer exists.
+    fn reconcile(&self, id: ChannelHandle) -> anyhow::Result<()>;
+
+    /// Runs one reconcile pass for a channel immediately, on demand, without
+    /// touching the recurring reconcile schedule. No-ops entirely if the
+    /// channel no longer exists.
+    fn force_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()>;
+}
+
+impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
+    fn reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
+        let Some(channel) = self.channel_repository.find(&id)? else {
+            info!(channel_id = %id, "channel no longer exists, skipping reconcile");
+            return Ok(());
+        };
+
+        self.run_reconcile_pass(&channel)?;
+
+        let now = self.clock.now();
+        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
+        self.task_repository.schedule(
+            &Task::ReconcileChannel {
+                channel_id: id.as_str().to_string(),
+            },
+            next_run_at,
+        )?;
+        info!(channel_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of channel");
+
+        Ok(())
+    }
+
+    fn force_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
+        let Some(channel) = self.channel_repository.find(&id)? else {
+            info!(channel_id = %id, "channel no longer exists, skipping reconcile");
+            return Ok(());
+        };
+
+        self.run_reconcile_pass(&channel)
+    }
+}
+
+impl ChannelVideoReconciler {
     /// Regenerates `video`'s metadata — the channel equivalent of
     /// `PlaylistVideoReconciler::generate_metadata`. A channel-tracked video's
     /// `sorttitle` always resolves via publish date: `ChannelVideo.position`
@@ -114,41 +159,6 @@ impl ChannelVideoReconciler {
         {
             warn!(video_id = %video.id, error = %e, "failed to save video metadata during reconcile");
         }
-    }
-
-    /// Runs one reconcile pass for a channel and reschedules the next
-    /// recurring pass — no-ops entirely if the channel no longer exists.
-    pub fn reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
-        let Some(channel) = self.channel_repository.find(&id)? else {
-            info!(channel_id = %id, "channel no longer exists, skipping reconcile");
-            return Ok(());
-        };
-
-        self.run_reconcile_pass(&channel)?;
-
-        let now = self.clock.now();
-        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
-        self.task_repository.schedule(
-            &Task::ReconcileChannel {
-                channel_id: id.as_str().to_string(),
-            },
-            next_run_at,
-        )?;
-        info!(channel_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of channel");
-
-        Ok(())
-    }
-
-    /// Runs one reconcile pass for a channel immediately, on demand, without
-    /// touching the recurring reconcile schedule. No-ops entirely if the
-    /// channel no longer exists.
-    pub fn force_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
-        let Some(channel) = self.channel_repository.find(&id)? else {
-            info!(channel_id = %id, "channel no longer exists, skipping reconcile");
-            return Ok(());
-        };
-
-        self.run_reconcile_pass(&channel)
     }
 
     /// Diffs membership against YouTube, then reconciles the filesystem

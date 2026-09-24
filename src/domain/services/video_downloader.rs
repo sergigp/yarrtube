@@ -53,56 +53,23 @@ impl VideoDownloader {
             clock,
         }
     }
+}
 
-    /// Fetches `video`'s YouTube metadata, resolves its `sorttitle`, and
-    /// saves its `movie.nfo` — see design.md's "Failure handling: skip the
-    /// save entirely, never fail the download" decision. Any failure
-    /// anywhere in this sequence (the YouTube fetch, the playlist-position
-    /// lookup, or the save itself) is logged and swallowed rather than
-    /// propagated: metadata generation never fails or retries the download
-    /// itself, and a skipped/failed attempt self-heals on the next
-    /// reconcile pass (see `PlaylistVideoReconciler`/`ChannelVideoReconciler`).
-    fn generate_metadata(&self, video: &Video, video_dir: &Path, thumbnail_filename: Option<&str>) {
-        let metadata = match self.youtube_metadata_repository.find(&video.youtube_id) {
-            Ok(Some(metadata)) => metadata,
-            Ok(None) => {
-                warn!(video_id = %video.id, "no YouTube metadata found for video, skipping metadata generation");
-                return;
-            }
-            Err(e) => {
-                warn!(video_id = %video.id, error = %e, "failed to fetch YouTube metadata, skipping metadata generation");
-                return;
-            }
-        };
-
-        let playlist_position = match self.playlist_video_repository.find_by_video(&video.id) {
-            Ok(playlist_video) => playlist_video.and_then(|pv| pv.position),
-            Err(e) => {
-                warn!(video_id = %video.id, error = %e, "failed to look up playlist position, falling back to publish-date sorttitle");
-                None
-            }
-        };
-        let sorttitle =
-            resolve_sorttitle(&metadata.title, metadata.published_at, playlist_position);
-        let video_metadata = build_video_metadata(
-            &video.youtube_id,
-            &metadata,
-            sorttitle,
-            thumbnail_filename.map(str::to_string),
-        );
-
-        if let Err(e) = self
-            .video_metadata_repository
-            .save(&video.id, &video_metadata, video_dir)
-        {
-            warn!(video_id = %video.id, error = %e, "failed to save video metadata");
-        }
-    }
-
+pub trait VideoDownloaderApi: Send + Sync {
     /// No-ops (without touching status) if the video no longer exists,
     /// since that means the download no longer needs to happen. Returns
     /// `Err` on a failed download so the task queue retries/dead-letters it.
-    pub fn download(
+    fn download(
+        &self,
+        video_id: VideoRecordId,
+        quality: Quality,
+        output_dir: &Path,
+        is_last_attempt: bool,
+    ) -> anyhow::Result<()>;
+}
+
+impl VideoDownloaderApi for VideoDownloader {
+    fn download(
         &self,
         video_id: VideoRecordId,
         quality: Quality,
@@ -178,6 +145,53 @@ impl VideoDownloader {
                 error!(video_id = %video_id, error = %e, "video download errored");
                 Err(e)
             }
+        }
+    }
+}
+
+impl VideoDownloader {
+    /// Fetches `video`'s YouTube metadata, resolves its `sorttitle`, and
+    /// saves its `movie.nfo` — see design.md's "Failure handling: skip the
+    /// save entirely, never fail the download" decision. Any failure
+    /// anywhere in this sequence (the YouTube fetch, the playlist-position
+    /// lookup, or the save itself) is logged and swallowed rather than
+    /// propagated: metadata generation never fails or retries the download
+    /// itself, and a skipped/failed attempt self-heals on the next
+    /// reconcile pass (see `PlaylistVideoReconciler`/`ChannelVideoReconciler`).
+    fn generate_metadata(&self, video: &Video, video_dir: &Path, thumbnail_filename: Option<&str>) {
+        let metadata = match self.youtube_metadata_repository.find(&video.youtube_id) {
+            Ok(Some(metadata)) => metadata,
+            Ok(None) => {
+                warn!(video_id = %video.id, "no YouTube metadata found for video, skipping metadata generation");
+                return;
+            }
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to fetch YouTube metadata, skipping metadata generation");
+                return;
+            }
+        };
+
+        let playlist_position = match self.playlist_video_repository.find_by_video(&video.id) {
+            Ok(playlist_video) => playlist_video.and_then(|pv| pv.position),
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to look up playlist position, falling back to publish-date sorttitle");
+                None
+            }
+        };
+        let sorttitle =
+            resolve_sorttitle(&metadata.title, metadata.published_at, playlist_position);
+        let video_metadata = build_video_metadata(
+            &video.youtube_id,
+            &metadata,
+            sorttitle,
+            thumbnail_filename.map(str::to_string),
+        );
+
+        if let Err(e) = self
+            .video_metadata_repository
+            .save(&video.id, &video_metadata, video_dir)
+        {
+            warn!(video_id = %video.id, error = %e, "failed to save video metadata");
         }
     }
 }

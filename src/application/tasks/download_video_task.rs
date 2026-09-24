@@ -1,4 +1,4 @@
-use crate::domain::services::VideoDownloader;
+use crate::domain::services::{VideoDownloader, VideoDownloaderApi};
 use crate::domain::shared::{Quality, VideoRecordId};
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::task_handler::TaskHandler;

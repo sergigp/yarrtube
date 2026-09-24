@@ -72,6 +72,42 @@ src/
 - Business-meaningful outcomes that look like they belong in the repository (e.g. "was this newly created, or did it already exist?") are decided in the domain service, not returned by infra: call `find`, branch on `Some`/`None`, then call `insert`/`save`. This trades DB-level atomicity for keeping business logic out of infra, a known, accepted race window, not an oversight.
 - State transitions live on the entity, never as behavior-named repository methods or as anemic domain models operated from domain service. We prefer immutable state transitions: a transition method takes `self` by value and returns a new `Self` (via struct-update syntax, `Self { field: new_value, ..self }`) rather than mutating `&mut self`. Name such a method `with_<field>` when it simply sets one field (e.g. `with_thumbnail`); reserve a verb-based name (`mark_downloaded`, `start_download`, `reset_for_redownload`) for a transition that carries additional domain meaning beyond "set this field".
 - **Fn ordering**: within any `impl` block, and among free functions in a file, order is: `new` (if it exists), then every `pub` method or trait-impl method (trait-impl methods are the type's public surface even without the `pub` keyword), then private/helper methods. This applies uniformly, no exceptions — including repositories' `row_to_*` mapping helpers, which go after the trait-impl methods they support, not before.
+- **Domain service layout**: every domain service file is laid out in four blocks, top to bottom, so a reader meets the contract before the implementation:
+  1. The struct holding its dependencies, followed by an inherent `impl` with **only** `new`.
+  2. The service's interface: a `pub trait <Service>Api: Send + Sync` declaring every public operation (doc comments describing the contract go here, on the trait method, not on the impl).
+  3. `impl <Service>Api for <Service>` with the implementation of those operations.
+  4. A second inherent `impl <Service>` holding every private helper, never `pub`.
+
+  Callers keep depending on the concrete service type (`State<PlaylistCreator>`, `video_downloader: VideoDownloader`) and just `use` the `…Api` trait to call it; the trait exists to make the contract readable, not to add dynamic dispatch. Supporting types the service returns (e.g. an outcome enum) and constants go above the struct.
+
+  ```rust
+  pub struct WidgetCreator {
+      repository: Arc<dyn WidgetRepository>,
+  }
+
+  impl WidgetCreator {
+      pub fn new(repository: Arc<dyn WidgetRepository>) -> Self {
+          Self { repository }
+      }
+  }
+
+  pub trait WidgetCreatorApi: Send + Sync {
+      fn create(&self, id: WidgetId) -> Result<Widget, CreateWidgetError>;
+  }
+
+  impl WidgetCreatorApi for WidgetCreator {
+      fn create(&self, id: WidgetId) -> Result<Widget, CreateWidgetError> {
+          self.ensure_absent(&id)?;
+          // ...
+      }
+  }
+
+  impl WidgetCreator {
+      fn ensure_absent(&self, id: &WidgetId) -> Result<(), CreateWidgetError> {
+          // ...
+      }
+  }
+  ```
 - Domain services are call-agnostic: they know nothing about HTTP, CLI, subscribers, or tasks. Adapting any external trigger into a domain call — parsing/validating input, invoking the domain service, mapping its result back — is the application layer's sole responsibility.
 
 ## HTTP Handlers

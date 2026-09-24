@@ -1,4 +1,4 @@
-use crate::domain::services::PlaylistVideoReconciler;
+use crate::domain::services::{PlaylistVideoReconciler, PlaylistVideoReconcilerApi};
 use crate::domain::shared::PlaylistId;
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::task_handler::TaskHandler;

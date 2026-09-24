@@ -1,5 +1,5 @@
 use crate::domain::channel::ChannelHandle;
-use crate::domain::services::ChannelVideoReconciler;
+use crate::domain::services::{ChannelVideoReconciler, ChannelVideoReconcilerApi};
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use serde::Deserialize;
 

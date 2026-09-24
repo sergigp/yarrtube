@@ -7,8 +7,9 @@ use crate::domain::playlist::{
     CreatePlaylistError, DeletePlaylistError, PlaylistName, PlaylistPath,
 };
 use crate::domain::services::{
-    CreatePlaylistOutcome, PlaylistCreator, PlaylistDeleter, PlaylistSearcher,
-    PlaylistVideoReconciler,
+    CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi, PlaylistDeleter,
+    PlaylistDeleterApi, PlaylistSearcher, PlaylistSearcherApi, PlaylistVideoReconciler,
+    PlaylistVideoReconcilerApi,
 };
 use crate::domain::shared::{PlaylistId, Quality};
 use axum::Json;

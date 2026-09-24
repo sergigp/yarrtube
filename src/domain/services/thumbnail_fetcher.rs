@@ -35,7 +35,9 @@ impl ThumbnailFetcher {
             clock,
         }
     }
+}
 
+pub trait ThumbnailFetcherApi: Send + Sync {
     /// No-ops if `video` already has a recorded thumbnail. Otherwise fetches
     /// one into `output_dir` and persists it via `Video::with_thumbnail` on
     /// success; any failure (a clean "no thumbnail available" outcome, or a
@@ -44,7 +46,27 @@ impl ThumbnailFetcher {
     /// `filename` (e.g. a missing-thumbnail recovery pass running against a
     /// video whose full download already ran) — that folder is reused
     /// verbatim instead of resolving a fresh, collision-suffixed one.
-    pub fn fetch(&self, video: &Video, output_dir: &Path) {
+    fn fetch(&self, video: &Video, output_dir: &Path);
+
+    /// Missing-thumbnail recovery pass over `videos`, shared by both
+    /// reconcilers' `reconcile_filesystem`. Skips a video with no
+    /// thumbnail if it's in `skip_ids` (just reset for redownload this same
+    /// pass — see `fetch`'s own reasons this must not run for it) or if its
+    /// real download is currently `InProgress` (a concurrent `DownloadVideo`
+    /// task owns its not-yet-recorded output folder; fetching now would
+    /// resolve `existing_folder` to `None` and collide with it, spawning a
+    /// stray sibling folder that then gets permanently protected from the
+    /// orphan sweep).
+    fn fetch_missing(
+        &self,
+        videos: &[Video],
+        skip_ids: &HashSet<&VideoRecordId>,
+        output_dir: &Path,
+    );
+}
+
+impl ThumbnailFetcherApi for ThumbnailFetcher {
+    fn fetch(&self, video: &Video, output_dir: &Path) {
         if video.thumbnail_filename.is_some() {
             return;
         }
@@ -78,16 +100,7 @@ impl ThumbnailFetcher {
         }
     }
 
-    /// Missing-thumbnail recovery pass over `videos`, shared by both
-    /// reconcilers' `reconcile_filesystem`. Skips a video with no
-    /// thumbnail if it's in `skip_ids` (just reset for redownload this same
-    /// pass — see `fetch`'s own reasons this must not run for it) or if its
-    /// real download is currently `InProgress` (a concurrent `DownloadVideo`
-    /// task owns its not-yet-recorded output folder; fetching now would
-    /// resolve `existing_folder` to `None` and collide with it, spawning a
-    /// stray sibling folder that then gets permanently protected from the
-    /// orphan sweep).
-    pub fn fetch_missing(
+    fn fetch_missing(
         &self,
         videos: &[Video],
         skip_ids: &HashSet<&VideoRecordId>,

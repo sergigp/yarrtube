@@ -38,8 +38,20 @@ impl PlaylistCreator {
             clock,
         }
     }
+}
 
-    pub fn create(
+pub trait PlaylistCreatorApi: Send + Sync {
+    fn create(
+        &self,
+        id: PlaylistId,
+        name: PlaylistName,
+        path: PlaylistPath,
+        quality: Quality,
+    ) -> Result<CreatePlaylistOutcome, CreatePlaylistError>;
+}
+
+impl PlaylistCreatorApi for PlaylistCreator {
+    fn create(
         &self,
         id: PlaylistId,
         name: PlaylistName,

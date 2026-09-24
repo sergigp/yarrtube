@@ -2,7 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
-use crate::domain::services::TaskViewSearcher;
+use crate::domain::services::{TaskViewSearcher, TaskViewSearcherApi};
 use axum::Json;
 use axum::extract::State;
 use dto::TaskResponse;

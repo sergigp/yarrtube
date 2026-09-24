@@ -31,8 +31,14 @@ impl PlaylistDeleter {
             event_publisher,
         }
     }
+}
 
-    pub fn delete(&self, id: PlaylistId) -> Result<(), DeletePlaylistError> {
+pub trait PlaylistDeleterApi: Send + Sync {
+    fn delete(&self, id: PlaylistId) -> Result<(), DeletePlaylistError>;
+}
+
+impl PlaylistDeleterApi for PlaylistDeleter {
+    fn delete(&self, id: PlaylistId) -> Result<(), DeletePlaylistError> {
         let playlist = match self.repository.find(&id) {
             Ok(Some(playlist)) => playlist,
             Ok(None) => return Err(DeletePlaylistError::NotFound(id)),

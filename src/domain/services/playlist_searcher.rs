@@ -12,8 +12,14 @@ impl PlaylistSearcher {
     pub fn new(repository: Arc<dyn PlaylistRepository>) -> Self {
         Self { repository }
     }
+}
 
-    pub fn search_all(&self) -> anyhow::Result<Vec<Playlist>> {
+pub trait PlaylistSearcherApi: Send + Sync {
+    fn search_all(&self) -> anyhow::Result<Vec<Playlist>>;
+}
+
+impl PlaylistSearcherApi for PlaylistSearcher {
+    fn search_all(&self) -> anyhow::Result<Vec<Playlist>> {
         self.repository.list()
     }
 }

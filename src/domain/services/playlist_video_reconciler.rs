@@ -1,7 +1,7 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::Playlist;
 use crate::domain::playlist_video::PlaylistVideo;
-use crate::domain::services::thumbnail_fetcher::ThumbnailFetcher;
+use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
 use crate::domain::shared::{PlaylistId, VideoId, VideoRecordId};
 use crate::domain::task::Task;
 use crate::domain::video::{
@@ -75,7 +75,57 @@ impl PlaylistVideoReconciler {
             videos_path: videos_path.into(),
         }
     }
+}
 
+pub trait PlaylistVideoReconcilerApi: Send + Sync {
+    /// Runs one reconcile pass for a playlist and reschedules the next
+    /// recurring pass — no-ops entirely if the playlist no longer exists.
+    /// Called by the recurring `ReconcilePlaylistTask` and by the one-shot
+    /// `PlaylistCreated` reaction alike.
+    fn reconcile(&self, id: PlaylistId) -> anyhow::Result<()>;
+
+    /// Runs one reconcile pass for a playlist immediately, on demand,
+    /// without touching the recurring reconcile schedule — whatever
+    /// `ReconcilePlaylist` task is already pending for this playlist (from
+    /// creation or the last recurring pass) is left exactly as it was. This
+    /// means triggering it repeatedly never queues extra tasks. No-ops
+    /// entirely if the playlist no longer exists.
+    fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()>;
+}
+
+impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
+    fn reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
+        let Some(playlist) = self.playlist_repository.find(&id)? else {
+            debug!(playlist_id = %id, "playlist no longer exists, skipping reconcile");
+            return Ok(());
+        };
+
+        self.run_reconcile_pass(&playlist)?;
+
+        let now = self.clock.now();
+        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
+        self.task_repository.schedule(
+            &Task::ReconcilePlaylist {
+                playlist_id: id.as_str().to_string(),
+            },
+            next_run_at,
+        )?;
+        info!(playlist_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of playlist");
+
+        Ok(())
+    }
+
+    fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
+        let Some(playlist) = self.playlist_repository.find(&id)? else {
+            debug!(playlist_id = %id, "playlist no longer exists, skipping reconcile");
+            return Ok(());
+        };
+
+        self.run_reconcile_pass(&playlist)
+    }
+}
+
+impl PlaylistVideoReconciler {
     /// Regenerates `video`'s metadata (fetch `YoutubeMetadata`, resolve
     /// `sorttitle`, build `VideoMetadata`, save) the same way
     /// `VideoDownloader::download` does at download time. Any failure is
@@ -117,46 +167,6 @@ impl PlaylistVideoReconciler {
         {
             warn!(video_id = %video.id, error = %e, "failed to save video metadata during reconcile");
         }
-    }
-
-    /// Runs one reconcile pass for a playlist and reschedules the next
-    /// recurring pass — no-ops entirely if the playlist no longer exists.
-    /// Called by the recurring `ReconcilePlaylistTask` and by the one-shot
-    /// `PlaylistCreated` reaction alike.
-    pub fn reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
-        let Some(playlist) = self.playlist_repository.find(&id)? else {
-            debug!(playlist_id = %id, "playlist no longer exists, skipping reconcile");
-            return Ok(());
-        };
-
-        self.run_reconcile_pass(&playlist)?;
-
-        let now = self.clock.now();
-        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
-        self.task_repository.schedule(
-            &Task::ReconcilePlaylist {
-                playlist_id: id.as_str().to_string(),
-            },
-            next_run_at,
-        )?;
-        info!(playlist_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of playlist");
-
-        Ok(())
-    }
-
-    /// Runs one reconcile pass for a playlist immediately, on demand,
-    /// without touching the recurring reconcile schedule — whatever
-    /// `ReconcilePlaylist` task is already pending for this playlist (from
-    /// creation or the last recurring pass) is left exactly as it was. This
-    /// means triggering it repeatedly never queues extra tasks. No-ops
-    /// entirely if the playlist no longer exists.
-    pub fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
-        let Some(playlist) = self.playlist_repository.find(&id)? else {
-            debug!(playlist_id = %id, "playlist no longer exists, skipping reconcile");
-            return Ok(());
-        };
-
-        self.run_reconcile_pass(&playlist)
     }
 
     /// Diffs membership against YouTube, then reconciles the filesystem

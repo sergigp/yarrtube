@@ -1,4 +1,4 @@
-use crate::domain::services::VideoFileDeleter;
+use crate::domain::services::{VideoFileDeleter, VideoFileDeleterApi};
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use std::path::Path;

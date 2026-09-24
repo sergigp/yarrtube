@@ -1,10 +1,9 @@
 use crate::application::http::{self, ApiServices, VideosRoot};
 use crate::application::{subscribers, tasks};
-use crate::domain::channel::ChannelService;
 use crate::domain::services::{
-    ChannelVideoReconciler, DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistSearcher,
-    PlaylistVideoReconciler, TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter,
-    VideoSearcher,
+    ChannelCreator, ChannelDeleter, ChannelSearcher, ChannelVideoReconciler, DirectorySearcher,
+    PlaylistCreator, PlaylistDeleter, PlaylistSearcher, PlaylistVideoReconciler, TaskViewSearcher,
+    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher,
 };
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::infrastructure_container::{
@@ -210,15 +209,21 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.playlist_video_repository.clone(),
             infrastructure.channel_video_repository.clone(),
         ),
-        channel_service: ChannelService::new(
+        channel_creator: ChannelCreator::new(
             infrastructure.channel_repository.clone(),
             infrastructure.youtube_channel_repository.clone(),
             infrastructure.channel_avatar_repository.clone(),
-            infrastructure.video_repository.clone(),
-            infrastructure.channel_video_repository.clone(),
             infrastructure.event_publisher.clone(),
             infrastructure.clock.clone(),
         ),
+        channel_deleter: ChannelDeleter::new(
+            infrastructure.channel_repository.clone(),
+            infrastructure.video_repository.clone(),
+            infrastructure.channel_video_repository.clone(),
+            infrastructure.channel_avatar_repository.clone(),
+            infrastructure.event_publisher.clone(),
+        ),
+        channel_searcher: ChannelSearcher::new(infrastructure.channel_repository.clone()),
         channel_video_reconciler: channel_video_reconciler(infrastructure),
         directory_searcher: DirectorySearcher::new(infrastructure.directory_repository.clone()),
         videos_root: VideosRoot(videos_path()),
