@@ -1,12 +1,18 @@
 import { test, expect } from '@playwright/test'
 import { openAddDialog, submitChannel, dialogErrorText } from '../helpers/addDialog.js'
 import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
-import { syncItem, deleteItem, sectionRows } from '../helpers/sidebar.js'
+import {
+  syncItem,
+  deleteItem,
+  markItemWatched,
+  sectionRows,
+  unwatchedBadge,
+} from '../helpers/sidebar.js'
 
 const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 const VIDEO_LIMIT = process.env.SMOKE_CHANNEL_VIDEO_LIMIT ?? '1'
 
-test('channel lifecycle: add, download, play, sync, invalid handle error, delete', async ({ page }) => {
+test('channel lifecycle: add, download, play, resume, mark watched, sync, invalid handle error, delete', async ({ page }) => {
   await page.goto('/')
 
   // Add via the Add dialog and confirm it lands in the sidebar. The
@@ -24,6 +30,27 @@ test('channel lifecycle: add, download, play, sync, invalid handle error, delete
   await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 240_000 })
   const videoTitle = await page.locator('main h3').first().innerText()
   await assertVideoPlays(page)
+
+  // Pausing a few seconds in reports the position, so reloading resumes
+  // from it instead of from the start.
+  const video = page.locator('video')
+  const progressReported = page.waitForResponse(
+    (response) => response.url().endsWith('/progress') && response.request().method() === 'POST',
+  )
+  await video.evaluate((el) => {
+    el.currentTime = 5
+    el.pause()
+  })
+  expect((await progressReported).status()).toBe(204)
+  await page.reload()
+  await expect.poll(() => video.evaluate((el) => el.currentTime), { timeout: 15_000 }).toBeGreaterThan(0)
+
+  // The downloaded, unwatched video shows as a badge on the channel's row
+  // until the channel is marked watched from the sidebar.
+  const channelRow = sectionRows(page, 'Channels').first()
+  await expect(unwatchedBadge(channelRow)).toHaveText('1')
+  await markItemWatched(page, { section: 'Channels', name: CHANNEL_HANDLE })
+  await expect(unwatchedBadge(channelRow)).toHaveCount(0)
 
   // Sync from the sidebar completes without an error dialog/alert.
   await syncItem(page, { section: 'Channels', name: CHANNEL_HANDLE })

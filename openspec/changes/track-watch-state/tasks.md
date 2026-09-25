@@ -56,7 +56,7 @@ SQLite migrations:
   - `ChannelDetail`/`PlaylistDetail` keep the selected video by id.
 
   Verify `npm run build` and `npm run lint` succeed in `web/`.
-- [ ] 4.2 Extend `smoke-tests/tests/channel.spec.js` (plus a `markItemWatched` helper in `smoke-tests/helpers/sidebar.js`) so every new route the UI calls is exercised:
+- [x] 4.2 Extend `smoke-tests/tests/channel.spec.js` (plus a `markItemWatched` helper in `smoke-tests/helpers/sidebar.js`) so every new route the UI calls is exercised:
   - after the video plays and is paused, reloading resumes past 0 (progress).
   - the sidebar mark-watched action removes the channel badge (channel watched).
 

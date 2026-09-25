@@ -49,3 +49,30 @@ export async function deleteItem(page, { section, name }) {
   await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
   await dialog.waitFor({ state: 'hidden' })
 }
+
+export function unwatchedBadge(row) {
+  return row.getByLabel(/ unwatched$/)
+}
+
+export async function markItemWatched(page, { section, name }) {
+  const row = await rowFor(page, section, name)
+
+  let alertMessage = null
+  const onDialog = async (dialog) => {
+    alertMessage = dialog.message()
+    await dialog.dismiss()
+  }
+  page.on('dialog', onDialog)
+  try {
+    const marked = page.waitForResponse(
+      (response) => response.url().endsWith('/watched') && response.request().method() === 'POST',
+    )
+    await row.getByRole('button', { name: /^Mark .* watched$/ }).click()
+    await marked
+  } finally {
+    page.off('dialog', onDialog)
+  }
+  if (alertMessage) {
+    throw new Error(`mark watched failed: ${alertMessage}`)
+  }
+}
