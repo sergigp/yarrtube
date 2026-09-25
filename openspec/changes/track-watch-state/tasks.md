@@ -17,7 +17,7 @@
 - [x] 2.1 `it_should_record_playback_progress`: drives saving the position of an unwatched video (`VideoWatchStateUpdater::record_progress`, `find_by_youtube_id`, `Video::record_progress`).
 - [x] 2.2 `it_should_mark_the_video_watched_at_90_percent`: drives the 90% watched rule and resetting the position to 0.
 - [x] 2.3 `it_should_use_the_reported_duration_if_none_is_recorded`: drives the fallback to the player-reported duration.
-- [ ] 2.4 `it_should_only_record_the_position_if_duration_is_unknown`: drives the unknown-duration branch.
+- [x] 2.4 `it_should_only_record_the_position_if_duration_is_unknown`: drives the unknown-duration branch.
 - [ ] 2.5 `it_should_keep_a_watched_video_watched_early_in_a_rewatch`: drives leaving a watched video unchanged at or below 10%.
 - [ ] 2.6 `it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch`: drives the rewatch reset.
 - [ ] 2.7 `it_should_record_progress_on_every_copy_of_the_video`: drives applying progress to every stored copy of a YouTube video.
