@@ -126,16 +126,25 @@ impl Video {
         self,
         position: PlaybackPosition,
         _reported_duration_seconds: Option<i64>,
-        _now: DateTime<Utc>,
+        now: DateTime<Utc>,
     ) -> Self {
-        Self {
-            playback_position: position,
-            ..self
+        match self.duration_seconds {
+            Some(duration) if position.seconds() as f64 >= duration as f64 * WATCHED_THRESHOLD => {
+                self.mark_watched(now)
+            }
+            _ => Self {
+                playback_position: position,
+                ..self
+            },
         }
     }
 
-    pub fn mark_watched(self, _now: DateTime<Utc>) -> Self {
-        self
+    pub fn mark_watched(self, now: DateTime<Utc>) -> Self {
+        Self {
+            watched_at: Some(now),
+            playback_position: PlaybackPosition::start(),
+            ..self
+        }
     }
 
     pub fn is_watched(&self) -> bool {
