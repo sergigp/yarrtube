@@ -14,7 +14,7 @@
 
 ### sqlite_migrations
 
-- [ ] 3.1 `it_should_backfill_the_sync_time_of_downloaded_videos_when_migrating`: adds the `synced_at` backfill for `DOWNLOADED` videos to migration 0003. Verify: test red, then green with the full suite passing.
+- [x] 3.1 `it_should_backfill_the_sync_time_of_downloaded_videos_when_migrating`: adds the `synced_at` backfill for `DOWNLOADED` videos to migration 0003. Verify: test red, then green with the full suite passing.
 - [ ] 3.2 `it_should_backfill_the_publish_time_from_premiered_when_migrating`: adds the `published_at` backfill from `premiered` (before the column drop). Verify: test red, then green with the full suite passing.
 - [ ] 3.3 `it_should_backfill_the_metadata_update_time_from_its_creation_time_when_migrating`: adds the `updated_at = created_at` backfill. Verify: test red, then green with the full suite passing.
 

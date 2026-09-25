@@ -119,4 +119,40 @@ mod tests {
         );
         assert_eq!(watch_state, Ok((None, 0)));
     }
+
+    #[test]
+    fn it_should_backfill_the_sync_time_of_downloaded_videos_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![M::up(BASELINE_SQL), M::up(WATCH_STATE_SQL)])
+            .to_latest(&mut conn)
+            .unwrap();
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec1', 'yt1', 'Downloaded Video', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-02T00:00:00+00:00');
+             INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec2', 'yt2', 'Pending Video', 'PENDING', '2024-01-01T00:00:00+00:00', '2024-01-03T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT id, synced_at FROM videos ORDER BY id")
+            .unwrap();
+        let synced_at: Vec<(String, Option<String>)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            synced_at,
+            vec![
+                (
+                    "rec1".to_string(),
+                    Some("2024-01-02T00:00:00+00:00".to_string())
+                ),
+                ("rec2".to_string(), None),
+            ]
+        );
+    }
 }

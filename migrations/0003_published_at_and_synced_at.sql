@@ -1,4 +1,5 @@
 ALTER TABLE videos ADD COLUMN synced_at TEXT;
+UPDATE videos SET synced_at = updated_at WHERE status = 'DOWNLOADED';
 
 ALTER TABLE video_metadata ADD COLUMN published_at TEXT NOT NULL DEFAULT '';
 ALTER TABLE video_metadata ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
