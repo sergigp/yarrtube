@@ -4,13 +4,15 @@ import { beaconVideoProgress, recordVideoProgress } from './api'
 const REPORT_INTERVAL_MS = 15000
 
 /**
- * Attaches to the `<video>` element in `videoRef` while `video` plays:
+ * Attaches to the `videoElement` `<video>` while `video` plays:
  * resumes an unwatched video from its saved position, and reports the
  * position at most every 15s while playing, on pause and end, when the
  * video changes or the view unmounts, and (as a beacon) when the page is
- * hidden or closed.
+ * hidden or closed. Takes the element itself (from a callback ref) rather
+ * than a ref object, so it re-attaches whenever the element mounts later
+ * than the video is selected (e.g. while the view is still loading).
  */
-export function useWatchProgress(videoRef, video) {
+export function useWatchProgress(videoElement, video) {
   const latestVideo = useRef(video)
   const videoId = video?.id ?? null
   const playable = video?.status === 'DOWNLOADED' && Boolean(video?.filename)
@@ -20,7 +22,7 @@ export function useWatchProgress(videoRef, video) {
   })
 
   useEffect(() => {
-    const element = videoRef.current
+    const element = videoElement
     if (!element || !videoId || !playable) {
       return undefined
     }
@@ -55,7 +57,7 @@ export function useWatchProgress(videoRef, video) {
     const resume = () => {
       const current = latestVideo.current
       if (current?.id === videoId && !current.watched && current.position_seconds > 0) {
-        element.currentTime = current.position_seconds
+        seekTo(element, current.position_seconds)
       }
     }
 
@@ -93,5 +95,9 @@ export function useWatchProgress(videoRef, video) {
       window.removeEventListener('pagehide', onPageHide)
       report()
     }
-  }, [videoRef, videoId, playable])
+  }, [videoElement, videoId, playable])
+}
+
+function seekTo(element, seconds) {
+  element.currentTime = seconds
 }

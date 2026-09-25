@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { CheckCheck, TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
@@ -113,8 +113,8 @@ export function ChannelDetail() {
   const defaultVideo = !manualSelection && !deepLinkedVideo ? (videos?.[0] ?? null) : null
   const selectedVideo = manualSelection ?? deepLinkedVideo ?? defaultVideo
   const autoplay = selectedVideo !== null && selectedVideo === deepLinkedVideo
-  const videoRef = useRef(null)
-  useWatchProgress(videoRef, selectedVideo)
+  const [videoElement, setVideoElement] = useState(null)
+  useWatchProgress(videoElement, selectedVideo)
 
   if (channelsError) {
     return <p className="text-sm text-destructive">Failed to load channel: {channelsError.message}</p>
@@ -136,7 +136,7 @@ export function ChannelDetail() {
             {selectedVideo?.status === 'DOWNLOADED' && selectedVideo.filename ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <video
-                ref={videoRef}
+                ref={setVideoElement}
                 controls
                 autoPlay={autoplay}
                 className="block max-h-[70vh] w-full rounded-lg"
