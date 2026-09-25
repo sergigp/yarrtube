@@ -11,7 +11,7 @@ export function WatchedTick({ watched }) {
 
   return (
     <span
-      className="absolute top-1 left-1 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm"
+      className="absolute bottom-1 left-1 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm"
       role="img"
       aria-label="Watched"
       title="Watched"
