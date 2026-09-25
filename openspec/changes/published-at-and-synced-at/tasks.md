@@ -20,5 +20,5 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Run `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings`. Verify: all pass.
+- [x] 4.1 Run `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings`. Verify: all pass.
 - [ ] 4.2 Run `scripts/run-local.sh` against a copy of an existing `yarrtube.sqlite3`: confirm the migration applies, downloaded videos report `synced_at` in `GET /playlists/{id}/videos`, `video_metadata` rows have `published_at`/`updated_at` and no `premiered`/`year`, and a regenerated `movie.nfo` still has the same `premiered`/`year`. Verify: observed manually.
