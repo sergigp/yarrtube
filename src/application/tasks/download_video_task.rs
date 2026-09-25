@@ -498,6 +498,55 @@ mod tests {
     }
 
     #[test]
+    fn it_should_record_when_metadata_was_generated() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_metadata_repository =
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection()));
+        let output_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(output_dir.path().join("fake-output")).unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            video_metadata_repository.clone(),
+        ));
+        let payload = Task::DownloadVideo {
+            video_id: video.id.as_str().to_string(),
+            quality: "high".to_string(),
+            output_dir: output_dir.path().to_string_lossy().to_string(),
+        }
+        .payload()
+        .to_string();
+
+        let result = run(&task, &payload, false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_metadata_repository.find(&video.id).unwrap(),
+            Some(VideoMetadata::new(
+                "My Video",
+                "A description",
+                "My Channel",
+                "My Channel",
+                fixed_timestamp(),
+                None,
+                Vec::new(),
+                "yt1",
+                None,
+                "20231114 My Video",
+                fixed_timestamp(),
+            ))
+        );
+    }
+
+    #[test]
     fn it_should_save_youtube_metadata() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -556,7 +605,7 @@ mod tests {
                 "yt1",
                 None,
                 "20231114 My Video",
-                DateTime::UNIX_EPOCH,
+                fixed_timestamp(),
             ))
         );
     }

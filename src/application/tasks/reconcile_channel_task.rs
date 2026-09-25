@@ -866,7 +866,7 @@ mod tests {
                 "yt1",
                 None,
                 "20231114 My Video",
-                DateTime::UNIX_EPOCH,
+                fixed_timestamp(),
             ))
         );
         assert_eq!(video_repository.list().unwrap(), vec![video]);

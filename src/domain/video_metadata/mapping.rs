@@ -48,7 +48,7 @@ pub fn build_video_metadata(
     metadata: &YoutubeMetadata,
     sorttitle: impl Into<String>,
     thumbnail_filename: Option<String>,
-    _now: DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> VideoMetadata {
     VideoMetadata::new(
         metadata.title.clone(),
@@ -61,7 +61,7 @@ pub fn build_video_metadata(
         youtube_id.as_str().to_string(),
         thumbnail_filename,
         sorttitle,
-        DateTime::UNIX_EPOCH,
+        now,
     )
 }
 
