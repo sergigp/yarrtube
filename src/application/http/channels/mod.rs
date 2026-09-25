@@ -3,12 +3,13 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::{MISSING_QUALITY, required};
+use super::videos::update_watch_state_error;
 use crate::domain::channel::{ChannelHandle, CreateChannelError, DeleteChannelError, VideoLimit};
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::services::{
     ChannelCreator, ChannelCreatorApi, ChannelDeleter, ChannelDeleterApi, ChannelSearcher,
     ChannelSearcherApi, ChannelVideoReconciler, ChannelVideoReconcilerApi, CreateChannelOutcome,
-    VideoWatchStateUpdater,
+    VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use crate::domain::shared::Quality;
 use axum::Json;
@@ -85,9 +86,15 @@ pub async fn reconcile_channel(
 }
 
 pub async fn mark_channel_watched(
-    State(_video_watch_state_updater): State<VideoWatchStateUpdater>,
-    Path(_handle): Path<String>,
+    State(video_watch_state_updater): State<VideoWatchStateUpdater>,
+    Path(handle): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    let channel_id = ChannelHandle::new(handle)?;
+
+    run_blocking(move || video_watch_state_updater.mark_channel_watched(&channel_id))
+        .await?
+        .map_err(update_watch_state_error)?;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -97,6 +104,8 @@ mod tests {
     use crate::domain::channel::Channel;
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::playlist::PlaylistId;
+    use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::video::Video;
     use crate::domain::video::VideoId;
@@ -107,6 +116,9 @@ mod tests {
     };
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+        PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
@@ -898,6 +910,65 @@ mod tests {
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
+    #[tokio::test]
+    async fn it_should_mark_every_downloaded_channel_video_watched() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.connection());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let downloaded = save_downloaded_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "vid_downloaded",
+            0,
+        );
+        let (pending, _) = save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "vid_pending",
+            1,
+        );
+        let shared = save_downloaded_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "vid_shared",
+            2,
+        );
+        let playlist_copy = downloaded_video("vid_shared");
+        video_repository.save(&playlist_copy).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                PlaylistId::new("PL1").unwrap(),
+                playlist_copy.id.clone(),
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            channel_repository,
+            channel_video_repository,
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = mark_watched(video_watch_state_updater, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                downloaded.mark_watched(watched_timestamp()),
+                pending,
+                shared.mark_watched(watched_timestamp()),
+                playlist_copy.mark_watched(watched_timestamp()),
+            ]
+        );
+    }
+
     fn any_channel_creator() -> ChannelCreator {
         ChannelCreator::new(
             Arc::new(SqliteChannelRepository::new(unused_connection())),
@@ -1019,6 +1090,10 @@ mod tests {
         }
     }
 
+    fn watched_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_800_000_000, 0).unwrap()
+    }
+
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
@@ -1087,6 +1162,43 @@ mod tests {
             .unwrap()
             .unwrap();
         (video, channel_video)
+    }
+
+    /// Saves a downloaded video and its channel membership, returning the
+    /// video as stored.
+    fn save_downloaded_channel_video(
+        video_repository: &dyn VideoRepository,
+        channel_video_repository: &dyn ChannelVideoRepository,
+        channel_handle: &str,
+        youtube_id: &str,
+        position: i64,
+    ) -> Video {
+        let video = downloaded_video(youtube_id);
+        video_repository.save(&video).unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                handle(channel_handle),
+                video.id.clone(),
+                position,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        video
+    }
+
+    fn downloaded_video(youtube_id: &str) -> Video {
+        Video::create(
+            VideoId::new(youtube_id).unwrap(),
+            format!("Video {youtube_id}"),
+            fixed_timestamp(),
+        )
+        .mark_downloaded(
+            Quality::High,
+            format!("Video {youtube_id}.mp4"),
+            None,
+            Some(100),
+            fixed_timestamp(),
+        )
     }
 
     fn listed_video(youtube_id: &str, title: &str, position: i64) -> ChannelVideoListing {
@@ -1164,6 +1276,17 @@ mod tests {
         list_channels(State(channel_searcher))
             .await
             .map(|Json(channels)| channels)
+    }
+
+    async fn mark_watched(
+        video_watch_state_updater: VideoWatchStateUpdater,
+        channel_handle: &str,
+    ) -> Result<StatusCode, ApiError> {
+        mark_channel_watched(
+            State(video_watch_state_updater),
+            Path(channel_handle.to_string()),
+        )
+        .await
     }
 
     async fn reconcile(

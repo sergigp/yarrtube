@@ -1,9 +1,11 @@
 use crate::domain::channel::ChannelHandle;
-use crate::domain::video::{PlaybackPosition, UpdateWatchStateError, Video, VideoId};
+use crate::domain::video::{PlaybackPosition, UpdateWatchStateError, Video, VideoId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
+use chrono::{DateTime, Utc};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 /// Updates whether videos have been watched and where their playback
@@ -65,13 +67,63 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
 
     fn mark_channel_watched(
         &self,
-        _channel_id: &ChannelHandle,
+        channel_id: &ChannelHandle,
     ) -> Result<(), UpdateWatchStateError> {
-        Ok(())
+        let now = self.clock.now();
+        self.unwatched_downloaded_youtube_ids(channel_id)?
+            .iter()
+            .try_for_each(|youtube_id| self.mark_copies_watched(youtube_id, now))
     }
 }
 
 impl VideoWatchStateUpdater {
+    /// The YouTube IDs of the channel's `Downloaded` videos not yet watched,
+    /// each once.
+    fn unwatched_downloaded_youtube_ids(
+        &self,
+        channel_id: &ChannelHandle,
+    ) -> Result<HashSet<VideoId>, UpdateWatchStateError> {
+        Ok(self
+            .channel_videos(channel_id)?
+            .into_iter()
+            .filter(|video| video.status == VideoStatus::Downloaded && !video.is_watched())
+            .map(|video| video.youtube_id)
+            .collect())
+    }
+
+    fn channel_videos(
+        &self,
+        channel_id: &ChannelHandle,
+    ) -> Result<Vec<Video>, UpdateWatchStateError> {
+        self.channel_video_repository
+            .list_for_channel(channel_id)
+            .and_then(|channel_videos| {
+                channel_videos
+                    .iter()
+                    .filter_map(|channel_video| {
+                        self.video_repository
+                            .find(&channel_video.video_id)
+                            .transpose()
+                    })
+                    .collect()
+            })
+            .map_err(UpdateWatchStateError::Repository)
+    }
+
+    fn mark_copies_watched(
+        &self,
+        youtube_id: &VideoId,
+        now: DateTime<Utc>,
+    ) -> Result<(), UpdateWatchStateError> {
+        self.video_repository
+            .find_by_youtube_id(youtube_id)
+            .map_err(UpdateWatchStateError::Repository)?
+            .into_iter()
+            .map(|video| video.mark_watched(now))
+            .try_for_each(|video| self.video_repository.update(&video))
+            .map_err(UpdateWatchStateError::Repository)
+    }
+
     fn find_copies(&self, youtube_id: &VideoId) -> Result<Vec<Video>, UpdateWatchStateError> {
         Some(
             self.video_repository
