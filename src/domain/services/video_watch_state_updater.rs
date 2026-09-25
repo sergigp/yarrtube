@@ -69,6 +69,7 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
         &self,
         channel_id: &ChannelHandle,
     ) -> Result<(), UpdateWatchStateError> {
+        self.ensure_channel_exists(channel_id)?;
         let now = self.clock.now();
         self.unwatched_downloaded_youtube_ids(channel_id)?
             .iter()
@@ -77,6 +78,17 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
 }
 
 impl VideoWatchStateUpdater {
+    fn ensure_channel_exists(
+        &self,
+        channel_id: &ChannelHandle,
+    ) -> Result<(), UpdateWatchStateError> {
+        self.channel_repository
+            .find(channel_id)
+            .map_err(UpdateWatchStateError::Repository)?
+            .map(|_| ())
+            .ok_or_else(|| UpdateWatchStateError::ChannelNotFound(channel_id.clone()))
+    }
+
     /// The YouTube IDs of the channel's `Downloaded` videos not yet watched,
     /// each once.
     fn unwatched_downloaded_youtube_ids(

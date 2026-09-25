@@ -969,6 +969,34 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_mark_watched_a_missing_channel() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let video = save_downloaded_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@missing",
+            "vid1",
+            0,
+        );
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            channel_video_repository,
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = mark_watched(video_watch_state_updater, "@missing").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("channel @missing not found"))
+        );
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+    }
+
     fn any_channel_creator() -> ChannelCreator {
         ChannelCreator::new(
             Arc::new(SqliteChannelRepository::new(unused_connection())),
