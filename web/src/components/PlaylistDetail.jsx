@@ -90,7 +90,10 @@ export function PlaylistDetail() {
   const playlist = playlists?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = usePolling(() => fetchVideos(id), [id])
-  const [manualSelection, setManualSelection] = useState(null)
+  const [manualSelectionId, setManualSelectionId] = useState(null)
+  const manualSelection = manualSelectionId
+    ? (videos?.find((video) => video.id === manualSelectionId) ?? null)
+    : null
   const initialVideoId = searchParams.get('video')
   const deepLinkedVideo = !manualSelection && initialVideoId
     ? (videos?.find((video) => video.id === initialVideoId) ?? null)
@@ -165,7 +168,7 @@ export function PlaylistDetail() {
                         'flex w-full items-start gap-3 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-accent',
                         active && 'bg-accent',
                       )}
-                      onClick={() => setManualSelection(video)}
+                      onClick={() => setManualSelectionId(video.id)}
                     >
                       <div className="relative shrink-0">
                         <Thumbnail

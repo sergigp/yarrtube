@@ -48,7 +48,7 @@ SQLite migrations:
 
 ## 4. Verification
 
-- [ ] 4.1 Implement the SPA behaviour on top of the skeleton, following the web-ui delta spec:
+- [x] 4.1 Implement the SPA behaviour on top of the skeleton, following the web-ui delta spec:
   - `useWatchProgress`: resume, a 15s throttle, and reports on pause, ended and cleanup, with a beacon on `pagehide`.
   - `WatchedTick` on thumbnails in the channel, playlist and home views.
   - the sidebar badge and mark-watched row action.

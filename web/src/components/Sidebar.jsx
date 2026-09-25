@@ -53,6 +53,15 @@ function SidebarRow({
           />
         )}
         <span className="min-w-0 flex-1 truncate">{item.name}</span>
+        {item.unwatched_count > 0 && (
+          <span
+            className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none font-medium text-primary-foreground"
+            aria-label={`${item.unwatched_count} unwatched`}
+            title={`${item.unwatched_count} unwatched`}
+          >
+            {item.unwatched_count}
+          </span>
+        )}
       </Link>
       <span className="flex shrink-0 items-center gap-0.5 pr-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         <button
@@ -137,7 +146,16 @@ function SidebarSection({
                   window.alert(`Failed to sync "${item.name}": ${err.message}`)
                 }
               }}
-              onMarkWatched={onMarkWatched && (() => {})}
+              onMarkWatched={
+                onMarkWatched &&
+                (async () => {
+                  try {
+                    await onMarkWatched(item.id)
+                  } catch (err) {
+                    window.alert(`Failed to mark "${item.name}" watched: ${err.message}`)
+                  }
+                })
+              }
               onDeleteRequest={() => setPendingDelete(item)}
             />
           ))}

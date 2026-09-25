@@ -2,7 +2,13 @@ import { useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { CheckCheck, TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
-import { fetchChannels, fetchChannelVideos, videoMediaUrl, avatarMediaUrl } from '../api'
+import {
+  fetchChannels,
+  fetchChannelVideos,
+  markChannelWatched,
+  videoMediaUrl,
+  avatarMediaUrl,
+} from '../api'
 import { formatDuration } from '../formatDuration'
 import { useWatchProgress } from '../useWatchProgress'
 import { Thumbnail } from './Thumbnail'
@@ -95,7 +101,11 @@ export function ChannelDetail() {
   const channel = channels?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = usePolling(() => fetchChannelVideos(id), [id])
-  const [manualSelection, setManualSelection] = useState(null)
+  const [manualSelectionId, setManualSelectionId] = useState(null)
+  const [markingWatched, setMarkingWatched] = useState(false)
+  const manualSelection = manualSelectionId
+    ? (videos?.find((video) => video.id === manualSelectionId) ?? null)
+    : null
   const initialVideoId = searchParams.get('video')
   const deepLinkedVideo = !manualSelection && initialVideoId
     ? (videos?.find((video) => video.id === initialVideoId) ?? null)
@@ -155,7 +165,21 @@ export function ChannelDetail() {
 
         <div className="min-h-0 h-full overflow-y-auto">
           <div className="mb-2 flex justify-end">
-            <Button variant="outline" size="sm" onClick={() => {}}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={markingWatched}
+              onClick={async () => {
+                setMarkingWatched(true)
+                try {
+                  await markChannelWatched(id)
+                } catch (err) {
+                  window.alert(`Failed to mark "${channel.name}" watched: ${err.message}`)
+                } finally {
+                  setMarkingWatched(false)
+                }
+              }}
+            >
               <CheckCheck />
               Mark all watched
             </Button>
@@ -176,7 +200,7 @@ export function ChannelDetail() {
                         'flex w-full items-start gap-3 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-accent',
                         active && 'bg-accent',
                       )}
-                      onClick={() => setManualSelection(video)}
+                      onClick={() => setManualSelectionId(video.id)}
                     >
                       <div className="relative shrink-0">
                         <Thumbnail
