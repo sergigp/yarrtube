@@ -3,7 +3,7 @@ use crate::application::{subscribers, tasks};
 use crate::domain::services::{
     ChannelCreator, ChannelDeleter, ChannelSearcher, ChannelVideoReconciler, DirectorySearcher,
     PlaylistCreator, PlaylistDeleter, PlaylistSearcher, PlaylistVideoReconciler, TaskViewSearcher,
-    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher,
+    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::infrastructure_container::{
@@ -223,9 +223,19 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_avatar_repository.clone(),
             infrastructure.event_publisher.clone(),
         ),
-        channel_searcher: ChannelSearcher::new(infrastructure.channel_repository.clone()),
+        channel_searcher: ChannelSearcher::new(
+            infrastructure.channel_repository.clone(),
+            infrastructure.channel_video_repository.clone(),
+            infrastructure.video_repository.clone(),
+        ),
         channel_video_reconciler: channel_video_reconciler(infrastructure),
         directory_searcher: DirectorySearcher::new(infrastructure.directory_repository.clone()),
+        video_watch_state_updater: VideoWatchStateUpdater::new(
+            infrastructure.video_repository.clone(),
+            infrastructure.channel_repository.clone(),
+            infrastructure.channel_video_repository.clone(),
+            infrastructure.clock.clone(),
+        ),
         videos_root: VideosRoot(videos_path()),
     }
 }

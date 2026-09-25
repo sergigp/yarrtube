@@ -128,3 +128,40 @@ export async function deleteChannel(id) {
     )
   }
 }
+
+export async function markChannelWatched(handle) {
+  const response = await fetch(`/api/channels/${encodeURIComponent(handle)}/watched`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(
+      body?.error ?? `request to mark channel ${handle} watched failed with status ${response.status}`,
+    )
+  }
+}
+
+export async function recordVideoProgress(youtubeId, { position_seconds, duration_seconds }) {
+  const response = await fetch(`/api/videos/${encodeURIComponent(youtubeId)}/progress`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ position_seconds, duration_seconds }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(
+      body?.error ?? `request to record progress of video ${youtubeId} failed with status ${response.status}`,
+    )
+  }
+}
+
+/**
+ * Records progress with `navigator.sendBeacon`, which the browser still
+ * delivers while the page is being closed or hidden.
+ */
+export function beaconVideoProgress(youtubeId, { position_seconds, duration_seconds }) {
+  const body = new Blob([JSON.stringify({ position_seconds, duration_seconds })], {
+    type: 'application/json',
+  })
+  navigator.sendBeacon(`/api/videos/${encodeURIComponent(youtubeId)}/progress`, body)
+}

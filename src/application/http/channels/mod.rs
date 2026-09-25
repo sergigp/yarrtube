@@ -8,12 +8,13 @@ use crate::domain::playlist::PlaylistPath;
 use crate::domain::services::{
     ChannelCreator, ChannelCreatorApi, ChannelDeleter, ChannelDeleterApi, ChannelSearcher,
     ChannelSearcherApi, ChannelVideoReconciler, ChannelVideoReconcilerApi, CreateChannelOutcome,
+    VideoWatchStateUpdater,
 };
 use crate::domain::shared::Quality;
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use dto::{ChannelResponse, CreateChannelRequest};
+use dto::{ChannelListItemResponse, ChannelResponse, CreateChannelRequest};
 
 const MISSING_VIDEO_LIMIT: &str = "Video limit must be a positive integer (missing)";
 const MISSING_PATH: &str = "Channel path must not be empty";
@@ -58,12 +59,15 @@ pub async fn delete_channel(
 
 pub async fn list_channels(
     State(channel_searcher): State<ChannelSearcher>,
-) -> Result<Json<Vec<ChannelResponse>>, ApiError> {
+) -> Result<Json<Vec<ChannelListItemResponse>>, ApiError> {
     let channels = run_blocking(move || channel_searcher.search_all())
         .await?
         .map_err(ApiError::internal)?;
     Ok(Json(
-        channels.into_iter().map(ChannelResponse::from).collect(),
+        channels
+            .into_iter()
+            .map(ChannelListItemResponse::from)
+            .collect(),
     ))
 }
 
@@ -77,6 +81,13 @@ pub async fn reconcile_channel(
         .await?
         .map_err(ApiError::internal)?;
 
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn mark_channel_watched(
+    State(_video_watch_state_updater): State<VideoWatchStateUpdater>,
+    Path(_handle): Path<String>,
+) -> Result<StatusCode, ApiError> {
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -654,8 +665,11 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_no_channels() {
         let db = TestDatabase::new();
-        let channel_searcher =
-            ChannelSearcher::new(Arc::new(SqliteChannelRepository::new(db.connection())));
+        let channel_searcher = ChannelSearcher::new(
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+        );
 
         let response = list(channel_searcher).await;
 
@@ -667,11 +681,15 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let channel_searcher = ChannelSearcher::new(channel_repository);
+        let channel_searcher = ChannelSearcher::new(
+            channel_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+        );
 
         let response = list(channel_searcher).await;
 
-        assert_eq!(response, Ok(vec![some_channel_response()]));
+        assert_eq!(response, Ok(vec![some_channel_list_item_response()]));
     }
 
     #[tokio::test]
@@ -1114,6 +1132,16 @@ mod tests {
         }
     }
 
+    fn some_channel_list_item_response() -> ChannelListItemResponse {
+        ChannelListItemResponse {
+            id: "@somechannel".to_string(),
+            name: "Some Channel".to_string(),
+            path: "creators/somechannel".to_string(),
+            avatar_filename: None,
+            unwatched_count: 0,
+        }
+    }
+
     async fn create(
         channel_creator: ChannelCreator,
         request: CreateChannelRequest,
@@ -1130,7 +1158,9 @@ mod tests {
         delete_channel(State(channel_deleter), Path(channel_handle.to_string())).await
     }
 
-    async fn list(channel_searcher: ChannelSearcher) -> Result<Vec<ChannelResponse>, ApiError> {
+    async fn list(
+        channel_searcher: ChannelSearcher,
+    ) -> Result<Vec<ChannelListItemResponse>, ApiError> {
         list_channels(State(channel_searcher))
             .await
             .map(|Json(channels)| channels)

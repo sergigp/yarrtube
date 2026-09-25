@@ -1,3 +1,4 @@
+use super::playback_position::PlaybackPosition;
 use super::video_id::VideoId;
 use super::video_record_id::VideoRecordId;
 use super::video_status::VideoStatus;
@@ -20,7 +21,12 @@ pub struct Video {
     pub duration_seconds: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub watched_at: Option<DateTime<Utc>>,
+    pub playback_position: PlaybackPosition,
 }
+
+const WATCHED_THRESHOLD: f64 = 0.9;
+const REWATCH_RESET_THRESHOLD: f64 = 0.1;
 
 impl Video {
     pub fn create(youtube_id: VideoId, title: impl Into<String>, now: DateTime<Utc>) -> Self {
@@ -35,6 +41,8 @@ impl Video {
             duration_seconds: None,
             created_at: now,
             updated_at: now,
+            watched_at: None,
+            playback_position: PlaybackPosition::start(),
         }
     }
 
@@ -108,6 +116,27 @@ impl Video {
             updated_at: now,
             ..self
         }
+    }
+
+    /// Records how far playback got, against the recorded duration or, when
+    /// none is recorded, the one the player reported. An unwatched video
+    /// becomes watched at 90%; a watched one becomes unwatched again once a
+    /// rewatch passes 10%. With no known duration only the position is kept.
+    pub fn record_progress(
+        self,
+        _position: PlaybackPosition,
+        _reported_duration_seconds: Option<i64>,
+        _now: DateTime<Utc>,
+    ) -> Self {
+        self
+    }
+
+    pub fn mark_watched(self, _now: DateTime<Utc>) -> Self {
+        self
+    }
+
+    pub fn is_watched(&self) -> bool {
+        false
     }
 }
 

@@ -12,6 +12,7 @@ pub mod thumbnail_fetcher;
 pub mod video_downloader;
 pub mod video_file_deleter;
 pub mod video_searcher;
+pub mod video_watch_state_updater;
 
 pub use channel_creator::{ChannelCreator, ChannelCreatorApi, CreateChannelOutcome};
 pub use channel_deleter::{ChannelDeleter, ChannelDeleterApi};
@@ -27,3 +28,4 @@ pub use thumbnail_fetcher::{ThumbnailFetcher, ThumbnailFetcherApi};
 pub use video_downloader::{VideoDownloader, VideoDownloaderApi};
 pub use video_file_deleter::{VideoFileDeleter, VideoFileDeleterApi};
 pub use video_searcher::{VideoSearcher, VideoSearcherApi};
+pub use video_watch_state_updater::{VideoWatchStateUpdater, VideoWatchStateUpdaterApi};

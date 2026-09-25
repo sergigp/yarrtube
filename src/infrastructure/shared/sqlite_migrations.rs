@@ -3,9 +3,10 @@ use rusqlite::Connection;
 use rusqlite_migration::{M, Migrations};
 
 const BASELINE_SQL: &str = include_str!("../../../migrations/0001_baseline.sql");
+const WATCH_STATE_SQL: &str = include_str!("../../../migrations/0002_watch_state.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
-    Migrations::new(vec![M::up(BASELINE_SQL)])
+    Migrations::new(vec![M::up(BASELINE_SQL), M::up(WATCH_STATE_SQL)])
         .to_latest(conn)
         .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
         .context("failed to apply database migrations")

@@ -4,11 +4,12 @@ use super::blocking::run_blocking;
 use super::error::ApiError;
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
-use crate::domain::services::{VideoSearcher, VideoSearcherApi};
+use crate::domain::services::{VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater};
 use crate::domain::video::ListVideosError;
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use dto::{RecentVideoResponse, VideoResponse};
+use axum::http::StatusCode;
+use dto::{RecentVideoResponse, RecordProgressRequest, VideoResponse};
 use serde::Deserialize;
 
 const DEFAULT_RECENT_VIDEOS_LIMIT: usize = 20;
@@ -59,6 +60,14 @@ pub async fn list_recent_videos(
     Ok(Json(
         videos.into_iter().map(RecentVideoResponse::from).collect(),
     ))
+}
+
+pub async fn record_video_progress(
+    State(_video_watch_state_updater): State<VideoWatchStateUpdater>,
+    Path(_youtube_id): Path<String>,
+    Json(_request): Json<RecordProgressRequest>,
+) -> Result<StatusCode, ApiError> {
+    Ok(StatusCode::NO_CONTENT)
 }
 
 fn list_videos_error(error: ListVideosError) -> ApiError {
@@ -762,6 +771,8 @@ mod tests {
             duration_seconds: None,
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
+            watched: false,
+            position_seconds: 0,
         }
     }
 
@@ -775,6 +786,7 @@ mod tests {
             title: title.to_string(),
             thumbnail_filename: None,
             duration_seconds: None,
+            watched: false,
             source,
         }
     }

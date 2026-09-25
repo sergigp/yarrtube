@@ -1,4 +1,5 @@
 pub mod errors;
+pub mod playback_position;
 pub mod recent_video;
 pub mod thumbnail_filename;
 #[allow(clippy::module_inception)]
@@ -9,7 +10,8 @@ pub mod video_output_entry;
 pub mod video_record_id;
 pub mod video_status;
 
-pub use errors::ListVideosError;
+pub use errors::{ListVideosError, UpdateWatchStateError};
+pub use playback_position::PlaybackPosition;
 pub use recent_video::{RecentVideo, VideoSource};
 pub use video::Video;
 pub use video_id::VideoId;

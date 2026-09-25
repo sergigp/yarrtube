@@ -1,4 +1,4 @@
-use crate::domain::channel::Channel;
+use crate::domain::channel::{Channel, ChannelView};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +37,27 @@ impl From<Channel> for ChannelResponse {
             path: channel.path.as_str().to_string(),
             avatar_filename: channel.avatar_filename,
             created_at: channel.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ChannelListItemResponse {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub avatar_filename: Option<String>,
+    pub unwatched_count: usize,
+}
+
+impl From<ChannelView> for ChannelListItemResponse {
+    fn from(channel: ChannelView) -> Self {
+        Self {
+            id: channel.id.as_str().to_string(),
+            name: channel.name,
+            path: channel.path.as_str().to_string(),
+            avatar_filename: channel.avatar_filename,
+            unwatched_count: channel.unwatched_count,
         }
     }
 }

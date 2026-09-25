@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { RotateCw, X } from 'lucide-react'
+import { CheckCheck, RotateCw, X } from 'lucide-react'
 import { usePolling } from '../usePolling'
 import {
   fetchChannels,
@@ -9,6 +9,7 @@ import {
   reconcilePlaylist,
   deleteChannel,
   deletePlaylist,
+  markChannelWatched,
   avatarMediaUrl,
 } from '../api'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -23,7 +24,16 @@ function activeIdFrom(pathname, prefix) {
   return rest ? decodeURIComponent(rest) : null
 }
 
-function SidebarRow({ item, active, href, onSync, onDeleteRequest, showAvatar, onNavigate }) {
+function SidebarRow({
+  item,
+  active,
+  href,
+  onSync,
+  onMarkWatched,
+  onDeleteRequest,
+  showAvatar,
+  onNavigate,
+}) {
   const [syncing, setSyncing] = useState(false)
 
   return (
@@ -62,6 +72,17 @@ function SidebarRow({ item, active, href, onSync, onDeleteRequest, showAvatar, o
         >
           <RotateCw className={cn('size-3.5', syncing && 'animate-spin')} />
         </button>
+        {onMarkWatched && (
+          <button
+            type="button"
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            onClick={onMarkWatched}
+            aria-label={`Mark ${item.name} watched`}
+            title="Mark all watched"
+          >
+            <CheckCheck className="size-3.5" />
+          </button>
+        )}
         <button
           type="button"
           className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -83,6 +104,7 @@ function SidebarSection({
   activeId,
   hrefFor,
   onSync,
+  onMarkWatched,
   onDelete,
   deleteDescription,
   showAvatar,
@@ -115,6 +137,7 @@ function SidebarSection({
                   window.alert(`Failed to sync "${item.name}": ${err.message}`)
                 }
               }}
+              onMarkWatched={onMarkWatched && (() => {})}
               onDeleteRequest={() => setPendingDelete(item)}
             />
           ))}
@@ -183,6 +206,7 @@ export function Sidebar({ open = false, onClose }) {
           showAvatar
           onNavigate={onClose}
           onSync={reconcileChannel}
+          onMarkWatched={markChannelWatched}
           onDelete={async (id) => {
             await deleteChannel(id)
             if (activeChannelId === id) {

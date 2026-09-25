@@ -1,6 +1,14 @@
 use crate::domain::video::{RecentVideo, Video, VideoSource};
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize)]
+pub struct RecordProgressRequest {
+    #[serde(default)]
+    pub position_seconds: Option<i64>,
+    #[serde(default)]
+    pub duration_seconds: Option<i64>,
+}
 
 #[derive(Debug, Serialize, PartialEq)]
 pub struct VideoResponse {
@@ -13,6 +21,8 @@ pub struct VideoResponse {
     pub duration_seconds: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub watched: bool,
+    pub position_seconds: i64,
 }
 
 impl From<Video> for VideoResponse {
@@ -27,6 +37,8 @@ impl From<Video> for VideoResponse {
             duration_seconds: video.duration_seconds,
             created_at: video.created_at,
             updated_at: video.updated_at,
+            watched: false,
+            position_seconds: 0,
         }
     }
 }
@@ -45,6 +57,7 @@ pub struct RecentVideoResponse {
     pub title: String,
     pub thumbnail_filename: Option<String>,
     pub duration_seconds: Option<i64>,
+    pub watched: bool,
     pub source: RecentVideoSourceResponse,
 }
 
@@ -69,6 +82,7 @@ impl From<RecentVideo> for RecentVideoResponse {
             title: recent_video.video.title,
             thumbnail_filename: recent_video.video.thumbnail_filename,
             duration_seconds: recent_video.video.duration_seconds,
+            watched: false,
             source,
         }
     }

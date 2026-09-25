@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
 import { fetchPlaylists, fetchVideos, videoMediaUrl } from '../api'
 import { formatDuration } from '../formatDuration'
+import { useWatchProgress } from '../useWatchProgress'
 import { Thumbnail } from './Thumbnail'
+import { WatchedTick } from './WatchedTick'
 import { Beacon } from './Beacon'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -96,6 +98,8 @@ export function PlaylistDetail() {
   const defaultVideo = !manualSelection && !deepLinkedVideo ? (videos?.[0] ?? null) : null
   const selectedVideo = manualSelection ?? deepLinkedVideo ?? defaultVideo
   const autoplay = selectedVideo !== null && selectedVideo === deepLinkedVideo
+  const videoRef = useRef(null)
+  useWatchProgress(videoRef, selectedVideo)
 
   if (playlistsError) {
     return <p className="text-sm text-destructive">Failed to load playlist: {playlistsError.message}</p>
@@ -117,6 +121,7 @@ export function PlaylistDetail() {
             {selectedVideo?.status === 'DOWNLOADED' && selectedVideo.filename ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <video
+                ref={videoRef}
                 controls
                 autoPlay={autoplay}
                 className="block max-h-[70vh] w-full rounded-lg"
@@ -171,6 +176,7 @@ export function PlaylistDetail() {
                           }
                           className="aspect-video w-24 rounded-md object-cover"
                         />
+                        <WatchedTick watched={video.watched} />
                         {formatDuration(video.duration_seconds) && (
                           <span className="absolute right-1 bottom-1 rounded bg-black/75 px-1 py-0.5 text-[10px] font-medium text-white">
                             {formatDuration(video.duration_seconds)}
