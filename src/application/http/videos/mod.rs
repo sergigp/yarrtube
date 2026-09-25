@@ -674,6 +674,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_whether_recent_videos_were_watched() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &downloaded_video("vid1", "My Video", None, 100).mark_watched(watched_timestamp()),
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+        );
+
+        let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![RecentVideoResponse {
+                watched: true,
+                ..recent_video_response("vid1", "My Video", playlist_source())
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_exclude_not_downloaded_videos_from_recent() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));

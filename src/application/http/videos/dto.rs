@@ -78,11 +78,11 @@ impl From<RecentVideo> for RecentVideoResponse {
             },
         };
         Self {
+            watched: recent_video.video.is_watched(),
             id: recent_video.video.youtube_id.as_str().to_string(),
             title: recent_video.video.title,
             thumbnail_filename: recent_video.video.thumbnail_filename,
             duration_seconds: recent_video.video.duration_seconds,
-            watched: false,
             source,
         }
     }
