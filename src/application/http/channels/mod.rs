@@ -705,6 +705,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_count_unwatched_downloaded_videos_when_listing_channels() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        for (youtube_id, position) in [("vid_unwatched_1", 0), ("vid_unwatched_2", 1)] {
+            save_downloaded_channel_video(
+                video_repository.as_ref(),
+                channel_video_repository.as_ref(),
+                "@somechannel",
+                youtube_id,
+                position,
+            );
+        }
+        let watched = save_downloaded_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "vid_watched",
+            2,
+        );
+        video_repository
+            .update(&watched.mark_watched(fixed_timestamp()))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "vid_pending",
+            3,
+        );
+        let channel_searcher = ChannelSearcher::new(
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+        );
+
+        let response = list(channel_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![ChannelListItemResponse {
+                unwatched_count: 2,
+                ..some_channel_list_item_response()
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_add_new_videos_on_reconcile() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
