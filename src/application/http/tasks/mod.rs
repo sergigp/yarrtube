@@ -22,11 +22,13 @@ mod tests {
     use super::*;
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::shared::{PlaylistId, Quality, VideoId, VideoRecordId};
+    use crate::domain::shared::Quality;
     use crate::domain::task::Task;
     use crate::domain::video::{Video, VideoStatus};
+    use crate::domain::video::{VideoId, VideoRecordId};
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };

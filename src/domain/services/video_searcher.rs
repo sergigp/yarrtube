@@ -1,5 +1,5 @@
 use crate::domain::channel::ChannelHandle;
-use crate::domain::shared::PlaylistId;
+use crate::domain::playlist::PlaylistId;
 use crate::domain::video::{ListVideosError, RecentVideo, Video, VideoSource, VideoStatus};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;

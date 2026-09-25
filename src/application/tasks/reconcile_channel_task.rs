@@ -35,9 +35,10 @@ mod tests {
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::services::ThumbnailFetcher;
-    use crate::domain::shared::{Quality, VideoId};
+    use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
+    use crate::domain::video::VideoId;
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{

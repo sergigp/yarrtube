@@ -1,5 +1,7 @@
+use super::video_id::VideoId;
+use super::video_record_id::VideoRecordId;
 use super::video_status::VideoStatus;
-use crate::domain::shared::{Quality, VideoId, VideoRecordId};
+use crate::domain::shared::Quality;
 use chrono::{DateTime, Utc};
 
 /// A downloaded (or to-be-downloaded) video's own record: its download

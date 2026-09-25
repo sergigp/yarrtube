@@ -1,5 +1,6 @@
+use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
-use crate::domain::shared::{PlaylistId, Quality};
+use crate::domain::shared::Quality;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};

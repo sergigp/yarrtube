@@ -1,5 +1,5 @@
 use crate::domain::channel::ChannelHandle;
-use crate::domain::shared::VideoRecordId;
+use crate::domain::video::VideoRecordId;
 use chrono::{DateTime, Utc};
 
 /// Records that a `Video` belongs to a `Channel`'s tracked most-recent

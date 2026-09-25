@@ -1,4 +1,4 @@
-use crate::domain::shared::PlaylistId;
+use crate::domain::playlist::PlaylistId;
 use anyhow::{Context, anyhow};
 use serde::Deserialize;
 

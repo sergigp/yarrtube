@@ -1,5 +1,6 @@
-use crate::domain::shared::{Quality, VideoId, VideoRecordId};
+use crate::domain::shared::Quality;
 use crate::domain::video::{Video, VideoStatus};
+use crate::domain::video::{VideoId, VideoRecordId};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};

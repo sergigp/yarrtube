@@ -1,7 +1,6 @@
 use super::video::Video;
 use crate::domain::channel::ChannelHandle;
-use crate::domain::playlist::PlaylistPath;
-use crate::domain::shared::PlaylistId;
+use crate::domain::playlist::{PlaylistId, PlaylistPath};
 
 /// The playlist or channel that tracks a `RecentVideo`. A channel source
 /// additionally carries its channel's avatar filename (when recorded), so

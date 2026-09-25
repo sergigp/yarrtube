@@ -3,8 +3,8 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use crate::domain::channel::ChannelHandle;
+use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{VideoSearcher, VideoSearcherApi};
-use crate::domain::shared::PlaylistId;
 use crate::domain::video::ListVideosError;
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -76,8 +76,9 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::shared::{Quality, VideoId};
+    use crate::domain::shared::Quality;
     use crate::domain::video::Video;
+    use crate::domain::video::VideoId;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };

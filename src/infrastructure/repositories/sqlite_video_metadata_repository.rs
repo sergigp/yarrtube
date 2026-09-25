@@ -1,4 +1,4 @@
-use crate::domain::shared::VideoRecordId;
+use crate::domain::video::VideoRecordId;
 use crate::domain::video_metadata::{VideoMetadata, render_movie_nfo};
 use anyhow::Context;
 use chrono::Utc;
@@ -143,7 +143,7 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::shared::VideoId;
+    use crate::domain::video::VideoId;
 
     fn metadata() -> VideoMetadata {
         VideoMetadata::new(

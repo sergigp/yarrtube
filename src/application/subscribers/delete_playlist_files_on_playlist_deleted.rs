@@ -1,4 +1,4 @@
-use crate::domain::shared::PlaylistId;
+use crate::domain::playlist::PlaylistId;
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
