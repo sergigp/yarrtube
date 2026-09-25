@@ -4,13 +4,14 @@
 - `migrations/0002_watch_state.sql`: adds `watched_at TEXT NULL` and `playback_position_seconds INTEGER NOT NULL DEFAULT 0` to `videos`, plus an index on `videos(youtube_id)`.
 - `src/infrastructure/shared/sqlite_migrations.rs`: registers `0002` after the baseline.
 - `src/domain/video/playback_position.rs`: new `PlaybackPosition` value object (non-negative whole seconds).
-- `src/domain/video/video.rs`: `watched_at`/`playback_position` fields, plus the `record_progress` and `mark_watched` transitions.
+- `src/domain/video/video_duration.rs`: new `VideoDuration` value object (positive whole seconds), for the player-reported duration.
+- `src/domain/video/video.rs`: `watched_at`/`playback_position` fields, plus the `update_watch_state` and `mark_watched` transitions.
 - `src/domain/video/errors.rs`: new `UpdateWatchStateError`.
 - `src/domain/video/mod.rs`: exports `PlaybackPosition` and `UpdateWatchStateError`.
 - `src/domain/channel/channel_view.rs`: new flat `ChannelView` (only the channel fields the listing exposes, plus the unwatched count).
 - `src/domain/channel/mod.rs`: exports `ChannelView`.
 - `src/domain/services/video_watch_state_updater.rs`: new `VideoWatchStateUpdater` service holding every watch-state use case.
-- `src/domain/services/channel_searcher.rs`: `search_all` returns `Vec<ChannelView>` and gains the channel-video and video repositories.
+- `src/domain/services/channel_view_searcher.rs`: `ChannelSearcher` renamed to `ChannelViewSearcher` (it returns `ChannelView`s); `search_all` returns `Vec<ChannelView>` and gains the channel-video and video repositories.
 - `src/domain/services/mod.rs`: exports `VideoWatchStateUpdater` and `VideoWatchStateUpdaterApi`.
 - `src/infrastructure/repositories/sqlite_video_repository.rs`: new columns in `save`/`find`/`update`/`row_to_video`, and a new `find_by_youtube_id` read.
 - `src/application/http/videos/mod.rs`: `record_video_progress` handler.
@@ -19,11 +20,11 @@
 - `src/application/http/channels/dto.rs`: new flat `ChannelListItemResponse` (only the fields the SPA reads, plus `unwatched_count`). `create_channel` keeps returning `ChannelResponse`.
 - `src/application/http/validation.rs`: `MISSING_POSITION` message.
 - `src/application/http/mod.rs`: `ApiServices.video_watch_state_updater` and the two new routes.
-- `src/serve.rs`: constructs `VideoWatchStateUpdater` and passes the extra repositories to `ChannelSearcher`.
+- `src/serve.rs`: constructs `VideoWatchStateUpdater` and passes the extra repositories to `ChannelViewSearcher`.
 
 **SPA**
 - `web/src/api.js`: `recordVideoProgress`, `beaconVideoProgress`, `markChannelWatched`.
-- `web/src/useWatchProgress.js`: new hook that attaches to a `<video>`, resumes from the saved position and reports progress.
+- `web/src/useWatchProgress.js`: new hook that attaches to a `<video>` element (passed from a callback ref), resumes from the saved position and reports progress.
 - `web/src/components/WatchedTick.jsx`: new tick overlay for a thumbnail.
 - `web/src/components/ChannelDetail.jsx`: uses the hook, shows the tick and the "Mark all watched" control. The selection is kept by id so resume reads fresh polled data.
 - `web/src/components/PlaylistDetail.jsx`: uses the hook and shows the tick.
@@ -56,6 +57,17 @@ impl PlaybackPosition {
 ```
 
 ```rust
+// domain/video/video_duration.rs
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VideoDuration(i64);
+
+impl VideoDuration {
+    pub fn new(seconds: i64) -> Result<Self, ValidationError>; // "Video duration must be positive (got N)"
+    pub fn seconds(&self) -> i64;
+}
+```
+
+```rust
 // domain/video/video.rs
 pub struct Video {
     // ...existing fields...
@@ -70,13 +82,14 @@ impl Video {
     // Video::create -> watched_at: None, playback_position: PlaybackPosition::start()
     // reset_for_redownload keeps watch state (struct update, untouched).
 
-    /// Duration is `self.duration_seconds`, else `reported_duration_seconds`; non-positive = unknown.
+    /// Duration is `self.duration_seconds`, else `reported_duration`. A recorded 0 (yt-dlp
+    /// truncating a sub-second video) counts as unknown, which also guards the division.
     /// unwatched: pos >= 90% -> mark_watched; else position = pos (also when duration unknown).
     /// watched:   10% < pos < 90% -> watched_at = None, position = pos; else unchanged.
-    pub fn record_progress(
+    pub fn update_watch_state(
         self,
         position: PlaybackPosition,
-        reported_duration_seconds: Option<i64>,
+        reported_duration: Option<VideoDuration>,
         now: DateTime<Utc>,
     ) -> Self;
     pub fn mark_watched(self, now: DateTime<Utc>) -> Self; // watched_at = now, position = start
@@ -135,12 +148,12 @@ impl VideoWatchStateUpdater {
 }
 
 pub trait VideoWatchStateUpdaterApi: Send + Sync {
-    /// Applies `Video::record_progress` to every stored copy of `youtube_id`.
-    fn record_progress(
+    /// Applies `Video::update_watch_state` to every stored copy of `youtube_id`.
+    fn update(
         &self,
         youtube_id: &VideoId,
         position: PlaybackPosition,
-        reported_duration_seconds: Option<i64>,
+        reported_duration: Option<VideoDuration>,
     ) -> Result<(), UpdateWatchStateError>;
     /// Marks every `Downloaded` video of the channel watched, with every
     /// stored copy of each; pending/in-flight videos are left unchanged.
@@ -149,8 +162,8 @@ pub trait VideoWatchStateUpdaterApi: Send + Sync {
 ```
 
 ```rust
-// domain/services/channel_searcher.rs
-impl ChannelSearcher {
+// domain/services/channel_view_searcher.rs
+impl ChannelViewSearcher {
     pub fn new(
         repository: Arc<dyn ChannelRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
@@ -158,8 +171,7 @@ impl ChannelSearcher {
     ) -> Self;
 }
 
-pub trait ChannelSearcherApi: Send + Sync {
-    /// Every channel with its count of `Downloaded`, unwatched videos.
+pub trait ChannelViewSearcherApi: Send + Sync {
     fn search_all(&self) -> anyhow::Result<Vec<ChannelView>>;
 }
 ```
@@ -213,7 +225,7 @@ pub async fn mark_channel_watched(
     Path(handle): Path<String>,
 ) -> Result<StatusCode, ApiError>; // 204
 pub async fn list_channels(
-    State(channel_searcher): State<ChannelSearcher>,
+    State(channel_view_searcher): State<ChannelViewSearcher>,
 ) -> Result<Json<Vec<ChannelListItemResponse>>, ApiError>;
 
 // UpdateWatchStateError mapping (one fn, shared): VideoNotFound | ChannelNotFound -> 400, Repository -> 500
@@ -235,7 +247,7 @@ export async function markChannelWatched(handle)
 // Resumes on loadedmetadata when !video.watched && video.position_seconds > 0.
 // Reports on timeupdate (throttled to 15s), pause, ended, and video change/unmount;
 // uses beaconVideoProgress on pagehide.
-export function useWatchProgress(videoRef, video)
+export function useWatchProgress(videoElement, video)
 
 // web/src/components/WatchedTick.jsx
 export function WatchedTick({ watched })
@@ -251,10 +263,11 @@ POST /api/videos/{id}/progress {position_seconds, duration_seconds?}
   record_video_progress(State<VideoWatchStateUpdater>, Path(id), Json(request))
     VideoId::new(id)?
     PlaybackPosition::new(required(request.position_seconds, MISSING_POSITION)?)?
-    run_blocking(video_watch_state_updater.record_progress(&youtube_id, position, request.duration_seconds))
+    request.duration_seconds.map(VideoDuration::new).transpose()?
+    run_blocking(video_watch_state_updater.update(&youtube_id, position, reported_duration))
       copies = find_copies(youtube_id)                  -> video_repository.find_by_youtube_id; empty -> VideoNotFound
       now = clock.now()
-      copies.map(|v| v.record_progress(position, reported_duration_seconds, now))
+      copies.map(|v| v.update_watch_state(position, reported_duration, now))
             .try_for_each(|v| video_repository.update(&v))
     -> 204
 ```
@@ -279,8 +292,8 @@ POST /api/channels/{handle}/watched
 List channels with unwatched count:
 ```
 GET /api/channels
-  list_channels(State<ChannelSearcher>)
-    run_blocking(channel_searcher.search_all())
+  list_channels(State<ChannelViewSearcher>)
+    run_blocking(channel_view_searcher.search_all())
       channel_repository.list()
         .map(|channel| ChannelView { id, name, path, avatar_filename (from channel), unwatched_count: count_unwatched(&channel.id) })
           count_unwatched: channel_video_repository.list_for_channel
@@ -293,7 +306,7 @@ SPA playback:
 ```
 ChannelDetail / PlaylistDetail
   selectedVideo = videos.find(id == selectedId)       (fresh from poll)
-  useWatchProgress(videoRef, selectedVideo)
+  useWatchProgress(videoElement, selectedVideo)      (videoElement from a callback ref, so it re-attaches when the <video> mounts late)
     loadedmetadata -> if !watched && position_seconds > 0: el.currentTime = position_seconds
     timeupdate     -> if now - lastReport >= 15s: recordVideoProgress(id, {floor(currentTime), floor(duration)})
     pause | ended  -> recordVideoProgress(...)
@@ -336,12 +349,21 @@ Sidebar channel row
 
 `application/tasks/reconcile_channel_task.rs`:
 
-19. `it_should_keep_watch_state_when_redownloading_a_missing_file`: a watched `Downloaded` video whose file is missing. After the reconcile the video is `Pending` and still watched.
+19. `it_should_redownload_videos_with_missing_file` (existing, strengthened): a watched `Downloaded` video with a recorded duration whose file is missing. After the reconcile the stored video equals an explicitly written expected value: `status`, `quality`, `filename`, `thumbnail_filename` and `duration_seconds` cleared, every other field (including the watch state) kept.
 
 `domain/video/playback_position.rs` (value object):
 
 20. `it_should_accept_zero_and_positive_positions`: `Ok(PlaybackPosition(0))` and `Ok(PlaybackPosition(120))`.
 21. `it_should_reject_a_negative_position`: `Err(ValidationError("Playback position must not be negative (got -1)"))`.
+
+`domain/video/video_duration.rs` (value object):
+
+- `it_should_accept_a_positive_duration`: `Ok(VideoDuration(1))` and `Ok(VideoDuration(120))`.
+- `it_should_reject_a_non_positive_duration`: `Err(ValidationError("Video duration must be positive (got 0)"))` and the same for -1.
+
+`application/http/videos/mod.rs`, record progress:
+
+- `it_should_fail_to_record_progress_if_invalid_duration_provided`: `duration_seconds: 0`. Exact `VideoDuration` 400 message, on an unmigrated connection.
 
 **2. Infrastructure tests**
 

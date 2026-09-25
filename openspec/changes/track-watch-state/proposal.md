@@ -32,7 +32,7 @@ The SPA plays downloaded videos but keeps no record of what has been watched. Th
 
 ## Impact
 
-- **Backend (Rust)**: `Video` entity (new fields and transitions), a new `PlaybackPosition` value object, `VideoRepository` (new columns, new lookup by YouTube ID), a new `VideoWatchStateUpdater` domain service, `ChannelSearcher` (flat `ChannelView` with the unwatched count), new HTTP handlers and routes, DTO fields on video responses and a new flat channel list response.
+- **Backend (Rust)**: `Video` entity (new fields and transitions), new `PlaybackPosition` and `VideoDuration` value objects, `VideoRepository` (new columns, new lookup by YouTube ID), a new `VideoWatchStateUpdater` domain service, `ChannelSearcher` renamed to `ChannelViewSearcher` (flat `ChannelView` with the unwatched count), new HTTP handlers and routes, DTO fields on video responses and a new flat channel list response.
 - **Database**: migration `0002` adds two columns and a `youtube_id` index to `videos`. It is additive, so existing data is kept.
 - **API**: new fields on video responses; `GET /api/channels` trimmed to the fields above plus `unwatched_count`; new routes `POST /api/videos/{id}/progress` and `POST /api/channels/{handle}/watched`.
 - **SPA**: `api.js`, the channel, playlist and home views, the sidebar, and a new playback-progress hook.
