@@ -178,4 +178,33 @@ mod tests {
         );
         assert_eq!(published_at, Ok("2024-01-02T00:00:00+00:00".to_string()));
     }
+
+    #[test]
+    fn it_should_backfill_the_metadata_update_time_from_its_creation_time_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![M::up(BASELINE_SQL), M::up(WATCH_STATE_SQL)])
+            .to_latest(&mut conn)
+            .unwrap();
+        conn.execute(
+            "INSERT INTO video_metadata (video_id, title, plot, studio, director, premiered, year, tags, uniqueid, sorttitle, created_at)
+             VALUES ('rec1', 'My Video', 'A description', 'My Channel', 'My Channel', '2024-01-02', 2024, '[]', 'yt1', '20240102 My Video', '2024-02-01T00:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let timestamps = conn.query_row(
+            "SELECT created_at, updated_at FROM video_metadata WHERE video_id = 'rec1'",
+            [],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        );
+        assert_eq!(
+            timestamps,
+            Ok((
+                "2024-02-01T00:00:00+00:00".to_string(),
+                "2024-02-01T00:00:00+00:00".to_string()
+            ))
+        );
+    }
 }
