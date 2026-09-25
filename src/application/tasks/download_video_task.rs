@@ -547,6 +547,79 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_the_metadata_creation_time_when_regenerated() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_metadata_repository =
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video_dir = output_dir.path().join("fake-output");
+        std::fs::create_dir_all(&video_dir).unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let earlier = DateTime::<Utc>::from_timestamp(1_600_000_000, 0).unwrap();
+        video_metadata_repository
+            .save(
+                &video.id,
+                &VideoMetadata::new(
+                    "Stale Title",
+                    "Stale plot",
+                    "Stale Channel",
+                    "Stale Channel",
+                    earlier,
+                    None,
+                    Vec::new(),
+                    "yt1",
+                    None,
+                    "20200913 Stale Title",
+                    earlier,
+                ),
+                &video_dir,
+            )
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            video_metadata_repository.clone(),
+        ));
+        let payload = Task::DownloadVideo {
+            video_id: video.id.as_str().to_string(),
+            quality: "high".to_string(),
+            output_dir: output_dir.path().to_string_lossy().to_string(),
+        }
+        .payload()
+        .to_string();
+
+        let result = run(&task, &payload, false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_metadata_repository.find(&video.id).unwrap(),
+            Some(VideoMetadata {
+                created_at: earlier,
+                ..VideoMetadata::new(
+                    "My Video",
+                    "A description",
+                    "My Channel",
+                    "My Channel",
+                    fixed_timestamp(),
+                    None,
+                    Vec::new(),
+                    "yt1",
+                    None,
+                    "20231114 My Video",
+                    fixed_timestamp(),
+                )
+            })
+        );
+    }
+
+    #[test]
     fn it_should_save_youtube_metadata() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));

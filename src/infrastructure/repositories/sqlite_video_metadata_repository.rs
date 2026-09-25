@@ -92,7 +92,6 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
                 uniqueid = excluded.uniqueid,
                 thumb = excluded.thumb,
                 sorttitle = excluded.sorttitle,
-                created_at = excluded.created_at,
                 updated_at = excluded.updated_at",
             params![
                 video_id.as_str(),
