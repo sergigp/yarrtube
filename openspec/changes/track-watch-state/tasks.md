@@ -42,7 +42,7 @@ SQLite migrations:
 
 `SqliteVideoRepository`:
 - [x] 3.2 `it_should_round_trip_a_watched_video_with_a_playback_position`: drives the new columns in `save`/`find`/`row_to_video`.
-- [ ] 3.3 `it_should_find_every_copy_of_a_youtube_video`: drives the `find_by_youtube_id` query.
+- [x] 3.3 `it_should_find_every_copy_of_a_youtube_video`: drives the `find_by_youtube_id` query.
 - [ ] 3.4 `it_should_find_no_copies_of_an_unknown_youtube_video`: drives the empty result.
 
 ## 4. Verification

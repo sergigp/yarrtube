@@ -436,4 +436,20 @@ mod tests {
 
         assert_eq!(repo.find(&video.id).unwrap(), Some(video));
     }
+
+    #[test]
+    fn it_should_find_every_copy_of_a_youtube_video() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let first_copy = Video::create(VideoId::new("shared").unwrap(), "A", now);
+        let other = Video::create(VideoId::new("other").unwrap(), "B", now);
+        let second_copy = Video::create(VideoId::new("shared").unwrap(), "C", now);
+        repo.save(&first_copy).unwrap();
+        repo.save(&other).unwrap();
+        repo.save(&second_copy).unwrap();
+
+        let found = repo.find_by_youtube_id(&VideoId::new("shared").unwrap());
+
+        assert_eq!(found.unwrap(), vec![first_copy, second_copy]);
+    }
 }
