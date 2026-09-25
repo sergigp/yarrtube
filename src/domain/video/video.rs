@@ -1,4 +1,5 @@
 use super::playback_position::PlaybackPosition;
+use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
 use super::video_record_id::VideoRecordId;
 use super::video_status::VideoStatus;
@@ -120,17 +121,18 @@ impl Video {
 
     /// Updates the watch state from how far playback got, against the
     /// recorded duration or, when none is recorded, the one the player
-    /// reported. An unwatched video becomes watched at 90%; a watched one becomes unwatched again once a
-    /// rewatch passes 10%, as long as it is still below 90%. With no known
-    /// duration an unwatched video only keeps the position.
+    /// reported. An unwatched video becomes watched at 90%; a watched one
+    /// becomes unwatched again once a rewatch passes 10%, as long as it is
+    /// still below 90%. With no known duration an unwatched video only keeps
+    /// the position.
     pub fn update_watch_state(
         self,
         position: PlaybackPosition,
-        reported_duration_seconds: Option<i64>,
+        reported_duration: Option<VideoDuration>,
         now: DateTime<Utc>,
     ) -> Self {
         let progress = self
-            .known_duration_seconds(reported_duration_seconds)
+            .known_duration_seconds(reported_duration)
             .map(|duration| position.seconds() as f64 / duration as f64);
         match (self.is_watched(), progress) {
             (true, Some(progress))
@@ -163,11 +165,13 @@ impl Video {
         self.watched_at.is_some()
     }
 
-    /// The recorded duration, else the reported one; a non-positive duration
-    /// counts as unknown.
-    fn known_duration_seconds(&self, reported_duration_seconds: Option<i64>) -> Option<i64> {
+    /// The recorded duration, else the reported one. The reported one is
+    /// always positive (`VideoDuration`), but yt-dlp truncates a sub-second
+    /// video's duration to a recorded 0, which counts as unknown so progress
+    /// is never divided by it.
+    fn known_duration_seconds(&self, reported_duration: Option<VideoDuration>) -> Option<i64> {
         self.duration_seconds
-            .or(reported_duration_seconds)
+            .or(reported_duration.map(|duration| duration.seconds()))
             .filter(|duration| *duration > 0)
     }
 }

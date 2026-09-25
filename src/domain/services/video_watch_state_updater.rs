@@ -1,5 +1,7 @@
 use crate::domain::channel::ChannelHandle;
-use crate::domain::video::{PlaybackPosition, UpdateWatchStateError, Video, VideoId, VideoStatus};
+use crate::domain::video::{
+    PlaybackPosition, UpdateWatchStateError, Video, VideoDuration, VideoId, VideoStatus,
+};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -41,7 +43,7 @@ pub trait VideoWatchStateUpdaterApi: Send + Sync {
         &self,
         youtube_id: &VideoId,
         position: PlaybackPosition,
-        reported_duration_seconds: Option<i64>,
+        reported_duration: Option<VideoDuration>,
     ) -> Result<(), UpdateWatchStateError>;
     /// Marks every `Downloaded` video of the channel watched, with every
     /// stored copy of each; pending/in-flight videos are left unchanged.
@@ -54,13 +56,13 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
         &self,
         youtube_id: &VideoId,
         position: PlaybackPosition,
-        reported_duration_seconds: Option<i64>,
+        reported_duration: Option<VideoDuration>,
     ) -> Result<(), UpdateWatchStateError> {
         let copies = self.find_copies(youtube_id)?;
         let now = self.clock.now();
         copies
             .into_iter()
-            .map(|video| video.update_watch_state(position, reported_duration_seconds, now))
+            .map(|video| video.update_watch_state(position, reported_duration, now))
             .try_for_each(|video| self.video_repository.update(&video))
             .map_err(UpdateWatchStateError::Repository)
     }

@@ -8,7 +8,9 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
-use crate::domain::video::{ListVideosError, PlaybackPosition, UpdateWatchStateError, VideoId};
+use crate::domain::video::{
+    ListVideosError, PlaybackPosition, UpdateWatchStateError, VideoDuration, VideoId,
+};
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -72,9 +74,13 @@ pub async fn record_video_progress(
 ) -> Result<StatusCode, ApiError> {
     let youtube_id = VideoId::new(youtube_id)?;
     let position = PlaybackPosition::new(required(request.position_seconds, MISSING_POSITION)?)?;
+    let reported_duration = request
+        .duration_seconds
+        .map(VideoDuration::new)
+        .transpose()?;
 
     run_blocking(move || {
-        video_watch_state_updater.update(&youtube_id, position, request.duration_seconds)
+        video_watch_state_updater.update(&youtube_id, position, reported_duration)
     })
     .await?
     .map_err(update_watch_state_error)?;
@@ -959,10 +965,7 @@ mod tests {
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
-        let request = RecordProgressRequest {
-            duration_seconds: Some(0),
-            ..progress_request(500)
-        };
+        let request = progress_request(500);
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
@@ -1144,6 +1147,23 @@ mod tests {
             response,
             Err(ApiError::bad_request(
                 "Playback position must not be negative (got -1)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_record_progress_if_invalid_duration_provided() {
+        let request = RecordProgressRequest {
+            duration_seconds: Some(0),
+            ..progress_request(30)
+        };
+
+        let response = record_progress(any_video_watch_state_updater(), "vid1", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Video duration must be positive (got 0)"
             ))
         );
     }
