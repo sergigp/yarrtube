@@ -39,9 +39,7 @@ export function useWatchProgress(videoElement, video) {
       }
       progress = {
         position_seconds: Math.floor(element.currentTime),
-        duration_seconds: Number.isFinite(element.duration)
-          ? Math.floor(element.duration)
-          : undefined,
+        duration_seconds: reportableDuration(element.duration),
       }
     }
 
@@ -100,4 +98,14 @@ export function useWatchProgress(videoElement, video) {
 
 function seekTo(element, seconds) {
   element.currentTime = seconds
+}
+
+/**
+ * The player's duration in whole seconds, or `undefined` when it isn't known
+ * yet (NaN), is unbounded (Infinity), or rounds down to 0 — the daemon only
+ * accepts a positive duration.
+ */
+function reportableDuration(duration) {
+  const seconds = Number.isFinite(duration) ? Math.floor(duration) : 0
+  return seconds > 0 ? seconds : undefined
 }
