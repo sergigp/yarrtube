@@ -121,8 +121,8 @@ impl Video {
     /// Records how far playback got, against the recorded duration or, when
     /// none is recorded, the one the player reported. An unwatched video
     /// becomes watched at 90%; a watched one becomes unwatched again once a
-    /// rewatch passes 10%. With no known duration an unwatched video only
-    /// keeps the position.
+    /// rewatch passes 10%, as long as it is still below 90%. With no known
+    /// duration an unwatched video only keeps the position.
     pub fn record_progress(
         self,
         position: PlaybackPosition,
@@ -133,11 +133,15 @@ impl Video {
             .known_duration_seconds(reported_duration_seconds)
             .map(|duration| position.seconds() as f64 / duration as f64);
         match (self.is_watched(), progress) {
-            (true, Some(progress)) if progress > REWATCH_RESET_THRESHOLD => Self {
-                watched_at: None,
-                playback_position: position,
-                ..self
-            },
+            (true, Some(progress))
+                if progress > REWATCH_RESET_THRESHOLD && progress < WATCHED_THRESHOLD =>
+            {
+                Self {
+                    watched_at: None,
+                    playback_position: position,
+                    ..self
+                }
+            }
             (true, _) => self,
             (false, Some(progress)) if progress >= WATCHED_THRESHOLD => self.mark_watched(now),
             (false, _) => Self {

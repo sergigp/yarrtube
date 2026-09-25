@@ -1024,6 +1024,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_a_watched_video_watched_when_playing_on_past_90_percent() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(95);
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+    }
+
+    #[tokio::test]
     async fn it_should_record_progress_on_every_copy_of_the_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
