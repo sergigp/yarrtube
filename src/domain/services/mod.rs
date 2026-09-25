@@ -1,7 +1,7 @@
 pub mod channel_creator;
 pub mod channel_deleter;
-pub mod channel_searcher;
 pub mod channel_video_reconciler;
+pub mod channel_view_searcher;
 pub mod directory_searcher;
 pub mod playlist_creator;
 pub mod playlist_deleter;
@@ -12,11 +12,12 @@ pub mod thumbnail_fetcher;
 pub mod video_downloader;
 pub mod video_file_deleter;
 pub mod video_searcher;
+pub mod video_watch_state_updater;
 
 pub use channel_creator::{ChannelCreator, ChannelCreatorApi, CreateChannelOutcome};
 pub use channel_deleter::{ChannelDeleter, ChannelDeleterApi};
-pub use channel_searcher::{ChannelSearcher, ChannelSearcherApi};
 pub use channel_video_reconciler::{ChannelVideoReconciler, ChannelVideoReconcilerApi};
+pub use channel_view_searcher::{ChannelViewSearcher, ChannelViewSearcherApi};
 pub use directory_searcher::{DirectorySearcher, DirectorySearcherApi};
 pub use playlist_creator::{CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi};
 pub use playlist_deleter::{PlaylistDeleter, PlaylistDeleterApi};
@@ -27,3 +28,4 @@ pub use thumbnail_fetcher::{ThumbnailFetcher, ThumbnailFetcherApi};
 pub use video_downloader::{VideoDownloader, VideoDownloaderApi};
 pub use video_file_deleter::{VideoFileDeleter, VideoFileDeleterApi};
 pub use video_searcher::{VideoSearcher, VideoSearcherApi};
+pub use video_watch_state_updater::{VideoWatchStateUpdater, VideoWatchStateUpdaterApi};

@@ -3,6 +3,7 @@ import { usePolling } from '../usePolling'
 import { fetchRecentVideos, videoMediaUrl, avatarMediaUrl } from '../api'
 import { formatDuration } from '../formatDuration'
 import { Thumbnail } from './Thumbnail'
+import { WatchedTick } from './WatchedTick'
 
 function videoDetailPath(source) {
   const base = source.kind === 'channel' ? `/channels/${source.id}` : `/playlists/${source.id}`
@@ -35,6 +36,7 @@ function VideoGrid({ videos }) {
                 }
                 className="aspect-video w-full rounded-lg object-cover transition-opacity group-hover:opacity-90"
               />
+              <WatchedTick watched={video.watched} />
               {formatDuration(video.duration_seconds) && (
                 <span className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-xs font-medium text-white">
                   {formatDuration(video.duration_seconds)}

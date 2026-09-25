@@ -27,7 +27,7 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::Quality;
     use crate::domain::task::Task;
-    use crate::domain::video::{Video, VideoStatus};
+    use crate::domain::video::{PlaybackPosition, Video, VideoStatus};
     use crate::domain::video::{VideoId, VideoRecordId};
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
@@ -623,6 +623,8 @@ mod tests {
             duration_seconds: None,
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
+            watched_at: None,
+            playback_position: PlaybackPosition::start(),
         }
     }
 

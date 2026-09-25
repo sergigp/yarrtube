@@ -4,7 +4,9 @@ import { TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
 import { fetchPlaylists, fetchVideos, videoMediaUrl } from '../api'
 import { formatDuration } from '../formatDuration'
+import { useWatchProgress } from '../useWatchProgress'
 import { Thumbnail } from './Thumbnail'
+import { WatchedTick } from './WatchedTick'
 import { Beacon } from './Beacon'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -88,7 +90,10 @@ export function PlaylistDetail() {
   const playlist = playlists?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = usePolling(() => fetchVideos(id), [id])
-  const [manualSelection, setManualSelection] = useState(null)
+  const [manualSelectionId, setManualSelectionId] = useState(null)
+  const manualSelection = manualSelectionId
+    ? (videos?.find((video) => video.id === manualSelectionId) ?? null)
+    : null
   const initialVideoId = searchParams.get('video')
   const deepLinkedVideo = !manualSelection && initialVideoId
     ? (videos?.find((video) => video.id === initialVideoId) ?? null)
@@ -96,6 +101,8 @@ export function PlaylistDetail() {
   const defaultVideo = !manualSelection && !deepLinkedVideo ? (videos?.[0] ?? null) : null
   const selectedVideo = manualSelection ?? deepLinkedVideo ?? defaultVideo
   const autoplay = selectedVideo !== null && selectedVideo === deepLinkedVideo
+  const [videoElement, setVideoElement] = useState(null)
+  useWatchProgress(videoElement, selectedVideo)
 
   if (playlistsError) {
     return <p className="text-sm text-destructive">Failed to load playlist: {playlistsError.message}</p>
@@ -117,6 +124,7 @@ export function PlaylistDetail() {
             {selectedVideo?.status === 'DOWNLOADED' && selectedVideo.filename ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <video
+                ref={setVideoElement}
                 controls
                 autoPlay={autoplay}
                 className="block max-h-[70vh] w-full rounded-lg"
@@ -160,7 +168,7 @@ export function PlaylistDetail() {
                         'flex w-full items-start gap-3 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-accent',
                         active && 'bg-accent',
                       )}
-                      onClick={() => setManualSelection(video)}
+                      onClick={() => setManualSelectionId(video.id)}
                     >
                       <div className="relative shrink-0">
                         <Thumbnail
@@ -171,6 +179,7 @@ export function PlaylistDetail() {
                           }
                           className="aspect-video w-24 rounded-md object-cover"
                         />
+                        <WatchedTick watched={video.watched} />
                         {formatDuration(video.duration_seconds) && (
                           <span className="absolute right-1 bottom-1 rounded bg-black/75 px-1 py-0.5 text-[10px] font-medium text-white">
                             {formatDuration(video.duration_seconds)}

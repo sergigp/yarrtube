@@ -3,9 +3,10 @@ use rusqlite::Connection;
 use rusqlite_migration::{M, Migrations};
 
 const BASELINE_SQL: &str = include_str!("../../../migrations/0001_baseline.sql");
+const WATCH_STATE_SQL: &str = include_str!("../../../migrations/0002_watch_state.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
-    Migrations::new(vec![M::up(BASELINE_SQL)])
+    Migrations::new(vec![M::up(BASELINE_SQL), M::up(WATCH_STATE_SQL)])
         .to_latest(conn)
         .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
         .context("failed to apply database migrations")
@@ -88,5 +89,28 @@ mod tests {
             )
             .unwrap();
         assert_eq!(name, "Some Channel");
+    }
+
+    #[test]
+    fn it_should_default_existing_videos_to_unwatched_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![M::up(BASELINE_SQL)])
+            .to_latest(&mut conn)
+            .unwrap();
+        conn.execute(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec1', 'yt1', 'My Video', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let watch_state = conn.query_row(
+            "SELECT watched_at, playback_position_seconds FROM videos WHERE id = 'rec1'",
+            [],
+            |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, i64>(1)?)),
+        );
+        assert_eq!(watch_state, Ok((None, 0)));
     }
 }

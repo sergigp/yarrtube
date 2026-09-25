@@ -110,6 +110,7 @@ src/
       }
   }
   ```
+- Read models (`*View`, e.g. `TaskView`, `ChannelView`) hold the flat fields they expose, not the entity they're derived from.
 - Domain services are call-agnostic: they know nothing about HTTP, CLI, subscribers, or tasks. Adapting any external trigger into a domain call — parsing/validating input, invoking the domain service, mapping its result back — is the application layer's sole responsibility.
 
 ## HTTP Handlers
@@ -119,6 +120,7 @@ src/
 - Every failure is an `ApiError` (status + message, rendered as `{"error": ...}`). Input is validated with `?` only: VOs via `From<ValidationError>`, missing fields via `required(request.field, MISSING_X)?` (`http/validation.rs`).
 - Domain errors are mapped explicitly per variant (`Err(e @ CreateChannelError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e))`), no catch-all arm. A mapping repeated across handlers gets one small function.
 - Every service call goes through `run_blocking` (`http/blocking.rs`), since services are synchronous (SQLite, blocking HTTP). Don't judge per call whether it's needed.
+- Response DTOs are flat and carry only the fields their consumers use. Never compose one resource's response by wrapping or `#[serde(flatten)]`-ing another response DTO. A genuinely nested JSON object (e.g. a video's `source`) gets its own DTO.
 
 # Testing
 

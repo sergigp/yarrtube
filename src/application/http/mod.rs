@@ -8,9 +8,9 @@ pub mod validation;
 pub mod videos;
 
 use crate::domain::services::{
-    ChannelCreator, ChannelDeleter, ChannelSearcher, ChannelVideoReconciler, DirectorySearcher,
+    ChannelCreator, ChannelDeleter, ChannelVideoReconciler, ChannelViewSearcher, DirectorySearcher,
     PlaylistCreator, PlaylistDeleter, PlaylistSearcher, PlaylistVideoReconciler, TaskViewSearcher,
-    VideoSearcher,
+    VideoSearcher, VideoWatchStateUpdater,
 };
 use axum::Router;
 use axum::extract::FromRef;
@@ -32,9 +32,10 @@ pub struct ApiServices {
     pub task_view_searcher: TaskViewSearcher,
     pub channel_creator: ChannelCreator,
     pub channel_deleter: ChannelDeleter,
-    pub channel_searcher: ChannelSearcher,
+    pub channel_view_searcher: ChannelViewSearcher,
     pub channel_video_reconciler: ChannelVideoReconciler,
     pub directory_searcher: DirectorySearcher,
+    pub video_watch_state_updater: VideoWatchStateUpdater,
     pub videos_root: VideosRoot,
 }
 
@@ -58,6 +59,7 @@ pub fn api_router(api_services: ApiServices) -> Router {
             get(videos::list_videos_for_playlist),
         )
         .route("/videos/recent", get(videos::list_recent_videos))
+        .route("/videos/{id}/progress", post(videos::record_video_progress))
         .route("/tasks", get(tasks::list_tasks))
         .route(
             "/channels",
@@ -74,6 +76,10 @@ pub fn api_router(api_services: ApiServices) -> Router {
         .route(
             "/channels/{handle}/videos",
             get(videos::list_videos_for_channel),
+        )
+        .route(
+            "/channels/{handle}/watched",
+            post(channels::mark_channel_watched),
         )
         .with_state(api_services)
 }

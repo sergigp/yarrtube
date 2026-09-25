@@ -1,12 +1,21 @@
 import { useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { TriangleAlert } from 'lucide-react'
+import { CheckCheck, TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
-import { fetchChannels, fetchChannelVideos, videoMediaUrl, avatarMediaUrl } from '../api'
+import {
+  fetchChannels,
+  fetchChannelVideos,
+  markChannelWatched,
+  videoMediaUrl,
+  avatarMediaUrl,
+} from '../api'
 import { formatDuration } from '../formatDuration'
+import { useWatchProgress } from '../useWatchProgress'
 import { Thumbnail } from './Thumbnail'
+import { WatchedTick } from './WatchedTick'
 import { Beacon } from './Beacon'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 const STATUS_MESSAGES = {
@@ -92,7 +101,11 @@ export function ChannelDetail() {
   const channel = channels?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = usePolling(() => fetchChannelVideos(id), [id])
-  const [manualSelection, setManualSelection] = useState(null)
+  const [manualSelectionId, setManualSelectionId] = useState(null)
+  const [markingWatched, setMarkingWatched] = useState(false)
+  const manualSelection = manualSelectionId
+    ? (videos?.find((video) => video.id === manualSelectionId) ?? null)
+    : null
   const initialVideoId = searchParams.get('video')
   const deepLinkedVideo = !manualSelection && initialVideoId
     ? (videos?.find((video) => video.id === initialVideoId) ?? null)
@@ -100,6 +113,8 @@ export function ChannelDetail() {
   const defaultVideo = !manualSelection && !deepLinkedVideo ? (videos?.[0] ?? null) : null
   const selectedVideo = manualSelection ?? deepLinkedVideo ?? defaultVideo
   const autoplay = selectedVideo !== null && selectedVideo === deepLinkedVideo
+  const [videoElement, setVideoElement] = useState(null)
+  useWatchProgress(videoElement, selectedVideo)
 
   if (channelsError) {
     return <p className="text-sm text-destructive">Failed to load channel: {channelsError.message}</p>
@@ -121,6 +136,7 @@ export function ChannelDetail() {
             {selectedVideo?.status === 'DOWNLOADED' && selectedVideo.filename ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
               <video
+                ref={setVideoElement}
                 controls
                 autoPlay={autoplay}
                 className="block max-h-[70vh] w-full rounded-lg"
@@ -148,6 +164,26 @@ export function ChannelDetail() {
         </div>
 
         <div className="min-h-0 h-full overflow-y-auto">
+          <div className="mb-2 flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={markingWatched}
+              onClick={async () => {
+                setMarkingWatched(true)
+                try {
+                  await markChannelWatched(id)
+                } catch (err) {
+                  window.alert(`Failed to mark "${channel.name}" watched: ${err.message}`)
+                } finally {
+                  setMarkingWatched(false)
+                }
+              }}
+            >
+              <CheckCheck />
+              Mark all watched
+            </Button>
+          </div>
           {error && <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>}
           {!error && !videos && <p className="text-sm text-muted-foreground">Loading videos…</p>}
           {!error && videos && videos.length === 0 && (
@@ -164,7 +200,7 @@ export function ChannelDetail() {
                         'flex w-full items-start gap-3 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-accent',
                         active && 'bg-accent',
                       )}
-                      onClick={() => setManualSelection(video)}
+                      onClick={() => setManualSelectionId(video.id)}
                     >
                       <div className="relative shrink-0">
                         <Thumbnail
@@ -175,6 +211,7 @@ export function ChannelDetail() {
                           }
                           className="aspect-video w-24 rounded-md object-cover"
                         />
+                        <WatchedTick watched={video.watched} />
                         {formatDuration(video.duration_seconds) && (
                           <span className="absolute right-1 bottom-1 rounded bg-black/75 px-1 py-0.5 text-[10px] font-medium text-white">
                             {formatDuration(video.duration_seconds)}

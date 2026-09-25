@@ -1,3 +1,5 @@
+use super::playback_position::PlaybackPosition;
+use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
 use super::video_record_id::VideoRecordId;
 use super::video_status::VideoStatus;
@@ -20,7 +22,12 @@ pub struct Video {
     pub duration_seconds: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub watched_at: Option<DateTime<Utc>>,
+    pub playback_position: PlaybackPosition,
 }
+
+const WATCHED_THRESHOLD: f64 = 0.9;
+const REWATCH_RESET_THRESHOLD: f64 = 0.1;
 
 impl Video {
     pub fn create(youtube_id: VideoId, title: impl Into<String>, now: DateTime<Utc>) -> Self {
@@ -35,6 +42,8 @@ impl Video {
             duration_seconds: None,
             created_at: now,
             updated_at: now,
+            watched_at: None,
+            playback_position: PlaybackPosition::start(),
         }
     }
 
@@ -108,6 +117,62 @@ impl Video {
             updated_at: now,
             ..self
         }
+    }
+
+    /// Updates the watch state from how far playback got, against the
+    /// recorded duration or, when none is recorded, the one the player
+    /// reported. An unwatched video becomes watched at 90%; a watched one
+    /// becomes unwatched again once a rewatch passes 10%, as long as it is
+    /// still below 90%. With no known duration an unwatched video only keeps
+    /// the position.
+    pub fn update_watch_state(
+        self,
+        position: PlaybackPosition,
+        reported_duration: Option<VideoDuration>,
+        now: DateTime<Utc>,
+    ) -> Self {
+        let progress = self
+            .known_duration_seconds(reported_duration)
+            .map(|duration| position.seconds() as f64 / duration as f64);
+        match (self.is_watched(), progress) {
+            (true, Some(progress))
+                if progress > REWATCH_RESET_THRESHOLD && progress < WATCHED_THRESHOLD =>
+            {
+                Self {
+                    watched_at: None,
+                    playback_position: position,
+                    ..self
+                }
+            }
+            (true, _) => self,
+            (false, Some(progress)) if progress >= WATCHED_THRESHOLD => self.mark_watched(now),
+            (false, _) => Self {
+                playback_position: position,
+                ..self
+            },
+        }
+    }
+
+    pub fn mark_watched(self, now: DateTime<Utc>) -> Self {
+        Self {
+            watched_at: Some(now),
+            playback_position: PlaybackPosition::start(),
+            ..self
+        }
+    }
+
+    pub fn is_watched(&self) -> bool {
+        self.watched_at.is_some()
+    }
+
+    /// The recorded duration, else the reported one. The reported one is
+    /// always positive (`VideoDuration`), but yt-dlp truncates a sub-second
+    /// video's duration to a recorded 0, which counts as unknown so progress
+    /// is never divided by it.
+    fn known_duration_seconds(&self, reported_duration: Option<VideoDuration>) -> Option<i64> {
+        self.duration_seconds
+            .or(reported_duration.map(|duration| duration.seconds()))
+            .filter(|duration| *duration > 0)
     }
 }
 

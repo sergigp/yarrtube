@@ -1,10 +1,28 @@
 use crate::domain::shared::Quality;
-use crate::domain::video::{Video, VideoStatus};
+use crate::domain::video::{PlaybackPosition, Video, VideoStatus};
 use crate::domain::video::{VideoId, VideoRecordId};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::sync::Mutex;
+
+const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds";
+
+/// A `videos` row as read, before its values are parsed into a `Video`.
+struct VideoRow {
+    id: String,
+    youtube_id: String,
+    title: String,
+    status: String,
+    quality: Option<String>,
+    filename: Option<String>,
+    thumbnail_filename: Option<String>,
+    duration_seconds: Option<i64>,
+    created_at: String,
+    updated_at: String,
+    watched_at: Option<String>,
+    playback_position_seconds: i64,
+}
 
 pub trait VideoRepository: Send + Sync {
     /// Plain insert-or-full-replace of every column — no conflict-merge
@@ -16,6 +34,8 @@ pub trait VideoRepository: Send + Sync {
     /// still exists.
     fn update(&self, video: &Video) -> anyhow::Result<()>;
     fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()>;
+    /// Every stored copy of a YouTube video, across all playlists/channels.
+    fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>>;
 }
 
 pub struct SqliteVideoRepository {
@@ -53,8 +73,8 @@ impl VideoRepository for SqliteVideoRepository {
             .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
              ON CONFLICT (id) DO UPDATE SET
                 youtube_id = excluded.youtube_id,
                 title = excluded.title,
@@ -64,7 +84,9 @@ impl VideoRepository for SqliteVideoRepository {
                 thumbnail_filename = excluded.thumbnail_filename,
                 duration_seconds = excluded.duration_seconds,
                 created_at = excluded.created_at,
-                updated_at = excluded.updated_at",
+                updated_at = excluded.updated_at,
+                watched_at = excluded.watched_at,
+                playback_position_seconds = excluded.playback_position_seconds",
             params![
                 video.id.as_str(),
                 video.youtube_id.as_str(),
@@ -76,6 +98,8 @@ impl VideoRepository for SqliteVideoRepository {
                 video.duration_seconds,
                 video.created_at.to_rfc3339(),
                 video.updated_at.to_rfc3339(),
+                video.watched_at.map(|w| w.to_rfc3339()),
+                video.playback_position.seconds(),
             ],
         )
         .inspect_err(|e| {
@@ -92,35 +116,14 @@ impl VideoRepository for SqliteVideoRepository {
             .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
-            "SELECT id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at
-             FROM videos WHERE id = ?1",
+            &format!("SELECT {VIDEO_COLUMNS} FROM videos WHERE id = ?1"),
             params![id.as_str()],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, Option<String>>(4)?,
-                    row.get::<_, Option<String>>(5)?,
-                    row.get::<_, Option<String>>(6)?,
-                    row.get::<_, Option<i64>>(7)?,
-                    row.get::<_, String>(8)?,
-                    row.get::<_, String>(9)?,
-                ))
-            },
+            Self::read_row,
         )
         .optional()
         .inspect_err(|e| tracing::error!(video_id = %id, error = %e, "failed to find video"))
         .context("failed to find video")?
-        .map(
-            |(id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at)| {
-                Self::row_to_video(
-                    id, youtube_id, title, status, quality, filename, thumbnail_filename,
-                    duration_seconds, created_at, updated_at,
-                )
-            },
-        )
+        .map(Self::row_to_video)
         .transpose()
     }
 
@@ -131,7 +134,7 @@ impl VideoRepository for SqliteVideoRepository {
             .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9
+            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11
              WHERE id = ?1",
             params![
                 video.id.as_str(),
@@ -143,6 +146,8 @@ impl VideoRepository for SqliteVideoRepository {
                 video.thumbnail_filename,
                 video.duration_seconds,
                 video.updated_at.to_rfc3339(),
+                video.watched_at.map(|w| w.to_rfc3339()),
+                video.playback_position.seconds(),
             ],
         )
         .inspect_err(|e| {
@@ -163,38 +168,72 @@ impl VideoRepository for SqliteVideoRepository {
             .context("failed to delete video")?;
         Ok(())
     }
+
+    fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>> {
+        let conn = self
+            .conn
+            .lock()
+            .inspect_err(|_| tracing::error!(youtube_id = %youtube_id, "database lock poisoned"))
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {VIDEO_COLUMNS} FROM videos WHERE youtube_id = ?1 ORDER BY rowid ASC"
+            ))
+            .context("failed to prepare find videos by youtube id")?;
+        stmt.query_map(params![youtube_id.as_str()], Self::read_row)
+            .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+            .inspect_err(|e| {
+                tracing::error!(youtube_id = %youtube_id, error = %e, "failed to find videos by youtube id")
+            })
+            .context("failed to find videos by youtube id")?
+            .into_iter()
+            .map(Self::row_to_video)
+            .collect()
+    }
 }
 
 impl SqliteVideoRepository {
-    #[allow(clippy::too_many_arguments)]
-    fn row_to_video(
-        id: String,
-        youtube_id: String,
-        title: String,
-        status: String,
-        quality: Option<String>,
-        filename: Option<String>,
-        thumbnail_filename: Option<String>,
-        duration_seconds: Option<i64>,
-        created_at: String,
-        updated_at: String,
-    ) -> anyhow::Result<Video> {
-        Ok(Video {
-            id: VideoRecordId::new(id)?,
-            youtube_id: VideoId::new(youtube_id)?,
-            title,
-            status: VideoStatus::parse(&status)?,
-            quality: quality.map(Quality::new).transpose()?,
-            filename,
-            thumbnail_filename,
-            duration_seconds,
-            created_at: DateTime::parse_from_rfc3339(&created_at)
-                .context("failed to parse stored created_at")?
-                .with_timezone(&Utc),
-            updated_at: DateTime::parse_from_rfc3339(&updated_at)
-                .context("failed to parse stored updated_at")?
-                .with_timezone(&Utc),
+    fn read_row(row: &Row<'_>) -> rusqlite::Result<VideoRow> {
+        Ok(VideoRow {
+            id: row.get(0)?,
+            youtube_id: row.get(1)?,
+            title: row.get(2)?,
+            status: row.get(3)?,
+            quality: row.get(4)?,
+            filename: row.get(5)?,
+            thumbnail_filename: row.get(6)?,
+            duration_seconds: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
+            watched_at: row.get(10)?,
+            playback_position_seconds: row.get(11)?,
         })
+    }
+
+    fn row_to_video(row: VideoRow) -> anyhow::Result<Video> {
+        Ok(Video {
+            id: VideoRecordId::new(row.id)?,
+            youtube_id: VideoId::new(row.youtube_id)?,
+            title: row.title,
+            status: VideoStatus::parse(&row.status)?,
+            quality: row.quality.map(Quality::new).transpose()?,
+            filename: row.filename,
+            thumbnail_filename: row.thumbnail_filename,
+            duration_seconds: row.duration_seconds,
+            created_at: Self::parse_timestamp(&row.created_at, "created_at")?,
+            updated_at: Self::parse_timestamp(&row.updated_at, "updated_at")?,
+            watched_at: row
+                .watched_at
+                .map(|w| Self::parse_timestamp(&w, "watched_at"))
+                .transpose()?,
+            playback_position: PlaybackPosition::new(row.playback_position_seconds)?,
+        })
+    }
+
+    fn parse_timestamp(value: &str, column: &str) -> anyhow::Result<DateTime<Utc>> {
+        Ok(DateTime::parse_from_rfc3339(value)
+            .with_context(|| format!("failed to parse stored {column}"))?
+            .with_timezone(&Utc))
     }
 }
 
@@ -381,5 +420,47 @@ mod tests {
         let found = repo.find(&original.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::InProgress);
         assert_eq!(found.updated_at, later);
+    }
+
+    #[test]
+    fn it_should_round_trip_a_watched_video_with_a_playback_position() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let watched_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let video = Video {
+            playback_position: PlaybackPosition::new(42).unwrap(),
+            ..video("First", now).mark_watched(watched_at)
+        };
+
+        repo.save(&video).unwrap();
+
+        assert_eq!(repo.find(&video.id).unwrap(), Some(video));
+    }
+
+    #[test]
+    fn it_should_find_every_copy_of_a_youtube_video() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let first_copy = Video::create(VideoId::new("shared").unwrap(), "A", now);
+        let other = Video::create(VideoId::new("other").unwrap(), "B", now);
+        let second_copy = Video::create(VideoId::new("shared").unwrap(), "C", now);
+        repo.save(&first_copy).unwrap();
+        repo.save(&other).unwrap();
+        repo.save(&second_copy).unwrap();
+
+        let found = repo.find_by_youtube_id(&VideoId::new("shared").unwrap());
+
+        assert_eq!(found.unwrap(), vec![first_copy, second_copy]);
+    }
+
+    #[test]
+    fn it_should_find_no_copies_of_an_unknown_youtube_video() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        repo.save(&video("First", now)).unwrap();
+
+        let found = repo.find_by_youtube_id(&VideoId::new("unknown").unwrap());
+
+        assert_eq!(found.unwrap(), vec![]);
     }
 }

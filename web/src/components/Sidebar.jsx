@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { RotateCw, X } from 'lucide-react'
+import { CheckCheck, RotateCw, X } from 'lucide-react'
 import { usePolling } from '../usePolling'
 import {
   fetchChannels,
@@ -9,6 +9,7 @@ import {
   reconcilePlaylist,
   deleteChannel,
   deletePlaylist,
+  markChannelWatched,
   avatarMediaUrl,
 } from '../api'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -23,7 +24,16 @@ function activeIdFrom(pathname, prefix) {
   return rest ? decodeURIComponent(rest) : null
 }
 
-function SidebarRow({ item, active, href, onSync, onDeleteRequest, showAvatar, onNavigate }) {
+function SidebarRow({
+  item,
+  active,
+  href,
+  onSync,
+  onMarkWatched,
+  onDeleteRequest,
+  showAvatar,
+  onNavigate,
+}) {
   const [syncing, setSyncing] = useState(false)
 
   return (
@@ -43,6 +53,15 @@ function SidebarRow({ item, active, href, onSync, onDeleteRequest, showAvatar, o
           />
         )}
         <span className="min-w-0 flex-1 truncate">{item.name}</span>
+        {item.unwatched_count > 0 && (
+          <span
+            className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none font-medium text-primary-foreground"
+            aria-label={`${item.unwatched_count} unwatched`}
+            title={`${item.unwatched_count} unwatched`}
+          >
+            {item.unwatched_count}
+          </span>
+        )}
       </Link>
       <span className="flex shrink-0 items-center gap-0.5 pr-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         <button
@@ -62,6 +81,17 @@ function SidebarRow({ item, active, href, onSync, onDeleteRequest, showAvatar, o
         >
           <RotateCw className={cn('size-3.5', syncing && 'animate-spin')} />
         </button>
+        {onMarkWatched && (
+          <button
+            type="button"
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            onClick={onMarkWatched}
+            aria-label={`Mark ${item.name} watched`}
+            title="Mark all watched"
+          >
+            <CheckCheck className="size-3.5" />
+          </button>
+        )}
         <button
           type="button"
           className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -83,6 +113,7 @@ function SidebarSection({
   activeId,
   hrefFor,
   onSync,
+  onMarkWatched,
   onDelete,
   deleteDescription,
   showAvatar,
@@ -115,6 +146,16 @@ function SidebarSection({
                   window.alert(`Failed to sync "${item.name}": ${err.message}`)
                 }
               }}
+              onMarkWatched={
+                onMarkWatched &&
+                (async () => {
+                  try {
+                    await onMarkWatched(item.id)
+                  } catch (err) {
+                    window.alert(`Failed to mark "${item.name}" watched: ${err.message}`)
+                  }
+                })
+              }
               onDeleteRequest={() => setPendingDelete(item)}
             />
           ))}
@@ -183,6 +224,7 @@ export function Sidebar({ open = false, onClose }) {
           showAvatar
           onNavigate={onClose}
           onSync={reconcileChannel}
+          onMarkWatched={markChannelWatched}
           onDelete={async (id) => {
             await deleteChannel(id)
             if (activeChannelId === id) {

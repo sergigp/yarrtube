@@ -38,7 +38,7 @@ mod tests {
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
-    use crate::domain::video::VideoId;
+    use crate::domain::video::{VideoId, VideoStatus};
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -397,7 +397,11 @@ mod tests {
         ));
         let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(Vec::new()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let video = downloaded_video("My Video.mp4", Some("My Video.jpg"));
+        let video = Video {
+            duration_seconds: Some(223),
+            ..downloaded_video("My Video.mp4", Some("My Video.jpg"))
+        }
+        .mark_watched(watched_timestamp());
         save_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -420,7 +424,15 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![video.clone().reset_for_redownload(fixed_timestamp())]
+            vec![Video {
+                status: VideoStatus::Pending,
+                quality: None,
+                filename: None,
+                thumbnail_filename: None,
+                duration_seconds: None,
+                updated_at: fixed_timestamp(),
+                ..video.clone()
+            }]
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
@@ -1482,6 +1494,10 @@ mod tests {
             None,
             fixed_timestamp(),
         )
+    }
+
+    fn watched_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_800_000_000, 0).unwrap()
     }
 
     fn my_video() -> Video {

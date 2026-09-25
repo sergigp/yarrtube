@@ -2,13 +2,19 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
+use super::validation::{MISSING_POSITION, required};
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
-use crate::domain::services::{VideoSearcher, VideoSearcherApi};
-use crate::domain::video::ListVideosError;
+use crate::domain::services::{
+    VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+};
+use crate::domain::video::{
+    ListVideosError, PlaybackPosition, UpdateWatchStateError, VideoDuration, VideoId,
+};
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use dto::{RecentVideoResponse, VideoResponse};
+use axum::http::StatusCode;
+use dto::{RecentVideoResponse, RecordProgressRequest, VideoResponse};
 use serde::Deserialize;
 
 const DEFAULT_RECENT_VIDEOS_LIMIT: usize = 20;
@@ -61,6 +67,35 @@ pub async fn list_recent_videos(
     ))
 }
 
+pub async fn record_video_progress(
+    State(video_watch_state_updater): State<VideoWatchStateUpdater>,
+    Path(youtube_id): Path<String>,
+    Json(request): Json<RecordProgressRequest>,
+) -> Result<StatusCode, ApiError> {
+    let youtube_id = VideoId::new(youtube_id)?;
+    let position = PlaybackPosition::new(required(request.position_seconds, MISSING_POSITION)?)?;
+    let reported_duration = request
+        .duration_seconds
+        .map(VideoDuration::new)
+        .transpose()?;
+
+    run_blocking(move || {
+        video_watch_state_updater.update(&youtube_id, position, reported_duration)
+    })
+    .await?
+    .map_err(update_watch_state_error)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub fn update_watch_state_error(error: UpdateWatchStateError) -> ApiError {
+    match error {
+        e @ UpdateWatchStateError::VideoNotFound(_) => ApiError::bad_request(e),
+        e @ UpdateWatchStateError::ChannelNotFound(_) => ApiError::bad_request(e),
+        e @ UpdateWatchStateError::Repository(_) => ApiError::internal(e),
+    }
+}
+
 fn list_videos_error(error: ListVideosError) -> ApiError {
     match error {
         e @ ListVideosError::PlaylistNotFound(_) => ApiError::bad_request(e),
@@ -78,7 +113,6 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::Quality;
     use crate::domain::video::Video;
-    use crate::domain::video::VideoId;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -95,6 +129,7 @@ mod tests {
         SqliteVideoRepository, VideoRepository,
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use dto::RecentVideoSourceResponse;
     use rusqlite::Connection;
@@ -222,6 +257,71 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_watch_state_when_listing_playlist_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        for (video, position) in [
+            (
+                Video::create(
+                    VideoId::new("vid_watched").unwrap(),
+                    "Watched",
+                    fixed_timestamp(),
+                )
+                .mark_watched(watched_timestamp()),
+                0,
+            ),
+            (
+                Video {
+                    playback_position: PlaybackPosition::new(42).unwrap(),
+                    ..Video::create(
+                        VideoId::new("vid_partly").unwrap(),
+                        "Partly",
+                        fixed_timestamp(),
+                    )
+                },
+                1,
+            ),
+        ] {
+            video_repository.save(&video).unwrap();
+            playlist_video_repository
+                .save(&PlaylistVideo::create_with_position(
+                    PlaylistId::new("PL1").unwrap(),
+                    video.id.clone(),
+                    position,
+                    fixed_timestamp(),
+                ))
+                .unwrap();
+        }
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                VideoResponse {
+                    watched: true,
+                    ..pending_video_response("vid_watched", "Watched")
+                },
+                VideoResponse {
+                    position_seconds: 42,
+                    ..pending_video_response("vid_partly", "Partly")
+                },
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_no_videos_for_an_empty_playlist() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -309,6 +409,66 @@ mod tests {
             Ok(vec![
                 pending_video_response("vid_newest", "Newest"),
                 pending_video_response("vid_oldest", "Oldest"),
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_include_watch_state_when_listing_channel_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &Video::create(
+                VideoId::new("vid_watched").unwrap(),
+                "Watched",
+                fixed_timestamp(),
+            )
+            .mark_watched(watched_timestamp()),
+            0,
+        );
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &Video {
+                playback_position: PlaybackPosition::new(42).unwrap(),
+                ..Video::create(
+                    VideoId::new("vid_partly").unwrap(),
+                    "Partly",
+                    fixed_timestamp(),
+                )
+            },
+            1,
+        );
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+        );
+
+        let response = list_for_channel(video_searcher, "@somechannel").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                VideoResponse {
+                    watched: true,
+                    ..pending_video_response("vid_watched", "Watched")
+                },
+                VideoResponse {
+                    position_seconds: 42,
+                    ..pending_video_response("vid_partly", "Partly")
+                },
             ])
         );
     }
@@ -520,6 +680,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_whether_recent_videos_were_watched() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &downloaded_video("vid1", "My Video", None, 100).mark_watched(watched_timestamp()),
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+        );
+
+        let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![RecentVideoResponse {
+                watched: true,
+                ..recent_video_response("vid1", "My Video", playlist_source())
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_exclude_not_downloaded_videos_from_recent() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -675,6 +868,306 @@ mod tests {
         assert_eq!(response, Ok(numbered_recent_videos((5..105).rev())));
     }
 
+    #[tokio::test]
+    async fn it_should_record_playback_progress() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", Some(100));
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(30);
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                playback_position: PlaybackPosition::new(30).unwrap(),
+                ..video
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_mark_the_video_watched_at_90_percent() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = Video {
+            playback_position: PlaybackPosition::new(60).unwrap(),
+            ..video_with_duration("vid1", Some(100))
+        };
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(90);
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                watched_at: Some(watched_timestamp()),
+                playback_position: PlaybackPosition::start(),
+                ..video
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_use_the_reported_duration_if_none_is_recorded() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", None);
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = RecordProgressRequest {
+            duration_seconds: Some(100),
+            ..progress_request(95)
+        };
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                watched_at: Some(watched_timestamp()),
+                ..video
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_only_record_the_position_if_duration_is_unknown() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", None);
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(500);
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                playback_position: PlaybackPosition::new(500).unwrap(),
+                ..video
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_a_watched_video_watched_early_in_a_rewatch() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(10);
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+    }
+
+    #[tokio::test]
+    async fn it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(11);
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                watched_at: None,
+                playback_position: PlaybackPosition::new(11).unwrap(),
+                ..video
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_a_watched_video_watched_when_playing_on_past_90_percent() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(95);
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+    }
+
+    #[tokio::test]
+    async fn it_should_record_progress_on_every_copy_of_the_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let playlist_repository = SqlitePlaylistRepository::new(db.connection());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        let channel_copy = video_with_duration("vid1", Some(100));
+        let playlist_copy = video_with_duration("vid1", Some(100));
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &channel_copy,
+            0,
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &playlist_copy,
+        );
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            channel_repository,
+            channel_video_repository,
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(30);
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                Video {
+                    playback_position: PlaybackPosition::new(30).unwrap(),
+                    ..channel_copy
+                },
+                Video {
+                    playback_position: PlaybackPosition::new(30).unwrap(),
+                    ..playlist_copy
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_record_progress_of_an_unknown_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", Some(100));
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(30);
+
+        let response = record_progress(video_watch_state_updater, "x", request).await;
+
+        assert_eq!(response, Err(ApiError::bad_request("video x not found")));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_record_progress_if_position_missing() {
+        let request = RecordProgressRequest {
+            position_seconds: None,
+            ..progress_request(30)
+        };
+
+        let response = record_progress(any_video_watch_state_updater(), "vid1", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Playback position must not be negative (missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_record_progress_if_invalid_position_provided() {
+        let request = progress_request(-1);
+
+        let response = record_progress(any_video_watch_state_updater(), "vid1", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Playback position must not be negative (got -1)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_record_progress_if_invalid_duration_provided() {
+        let request = RecordProgressRequest {
+            duration_seconds: Some(0),
+            ..progress_request(30)
+        };
+
+        let response = record_progress(any_video_watch_state_updater(), "vid1", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Video duration must be positive (got 0)"
+            ))
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -685,6 +1178,17 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
             Arc::new(SqliteVideoRepository::new(unused_connection())),
+        )
+    }
+
+    /// An updater for tests whose request is rejected before reaching it, on
+    /// an unmigrated in-memory database like `any_video_searcher`.
+    fn any_video_watch_state_updater() -> VideoWatchStateUpdater {
+        VideoWatchStateUpdater::new(
+            Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+            Arc::new(FixedClock(watched_timestamp())),
         )
     }
 
@@ -762,6 +1266,8 @@ mod tests {
             duration_seconds: None,
             created_at: fixed_timestamp(),
             updated_at: fixed_timestamp(),
+            watched: false,
+            position_seconds: 0,
         }
     }
 
@@ -775,6 +1281,7 @@ mod tests {
             title: title.to_string(),
             thumbnail_filename: None,
             duration_seconds: None,
+            watched: false,
             source,
         }
     }
@@ -839,6 +1346,45 @@ mod tests {
             None,
             created_at,
         )
+    }
+
+    fn video_with_duration(youtube_id: &str, duration_seconds: Option<i64>) -> Video {
+        Video::create(
+            VideoId::new(youtube_id).unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .mark_downloaded(
+            Quality::High,
+            "My Video.mp4",
+            None,
+            duration_seconds,
+            fixed_timestamp(),
+        )
+    }
+
+    fn progress_request(position_seconds: i64) -> RecordProgressRequest {
+        RecordProgressRequest {
+            position_seconds: Some(position_seconds),
+            duration_seconds: None,
+        }
+    }
+
+    fn watched_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_800_000_000, 0).unwrap()
+    }
+
+    async fn record_progress(
+        video_watch_state_updater: VideoWatchStateUpdater,
+        youtube_id: &str,
+        request: RecordProgressRequest,
+    ) -> Result<StatusCode, ApiError> {
+        record_video_progress(
+            State(video_watch_state_updater),
+            Path(youtube_id.to_string()),
+            Json(request),
+        )
+        .await
     }
 
     async fn list_for_playlist(
