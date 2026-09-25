@@ -70,7 +70,7 @@ SQLite migrations:
 ## 5. PR review
 
 - [x] 5.1 Rename `ChannelSearcher` to `ChannelViewSearcher` (`channel_view_searcher.rs`, `ChannelViewSearcherApi`, `ApiServices.channel_view_searcher`, drop the `search_all` doc comment), `VideoWatchStateUpdaterApi::record_progress` to `update`, and `Video::record_progress` to `update_watch_state`. Refactor only: the suite stays green.
-- [ ] 5.2 Remove `it_should_keep_watch_state_when_redownloading_a_missing_file`; strengthen `it_should_redownload_videos_with_missing_file` to seed a watched video with a recorded duration and assert an explicit expected video (cleared: status, quality, filename, thumbnail, duration; kept: everything else, including watch state).
+- [x] 5.2 Remove `it_should_keep_watch_state_when_redownloading_a_missing_file`; strengthen `it_should_redownload_videos_with_missing_file` to seed a watched video with a recorded duration and assert an explicit expected video (cleared: status, quality, filename, thumbnail, duration; kept: everything else, including watch state).
 - [ ] 5.3 `it_should_accept_a_positive_duration` (in `video_duration.rs`): drives `VideoDuration::new` accepting positive durations.
 - [ ] 5.4 `it_should_reject_a_non_positive_duration` (in `video_duration.rs`): drives the exact non-positive message.
 - [ ] 5.5 `it_should_fail_to_record_progress_if_invalid_duration_provided`: drives parsing `duration_seconds` with `VideoDuration` in the handler and passing `Option<VideoDuration>` through `update`/`update_watch_state`. `it_should_only_record_the_position_if_duration_is_unknown` goes back to no duration anywhere; the domain keeps the non-positive filter for a recorded 0, with its comment saying so.
