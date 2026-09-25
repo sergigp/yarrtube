@@ -125,10 +125,10 @@ impl Video {
     pub fn record_progress(
         self,
         position: PlaybackPosition,
-        _reported_duration_seconds: Option<i64>,
+        reported_duration_seconds: Option<i64>,
         now: DateTime<Utc>,
     ) -> Self {
-        match self.duration_seconds {
+        match self.duration_seconds.or(reported_duration_seconds) {
             Some(duration) if position.seconds() as f64 >= duration as f64 * WATCHED_THRESHOLD => {
                 self.mark_watched(now)
             }
