@@ -33,4 +33,14 @@ mod tests {
         assert_eq!(PlaybackPosition::new(0), Ok(PlaybackPosition(0)));
         assert_eq!(PlaybackPosition::new(120), Ok(PlaybackPosition(120)));
     }
+
+    #[test]
+    fn it_should_reject_a_negative_position() {
+        assert_eq!(
+            PlaybackPosition::new(-1),
+            Err(ValidationError(
+                "Playback position must not be negative (got -1)".to_string()
+            ))
+        );
+    }
 }
