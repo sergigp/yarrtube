@@ -3,9 +3,8 @@ pub mod dto;
 use super::VideosRoot;
 use super::blocking::run_blocking;
 use super::error::ApiError;
-use crate::domain::directory::{
-    DirectoryPath, DirectorySearcher, DirectorySearcherApi, ListDirectoriesError,
-};
+use crate::domain::directory::{DirectoryPath, ListDirectoriesError};
+use crate::domain::services::{DirectorySearcher, DirectorySearcherApi};
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;

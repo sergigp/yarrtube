@@ -4,9 +4,12 @@ use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::{MISSING_QUALITY, required};
 use crate::domain::playlist::{
-    CreatePlaylistError, CreatePlaylistOutcome, DeletePlaylistError, PlaylistCreator,
-    PlaylistCreatorApi, PlaylistDeleter, PlaylistDeleterApi, PlaylistName, PlaylistPath,
-    PlaylistSearcher, PlaylistSearcherApi, PlaylistVideoReconciler, PlaylistVideoReconcilerApi,
+    CreatePlaylistError, DeletePlaylistError, PlaylistName, PlaylistPath,
+};
+use crate::domain::services::{
+    CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi, PlaylistDeleter,
+    PlaylistDeleterApi, PlaylistSearcher, PlaylistSearcherApi, PlaylistVideoReconciler,
+    PlaylistVideoReconcilerApi,
 };
 use crate::domain::shared::{PlaylistId, Quality};
 use axum::Json;
@@ -84,9 +87,10 @@ mod tests {
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistKind};
     use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::services::ThumbnailFetcher;
     use crate::domain::shared::VideoId;
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-    use crate::domain::video::{ThumbnailFetcher, Video};
+    use crate::domain::video::Video;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         PlaylistRepository, SqlitePlaylistRepository,

@@ -1,4 +1,5 @@
-use crate::domain::channel::{ChannelHandle, ChannelVideoReconciler, ChannelVideoReconcilerApi};
+use crate::domain::channel::ChannelHandle;
+use crate::domain::services::{ChannelVideoReconciler, ChannelVideoReconcilerApi};
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use serde::Deserialize;
 
@@ -37,9 +38,9 @@ mod tests {
     use super::*;
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::playlist::PlaylistPath;
+    use crate::domain::services::ThumbnailFetcher;
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
-    use crate::domain::video::ThumbnailFetcher;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,

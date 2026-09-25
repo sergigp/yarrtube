@@ -1,6 +1,6 @@
+use crate::domain::services::{VideoFileDeleter, VideoFileDeleterApi};
 use crate::domain::shared::PlaylistId;
 use crate::domain::task::Task;
-use crate::domain::video::{VideoFileDeleter, VideoFileDeleterApi};
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 
 /// Recursively deletes a deleted playlist's output directory, scheduled by

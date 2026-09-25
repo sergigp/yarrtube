@@ -35,7 +35,8 @@ src/
       <value_object>.rs   # one file per value object, named after the type
       <entity>.rs         # named after the type, even if it repeats the folder name
       errors.rs           # every error type for this aggregate, together
-      <use_case>.rs       # one domain service per use case, e.g. widget_creator.rs
+    services/              # every aggregate's use-case services, together, flat
+      <use_case>.rs         # one domain service per use case, e.g. widget_creator.rs
   application/              # every external entry point (adapters), one subfolder per interface
     http/  (or grpc/, etc.)
       mod.rs                 # ApiServices + router wiring only
@@ -62,7 +63,6 @@ src/
 ```
 
 - We prefer not generic names: not `entity.rs`, not `value_objects.rs`, not `ports.rs`. A file is named after the single type/concept it holds (`user.rs` holds `User`, `user_id.rs` holds `UserId`).
-- Domain services live in the folder of the aggregate they are about, next to its entity (`domain/playlist/playlist_creator.rs`, `domain/video/video_downloader.rs`), and are re-exported from that aggregate's `mod.rs` (`use crate::domain::playlist::{PlaylistCreator, PlaylistCreatorApi}`). There is no shared `services/` folder. A service touching several aggregates goes with the one it is named after, i.e. the one whose use case it implements (`PlaylistVideoReconciler` → `playlist/`, even though it also writes `Video` rows).
 - `errors.rs` is the one deliberately generic name: every error type for an aggregate (use-case error enums) lives together in one file, not scattered across the files that raise them.
 - Every value object constructor fails with the single shared `ValidationError(String)` (`domain/shared/errors.rs`), never a per-VO error type. The application layer maps it once (e.g. `impl From<ValidationError> for ApiError` → 400), so handlers build VOs with a plain `?`.
 - Every value object gets its own file. Don't bundle multiple value objects into one "value objects" file.
@@ -203,6 +203,6 @@ Some of these are deliberate deviations from DDD/hexagonal orthodoxy, for conven
 - Port traits live in `infrastructure/`, not `domain/` (dependency direction inverted, traded for editing convenience).
 - Repositories have no typed error enums, everything is `anyhow::Error` until the domain service gives it meaning.
 - An idempotent "create" use case is two non-atomic port calls (`find` then `insert`), not one atomic upsert.
-- Orchestration lives in domain services inside each aggregate's folder (`domain/<aggregate>/<use_case>.rs`), not a separate `application/` layer. The `application/` folder holds only adapters (HTTP, CLI, subscribers, tasks) that translate an external trigger into a domain call — business orchestration itself never lives there.
+- Orchestration lives in `domain/services/`, not a separate `application/` layer. The `application/` folder holds only adapters (HTTP, CLI, subscribers, tasks) that translate an external trigger into a domain call — business orchestration itself never lives there.
 
 If code looks like it violates textbook architecture in one of these ways, it's probably intentional. Ask before changing it.

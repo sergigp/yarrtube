@@ -6,9 +6,9 @@ pub mod reconcile_channel_task;
 pub mod reconcile_playlist_task;
 pub mod update_ytdlp_task;
 
-use crate::domain::channel::ChannelVideoReconciler;
-use crate::domain::playlist::PlaylistVideoReconciler;
-use crate::domain::video::{VideoDownloader, VideoFileDeleter};
+use crate::domain::services::{
+    ChannelVideoReconciler, PlaylistVideoReconciler, VideoDownloader, VideoFileDeleter,
+};
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_executor::HandlerRegistry;
