@@ -4,12 +4,18 @@ use rusqlite_migration::{M, Migrations};
 
 const BASELINE_SQL: &str = include_str!("../../../migrations/0001_baseline.sql");
 const WATCH_STATE_SQL: &str = include_str!("../../../migrations/0002_watch_state.sql");
+const PUBLISHED_AT_AND_SYNCED_AT_SQL: &str =
+    include_str!("../../../migrations/0003_published_at_and_synced_at.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
-    Migrations::new(vec![M::up(BASELINE_SQL), M::up(WATCH_STATE_SQL)])
-        .to_latest(conn)
-        .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
-        .context("failed to apply database migrations")
+    Migrations::new(vec![
+        M::up(BASELINE_SQL),
+        M::up(WATCH_STATE_SQL),
+        M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+    ])
+    .to_latest(conn)
+    .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
+    .context("failed to apply database migrations")
 }
 
 #[cfg(test)]

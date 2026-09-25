@@ -1268,6 +1268,7 @@ mod tests {
             updated_at: fixed_timestamp(),
             watched: false,
             position_seconds: 0,
+            synced_at: None,
         }
     }
 

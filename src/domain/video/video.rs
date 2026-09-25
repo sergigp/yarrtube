@@ -24,6 +24,7 @@ pub struct Video {
     pub updated_at: DateTime<Utc>,
     pub watched_at: Option<DateTime<Utc>>,
     pub playback_position: PlaybackPosition,
+    pub synced_at: Option<DateTime<Utc>>,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -44,6 +45,7 @@ impl Video {
             updated_at: now,
             watched_at: None,
             playback_position: PlaybackPosition::start(),
+            synced_at: None,
         }
     }
 

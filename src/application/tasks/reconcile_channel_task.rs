@@ -859,13 +859,13 @@ mod tests {
                 "A description",
                 "My Channel",
                 "My Channel",
-                "2023-11-14",
-                2023,
+                fixed_timestamp(),
                 None,
                 Vec::new(),
                 "yt1",
                 None,
                 "20231114 My Video",
+                DateTime::UNIX_EPOCH,
             ))
         );
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -902,13 +902,15 @@ mod tests {
             "Stale plot",
             "Stale Channel",
             "Stale Channel",
-            "2020-01-01",
-            2020,
+            DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
             None,
             Vec::new(),
             "yt1",
             None,
             "0000 Stale Title",
+            DateTime::UNIX_EPOCH,
         );
         video_metadata_repository
             .save(&video.id, &existing_metadata, &video_dir)

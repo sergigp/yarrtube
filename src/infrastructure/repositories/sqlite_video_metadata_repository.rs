@@ -1,8 +1,8 @@
 use crate::domain::video::VideoRecordId;
 use crate::domain::video_metadata::{VideoMetadata, render_movie_nfo};
 use anyhow::Context;
-use chrono::Utc;
-use rusqlite::{Connection, OptionalExtension, params};
+use chrono::{DateTime, Utc};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -24,6 +24,23 @@ pub trait VideoMetadataRepository: Send + Sync {
         video_dir: &Path,
     ) -> anyhow::Result<()>;
     fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoMetadata>>;
+}
+
+/// A `video_metadata` row as read, before its values are parsed into a
+/// `VideoMetadata`.
+struct VideoMetadataRow {
+    title: String,
+    plot: String,
+    studio: String,
+    director: String,
+    published_at: String,
+    genre: Option<String>,
+    tags: String,
+    uniqueid: String,
+    thumb: Option<String>,
+    sorttitle: String,
+    created_at: String,
+    updated_at: String,
 }
 
 pub struct SqliteVideoMetadataRepository {
@@ -62,35 +79,35 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
         let tags = serde_json::to_string(&metadata.tags)
             .context("failed to serialize video metadata tags")?;
         conn.execute(
-            "INSERT INTO video_metadata (video_id, title, plot, studio, director, premiered, year, genre, tags, uniqueid, thumb, sorttitle, created_at)
+            "INSERT INTO video_metadata (video_id, title, plot, studio, director, published_at, genre, tags, uniqueid, thumb, sorttitle, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
              ON CONFLICT (video_id) DO UPDATE SET
                 title = excluded.title,
                 plot = excluded.plot,
                 studio = excluded.studio,
                 director = excluded.director,
-                premiered = excluded.premiered,
-                year = excluded.year,
+                published_at = excluded.published_at,
                 genre = excluded.genre,
                 tags = excluded.tags,
                 uniqueid = excluded.uniqueid,
                 thumb = excluded.thumb,
                 sorttitle = excluded.sorttitle,
-                created_at = excluded.created_at",
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at",
             params![
                 video_id.as_str(),
                 metadata.title,
                 metadata.plot,
                 metadata.studio,
                 metadata.director,
-                metadata.premiered,
-                metadata.year,
+                metadata.published_at.to_rfc3339(),
                 metadata.genre,
                 tags,
                 metadata.uniqueid,
                 metadata.thumb,
                 metadata.sorttitle,
-                Utc::now().to_rfc3339(),
+                metadata.created_at.to_rfc3339(),
+                metadata.updated_at.to_rfc3339(),
             ],
         )
         .inspect_err(|e| {
@@ -107,36 +124,59 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
             .inspect_err(|_| tracing::error!(video_id = %video_id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
-            "SELECT title, plot, studio, director, premiered, year, genre, tags, uniqueid, thumb, sorttitle
+            "SELECT title, plot, studio, director, published_at, genre, tags, uniqueid, thumb, sorttitle, created_at, updated_at
              FROM video_metadata WHERE video_id = ?1",
             params![video_id.as_str()],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, String>(4)?,
-                    row.get::<_, i32>(5)?,
-                    row.get::<_, Option<String>>(6)?,
-                    row.get::<_, String>(7)?,
-                    row.get::<_, String>(8)?,
-                    row.get::<_, Option<String>>(9)?,
-                    row.get::<_, String>(10)?,
-                ))
-            },
+            Self::read_row,
         )
         .optional()
         .inspect_err(|e| tracing::error!(video_id = %video_id, error = %e, "failed to find video metadata"))
         .context("failed to find video metadata")?
-        .map(|(title, plot, studio, director, premiered, year, genre, tags, uniqueid, thumb, sorttitle)| {
-            let tags: Vec<String> = serde_json::from_str(&tags)
-                .context("failed to deserialize stored video metadata tags")?;
-            Ok(VideoMetadata::new(
-                title, plot, studio, director, premiered, year, genre, tags, uniqueid, thumb, sorttitle,
-            ))
-        })
+        .map(Self::row_to_video_metadata)
         .transpose()
+    }
+}
+
+impl SqliteVideoMetadataRepository {
+    fn read_row(row: &Row<'_>) -> rusqlite::Result<VideoMetadataRow> {
+        Ok(VideoMetadataRow {
+            title: row.get(0)?,
+            plot: row.get(1)?,
+            studio: row.get(2)?,
+            director: row.get(3)?,
+            published_at: row.get(4)?,
+            genre: row.get(5)?,
+            tags: row.get(6)?,
+            uniqueid: row.get(7)?,
+            thumb: row.get(8)?,
+            sorttitle: row.get(9)?,
+            created_at: row.get(10)?,
+            updated_at: row.get(11)?,
+        })
+    }
+
+    fn row_to_video_metadata(row: VideoMetadataRow) -> anyhow::Result<VideoMetadata> {
+        Ok(VideoMetadata {
+            title: row.title,
+            plot: row.plot,
+            studio: row.studio,
+            director: row.director,
+            published_at: Self::parse_timestamp(&row.published_at, "published_at")?,
+            genre: row.genre,
+            tags: serde_json::from_str(&row.tags)
+                .context("failed to deserialize stored video metadata tags")?,
+            uniqueid: row.uniqueid,
+            thumb: row.thumb,
+            sorttitle: row.sorttitle,
+            created_at: Self::parse_timestamp(&row.created_at, "created_at")?,
+            updated_at: Self::parse_timestamp(&row.updated_at, "updated_at")?,
+        })
+    }
+
+    fn parse_timestamp(value: &str, column: &str) -> anyhow::Result<DateTime<Utc>> {
+        Ok(DateTime::parse_from_rfc3339(value)
+            .with_context(|| format!("failed to parse stored {column}"))?
+            .with_timezone(&Utc))
     }
 }
 
@@ -151,13 +191,15 @@ mod tests {
             "A description",
             "My Channel",
             "My Channel",
-            "2024-01-02",
-            2024,
+            DateTime::parse_from_rfc3339("2024-01-02T03:04:05Z")
+                .unwrap()
+                .with_timezone(&Utc),
             Some("Music".to_string()),
             vec!["tag1".to_string(), "tag2".to_string()],
             "yt1",
             Some("My Video.jpg".to_string()),
             "0001 My Video",
+            DateTime::<Utc>::UNIX_EPOCH,
         )
     }
 

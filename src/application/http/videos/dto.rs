@@ -23,6 +23,7 @@ pub struct VideoResponse {
     pub updated_at: DateTime<Utc>,
     pub watched: bool,
     pub position_seconds: i64,
+    pub synced_at: Option<DateTime<Utc>>,
 }
 
 impl From<Video> for VideoResponse {
@@ -39,6 +40,7 @@ impl From<Video> for VideoResponse {
             duration_seconds: video.duration_seconds,
             created_at: video.created_at,
             updated_at: video.updated_at,
+            synced_at: None,
         }
     }
 }

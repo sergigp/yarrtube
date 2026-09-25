@@ -520,13 +520,13 @@ mod tests {
                 "A description",
                 "My Channel",
                 "My Channel",
-                "2023-11-14",
-                2023,
+                fixed_timestamp(),
                 None,
                 Vec::new(),
                 "yt1",
                 None,
                 "20231114 My Video",
+                DateTime::UNIX_EPOCH,
             ))
         );
     }
