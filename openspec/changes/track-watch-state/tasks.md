@@ -62,7 +62,7 @@ SQLite migrations:
 
   Verify `scripts/run-smoke-tests.sh` passes.
 - [x] 4.3 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cargo test --locked`. Verify all three succeed.
-- [ ] 4.4 Run the app against an existing `yarrtube.sqlite3` with `scripts/run-local.sh` and check:
+- [x] 4.4 Run the app against an existing `yarrtube.sqlite3` with `scripts/run-local.sh` and check:
   - the migration applies and existing videos show as unwatched, with channel badges showing their downloaded counts.
   - watching past 90% ticks the video and lowers the badge within one poll.
   - closing the tab mid-video and reopening resumes near the same position.
