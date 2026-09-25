@@ -75,4 +75,4 @@ SQLite migrations:
 - [x] 5.4 `it_should_reject_a_non_positive_duration` (in `video_duration.rs`): drives the exact non-positive message.
 - [x] 5.5 `it_should_fail_to_record_progress_if_invalid_duration_provided`: drives parsing `duration_seconds` with `VideoDuration` in the handler and passing `Option<VideoDuration>` through `update`/`update_watch_state`. `it_should_only_record_the_position_if_duration_is_unknown` goes back to no duration anywhere; the domain keeps the non-positive filter for a recorded 0, with its comment saying so.
 - [x] 5.6 SPA: `useWatchProgress` reports `duration_seconds` only when the player's duration is at least 1s. Verify `npm run build` and `npm run lint`.
-- [ ] 5.7 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --locked` and `scripts/run-smoke-tests.sh`; push to the PR.
+- [x] 5.7 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --locked` and `scripts/run-smoke-tests.sh`; push to the PR.
