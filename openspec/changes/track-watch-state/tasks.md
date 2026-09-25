@@ -61,7 +61,7 @@ SQLite migrations:
   - the sidebar mark-watched action removes the channel badge (channel watched).
 
   Verify `scripts/run-smoke-tests.sh` passes.
-- [ ] 4.3 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cargo test --locked`. Verify all three succeed.
+- [x] 4.3 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cargo test --locked`. Verify all three succeed.
 - [ ] 4.4 Run the app against an existing `yarrtube.sqlite3` with `scripts/run-local.sh` and check:
   - the migration applies and existing videos show as unwatched, with channel badges showing their downloaded counts.
   - watching past 90% ticks the video and lowers the badge within one poll.
