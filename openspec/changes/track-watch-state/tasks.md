@@ -20,7 +20,7 @@
 - [x] 2.4 `it_should_only_record_the_position_if_duration_is_unknown`: drives the unknown-duration branch.
 - [x] 2.5 `it_should_keep_a_watched_video_watched_early_in_a_rewatch`: drives leaving a watched video unchanged at or below 10%.
 - [x] 2.6 `it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch`: drives the rewatch reset.
-- [ ] 2.7 `it_should_record_progress_on_every_copy_of_the_video`: drives applying progress to every stored copy of a YouTube video.
+- [x] 2.7 `it_should_record_progress_on_every_copy_of_the_video`: drives applying progress to every stored copy of a YouTube video.
 - [ ] 2.8 `it_should_fail_to_record_progress_of_an_unknown_video`: drives `UpdateWatchStateError::VideoNotFound` mapping to 400.
 - [ ] 2.9 `it_should_fail_to_record_progress_if_position_missing`: drives `required(.., MISSING_POSITION)`.
 - [ ] 2.10 `it_should_fail_to_record_progress_if_invalid_position_provided`: drives the `PlaybackPosition` `ValidationError` mapping to 400.
