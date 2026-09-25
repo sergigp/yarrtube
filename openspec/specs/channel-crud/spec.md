@@ -87,15 +87,19 @@ The system SHALL provide an HTTP endpoint that deletes a previously created chan
 - **THEN** the system reports that nothing was found, makes no change to storage, and returns a bad request with a meaningful error description
 
 ### Requirement: List Channels
-The system SHALL provide an HTTP endpoint that returns every currently stored channel.
+The system SHALL provide an HTTP endpoint that returns every currently stored channel. Each returned channel SHALL include only its handle, name, path and avatar filename (when present), plus its count of unwatched videos, counting only videos that have finished downloading.
 
 #### Scenario: Channels exist
 - **WHEN** one or more channels have been created
-- **THEN** the system returns all of them, each with its handle, name, immutable YouTube channel ID, quality, video limit, path, creation timestamp, and avatar filename (when present)
+- **THEN** the system returns all of them, each with only its handle, name, path, avatar filename (when present), and unwatched video count
 
 #### Scenario: No channels exist
 - **WHEN** no channels have been created
 - **THEN** the system returns an empty list rather than an error
+
+#### Scenario: Unwatched count only includes downloaded, unwatched videos
+- **WHEN** a channel has downloaded videos that are unwatched, downloaded videos that are watched, and videos that have not finished downloading
+- **THEN** its unwatched video count equals the number of downloaded, unwatched videos only
 
 ### Requirement: Channel Avatar Is Recorded
 The system SHALL record, on the channel itself, the local filename of its downloaded avatar image, whenever one was successfully resolved and downloaded during channel creation. A channel whose avatar could not be resolved or downloaded SHALL have no recorded avatar filename.

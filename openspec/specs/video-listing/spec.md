@@ -7,7 +7,7 @@ Provides an HTTP endpoint to list the videos belonging to a single tracked playl
 ## Requirements
 
 ### Requirement: List Videos For A Playlist
-The system SHALL provide an HTTP endpoint that, given a tracked playlist's ID, returns every video recorded for that playlist, including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), and duration in seconds (when present). For a YouTube-linked playlist, the returned videos SHALL be ordered by their current position in the source YouTube playlist. For a custom playlist, no particular order is guaranteed.
+The system SHALL provide an HTTP endpoint that, given a tracked playlist's ID, returns every video recorded for that playlist, including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and its saved playback position in seconds. For a YouTube-linked playlist, the returned videos SHALL be ordered by their current position in the source YouTube playlist. For a custom playlist, no particular order is guaranteed.
 
 #### Scenario: Playlist has videos
 - **WHEN** a client requests the videos of a tracked playlist that has one or more recorded videos
@@ -25,8 +25,12 @@ The system SHALL provide an HTTP endpoint that, given a tracked playlist's ID, r
 - **WHEN** a client requests the videos of a YouTube-linked playlist
 - **THEN** the daemon returns them ordered by their position in the source YouTube playlist, matching the order they appear in on YouTube
 
+#### Scenario: Playlist videos include their watch state
+- **WHEN** a client requests the videos of a tracked playlist that has a watched video and a partly watched video
+- **THEN** each returned video reports whether it has been watched and its saved playback position
+
 ### Requirement: List Videos For A Channel
-The system SHALL provide an HTTP endpoint that, given a tracked channel's handle, returns every video recorded for that channel, including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), and duration in seconds (when present), ordered by recency (most recently uploaded first).
+The system SHALL provide an HTTP endpoint that, given a tracked channel's handle, returns every video recorded for that channel, including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and its saved playback position in seconds, ordered by recency (most recently uploaded first).
 
 #### Scenario: Channel has videos
 - **WHEN** a client requests the videos of a tracked channel that has one or more recorded videos
@@ -40,8 +44,12 @@ The system SHALL provide an HTTP endpoint that, given a tracked channel's handle
 - **WHEN** a client requests the videos of a channel handle that is not currently tracked
 - **THEN** the daemon responds with HTTP status 400 and does not return a list
 
+#### Scenario: Channel videos include their watch state
+- **WHEN** a client requests the videos of a tracked channel that has a watched video and a partly watched video
+- **THEN** each returned video reports whether it has been watched and its saved playback position
+
 ### Requirement: List Recently Synced Videos Across Sources
-The system SHALL provide an HTTP endpoint that returns downloaded videos across every tracked playlist and channel combined into a single list, ordered by sync time (the time the video was recorded by the system), newest first. The endpoint SHALL accept an optional limit on the number of videos returned, defaulting to 20 and capped at 100 when a larger value is requested. Each returned video SHALL include its ID, title, thumbnail filename (when present), duration in seconds (when present), and the source that tracks it (kind: `playlist` or `channel`, that source's identifier, that source's storage path, and — for a channel source — that channel's avatar filename, when present). A video tracked by more than one source SHALL appear once per source.
+The system SHALL provide an HTTP endpoint that returns downloaded videos across every tracked playlist and channel combined into a single list, ordered by sync time (the time the video was recorded by the system), newest first. The endpoint SHALL accept an optional limit on the number of videos returned, defaulting to 20 and capped at 100 when a larger value is requested. Each returned video SHALL include its ID, title, thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and the source that tracks it (kind: `playlist` or `channel`, that source's identifier, that source's storage path, and — for a channel source — that channel's avatar filename, when present). A video tracked by more than one source SHALL appear once per source.
 
 #### Scenario: Recently synced videos exist
 - **WHEN** a client requests recently synced videos and at least one downloaded video is recorded
@@ -98,3 +106,7 @@ The system SHALL provide an HTTP endpoint that returns downloaded videos across 
 #### Scenario: Playlist source has no avatar filename
 - **WHEN** a returned video's source is a playlist
 - **THEN** the source object's avatar filename is absent
+
+#### Scenario: Recent videos include whether they have been watched
+- **WHEN** a returned recently synced video has been watched
+- **THEN** it is reported as watched
