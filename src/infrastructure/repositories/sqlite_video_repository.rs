@@ -421,4 +421,19 @@ mod tests {
         assert_eq!(found.status, VideoStatus::InProgress);
         assert_eq!(found.updated_at, later);
     }
+
+    #[test]
+    fn it_should_round_trip_a_watched_video_with_a_playback_position() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let watched_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let video = Video {
+            playback_position: PlaybackPosition::new(42).unwrap(),
+            ..video("First", now).mark_watched(watched_at)
+        };
+
+        repo.save(&video).unwrap();
+
+        assert_eq!(repo.find(&video.id).unwrap(), Some(video));
+    }
 }

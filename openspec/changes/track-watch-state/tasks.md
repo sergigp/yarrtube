@@ -41,7 +41,7 @@ SQLite migrations:
 - [x] 3.1 `it_should_default_existing_videos_to_unwatched_when_migrating`: drives the `0002` SQL. Existing rows read back unwatched with position 0.
 
 `SqliteVideoRepository`:
-- [ ] 3.2 `it_should_round_trip_a_watched_video_with_a_playback_position`: drives the new columns in `save`/`find`/`row_to_video`.
+- [x] 3.2 `it_should_round_trip_a_watched_video_with_a_playback_position`: drives the new columns in `save`/`find`/`row_to_video`.
 - [ ] 3.3 `it_should_find_every_copy_of_a_youtube_video`: drives the `find_by_youtube_id` query.
 - [ ] 3.4 `it_should_find_no_copies_of_an_unknown_youtube_video`: drives the empty result.
 
