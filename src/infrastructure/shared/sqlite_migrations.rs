@@ -90,4 +90,27 @@ mod tests {
             .unwrap();
         assert_eq!(name, "Some Channel");
     }
+
+    #[test]
+    fn it_should_default_existing_videos_to_unwatched_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![M::up(BASELINE_SQL)])
+            .to_latest(&mut conn)
+            .unwrap();
+        conn.execute(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec1', 'yt1', 'My Video', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let watch_state = conn.query_row(
+            "SELECT watched_at, playback_position_seconds FROM videos WHERE id = 'rec1'",
+            [],
+            |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, i64>(1)?)),
+        );
+        assert_eq!(watch_state, Ok((None, 0)));
+    }
 }

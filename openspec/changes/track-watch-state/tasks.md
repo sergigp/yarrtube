@@ -38,7 +38,7 @@
 ## 3. Infrastructure adapters (TDD)
 
 SQLite migrations:
-- [ ] 3.1 `it_should_default_existing_videos_to_unwatched_when_migrating`: drives the `0002` SQL. Existing rows read back unwatched with position 0.
+- [x] 3.1 `it_should_default_existing_videos_to_unwatched_when_migrating`: drives the `0002` SQL. Existing rows read back unwatched with position 0.
 
 `SqliteVideoRepository`:
 - [ ] 3.2 `it_should_round_trip_a_watched_video_with_a_playback_position`: drives the new columns in `save`/`find`/`row_to_video`.
