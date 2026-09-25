@@ -23,7 +23,7 @@
 - [x] 2.7 `it_should_record_progress_on_every_copy_of_the_video`: drives applying progress to every stored copy of a YouTube video.
 - [x] 2.8 `it_should_fail_to_record_progress_of_an_unknown_video`: drives `UpdateWatchStateError::VideoNotFound` mapping to 400.
 - [x] 2.9 `it_should_fail_to_record_progress_if_position_missing`: drives `required(.., MISSING_POSITION)`.
-- [ ] 2.10 `it_should_fail_to_record_progress_if_invalid_position_provided`: drives the `PlaybackPosition` `ValidationError` mapping to 400.
+- [x] 2.10 `it_should_fail_to_record_progress_if_invalid_position_provided`: drives the `PlaybackPosition` `ValidationError` mapping to 400.
 - [ ] 2.11 `it_should_mark_every_downloaded_channel_video_watched`: drives `mark_channel_watched` (downloaded videos only, including their playlist copies, via `Video::mark_watched`).
 - [ ] 2.12 `it_should_fail_to_mark_watched_a_missing_channel`: drives `UpdateWatchStateError::ChannelNotFound` mapping to 400.
 - [ ] 2.13 `it_should_fail_to_mark_watched_if_invalid_handle_provided`: drives the `ChannelHandle` validation mapping on the new route.

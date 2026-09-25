@@ -956,6 +956,20 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_record_progress_if_invalid_position_provided() {
+        let request = progress_request(-1);
+
+        let response = record_progress(any_video_watch_state_updater(), "vid1", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Playback position must not be negative (got -1)"
+            ))
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.

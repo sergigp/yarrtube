@@ -6,6 +6,11 @@ pub struct PlaybackPosition(i64);
 
 impl PlaybackPosition {
     pub fn new(seconds: i64) -> Result<Self, ValidationError> {
+        if seconds < 0 {
+            return Err(ValidationError(format!(
+                "Playback position must not be negative (got {seconds})"
+            )));
+        }
         Ok(Self(seconds))
     }
 
