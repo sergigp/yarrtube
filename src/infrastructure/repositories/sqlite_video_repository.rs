@@ -452,4 +452,15 @@ mod tests {
 
         assert_eq!(found.unwrap(), vec![first_copy, second_copy]);
     }
+
+    #[test]
+    fn it_should_find_no_copies_of_an_unknown_youtube_video() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        repo.save(&video("First", now)).unwrap();
+
+        let found = repo.find_by_youtube_id(&VideoId::new("unknown").unwrap());
+
+        assert_eq!(found.unwrap(), vec![]);
+    }
 }
