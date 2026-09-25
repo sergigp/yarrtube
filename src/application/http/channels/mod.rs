@@ -997,6 +997,18 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![video]);
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_mark_watched_if_invalid_handle_provided() {
+        let response = mark_watched(any_video_watch_state_updater(), "noatsign").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Channel handle must start with \"@\" (got \"noatsign\")"
+            ))
+        );
+    }
+
     fn any_channel_creator() -> ChannelCreator {
         ChannelCreator::new(
             Arc::new(SqliteChannelRepository::new(unused_connection())),
@@ -1084,6 +1096,15 @@ mod tests {
         fn resolve(&self, _handle: &ChannelHandle) -> anyhow::Result<Option<ResolvedChannel>> {
             anyhow::bail!("YouTube API request failed")
         }
+    }
+
+    fn any_video_watch_state_updater() -> VideoWatchStateUpdater {
+        VideoWatchStateUpdater::new(
+            Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        )
     }
 
     fn unused_connection() -> Connection {
