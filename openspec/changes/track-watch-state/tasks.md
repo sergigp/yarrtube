@@ -28,7 +28,7 @@
 - [x] 2.12 `it_should_fail_to_mark_watched_a_missing_channel`: drives `UpdateWatchStateError::ChannelNotFound` mapping to 400.
 - [x] 2.13 `it_should_fail_to_mark_watched_if_invalid_handle_provided`: drives the `ChannelHandle` validation mapping on the new route.
 - [x] 2.14 `it_should_count_unwatched_downloaded_videos_when_listing_channels`: drives `ChannelSearcher` computing `unwatched_count` and the flat channel list mapping.
-- [ ] 2.15 `it_should_include_watch_state_when_listing_channel_videos`: drives the `watched`/`position_seconds` mapping on `VideoResponse`.
+- [x] 2.15 `it_should_include_watch_state_when_listing_channel_videos`: drives the `watched`/`position_seconds` mapping on `VideoResponse`.
 - [ ] 2.16 `it_should_include_watch_state_when_listing_playlist_videos`: drives the same fields through the playlist listing.
 - [ ] 2.17 `it_should_include_whether_recent_videos_were_watched`: drives `watched` on `RecentVideoResponse`.
 - [ ] 2.18 `it_should_keep_watch_state_when_redownloading_a_missing_file` (in `reconcile_channel_task.rs`): a regression guard for `reset_for_redownload`. It may pass on its first run because struct update already keeps the fields. If it does, ask whether to keep it and skip the cycle.

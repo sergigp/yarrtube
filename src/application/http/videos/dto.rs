@@ -28,6 +28,8 @@ pub struct VideoResponse {
 impl From<Video> for VideoResponse {
     fn from(video: Video) -> Self {
         Self {
+            watched: video.is_watched(),
+            position_seconds: video.playback_position.seconds(),
             id: video.youtube_id.as_str().to_string(),
             title: video.title,
             status: video.status.as_str().to_string(),
@@ -37,8 +39,6 @@ impl From<Video> for VideoResponse {
             duration_seconds: video.duration_seconds,
             created_at: video.created_at,
             updated_at: video.updated_at,
-            watched: false,
-            position_seconds: 0,
         }
     }
 }

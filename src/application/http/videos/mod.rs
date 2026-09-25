@@ -343,6 +343,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_watch_state_when_listing_channel_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &Video::create(
+                VideoId::new("vid_watched").unwrap(),
+                "Watched",
+                fixed_timestamp(),
+            )
+            .mark_watched(watched_timestamp()),
+            0,
+        );
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &Video {
+                playback_position: PlaybackPosition::new(42).unwrap(),
+                ..Video::create(
+                    VideoId::new("vid_partly").unwrap(),
+                    "Partly",
+                    fixed_timestamp(),
+                )
+            },
+            1,
+        );
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+        );
+
+        let response = list_for_channel(video_searcher, "@somechannel").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                VideoResponse {
+                    watched: true,
+                    ..pending_video_response("vid_watched", "Watched")
+                },
+                VideoResponse {
+                    position_seconds: 42,
+                    ..pending_video_response("vid_partly", "Partly")
+                },
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_no_videos_for_an_empty_channel() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
