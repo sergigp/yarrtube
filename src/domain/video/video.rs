@@ -72,6 +72,7 @@ impl Video {
             thumbnail_filename,
             duration_seconds,
             updated_at: now,
+            synced_at: Some(now),
             ..self
         }
     }

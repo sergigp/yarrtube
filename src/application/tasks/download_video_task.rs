@@ -36,7 +36,7 @@ impl TaskHandler for DownloadVideoTask {
 mod tests {
     use super::*;
     use crate::domain::video::Video;
-    use crate::domain::video::VideoId;
+    use crate::domain::video::{VideoId, VideoStatus};
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
         FakeVideoFileRepository, FilesystemVideoFileRepository, VideoFileRepository,
@@ -90,6 +90,36 @@ mod tests {
                 None,
                 fixed_timestamp(),
             )]
+        );
+    }
+
+    #[test]
+    fn it_should_record_the_sync_time() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                status: VideoStatus::Downloaded,
+                quality: Some(Quality::High),
+                filename: Some("fake-output/fake-output.mp4".to_string()),
+                synced_at: Some(fixed_timestamp()),
+                ..video
+            }]
         );
     }
 
