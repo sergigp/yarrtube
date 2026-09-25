@@ -2,6 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
+use super::validation::{MISSING_POSITION, required};
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
@@ -70,7 +71,7 @@ pub async fn record_video_progress(
     Json(request): Json<RecordProgressRequest>,
 ) -> Result<StatusCode, ApiError> {
     let youtube_id = VideoId::new(youtube_id)?;
-    let position = PlaybackPosition::new(request.position_seconds.unwrap_or_default())?;
+    let position = PlaybackPosition::new(required(request.position_seconds, MISSING_POSITION)?)?;
 
     run_blocking(move || {
         video_watch_state_updater.record_progress(&youtube_id, position, request.duration_seconds)
@@ -938,6 +939,23 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![video]);
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_record_progress_if_position_missing() {
+        let request = RecordProgressRequest {
+            position_seconds: None,
+            ..progress_request(30)
+        };
+
+        let response = record_progress(any_video_watch_state_updater(), "vid1", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Playback position must not be negative (missing)"
+            ))
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -948,6 +966,17 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
             Arc::new(SqliteVideoRepository::new(unused_connection())),
+        )
+    }
+
+    /// An updater for tests whose request is rejected before reaching it, on
+    /// an unmigrated in-memory database like `any_video_searcher`.
+    fn any_video_watch_state_updater() -> VideoWatchStateUpdater {
+        VideoWatchStateUpdater::new(
+            Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+            Arc::new(FixedClock(watched_timestamp())),
         )
     }
 
