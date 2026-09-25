@@ -251,6 +251,71 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_watch_state_when_listing_playlist_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        for (video, position) in [
+            (
+                Video::create(
+                    VideoId::new("vid_watched").unwrap(),
+                    "Watched",
+                    fixed_timestamp(),
+                )
+                .mark_watched(watched_timestamp()),
+                0,
+            ),
+            (
+                Video {
+                    playback_position: PlaybackPosition::new(42).unwrap(),
+                    ..Video::create(
+                        VideoId::new("vid_partly").unwrap(),
+                        "Partly",
+                        fixed_timestamp(),
+                    )
+                },
+                1,
+            ),
+        ] {
+            video_repository.save(&video).unwrap();
+            playlist_video_repository
+                .save(&PlaylistVideo::create_with_position(
+                    PlaylistId::new("PL1").unwrap(),
+                    video.id.clone(),
+                    position,
+                    fixed_timestamp(),
+                ))
+                .unwrap();
+        }
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                VideoResponse {
+                    watched: true,
+                    ..pending_video_response("vid_watched", "Watched")
+                },
+                VideoResponse {
+                    position_seconds: 42,
+                    ..pending_video_response("vid_partly", "Partly")
+                },
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_no_videos_for_an_empty_playlist() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
