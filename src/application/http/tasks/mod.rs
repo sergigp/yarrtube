@@ -625,6 +625,7 @@ mod tests {
             updated_at: fixed_timestamp(),
             watched_at: None,
             playback_position: PlaybackPosition::start(),
+            synced_at: None,
         }
     }
 

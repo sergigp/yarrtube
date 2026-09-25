@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::sync::Mutex;
 
-const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds";
+const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at";
 
 /// A `videos` row as read, before its values are parsed into a `Video`.
 struct VideoRow {
@@ -22,6 +22,7 @@ struct VideoRow {
     updated_at: String,
     watched_at: Option<String>,
     playback_position_seconds: i64,
+    synced_at: Option<String>,
 }
 
 pub trait VideoRepository: Send + Sync {
@@ -73,8 +74,8 @@ impl VideoRepository for SqliteVideoRepository {
             .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
              ON CONFLICT (id) DO UPDATE SET
                 youtube_id = excluded.youtube_id,
                 title = excluded.title,
@@ -86,7 +87,8 @@ impl VideoRepository for SqliteVideoRepository {
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at,
                 watched_at = excluded.watched_at,
-                playback_position_seconds = excluded.playback_position_seconds",
+                playback_position_seconds = excluded.playback_position_seconds,
+                synced_at = excluded.synced_at",
             params![
                 video.id.as_str(),
                 video.youtube_id.as_str(),
@@ -100,6 +102,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.updated_at.to_rfc3339(),
                 video.watched_at.map(|w| w.to_rfc3339()),
                 video.playback_position.seconds(),
+                video.synced_at.map(|s| s.to_rfc3339()),
             ],
         )
         .inspect_err(|e| {
@@ -134,7 +137,7 @@ impl VideoRepository for SqliteVideoRepository {
             .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11
+            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12
              WHERE id = ?1",
             params![
                 video.id.as_str(),
@@ -148,6 +151,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.updated_at.to_rfc3339(),
                 video.watched_at.map(|w| w.to_rfc3339()),
                 video.playback_position.seconds(),
+                video.synced_at.map(|s| s.to_rfc3339()),
             ],
         )
         .inspect_err(|e| {
@@ -207,6 +211,7 @@ impl SqliteVideoRepository {
             updated_at: row.get(9)?,
             watched_at: row.get(10)?,
             playback_position_seconds: row.get(11)?,
+            synced_at: row.get(12)?,
         })
     }
 
@@ -227,6 +232,10 @@ impl SqliteVideoRepository {
                 .map(|w| Self::parse_timestamp(&w, "watched_at"))
                 .transpose()?,
             playback_position: PlaybackPosition::new(row.playback_position_seconds)?,
+            synced_at: row
+                .synced_at
+                .map(|s| Self::parse_timestamp(&s, "synced_at"))
+                .transpose()?,
         })
     }
 

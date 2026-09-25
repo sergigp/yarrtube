@@ -15,8 +15,8 @@ pub fn render_movie_nfo(metadata: &VideoMetadata) -> String {
     body.push_str(&element("plot", &metadata.plot));
     body.push_str(&element("studio", &metadata.studio));
     body.push_str(&element("director", &metadata.director));
-    body.push_str(&element("premiered", &metadata.premiered));
-    body.push_str(&element("year", &metadata.year.to_string()));
+    body.push_str(&element("premiered", &metadata.premiered()));
+    body.push_str(&element("year", &metadata.year().to_string()));
     if let Some(genre) = &metadata.genre {
         body.push_str(&element("genre", genre));
     }
@@ -37,6 +37,7 @@ pub fn render_movie_nfo(metadata: &VideoMetadata) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{DateTime, Utc};
 
     fn metadata() -> VideoMetadata {
         VideoMetadata::new(
@@ -44,13 +45,15 @@ mod tests {
             "A description",
             "My Channel",
             "My Channel",
-            "2024-01-02",
-            2024,
+            DateTime::parse_from_rfc3339("2024-01-02T03:04:05Z")
+                .unwrap()
+                .with_timezone(&Utc),
             Some("Music".to_string()),
             vec!["tag1".to_string(), "tag2".to_string()],
             "yt1",
             Some("My Video.jpg".to_string()),
             "0001 My Video",
+            DateTime::<Utc>::UNIX_EPOCH,
         )
     }
 

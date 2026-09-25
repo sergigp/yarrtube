@@ -207,6 +207,48 @@ mod tests {
                 filename: Some("My Video.mp4".to_string()),
                 thumbnail_filename: Some("My Video.jpg".to_string()),
                 duration_seconds: Some(223),
+                synced_at: Some(fixed_timestamp()),
+                ..pending_video_response("vid1", "My Video")
+            }])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_include_the_sync_time_when_listing_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let synced_at = DateTime::<Utc>::from_timestamp(1_700_000_600, 0).unwrap();
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+            .start_download(fixed_timestamp())
+            .mark_downloaded(Quality::High, "My Video.mp4", None, None, synced_at);
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![VideoResponse {
+                status: "DOWNLOADED".to_string(),
+                quality: Some("high".to_string()),
+                filename: Some("My Video.mp4".to_string()),
+                updated_at: synced_at,
+                synced_at: Some(synced_at),
                 ..pending_video_response("vid1", "My Video")
             }])
         );
@@ -1268,6 +1310,7 @@ mod tests {
             updated_at: fixed_timestamp(),
             watched: false,
             position_seconds: 0,
+            synced_at: None,
         }
     }
 

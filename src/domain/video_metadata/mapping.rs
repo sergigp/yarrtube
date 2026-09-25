@@ -3,7 +3,7 @@ use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::youtube_metadata_repository::{
     YoutubeMetadata, map_category_to_genre,
 };
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Utc};
 
 const PLOT_LIMIT: usize = 500;
 
@@ -48,19 +48,20 @@ pub fn build_video_metadata(
     metadata: &YoutubeMetadata,
     sorttitle: impl Into<String>,
     thumbnail_filename: Option<String>,
+    now: DateTime<Utc>,
 ) -> VideoMetadata {
     VideoMetadata::new(
         metadata.title.clone(),
         truncate_plot(&metadata.description),
         metadata.channel_title.clone(),
         metadata.channel_title.clone(),
-        metadata.published_at.format("%Y-%m-%d").to_string(),
-        metadata.published_at.year(),
+        metadata.published_at,
         map_category_to_genre(metadata.category_id.as_deref()),
         metadata.tags.clone(),
         youtube_id.as_str().to_string(),
         thumbnail_filename,
         sorttitle,
+        now,
     )
 }
 
@@ -146,14 +147,14 @@ mod tests {
             &metadata,
             "0001 My Video",
             Some("My Video.jpg".to_string()),
+            DateTime::UNIX_EPOCH,
         );
 
         assert_eq!(video_metadata.title, "My Video");
         assert_eq!(video_metadata.plot, "A description");
         assert_eq!(video_metadata.studio, "My Channel");
         assert_eq!(video_metadata.director, "My Channel");
-        assert_eq!(video_metadata.premiered, "2024-01-02");
-        assert_eq!(video_metadata.year, 2024);
+        assert_eq!(video_metadata.published_at, published_at());
         assert_eq!(video_metadata.genre, Some("Music".to_string()));
         assert_eq!(video_metadata.tags, vec!["tag1".to_string()]);
         assert_eq!(video_metadata.uniqueid, "yt1");
@@ -166,7 +167,13 @@ mod tests {
         let youtube_id = VideoId::new("yt1").unwrap();
         let metadata = youtube_metadata();
 
-        let video_metadata = build_video_metadata(&youtube_id, &metadata, "0001 My Video", None);
+        let video_metadata = build_video_metadata(
+            &youtube_id,
+            &metadata,
+            "0001 My Video",
+            None,
+            DateTime::UNIX_EPOCH,
+        );
 
         assert_eq!(video_metadata.thumb, None);
     }

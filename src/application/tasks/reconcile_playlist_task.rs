@@ -37,7 +37,7 @@ mod tests {
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
-    use crate::domain::video::VideoId;
+    use crate::domain::video::{VideoId, VideoStatus};
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
@@ -475,6 +475,67 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![video.clone().reset_for_redownload(fixed_timestamp())]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(
+                    1,
+                    &Task::DownloadVideo {
+                        video_id: video.id.as_str().to_string(),
+                        quality: "high".to_string(),
+                        output_dir: "/videos/my-playlist".to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+                next_reconcile(2),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_clear_the_sync_time_of_videos_redownloaded() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(Vec::new()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = downloaded_video("My Video.mp4", Some("My Video.jpg"));
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &video,
+            0,
+        );
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            vec![member_playlist_item()],
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                status: VideoStatus::Pending,
+                quality: None,
+                filename: None,
+                thumbnail_filename: None,
+                synced_at: None,
+                ..video.clone()
+            }]
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
@@ -955,13 +1016,13 @@ mod tests {
                 "A description",
                 "My Channel",
                 "My Channel",
-                "2023-11-14",
-                2023,
+                fixed_timestamp(),
                 None,
                 Vec::new(),
                 "vid1",
                 None,
                 "0003 My Video",
+                fixed_timestamp(),
             ))
         );
         assert_eq!(video_repository.list().unwrap(), vec![video]);
@@ -1000,13 +1061,15 @@ mod tests {
             "Stale plot",
             "Stale Channel",
             "Stale Channel",
-            "2020-01-01",
-            2020,
+            DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
             None,
             Vec::new(),
             "vid1",
             None,
             "0000 Stale Title",
+            DateTime::UNIX_EPOCH,
         );
         video_metadata_repository
             .save(&video.id, &existing_metadata, &video_dir)

@@ -4,12 +4,18 @@ use rusqlite_migration::{M, Migrations};
 
 const BASELINE_SQL: &str = include_str!("../../../migrations/0001_baseline.sql");
 const WATCH_STATE_SQL: &str = include_str!("../../../migrations/0002_watch_state.sql");
+const PUBLISHED_AT_AND_SYNCED_AT_SQL: &str =
+    include_str!("../../../migrations/0003_published_at_and_synced_at.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
-    Migrations::new(vec![M::up(BASELINE_SQL), M::up(WATCH_STATE_SQL)])
-        .to_latest(conn)
-        .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
-        .context("failed to apply database migrations")
+    Migrations::new(vec![
+        M::up(BASELINE_SQL),
+        M::up(WATCH_STATE_SQL),
+        M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+    ])
+    .to_latest(conn)
+    .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
+    .context("failed to apply database migrations")
 }
 
 #[cfg(test)]
@@ -112,5 +118,93 @@ mod tests {
             |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, i64>(1)?)),
         );
         assert_eq!(watch_state, Ok((None, 0)));
+    }
+
+    #[test]
+    fn it_should_backfill_the_sync_time_of_downloaded_videos_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![M::up(BASELINE_SQL), M::up(WATCH_STATE_SQL)])
+            .to_latest(&mut conn)
+            .unwrap();
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec1', 'yt1', 'Downloaded Video', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-02T00:00:00+00:00');
+             INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec2', 'yt2', 'Pending Video', 'PENDING', '2024-01-01T00:00:00+00:00', '2024-01-03T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT id, synced_at FROM videos ORDER BY id")
+            .unwrap();
+        let synced_at: Vec<(String, Option<String>)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            synced_at,
+            vec![
+                (
+                    "rec1".to_string(),
+                    Some("2024-01-02T00:00:00+00:00".to_string())
+                ),
+                ("rec2".to_string(), None),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_backfill_the_publish_time_from_premiered_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![M::up(BASELINE_SQL), M::up(WATCH_STATE_SQL)])
+            .to_latest(&mut conn)
+            .unwrap();
+        conn.execute(
+            "INSERT INTO video_metadata (video_id, title, plot, studio, director, premiered, year, tags, uniqueid, sorttitle, created_at)
+             VALUES ('rec1', 'My Video', 'A description', 'My Channel', 'My Channel', '2024-01-02', 2024, '[]', 'yt1', '20240102 My Video', '2024-02-01T00:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let published_at = conn.query_row(
+            "SELECT published_at FROM video_metadata WHERE video_id = 'rec1'",
+            [],
+            |row| row.get::<_, String>(0),
+        );
+        assert_eq!(published_at, Ok("2024-01-02T00:00:00+00:00".to_string()));
+    }
+
+    #[test]
+    fn it_should_backfill_the_metadata_update_time_from_its_creation_time_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![M::up(BASELINE_SQL), M::up(WATCH_STATE_SQL)])
+            .to_latest(&mut conn)
+            .unwrap();
+        conn.execute(
+            "INSERT INTO video_metadata (video_id, title, plot, studio, director, premiered, year, tags, uniqueid, sorttitle, created_at)
+             VALUES ('rec1', 'My Video', 'A description', 'My Channel', 'My Channel', '2024-01-02', 2024, '[]', 'yt1', '20240102 My Video', '2024-02-01T00:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let timestamps = conn.query_row(
+            "SELECT created_at, updated_at FROM video_metadata WHERE video_id = 'rec1'",
+            [],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        );
+        assert_eq!(
+            timestamps,
+            Ok((
+                "2024-02-01T00:00:00+00:00".to_string(),
+                "2024-02-01T00:00:00+00:00".to_string()
+            ))
+        );
     }
 }

@@ -235,6 +235,7 @@ impl VideoDownloader {
             &metadata,
             sorttitle,
             thumbnail_filename.map(str::to_string),
+            self.clock.now(),
         );
 
         if let Err(e) = self

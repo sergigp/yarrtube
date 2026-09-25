@@ -161,8 +161,13 @@ impl PlaylistVideoReconciler {
             .map(str::to_string);
         let sorttitle =
             resolve_sorttitle(&metadata.title, metadata.published_at, playlist_position);
-        let video_metadata =
-            build_video_metadata(&video.youtube_id, &metadata, sorttitle, thumbnail_filename);
+        let video_metadata = build_video_metadata(
+            &video.youtube_id,
+            &metadata,
+            sorttitle,
+            thumbnail_filename,
+            self.clock.now(),
+        );
         let video_dir = video_dir_for_filename(output_dir, filename);
 
         if let Err(e) = self
