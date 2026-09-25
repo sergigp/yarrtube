@@ -4,8 +4,10 @@ use super::blocking::run_blocking;
 use super::error::ApiError;
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
-use crate::domain::services::{VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater};
-use crate::domain::video::ListVideosError;
+use crate::domain::services::{
+    VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+};
+use crate::domain::video::{ListVideosError, PlaybackPosition, VideoId};
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -63,10 +65,19 @@ pub async fn list_recent_videos(
 }
 
 pub async fn record_video_progress(
-    State(_video_watch_state_updater): State<VideoWatchStateUpdater>,
-    Path(_youtube_id): Path<String>,
-    Json(_request): Json<RecordProgressRequest>,
+    State(video_watch_state_updater): State<VideoWatchStateUpdater>,
+    Path(youtube_id): Path<String>,
+    Json(request): Json<RecordProgressRequest>,
 ) -> Result<StatusCode, ApiError> {
+    let youtube_id = VideoId::new(youtube_id)?;
+    let position = PlaybackPosition::new(request.position_seconds.unwrap_or_default())?;
+
+    run_blocking(move || {
+        video_watch_state_updater.record_progress(&youtube_id, position, request.duration_seconds)
+    })
+    .await?
+    .map_err(ApiError::internal)?;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -87,7 +98,6 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::Quality;
     use crate::domain::video::Video;
-    use crate::domain::video::VideoId;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -104,6 +114,7 @@ mod tests {
         SqliteVideoRepository, VideoRepository,
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use dto::RecentVideoSourceResponse;
     use rusqlite::Connection;
@@ -684,6 +695,32 @@ mod tests {
         assert_eq!(response, Ok(numbered_recent_videos((5..105).rev())));
     }
 
+    #[tokio::test]
+    async fn it_should_record_playback_progress() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", Some(100));
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(30);
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                playback_position: PlaybackPosition::new(30).unwrap(),
+                ..video
+            }]
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -851,6 +888,45 @@ mod tests {
             None,
             created_at,
         )
+    }
+
+    fn video_with_duration(youtube_id: &str, duration_seconds: Option<i64>) -> Video {
+        Video::create(
+            VideoId::new(youtube_id).unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .mark_downloaded(
+            Quality::High,
+            "My Video.mp4",
+            None,
+            duration_seconds,
+            fixed_timestamp(),
+        )
+    }
+
+    fn progress_request(position_seconds: i64) -> RecordProgressRequest {
+        RecordProgressRequest {
+            position_seconds: Some(position_seconds),
+            duration_seconds: None,
+        }
+    }
+
+    fn watched_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_800_000_000, 0).unwrap()
+    }
+
+    async fn record_progress(
+        video_watch_state_updater: VideoWatchStateUpdater,
+        youtube_id: &str,
+        request: RecordProgressRequest,
+    ) -> Result<StatusCode, ApiError> {
+        record_video_progress(
+            State(video_watch_state_updater),
+            Path(youtube_id.to_string()),
+            Json(request),
+        )
+        .await
     }
 
     async fn list_for_playlist(

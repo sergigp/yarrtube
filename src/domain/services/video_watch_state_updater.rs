@@ -1,5 +1,5 @@
 use crate::domain::channel::ChannelHandle;
-use crate::domain::video::{PlaybackPosition, UpdateWatchStateError, VideoId};
+use crate::domain::video::{PlaybackPosition, UpdateWatchStateError, Video, VideoId};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -50,11 +50,17 @@ pub trait VideoWatchStateUpdaterApi: Send + Sync {
 impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
     fn record_progress(
         &self,
-        _youtube_id: &VideoId,
-        _position: PlaybackPosition,
-        _reported_duration_seconds: Option<i64>,
+        youtube_id: &VideoId,
+        position: PlaybackPosition,
+        reported_duration_seconds: Option<i64>,
     ) -> Result<(), UpdateWatchStateError> {
-        Ok(())
+        let copies = self.find_copies(youtube_id)?;
+        let now = self.clock.now();
+        copies
+            .into_iter()
+            .map(|video| video.record_progress(position, reported_duration_seconds, now))
+            .try_for_each(|video| self.video_repository.update(&video))
+            .map_err(UpdateWatchStateError::Repository)
     }
 
     fn mark_channel_watched(
@@ -62,5 +68,13 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
         _channel_id: &ChannelHandle,
     ) -> Result<(), UpdateWatchStateError> {
         Ok(())
+    }
+}
+
+impl VideoWatchStateUpdater {
+    fn find_copies(&self, youtube_id: &VideoId) -> Result<Vec<Video>, UpdateWatchStateError> {
+        self.video_repository
+            .find_by_youtube_id(youtube_id)
+            .map_err(UpdateWatchStateError::Repository)
     }
 }

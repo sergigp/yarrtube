@@ -169,8 +169,26 @@ impl VideoRepository for SqliteVideoRepository {
         Ok(())
     }
 
-    fn find_by_youtube_id(&self, _youtube_id: &VideoId) -> anyhow::Result<Vec<Video>> {
-        Ok(vec![])
+    fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>> {
+        let conn = self
+            .conn
+            .lock()
+            .inspect_err(|_| tracing::error!(youtube_id = %youtube_id, "database lock poisoned"))
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {VIDEO_COLUMNS} FROM videos WHERE youtube_id = ?1 ORDER BY rowid ASC"
+            ))
+            .context("failed to prepare find videos by youtube id")?;
+        stmt.query_map(params![youtube_id.as_str()], Self::read_row)
+            .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+            .inspect_err(|e| {
+                tracing::error!(youtube_id = %youtube_id, error = %e, "failed to find videos by youtube id")
+            })
+            .context("failed to find videos by youtube id")?
+            .into_iter()
+            .map(Self::row_to_video)
+            .collect()
     }
 }
 

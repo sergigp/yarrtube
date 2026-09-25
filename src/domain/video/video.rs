@@ -124,11 +124,14 @@ impl Video {
     /// rewatch passes 10%. With no known duration only the position is kept.
     pub fn record_progress(
         self,
-        _position: PlaybackPosition,
+        position: PlaybackPosition,
         _reported_duration_seconds: Option<i64>,
         _now: DateTime<Utc>,
     ) -> Self {
-        self
+        Self {
+            playback_position: position,
+            ..self
+        }
     }
 
     pub fn mark_watched(self, _now: DateTime<Utc>) -> Self {
