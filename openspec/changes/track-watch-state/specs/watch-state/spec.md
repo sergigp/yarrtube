@@ -43,8 +43,12 @@ The system SHALL provide an HTTP endpoint that, given a YouTube video ID and a p
 - **THEN** the video stays watched and its saved position stays 0
 
 #### Scenario: Rewatch passes 10%
-- **WHEN** a client records a position above 10% of the duration for a watched video
+- **WHEN** a client records a position above 10% and below 90% of the duration for a watched video
 - **THEN** the video becomes unwatched and its saved position becomes the given position
+
+#### Scenario: Playing on past 90%
+- **WHEN** a client records a position at or above 90% of the duration for a watched video
+- **THEN** the video stays watched and its saved position stays 0
 
 #### Scenario: Unknown video
 - **WHEN** a client records progress for a YouTube video ID that no playlist or channel tracks

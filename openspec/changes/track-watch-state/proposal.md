@@ -7,7 +7,7 @@ The SPA plays downloaded videos but keeps no record of what has been watched. Th
 - A video gains a watch state: watched or not, plus a saved playback position. "Seen" and "watched" are the same concept.
 - Watch state belongs to the YouTube video, not to one stored copy. Every stored copy of the same YouTube video (e.g. in a channel and in a "favorites" playlist) is updated together.
 - New HTTP endpoints:
-  - record playback progress for a video. The server marks the video watched once progress reaches 90% of its duration. A watched video is marked unwatched again once a rewatch passes 10%.
+  - record playback progress for a video. The server marks the video watched once progress reaches 90% of its duration. A watched video is marked unwatched again once a rewatch passes 10% (while still below 90%).
   - mark a channel watched, which marks every downloaded video in the channel as watched.
 - Video listings (playlist, channel, recent) include each video's watch state.
 - The channel listing is trimmed to the fields the SPA uses (handle, name, path, avatar filename) and adds each channel's count of downloaded, unwatched videos. **BREAKING** for any client reading `youtube_channel_id`, `quality`, `video_limit` or `created_at` from the list (the SPA does not).
@@ -22,7 +22,7 @@ The SPA plays downloaded videos but keeps no record of what has been watched. Th
 
 ### New Capabilities
 
-- `watch-state`: recording playback progress, the watched/unwatched rules (90% to mark watched, 10% into a rewatch to unmark), marking a whole channel watched, and sharing the state across every stored copy of a YouTube video. There is no single-video mark or unmark endpoint: progress covers both (seek past 90% to mark, rewatch past 10% to unmark).
+- `watch-state`: recording playback progress, the watched/unwatched rules (90% to mark watched, 10% into a rewatch, while still below 90%, to unmark), marking a whole channel watched, and sharing the state across every stored copy of a YouTube video. There is no single-video mark or unmark endpoint: progress covers both (seek past 90% to mark, rewatch past 10% to unmark).
 
 ### Modified Capabilities
 

@@ -34,6 +34,7 @@
 - [x] 2.18 `it_should_keep_watch_state_when_redownloading_a_missing_file` (in `reconcile_channel_task.rs`): a regression guard for `reset_for_redownload`. It may pass on its first run because struct update already keeps the fields. If it does, ask whether to keep it and skip the cycle.
 - [x] 2.19 `it_should_accept_zero_and_positive_positions` (in `playback_position.rs`): drives `PlaybackPosition::new` accepting positions of 0 and above.
 - [x] 2.20 `it_should_reject_a_negative_position` (in `playback_position.rs`): drives the exact negative-position message.
+- [ ] 2.21 `it_should_keep_a_watched_video_watched_when_playing_on_past_90_percent`: drives keeping a watched video unchanged at or above 90%.
 
 ## 3. Infrastructure adapters (TDD)
 

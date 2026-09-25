@@ -72,7 +72,7 @@ impl Video {
 
     /// Duration is `self.duration_seconds`, else `reported_duration_seconds`; non-positive = unknown.
     /// unwatched: pos >= 90% -> mark_watched; else position = pos (also when duration unknown).
-    /// watched:   pos > 10% -> watched_at = None, position = pos; else unchanged.
+    /// watched:   10% < pos < 90% -> watched_at = None, position = pos; else unchanged.
     pub fn record_progress(
         self,
         position: PlaybackPosition,
@@ -315,41 +315,42 @@ Sidebar channel row
 4. `it_should_only_record_the_position_if_duration_is_unknown`: no duration anywhere, position 500. Position 500, still unwatched.
 5. `it_should_keep_a_watched_video_watched_early_in_a_rewatch`: watched video, position 10 of 100. Stored video unchanged.
 6. `it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch`: watched video, position 11 of 100. `watched_at = None`, position 11.
-7. `it_should_record_progress_on_every_copy_of_the_video`: same YouTube ID stored in a channel and a playlist. Both copies are updated identically.
-8. `it_should_fail_to_record_progress_of_an_unknown_video`: `Err(ApiError::bad_request("video x not found"))`, stored videos unchanged.
-9. `it_should_fail_to_record_progress_if_position_missing`: exact missing-position 400, on an unmigrated connection.
-10. `it_should_fail_to_record_progress_if_invalid_position_provided`: position -1. Exact `PlaybackPosition` 400 message.
+7. `it_should_keep_a_watched_video_watched_when_playing_on_past_90_percent`: watched video, position 95 of 100. Stored video unchanged.
+8. `it_should_record_progress_on_every_copy_of_the_video`: same YouTube ID stored in a channel and a playlist. Both copies are updated identically.
+9. `it_should_fail_to_record_progress_of_an_unknown_video`: `Err(ApiError::bad_request("video x not found"))`, stored videos unchanged.
+10. `it_should_fail_to_record_progress_if_position_missing`: exact missing-position 400, on an unmigrated connection.
+11. `it_should_fail_to_record_progress_if_invalid_position_provided`: position -1. Exact `PlaybackPosition` 400 message.
 
 `application/http/channels/mod.rs`:
 
-11. `it_should_mark_every_downloaded_channel_video_watched`: the channel has a downloaded video, a pending video, and a downloaded video also stored in a playlist. Both downloaded videos and the playlist copy become watched; the pending video is unchanged.
-12. `it_should_fail_to_mark_watched_a_missing_channel`: 400 "channel @missing not found", videos unchanged.
-13. `it_should_fail_to_mark_watched_if_invalid_handle_provided`: exact `ChannelHandle` 400 message.
-14. `it_should_count_unwatched_downloaded_videos_when_listing_channels`: one channel with downloaded-unwatched ×2, downloaded-watched ×1 and pending ×1. Whole flat `ChannelListItemResponse` with `unwatched_count: 2`. (The existing `it_should_list_all_channels`/`it_should_list_no_channels` are updated to the new response and constructor.)
+12. `it_should_mark_every_downloaded_channel_video_watched`: the channel has a downloaded video, a pending video, and a downloaded video also stored in a playlist. Both downloaded videos and the playlist copy become watched; the pending video is unchanged.
+13. `it_should_fail_to_mark_watched_a_missing_channel`: 400 "channel @missing not found", videos unchanged.
+14. `it_should_fail_to_mark_watched_if_invalid_handle_provided`: exact `ChannelHandle` 400 message.
+15. `it_should_count_unwatched_downloaded_videos_when_listing_channels`: one channel with downloaded-unwatched ×2, downloaded-watched ×1 and pending ×1. Whole flat `ChannelListItemResponse` with `unwatched_count: 2`. (The existing `it_should_list_all_channels`/`it_should_list_no_channels` are updated to the new response and constructor.)
 
 `application/http/videos/mod.rs`, listings:
 
-15. `it_should_include_watch_state_when_listing_channel_videos`: one watched video and one video at position 42. Whole `VideoResponse`s with `watched`/`position_seconds`.
-16. `it_should_include_watch_state_when_listing_playlist_videos`: same, through the playlist listing.
-17. `it_should_include_whether_recent_videos_were_watched`: a watched downloaded video appears with `watched: true`.
+16. `it_should_include_watch_state_when_listing_channel_videos`: one watched video and one video at position 42. Whole `VideoResponse`s with `watched`/`position_seconds`.
+17. `it_should_include_watch_state_when_listing_playlist_videos`: same, through the playlist listing.
+18. `it_should_include_whether_recent_videos_were_watched`: a watched downloaded video appears with `watched: true`.
 
 `application/tasks/reconcile_channel_task.rs`:
 
-18. `it_should_keep_watch_state_when_redownloading_a_missing_file`: a watched `Downloaded` video whose file is missing. After the reconcile the video is `Pending` and still watched.
+19. `it_should_keep_watch_state_when_redownloading_a_missing_file`: a watched `Downloaded` video whose file is missing. After the reconcile the video is `Pending` and still watched.
 
 `domain/video/playback_position.rs` (value object):
 
-19. `it_should_accept_zero_and_positive_positions`: `Ok(PlaybackPosition(0))` and `Ok(PlaybackPosition(120))`.
-20. `it_should_reject_a_negative_position`: `Err(ValidationError("Playback position must not be negative (got -1)"))`.
+20. `it_should_accept_zero_and_positive_positions`: `Ok(PlaybackPosition(0))` and `Ok(PlaybackPosition(120))`.
+21. `it_should_reject_a_negative_position`: `Err(ValidationError("Playback position must not be negative (got -1)"))`.
 
 **2. Infrastructure tests**
 
 `infrastructure/shared/sqlite_migrations.rs`:
 
-21. `it_should_default_existing_videos_to_unwatched_when_migrating`: apply only the baseline, insert a `videos` row with raw SQL, then `apply`. The row reads back with `watched_at` NULL and position 0.
+22. `it_should_default_existing_videos_to_unwatched_when_migrating`: apply only the baseline, insert a `videos` row with raw SQL, then `apply`. The row reads back with `watched_at` NULL and position 0.
 
 `infrastructure/repositories/sqlite_video_repository.rs`:
 
-22. `it_should_round_trip_a_watched_video_with_a_playback_position`: save, then `find` returns the whole video unchanged.
-23. `it_should_find_every_copy_of_a_youtube_video`: three rows, two sharing a YouTube ID. `find_by_youtube_id` returns exactly those two.
-24. `it_should_find_no_copies_of_an_unknown_youtube_video`: `Ok(vec![])`.
+23. `it_should_round_trip_a_watched_video_with_a_playback_position`: save, then `find` returns the whole video unchanged.
+24. `it_should_find_every_copy_of_a_youtube_video`: three rows, two sharing a YouTube ID. `find_by_youtube_id` returns exactly those two.
+25. `it_should_find_no_copies_of_an_unknown_youtube_video`: `Ok(vec![])`.
