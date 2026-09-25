@@ -1,37 +1,36 @@
-use crate::domain::channel::{Channel, ChannelHandle};
-use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::DomainEvent;
+use crate::domain::playlist::Playlist;
+use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
-use crate::domain::shared::{VideoId, VideoRecordId};
+use crate::domain::shared::{PlaylistId, VideoId, VideoRecordId};
 use crate::domain::task::Task;
 use crate::domain::video::{
     Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
 };
 use crate::domain::video_metadata::{build_video_metadata, resolve_sorttitle};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
-use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
-use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
+use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::youtube_channel_videos_repository::ChannelVideosRepository;
 use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadataRepository;
+use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubePlaylistItemsRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
-/// Reconciles a channel's stored videos against its current `video_limit`
-/// most recent uploads on YouTube, and its output directory against
-/// recorded downloads — the channel equivalent of `PlaylistVideoReconciler`.
+/// Reconciles a playlist's stored videos against YouTube membership and its
+/// output directory against recorded downloads.
 #[derive(Clone)]
-pub struct ChannelVideoReconciler {
-    channel_repository: Arc<dyn ChannelRepository>,
+pub struct PlaylistVideoReconciler {
+    playlist_repository: Arc<dyn PlaylistRepository>,
     video_repository: Arc<dyn VideoRepository>,
-    channel_video_repository: Arc<dyn ChannelVideoRepository>,
-    channel_videos_repository: Arc<dyn ChannelVideosRepository>,
+    playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
+    youtube_playlist_items_repository: Arc<dyn YoutubePlaylistItemsRepository>,
     youtube_metadata_repository: Arc<dyn YoutubeMetadataRepository>,
     video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     event_publisher: Arc<dyn EventPublisher>,
@@ -43,13 +42,13 @@ pub struct ChannelVideoReconciler {
     videos_path: String,
 }
 
-impl ChannelVideoReconciler {
+impl PlaylistVideoReconciler {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        channel_repository: Arc<dyn ChannelRepository>,
+        playlist_repository: Arc<dyn PlaylistRepository>,
         video_repository: Arc<dyn VideoRepository>,
-        channel_video_repository: Arc<dyn ChannelVideoRepository>,
-        channel_videos_repository: Arc<dyn ChannelVideosRepository>,
+        playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
+        youtube_playlist_items_repository: Arc<dyn YoutubePlaylistItemsRepository>,
         youtube_metadata_repository: Arc<dyn YoutubeMetadataRepository>,
         video_metadata_repository: Arc<dyn VideoMetadataRepository>,
         event_publisher: Arc<dyn EventPublisher>,
@@ -61,10 +60,10 @@ impl ChannelVideoReconciler {
         videos_path: impl Into<String>,
     ) -> Self {
         Self {
-            channel_repository,
+            playlist_repository,
             video_repository,
-            channel_video_repository,
-            channel_videos_repository,
+            playlist_video_repository,
+            youtube_playlist_items_repository,
             youtube_metadata_repository,
             video_metadata_repository,
             event_publisher,
@@ -78,58 +77,66 @@ impl ChannelVideoReconciler {
     }
 }
 
-pub trait ChannelVideoReconcilerApi: Send + Sync {
-    /// Runs one reconcile pass for a channel and reschedules the next
-    /// recurring pass — no-ops entirely if the channel no longer exists.
-    fn reconcile(&self, id: ChannelHandle) -> anyhow::Result<()>;
+pub trait PlaylistVideoReconcilerApi: Send + Sync {
+    /// Runs one reconcile pass for a playlist and reschedules the next
+    /// recurring pass — no-ops entirely if the playlist no longer exists.
+    /// Called by the recurring `ReconcilePlaylistTask` and by the one-shot
+    /// `PlaylistCreated` reaction alike.
+    fn reconcile(&self, id: PlaylistId) -> anyhow::Result<()>;
 
-    /// Runs one reconcile pass for a channel immediately, on demand, without
-    /// touching the recurring reconcile schedule. No-ops entirely if the
-    /// channel no longer exists.
-    fn force_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()>;
+    /// Runs one reconcile pass for a playlist immediately, on demand,
+    /// without touching the recurring reconcile schedule — whatever
+    /// `ReconcilePlaylist` task is already pending for this playlist (from
+    /// creation or the last recurring pass) is left exactly as it was. This
+    /// means triggering it repeatedly never queues extra tasks. No-ops
+    /// entirely if the playlist no longer exists.
+    fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()>;
 }
 
-impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
-    fn reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
-        let Some(channel) = self.channel_repository.find(&id)? else {
-            info!(channel_id = %id, "channel no longer exists, skipping reconcile");
+impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
+    fn reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
+        let Some(playlist) = self.playlist_repository.find(&id)? else {
+            debug!(playlist_id = %id, "playlist no longer exists, skipping reconcile");
             return Ok(());
         };
 
-        self.run_reconcile_pass(&channel)?;
+        self.run_reconcile_pass(&playlist)?;
         self.schedule_next_reconcile(&id)
     }
 
-    fn force_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
-        let Some(channel) = self.channel_repository.find(&id)? else {
-            info!(channel_id = %id, "channel no longer exists, skipping reconcile");
+    fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
+        let Some(playlist) = self.playlist_repository.find(&id)? else {
+            debug!(playlist_id = %id, "playlist no longer exists, skipping reconcile");
             return Ok(());
         };
 
-        self.run_reconcile_pass(&channel)
+        self.run_reconcile_pass(&playlist)
     }
 }
 
-impl ChannelVideoReconciler {
-    fn schedule_next_reconcile(&self, id: &ChannelHandle) -> anyhow::Result<()> {
+impl PlaylistVideoReconciler {
+    fn schedule_next_reconcile(&self, id: &PlaylistId) -> anyhow::Result<()> {
         let now = self.clock.now();
         let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
         self.task_repository.schedule(
-            &Task::ReconcileChannel {
-                channel_id: id.as_str().to_string(),
+            &Task::ReconcilePlaylist {
+                playlist_id: id.as_str().to_string(),
             },
             next_run_at,
         )?;
-        info!(channel_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of channel");
+        info!(playlist_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of playlist");
 
         Ok(())
     }
 
-    /// Regenerates `video`'s metadata — the channel equivalent of
-    /// `PlaylistVideoReconciler::generate_metadata`. A channel-tracked video's
-    /// `sorttitle` always resolves via publish date: `ChannelVideo.position`
-    /// is a recency rank, never passed in as a playlist position.
-    fn generate_metadata(&self, video: &Video, output_dir: &Path) {
+    /// Regenerates `video`'s metadata (fetch `YoutubeMetadata`, resolve
+    /// `sorttitle`, build `VideoMetadata`, save) the same way
+    /// `VideoDownloader::download` does at download time. Any failure is
+    /// logged and swallowed — a `Downloaded` video's status and file are
+    /// never touched by this, and a repeated failure simply tries again on
+    /// the next reconcile pass. `playlist_position` is `None` when no
+    /// position is recorded, resolving `sorttitle` via publish date instead.
+    fn generate_metadata(&self, video: &Video, output_dir: &Path, playlist_position: Option<i64>) {
         let Some(filename) = video.filename.as_deref() else {
             return;
         };
@@ -151,7 +158,8 @@ impl ChannelVideoReconciler {
             .and_then(|f| Path::new(f).file_name())
             .and_then(|f| f.to_str())
             .map(str::to_string);
-        let sorttitle = resolve_sorttitle(&metadata.title, metadata.published_at, None);
+        let sorttitle =
+            resolve_sorttitle(&metadata.title, metadata.published_at, playlist_position);
         let video_metadata =
             build_video_metadata(&video.youtube_id, &metadata, sorttitle, thumbnail_filename);
         let video_dir = video_dir_for_filename(output_dir, filename);
@@ -166,53 +174,55 @@ impl ChannelVideoReconciler {
 
     /// Diffs membership against YouTube, then reconciles the filesystem
     /// against recorded downloads. Shared by `reconcile` and
-    /// `force_reconcile`. A `yt-dlp` failure during the membership diff
-    /// propagates before filesystem reconciliation runs, leaving every
-    /// stored row (and every file on disk) untouched.
-    fn run_reconcile_pass(&self, channel: &Channel) -> anyhow::Result<()> {
-        info!(channel_id = %channel.id, "reconciling channel");
+    /// `force_reconcile`.
+    fn run_reconcile_pass(&self, playlist: &Playlist) -> anyhow::Result<()> {
+        info!(playlist_id = %playlist.id, kind = %playlist.kind, "reconciling playlist");
 
-        self.sync_channel_membership(channel)?;
-        self.reconcile_filesystem(channel)
+        self.sync_playlist_membership(playlist)?;
+
+        self.reconcile_filesystem(playlist)
     }
 
-    /// Diffs the channel's current `video_limit` most recent uploads against
-    /// its stored `ChannelVideo` rows: adds newly-seen videos as `PENDING`
-    /// at their recency position, evicts stored videos no longer among the
-    /// current top-N (whether removed on YouTube or aged past the limit).
-    fn sync_channel_membership(&self, channel: &Channel) -> anyhow::Result<()> {
-        let id = &channel.id;
-        let output_dir = resolve_output_dir(&self.videos_path, channel.path.as_str());
+    /// Diffs a YouTube-linked playlist's stored videos against YouTube's
+    /// playlist-items API: adds newly-seen videos as `PENDING`, deletes
+    /// stored videos no longer present on YouTube.
+    fn sync_playlist_membership(&self, playlist: &Playlist) -> anyhow::Result<()> {
+        let id = &playlist.id;
+        let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
         let current_videos = self
-            .channel_videos_repository
-            .list_current_videos(id, channel.video_limit.value())?;
-        let stored_videos = self.channel_video_repository.list_for_channel(id)?;
+            .youtube_playlist_items_repository
+            .list_current_videos(id)?;
+        let stored_videos = self.playlist_video_repository.list_for_playlist(id)?;
 
         let now = self.clock.now();
         let mut current_youtube_ids = Vec::with_capacity(current_videos.len());
         for current in &current_videos {
-            let youtube_id = VideoId::new(&current.youtube_id)?;
+            let youtube_id = VideoId::new(&current.video_id)?;
             let existing = self
-                .channel_video_repository
+                .playlist_video_repository
                 .find_by_youtube_video(id, &youtube_id)?;
 
             match existing {
                 None => {
                     let video = Video::create(youtube_id.clone(), current.title.clone(), now);
                     self.video_repository.save(&video)?;
-                    let channel_video =
-                        ChannelVideo::create(id.clone(), video.id.clone(), current.position, now);
-                    self.channel_video_repository.save(&channel_video)?;
+                    let playlist_video = PlaylistVideo::create_with_position(
+                        id.clone(),
+                        video.id.clone(),
+                        current.position,
+                        now,
+                    );
+                    self.playlist_video_repository.save(&playlist_video)?;
                     self.thumbnail_fetcher.fetch(&video, &output_dir);
                     info!(
-                        channel_id = %id,
+                        playlist_id = %id,
                         video_id = %youtube_id,
                         title = %current.title,
-                        "added video to channel"
+                        "added video to playlist"
                     );
                     self.event_publisher
-                        .publish(&DomainEvent::VideoAddedToChannel {
-                            channel_id: id.as_str().to_string(),
+                        .publish(&DomainEvent::VideoAddedToPlaylist {
+                            playlist_id: id.as_str().to_string(),
                             video_id: video.id.as_str().to_string(),
                         })?;
                 }
@@ -224,9 +234,9 @@ impl ChannelVideoReconciler {
                             ..video
                         })?;
                     }
-                    if existing.position != current.position {
-                        self.channel_video_repository.save(&ChannelVideo {
-                            position: current.position,
+                    if existing.position != Some(current.position) {
+                        self.playlist_video_repository.save(&PlaylistVideo {
+                            position: Some(current.position),
                             created_at: now,
                             ..existing
                         })?;
@@ -248,16 +258,16 @@ impl ChannelVideoReconciler {
             }
 
             info!(
-                channel_id = %id,
+                playlist_id = %id,
                 video_id = %video.youtube_id,
-                "evicting video from channel (no longer among its most recent uploads)"
+                "removing video from playlist (no longer on YouTube)"
             );
-            self.channel_video_repository
+            self.playlist_video_repository
                 .delete(id, &video.youtube_id)?;
             self.video_repository.delete(&video.id)?;
             self.event_publisher
-                .publish(&DomainEvent::VideoRemovedFromChannel {
-                    channel_id: id.as_str().to_string(),
+                .publish(&DomainEvent::VideoRemovedFromPlaylist {
+                    playlist_id: id.as_str().to_string(),
                     video_id: video.id.as_str().to_string(),
                     title: video.title.clone(),
                     filename: video.filename.clone(),
@@ -269,22 +279,27 @@ impl ChannelVideoReconciler {
         Ok(())
     }
 
-    /// Reconciles `channel`'s output directory against its recorded
+    /// Reconciles `playlist`'s output directory against its recorded
     /// downloads: heals a `Downloaded` video whose file is missing, or whose
-    /// file is present but not mp4, by resetting it and scheduling a fresh
-    /// download. Also resets any `Errored` video (one that permanently
-    /// exhausted its download retries) the same way. Also deletes a file
-    /// that doesn't belong to any currently-`Downloaded` video (an orphan).
-    /// Mirrors `PlaylistVideoReconciler::reconcile_filesystem`.
-    fn reconcile_filesystem(&self, channel: &Channel) -> anyhow::Result<()> {
-        let output_dir = resolve_output_dir(&self.videos_path, channel.path.as_str());
+    /// file is present but not mp4 (a stale non-mp4 container downloaded
+    /// before yt-dlp was made to always remux to mp4 — see
+    /// `args_for_quality`), by resetting it and scheduling a fresh download.
+    /// Also resets any `Errored` video (one that permanently exhausted its
+    /// download retries) the same way, with no limit on how many times a
+    /// given video may be recovered this way — see design.md's "Reconcile
+    /// also recovers Errored videos" decision. Also deletes a file that
+    /// doesn't belong to any currently-`Downloaded` video (an orphan) — this
+    /// is what clears out a stale non-mp4 file once its video has been
+    /// redownloaded under a fresh filename.
+    fn reconcile_filesystem(&self, playlist: &Playlist) -> anyhow::Result<()> {
+        let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
-        let stored_channel_videos = self
-            .channel_video_repository
-            .list_for_channel(&channel.id)?;
-        let stored_videos: Vec<Video> = stored_channel_videos
+        let stored_playlist_videos = self
+            .playlist_video_repository
+            .list_for_playlist(&playlist.id)?;
+        let stored_videos: Vec<Video> = stored_playlist_videos
             .iter()
-            .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
+            .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
             .collect::<anyhow::Result<Vec<Video>>>()?;
         let downloaded: Vec<&Video> = stored_videos
             .iter()
@@ -304,6 +319,11 @@ impl ChannelVideoReconciler {
             )
             .map(top_level_entry)
             .collect();
+        let playlist_position_by_video: HashMap<&VideoRecordId, Option<i64>> =
+            stored_playlist_videos
+                .iter()
+                .map(|pv| (&pv.video_id, pv.position))
+                .collect();
         // Videos reset for redownload below: their in-memory `stored_videos`
         // snapshot goes stale the instant the reset is persisted, and their
         // thumbnail is expected to arrive with their own fresh download (see
@@ -323,7 +343,7 @@ impl ChannelVideoReconciler {
             if !healthy {
                 let now = self.clock.now();
                 warn!(
-                    channel_id = %channel.id,
+                    playlist_id = %playlist.id,
                     video_id = %video.youtube_id,
                     filename = video.filename.as_deref().unwrap_or(""),
                     "downloaded video's file is missing or not mp4, resetting for redownload"
@@ -334,7 +354,7 @@ impl ChannelVideoReconciler {
                 self.task_repository.schedule(
                     &Task::DownloadVideo {
                         video_id: video.id.as_str().to_string(),
-                        quality: channel.quality.as_str().to_string(),
+                        quality: playlist.quality.as_str().to_string(),
                         output_dir: output_dir.to_string_lossy().to_string(),
                     },
                     now,
@@ -345,7 +365,8 @@ impl ChannelVideoReconciler {
             if self.video_metadata_repository.find(&video.id)?.is_some() {
                 continue;
             }
-            self.generate_metadata(video, &output_dir);
+            let playlist_position = playlist_position_by_video.get(&video.id).copied().flatten();
+            self.generate_metadata(video, &output_dir, playlist_position);
         }
 
         for video in stored_videos
@@ -354,7 +375,7 @@ impl ChannelVideoReconciler {
         {
             let now = self.clock.now();
             warn!(
-                channel_id = %channel.id,
+                playlist_id = %playlist.id,
                 video_id = %video.youtube_id,
                 "permanently errored video found during reconcile, resetting for redownload"
             );
@@ -364,7 +385,7 @@ impl ChannelVideoReconciler {
             self.task_repository.schedule(
                 &Task::DownloadVideo {
                     video_id: video.id.as_str().to_string(),
-                    quality: channel.quality.as_str().to_string(),
+                    quality: playlist.quality.as_str().to_string(),
                     output_dir: output_dir.to_string_lossy().to_string(),
                 },
                 now,
@@ -379,7 +400,7 @@ impl ChannelVideoReconciler {
                 continue;
             }
             if self.video_file_repository.delete(&output_dir, file)? {
-                info!(channel_id = %channel.id, file, "deleted orphaned file during reconciliation");
+                info!(playlist_id = %playlist.id, file, "deleted orphaned file during reconciliation");
             }
         }
 

@@ -6,7 +6,7 @@ const IN_PROGRESS_EXTENSIONS: &[&str] = &["part", "ytdl"];
 
 /// Locates and deletes a video's downloaded file on disk, and lists a
 /// playlist output directory's current entries, injected into
-/// `VideoFileDeleter` and `VideoReconciler` for the event-driven cleanup
+/// `VideoFileDeleter` and `PlaylistVideoReconciler` for the event-driven cleanup
 /// path and filesystem reconciliation. Separate from
 /// `VideoDownloaderRepository` (`youtube_video_downloader_repository.rs`):
 /// downloading shells out to `yt-dlp`, this is pure filesystem search,

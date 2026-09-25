@@ -149,39 +149,6 @@ impl SqlitePlaylistRepository {
 }
 
 #[cfg(test)]
-#[derive(Default)]
-pub struct FakePlaylistRepository {
-    playlists: Mutex<Vec<Playlist>>,
-}
-
-#[cfg(test)]
-impl PlaylistRepository for FakePlaylistRepository {
-    fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
-        Ok(self
-            .playlists
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|p| p.id == *id)
-            .cloned())
-    }
-
-    fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
-        self.playlists.lock().unwrap().push(playlist.clone());
-        Ok(())
-    }
-
-    fn delete(&self, id: &PlaylistId) -> anyhow::Result<()> {
-        self.playlists.lock().unwrap().retain(|p| p.id != *id);
-        Ok(())
-    }
-
-    fn list(&self) -> anyhow::Result<Vec<Playlist>> {
-        Ok(self.playlists.lock().unwrap().clone())
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
 

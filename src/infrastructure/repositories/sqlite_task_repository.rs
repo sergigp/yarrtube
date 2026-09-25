@@ -119,6 +119,42 @@ impl SqliteTaskRepository {
         .optional()
         .context("failed to find task")
     }
+
+    /// Every row in the dead-letter table, which `TaskRepository` cannot read.
+    #[cfg(test)]
+    pub fn list_dead_lettered(&self) -> anyhow::Result<Vec<DeadLetteredTask>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT original_task_id, task_type, payload, retries, last_error, created_at, failed_at
+                 FROM tasks_dead_letter ORDER BY id ASC",
+            )
+            .context("failed to prepare dead-lettered tasks query")?;
+        let rows = stmt
+            .query_map([], |row| {
+                let created_at: String = row.get(5)?;
+                let failed_at: String = row.get(6)?;
+                Ok(DeadLetteredTask {
+                    original_task_id: row.get(0)?,
+                    task_type: row.get(1)?,
+                    payload: row.get(2)?,
+                    retries: row.get(3)?,
+                    last_error: row.get(4)?,
+                    created_at: DateTime::parse_from_rfc3339(&created_at)
+                        .unwrap()
+                        .with_timezone(&Utc),
+                    failed_at: DateTime::parse_from_rfc3339(&failed_at)
+                        .unwrap()
+                        .with_timezone(&Utc),
+                })
+            })
+            .context("failed to list dead-lettered tasks")?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .context("failed to read dead-lettered task row")
+    }
 }
 
 impl TaskRepository for SqliteTaskRepository {
@@ -283,118 +319,6 @@ impl TaskRepository for SqliteTaskRepository {
             })
             .context("failed to commit dead-letter transaction")?;
         Ok(())
-    }
-}
-
-/// State-based stand-in for the `tasks` table: every scheduled task is a row
-/// (kept alongside the typed `Task` it was scheduled from) that the listing
-/// methods filter the way the SQL queries do.
-#[cfg(test)]
-pub struct FakeTaskRepository {
-    rows: Mutex<Vec<(Task, ScheduledTask)>>,
-    clock: Arc<dyn Clock>,
-}
-
-/// Rows are stamped with the Unix epoch, for tests that never look at when a
-/// task was created or which tasks are eligible to run.
-#[cfg(test)]
-impl Default for FakeTaskRepository {
-    fn default() -> Self {
-        Self::new(Arc::new(
-            crate::infrastructure::shared::system_clock::FixedClock(DateTime::UNIX_EPOCH),
-        ))
-    }
-}
-
-#[cfg(test)]
-impl FakeTaskRepository {
-    pub fn new(clock: Arc<dyn Clock>) -> Self {
-        Self {
-            rows: Mutex::new(Vec::new()),
-            clock,
-        }
-    }
-
-    /// Every task currently stored, with the time it is scheduled to run.
-    pub fn scheduled(&self) -> Vec<(Task, DateTime<Utc>)> {
-        self.rows
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|(task, row)| (task.clone(), row.run_at))
-            .collect()
-    }
-
-    fn list_matching(&self, predicate: impl Fn(&ScheduledTask) -> bool) -> Vec<ScheduledTask> {
-        self.rows
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|(_, row)| row)
-            .filter(|row| predicate(row))
-            .cloned()
-            .collect()
-    }
-}
-
-#[cfg(test)]
-impl TaskRepository for FakeTaskRepository {
-    fn schedule(&self, task: &Task, run_at: DateTime<Utc>) -> anyhow::Result<()> {
-        let mut rows = self.rows.lock().unwrap();
-        let now = self.clock.now();
-        let id = rows.iter().map(|(_, row)| row.id).max().unwrap_or(0) + 1;
-        rows.push((
-            task.clone(),
-            ScheduledTask {
-                id,
-                task_type: task.task_type().to_string(),
-                payload: task.payload().to_string(),
-                status: TaskStatus::Pending,
-                retries: 0,
-                run_at,
-                created_at: now,
-                updated_at: now,
-                last_error: None,
-            },
-        ));
-        Ok(())
-    }
-
-    fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {
-        let now = self.clock.now();
-        Ok(self.list_matching(|row| row.status == TaskStatus::Pending && row.run_at <= now))
-    }
-
-    fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {
-        Ok(self.list_matching(|row| row.status == TaskStatus::Running))
-    }
-
-    fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
-        Ok(self.list_matching(|_| true))
-    }
-
-    fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {
-        if let Some((_, row)) = self
-            .rows
-            .lock()
-            .unwrap()
-            .iter_mut()
-            .find(|(_, row)| row.id == task.id)
-        {
-            *row = task.clone();
-        }
-        Ok(())
-    }
-
-    fn delete(&self, id: i64) -> anyhow::Result<()> {
-        self.rows.lock().unwrap().retain(|(_, row)| row.id != id);
-        Ok(())
-    }
-
-    /// The dead-letter table is not readable through this port, so the only
-    /// observable effect is the original row disappearing.
-    fn dead_letter(&self, task: &DeadLetteredTask) -> anyhow::Result<()> {
-        self.delete(task.original_task_id)
     }
 }
 

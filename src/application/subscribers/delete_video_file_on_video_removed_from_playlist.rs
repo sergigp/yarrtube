@@ -78,110 +78,161 @@ mod tests {
     use super::*;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::shared::Quality;
-    use crate::infrastructure::repositories::sqlite_playlist_repository::FakePlaylistRepository;
-    use crate::infrastructure::repositories::sqlite_task_repository::FakeTaskRepository;
+    use crate::domain::task::{ScheduledTask, TaskStatus};
+    use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
+    use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
-
-    fn fixed_timestamp() -> DateTime<Utc> {
-        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
-    }
-
-    fn playlist_repository_with(id: &str) -> Arc<FakePlaylistRepository> {
-        let repository = Arc::new(FakePlaylistRepository::default());
-        repository
-            .insert(&Playlist::create(
-                PlaylistId::new(id).unwrap(),
-                PlaylistName::new("My Playlist").unwrap(),
-                PlaylistPath::new("my-playlist").unwrap(),
-                Quality::High,
-                PlaylistKind::YoutubeLinked,
-                fixed_timestamp(),
-            ))
-            .unwrap();
-        repository
-    }
-
-    fn subscriber(
-        playlist_repository: Arc<dyn PlaylistRepository>,
-        task_repository: Arc<dyn TaskRepository>,
-    ) -> DeleteVideoFileOnVideoRemovedFromPlaylist {
-        DeleteVideoFileOnVideoRemovedFromPlaylist::new(
-            playlist_repository,
-            task_repository,
-            Arc::new(FixedClock(fixed_timestamp())),
-            "/videos",
-        )
-    }
+    use rusqlite::Connection;
+    use std::sync::Mutex;
 
     #[test]
-    fn it_should_schedule_a_delete_video_file_task_when_the_video_was_downloaded() {
-        let playlist_repository = playlist_repository_with("PL1");
-        let task_repository = Arc::new(FakeTaskRepository::default());
-        let subscriber = subscriber(playlist_repository, task_repository.clone());
+    fn it_should_schedule_file_deletion_if_downloaded() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let subscriber = DeleteVideoFileOnVideoRemovedFromPlaylist::new(
+            playlist_repository,
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        );
 
-        subscriber
-            .handle(
-                r#"{"playlist_id": "PL1", "video_id": "rec1", "title": "My Video", "filename": "My Video.mp4", "thumbnail_filename": "My Video.jpg", "was_downloaded": true}"#,
-            )
-            .unwrap();
+        let result = handle(
+            &subscriber,
+            r#"{"playlist_id": "PL1", "video_id": "rec1", "title": "My Video", "filename": "My Video.mp4", "thumbnail_filename": "My Video.jpg", "was_downloaded": true}"#,
+        );
 
-        let scheduled = task_repository.scheduled();
+        assert_eq!(result, Ok(()));
         assert_eq!(
-            *scheduled,
-            vec![(
-                Task::DeleteVideoFile {
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::DeleteVideoFile {
                     filename: Some("My Video.mp4".to_string()),
                     thumbnail_filename: Some("My Video.jpg".to_string()),
                     output_dir: "/videos/my-playlist".to_string(),
                 },
-                fixed_timestamp()
             )]
         );
     }
 
     #[test]
-    fn it_should_not_schedule_a_task_when_the_video_was_not_downloaded() {
-        let playlist_repository = playlist_repository_with("PL1");
-        let task_repository = Arc::new(FakeTaskRepository::default());
-        let subscriber = subscriber(playlist_repository, task_repository.clone());
+    fn it_should_skip_if_not_downloaded() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let subscriber = DeleteVideoFileOnVideoRemovedFromPlaylist::new(
+            playlist_repository,
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        );
 
-        subscriber
-            .handle(
-                r#"{"playlist_id": "PL1", "video_id": "rec1", "title": "My Video", "filename": null, "thumbnail_filename": null, "was_downloaded": false}"#,
-            )
-            .unwrap();
+        let result = handle(
+            &subscriber,
+            r#"{"playlist_id": "PL1", "video_id": "rec1", "title": "My Video", "filename": null, "thumbnail_filename": null, "was_downloaded": false}"#,
+        );
 
-        assert!(task_repository.scheduled().is_empty());
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
     #[test]
-    fn it_should_no_op_when_the_payload_playlist_id_is_invalid() {
-        let playlist_repository = playlist_repository_with("PL1");
-        let task_repository = Arc::new(FakeTaskRepository::default());
-        let subscriber = subscriber(playlist_repository, task_repository.clone());
+    fn it_should_skip_if_invalid_playlist_id_provided() {
+        let result = handle(
+            &any_subscriber(),
+            r#"{"playlist_id": "", "video_id": "rec1", "title": "My Video", "filename": null, "thumbnail_filename": null, "was_downloaded": true}"#,
+        );
 
-        subscriber
-            .handle(
-                r#"{"playlist_id": "", "video_id": "rec1", "title": "My Video", "filename": null, "thumbnail_filename": null, "was_downloaded": true}"#,
-            )
-            .unwrap();
-
-        assert!(task_repository.scheduled().is_empty());
+        assert_eq!(result, Ok(()));
     }
 
     #[test]
-    fn it_should_no_op_when_the_playlist_no_longer_exists() {
-        let playlist_repository = Arc::new(FakePlaylistRepository::default());
-        let task_repository = Arc::new(FakeTaskRepository::default());
-        let subscriber = subscriber(playlist_repository, task_repository.clone());
+    fn it_should_skip_if_playlist_is_gone() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let subscriber = DeleteVideoFileOnVideoRemovedFromPlaylist::new(
+            playlist_repository,
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        );
 
-        subscriber
-            .handle(
-                r#"{"playlist_id": "PL404", "video_id": "rec1", "title": "My Video", "filename": "My Video.mp4", "thumbnail_filename": null, "was_downloaded": true}"#,
-            )
-            .unwrap();
+        let result = handle(
+            &subscriber,
+            r#"{"playlist_id": "PL404", "video_id": "rec1", "title": "My Video", "filename": "My Video.mp4", "thumbnail_filename": null, "was_downloaded": true}"#,
+        );
 
-        assert!(task_repository.scheduled().is_empty());
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    }
+
+    /// A subscriber for tests whose payload is rejected before any lookup.
+    /// Its repositories sit on an unmigrated in-memory database, so a
+    /// payload that wrongly got through would fail loudly instead of passing.
+    fn any_subscriber() -> DeleteVideoFileOnVideoRemovedFromPlaylist {
+        DeleteVideoFileOnVideoRemovedFromPlaylist::new(
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            Arc::new(SqliteTaskRepository::new(
+                Arc::new(Mutex::new(unused_connection())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        )
+    }
+
+    fn unused_connection() -> Connection {
+        Connection::open_in_memory().unwrap()
+    }
+
+    fn playlist(id: &str) -> Playlist {
+        Playlist::create(
+            PlaylistId::new(id).unwrap(),
+            PlaylistName::new("My Playlist").unwrap(),
+            PlaylistPath::new("my-playlist").unwrap(),
+            Quality::High,
+            PlaylistKind::YoutubeLinked,
+            fixed_timestamp(),
+        )
+    }
+
+    fn pending_task(id: i64, task: &Task) -> ScheduledTask {
+        ScheduledTask {
+            id,
+            task_type: task.task_type().to_string(),
+            payload: task.payload().to_string(),
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at: fixed_timestamp(),
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
+    }
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn handle(
+        subscriber: &DeleteVideoFileOnVideoRemovedFromPlaylist,
+        payload: &str,
+    ) -> Result<(), String> {
+        subscriber.handle(payload).map_err(|e| e.to_string())
     }
 }

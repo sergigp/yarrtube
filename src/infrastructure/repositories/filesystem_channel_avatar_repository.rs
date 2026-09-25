@@ -2,7 +2,7 @@ use crate::domain::channel::ChannelHandle;
 use std::path::PathBuf;
 
 /// Downloads a channel's avatar image and stores/removes it under a local
-/// avatars directory, injected into `ChannelService` alongside
+/// avatars directory, injected into `ChannelCreator`/`ChannelDeleter` alongside
 /// `YoutubeChannelRepository`. Kept separate from that repository (see
 /// design.md's "A new small port, not a method on `YoutubeChannelRepository`"
 /// decision): resolving channel metadata from the YouTube Data API and

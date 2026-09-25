@@ -141,41 +141,6 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
 }
 
 #[cfg(test)]
-#[derive(Default)]
-pub struct FakeVideoMetadataRepository {
-    #[allow(clippy::type_complexity)]
-    pub(crate) entries: Mutex<Vec<(VideoRecordId, VideoMetadata)>>,
-}
-
-#[cfg(test)]
-impl VideoMetadataRepository for FakeVideoMetadataRepository {
-    fn save(
-        &self,
-        video_id: &VideoRecordId,
-        metadata: &VideoMetadata,
-        _video_dir: &Path,
-    ) -> anyhow::Result<()> {
-        let mut entries = self.entries.lock().unwrap();
-        if let Some(existing) = entries.iter_mut().find(|(id, _)| id == video_id) {
-            existing.1 = metadata.clone();
-        } else {
-            entries.push((video_id.clone(), metadata.clone()));
-        }
-        Ok(())
-    }
-
-    fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoMetadata>> {
-        Ok(self
-            .entries
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|(id, _)| id == video_id)
-            .map(|(_, metadata)| metadata.clone()))
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::shared::VideoId;

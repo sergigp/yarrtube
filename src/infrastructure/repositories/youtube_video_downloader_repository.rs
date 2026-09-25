@@ -1,6 +1,8 @@
 use crate::domain::shared::Quality;
 use crate::infrastructure::shared::ytdlp;
-pub use crate::infrastructure::shared::ytdlp::{DownloadAttempt, FetchedThumbnail};
+pub use crate::infrastructure::shared::ytdlp::{
+    DownloadAttempt, DownloadedVideo, FetchedThumbnail,
+};
 use std::path::{Path, PathBuf};
 
 /// Downloads a single video (or just its thumbnail) via `yt-dlp`, injected
@@ -98,9 +100,6 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
 }
 
 #[cfg(test)]
-use crate::infrastructure::shared::ytdlp::DownloadedVideo;
-
-#[cfg(test)]
 pub struct FakeVideoDownloaderRepository {
     pub(crate) result: std::sync::Mutex<DownloadAttempt>,
     #[allow(clippy::type_complexity)]
@@ -176,10 +175,6 @@ impl FakeVideoDownloaderRepository {
             )))),
             ..self
         }
-    }
-
-    pub fn thumbnail_calls_count(&self) -> usize {
-        self.thumbnail_calls.lock().unwrap().len()
     }
 
     fn with_result(result: DownloadAttempt) -> Self {

@@ -195,39 +195,6 @@ impl SqliteChannelRepository {
 }
 
 #[cfg(test)]
-#[derive(Default)]
-pub struct FakeChannelRepository {
-    channels: Mutex<Vec<Channel>>,
-}
-
-#[cfg(test)]
-impl ChannelRepository for FakeChannelRepository {
-    fn find(&self, id: &ChannelHandle) -> anyhow::Result<Option<Channel>> {
-        Ok(self
-            .channels
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|c| c.id == *id)
-            .cloned())
-    }
-
-    fn insert(&self, channel: &Channel) -> anyhow::Result<()> {
-        self.channels.lock().unwrap().push(channel.clone());
-        Ok(())
-    }
-
-    fn delete(&self, id: &ChannelHandle) -> anyhow::Result<()> {
-        self.channels.lock().unwrap().retain(|c| c.id != *id);
-        Ok(())
-    }
-
-    fn list(&self) -> anyhow::Result<Vec<Channel>> {
-        Ok(self.channels.lock().unwrap().clone())
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
 

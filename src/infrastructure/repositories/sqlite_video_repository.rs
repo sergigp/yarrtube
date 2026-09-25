@@ -198,48 +198,6 @@ impl SqliteVideoRepository {
 }
 
 #[cfg(test)]
-#[derive(Default)]
-pub struct FakeVideoRepository {
-    pub(crate) videos: Mutex<Vec<Video>>,
-}
-
-#[cfg(test)]
-impl VideoRepository for FakeVideoRepository {
-    fn save(&self, video: &Video) -> anyhow::Result<()> {
-        let mut videos = self.videos.lock().unwrap();
-        if let Some(existing) = videos.iter_mut().find(|v| v.id == video.id) {
-            *existing = video.clone();
-        } else {
-            videos.push(video.clone());
-        }
-        Ok(())
-    }
-
-    fn find(&self, id: &VideoRecordId) -> anyhow::Result<Option<Video>> {
-        Ok(self
-            .videos
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|v| v.id == *id)
-            .cloned())
-    }
-
-    fn update(&self, video: &Video) -> anyhow::Result<()> {
-        let mut videos = self.videos.lock().unwrap();
-        if let Some(existing) = videos.iter_mut().find(|v| v.id == video.id) {
-            *existing = video.clone();
-        }
-        Ok(())
-    }
-
-    fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()> {
-        self.videos.lock().unwrap().retain(|v| v.id != *id);
-        Ok(())
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
 

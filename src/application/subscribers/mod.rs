@@ -7,7 +7,7 @@ pub mod download_video_on_video_added_to_playlist;
 pub mod reconcile_on_channel_created;
 pub mod reconcile_on_playlist_created;
 
-use crate::domain::services::{ChannelVideoReconciler, VideoReconciler};
+use crate::domain::services::{ChannelVideoReconciler, PlaylistVideoReconciler};
 use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -28,7 +28,7 @@ use std::sync::Arc;
 /// to `DomainEventsConsumer` at composition time.
 #[allow(clippy::too_many_arguments)]
 pub fn registry(
-    video_reconciler: VideoReconciler,
+    playlist_video_reconciler: PlaylistVideoReconciler,
     channel_video_reconciler: ChannelVideoReconciler,
     playlist_repository: Arc<dyn PlaylistRepository>,
     channel_repository: Arc<dyn ChannelRepository>,
@@ -40,7 +40,9 @@ pub fn registry(
     let mut registry: SubscriberRegistry = HashMap::new();
     registry.insert(
         "playlist_created".to_string(),
-        vec![Arc::new(ReconcileOnPlaylistCreated::new(video_reconciler))],
+        vec![Arc::new(ReconcileOnPlaylistCreated::new(
+            playlist_video_reconciler,
+        ))],
     );
     registry.insert(
         "channel_created".to_string(),
