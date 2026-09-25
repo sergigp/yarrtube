@@ -128,6 +128,9 @@ impl Video {
         reported_duration_seconds: Option<i64>,
         now: DateTime<Utc>,
     ) -> Self {
+        if self.is_watched() {
+            return self;
+        }
         match self.known_duration_seconds(reported_duration_seconds) {
             Some(duration) if position.seconds() as f64 >= duration as f64 * WATCHED_THRESHOLD => {
                 self.mark_watched(now)
@@ -148,7 +151,7 @@ impl Video {
     }
 
     pub fn is_watched(&self) -> bool {
-        false
+        self.watched_at.is_some()
     }
 
     /// The recorded duration, else the reported one; a non-positive duration
