@@ -7,7 +7,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
-use crate::domain::video::{ListVideosError, PlaybackPosition, VideoId};
+use crate::domain::video::{ListVideosError, PlaybackPosition, UpdateWatchStateError, VideoId};
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -76,9 +76,17 @@ pub async fn record_video_progress(
         video_watch_state_updater.record_progress(&youtube_id, position, request.duration_seconds)
     })
     .await?
-    .map_err(ApiError::internal)?;
+    .map_err(update_watch_state_error)?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub fn update_watch_state_error(error: UpdateWatchStateError) -> ApiError {
+    match error {
+        e @ UpdateWatchStateError::VideoNotFound(_) => ApiError::bad_request(e),
+        e @ UpdateWatchStateError::ChannelNotFound(_) => ApiError::bad_request(e),
+        e @ UpdateWatchStateError::Repository(_) => ApiError::internal(e),
+    }
 }
 
 fn list_videos_error(error: ListVideosError) -> ApiError {
@@ -908,6 +916,26 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_record_progress_of_an_unknown_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", Some(100));
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(30);
+
+        let response = record_progress(video_watch_state_updater, "x", request).await;
+
+        assert_eq!(response, Err(ApiError::bad_request("video x not found")));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
     }
 
     /// A searcher for tests whose request is rejected before reaching it. Its

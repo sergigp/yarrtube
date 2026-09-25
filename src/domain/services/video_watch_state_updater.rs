@@ -73,8 +73,12 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
 
 impl VideoWatchStateUpdater {
     fn find_copies(&self, youtube_id: &VideoId) -> Result<Vec<Video>, UpdateWatchStateError> {
-        self.video_repository
-            .find_by_youtube_id(youtube_id)
-            .map_err(UpdateWatchStateError::Repository)
+        Some(
+            self.video_repository
+                .find_by_youtube_id(youtube_id)
+                .map_err(UpdateWatchStateError::Repository)?,
+        )
+        .filter(|copies| !copies.is_empty())
+        .ok_or_else(|| UpdateWatchStateError::VideoNotFound(youtube_id.clone()))
     }
 }
