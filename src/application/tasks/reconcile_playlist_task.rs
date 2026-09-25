@@ -1,5 +1,5 @@
+use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{PlaylistVideoReconciler, PlaylistVideoReconcilerApi};
-use crate::domain::shared::PlaylistId;
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 
@@ -34,9 +34,10 @@ mod tests {
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::ThumbnailFetcher;
-    use crate::domain::shared::{Quality, VideoId};
+    use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
+    use crate::domain::video::VideoId;
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{

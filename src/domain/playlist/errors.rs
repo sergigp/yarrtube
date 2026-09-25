@@ -1,5 +1,5 @@
+use super::playlist_id::PlaylistId;
 use super::playlist_path::PlaylistPath;
-use crate::domain::shared::PlaylistId;
 use std::fmt;
 
 #[derive(Debug)]

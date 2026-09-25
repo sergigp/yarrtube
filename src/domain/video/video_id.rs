@@ -1,4 +1,4 @@
-use super::errors::ValidationError;
+use crate::domain::shared::ValidationError;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

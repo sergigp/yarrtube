@@ -1,6 +1,7 @@
 use crate::domain::services::{VideoDownloader, VideoDownloaderApi};
-use crate::domain::shared::{Quality, VideoRecordId};
+use crate::domain::shared::Quality;
 use crate::domain::task::Task;
+use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use std::path::Path;
 
@@ -34,8 +35,8 @@ impl TaskHandler for DownloadVideoTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::shared::VideoId;
     use crate::domain::video::Video;
+    use crate::domain::video::VideoId;
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
         FakeVideoFileRepository, FilesystemVideoFileRepository, VideoFileRepository,

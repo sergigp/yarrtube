@@ -1,4 +1,5 @@
-use crate::domain::shared::{PlaylistId, VideoRecordId};
+use crate::domain::playlist::PlaylistId;
+use crate::domain::video::VideoRecordId;
 use chrono::{DateTime, Utc};
 
 /// Records that a `Video` belongs to a `Playlist`, and (for a YouTube-linked

@@ -1,5 +1,5 @@
-use crate::domain::shared::VideoRecordId;
 use crate::domain::video::Video;
+use crate::domain::video::VideoRecordId;
 use crate::domain::video::VideoStatus;
 use crate::domain::video::top_level_entry;
 use crate::domain::video::video_filename::VideoFilename;

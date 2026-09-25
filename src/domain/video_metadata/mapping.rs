@@ -1,5 +1,5 @@
 use super::VideoMetadata;
-use crate::domain::shared::VideoId;
+use crate::domain::video::VideoId;
 use crate::infrastructure::repositories::youtube_metadata_repository::{
     YoutubeMetadata, map_category_to_genre,
 };

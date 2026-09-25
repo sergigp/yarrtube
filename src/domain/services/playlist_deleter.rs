@@ -1,7 +1,7 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::Playlist;
+use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::errors::DeletePlaylistError;
-use crate::domain::shared::PlaylistId;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;

@@ -1,5 +1,6 @@
-use crate::domain::shared::{Quality, VideoRecordId};
+use crate::domain::shared::Quality;
 use crate::domain::video::Video;
+use crate::domain::video::VideoRecordId;
 use crate::domain::video::thumbnail_filename::expected_thumbnail_filename;
 use crate::domain::video::top_level_entry;
 use crate::domain::video::video_filename::VideoFilename;

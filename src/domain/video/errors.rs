@@ -1,5 +1,5 @@
 use crate::domain::channel::ChannelHandle;
-use crate::domain::shared::PlaylistId;
+use crate::domain::playlist::PlaylistId;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

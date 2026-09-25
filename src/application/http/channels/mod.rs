@@ -87,8 +87,8 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::services::ThumbnailFetcher;
-    use crate::domain::shared::VideoId;
     use crate::domain::video::Video;
+    use crate::domain::video::VideoId;
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{

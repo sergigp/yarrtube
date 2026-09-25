@@ -1,6 +1,7 @@
 use crate::domain::channel::ChannelHandle;
-use crate::domain::shared::{PlaylistId, VideoRecordId};
+use crate::domain::playlist::PlaylistId;
 use crate::domain::task::{ScheduledTask, Task, TaskView};
+use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;

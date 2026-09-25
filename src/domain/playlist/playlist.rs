@@ -1,7 +1,8 @@
+use super::playlist_id::PlaylistId;
 use super::playlist_kind::PlaylistKind;
 use super::playlist_name::PlaylistName;
 use super::playlist_path::PlaylistPath;
-use crate::domain::shared::{PlaylistId, Quality};
+use crate::domain::shared::Quality;
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

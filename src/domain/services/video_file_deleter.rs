@@ -1,5 +1,5 @@
 use crate::domain::channel::ChannelHandle;
-use crate::domain::shared::PlaylistId;
+use crate::domain::playlist::PlaylistId;
 use crate::domain::video::{resolve_output_dir, top_level_entry};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use std::path::Path;

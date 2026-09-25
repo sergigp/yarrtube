@@ -1,6 +1,6 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::channel_video::ChannelVideo;
-use crate::domain::shared::{VideoId, VideoRecordId};
+use crate::domain::video::{VideoId, VideoRecordId};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};

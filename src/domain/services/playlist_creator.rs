@@ -1,7 +1,8 @@
 use crate::domain::event::DomainEvent;
+use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::errors::CreatePlaylistError;
 use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
-use crate::domain::shared::{PlaylistId, Quality};
+use crate::domain::shared::Quality;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubePlaylistRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
