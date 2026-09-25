@@ -118,6 +118,7 @@ impl Video {
             thumbnail_filename: None,
             duration_seconds: None,
             updated_at: now,
+            synced_at: None,
             ..self
         }
     }

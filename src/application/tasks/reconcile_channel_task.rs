@@ -431,6 +431,7 @@ mod tests {
                 thumbnail_filename: None,
                 duration_seconds: None,
                 updated_at: fixed_timestamp(),
+                synced_at: None,
                 ..video.clone()
             }]
         );
