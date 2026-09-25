@@ -38,7 +38,7 @@ mod tests {
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
-    use crate::domain::video::VideoId;
+    use crate::domain::video::{VideoId, VideoStatus};
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -421,6 +421,65 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![video.clone().reset_for_redownload(fixed_timestamp())]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(
+                    1,
+                    &Task::DownloadVideo {
+                        video_id: video.id.as_str().to_string(),
+                        quality: "high".to_string(),
+                        output_dir: "/videos/creators/somechannel".to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+                next_reconcile(2),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_keep_watch_state_when_redownloading_a_missing_file() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(Vec::new()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = downloaded_video("My Video.mp4", None).mark_watched(watched_timestamp());
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &video,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                status: VideoStatus::Pending,
+                quality: None,
+                filename: None,
+                ..video.clone()
+            }]
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
@@ -1482,6 +1541,10 @@ mod tests {
             None,
             fixed_timestamp(),
         )
+    }
+
+    fn watched_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_800_000_000, 0).unwrap()
     }
 
     fn my_video() -> Video {
