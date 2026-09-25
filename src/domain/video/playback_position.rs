@@ -23,3 +23,14 @@ impl PlaybackPosition {
         self.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_accept_zero_and_positive_positions() {
+        assert_eq!(PlaybackPosition::new(0), Ok(PlaybackPosition(0)));
+        assert_eq!(PlaybackPosition::new(120), Ok(PlaybackPosition(120)));
+    }
+}
