@@ -1,7 +1,7 @@
 use crate::application::http::{self, ApiServices, VideosRoot};
 use crate::application::{subscribers, tasks};
 use crate::domain::services::{
-    ChannelCreator, ChannelDeleter, ChannelSearcher, ChannelVideoReconciler, DirectorySearcher,
+    ChannelCreator, ChannelDeleter, ChannelVideoReconciler, ChannelViewSearcher, DirectorySearcher,
     PlaylistCreator, PlaylistDeleter, PlaylistSearcher, PlaylistVideoReconciler, TaskViewSearcher,
     ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher, VideoWatchStateUpdater,
 };
@@ -223,7 +223,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_avatar_repository.clone(),
             infrastructure.event_publisher.clone(),
         ),
-        channel_searcher: ChannelSearcher::new(
+        channel_view_searcher: ChannelViewSearcher::new(
             infrastructure.channel_repository.clone(),
             infrastructure.channel_video_repository.clone(),
             infrastructure.video_repository.clone(),

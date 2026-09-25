@@ -118,12 +118,12 @@ impl Video {
         }
     }
 
-    /// Records how far playback got, against the recorded duration or, when
-    /// none is recorded, the one the player reported. An unwatched video
-    /// becomes watched at 90%; a watched one becomes unwatched again once a
+    /// Updates the watch state from how far playback got, against the
+    /// recorded duration or, when none is recorded, the one the player
+    /// reported. An unwatched video becomes watched at 90%; a watched one becomes unwatched again once a
     /// rewatch passes 10%, as long as it is still below 90%. With no known
     /// duration an unwatched video only keeps the position.
-    pub fn record_progress(
+    pub fn update_watch_state(
         self,
         position: PlaybackPosition,
         reported_duration_seconds: Option<i64>,

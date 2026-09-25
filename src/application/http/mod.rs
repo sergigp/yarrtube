@@ -8,7 +8,7 @@ pub mod validation;
 pub mod videos;
 
 use crate::domain::services::{
-    ChannelCreator, ChannelDeleter, ChannelSearcher, ChannelVideoReconciler, DirectorySearcher,
+    ChannelCreator, ChannelDeleter, ChannelVideoReconciler, ChannelViewSearcher, DirectorySearcher,
     PlaylistCreator, PlaylistDeleter, PlaylistSearcher, PlaylistVideoReconciler, TaskViewSearcher,
     VideoSearcher, VideoWatchStateUpdater,
 };
@@ -32,7 +32,7 @@ pub struct ApiServices {
     pub task_view_searcher: TaskViewSearcher,
     pub channel_creator: ChannelCreator,
     pub channel_deleter: ChannelDeleter,
-    pub channel_searcher: ChannelSearcher,
+    pub channel_view_searcher: ChannelViewSearcher,
     pub channel_video_reconciler: ChannelVideoReconciler,
     pub directory_searcher: DirectorySearcher,
     pub video_watch_state_updater: VideoWatchStateUpdater,

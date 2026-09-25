@@ -5,15 +5,15 @@ use crate::infrastructure::repositories::sqlite_channel_video_repository::Channe
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use std::sync::Arc;
 
-/// Reads channels.
+/// Reads channels as `ChannelView`s.
 #[derive(Clone)]
-pub struct ChannelSearcher {
+pub struct ChannelViewSearcher {
     repository: Arc<dyn ChannelRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     video_repository: Arc<dyn VideoRepository>,
 }
 
-impl ChannelSearcher {
+impl ChannelViewSearcher {
     pub fn new(
         repository: Arc<dyn ChannelRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
@@ -27,12 +27,11 @@ impl ChannelSearcher {
     }
 }
 
-pub trait ChannelSearcherApi: Send + Sync {
-    /// Every channel with its count of `Downloaded`, unwatched videos.
+pub trait ChannelViewSearcherApi: Send + Sync {
     fn search_all(&self) -> anyhow::Result<Vec<ChannelView>>;
 }
 
-impl ChannelSearcherApi for ChannelSearcher {
+impl ChannelViewSearcherApi for ChannelViewSearcher {
     fn search_all(&self) -> anyhow::Result<Vec<ChannelView>> {
         self.repository
             .list()?
@@ -42,7 +41,7 @@ impl ChannelSearcherApi for ChannelSearcher {
     }
 }
 
-impl ChannelSearcher {
+impl ChannelViewSearcher {
     fn channel_view(&self, channel: Channel) -> anyhow::Result<ChannelView> {
         Ok(ChannelView {
             unwatched_count: self.count_unwatched(&channel.id)?,

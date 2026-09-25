@@ -74,7 +74,7 @@ pub async fn record_video_progress(
     let position = PlaybackPosition::new(required(request.position_seconds, MISSING_POSITION)?)?;
 
     run_blocking(move || {
-        video_watch_state_updater.record_progress(&youtube_id, position, request.duration_seconds)
+        video_watch_state_updater.update(&youtube_id, position, request.duration_seconds)
     })
     .await?
     .map_err(update_watch_state_error)?;

@@ -36,8 +36,8 @@ impl VideoWatchStateUpdater {
 }
 
 pub trait VideoWatchStateUpdaterApi: Send + Sync {
-    /// Applies `Video::record_progress` to every stored copy of `youtube_id`.
-    fn record_progress(
+    /// Applies `Video::update_watch_state` to every stored copy of `youtube_id`.
+    fn update(
         &self,
         youtube_id: &VideoId,
         position: PlaybackPosition,
@@ -50,7 +50,7 @@ pub trait VideoWatchStateUpdaterApi: Send + Sync {
 }
 
 impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
-    fn record_progress(
+    fn update(
         &self,
         youtube_id: &VideoId,
         position: PlaybackPosition,
@@ -60,7 +60,7 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
         let now = self.clock.now();
         copies
             .into_iter()
-            .map(|video| video.record_progress(position, reported_duration_seconds, now))
+            .map(|video| video.update_watch_state(position, reported_duration_seconds, now))
             .try_for_each(|video| self.video_repository.update(&video))
             .map_err(UpdateWatchStateError::Repository)
     }
