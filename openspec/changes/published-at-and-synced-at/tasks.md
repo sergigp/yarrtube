@@ -8,7 +8,7 @@
 - [x] 2.2 `reconcile_playlist_task::it_should_clear_the_sync_time_of_videos_redownloaded`: drives `reset_for_redownload` clearing `synced_at`. Verify: test red, then green with the full suite passing.
 - [x] 2.3 `download_video_task::it_should_record_when_metadata_was_generated`: drives `build_video_metadata` setting `created_at`/`updated_at` from `now`. Verify: test red, then green with the full suite passing.
 - [x] 2.4 `download_video_task::it_should_keep_the_metadata_creation_time_when_regenerated`: drives the metadata upsert keeping the stored `created_at` and updating `updated_at`. Verify: test red, then green with the full suite passing.
-- [ ] 2.5 `http::videos::it_should_include_the_sync_time_when_listing_videos`: drives `VideoResponse::from` mapping `synced_at`. Verify: test red, then green with the full suite passing.
+- [x] 2.5 `http::videos::it_should_include_the_sync_time_when_listing_videos`: drives `VideoResponse::from` mapping `synced_at`. Verify: test red, then green with the full suite passing.
 
 ## 3. Infrastructure adapters (TDD)
 

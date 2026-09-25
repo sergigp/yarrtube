@@ -40,7 +40,7 @@ impl From<Video> for VideoResponse {
             duration_seconds: video.duration_seconds,
             created_at: video.created_at,
             updated_at: video.updated_at,
-            synced_at: None,
+            synced_at: video.synced_at,
         }
     }
 }
