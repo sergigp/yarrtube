@@ -4,7 +4,11 @@ use super::video_id::VideoId;
 use super::video_record_id::VideoRecordId;
 use super::video_status::VideoStatus;
 use crate::domain::shared::Quality;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
+
+/// How long a video stays permanently errored before reconcile gives it
+/// another download attempt.
+const ERRORED_RECOVERY_COOLDOWN: Duration = Duration::hours(24);
 
 /// A downloaded (or to-be-downloaded) video's own record: its download
 /// state, independent of any container. Container membership — which
@@ -169,6 +173,12 @@ impl Video {
         self.watched_at.is_some()
     }
 
+    /// Whether reconcile should reset this video for another download: it
+    /// has been permanently errored for at least the recovery cooldown.
+    pub fn is_due_for_recovery(&self, now: DateTime<Utc>) -> bool {
+        self.status == VideoStatus::Errored && now - self.updated_at >= ERRORED_RECOVERY_COOLDOWN
+    }
+
     /// The recorded duration, else the reported one. The reported one is
     /// always positive (`VideoDuration`), but yt-dlp truncates a sub-second
     /// video's duration to a recorded 0, which counts as unknown so progress
@@ -325,5 +335,49 @@ mod tests {
         assert_eq!(video.status, VideoStatus::Errored);
         assert_eq!(video.quality, None);
         assert_eq!(video.updated_at, now);
+    }
+
+    #[test]
+    fn it_should_be_due_for_recovery_once_errored_for_the_whole_cooldown() {
+        let errored_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+
+        let video = video().mark_errored(errored_at);
+
+        assert!(video.is_due_for_recovery(errored_at + Duration::hours(24)));
+    }
+
+    #[test]
+    fn it_should_be_due_for_recovery_when_errored_longer_than_the_cooldown() {
+        let errored_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+
+        let video = video().mark_errored(errored_at);
+
+        assert!(video.is_due_for_recovery(errored_at + Duration::days(3)));
+    }
+
+    #[test]
+    fn it_should_not_be_due_for_recovery_if_errored_within_the_cooldown() {
+        let errored_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+
+        let video = video().mark_errored(errored_at);
+
+        assert!(
+            !video.is_due_for_recovery(errored_at + Duration::hours(24) - Duration::seconds(1))
+        );
+    }
+
+    #[test]
+    fn it_should_not_be_due_for_recovery_if_not_permanently_errored() {
+        let updated_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let later = updated_at + Duration::days(3);
+
+        let pending = video();
+        let retrying = video().mark_errored_retrying(updated_at);
+        let in_progress = video().start_download(updated_at);
+
+        assert_eq!(
+            [pending, retrying, in_progress].map(|v| v.is_due_for_recovery(later)),
+            [false, false, false]
+        );
     }
 }

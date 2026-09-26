@@ -5,7 +5,7 @@
 
 ## 2. Errored video recovery cooldown
 
-- [ ] 2.1 Add a recovery-due predicate to `Video` (`src/domain/video/video.rs`) with a named 24h cooldown constant: true only for `Errored` videos whose `updated_at` is at least 24h before `now`. Verify with unit tests covering errored ≥24h (true), errored <24h (false), exactly 24h (true), and non-errored statuses (false)
+- [x] 2.1 Add a recovery-due predicate to `Video` (`src/domain/video/video.rs`) with a named 24h cooldown constant: true only for `Errored` videos whose `updated_at` is at least 24h before `now`. Verify with unit tests covering errored ≥24h (true), errored <24h (false), exactly 24h (true), and non-errored statuses (false)
 - [ ] 2.2 Use the predicate in `PlaylistVideoReconciler`'s errored-video recovery loop instead of the plain `status == Errored` filter. Update `it_should_retry_permanently_errored_videos` in `src/application/tasks/reconcile_playlist_task.rs` to an errored-≥24h video, add a test asserting that an errored-<24h video stays `Errored` with no download task scheduled, and verify both pass
 - [ ] 2.3 Use the same predicate in `ChannelVideoReconciler`'s errored-video recovery loop. Mirror the two tests in `src/application/tasks/reconcile_channel_task.rs` and verify both pass
 
