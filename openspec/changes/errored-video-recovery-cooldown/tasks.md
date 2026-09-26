@@ -1,7 +1,7 @@
 ## 1. JavaScript runtime in the image
 
 - [x] 1.1 Copy `/deno` from `denoland/deno:bin` into `/usr/local/bin/deno` in the runtime stage of `Dockerfile`. Verified with a bookworm-slim image containing the same yt-dlp build: `yt-dlp -v` reports `JS runtimes: deno-…` and video `3812m0ubckk` resolves as `public` instead of `This video is not available`
-- [ ] 1.2 Build the full image (`docker build .`) and run `docker run --rm --entrypoint /app/bin/yt-dlp <image> -v --simulate https://www.youtube.com/watch?v=3812m0ubckk`. Verify the output lists deno under `JS runtimes` and ends without `ERROR`
+- [x] 1.2 Build the full image (`docker build .`) and run `docker run --rm --entrypoint /app/bin/yt-dlp <image> -v --simulate https://www.youtube.com/watch?v=3812m0ubckk`. Verify the output lists deno under `JS runtimes` and ends without `ERROR`
 
 ## 2. Errored video recovery cooldown
 
