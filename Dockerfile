@@ -38,6 +38,11 @@ RUN apt-get update \
 
 COPY --from=build /build/target/release/yarrtube /usr/local/bin/yarrtube
 COPY --from=ytdlp-fetch /tmp/yt-dlp /app/bin/yt-dlp
+# yt-dlp needs a JavaScript runtime to solve YouTube's player challenges;
+# without one it falls back to a limited client that YouTube answers with
+# "This video is not available" for some videos (e.g. made-for-kids ones).
+# Deno is the runtime yt-dlp enables by default and finds it on PATH.
+COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
