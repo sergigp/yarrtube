@@ -185,7 +185,7 @@ impl Video {
     /// Downloaded, unwatched, position over 30s and last played within the
     /// past 7 days of `now`: worth offering to continue watching.
     pub fn is_in_progress(&self, _now: DateTime<Utc>) -> bool {
-        false
+        self.last_played_at.is_some()
     }
 
     /// Downloaded, unwatched and recorded as shorter than 15 minutes.

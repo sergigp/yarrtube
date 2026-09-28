@@ -166,7 +166,7 @@ mod tests {
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use chrono::{DateTime, Utc};
+    use chrono::{DateTime, Duration, Utc};
     use dto::RecentVideoSourceResponse;
     use rusqlite::Connection;
     use std::sync::Arc;
@@ -1242,6 +1242,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_a_recently_started_video_in_continue_watching() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &started_video(
+                "vid1",
+                "Started",
+                120,
+                watched_timestamp() - Duration::days(2),
+            ),
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response =
+            continue_watching(video_searcher, ListRecentVideosQuery { limit: None }).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![RecentVideoResponse {
+                position_seconds: 120,
+                ..recent_video_response("vid1", "Started", playlist_source())
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -1829,6 +1870,21 @@ mod tests {
             None,
             created_at,
         )
+    }
+
+    /// A downloaded, unwatched video stopped at `position_seconds`, last played
+    /// at `last_played_at`.
+    fn started_video(
+        youtube_id: &str,
+        title: &str,
+        position_seconds: i64,
+        last_played_at: DateTime<Utc>,
+    ) -> Video {
+        Video {
+            playback_position: PlaybackPosition::new(position_seconds).unwrap(),
+            last_played_at: Some(last_played_at),
+            ..downloaded_video(youtube_id, title, None, 100)
+        }
     }
 
     fn video_with_duration(youtube_id: &str, duration_seconds: Option<i64>) -> Video {

@@ -126,7 +126,12 @@ impl VideoSearcherApi for VideoSearcher {
     }
 
     fn list_continue_watching(&self, _limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
-        Ok(vec![])
+        let now = self.clock.now();
+        Ok(self
+            .downloaded_across_sources()?
+            .into_iter()
+            .filter(|recent| recent.video.is_in_progress(now))
+            .collect())
     }
 
     fn list_quick_watches(&self, _limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
@@ -138,6 +143,14 @@ impl VideoSearcher {
     fn view(&self, video: Video) -> anyhow::Result<VideoView> {
         let metadata = self.video_metadata_repository.find(&video.id)?;
         Ok(VideoView { video, metadata })
+    }
+
+    /// Every downloaded video of every tracked channel, then of every tracked
+    /// playlist, once per source.
+    fn downloaded_across_sources(&self) -> Result<Vec<RecentVideo>, ListVideosError> {
+        let mut videos = self.recent_from_channels()?;
+        videos.extend(self.recent_from_playlists()?);
+        Ok(videos)
     }
 
     fn recent_from_playlists(&self) -> Result<Vec<RecentVideo>, ListVideosError> {
