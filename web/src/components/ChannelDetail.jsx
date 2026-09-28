@@ -80,9 +80,9 @@ export function ChannelDetail() {
   }
 
   return (
-    <div className="flex h-full min-h-[480px] flex-col">
-      <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-6 overflow-hidden md:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex min-w-0 flex-col gap-4 h-full overflow-hidden overflow-y-auto">
+    <div className="flex flex-col md:h-full md:min-h-[480px]">
+      <div className="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_360px] md:items-start md:gap-6 md:overflow-hidden">
+        <div className="contents md:flex md:h-full md:min-w-0 md:flex-col md:gap-4 md:overflow-y-auto">
           <VideoPlayer
             basePath={channel.path}
             video={selectedVideo}
@@ -97,7 +97,7 @@ export function ChannelDetail() {
           )}
         </div>
 
-        <div className="min-h-0 h-full overflow-y-auto">
+        <div className="md:h-full md:min-h-0 md:overflow-y-auto">
           <div className="mb-2 flex justify-end">
             <Button
               variant="outline"

@@ -39,7 +39,7 @@ export default function App() {
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
           <main className="min-w-0 flex-1 md:min-h-0 md:overflow-y-auto">
-            <div className="h-full px-4 py-6 sm:px-6">
+            <div className="h-full px-4 pt-4 pb-6 sm:px-6 md:pt-6">
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/playlists/:id" element={<PlaylistDetail />} />

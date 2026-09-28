@@ -73,9 +73,9 @@ export function PlaylistDetail() {
   }
 
   return (
-    <div className="flex h-full min-h-[480px] flex-col">
-      <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-6 overflow-hidden md:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex min-w-0 flex-col gap-4 h-full overflow-hidden overflow-y-auto">
+    <div className="flex flex-col md:h-full md:min-h-[480px]">
+      <div className="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_360px] md:items-start md:gap-6 md:overflow-hidden">
+        <div className="contents md:flex md:h-full md:min-w-0 md:flex-col md:gap-4 md:overflow-y-auto">
           <VideoPlayer
             basePath={playlist.path}
             video={selectedVideo}
@@ -90,7 +90,7 @@ export function PlaylistDetail() {
           )}
         </div>
 
-        <div className="min-h-0 h-full overflow-y-auto">
+        <div className="md:h-full md:min-h-0 md:overflow-y-auto">
           {error && <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>}
           {!error && !videos && <p className="text-sm text-muted-foreground">Loading videos…</p>}
           {!error && videos && videos.length === 0 && (
