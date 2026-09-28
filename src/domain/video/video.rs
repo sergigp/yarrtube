@@ -205,8 +205,10 @@ impl Video {
 
     /// Downloaded, unwatched and recorded as shorter than 15 minutes.
     pub fn is_quick_watch(&self) -> bool {
-        self.duration_seconds
-            .is_some_and(|duration| duration < QUICK_WATCH_MAX_DURATION_SECONDS)
+        !self.is_watched()
+            && self
+                .duration_seconds
+                .is_some_and(|duration| duration < QUICK_WATCH_MAX_DURATION_SECONDS)
     }
 
     /// Whether reconcile should reset this video for another download: it

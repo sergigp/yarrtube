@@ -1749,6 +1749,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_exclude_watched_and_not_downloaded_videos_from_quick_watches() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video_lasting("vid_watched", "Watched", Some(600), 100)
+                .mark_watched(watched_timestamp()),
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &Video {
+                duration_seconds: Some(600),
+                ..Video::create(
+                    VideoId::new("vid_pending").unwrap(),
+                    "Pending",
+                    fixed_timestamp(),
+                )
+            },
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = quick_watches(video_searcher, ListRecentVideosQuery { limit: None }).await;
+
+        assert_eq!(response, Ok(vec![]));
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
