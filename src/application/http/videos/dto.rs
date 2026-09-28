@@ -76,13 +76,13 @@ impl From<RecentVideo> for RecentVideoResponse {
             },
             VideoSource::Channel {
                 handle,
+                name,
                 path,
                 avatar_filename,
-                ..
             } => RecentVideoSourceResponse {
                 kind: "channel".to_string(),
                 id: handle.as_str().to_string(),
-                name: String::new(),
+                name,
                 path: path.as_str().to_string(),
                 avatar_filename,
             },
