@@ -1,4 +1,6 @@
 pub mod errors;
+pub mod home_limits;
+pub mod home_videos;
 pub mod playback_position;
 pub mod recent_video;
 pub mod thumbnail_filename;
@@ -13,6 +15,8 @@ pub mod video_status;
 pub mod video_view;
 
 pub use errors::{ListVideosError, UpdateWatchStateError};
+pub use home_limits::HomeLimits;
+pub use home_videos::HomeVideos;
 pub use playback_position::PlaybackPosition;
 pub use recent_video::{RecentVideo, VideoSource};
 pub use video::Video;

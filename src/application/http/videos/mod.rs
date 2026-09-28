@@ -9,16 +9,22 @@ use crate::domain::services::{
     VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use crate::domain::video::{
-    ListVideosError, PlaybackPosition, RecentVideo, UpdateWatchStateError, VideoDuration, VideoId,
+    HomeLimits, ListVideosError, PlaybackPosition, RecentVideo, UpdateWatchStateError,
+    VideoDuration, VideoId,
 };
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use dto::{RecentVideoResponse, RecordProgressRequest, VideoResponse};
+use dto::{HomeResponse, RecentVideoResponse, RecordProgressRequest, VideoResponse};
 use serde::Deserialize;
 
 const DEFAULT_RECENT_VIDEOS_LIMIT: usize = 20;
 const MAX_RECENT_VIDEOS_LIMIT: usize = 100;
+const HOME_LIMITS: HomeLimits = HomeLimits {
+    continue_watching: 6,
+    quick_watches: 6,
+    latest: 18,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct ListRecentVideosQuery {
@@ -74,6 +80,15 @@ pub async fn list_quick_watch_videos(
     Query(query): Query<ListRecentVideosQuery>,
 ) -> Result<Json<Vec<RecentVideoResponse>>, ApiError> {
     list_across_sources(video_searcher, &query, VideoSearcher::list_quick_watches).await
+}
+
+pub async fn list_home_videos(
+    State(video_searcher): State<VideoSearcher>,
+) -> Result<Json<HomeResponse>, ApiError> {
+    let home = run_blocking(move || video_searcher.list_home(HOME_LIMITS))
+        .await?
+        .map_err(list_videos_error)?;
+    Ok(Json(HomeResponse::from(home)))
 }
 
 pub async fn record_video_progress(

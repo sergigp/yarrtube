@@ -51,7 +51,7 @@ Migrations:
 
 ## 6. Home in one call, no repeated videos
 
-- [ ] 6.1 Walking skeleton: `HomeVideos` (`home_videos.rs`) and `HomeLimits` (`home_limits.rs`); `VideoSearcherApi::list_home` returning empty sections; `HomeResponse` DTO; `list_home_videos` handler with the home limits, routed at `/videos/home`; `fetchHomeVideos` in `api.js` (`Home.jsx` not switched yet). Done when `cargo build` succeeds and all existing tests pass. No new behaviour and no new tests.
+- [x] 6.1 Walking skeleton: `HomeVideos` (`home_videos.rs`) and `HomeLimits` (`home_limits.rs`); `VideoSearcherApi::list_home` returning empty sections; `HomeResponse` DTO; `list_home_videos` handler with the home limits, routed at `/videos/home`; `fetchHomeVideos` in `api.js` (`Home.jsx` not switched yet). Done when `cargo build` succeeds and all existing tests pass. No new behaviour and no new tests.
 - [ ] 6.2 `it_should_list_a_downloaded_video_under_latest_on_home`: `list_home` collects once and fills `latest`
 - [ ] 6.3 `it_should_list_a_started_video_under_continue_watching_only_on_home`: `continue_watching` filled, its videos left out of `latest`
 - [ ] 6.4 `it_should_list_a_short_video_under_quick_watches_only_on_home`: `quick_watches` filled, its videos left out of `latest`

@@ -67,6 +67,7 @@ pub fn api_router(api_services: ApiServices) -> Router {
             "/videos/quick-watches",
             get(videos::list_quick_watch_videos),
         )
+        .route("/videos/home", get(videos::list_home_videos))
         .route("/videos/{id}/progress", post(videos::record_video_progress))
         .route("/tasks", get(tasks::list_tasks))
         .route(

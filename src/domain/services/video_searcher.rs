@@ -1,7 +1,8 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::video::{
-    ListVideosError, RecentVideo, Video, VideoSource, VideoStatus, VideoView,
+    HomeLimits, HomeVideos, ListVideosError, RecentVideo, Video, VideoSource, VideoStatus,
+    VideoView,
 };
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -75,6 +76,12 @@ pub trait VideoSearcherApi: Send + Sync {
     /// `Video::is_quick_watch`), newest sync first, truncated to `limit`. A
     /// video tracked by more than one source appears once.
     fn list_quick_watches(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
+
+    /// Lists the three home sections from one collection across sources:
+    /// continue watching, then quick watches without the videos shown above,
+    /// then latest videos (once per source, newest sync first) without the
+    /// videos shown in either. Only shown videos are left out further down.
+    fn list_home(&self, limits: HomeLimits) -> Result<HomeVideos, ListVideosError>;
 }
 
 impl VideoSearcherApi for VideoSearcher {
@@ -137,6 +144,14 @@ impl VideoSearcherApi for VideoSearcher {
 
     fn list_quick_watches(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
         self.list_once_across_sources(Video::is_quick_watch, |video| video.created_at, limit)
+    }
+
+    fn list_home(&self, _limits: HomeLimits) -> Result<HomeVideos, ListVideosError> {
+        Ok(HomeVideos {
+            continue_watching: vec![],
+            quick_watches: vec![],
+            latest: vec![],
+        })
     }
 }
 

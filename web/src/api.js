@@ -14,6 +14,10 @@ export function fetchVideos(playlistId) {
   return request(`/playlists/${encodeURIComponent(playlistId)}/videos`)
 }
 
+export function fetchHomeVideos() {
+  return request('/videos/home')
+}
+
 export function fetchRecentVideos(limit) {
   return request(`/videos/recent?limit=${limit}`)
 }

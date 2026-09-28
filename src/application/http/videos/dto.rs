@@ -1,4 +1,4 @@
-use crate::domain::video::{RecentVideo, VideoSource, VideoView};
+use crate::domain::video::{HomeVideos, RecentVideo, VideoSource, VideoView};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -113,4 +113,25 @@ impl From<RecentVideo> for RecentVideoResponse {
             source,
         }
     }
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct HomeResponse {
+    pub continue_watching: Vec<RecentVideoResponse>,
+    pub quick_watches: Vec<RecentVideoResponse>,
+    pub latest: Vec<RecentVideoResponse>,
+}
+
+impl From<HomeVideos> for HomeResponse {
+    fn from(home: HomeVideos) -> Self {
+        Self {
+            continue_watching: cards(home.continue_watching),
+            quick_watches: cards(home.quick_watches),
+            latest: cards(home.latest),
+        }
+    }
+}
+
+fn cards(videos: Vec<RecentVideo>) -> Vec<RecentVideoResponse> {
+    videos.into_iter().map(RecentVideoResponse::from).collect()
 }
