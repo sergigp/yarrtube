@@ -1512,6 +1512,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_a_continue_watching_video_once_from_the_channel_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &started_video("vid_shared", "Shared", 120, watched_timestamp()),
+        );
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &started_video(
+                "vid_shared",
+                "Shared",
+                120,
+                watched_timestamp() - Duration::hours(1),
+            ),
+            0,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                continue_watching: vec![HomeVideoResponse {
+                    position_seconds: 120,
+                    ..home_video_response("vid_shared", "Shared", channel_source(None))
+                }],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
