@@ -31,6 +31,9 @@
 
   --radius: 0.625rem;
 
+  /* Shared by the sticky header and the sticky mobile video player below it. */
+  --header-height: 4rem;
+
   --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
   --font-heading: "Bricolage Grotesque", var(--font-sans);
 
@@ -76,6 +79,12 @@
 
   --animate-beacon-pulse: beacon-pulse 2s ease-in-out infinite;
   --animate-enter: enter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (width >= 40rem) {
+  :root {
+    --header-height: 4.5rem;
+  }
 }
 
 @layer base {

@@ -15,8 +15,8 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="flex h-dvh flex-col">
-        <header className="flex shrink-0 items-center gap-4 border-b border-border px-4 py-3 sm:px-6">
+      <div className="flex min-h-dvh flex-col md:h-dvh">
+        <header className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center gap-4 border-b border-border bg-background px-4 sm:px-6">
           <Button
             variant="ghost"
             size="icon"
@@ -38,7 +38,7 @@ export default function App() {
         </header>
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <main className="min-w-0 flex-1 md:min-h-0 md:overflow-y-auto">
             <div className="h-full px-4 py-6 sm:px-6">
               <Routes>
                 <Route path="/" element={<Home />} />
