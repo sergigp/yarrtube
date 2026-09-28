@@ -31,19 +31,32 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, invali
   const videoTitle = await page.locator('main h3').first().innerText()
   await assertVideoPlays(page)
 
-  // Pausing a few seconds in reports the position, so reloading resumes
-  // from it instead of from the start.
+  // Pausing halfway through reports the position, so reloading resumes from
+  // it instead of from the start. Halfway stays below the 90% that would mark
+  // the video watched, whatever the channel's newest video happens to last.
   const video = page.locator('video')
   const progressReported = page.waitForResponse(
     (response) => response.url().endsWith('/progress') && response.request().method() === 'POST',
   )
-  await video.evaluate((el) => {
-    el.currentTime = 5
+  const halfwaySeconds = await video.evaluate((el) => {
+    el.currentTime = el.duration / 2
     el.pause()
+    return el.currentTime
   })
   expect((await progressReported).status()).toBe(204)
   await page.reload()
   await expect.poll(() => video.evaluate((el) => el.currentTime), { timeout: 15_000 }).toBeGreaterThan(0)
+
+  // The part-played video is offered on the home view to continue watching,
+  // as long as halfway is past the 30 seconds a video must reach to count as
+  // started (the channel's newest video may be too short for that).
+  await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
+  if (halfwaySeconds > 30) {
+    const continueWatching = page.locator('section', {
+      has: page.getByRole('heading', { name: 'Continue watching' }),
+    })
+    await expect(continueWatching.getByText(videoTitle, { exact: true })).toBeVisible()
+  }
 
   // The downloaded, unwatched video shows as a badge on the channel's row
   // until the channel is marked watched from the sidebar.
