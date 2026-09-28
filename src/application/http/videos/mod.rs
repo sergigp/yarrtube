@@ -1603,6 +1603,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_no_quick_watches_if_none_short() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video_lasting("vid1", "Long", Some(3600), 100),
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = quick_watches(video_searcher, ListRecentVideosQuery { limit: None }).await;
+
+        assert_eq!(response, Ok(vec![]));
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -2242,6 +2271,20 @@ mod tests {
         }
     }
 
+    /// A downloaded, unwatched video lasting `duration_seconds`, created
+    /// `created_at_seconds` after the epoch.
+    fn video_lasting(
+        youtube_id: &str,
+        title: &str,
+        duration_seconds: Option<i64>,
+        created_at_seconds: i64,
+    ) -> Video {
+        Video {
+            duration_seconds,
+            ..downloaded_video(youtube_id, title, None, created_at_seconds)
+        }
+    }
+
     fn video_with_duration(youtube_id: &str, duration_seconds: Option<i64>) -> Video {
         Video::create(
             VideoId::new(youtube_id).unwrap(),
@@ -2333,6 +2376,15 @@ mod tests {
         query: ListRecentVideosQuery,
     ) -> Result<Vec<RecentVideoResponse>, ApiError> {
         list_continue_watching_videos(State(video_searcher), Query(query))
+            .await
+            .map(|Json(videos)| videos)
+    }
+
+    async fn quick_watches(
+        video_searcher: VideoSearcher,
+        query: ListRecentVideosQuery,
+    ) -> Result<Vec<RecentVideoResponse>, ApiError> {
+        list_quick_watch_videos(State(video_searcher), Query(query))
             .await
             .map(|Json(videos)| videos)
     }
