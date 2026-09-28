@@ -1454,6 +1454,64 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_not_continue_watched_or_never_played_videos_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &Video {
+                watched_at: Some(watched_timestamp()),
+                created_at: DateTime::<Utc>::from_timestamp(200, 0).unwrap(),
+                ..started_video("vid_watched", "Watched", 120, watched_timestamp())
+            },
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &Video {
+                last_played_at: None,
+                ..started_video("vid_never_played", "Never Played", 120, watched_timestamp())
+            },
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: vec![
+                    HomeVideoResponse {
+                        watched: true,
+                        position_seconds: 120,
+                        ..home_video_response("vid_watched", "Watched", playlist_source())
+                    },
+                    HomeVideoResponse {
+                        position_seconds: 120,
+                        ..home_video_response("vid_never_played", "Never Played", playlist_source())
+                    },
+                ],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
