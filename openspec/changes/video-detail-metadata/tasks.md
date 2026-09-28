@@ -10,7 +10,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `it_should_include_the_metadata_when_listing_playlist_videos`: listing playlist videos returns the publish time, description and channel name from the video's metadata.
-- [ ] 2.2 `it_should_include_the_metadata_when_listing_channel_videos`: listing channel videos returns the same metadata fields.
+- [x] 2.2 `it_should_include_the_metadata_when_listing_channel_videos`: listing channel videos returns the same metadata fields.
 - [ ] 2.3 `it_should_report_absent_metadata_when_listing_a_video_without_it`: a video with no metadata row is listed with all three fields absent.
 
 ## 3. Infrastructure adapters (TDD)

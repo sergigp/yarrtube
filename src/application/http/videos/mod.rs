@@ -517,6 +517,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_the_metadata_when_listing_channel_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_metadata_repository =
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection()));
+        let video_dir = tempfile::tempdir().unwrap();
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+            .start_download(fixed_timestamp())
+            .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &video,
+            0,
+        );
+        video_metadata_repository
+            .save(&video.id, &video_metadata(), video_dir.path())
+            .unwrap();
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            video_metadata_repository,
+        );
+
+        let response = list_for_channel(video_searcher, "@somechannel").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![VideoResponse {
+                status: "DOWNLOADED".to_string(),
+                quality: Some("high".to_string()),
+                filename: Some("My Video.mp4".to_string()),
+                synced_at: Some(fixed_timestamp()),
+                published_at: Some(published_timestamp()),
+                description: Some("A description\nwith two lines".to_string()),
+                channel_name: Some("Some Channel".to_string()),
+                ..pending_video_response("vid1", "My Video")
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_include_watch_state_when_listing_channel_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
