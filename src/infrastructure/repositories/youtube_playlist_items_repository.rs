@@ -35,7 +35,13 @@ impl PlaylistItem {
     /// True only for `public` and `unlisted`; private, missing and any
     /// other status (e.g. deleted videos) are not watchable.
     fn is_watchable(&self) -> bool {
-        true
+        self.privacy_status() != Some("private")
+    }
+
+    fn privacy_status(&self) -> Option<&str> {
+        self.status
+            .as_ref()
+            .and_then(|status| status.privacy_status.as_deref())
     }
 }
 
@@ -198,8 +204,8 @@ mod tests {
             .with_status(200)
             .with_body(
                 r#"{"items": [
-                    {"snippet": {"title": "One", "resourceId": {"videoId": "1"}, "position": 0}},
-                    {"snippet": {"title": "Two", "resourceId": {"videoId": "2"}, "position": 1}}
+                    {"snippet": {"title": "One", "resourceId": {"videoId": "1"}, "position": 0}, "status": {"privacyStatus": "public"}},
+                    {"snippet": {"title": "Two", "resourceId": {"videoId": "2"}, "position": 1}, "status": {"privacyStatus": "public"}}
                 ], "nextPageToken": "page2"}"#,
             )
             .create();
@@ -212,7 +218,7 @@ mod tests {
             .with_status(200)
             .with_body(
                 r#"{"items": [
-                    {"snippet": {"title": "Three", "resourceId": {"videoId": "3"}, "position": 2}}
+                    {"snippet": {"title": "Three", "resourceId": {"videoId": "3"}, "position": 2}, "status": {"privacyStatus": "public"}}
                 ]}"#,
             )
             .create();
@@ -277,6 +283,38 @@ mod tests {
                 title: "One".to_string(),
                 position: 0,
             }])
+        );
+    }
+
+    #[test]
+    fn it_should_skip_private_items() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"items": [
+                    {"snippet": {"title": "Private video", "resourceId": {"videoId": "1"}, "position": 0}, "status": {"privacyStatus": "private"}},
+                    {"snippet": {"title": "Two", "resourceId": {"videoId": "2"}, "position": 1}, "status": {"privacyStatus": "public"}}
+                ]}"#,
+            )
+            .create();
+
+        let repository =
+            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+
+        let videos = repository
+            .list_current_videos(&PlaylistId::new("PL1").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            videos,
+            vec![YoutubePlaylistItem {
+                video_id: "2".to_string(),
+                title: "Two".to_string(),
+                position: 1,
+            }]
         );
     }
 
