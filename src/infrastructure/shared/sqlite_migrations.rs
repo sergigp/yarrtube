@@ -161,6 +161,50 @@ mod tests {
     }
 
     #[test]
+    fn it_should_backfill_the_last_played_time_of_part_watched_videos_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+        ])
+        .to_latest(&mut conn)
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, watched_at, playback_position_seconds)
+             VALUES ('rec1', 'yt1', 'Part Watched', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-02T00:00:00+00:00', NULL, 120);
+             INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, watched_at, playback_position_seconds)
+             VALUES ('rec2', 'yt2', 'Watched', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-03T00:00:00+00:00', '2024-01-03T00:00:00+00:00', 50);
+             INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at, watched_at, playback_position_seconds)
+             VALUES ('rec3', 'yt3', 'Not Started', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-04T00:00:00+00:00', NULL, 0);",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT id, last_played_at FROM videos ORDER BY id")
+            .unwrap();
+        let last_played_at: Vec<(String, Option<String>)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            last_played_at,
+            vec![
+                (
+                    "rec1".to_string(),
+                    Some("2024-01-02T00:00:00+00:00".to_string())
+                ),
+                ("rec2".to_string(), None),
+                ("rec3".to_string(), None),
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_backfill_the_publish_time_from_premiered_when_migrating() {
         let mut conn = Connection::open_in_memory().unwrap();
         Migrations::new(vec![M::up(BASELINE_SQL), M::up(WATCH_STATE_SQL)])

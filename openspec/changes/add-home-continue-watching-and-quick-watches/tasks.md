@@ -32,7 +32,7 @@
 - [x] 3.2 `it_should_round_trip_a_video_never_played`: NULL maps to `None`
 
 Migrations:
-- [ ] 3.3 `it_should_backfill_the_last_played_time_of_part_watched_videos_when_migrating`: migration `0005` backfill touches only unwatched videos with a position
+- [x] 3.3 `it_should_backfill_the_last_played_time_of_part_watched_videos_when_migrating`: migration `0005` backfill touches only unwatched videos with a position
 
 ## 4. Verification
 
