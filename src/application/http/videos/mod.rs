@@ -1530,7 +1530,12 @@ mod tests {
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
             "@somechannel",
-            &started_video("vid_shared", "Shared", 120, watched_timestamp()),
+            &started_video(
+                "vid_shared",
+                "Shared",
+                120,
+                watched_timestamp() - Duration::hours(1),
+            ),
             0,
         );
         let video_searcher = VideoSearcher::new(
@@ -1808,7 +1813,7 @@ mod tests {
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
             "PL1",
-            &video_lasting("vid_shared", "Shared", Some(600), 100),
+            &video_lasting("vid_shared", "Shared", Some(600), 200),
         );
         save_channel_video(
             video_repository.as_ref(),

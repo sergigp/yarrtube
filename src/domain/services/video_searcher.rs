@@ -162,23 +162,23 @@ impl VideoSearcher {
         newest: impl Fn(&Video) -> K,
         limit: usize,
     ) -> Result<Vec<RecentVideo>, ListVideosError> {
-        let mut videos: Vec<RecentVideo> = self
-            .downloaded_across_sources()?
-            .into_iter()
-            .filter(|recent| keep(&recent.video))
-            .collect();
+        let mut videos = Self::once_per_youtube_video(
+            self.downloaded_across_sources()?
+                .into_iter()
+                .filter(|recent| keep(&recent.video))
+                .collect(),
+        );
 
         videos.sort_by_key(|recent| std::cmp::Reverse(newest(&recent.video)));
-        Ok(Self::once_per_youtube_video(videos)
-            .into_iter()
-            .take(limit)
-            .collect())
+        videos.truncate(limit);
+        Ok(videos)
     }
 
-    /// Keeps the first copy of each YouTube video. Channels are collected
-    /// before playlists and sorts are stable, so that is the channel copy when
-    /// there is one (its card has an avatar). Watch state is shared by every
-    /// copy, so any copy is correct.
+    /// Keeps the first copy of each YouTube video. Applied before sorting,
+    /// while channels still come before playlists, so that is the channel
+    /// copy when there is one (its card has an avatar), whatever each copy's
+    /// own timestamps. Watch state is shared by every copy, so any copy is
+    /// correct.
     fn once_per_youtube_video(videos: Vec<RecentVideo>) -> Vec<RecentVideo> {
         let mut seen = HashSet::new();
         videos
