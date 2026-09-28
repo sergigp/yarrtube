@@ -17,7 +17,7 @@ Each test here moves an existing rule onto `/videos/home`. It pins behaviour tha
 - [x] 2.1 `it_should_list_no_home_videos_if_nothing_downloaded`: three empty sections
 - [x] 2.2 `it_should_list_videos_from_playlists_and_channels_on_home`: both sources under `latest`, each with its own source
 - [x] 2.3 `it_should_include_the_channel_source_on_home`: channel name and avatar filename
-- [ ] 2.4 `it_should_include_the_playlist_source_on_home`: playlist name, no avatar
+- [x] 2.4 `it_should_include_the_playlist_source_on_home`: playlist name, no avatar
 - [ ] 2.5 `it_should_include_whether_a_video_was_watched_on_home`: a watched video under `latest` with `watched: true`
 - [ ] 2.6 `it_should_list_a_latest_video_once_per_source_on_home`
 - [ ] 2.7 `it_should_exclude_not_downloaded_videos_from_home`: a pending in-progress video and a pending short video appear nowhere
