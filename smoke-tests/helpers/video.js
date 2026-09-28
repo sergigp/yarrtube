@@ -1,7 +1,8 @@
 import { expect } from '@playwright/test'
 
+// The detail pane shows a status badge only for videos that are not
+// downloaded; a downloaded one is recognised by the meta line's "Synced" part.
 const STATUS_LABELS = {
-  DOWNLOADED: 'Downloaded',
   IN_PROGRESS: 'Downloading',
   PENDING: 'Pending',
   ERRORED_RETRYING: 'Retrying',
@@ -12,8 +13,11 @@ export async function waitForVideoStatus(page, { title, status = 'DOWNLOADED', t
   if (title) {
     await page.getByRole('button').filter({ hasText: title }).first().click()
   }
-  const label = STATUS_LABELS[status] ?? status
-  await expect(page.getByText(label, { exact: true }).first()).toBeVisible({ timeout: timeoutMs })
+  const indicator =
+    status === 'DOWNLOADED'
+      ? page.getByText(/^Synced /).first()
+      : page.getByText(STATUS_LABELS[status] ?? status, { exact: true }).first()
+  await expect(indicator).toBeVisible({ timeout: timeoutMs })
 }
 
 export async function assertVideoPlays(page) {
