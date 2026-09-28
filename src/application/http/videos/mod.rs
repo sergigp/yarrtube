@@ -311,6 +311,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_report_absent_metadata_when_listing_a_video_without_it() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let video_metadata_repository =
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            video_metadata_repository.clone(),
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![VideoResponse {
+                published_at: None,
+                description: None,
+                channel_name: None,
+                ..pending_video_response("vid1", "My Video")
+            }])
+        );
+        assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlist_videos_by_position() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
