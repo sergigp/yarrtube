@@ -11,6 +11,7 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
+use chrono::{DateTime, Utc};
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -134,36 +135,30 @@ impl VideoSearcherApi for VideoSearcher {
     }
 
     fn list_continue_watching(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
-        let now = self.clock.now();
-        self.list_once_across_sources(
-            |video| video.is_in_progress(now),
-            |video| video.last_played_at,
+        Ok(Self::continue_watching_in(
+            &self.downloaded_across_sources()?,
+            self.clock.now(),
             limit,
-        )
+        ))
     }
 
     fn list_quick_watches(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
-        self.list_once_across_sources(Video::is_quick_watch, |video| video.created_at, limit)
+        Ok(Self::quick_watches_in(
+            &self.downloaded_across_sources()?,
+            limit,
+        ))
     }
 
     fn list_home(&self, limits: HomeLimits) -> Result<HomeVideos, ListVideosError> {
-        let now = self.clock.now();
         let videos = self.downloaded_across_sources()?;
-        let continue_watching = Self::pick_once(
-            &videos,
-            |video| video.is_in_progress(now),
-            |video| video.last_played_at,
-            limits.continue_watching,
-        );
+        let continue_watching =
+            Self::continue_watching_in(&videos, self.clock.now(), limits.continue_watching);
         let not_continue_watching = Self::not_shown_in(&videos, &continue_watching);
-        let quick_watches = Self::pick_once(
-            &not_continue_watching,
-            Video::is_quick_watch,
-            |video| video.created_at,
-            limits.quick_watches,
+        let quick_watches = Self::quick_watches_in(&not_continue_watching, limits.quick_watches);
+        let latest = Self::latest_in(
+            Self::not_shown_in(&not_continue_watching, &quick_watches),
+            limits.latest,
         );
-        let mut latest = Self::not_shown_in(&not_continue_watching, &quick_watches);
-        latest.sort_by_key(|recent| std::cmp::Reverse(recent.video.created_at));
         Ok(HomeVideos {
             continue_watching,
             quick_watches,
@@ -188,18 +183,37 @@ impl VideoSearcher {
 
     /// Downloaded videos across sources that `keep` accepts, highest `newest`
     /// first, once per YouTube video, truncated to `limit`.
-    fn list_once_across_sources<K: Ord>(
-        &self,
-        keep: impl Fn(&Video) -> bool,
-        newest: impl Fn(&Video) -> K,
+    /// In progress videos of `videos` (see `Video::is_in_progress`), last
+    /// played first, once per YouTube video, up to `limit`.
+    fn continue_watching_in(
+        videos: &[RecentVideo],
+        now: DateTime<Utc>,
         limit: usize,
-    ) -> Result<Vec<RecentVideo>, ListVideosError> {
-        Ok(Self::pick_once(
-            &self.downloaded_across_sources()?,
-            keep,
-            newest,
+    ) -> Vec<RecentVideo> {
+        Self::pick_once(
+            videos,
+            |video| video.is_in_progress(now),
+            |video| video.last_played_at,
             limit,
-        ))
+        )
+    }
+
+    /// Quick watches of `videos` (see `Video::is_quick_watch`), newest sync
+    /// first, once per YouTube video, up to `limit`.
+    fn quick_watches_in(videos: &[RecentVideo], limit: usize) -> Vec<RecentVideo> {
+        Self::pick_once(
+            videos,
+            Video::is_quick_watch,
+            |video| video.created_at,
+            limit,
+        )
+    }
+
+    /// `videos` newest sync first, once per source, up to `limit`.
+    fn latest_in(mut videos: Vec<RecentVideo>, limit: usize) -> Vec<RecentVideo> {
+        videos.sort_by_key(|recent| std::cmp::Reverse(recent.video.created_at));
+        videos.truncate(limit);
+        videos
     }
 
     /// The videos of `videos` that `keep` accepts, once per YouTube video,

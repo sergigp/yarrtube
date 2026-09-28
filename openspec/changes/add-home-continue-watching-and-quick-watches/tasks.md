@@ -57,7 +57,7 @@ Migrations:
 - [x] 6.4 `it_should_list_a_short_video_under_quick_watches_only_on_home`: `quick_watches` filled, its videos left out of `latest`
 - [x] 6.5 `it_should_not_repeat_a_continue_watching_video_in_quick_watches_on_home`: quick watches skip videos shown under continue watching
 - [x] 6.6 `it_should_show_videos_left_out_of_a_full_section_further_down_on_home`: limits of 6 applied, exclusion by shown videos only
-- [ ] 6.7 `it_should_cap_latest_on_home_at_18`: latest truncated to its limit
+- [x] 6.7 `it_should_cap_latest_on_home_at_18`: latest truncated to its limit
 - [ ] 6.8 Web: `Home.jsx` polls only `fetchHomeVideos`; `api.js` drops the per-section home fetchers. Verify with `npm run lint` and `npm run build` in `web/`.
 - [ ] 6.9 Extend `smoke-tests/tests/playlist.spec.js`: the part-played video is not under "Latest videos" (this exercises `/videos/home`). Verify with `./scripts/run-smoke-tests.sh`.
 - [ ] 6.10 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass
