@@ -1,7 +1,7 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::video::{
-    HomeLimits, HomeVideos, ListVideosError, RecentVideo, Video, VideoSource, VideoStatus,
+    HomeLimits, HomeVideos, ListVideosError, RecentVideo, Video, VideoId, VideoSource, VideoStatus,
     VideoView,
 };
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -146,12 +146,20 @@ impl VideoSearcherApi for VideoSearcher {
         self.list_once_across_sources(Video::is_quick_watch, |video| video.created_at, limit)
     }
 
-    fn list_home(&self, _limits: HomeLimits) -> Result<HomeVideos, ListVideosError> {
+    fn list_home(&self, limits: HomeLimits) -> Result<HomeVideos, ListVideosError> {
+        let now = self.clock.now();
         let videos = self.downloaded_across_sources()?;
+        let continue_watching = Self::pick_once(
+            &videos,
+            |video| video.is_in_progress(now),
+            |video| video.last_played_at,
+            limits.continue_watching,
+        );
+        let latest = Self::not_shown_in(videos, &continue_watching);
         Ok(HomeVideos {
-            continue_watching: vec![],
+            continue_watching,
             quick_watches: vec![],
-            latest: videos,
+            latest,
         })
     }
 }
@@ -178,16 +186,45 @@ impl VideoSearcher {
         newest: impl Fn(&Video) -> K,
         limit: usize,
     ) -> Result<Vec<RecentVideo>, ListVideosError> {
-        let mut videos = Self::once_per_youtube_video(
-            self.downloaded_across_sources()?
-                .into_iter()
+        Ok(Self::pick_once(
+            &self.downloaded_across_sources()?,
+            keep,
+            newest,
+            limit,
+        ))
+    }
+
+    /// The videos of `videos` that `keep` accepts, once per YouTube video,
+    /// highest `newest` first, truncated to `limit`.
+    fn pick_once<K: Ord>(
+        videos: &[RecentVideo],
+        keep: impl Fn(&Video) -> bool,
+        newest: impl Fn(&Video) -> K,
+        limit: usize,
+    ) -> Vec<RecentVideo> {
+        let mut picked = Self::once_per_youtube_video(
+            videos
+                .iter()
                 .filter(|recent| keep(&recent.video))
+                .cloned()
                 .collect(),
         );
 
-        videos.sort_by_key(|recent| std::cmp::Reverse(newest(&recent.video)));
-        videos.truncate(limit);
-        Ok(videos)
+        picked.sort_by_key(|recent| std::cmp::Reverse(newest(&recent.video)));
+        picked.truncate(limit);
+        picked
+    }
+
+    /// `videos` without any copy of the YouTube videos in `shown`.
+    fn not_shown_in(videos: Vec<RecentVideo>, shown: &[RecentVideo]) -> Vec<RecentVideo> {
+        let shown: HashSet<&VideoId> = shown
+            .iter()
+            .map(|recent| &recent.video.youtube_id)
+            .collect();
+        videos
+            .into_iter()
+            .filter(|recent| !shown.contains(&recent.video.youtube_id))
+            .collect()
     }
 
     /// Keeps the first copy of each YouTube video. Applied before sorting,
