@@ -18,18 +18,6 @@ export function fetchHomeVideos() {
   return request('/videos/home')
 }
 
-export function fetchRecentVideos(limit) {
-  return request(`/videos/recent?limit=${limit}`)
-}
-
-export function fetchContinueWatchingVideos(limit) {
-  return request(`/videos/continue-watching?limit=${limit}`)
-}
-
-export function fetchQuickWatchVideos(limit) {
-  return request(`/videos/quick-watches?limit=${limit}`)
-}
-
 export function fetchTasks() {
   return request('/tasks')
 }
