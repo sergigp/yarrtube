@@ -9,7 +9,7 @@ use crate::domain::services::{
     VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use crate::domain::video::{
-    ListVideosError, PlaybackPosition, UpdateWatchStateError, VideoDuration, VideoId,
+    ListVideosError, PlaybackPosition, RecentVideo, UpdateWatchStateError, VideoDuration, VideoId,
 };
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -54,42 +54,26 @@ pub async fn list_recent_videos(
     State(video_searcher): State<VideoSearcher>,
     Query(query): Query<ListRecentVideosQuery>,
 ) -> Result<Json<Vec<RecentVideoResponse>>, ApiError> {
-    let limit = recent_limit(&query);
-
-    let videos = run_blocking(move || video_searcher.list_recent(limit))
-        .await?
-        .map_err(list_videos_error)?;
-    Ok(Json(
-        videos.into_iter().map(RecentVideoResponse::from).collect(),
-    ))
+    list_across_sources(video_searcher, &query, VideoSearcher::list_recent).await
 }
 
 pub async fn list_continue_watching_videos(
     State(video_searcher): State<VideoSearcher>,
     Query(query): Query<ListRecentVideosQuery>,
 ) -> Result<Json<Vec<RecentVideoResponse>>, ApiError> {
-    let limit = recent_limit(&query);
-
-    let videos = run_blocking(move || video_searcher.list_continue_watching(limit))
-        .await?
-        .map_err(list_videos_error)?;
-    Ok(Json(
-        videos.into_iter().map(RecentVideoResponse::from).collect(),
-    ))
+    list_across_sources(
+        video_searcher,
+        &query,
+        VideoSearcher::list_continue_watching,
+    )
+    .await
 }
 
 pub async fn list_quick_watch_videos(
     State(video_searcher): State<VideoSearcher>,
     Query(query): Query<ListRecentVideosQuery>,
 ) -> Result<Json<Vec<RecentVideoResponse>>, ApiError> {
-    let limit = recent_limit(&query);
-
-    let videos = run_blocking(move || video_searcher.list_quick_watches(limit))
-        .await?
-        .map_err(list_videos_error)?;
-    Ok(Json(
-        videos.into_iter().map(RecentVideoResponse::from).collect(),
-    ))
+    list_across_sources(video_searcher, &query, VideoSearcher::list_quick_watches).await
 }
 
 pub async fn record_video_progress(
@@ -121,11 +105,24 @@ pub fn update_watch_state_error(error: UpdateWatchStateError) -> ApiError {
     }
 }
 
-fn recent_limit(query: &ListRecentVideosQuery) -> usize {
-    query
+/// Runs one of the searcher's cross-source listings with the query's limit
+/// (default 20, capped at 100) and maps the videos to card responses.
+async fn list_across_sources(
+    video_searcher: VideoSearcher,
+    query: &ListRecentVideosQuery,
+    list: fn(&VideoSearcher, usize) -> Result<Vec<RecentVideo>, ListVideosError>,
+) -> Result<Json<Vec<RecentVideoResponse>>, ApiError> {
+    let limit = query
         .limit
         .unwrap_or(DEFAULT_RECENT_VIDEOS_LIMIT)
-        .min(MAX_RECENT_VIDEOS_LIMIT)
+        .min(MAX_RECENT_VIDEOS_LIMIT);
+
+    let videos = run_blocking(move || list(&video_searcher, limit))
+        .await?
+        .map_err(list_videos_error)?;
+    Ok(Json(
+        videos.into_iter().map(RecentVideoResponse::from).collect(),
+    ))
 }
 
 fn list_videos_error(error: ListVideosError) -> ApiError {
