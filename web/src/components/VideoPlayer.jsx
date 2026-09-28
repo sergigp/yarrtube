@@ -5,8 +5,9 @@ import { cn } from '@/lib/utils'
  * The player area of a playlist or channel detail view: plays `video` from
  * `basePath` once downloaded, or explains why it can't yet.
  *
- * Below the desktop breakpoint it bleeds to the screen edges (cancelling the
- * page gutter) and sticks right under the header while the page scrolls.
+ * Below the desktop breakpoint it bleeds to the side edges of the screen
+ * (cancelling the page gutter) and sticks right under the header while the
+ * page scrolls.
  */
 export function VideoPlayer({ basePath, video, autoplay, onVideoElement }) {
   const playable = video?.status === 'DOWNLOADED' && video.filename
@@ -14,7 +15,7 @@ export function VideoPlayer({ basePath, video, autoplay, onVideoElement }) {
   return (
     <div
       className={cn(
-        'sticky top-(--header-height) z-10 -mx-4 -mt-4 flex aspect-video items-center justify-center sm:-mx-6',
+        'sticky top-(--header-height) z-10 -mx-4 flex aspect-video items-center justify-center sm:-mx-6',
         'md:static md:m-0 md:aspect-auto md:min-h-80 md:rounded-lg',
         playable ? 'bg-black md:bg-secondary/60' : 'bg-secondary md:bg-secondary/60',
       )}

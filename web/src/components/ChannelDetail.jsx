@@ -1,12 +1,15 @@
 import { useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
-import { CheckCheck, TriangleAlert } from 'lucide-react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
 import {
   fetchChannels,
   fetchChannelVideos,
+  reconcileChannel,
+  deleteChannel,
   markChannelWatched,
   videoMediaUrl,
+  avatarMediaUrl,
 } from '../api'
 import { formatDuration } from '../formatDuration'
 import { useWatchProgress } from '../useWatchProgress'
@@ -15,7 +18,7 @@ import { WatchedTick } from './WatchedTick'
 import { Beacon } from './Beacon'
 import { VideoPlayer } from './VideoPlayer'
 import { VideoDetail } from './VideoDetail'
-import { Button } from '@/components/ui/button'
+import { DetailHeader } from './DetailHeader'
 import { cn } from '@/lib/utils'
 
 const STATUS_MESSAGES = {
@@ -47,13 +50,13 @@ function VideoStatusIndicator({ status }) {
 
 export function ChannelDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { data: channels, error: channelsError } = usePolling(fetchChannels, [])
   const channel = channels?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = usePolling(() => fetchChannelVideos(id), [id])
   const [manualSelectionId, setManualSelectionId] = useState(null)
-  const [markingWatched, setMarkingWatched] = useState(false)
   const manualSelection = manualSelectionId
     ? (videos?.find((video) => video.id === manualSelectionId) ?? null)
     : null
@@ -81,6 +84,20 @@ export function ChannelDetail() {
 
   return (
     <div className="flex flex-col md:h-full md:min-h-[480px]">
+      <DetailHeader
+        name={channel.name}
+        showAvatar
+        avatarSrc={channel.avatar_filename ? avatarMediaUrl(channel.avatar_filename) : null}
+        videos={videos}
+        unwatchedCount={channel.unwatched_count}
+        onSync={() => reconcileChannel(id)}
+        onMarkWatched={() => markChannelWatched(id)}
+        onDelete={async () => {
+          await deleteChannel(id)
+          navigate('/')
+        }}
+        deleteDescription="This removes the channel from tracking."
+      />
       <div className="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_360px] md:items-start md:gap-6 md:overflow-hidden">
         <div className="contents md:flex md:h-full md:min-w-0 md:flex-col md:gap-4 md:overflow-y-auto">
           <VideoPlayer
@@ -98,26 +115,6 @@ export function ChannelDetail() {
         </div>
 
         <div className="md:h-full md:min-h-0 md:overflow-y-auto">
-          <div className="mb-2 flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={markingWatched}
-              onClick={async () => {
-                setMarkingWatched(true)
-                try {
-                  await markChannelWatched(id)
-                } catch (err) {
-                  window.alert(`Failed to mark "${channel.name}" watched: ${err.message}`)
-                } finally {
-                  setMarkingWatched(false)
-                }
-              }}
-            >
-              <CheckCheck />
-              Mark all watched
-            </Button>
-          </div>
           {error && <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>}
           {!error && !videos && <p className="text-sm text-muted-foreground">Loading videos…</p>}
           {!error && videos && videos.length === 0 && (

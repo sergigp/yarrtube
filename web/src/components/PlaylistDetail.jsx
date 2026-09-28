@@ -1,8 +1,14 @@
 import { useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { usePolling } from '../usePolling'
-import { fetchPlaylists, fetchVideos, videoMediaUrl } from '../api'
+import {
+  fetchPlaylists,
+  fetchVideos,
+  reconcilePlaylist,
+  deletePlaylist,
+  videoMediaUrl,
+} from '../api'
 import { formatDuration } from '../formatDuration'
 import { useWatchProgress } from '../useWatchProgress'
 import { Thumbnail } from './Thumbnail'
@@ -10,6 +16,7 @@ import { WatchedTick } from './WatchedTick'
 import { Beacon } from './Beacon'
 import { VideoPlayer } from './VideoPlayer'
 import { VideoDetail } from './VideoDetail'
+import { DetailHeader } from './DetailHeader'
 import { cn } from '@/lib/utils'
 
 const STATUS_MESSAGES = {
@@ -41,6 +48,7 @@ function VideoStatusIndicator({ status }) {
 
 export function PlaylistDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { data: playlists, error: playlistsError } = usePolling(fetchPlaylists, [])
   const playlist = playlists?.find((item) => item.id === id) ?? null
@@ -74,6 +82,17 @@ export function PlaylistDetail() {
 
   return (
     <div className="flex flex-col md:h-full md:min-h-[480px]">
+      <DetailHeader
+        name={playlist.name}
+        videos={videos}
+        unwatchedCount={playlist.unwatched_count}
+        onSync={() => reconcilePlaylist(id)}
+        onDelete={async () => {
+          await deletePlaylist(id)
+          navigate('/')
+        }}
+        deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
+      />
       <div className="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_360px] md:items-start md:gap-6 md:overflow-hidden">
         <div className="contents md:flex md:h-full md:min-w-0 md:flex-col md:gap-4 md:overflow-y-auto">
           <VideoPlayer
