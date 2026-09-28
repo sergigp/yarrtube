@@ -1341,6 +1341,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_exclude_videos_last_played_over_a_week_ago_from_continue_watching() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &started_video(
+                "vid_week_ago",
+                "A Week Ago",
+                120,
+                watched_timestamp() - Duration::days(7),
+            ),
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &started_video(
+                "vid_over_a_week_ago",
+                "Over A Week Ago",
+                120,
+                watched_timestamp() - Duration::days(7) - Duration::seconds(1),
+            ),
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response =
+            continue_watching(video_searcher, ListRecentVideosQuery { limit: None }).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![RecentVideoResponse {
+                position_seconds: 120,
+                ..recent_video_response("vid_week_ago", "A Week Ago", playlist_source())
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));

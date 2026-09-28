@@ -11,7 +11,7 @@
 - [x] 2.4 `it_should_list_no_continue_watching_videos_if_none_in_progress`: empty listing when nothing is in progress
 - [x] 2.5 `it_should_list_a_recently_started_video_in_continue_watching`: `list_continue_watching` collects across sources, filters on `is_in_progress`, and the response carries `position_seconds`
 - [x] 2.6 `it_should_order_continue_watching_by_last_played_first`: sort by `last_played_at` desc
-- [ ] 2.7 `it_should_exclude_videos_last_played_over_a_week_ago_from_continue_watching`: 7-day window against the clock (boundary: exactly 7 days is included)
+- [x] 2.7 `it_should_exclude_videos_last_played_over_a_week_ago_from_continue_watching`: 7-day window against the clock (boundary: exactly 7 days is included)
 - [ ] 2.8 `it_should_exclude_barely_started_videos_from_continue_watching`: position must be > 30s
 - [ ] 2.9 `it_should_exclude_watched_and_never_played_videos_from_continue_watching`: unwatched and `last_played_at` present
 - [ ] 2.10 `it_should_exclude_not_downloaded_videos_from_continue_watching`: only `Downloaded` videos

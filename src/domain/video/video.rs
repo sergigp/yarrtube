@@ -10,6 +10,10 @@ use chrono::{DateTime, Duration, Utc};
 /// another download attempt.
 const ERRORED_RECOVERY_COOLDOWN: Duration = Duration::hours(24);
 
+/// How long after it was last played a started video is still offered to
+/// continue watching.
+const IN_PROGRESS_WINDOW: Duration = Duration::days(7);
+
 /// A downloaded (or to-be-downloaded) video's own record: its download
 /// state, independent of any container. Container membership — which
 /// playlist(s) or channel(s) this video belongs to, and its position within
@@ -184,8 +188,9 @@ impl Video {
 
     /// Downloaded, unwatched, position over 30s and last played within the
     /// past 7 days of `now`: worth offering to continue watching.
-    pub fn is_in_progress(&self, _now: DateTime<Utc>) -> bool {
-        self.last_played_at.is_some()
+    pub fn is_in_progress(&self, now: DateTime<Utc>) -> bool {
+        self.last_played_at
+            .is_some_and(|played_at| now - played_at <= IN_PROGRESS_WINDOW)
     }
 
     /// Downloaded, unwatched and recorded as shorter than 15 minutes.
