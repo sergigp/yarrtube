@@ -65,6 +65,13 @@ On viewports narrower than the desktop breakpoint, the sidebar (channels and pla
 - **WHEN** a user is on a viewport at or above the desktop breakpoint
 - **THEN** the sidebar is always visible as a persistent side panel, regardless of the open/closed state used on mobile
 
+### Requirement: Mark Channel Watched From Channel View
+A channel detail view SHALL provide a visible control to mark the channel watched, which takes effect without confirmation. The control SHALL sit in the detail view's page header.
+
+#### Scenario: Marking a channel watched from its view
+- **WHEN** a user activates the mark-watched control in a channel's detail view
+- **THEN** every downloaded video in the list shows a tick, and the channel's sidebar badge disappears
+
 ### Requirement: Home Page Layout
 The home view SHALL display recently synced videos as a grid of cards, each showing the video's thumbnail with its title below it. For videos from a tracked channel, the card SHALL also show the channel's avatar and name.
 
@@ -120,11 +127,15 @@ The video detail pane SHALL always show the video's title. The rest of the pane 
 - **THEN** the detail pane shows the title, indicators, path and YouTube link without needing to be expanded
 
 ### Requirement: Compact Mobile Player
-On viewports narrower than the desktop breakpoint, the video player area SHALL be sized to the video's own aspect ratio, with no blank padding above or below the video. The gap between the header and the player SHALL be no more than the standard page gutter.
+On viewports narrower than the desktop breakpoint, the video player area SHALL be sized to the video's own aspect ratio, with no blank padding above or below the video. The player SHALL start one standard page gutter below the detail view's page header. While the page scrolls, the page header SHALL scroll away and the player SHALL stay pinned directly below the application header.
 
 #### Scenario: Downloaded video on a mobile viewport
 - **WHEN** a user on a mobile-width viewport views a downloaded 16:9 video in a detail view
-- **THEN** the player area is exactly as tall as the video at full width, and it starts just below the header
+- **THEN** the player area is exactly as tall as the video at full width, and it starts one page gutter below the detail view's page header
+
+#### Scenario: Scrolling past the page header on a mobile viewport
+- **WHEN** a user on a mobile-width viewport scrolls down a detail view
+- **THEN** the page header scrolls out of view and the player stays pinned directly below the application header
 
 #### Scenario: Video not downloaded on a mobile viewport
 - **WHEN** a user on a mobile-width viewport selects a video that has not been downloaded
@@ -140,3 +151,37 @@ The application SHALL serve its own Yarrtube icon as the browser favicon and as 
 #### Scenario: Adding to the iOS home screen
 - **WHEN** a user adds the application to their iOS home screen and launches it from there
 - **THEN** the home screen shows the Yarrtube icon, and the application opens without Safari's address bar and toolbar
+
+### Requirement: Detail View Page Header
+A playlist or channel detail view SHALL open with a page header showing the playlist's or channel's name, with the channel's avatar beside it for channels. Below the name it SHALL show a summary of the number of videos and, when above 0, the number of unwatched videos. The header SHALL provide actions to sync (reconcile) and to delete the entry. For channels, it SHALL also provide an action to mark the channel watched. Deleting SHALL require confirmation and, once confirmed, SHALL return the user to the home view. On viewports narrower than the small breakpoint, the actions SHALL show as icons only, each keeping an accessible label.
+
+#### Scenario: Channel page header
+- **WHEN** a user opens a channel's detail view
+- **THEN** the page header shows the channel's avatar, its name, a video count summary, and sync, mark-watched and delete actions
+
+#### Scenario: Playlist page header
+- **WHEN** a user opens a playlist's detail view
+- **THEN** the page header shows the playlist's name, a video count summary, and sync and delete actions, with no avatar and no mark-watched action
+
+#### Scenario: Summary omits unwatched count when nothing is unwatched
+- **WHEN** a detail view's channel or playlist has no unwatched videos
+- **THEN** the summary shows only the video count
+
+#### Scenario: Syncing from the page header
+- **WHEN** a user activates the sync action in a detail view's page header
+- **THEN** the application triggers a reconcile for that channel or playlist and shows it as in progress until it completes
+
+#### Scenario: Deleting from the page header
+- **WHEN** a user activates the delete action in a detail view's page header and confirms
+- **THEN** the application deletes that channel or playlist and navigates to the home view
+
+#### Scenario: Page header actions on a narrow viewport
+- **WHEN** a user views a detail view on a viewport narrower than the small breakpoint
+- **THEN** the page header's actions show as icons only, and the name remains visible beside them
+
+### Requirement: Sidebar Section Headings
+The sidebar's "Channels" and "Playlists" section titles SHALL be styled as headings, visually distinct from the channel and playlist rows beneath them.
+
+#### Scenario: Distinguishing section titles from rows
+- **WHEN** a user views the sidebar
+- **THEN** the "Channels" and "Playlists" titles appear in a heading style, larger and bolder than the rows they label

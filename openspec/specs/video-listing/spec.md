@@ -49,7 +49,7 @@ The system SHALL provide an HTTP endpoint that, given a tracked channel's handle
 - **THEN** each returned video reports whether it has been watched and its saved playback position
 
 ### Requirement: List Recently Synced Videos Across Sources
-The system SHALL provide an HTTP endpoint that returns downloaded videos across every tracked playlist and channel combined into a single list, ordered by sync time (the time the video was recorded by the system), newest first. The endpoint SHALL accept an optional limit on the number of videos returned, defaulting to 20 and capped at 100 when a larger value is requested. Each returned video SHALL include its ID, title, thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and the source that tracks it (kind: `playlist` or `channel`, that source's identifier, that source's storage path, and — for a channel source — that channel's avatar filename, when present). A video tracked by more than one source SHALL appear once per source.
+The system SHALL provide an HTTP endpoint that returns downloaded videos across every tracked playlist and channel combined into a single list, ordered by sync time (the time the video was recorded by the system), newest first. The endpoint SHALL accept an optional limit on the number of videos returned, defaulting to 20 and capped at 100 when a larger value is requested. Each returned video SHALL include its ID, title, thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and the source that tracks it (kind: `playlist` or `channel`, that source's identifier, that source's display name, that source's storage path, and — for a channel source — that channel's avatar filename, when present). A video tracked by more than one source SHALL appear once per source.
 
 #### Scenario: Recently synced videos exist
 - **WHEN** a client requests recently synced videos and at least one downloaded video is recorded
@@ -110,6 +110,14 @@ The system SHALL provide an HTTP endpoint that returns downloaded videos across 
 #### Scenario: Recent videos include whether they have been watched
 - **WHEN** a returned recently synced video has been watched
 - **THEN** it is reported as watched
+
+#### Scenario: Channel source includes the channel's name
+- **WHEN** a returned video's source is a channel
+- **THEN** the source object includes that channel's name
+
+#### Scenario: Playlist source includes the playlist's name
+- **WHEN** a returned video's source is a playlist
+- **THEN** the source object includes that playlist's name
 
 ### Requirement: Listed Videos Include Sync Time
 The system SHALL include each video's recorded sync time in the responses that list the videos of a playlist and of a channel, and SHALL report it as absent for a video that has none.

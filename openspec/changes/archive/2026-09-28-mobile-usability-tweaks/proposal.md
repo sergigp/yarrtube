@@ -10,6 +10,8 @@ The web UI is hard to use on a phone, which is the main way it gets watched. The
 - Sidebar row actions (Sync, Mark all watched, Delete) move from hover-only buttons into a `...` menu that's always visible on each row. This also frees the row width the invisible buttons used to take. The mobile drawer gets narrower (`w-64`).
 - While the mobile drawer is open, the page behind it can't scroll.
 - On home page cards, the channel avatar and a new channel name link to the channel page. The rest of the card still links to the video. On the channel detail pane, the avatar links to the channel page.
+- Playlist and channel detail views get a page header with the name (plus avatar for channels), an "N videos · M unwatched" summary, and Sync, Mark all watched (channels only) and Delete actions. On phones the actions show as icons only. The channel view's "Mark all watched" button moves into this header.
+- The sidebar's "Channels" and "Playlists" titles get a heading style, so they no longer look like list rows.
 - The recently-synced videos endpoint now includes each source's display name (channel name or playlist name), so home cards can show it without another request.
 - The default Vite favicon is replaced with a Yarrtube icon: a green rounded square with a white "Y". We also add an `apple-touch-icon`, a `theme-color` and a minimal web app manifest (`display: standalone`), so the app can be added to the iOS home screen.
 
@@ -21,8 +23,8 @@ The web UI is hard to use on a phone, which is the main way it gets watched. The
 ### Modified Capabilities
 - `video-listing`: "List Recently Synced Videos Across Sources" now includes the source's name
 - `web-ui`:
-  - modified: "Detail View Fixed Video Area" (mobile now uses a sticky player and page scrolling), "Sidebar Row Actions" (a `...` menu replaces hover buttons), "Collapsible Mobile Sidebar" (the page behind the open drawer is locked instead of "the document never scrolls"), "Home Page Layout" (channel avatar and name link to the channel)
-  - added: collapsible video details with a prominent title, channel avatar links, compact mobile player, app icon and manifest
+  - modified: "Detail View Fixed Video Area" (mobile now uses a sticky player and page scrolling), "Sidebar Row Actions" (a `...` menu replaces hover buttons), "Collapsible Mobile Sidebar" (the page behind the open drawer is locked instead of "the document never scrolls"), "Home Page Layout" (channel avatar and name link to the channel), "Mark Channel Watched From Channel View" (the control moves into the page header)
+  - added: collapsible video details with a prominent title, channel avatar links, compact mobile player, app icon and manifest, detail view page header, sidebar section headings
 
 ## Impact
 
@@ -33,4 +35,5 @@ The web UI is hard to use on a phone, which is the main way it gets watched. The
 - `web/src/components/Home.jsx`
 - `web/src/components/PlaylistDetail.jsx`
 - `web/src/components/ChannelDetail.jsx`
+- `web/src/components/DetailHeader.jsx` (new), `web/src/components/VideoPlayer.jsx`
 - Behaviour on iOS Safari must be checked on a real device. A desktop browser emulating a phone doesn't reproduce how Safari handles its toolbars.

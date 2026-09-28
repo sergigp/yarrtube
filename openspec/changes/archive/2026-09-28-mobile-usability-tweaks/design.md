@@ -17,7 +17,8 @@ Frontend:
 - `web/src/components/Home.jsx`: the card splits into a video link (thumbnail and title) and a channel link (avatar and `source.name`).
 - `web/src/components/VideoPlayer.jsx` (new): player area shared by both detail views. On mobile it's `aspect-video`, sticky below the header, with no `min-h-80`.
 - `web/src/components/VideoDetail.jsx` (new): detail pane shared by both detail views. The title has its own row, and the rest is collapsible.
-- `web/src/components/PlaylistDetail.jsx`, `web/src/components/ChannelDetail.jsx`: use the shared player and detail. Their layout becomes a single document-flow column on mobile, and the desktop grid is unchanged.
+- `web/src/components/DetailHeader.jsx` (new): page header shared by both detail views. It shows the name, avatar (channels), a video/unwatched summary, and Sync / Mark all watched / Delete actions. It owns the pending states and the delete `ConfirmDialog`. `VideoPlayer` drops its mobile `-mt-4` so it sits one gutter below this header.
+- `web/src/components/PlaylistDetail.jsx`, `web/src/components/ChannelDetail.jsx`: render `DetailHeader` above the grid, and use the shared player and detail. Their layout becomes a single document-flow column on mobile, and the desktop grid is unchanged.
 
 The two detail views are currently copies of each other. Extracting `VideoPlayer` and `VideoDetail` means each fix here is made once instead of twice.
 
@@ -57,6 +58,10 @@ export function VideoPlayer({ basePath, video, autoplay, onVideoElement })
 // channel is optional: when given, renders its avatar as a link to /channels/:id
 export function VideoDetail({ basePath, video, channel })
 
+// web/src/components/DetailHeader.jsx
+// onMarkWatched is optional (channels only); onDelete resolves after deleting and navigating home
+export function DetailHeader({ name, avatarSrc, showAvatar, videos, unwatchedCount, onSync, onMarkWatched, onDelete, deleteDescription })
+
 // web/src/components/Sidebar.jsx
 function SidebarRowMenu({ item, onSync, onMarkWatched, onDeleteRequest })
 ```
@@ -90,6 +95,7 @@ Detail view (mobile):
 ```
 App (document scrolls; header sticky top-0, h-[--header-height])
   -> PlaylistDetail | ChannelDetail
+       -> DetailHeader { name, avatar?, summary, Sync / Mark all watched? / Delete -> ConfirmDialog -> navigate('/') }  scrolls with the page
        -> VideoPlayer { basePath, video, autoplay, onVideoElement }  sticky top-[--header-height], aspect-video
        -> VideoDetail { basePath, video, channel? }
             title (own row) + [more] toggle
