@@ -23,7 +23,7 @@
 - [x] 2.16 `it_should_exclude_videos_without_duration_from_quick_watches`: unknown duration is not quick
 - [x] 2.17 `it_should_exclude_watched_and_not_downloaded_videos_from_quick_watches`: unwatched and `Downloaded` only
 - [x] 2.18 `it_should_list_a_quick_watch_once_across_sources`: dedupe applied to quick watches
-- [ ] 2.19 `it_should_honor_and_cap_the_quick_watches_limit`: default 20, explicit N, capped at 100
+- [x] 2.19 `it_should_honor_and_cap_the_quick_watches_limit`: default 20, explicit N, capped at 100
 
 ## 3. Infrastructure adapters (TDD)
 

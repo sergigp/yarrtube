@@ -128,28 +128,15 @@ impl VideoSearcherApi for VideoSearcher {
 
     fn list_continue_watching(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
         let now = self.clock.now();
-        let mut in_progress: Vec<RecentVideo> = self
-            .downloaded_across_sources()?
-            .into_iter()
-            .filter(|recent| recent.video.is_in_progress(now))
-            .collect();
-
-        in_progress.sort_by_key(|r| std::cmp::Reverse(r.video.last_played_at));
-        Ok(Self::once_per_youtube_video(in_progress)
-            .into_iter()
-            .take(limit)
-            .collect())
+        self.list_once_across_sources(
+            |video| video.is_in_progress(now),
+            |video| video.last_played_at,
+            limit,
+        )
     }
 
-    fn list_quick_watches(&self, _limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
-        let mut quick_watches: Vec<RecentVideo> = self
-            .downloaded_across_sources()?
-            .into_iter()
-            .filter(|recent| recent.video.is_quick_watch())
-            .collect();
-
-        quick_watches.sort_by_key(|r| std::cmp::Reverse(r.video.created_at));
-        Ok(Self::once_per_youtube_video(quick_watches))
+    fn list_quick_watches(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
+        self.list_once_across_sources(Video::is_quick_watch, |video| video.created_at, limit)
     }
 }
 
@@ -165,6 +152,27 @@ impl VideoSearcher {
         let mut videos = self.recent_from_channels()?;
         videos.extend(self.recent_from_playlists()?);
         Ok(videos)
+    }
+
+    /// Downloaded videos across sources that `keep` accepts, highest `newest`
+    /// first, once per YouTube video, truncated to `limit`.
+    fn list_once_across_sources<K: Ord>(
+        &self,
+        keep: impl Fn(&Video) -> bool,
+        newest: impl Fn(&Video) -> K,
+        limit: usize,
+    ) -> Result<Vec<RecentVideo>, ListVideosError> {
+        let mut videos: Vec<RecentVideo> = self
+            .downloaded_across_sources()?
+            .into_iter()
+            .filter(|recent| keep(&recent.video))
+            .collect();
+
+        videos.sort_by_key(|recent| std::cmp::Reverse(newest(&recent.video)));
+        Ok(Self::once_per_youtube_video(videos)
+            .into_iter()
+            .take(limit)
+            .collect())
     }
 
     /// Keeps the first copy of each YouTube video. Channels are collected

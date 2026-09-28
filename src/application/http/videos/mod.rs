@@ -1839,6 +1839,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_honor_and_cap_the_quick_watches_limit() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_numbered_short_playlist_videos(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            105,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let responses = (
+            quick_watches(
+                video_searcher.clone(),
+                ListRecentVideosQuery { limit: None },
+            )
+            .await,
+            quick_watches(
+                video_searcher.clone(),
+                ListRecentVideosQuery { limit: Some(2) },
+            )
+            .await,
+            quick_watches(video_searcher, ListRecentVideosQuery { limit: Some(1000) }).await,
+        );
+
+        assert_eq!(
+            responses,
+            (
+                Ok(numbered_quick_watches((85..105).rev())),
+                Ok(numbered_quick_watches((103..105).rev())),
+                Ok(numbered_quick_watches((5..105).rev())),
+            )
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -2346,6 +2393,36 @@ mod tests {
         numbers
             .map(|i| RecentVideoResponse {
                 position_seconds: 120,
+                ..recent_video_response(
+                    &format!("vid{i}"),
+                    &format!("Video {i}"),
+                    playlist_source(),
+                )
+            })
+            .collect()
+    }
+
+    /// Saves `count` short videos to playlist `PL1`, video `i` created `i`
+    /// seconds after the epoch so recency order is the reverse of `i`.
+    fn save_numbered_short_playlist_videos(
+        video_repository: &dyn VideoRepository,
+        playlist_video_repository: &dyn PlaylistVideoRepository,
+        count: i64,
+    ) {
+        for i in 0..count {
+            save_playlist_video(
+                video_repository,
+                playlist_video_repository,
+                "PL1",
+                &video_lasting(&format!("vid{i}"), &format!("Video {i}"), Some(600), i),
+            );
+        }
+    }
+
+    fn numbered_quick_watches(numbers: impl Iterator<Item = i64>) -> Vec<RecentVideoResponse> {
+        numbers
+            .map(|i| RecentVideoResponse {
+                duration_seconds: Some(600),
                 ..recent_video_response(
                     &format!("vid{i}"),
                     &format!("Video {i}"),
