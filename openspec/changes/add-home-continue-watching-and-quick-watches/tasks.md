@@ -32,11 +32,13 @@
 - [x] 3.2 `it_should_round_trip_a_video_never_played`: NULL maps to `None`
 
 Migrations:
-- [x] 3.3 `it_should_backfill_the_last_played_time_of_part_watched_videos_when_migrating`: migration `0005` backfill touches only unwatched videos with a position
+- [x] 3.3 `it_should_backfill_the_last_played_time_of_part_watched_videos_when_migrating`: migration `0005` sets `last_played_at` to the migration time, only for unwatched videos with a position
+- [x] 3.4 `it_should_find_many_videos_in_the_order_given_skipping_missing_ones`: `find_many` loads several videos in one query, in the order given
+- [x] 3.5 `it_should_find_many_of_no_ids`: an empty id list finds nothing
 
 ## 4. Verification
 
 - [x] 4.1 Web UI: `WatchProgressBar` renders position / duration on continue-watching cards and new sections are hidden when empty. Verify with `npm run lint` and `npm run build` in `web/`.
-- [x] 4.2 Extend `smoke-tests/tests/channel.spec.js`: after the existing part-playback, navigate home and assert the video appears under "Continue watching" (this exercises `/videos/continue-watching`). Verify with `./scripts/run-smoke-tests.sh`.
+- [x] 4.2 Extend `smoke-tests/tests/playlist.spec.js`: pause its video (about 10 minutes long) halfway, navigate home and assert it appears under "Continue watching" with a progress bar (this exercises `/videos/continue-watching`). `channel.spec.js` seeks to half the duration for its resume check, since the channel's newest video can be too short for a fixed 45s. Verify with `./scripts/run-smoke-tests.sh`.
 - [x] 4.3 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass
-- [ ] 4.4 Manual check with `scripts/run-local.sh` against a copy of the prod DB: the backfilled part-watched video ("How to set up Herdr…") shows under "Continue watching" with a progress bar, "Quick watches" lists videos under 15 min, and "Latest videos" is unchanged
+- [ ] 4.4 Manual check with `scripts/run-local.sh` against a copy of the prod DB: the part-watched video ("How to set up Herdr…"), backfilled as played at migration time, shows under "Continue watching" with a progress bar, "Quick watches" lists videos under 15 min, and "Latest videos" is unchanged

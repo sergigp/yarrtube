@@ -1,32 +1,35 @@
 ## Files
 
-- `migrations/0005_last_played_at.sql`: adds `videos.last_played_at` and backfills it from `updated_at` for unwatched videos with a saved position.
+- `migrations/0005_last_played_at.sql`: adds `videos.last_played_at` and backfills it with the migration time for unwatched videos with a saved position (no play time was recorded before, and progress never touches `updated_at`).
 - `src/infrastructure/shared/sqlite_migrations.rs`: registers migration `0005`.
 - `src/domain/video/video.rs`: `last_played_at` field. `update_watch_state` sets it. New rules `is_in_progress` and `is_quick_watch` and their constants live on the entity.
-- `src/infrastructure/repositories/sqlite_video_repository.rs`: reads and writes the new column (`VIDEO_COLUMNS`, `save`, `update`, row mapping).
-- `src/domain/services/video_searcher.rs`: `list_continue_watching` and `list_quick_watches`. Takes a `Clock` for the 7-day window. Shares the cross-source collection with `list_recent`.
-- `src/application/http/videos/mod.rs`: two handlers, reusing `ListRecentVideosQuery` and the recent limits.
+- `src/infrastructure/repositories/sqlite_video_repository.rs`: reads and writes the new column (`VIDEO_COLUMNS`, `save`, `update`, row mapping). New port method `find_many`, loading several videos in one query.
+- `src/domain/services/video_searcher.rs`: `list_continue_watching` and `list_quick_watches`, both through one private cross-source listing helper. Takes a `Clock` for the 7-day window. Reuses `recent_from_playlists` / `recent_from_channels` with `list_recent`, which now load each source's videos with `find_many`.
+- `src/application/http/videos/mod.rs`: two handlers, reusing `ListRecentVideosQuery` and the recent limits. All three cross-source list handlers share one private body.
 - `src/application/http/videos/dto.rs`: `RecentVideoResponse` gains `position_seconds`.
 - `src/application/http/mod.rs`: routes `/videos/continue-watching` and `/videos/quick-watches`.
 - `src/serve.rs`: passes the clock to `VideoSearcher::new`.
+- `src/application/http/channels/mod.rs`: test only (marking a channel watched keeps last played times).
+- `src/application/http/tasks/mod.rs`: test only (a `Video` fixture gains `last_played_at: None`).
 - `web/src/api.js`: `fetchContinueWatchingVideos` and `fetchQuickWatchVideos`.
-- `web/src/components/Home.jsx`: renders three sections in order; the new ones are hidden when empty.
+- `web/src/components/Home.jsx`: renders three sections in order; the new ones are hidden when empty, loading or failing.
 - `web/src/components/WatchProgressBar.jsx`: thin bar over a thumbnail showing position / duration.
-- `smoke-tests/tests/channel.spec.js`: after the existing part-playback, the home view shows the video under "Continue watching".
+- `smoke-tests/tests/playlist.spec.js`: pauses the playlist's video (about 10 minutes long) halfway; the home view shows it under "Continue watching" with a progress bar.
+- `smoke-tests/tests/channel.spec.js`: its part-playback seeks to half the duration instead of 5s, so the resume check holds whatever the channel's newest video lasts.
 
 ## Types & Signatures
 
 ```sql
 -- migrations/0005_last_played_at.sql
 ALTER TABLE videos ADD COLUMN last_played_at TEXT;
-UPDATE videos SET last_played_at = updated_at
+UPDATE videos SET last_played_at = strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now')
  WHERE watched_at IS NULL AND playback_position_seconds > 0;
 ```
 
 ```rust
 // src/domain/video/video.rs
-const IN_PROGRESS_MIN_POSITION_SECONDS: i64 = 30;
 const IN_PROGRESS_WINDOW: Duration = Duration::days(7);
+const IN_PROGRESS_MIN_POSITION_SECONDS: i64 = 30;
 const QUICK_WATCH_MAX_DURATION_SECONDS: i64 = 900;
 
 pub struct Video {
@@ -40,10 +43,22 @@ impl Video {
     // Sets `last_played_at = Some(now)` in every branch, including the ones
     // that leave the watch state untouched.
     pub fn update_watch_state(self, position: PlaybackPosition, reported_duration: Option<VideoDuration>, now: DateTime<Utc>) -> Self;
-    /// Downloaded, unwatched, position > 30s, last played within 7 days of `now`.
+    /// Unwatched, position > 30s, last played within 7 days of `now`.
+    /// Doesn't check the download status: callers pass downloaded videos.
     pub fn is_in_progress(&self, now: DateTime<Utc>) -> bool;
-    /// Downloaded, unwatched, recorded duration < 900s.
+    /// Unwatched, recorded duration < 900s. Doesn't check the download
+    /// status: callers pass downloaded videos.
     pub fn is_quick_watch(&self) -> bool;
+}
+```
+
+```rust
+// src/infrastructure/repositories/sqlite_video_repository.rs
+pub trait VideoRepository: Send + Sync {
+    // ...existing methods
+    /// The stored videos among `ids`, in the order given, skipping ids with
+    /// no stored video. One query however many ids.
+    fn find_many(&self, ids: &[VideoRecordId]) -> anyhow::Result<Vec<Video>>;
 }
 ```
 
@@ -56,6 +71,7 @@ impl VideoSearcher {
         channel_repository: Arc<dyn ChannelRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         video_repository: Arc<dyn VideoRepository>,
+        video_metadata_repository: Arc<dyn VideoMetadataRepository>, // added by video-detail-metadata
         clock: Arc<dyn Clock>,
     ) -> Self;
 }
@@ -69,10 +85,15 @@ pub trait VideoSearcherApi: Send + Sync {
 }
 
 impl VideoSearcher {
-    // Channels are collected before playlists, and the sort is stable, so
-    // dedupe keeps the channel copy when there is one (its card has an avatar).
-    // Watch state is shared by every copy, so any copy is correct.
+    // Downloaded videos across sources that `keep` accepts, deduplicated,
+    // highest `newest` first, truncated to `limit`.
+    fn list_once_across_sources<K: Ord>(&self, keep: impl Fn(&Video) -> bool, newest: impl Fn(&Video) -> K, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
+    // Every downloaded video of every channel, then of every playlist.
     fn downloaded_across_sources(&self) -> Result<Vec<RecentVideo>, ListVideosError>;
+    // Keeps the first copy of each YouTube video. Applied before sorting,
+    // while channels still come before playlists, so the channel copy wins
+    // (its card has an avatar) whatever each copy's own timestamps. Watch
+    // state is shared by every copy, so any copy is correct.
     fn once_per_youtube_video(videos: Vec<RecentVideo>) -> Vec<RecentVideo>;
 }
 ```
@@ -89,6 +110,14 @@ pub async fn list_quick_watch_videos(
     Query(query): Query<ListRecentVideosQuery>,
 ) -> Result<Json<Vec<RecentVideoResponse>>, ApiError>;
 
+// Shared by list_recent_videos and the two handlers above: limit default 20,
+// capped at 100, run_blocking, error mapping, response mapping.
+async fn list_across_sources(
+    video_searcher: VideoSearcher,
+    query: &ListRecentVideosQuery,
+    list: fn(&VideoSearcher, usize) -> Result<Vec<RecentVideo>, ListVideosError>,
+) -> Result<Json<Vec<RecentVideoResponse>>, ApiError>;
+
 // dto.rs
 pub struct RecentVideoResponse {
     // ...existing fields
@@ -102,13 +131,13 @@ pub struct RecentVideoResponse {
 `POST /videos/{id}/progress {position_seconds, duration_seconds?}` → `record_video_progress` → `VideoWatchStateUpdater::update(&youtube_id, position, reported_duration)` → for each copy: `Video::update_watch_state(position, reported_duration, clock.now())` (sets `last_played_at`) → `VideoRepository::update(&video)`
 
 **Continue watching**:
-`GET /videos/continue-watching?limit=N` → `list_continue_watching_videos` → limit = `limit.unwrap_or(20).min(100)` → `VideoSearcher::list_continue_watching(limit)` → `downloaded_across_sources()` (channel and playlist repos → `VideoRepository::find`) → filter `video.is_in_progress(clock.now())` → sort by `last_played_at` desc → `once_per_youtube_video` → truncate(limit) → `RecentVideoResponse::from`
+`GET /videos/continue-watching?limit=N` → `list_continue_watching_videos` → `list_across_sources` (limit = `limit.unwrap_or(20).min(100)`) → `VideoSearcher::list_continue_watching(limit)` → `list_once_across_sources` → `downloaded_across_sources()` (channel then playlist repos → `VideoRepository::find_many` per source) → filter `video.is_in_progress(clock.now())` → `once_per_youtube_video` → sort by `last_played_at` desc → truncate(limit) → `RecentVideoResponse::from`
 
 **Quick watches**:
-`GET /videos/quick-watches?limit=N` → `list_quick_watch_videos` → same limit → `VideoSearcher::list_quick_watches(limit)` → `downloaded_across_sources()` → filter `video.is_quick_watch()` → sort by `created_at` desc → `once_per_youtube_video` → truncate(limit) → `RecentVideoResponse::from`
+`GET /videos/quick-watches?limit=N` → `list_quick_watch_videos` → `list_across_sources` → `VideoSearcher::list_quick_watches(limit)` → `list_once_across_sources` → `downloaded_across_sources()` → filter `video.is_quick_watch()` → `once_per_youtube_video` → sort by `created_at` desc → truncate(limit) → `RecentVideoResponse::from`
 
 **Home view**:
-`Home` → `usePolling(fetchContinueWatchingVideos)`, `usePolling(fetchRecentVideos)`, `usePolling(fetchQuickWatchVideos)` → `HomeSection` per list (a new section renders nothing when its list is empty) → `VideoGrid` (continue-watching cards render `WatchProgressBar` with `position_seconds / duration_seconds`)
+`Home` → `usePolling(fetchContinueWatchingVideos)`, `usePolling(fetchRecentVideos)`, `usePolling(fetchQuickWatchVideos)` → `HomeSection` per list (a new section renders nothing while loading, on error or when its list is empty) → `VideoGrid` (continue-watching cards render `WatchProgressBar` with `position_seconds / duration_seconds`)
 
 ## Test Plan
 
@@ -116,34 +145,37 @@ pub struct RecentVideoResponse {
 
 Record progress:
 1. `it_should_record_the_last_played_time_on_every_copy`: after a progress report, every copy has `last_played_at = clock now`.
-2. `it_should_record_the_last_played_time_even_if_the_watch_state_is_unchanged`: a watched video reported at ≤10% stays watched, and `last_played_at` is set.
-3. `it_should_not_change_the_last_played_time_when_marking_a_channel_watched` (in `channels/mod.rs`): the videos' `last_played_at` is unchanged after marking the channel watched.
+2. `it_should_record_the_last_played_time_even_if_the_watch_state_is_unchanged`: a watched video reported at exactly 10% stays watched, and `last_played_at` is set.
+3. Existing `it_should_mark_the_video_watched_at_90_percent`, `it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch` and `it_should_use_the_reported_duration_if_none_is_recorded` also expect `last_played_at`, so every branch of `update_watch_state` sets it. `it_should_record_progress_on_every_copy_of_the_video` and `it_should_keep_a_watched_video_watched_early_in_a_rewatch` are removed as duplicates of 1 and 2.
+4. `it_should_not_change_the_last_played_time_when_marking_a_channel_watched` (in `channels/mod.rs`): the videos' `last_played_at` is unchanged after marking the channel watched.
 
 Continue watching:
-4. `it_should_list_no_continue_watching_videos_if_none_in_progress`: empty list.
-5. `it_should_list_a_recently_started_video_in_continue_watching`: an unwatched video at 120s, played 2 days ago, is returned with `position_seconds: 120`.
-6. `it_should_order_continue_watching_by_last_played_first`
-7. `it_should_exclude_videos_last_played_over_a_week_ago_from_continue_watching`: excluded at 7 days + 1s, included at exactly 7 days.
-8. `it_should_exclude_barely_started_videos_from_continue_watching`: excluded at 30s, included at 31s.
-9. `it_should_exclude_watched_and_never_played_videos_from_continue_watching`
-10. `it_should_exclude_not_downloaded_videos_from_continue_watching`
-11. `it_should_list_a_continue_watching_video_once_across_sources`: a video tracked by a channel and a playlist is returned once, with the channel source.
-12. `it_should_honor_and_cap_the_continue_watching_limit`
+5. `it_should_list_no_continue_watching_videos_if_none_in_progress`: empty list.
+6. `it_should_list_a_recently_started_video_in_continue_watching`: an unwatched video at 120s, played 2 days ago, is returned with `position_seconds: 120`.
+7. `it_should_order_continue_watching_by_last_played_first`
+8. `it_should_exclude_videos_last_played_over_a_week_ago_from_continue_watching`: excluded at 7 days + 1s, included at exactly 7 days.
+9. `it_should_exclude_barely_started_videos_from_continue_watching`: excluded at 30s, included at 31s.
+10. `it_should_exclude_watched_and_never_played_videos_from_continue_watching`
+11. `it_should_exclude_not_downloaded_videos_from_continue_watching`
+12. `it_should_list_a_continue_watching_video_once_across_sources`: a video tracked by a channel and a playlist is returned once, with the channel source, even when the playlist copy was played later.
+13. `it_should_honor_and_cap_the_continue_watching_limit`
 
 Quick watches:
-13. `it_should_list_no_quick_watches_if_none_short`: empty list.
-14. `it_should_list_short_unwatched_videos_as_quick_watches_newest_first`
-15. `it_should_exclude_videos_of_15_minutes_or_more_from_quick_watches`: excluded at 900s, included at 899s.
-16. `it_should_exclude_videos_without_duration_from_quick_watches`
-17. `it_should_exclude_watched_and_not_downloaded_videos_from_quick_watches`
-18. `it_should_list_a_quick_watch_once_across_sources`
-19. `it_should_honor_and_cap_the_quick_watches_limit`
+14. `it_should_list_no_quick_watches_if_none_short`: empty list.
+15. `it_should_list_short_unwatched_videos_as_quick_watches_newest_first`
+16. `it_should_exclude_videos_of_15_minutes_or_more_from_quick_watches`: excluded at 900s, included at 899s.
+17. `it_should_exclude_videos_without_duration_from_quick_watches`
+18. `it_should_exclude_watched_and_not_downloaded_videos_from_quick_watches`
+19. `it_should_list_a_quick_watch_once_across_sources`: returned once, with the channel source, even when the playlist copy is newer.
+20. `it_should_honor_and_cap_the_quick_watches_limit`
 
 ### 2. Infrastructure
 
 `SqliteVideoRepository`:
-20. `it_should_round_trip_a_video_with_a_last_played_time`
-21. `it_should_round_trip_a_video_never_played`
+21. `it_should_round_trip_a_video_with_a_last_played_time`
+22. `it_should_round_trip_a_video_never_played`
+23. `it_should_find_many_videos_in_the_order_given_skipping_missing_ones`
+24. `it_should_find_many_of_no_ids`
 
 Migrations (`sqlite_migrations.rs`):
-22. `it_should_backfill_the_last_played_time_of_part_watched_videos_when_migrating`: an unwatched video with a position gets `last_played_at = updated_at`. Watched videos and videos with position 0 stay NULL.
+25. `it_should_backfill_the_last_played_time_of_part_watched_videos_when_migrating`: an unwatched video with a position gets `last_played_at` within the migration window. Watched videos and videos with position 0 stay NULL.
