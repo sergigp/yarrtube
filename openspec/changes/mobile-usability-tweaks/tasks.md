@@ -23,7 +23,7 @@ No adapter or repository changes in this change.
 
 ## 5. Verification
 
-- [ ] 5.1 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, and `npm run lint` in `web/` all pass.
+- [x] 5.1 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, and `npm run lint` in `web/` all pass.
 - [ ] 5.2 Manual pass with `scripts/run-local.sh`:
   - on a real iPhone in Safari and from the home screen: home, playlist detail, channel detail, tasks, the sidebar drawer and the Add dialog all behave as in `specs/web-ui/spec.md`
   - on desktop: the layout and sidebar are unchanged apart from the `...` menu
