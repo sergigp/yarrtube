@@ -278,7 +278,8 @@ impl ChannelVideoReconciler {
     /// downloads: heals a `Downloaded` video whose file is missing, or whose
     /// file is present but not mp4, by resetting it and scheduling a fresh
     /// download. Also resets any `Errored` video (one that permanently
-    /// exhausted its download retries) the same way. Also deletes a file
+    /// exhausted its download retries) the same way once it has been errored
+    /// for the recovery cooldown (`Video::is_due_for_recovery`). Also deletes a file
     /// that doesn't belong to any currently-`Downloaded` video (an orphan).
     /// Mirrors `PlaylistVideoReconciler::reconcile_filesystem`.
     fn reconcile_filesystem(&self, channel: &Channel) -> anyhow::Result<()> {
@@ -355,7 +356,7 @@ impl ChannelVideoReconciler {
 
         for video in stored_videos
             .iter()
-            .filter(|v| v.status == VideoStatus::Errored)
+            .filter(|v| v.is_due_for_recovery(self.clock.now()))
         {
             let now = self.clock.now();
             warn!(

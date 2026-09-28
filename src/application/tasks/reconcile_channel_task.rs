@@ -70,7 +70,7 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
-    use chrono::{DateTime, Utc};
+    use chrono::{DateTime, Duration, Utc};
     use rusqlite::Connection;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
@@ -554,8 +554,8 @@ mod tests {
         let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(Vec::new()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let video = my_video()
-            .start_download(fixed_timestamp())
-            .mark_errored(fixed_timestamp());
+            .start_download(a_day_ago())
+            .mark_errored(a_day_ago());
         save_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -594,6 +594,55 @@ mod tests {
                 ),
                 next_reconcile(2),
             ]
+        );
+    }
+
+    #[test]
+    fn it_should_not_retry_videos_errored_within_the_last_day() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(Vec::new()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let errored_at = fixed_timestamp() - Duration::hours(23);
+        let video = my_video()
+            .start_download(errored_at)
+            .mark_errored(errored_at);
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &video,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                updated_at: fixed_timestamp(),
+                ..video
+            }]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![next_reconcile(1)]
         );
     }
 
@@ -1608,6 +1657,10 @@ mod tests {
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn a_day_ago() -> DateTime<Utc> {
+        fixed_timestamp() - Duration::hours(24)
     }
 
     fn handle(value: &str) -> ChannelHandle {
