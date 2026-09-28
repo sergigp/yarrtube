@@ -1556,6 +1556,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_honor_and_cap_the_continue_watching_limit() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_numbered_started_playlist_videos(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            105,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let responses = (
+            continue_watching(
+                video_searcher.clone(),
+                ListRecentVideosQuery { limit: None },
+            )
+            .await,
+            continue_watching(
+                video_searcher.clone(),
+                ListRecentVideosQuery { limit: Some(2) },
+            )
+            .await,
+            continue_watching(video_searcher, ListRecentVideosQuery { limit: Some(1000) }).await,
+        );
+
+        assert_eq!(
+            responses,
+            (
+                Ok(numbered_started_videos(0..20)),
+                Ok(numbered_started_videos(0..2)),
+                Ok(numbered_started_videos(0..100)),
+            )
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -2035,6 +2082,41 @@ mod tests {
                 &downloaded_video(&format!("vid{i}"), &format!("Video {i}"), None, i),
             );
         }
+    }
+
+    /// Saves `count` started videos to playlist `PL1`, video `i` last played `i`
+    /// seconds before `watched_timestamp()` so last played order follows `i`.
+    fn save_numbered_started_playlist_videos(
+        video_repository: &dyn VideoRepository,
+        playlist_video_repository: &dyn PlaylistVideoRepository,
+        count: i64,
+    ) {
+        for i in 0..count {
+            save_playlist_video(
+                video_repository,
+                playlist_video_repository,
+                "PL1",
+                &started_video(
+                    &format!("vid{i}"),
+                    &format!("Video {i}"),
+                    120,
+                    watched_timestamp() - Duration::seconds(i),
+                ),
+            );
+        }
+    }
+
+    fn numbered_started_videos(numbers: impl Iterator<Item = i64>) -> Vec<RecentVideoResponse> {
+        numbers
+            .map(|i| RecentVideoResponse {
+                position_seconds: 120,
+                ..recent_video_response(
+                    &format!("vid{i}"),
+                    &format!("Video {i}"),
+                    playlist_source(),
+                )
+            })
+            .collect()
     }
 
     fn numbered_recent_videos(numbers: impl Iterator<Item = i64>) -> Vec<RecentVideoResponse> {
