@@ -113,6 +113,7 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::Quality;
     use crate::domain::video::Video;
+    use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -125,7 +126,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
+        SqliteVideoMetadataRepository, VideoMetadataRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
@@ -253,6 +256,55 @@ mod tests {
                 filename: Some("My Video.mp4".to_string()),
                 updated_at: synced_at,
                 synced_at: Some(synced_at),
+                ..pending_video_response("vid1", "My Video")
+            }])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_include_the_metadata_when_listing_playlist_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let video_metadata_repository =
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection()));
+        let video_dir = tempfile::tempdir().unwrap();
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+            .start_download(fixed_timestamp())
+            .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video,
+        );
+        video_metadata_repository
+            .save(&video.id, &video_metadata(), video_dir.path())
+            .unwrap();
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            video_metadata_repository,
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![VideoResponse {
+                status: "DOWNLOADED".to_string(),
+                quality: Some("high".to_string()),
+                filename: Some("My Video.mp4".to_string()),
+                synced_at: Some(fixed_timestamp()),
+                published_at: Some(published_timestamp()),
+                description: Some("A description\nwith two lines".to_string()),
+                channel_name: Some("Some Channel".to_string()),
                 ..pending_video_response("vid1", "My Video")
             }])
         );
@@ -1510,6 +1562,26 @@ mod tests {
             duration_seconds,
             fixed_timestamp(),
         )
+    }
+
+    fn video_metadata() -> VideoMetadata {
+        VideoMetadata::new(
+            "My Video",
+            "A description\nwith two lines",
+            "Some Channel",
+            "Some Channel",
+            published_timestamp(),
+            None,
+            Vec::new(),
+            "vid1",
+            None,
+            "20231114 My Video",
+            fixed_timestamp(),
+        )
+    }
+
+    fn published_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_600_000_000, 0).unwrap()
     }
 
     fn progress_request(position_seconds: i64) -> RecordProgressRequest {

@@ -32,6 +32,14 @@ pub struct VideoResponse {
 impl From<VideoView> for VideoResponse {
     fn from(view: VideoView) -> Self {
         let video = view.video;
+        let (published_at, description, channel_name) = match view.metadata {
+            Some(metadata) => (
+                Some(metadata.published_at),
+                Some(metadata.plot),
+                Some(metadata.studio),
+            ),
+            None => (None, None, None),
+        };
         Self {
             watched: video.is_watched(),
             position_seconds: video.playback_position.seconds(),
@@ -45,9 +53,9 @@ impl From<VideoView> for VideoResponse {
             created_at: video.created_at,
             updated_at: video.updated_at,
             synced_at: video.synced_at,
-            published_at: None,
-            description: None,
-            channel_name: None,
+            published_at,
+            description,
+            channel_name,
         }
     }
 }

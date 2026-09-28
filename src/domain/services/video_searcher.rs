@@ -114,10 +114,8 @@ impl VideoSearcherApi for VideoSearcher {
 
 impl VideoSearcher {
     fn view(&self, video: Video) -> anyhow::Result<VideoView> {
-        Ok(VideoView {
-            video,
-            metadata: None,
-        })
+        let metadata = self.video_metadata_repository.find(&video.id)?;
+        Ok(VideoView { video, metadata })
     }
 
     fn recent_from_playlists(&self) -> Result<Vec<RecentVideo>, ListVideosError> {
