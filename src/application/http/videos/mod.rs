@@ -2064,6 +2064,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_show_videos_left_out_of_a_full_section_further_down_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_numbered_started_playlist_videos(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            7,
+        );
+        (0..7).for_each(|i| {
+            save_playlist_video(
+                video_repository.as_ref(),
+                playlist_video_repository.as_ref(),
+                "PL1",
+                &video_lasting(
+                    &format!("short{i}"),
+                    &format!("Short {i}"),
+                    Some(600),
+                    200 + i,
+                ),
+            )
+        });
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                continue_watching: numbered_started_videos(0..6),
+                quick_watches: (1..7).rev().map(short_video_response).collect(),
+                latest: [short_video_response(0)]
+                    .into_iter()
+                    .chain(numbered_started_videos(6..7))
+                    .collect(),
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -2534,6 +2585,17 @@ mod tests {
                 recent_video_response(&format!("vid{i}"), &format!("Video {i}"), playlist_source())
             })
             .collect()
+    }
+
+    fn short_video_response(i: i64) -> RecentVideoResponse {
+        RecentVideoResponse {
+            duration_seconds: Some(600),
+            ..recent_video_response(
+                &format!("short{i}"),
+                &format!("Short {i}"),
+                playlist_source(),
+            )
+        }
     }
 
     fn empty_home() -> HomeResponse {

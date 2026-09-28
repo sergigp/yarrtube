@@ -162,7 +162,8 @@ impl VideoSearcherApi for VideoSearcher {
             |video| video.created_at,
             limits.quick_watches,
         );
-        let latest = Self::not_shown_in(&not_continue_watching, &quick_watches);
+        let mut latest = Self::not_shown_in(&not_continue_watching, &quick_watches);
+        latest.sort_by_key(|recent| std::cmp::Reverse(recent.video.created_at));
         Ok(HomeVideos {
             continue_watching,
             quick_watches,
