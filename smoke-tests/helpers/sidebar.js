@@ -21,9 +21,15 @@ async function rowFor(page, section, name) {
   throw new Error(`sidebar: no "${section}" row matching "${name}", and ${count} candidates present`)
 }
 
+// Row actions live in each row's "Actions for …" menu, rendered in a portal
+// outside the row, so menu items are looked up on the page.
+async function chooseRowAction(page, row, action) {
+  await row.getByRole('button', { name: /^Actions for / }).click()
+  await page.getByRole('menuitem', { name: action, exact: true }).click()
+}
+
 export async function syncItem(page, { section, name }) {
   const row = await rowFor(page, section, name)
-  const button = row.getByRole('button', { name: /^Sync/ })
 
   let alertMessage = null
   const onDialog = async (dialog) => {
@@ -32,8 +38,12 @@ export async function syncItem(page, { section, name }) {
   }
   page.on('dialog', onDialog)
   try {
-    await button.click()
-    await expect(button).toBeEnabled({ timeout: 15_000 })
+    const synced = page.waitForResponse(
+      (response) => response.url().endsWith('/reconcile') && response.request().method() === 'POST',
+      { timeout: 15_000 },
+    )
+    await chooseRowAction(page, row, 'Sync')
+    await synced
   } finally {
     page.off('dialog', onDialog)
   }
@@ -44,7 +54,7 @@ export async function syncItem(page, { section, name }) {
 
 export async function deleteItem(page, { section, name }) {
   const row = await rowFor(page, section, name)
-  await row.getByRole('button', { name: /^Delete/ }).click()
+  await chooseRowAction(page, row, 'Delete')
   const dialog = page.getByRole('dialog')
   await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
   await dialog.waitFor({ state: 'hidden' })
@@ -67,7 +77,7 @@ export async function markItemWatched(page, { section, name }) {
     const marked = page.waitForResponse(
       (response) => response.url().endsWith('/watched') && response.request().method() === 'POST',
     )
-    await row.getByRole('button', { name: /^Mark .* watched$/ }).click()
+    await chooseRowAction(page, row, 'Mark all watched')
     await marked
   } finally {
     page.off('dialog', onDialog)

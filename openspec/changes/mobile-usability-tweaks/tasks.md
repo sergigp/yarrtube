@@ -20,6 +20,7 @@ No adapter or repository changes in this change.
 - [x] 4.5 Sidebar: replace the hover buttons with an always-visible `...` `DropdownMenu` (Sync, Mark all watched for channels only, Delete via the existing `ConfirmDialog`). Make the drawer `w-64`, and lock the page behind it while it's open (`body` overflow). Verify on an iPhone that the menu opens on tap without navigating, the badge sits next to `...`, and the page keeps its scroll position after the drawer is dismissed.
 - [x] 4.6 Home card: split it into a video link (thumbnail and title) and, for channel sources, a channel link (avatar and `source.name`). There are no nested `<a>` elements. Verify that tapping the avatar or name opens the channel and tapping the thumbnail or title opens the video.
 - [ ] 4.7 App icon: replace `favicon.svg` with the Yarrtube mark. Render `apple-touch-icon.png` (180), `icon-192.png` and `icon-512.png` from it. Add `manifest.webmanifest` (`display: standalone`), plus the `theme-color`, `apple-touch-icon` and manifest links in `index.html`. Verify after `npm run build` and `cargo build` that the binary serves `/manifest.webmanifest` with `application/manifest+json`, and that iOS "Add to Home Screen" shows the icon and opens without Safari's bars.
+- [x] 4.8 Smoke-test sidebar helpers (`smoke-tests/helpers/sidebar.js`): `syncItem`, `deleteItem` and `markItemWatched` open the row's `...` menu and choose the action. `syncItem` waits for the reconcile response instead of the old button becoming enabled again. Verify with `scripts/run-smoke-tests.sh`.
 
 ## 5. Verification
 
