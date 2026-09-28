@@ -20,7 +20,7 @@ Each test here moves an existing rule onto `/videos/home`. It pins behaviour tha
 - [x] 2.4 `it_should_include_the_playlist_source_on_home`: playlist name, no avatar
 - [x] 2.5 `it_should_include_whether_a_video_was_watched_on_home`: a watched video under `latest` with `watched: true`
 - [x] 2.6 `it_should_list_a_latest_video_once_per_source_on_home`
-- [ ] 2.7 `it_should_exclude_not_downloaded_videos_from_home`: a pending in-progress video and a pending short video appear nowhere
+- [x] 2.7 `it_should_exclude_not_downloaded_videos_from_home`: a pending in-progress video and a pending short video appear nowhere
 - [ ] 2.8 `it_should_order_continue_watching_by_last_played_first_on_home`
 - [ ] 2.9 `it_should_continue_only_videos_played_within_a_week_on_home`: exactly 7 days under `continue_watching`, 7 days + 1s under `latest`
 - [ ] 2.10 `it_should_continue_only_videos_started_past_30_seconds_on_home`: 31s under `continue_watching`, 30s under `latest`
