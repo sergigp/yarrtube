@@ -1903,6 +1903,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_a_downloaded_video_under_latest_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video_lasting("vid1", "Long", Some(3600), 100),
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: vec![RecentVideoResponse {
+                    duration_seconds: Some(3600),
+                    ..recent_video_response("vid1", "Long", playlist_source())
+                }],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -2375,6 +2413,14 @@ mod tests {
             .collect()
     }
 
+    fn empty_home() -> HomeResponse {
+        HomeResponse {
+            continue_watching: vec![],
+            quick_watches: vec![],
+            latest: vec![],
+        }
+    }
+
     fn pending_video_response(youtube_id: &str, title: &str) -> VideoResponse {
         VideoResponse {
             id: youtube_id.to_string(),
@@ -2597,6 +2643,12 @@ mod tests {
         list_continue_watching_videos(State(video_searcher), Query(query))
             .await
             .map(|Json(videos)| videos)
+    }
+
+    async fn home(video_searcher: VideoSearcher) -> Result<HomeResponse, ApiError> {
+        list_home_videos(State(video_searcher))
+            .await
+            .map(|Json(home)| home)
     }
 
     async fn quick_watches(

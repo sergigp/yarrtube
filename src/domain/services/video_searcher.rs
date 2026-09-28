@@ -147,10 +147,11 @@ impl VideoSearcherApi for VideoSearcher {
     }
 
     fn list_home(&self, _limits: HomeLimits) -> Result<HomeVideos, ListVideosError> {
+        let videos = self.downloaded_across_sources()?;
         Ok(HomeVideos {
             continue_watching: vec![],
             quick_watches: vec![],
-            latest: vec![],
+            latest: videos,
         })
     }
 }
