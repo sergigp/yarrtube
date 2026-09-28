@@ -757,7 +757,7 @@ mod tests {
             Ok(HomeResponse {
                 latest: vec![HomeVideoResponse {
                     duration_seconds: Some(3600),
-                    ..recent_video_response("vid1", "Long", playlist_source())
+                    ..home_video_response("vid1", "Long", playlist_source())
                 }],
                 ..empty_home()
             })
@@ -800,7 +800,7 @@ mod tests {
             Ok(HomeResponse {
                 continue_watching: vec![HomeVideoResponse {
                     position_seconds: 120,
-                    ..recent_video_response("vid1", "Started", playlist_source())
+                    ..home_video_response("vid1", "Started", playlist_source())
                 }],
                 ..empty_home()
             })
@@ -838,7 +838,7 @@ mod tests {
             Ok(HomeResponse {
                 quick_watches: vec![HomeVideoResponse {
                     duration_seconds: Some(600),
-                    ..recent_video_response("vid1", "Short", playlist_source())
+                    ..home_video_response("vid1", "Short", playlist_source())
                 }],
                 ..empty_home()
             })
@@ -880,7 +880,7 @@ mod tests {
                 continue_watching: vec![HomeVideoResponse {
                     duration_seconds: Some(600),
                     position_seconds: 120,
-                    ..recent_video_response("vid1", "Started Short", playlist_source())
+                    ..home_video_response("vid1", "Started Short", playlist_source())
                 }],
                 ..empty_home()
             })
@@ -966,7 +966,7 @@ mod tests {
         assert_eq!(
             response,
             Ok(HomeResponse {
-                latest: numbered_recent_videos((2..20).rev()),
+                latest: numbered_latest_videos((2..20).rev()),
                 ..empty_home()
             })
         );
@@ -1398,21 +1398,15 @@ mod tests {
         numbers
             .map(|i| HomeVideoResponse {
                 position_seconds: 120,
-                ..recent_video_response(
-                    &format!("vid{i}"),
-                    &format!("Video {i}"),
-                    playlist_source(),
-                )
+                ..home_video_response(&format!("vid{i}"), &format!("Video {i}"), playlist_source())
             })
             .collect()
     }
 
-    /// Saves `count` short videos to playlist `PL1`, video `i` created `i`
-    /// seconds after the epoch so recency order is the reverse of `i`.
-    fn numbered_recent_videos(numbers: impl Iterator<Item = i64>) -> Vec<HomeVideoResponse> {
+    fn numbered_latest_videos(numbers: impl Iterator<Item = i64>) -> Vec<HomeVideoResponse> {
         numbers
             .map(|i| {
-                recent_video_response(&format!("vid{i}"), &format!("Video {i}"), playlist_source())
+                home_video_response(&format!("vid{i}"), &format!("Video {i}"), playlist_source())
             })
             .collect()
     }
@@ -1420,7 +1414,7 @@ mod tests {
     fn short_video_response(i: i64) -> HomeVideoResponse {
         HomeVideoResponse {
             duration_seconds: Some(600),
-            ..recent_video_response(
+            ..home_video_response(
                 &format!("short{i}"),
                 &format!("Short {i}"),
                 playlist_source(),
@@ -1456,7 +1450,7 @@ mod tests {
         }
     }
 
-    fn recent_video_response(
+    fn home_video_response(
         youtube_id: &str,
         title: &str,
         source: HomeVideoSourceResponse,
