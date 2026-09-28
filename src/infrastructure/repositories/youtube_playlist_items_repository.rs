@@ -35,7 +35,7 @@ impl PlaylistItem {
     /// True only for `public` and `unlisted`; private, missing and any
     /// other status (e.g. deleted videos) are not watchable.
     fn is_watchable(&self) -> bool {
-        matches!(self.privacy_status(), Some("public"))
+        matches!(self.privacy_status(), Some("public" | "unlisted"))
     }
 
     fn privacy_status(&self) -> Option<&str> {
@@ -378,6 +378,37 @@ mod tests {
                 video_id: "2".to_string(),
                 title: "Two".to_string(),
                 position: 1,
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_keep_unlisted_items() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"items": [
+                    {"snippet": {"title": "Unlisted", "resourceId": {"videoId": "1"}, "position": 3}, "status": {"privacyStatus": "unlisted"}}
+                ]}"#,
+            )
+            .create();
+
+        let repository =
+            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+
+        let videos = repository
+            .list_current_videos(&PlaylistId::new("PL1").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            videos,
+            vec![YoutubePlaylistItem {
+                video_id: "1".to_string(),
+                title: "Unlisted".to_string(),
+                position: 3,
             }]
         );
     }

@@ -14,7 +14,7 @@ _None: reconciler behaviour is unchanged (see design.md Test Plan)._
 - [x] 3.2 `it_should_skip_private_items`: a `private` item is dropped and the `public` item beside it is returned. Add `"status": {"privacyStatus": "public"}` to the existing tests' fixtures so they keep passing
 - [x] 3.3 `it_should_skip_items_without_a_privacy_status`: an item with no `status` (deleted video) is dropped
 - [x] 3.4 `it_should_skip_items_with_an_unrecognised_privacy_status`: an item with `privacyStatus: "privacyStatusUnspecified"` is dropped
-- [ ] 3.5 `it_should_keep_unlisted_items`: an `unlisted` item is returned with its video id, title and position
+- [x] 3.5 `it_should_keep_unlisted_items`: an `unlisted` item is returned with its video id, title and position
 
 ## 4. Verification
 
