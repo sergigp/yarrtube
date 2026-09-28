@@ -25,3 +25,6 @@ smoke-tests/node_modules/
 smoke-tests/test-results/
 smoke-tests/playwright-report/
 smoke-tests/container.log
+
+# Playwright MCP browser tool scratch output
+.playwright-mcp/
