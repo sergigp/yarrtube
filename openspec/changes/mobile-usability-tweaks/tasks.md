@@ -1,6 +1,6 @@
 ## 1. Walking skeleton
 
-- [ ] 1.1 Convert `VideoSource` to struct variants carrying `name` (`PlaylistName` / `String`) and fill them from the loaded `Playlist` / `Channel` in `VideoSearcher`. Add `name: String` to `RecentVideoSourceResponse`, with the DTO mapping hardcoded to `String::new()`, and add `name: String::new()` to the test helpers `playlist_source` / `channel_source`. Done when `cargo build` succeeds and `cargo test --locked` passes, with no new tests.
+- [x] 1.1 Convert `VideoSource` to struct variants carrying `name` (`PlaylistName` / `String`) and fill them from the loaded `Playlist` / `Channel` in `VideoSearcher`. Add `name: String` to `RecentVideoSourceResponse`, with the DTO mapping hardcoded to `String::new()`, and add `name: String::new()` to the test helpers `playlist_source` / `channel_source`. Done when `cargo build` succeeds and `cargo test --locked` passes, with no new tests.
 
 ## 2. Behaviour (TDD)
 

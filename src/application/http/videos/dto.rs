@@ -49,6 +49,7 @@ impl From<Video> for VideoResponse {
 pub struct RecentVideoSourceResponse {
     pub kind: String,
     pub id: String,
+    pub name: String,
     pub path: String,
     pub avatar_filename: Option<String>,
 }
@@ -66,15 +67,22 @@ pub struct RecentVideoResponse {
 impl From<RecentVideo> for RecentVideoResponse {
     fn from(recent_video: RecentVideo) -> Self {
         let source = match recent_video.source {
-            VideoSource::Playlist(id, path) => RecentVideoSourceResponse {
+            VideoSource::Playlist { id, path, .. } => RecentVideoSourceResponse {
                 kind: "playlist".to_string(),
                 id: id.as_str().to_string(),
+                name: String::new(),
                 path: path.as_str().to_string(),
                 avatar_filename: None,
             },
-            VideoSource::Channel(id, path, avatar_filename) => RecentVideoSourceResponse {
+            VideoSource::Channel {
+                handle,
+                path,
+                avatar_filename,
+                ..
+            } => RecentVideoSourceResponse {
                 kind: "channel".to_string(),
-                id: id.as_str().to_string(),
+                id: handle.as_str().to_string(),
+                name: String::new(),
                 path: path.as_str().to_string(),
                 avatar_filename,
             },

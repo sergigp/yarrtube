@@ -1333,6 +1333,7 @@ mod tests {
         RecentVideoSourceResponse {
             kind: "playlist".to_string(),
             id: "PL1".to_string(),
+            name: String::new(),
             path: "music".to_string(),
             avatar_filename: None,
         }
@@ -1342,6 +1343,7 @@ mod tests {
         RecentVideoSourceResponse {
             kind: "channel".to_string(),
             id: "@somechannel".to_string(),
+            name: String::new(),
             path: "creators/somechannel".to_string(),
             avatar_filename: avatar_filename.map(str::to_string),
         }
