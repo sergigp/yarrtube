@@ -1393,6 +1393,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_exclude_barely_started_videos_from_continue_watching() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &started_video("vid_at_30", "At 30s", 30, watched_timestamp()),
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &started_video("vid_at_31", "At 31s", 31, watched_timestamp()),
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response =
+            continue_watching(video_searcher, ListRecentVideosQuery { limit: None }).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![RecentVideoResponse {
+                position_seconds: 31,
+                ..recent_video_response("vid_at_31", "At 31s", playlist_source())
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
