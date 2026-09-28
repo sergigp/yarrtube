@@ -1283,6 +1283,64 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_order_continue_watching_by_last_played_first() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &started_video(
+                "vid_earlier",
+                "Played Earlier",
+                120,
+                watched_timestamp() - Duration::days(3),
+            ),
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &started_video(
+                "vid_latest",
+                "Played Latest",
+                120,
+                watched_timestamp() - Duration::hours(1),
+            ),
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response =
+            continue_watching(video_searcher, ListRecentVideosQuery { limit: None }).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                RecentVideoResponse {
+                    position_seconds: 120,
+                    ..recent_video_response("vid_latest", "Played Latest", playlist_source())
+                },
+                RecentVideoResponse {
+                    position_seconds: 120,
+                    ..recent_video_response("vid_earlier", "Played Earlier", playlist_source())
+                },
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));

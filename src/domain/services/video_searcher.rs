@@ -127,11 +127,14 @@ impl VideoSearcherApi for VideoSearcher {
 
     fn list_continue_watching(&self, _limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
         let now = self.clock.now();
-        Ok(self
+        let mut in_progress: Vec<RecentVideo> = self
             .downloaded_across_sources()?
             .into_iter()
             .filter(|recent| recent.video.is_in_progress(now))
-            .collect())
+            .collect();
+
+        in_progress.sort_by_key(|r| std::cmp::Reverse(r.video.last_played_at));
+        Ok(in_progress)
     }
 
     fn list_quick_watches(&self, _limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
