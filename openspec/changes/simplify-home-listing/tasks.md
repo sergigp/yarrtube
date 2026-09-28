@@ -5,6 +5,7 @@
   - add `HomeVideoView` (`home_video_view.rs`) with `From<SourcedVideo>`; this mapping is real, not a stub, because it reshapes card fields the API already returns and the six existing home tests pin them
   - `HomeVideos` holds `HomeVideoView`s
   - rename the DTOs to `HomeVideoResponse` / `HomeVideoSourceResponse`, mapped from `HomeVideoView`
+  - rename `VideoSearcherApi::list` to `list_for_playlist`, matching `list_for_channel`
   - remove `list_recent`, `list_continue_watching` and `list_quick_watches` from `VideoSearcherApi`, together with their handlers, routes, `ListRecentVideosQuery`, the recent limit constants, `list_across_sources` and their tests
 
   Done when `cargo build` succeeds and the remaining tests pass. No new tests.

@@ -4,8 +4,8 @@
 - `src/domain/video/home_video_view.rs`: new `HomeVideoView`, the flat card read model, built from a picked `SourcedVideo`.
 - `src/domain/video/home_videos.rs`: `HomeVideos` holds `HomeVideoView`s.
 - `src/domain/video/mod.rs`: module and export renames.
-- `src/domain/services/video_searcher.rs`: drops `list_recent`, `list_continue_watching` and `list_quick_watches` (and `list_recent`'s helpers `recent_from_*`, renamed `downloaded_from_*`); `list_home` maps the picked videos to `HomeVideoView`.
-- `src/application/http/videos/mod.rs`: drops `list_recent_videos`, `list_continue_watching_videos`, `list_quick_watch_videos`, `list_across_sources`, `ListRecentVideosQuery` and the recent limit constants. The section rule tests move onto `list_home_videos`.
+- `src/domain/services/video_searcher.rs`: renames `list` to `list_for_playlist` (matching `list_for_channel`); drops `list_recent`, `list_continue_watching` and `list_quick_watches` (and `list_recent`'s helpers `recent_from_*`, renamed `downloaded_from_*`); `list_home` maps the picked videos to `HomeVideoView`.
+- `src/application/http/videos/mod.rs`: `list_videos_for_playlist` calls `list_for_playlist`; drops `list_recent_videos`, `list_continue_watching_videos`, `list_quick_watch_videos`, `list_across_sources`, `ListRecentVideosQuery` and the recent limit constants. The section rule tests move onto `list_home_videos`.
 - `src/application/http/videos/dto.rs`: `RecentVideoResponse` → `HomeVideoResponse`, `RecentVideoSourceResponse` → `HomeVideoSourceResponse`, both mapped from `HomeVideoView`. JSON unchanged.
 - `src/application/http/mod.rs`: drops the `/videos/recent`, `/videos/continue-watching` and `/videos/quick-watches` routes.
 
@@ -44,7 +44,7 @@ pub struct HomeVideos {
 ```rust
 // src/domain/services/video_searcher.rs
 pub trait VideoSearcherApi: Send + Sync {
-    fn list(&self, playlist_id: &PlaylistId) -> Result<Vec<VideoView>, ListVideosError>;
+    fn list_for_playlist(&self, playlist_id: &PlaylistId) -> Result<Vec<VideoView>, ListVideosError>; // renamed from `list`
     fn list_for_channel(&self, channel_id: &ChannelHandle) -> Result<Vec<VideoView>, ListVideosError>;
     fn list_home(&self, limits: HomeLimits) -> Result<HomeVideos, ListVideosError>;
 }
