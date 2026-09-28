@@ -48,3 +48,17 @@ Migrations:
 - [x] 5.1 `api.js`: `fetchContinueWatchingVideos`, `fetchQuickWatchVideos` and `fetchRecentVideos` take a `limit` and pass it as the `limit` query parameter
 - [x] 5.2 `Home.jsx`: sections in the order Continue watching, Quick watches, Latest videos, requesting 6, 6 and 18 videos. Verify with `npm run lint` and `npm run build` in `web/`.
 - [x] 5.3 Extend `smoke-tests/tests/playlist.spec.js`: on the home view the section headings render in the order Continue watching, Quick watches (when present), Latest videos. Verify with `./scripts/run-smoke-tests.sh`.
+
+## 6. Home in one call, no repeated videos
+
+- [ ] 6.1 Walking skeleton: `HomeVideos` (`home_videos.rs`) and `HomeLimits` (`home_limits.rs`); `VideoSearcherApi::list_home` returning empty sections; `HomeResponse` DTO; `list_home_videos` handler with the home limits, routed at `/videos/home`; `fetchHomeVideos` in `api.js` (`Home.jsx` not switched yet). Done when `cargo build` succeeds and all existing tests pass. No new behaviour and no new tests.
+- [ ] 6.2 `it_should_list_a_downloaded_video_under_latest_on_home`: `list_home` collects once and fills `latest`
+- [ ] 6.3 `it_should_list_a_started_video_under_continue_watching_only_on_home`: `continue_watching` filled, its videos left out of `latest`
+- [ ] 6.4 `it_should_list_a_short_video_under_quick_watches_only_on_home`: `quick_watches` filled, its videos left out of `latest`
+- [ ] 6.5 `it_should_not_repeat_a_continue_watching_video_in_quick_watches_on_home`: quick watches skip videos shown under continue watching
+- [ ] 6.6 `it_should_show_videos_left_out_of_a_full_section_further_down_on_home`: limits of 6 applied, exclusion by shown videos only
+- [ ] 6.7 `it_should_cap_latest_on_home_at_18`: latest truncated to its limit
+- [ ] 6.8 Web: `Home.jsx` polls only `fetchHomeVideos`; `api.js` drops the per-section home fetchers. Verify with `npm run lint` and `npm run build` in `web/`.
+- [ ] 6.9 Extend `smoke-tests/tests/playlist.spec.js`: the part-played video is not under "Latest videos" (this exercises `/videos/home`). Verify with `./scripts/run-smoke-tests.sh`.
+- [ ] 6.10 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass
+

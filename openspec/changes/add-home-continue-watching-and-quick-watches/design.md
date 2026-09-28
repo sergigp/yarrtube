@@ -4,17 +4,19 @@
 - `src/infrastructure/shared/sqlite_migrations.rs`: registers migration `0005`.
 - `src/domain/video/video.rs`: `last_played_at` field. `update_watch_state` sets it. New rules `is_in_progress` and `is_quick_watch` and their constants live on the entity.
 - `src/infrastructure/repositories/sqlite_video_repository.rs`: reads and writes the new column (`VIDEO_COLUMNS`, `save`, `update`, row mapping). New port method `find_many`, loading several videos in one query.
-- `src/domain/services/video_searcher.rs`: `list_continue_watching` and `list_quick_watches`, both through one private cross-source listing helper. Takes a `Clock` for the 7-day window. Reuses `recent_from_playlists` / `recent_from_channels` with `list_recent`, which now load each source's videos with `find_many`.
-- `src/application/http/videos/mod.rs`: two handlers, reusing `ListRecentVideosQuery` and the recent limits. All three cross-source list handlers share one private body.
-- `src/application/http/videos/dto.rs`: `RecentVideoResponse` gains `position_seconds`.
-- `src/application/http/mod.rs`: routes `/videos/continue-watching` and `/videos/quick-watches`.
+- `src/domain/video/home_videos.rs`: `HomeVideos`, the three home sections' videos.
+- `src/domain/video/home_limits.rs`: `HomeLimits`, how many videos each home section holds.
+- `src/domain/services/video_searcher.rs`: `list_continue_watching`, `list_quick_watches` and `list_home`, all through one private section-picking helper over a single cross-source collection. Takes a `Clock` for the 7-day window. Reuses `recent_from_playlists` / `recent_from_channels` with `list_recent`, which now load each source's videos with `find_many`.
+- `src/application/http/videos/mod.rs`: three handlers. The two section handlers reuse `ListRecentVideosQuery` and the recent limits, and share one private body with `list_recent_videos`; `list_home_videos` holds the home limits (6, 6, 18).
+- `src/application/http/videos/dto.rs`: `RecentVideoResponse` gains `position_seconds`. New `HomeResponse`.
+- `src/application/http/mod.rs`: routes `/videos/continue-watching`, `/videos/quick-watches` and `/videos/home`.
 - `src/serve.rs`: passes the clock to `VideoSearcher::new`.
 - `src/application/http/channels/mod.rs`: test only (marking a channel watched keeps last played times).
 - `src/application/http/tasks/mod.rs`: test only (a `Video` fixture gains `last_played_at: None`).
-- `web/src/api.js`: `fetchContinueWatchingVideos` and `fetchQuickWatchVideos`; the three home fetchers take a `limit` passed as the `limit` query parameter.
-- `web/src/components/Home.jsx`: renders Continue watching (6), Quick watches (6) and Latest videos (18), in that order; the new ones are hidden when empty, loading or failing.
+- `web/src/api.js`: `fetchHomeVideos`; the per-section home fetchers are removed.
+- `web/src/components/Home.jsx`: renders Continue watching, Quick watches and Latest videos, in that order, from one `fetchHomeVideos` poll; the first two are hidden when empty, loading or failing.
 - `web/src/components/WatchProgressBar.jsx`: thin bar over a thumbnail showing position / duration.
-- `smoke-tests/tests/playlist.spec.js`: pauses the playlist's video (about 10 minutes long) halfway; the home view shows it under "Continue watching" with a progress bar, and the section headings render in order.
+- `smoke-tests/tests/playlist.spec.js`: pauses the playlist's video (about 10 minutes long) halfway; the home view shows it under "Continue watching" with a progress bar and not under "Latest videos", and the section headings render in order.
 - `smoke-tests/tests/channel.spec.js`: its part-playback seeks to half the duration instead of 5s, so the resume check holds whatever the channel's newest video lasts.
 
 ## Types & Signatures
@@ -82,12 +84,16 @@ pub trait VideoSearcherApi: Send + Sync {
     fn list_continue_watching(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
     /// Quick watches across sources, newest sync first, once per YouTube video.
     fn list_quick_watches(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
+    /// The three home sections from one collection: continue watching, then
+    /// quick watches without those shown above, then latest (once per source)
+    /// without those shown in either. Only shown videos are excluded.
+    fn list_home(&self, limits: HomeLimits) -> Result<HomeVideos, ListVideosError>;
 }
 
 impl VideoSearcher {
-    // Downloaded videos across sources that `keep` accepts, deduplicated,
-    // highest `newest` first, truncated to `limit`.
-    fn list_once_across_sources<K: Ord>(&self, keep: impl Fn(&Video) -> bool, newest: impl Fn(&Video) -> K, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
+    // The videos of `videos` that `keep` accepts, deduplicated, highest
+    // `newest` first, truncated to `limit`.
+    fn pick_once<K: Ord>(videos: &[RecentVideo], keep: impl Fn(&Video) -> bool, newest: impl Fn(&Video) -> K, limit: usize) -> Vec<RecentVideo>;
     // Every downloaded video of every channel, then of every playlist.
     fn downloaded_across_sources(&self) -> Result<Vec<RecentVideo>, ListVideosError>;
     // Keeps the first copy of each YouTube video. Applied before sorting,
@@ -95,6 +101,22 @@ impl VideoSearcher {
     // (its card has an avatar) whatever each copy's own timestamps. Watch
     // state is shared by every copy, so any copy is correct.
     fn once_per_youtube_video(videos: Vec<RecentVideo>) -> Vec<RecentVideo>;
+}
+```
+
+```rust
+// src/domain/video/home_videos.rs
+pub struct HomeVideos {
+    pub continue_watching: Vec<RecentVideo>,
+    pub quick_watches: Vec<RecentVideo>,
+    pub latest: Vec<RecentVideo>,
+}
+
+// src/domain/video/home_limits.rs
+pub struct HomeLimits {
+    pub continue_watching: usize,
+    pub quick_watches: usize,
+    pub latest: usize,
 }
 ```
 
@@ -118,10 +140,20 @@ async fn list_across_sources(
     list: fn(&VideoSearcher, usize) -> Result<Vec<RecentVideo>, ListVideosError>,
 ) -> Result<Json<Vec<RecentVideoResponse>>, ApiError>;
 
+pub async fn list_home_videos(
+    State(video_searcher): State<VideoSearcher>,
+) -> Result<Json<HomeResponse>, ApiError>;
+
 // dto.rs
 pub struct RecentVideoResponse {
     // ...existing fields
     pub position_seconds: i64,
+}
+
+pub struct HomeResponse {
+    pub continue_watching: Vec<RecentVideoResponse>,
+    pub quick_watches: Vec<RecentVideoResponse>,
+    pub latest: Vec<RecentVideoResponse>,
 }
 ```
 
@@ -131,13 +163,16 @@ pub struct RecentVideoResponse {
 `POST /videos/{id}/progress {position_seconds, duration_seconds?}` → `record_video_progress` → `VideoWatchStateUpdater::update(&youtube_id, position, reported_duration)` → for each copy: `Video::update_watch_state(position, reported_duration, clock.now())` (sets `last_played_at`) → `VideoRepository::update(&video)`
 
 **Continue watching**:
-`GET /videos/continue-watching?limit=N` → `list_continue_watching_videos` → `list_across_sources` (limit = `limit.unwrap_or(20).min(100)`) → `VideoSearcher::list_continue_watching(limit)` → `list_once_across_sources` → `downloaded_across_sources()` (channel then playlist repos → `VideoRepository::find_many` per source) → filter `video.is_in_progress(clock.now())` → `once_per_youtube_video` → sort by `last_played_at` desc → truncate(limit) → `RecentVideoResponse::from`
+`GET /videos/continue-watching?limit=N` → `list_continue_watching_videos` → `list_across_sources` (limit = `limit.unwrap_or(20).min(100)`) → `VideoSearcher::list_continue_watching(limit)` → `downloaded_across_sources()` (channel then playlist repos → `VideoRepository::find_many` per source) → `pick_once`: filter `video.is_in_progress(clock.now())` → `once_per_youtube_video` → sort by `last_played_at` desc → truncate(limit) → `RecentVideoResponse::from`
 
 **Quick watches**:
-`GET /videos/quick-watches?limit=N` → `list_quick_watch_videos` → `list_across_sources` → `VideoSearcher::list_quick_watches(limit)` → `list_once_across_sources` → `downloaded_across_sources()` → filter `video.is_quick_watch()` → `once_per_youtube_video` → sort by `created_at` desc → truncate(limit) → `RecentVideoResponse::from`
+`GET /videos/quick-watches?limit=N` → `list_quick_watch_videos` → `list_across_sources` → `VideoSearcher::list_quick_watches(limit)` → `downloaded_across_sources()` → `pick_once`: filter `video.is_quick_watch()` → `once_per_youtube_video` → sort by `created_at` desc → truncate(limit) → `RecentVideoResponse::from`
+
+**Home**:
+`GET /videos/home` → `list_home_videos` → `VideoSearcher::list_home(HomeLimits { continue_watching: 6, quick_watches: 6, latest: 18 })` → `downloaded_across_sources()` once → continue watching = `pick_once(is_in_progress(now), last_played_at, 6)` → quick watches = `pick_once(is_quick_watch && not shown above, created_at, 6)` → latest = videos not shown above, sorted by `created_at` desc, truncate(18) → `HomeResponse` (each list via `RecentVideoResponse::from`)
 
 **Home view**:
-`Home` → `usePolling(() => fetchContinueWatchingVideos(6))`, `usePolling(() => fetchQuickWatchVideos(6))`, `usePolling(() => fetchRecentVideos(18))` (→ `GET /videos/…?limit=N`) → `HomeSection` per list, in that order (a new section renders nothing while loading, on error or when its list is empty) → `VideoGrid` (continue-watching cards render `WatchProgressBar` with `position_seconds / duration_seconds`)
+`Home` → `usePolling(fetchHomeVideos)` (→ `GET /videos/home`) → `HomeSection` per list, in that order (a new section renders nothing while loading, on error or when its list is empty) → `VideoGrid` (continue-watching cards render `WatchProgressBar` with `position_seconds / duration_seconds`)
 
 ## Test Plan
 
@@ -169,13 +204,21 @@ Quick watches:
 19. `it_should_list_a_quick_watch_once_across_sources`: returned once, with the channel source, even when the playlist copy is newer.
 20. `it_should_honor_and_cap_the_quick_watches_limit`
 
+Home (composition only; the section rules are covered through the continue watching and quick watches endpoints above):
+21. `it_should_list_a_downloaded_video_under_latest_on_home`: a never-played, long video is only under `latest`.
+22. `it_should_list_a_started_video_under_continue_watching_only_on_home`: not repeated under `latest`.
+23. `it_should_list_a_short_video_under_quick_watches_only_on_home`: not repeated under `latest`.
+24. `it_should_not_repeat_a_continue_watching_video_in_quick_watches_on_home`: a started short video is only under `continue_watching`.
+25. `it_should_show_videos_left_out_of_a_full_section_further_down_on_home`: 7 started and 7 short videos: 6 of each shown in their sections, the 7th started one and the 7th short one under `latest`.
+26. `it_should_cap_latest_on_home_at_18`: 20 plain videos, the newest 18 under `latest`.
+
 ### 2. Infrastructure
 
 `SqliteVideoRepository`:
-21. `it_should_round_trip_a_video_with_a_last_played_time`
-22. `it_should_round_trip_a_video_never_played`
-23. `it_should_find_many_videos_in_the_order_given_skipping_missing_ones`
-24. `it_should_find_many_of_no_ids`
+27. `it_should_round_trip_a_video_with_a_last_played_time`
+28. `it_should_round_trip_a_video_never_played`
+29. `it_should_find_many_videos_in_the_order_given_skipping_missing_ones`
+30. `it_should_find_many_of_no_ids`
 
 Migrations (`sqlite_migrations.rs`):
-25. `it_should_backfill_the_last_played_time_of_part_watched_videos_when_migrating`: an unwatched video with a position gets `last_played_at` within the migration window. Watched videos and videos with position 0 stay NULL.
+31. `it_should_backfill_the_last_played_time_of_part_watched_videos_when_migrating`: an unwatched video with a position gets `last_played_at` within the migration window. Watched videos and videos with position 0 stay NULL.

@@ -9,6 +9,7 @@ The home view only shows "Latest videos", so a video you started yesterday or a 
 - New endpoint listing **quick watches**: downloaded, unwatched videos shorter than 15 minutes, newest sync first, one entry per YouTube video.
 - Both endpoints take the same optional `limit` as the recent videos endpoint (default 20, capped at 100) and return the same card shape, with the saved playback position added.
 - The home view shows three sections, in this order: "Continue watching" (cards show a progress bar, up to 6 videos), "Quick watches" (up to 6 videos), "Latest videos" (up to 18 videos, down from 20). The two short shelves come first so they can be glanced at; the longer browsing list comes last. The two new sections are hidden when empty.
+- New endpoint listing the **home** sections in one response, so a video shows in at most one section: continue watching first, then quick watches without the videos shown above, then latest videos without the videos shown in either. The home view makes this one call instead of three.
 
 ## Capabilities
 
@@ -19,7 +20,7 @@ _None._
 ### Modified Capabilities
 
 - `watch-state`: recording playback progress also records the last played time for every stored copy.
-- `video-listing`: adds the continue watching and quick watches listings across sources.
+- `video-listing`: adds the continue watching, quick watches and home listings across sources.
 - `web-ui`: the home page layout gains the "Continue watching" and "Quick watches" sections.
 
 ## Impact
@@ -27,6 +28,6 @@ _None._
 - **Database**: migration `0005` adds `videos.last_played_at` (nullable) and sets it to the migration time for part-watched, unwatched videos.
 - **Domain**: `Video` gains `last_played_at` and the continue-watching / quick-watch rules. `VideoSearcher` gains two listings and a clock dependency (for the 7-day window).
 - **Infrastructure**: `VideoRepository` gains `find_many`, so listing across sources loads each source's videos in one query instead of one per video (this also speeds up the recent videos listing).
-- **HTTP API**: new `GET /videos/continue-watching` and `GET /videos/quick-watches`. The recent videos card response gains `position_seconds` (additive).
-- **Web**: `Home.jsx` renders three sections, plus a progress bar on continue-watching cards, each asking its endpoint for a fixed number of videos through the existing `limit` parameter. `api.js` gains two fetchers, and the three home fetchers take a limit. No backend change.
-- **Smoke tests**: the playlist spec part-plays its video and checks it appears under "Continue watching" on the home view, with a progress bar, and that the sections render in order.
+- **HTTP API**: new `GET /videos/continue-watching`, `GET /videos/quick-watches` and `GET /videos/home`. The recent videos card response gains `position_seconds` (additive).
+- **Web**: `Home.jsx` renders three sections from one `GET /videos/home` call, plus a progress bar on continue-watching cards. `api.js` gains `fetchHomeVideos`.
+- **Smoke tests**: the playlist spec part-plays its video and checks it appears under "Continue watching" on the home view, with a progress bar, that the sections render in order, and that the part-played video is not repeated under "Latest videos".

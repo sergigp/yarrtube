@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Home Page Layout
-The home view SHALL display up to three sections, in this order: "Continue watching", "Quick watches" and "Latest videos". "Latest videos" SHALL display up to 18 recently synced videos. "Continue watching" SHALL display up to 6 videos the user has started and not finished recently, and SHALL show on each card how far the video has been watched. "Quick watches" SHALL display up to 6 short unwatched videos. "Continue watching" and "Quick watches" SHALL be hidden when they have no videos, including while their videos are loading or when they cannot be loaded. Each section SHALL display its videos as a grid of cards, each showing the video's thumbnail with its title below it. For videos from a tracked channel, the card SHALL also show the channel's avatar and name.
+The home view SHALL display up to three sections, in this order: "Continue watching", "Quick watches" and "Latest videos", loaded together in one request. A video SHALL appear in at most one section. "Latest videos" SHALL display up to 18 recently synced videos. "Continue watching" SHALL display up to 6 videos the user has started and not finished recently, and SHALL show on each card how far the video has been watched. "Quick watches" SHALL display up to 6 short unwatched videos. "Continue watching" and "Quick watches" SHALL be hidden when they have no videos, including while their videos are loading or when they cannot be loaded. Each section SHALL display its videos as a grid of cards, each showing the video's thumbnail with its title below it. For videos from a tracked channel, the card SHALL also show the channel's avatar and name.
 
 #### Scenario: Home view with recent videos
 - **WHEN** one or more videos have been synced
@@ -31,10 +31,14 @@ The home view SHALL display up to three sections, in this order: "Continue watch
 - **WHEN** more videos qualify for a section than it shows
 - **THEN** "Continue watching" and "Quick watches" each show at most 6 videos, and "Latest videos" shows at most 18
 
+#### Scenario: A video appears in one section only
+- **WHEN** a video qualifies for more than one home section
+- **THEN** it is shown only in the first of them, in section order
+
 #### Scenario: Empty sections are hidden
 - **WHEN** no video qualifies for "Continue watching" or "Quick watches"
 - **THEN** that section, including its heading, is not shown
 
 #### Scenario: Optional sections that fail to load are hidden
 - **WHEN** the videos for "Continue watching" or "Quick watches" are still loading or cannot be loaded
-- **THEN** that section, including its heading, is not shown, and the other sections still render
+- **THEN** that section, including its heading, is not shown, and "Latest videos" still renders (showing the load error when there is one)

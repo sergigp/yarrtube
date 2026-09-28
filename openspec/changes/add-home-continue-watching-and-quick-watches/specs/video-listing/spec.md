@@ -89,3 +89,27 @@ The system SHALL provide an HTTP endpoint that returns, across every tracked pla
 #### Scenario: Requested limit is capped
 - **WHEN** a client requests quick watch videos with a limit greater than 100
 - **THEN** the daemon returns at most 100 videos
+
+### Requirement: List Home Videos Across Sources
+The system SHALL provide an HTTP endpoint that returns, in one response, the videos of the three home sections, so that a YouTube video appears in at most one section. "Continue watching" SHALL hold up to 6 videos chosen and ordered as in the continue watching listing. "Quick watches" SHALL hold up to 6 videos chosen and ordered as in the quick watches listing, excluding the videos shown under "Continue watching". "Latest videos" SHALL hold up to 18 downloaded videos ordered by sync time, newest first, once per source, excluding the videos shown under "Continue watching" or "Quick watches". Only the videos a section shows SHALL be excluded from the sections after it. Each returned video SHALL include the same fields as a continue watching video.
+
+#### Scenario: Each video in its own section
+- **WHEN** one downloaded video is in progress, another is a quick watch and a third is neither
+- **THEN** the daemon responds with HTTP status 200, and each video appears only in its own section
+
+#### Scenario: A started short video counts as continue watching
+- **WHEN** a video qualifies for both "Continue watching" and "Quick watches"
+- **THEN** it appears under "Continue watching" only
+
+#### Scenario: A video shown above is not repeated in latest videos
+- **WHEN** a video appears under "Continue watching" or "Quick watches"
+- **THEN** it does not appear under "Latest videos"
+
+#### Scenario: Sections are bounded
+- **WHEN** more videos qualify for a section than it holds
+- **THEN** "Continue watching" and "Quick watches" hold at most 6 videos each, and "Latest videos" at most 18
+
+#### Scenario: A video left out of a full section can appear further down
+- **WHEN** a video qualifies for a section that is already full
+- **THEN** it can appear in a later section it qualifies for
+
