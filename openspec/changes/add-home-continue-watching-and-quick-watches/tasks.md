@@ -45,6 +45,6 @@ Migrations:
 
 ## 5. Home page refinement: order and section sizes
 
-- [ ] 5.1 `api.js`: `fetchContinueWatchingVideos`, `fetchQuickWatchVideos` and `fetchRecentVideos` take a `limit` and pass it as the `limit` query parameter
-- [ ] 5.2 `Home.jsx`: sections in the order Continue watching, Quick watches, Latest videos, requesting 6, 6 and 18 videos. Verify with `npm run lint` and `npm run build` in `web/`.
+- [x] 5.1 `api.js`: `fetchContinueWatchingVideos`, `fetchQuickWatchVideos` and `fetchRecentVideos` take a `limit` and pass it as the `limit` query parameter
+- [x] 5.2 `Home.jsx`: sections in the order Continue watching, Quick watches, Latest videos, requesting 6, 6 and 18 videos. Verify with `npm run lint` and `npm run build` in `web/`.
 - [ ] 5.3 Extend `smoke-tests/tests/playlist.spec.js`: on the home view the section headings render in the order Continue watching, Quick watches (when present), Latest videos. Verify with `./scripts/run-smoke-tests.sh`.

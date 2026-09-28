@@ -14,16 +14,16 @@ export function fetchVideos(playlistId) {
   return request(`/playlists/${encodeURIComponent(playlistId)}/videos`)
 }
 
-export function fetchRecentVideos() {
-  return request('/videos/recent')
+export function fetchRecentVideos(limit) {
+  return request(`/videos/recent?limit=${limit}`)
 }
 
-export function fetchContinueWatchingVideos() {
-  return request('/videos/continue-watching')
+export function fetchContinueWatchingVideos(limit) {
+  return request(`/videos/continue-watching?limit=${limit}`)
 }
 
-export function fetchQuickWatchVideos() {
-  return request('/videos/quick-watches')
+export function fetchQuickWatchVideos(limit) {
+  return request(`/videos/quick-watches?limit=${limit}`)
 }
 
 export function fetchTasks() {

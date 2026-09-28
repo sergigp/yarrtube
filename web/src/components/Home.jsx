@@ -118,13 +118,23 @@ function HomeSection({ title, name, videos, error, hideWhenEmpty, showProgress }
   )
 }
 
+const CONTINUE_WATCHING_LIMIT = 6
+const QUICK_WATCHES_LIMIT = 6
+const LATEST_VIDEOS_LIMIT = 18
+
 export function Home() {
   const { data: continueWatching, error: continueWatchingError } = usePolling(
-    fetchContinueWatchingVideos,
+    () => fetchContinueWatchingVideos(CONTINUE_WATCHING_LIMIT),
     [],
   )
-  const { data: videos, error: videosError } = usePolling(fetchRecentVideos, [])
-  const { data: quickWatches, error: quickWatchesError } = usePolling(fetchQuickWatchVideos, [])
+  const { data: quickWatches, error: quickWatchesError } = usePolling(
+    () => fetchQuickWatchVideos(QUICK_WATCHES_LIMIT),
+    [],
+  )
+  const { data: videos, error: videosError } = usePolling(
+    () => fetchRecentVideos(LATEST_VIDEOS_LIMIT),
+    [],
+  )
 
   return (
     <div className="flex min-w-0 flex-col gap-10">
@@ -137,17 +147,17 @@ export function Home() {
         showProgress
       />
       <HomeSection
-        title="Latest videos"
-        name="recent videos"
-        videos={videos}
-        error={videosError}
-      />
-      <HomeSection
         title="Quick watches"
         name="quick watches"
         videos={quickWatches}
         error={quickWatchesError}
         hideWhenEmpty
+      />
+      <HomeSection
+        title="Latest videos"
+        name="recent videos"
+        videos={videos}
+        error={videosError}
       />
     </div>
   )
