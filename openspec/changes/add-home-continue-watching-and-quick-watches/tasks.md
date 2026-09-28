@@ -38,5 +38,5 @@ Migrations:
 
 - [x] 4.1 Web UI: `WatchProgressBar` renders position / duration on continue-watching cards and new sections are hidden when empty. Verify with `npm run lint` and `npm run build` in `web/`.
 - [ ] 4.2 Extend `smoke-tests/tests/channel.spec.js`: after the existing part-playback, navigate home and assert the video appears under "Continue watching" (this exercises `/videos/continue-watching`). Verify with `./scripts/run-smoke-tests.sh`.
-- [ ] 4.3 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass
+- [x] 4.3 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass
 - [ ] 4.4 Manual check with `scripts/run-local.sh` against a copy of the prod DB: the backfilled part-watched video ("How to set up Herdr…") shows under "Continue watching" with a progress bar, "Quick watches" lists videos under 15 min, and "Latest videos" is unchanged
