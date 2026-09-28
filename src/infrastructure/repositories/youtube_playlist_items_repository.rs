@@ -85,7 +85,7 @@ impl YoutubeApiPlaylistItemsRepository {
     ) -> anyhow::Result<(Vec<YoutubePlaylistItem>, Option<String>)> {
         let client = reqwest::blocking::Client::new();
         let mut query = vec![
-            ("part", "snippet"),
+            ("part", "snippet,status"),
             ("maxResults", "50"),
             ("playlistId", playlist_id),
             ("key", self.api_key.as_str()),
@@ -243,6 +243,40 @@ mod tests {
                     position: 2,
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn it_should_request_snippet_and_status_parts() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/")
+            .match_query(mockito::Matcher::UrlEncoded(
+                "part".into(),
+                "snippet,status".into(),
+            ))
+            .with_status(200)
+            .with_body(
+                r#"{"items": [
+                    {"snippet": {"title": "One", "resourceId": {"videoId": "1"}, "position": 0}, "status": {"privacyStatus": "public"}}
+                ]}"#,
+            )
+            .create();
+
+        let repository =
+            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+
+        let videos = repository
+            .list_current_videos(&PlaylistId::new("PL1").unwrap())
+            .map_err(|e| e.to_string());
+
+        assert_eq!(
+            videos,
+            Ok(vec![YoutubePlaylistItem {
+                video_id: "1".to_string(),
+                title: "One".to_string(),
+                position: 0,
+            }])
         );
     }
 
