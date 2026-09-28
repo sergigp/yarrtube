@@ -142,7 +142,14 @@ impl VideoSearcherApi for VideoSearcher {
     }
 
     fn list_quick_watches(&self, _limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
-        Ok(vec![])
+        let mut quick_watches: Vec<RecentVideo> = self
+            .downloaded_across_sources()?
+            .into_iter()
+            .filter(|recent| recent.video.is_quick_watch())
+            .collect();
+
+        quick_watches.sort_by_key(|r| std::cmp::Reverse(r.video.created_at));
+        Ok(quick_watches)
     }
 }
 

@@ -18,6 +18,9 @@ const IN_PROGRESS_WINDOW: Duration = Duration::days(7);
 /// started rather than just opened.
 const IN_PROGRESS_MIN_POSITION_SECONDS: i64 = 30;
 
+/// A video shorter than this (15 minutes) counts as a quick watch.
+const QUICK_WATCH_MAX_DURATION_SECONDS: i64 = 900;
+
 /// A downloaded (or to-be-downloaded) video's own record: its download
 /// state, independent of any container. Container membership — which
 /// playlist(s) or channel(s) this video belongs to, and its position within
@@ -202,7 +205,8 @@ impl Video {
 
     /// Downloaded, unwatched and recorded as shorter than 15 minutes.
     pub fn is_quick_watch(&self) -> bool {
-        false
+        self.duration_seconds
+            .is_some_and(|duration| duration < QUICK_WATCH_MAX_DURATION_SECONDS)
     }
 
     /// Whether reconcile should reset this video for another download: it

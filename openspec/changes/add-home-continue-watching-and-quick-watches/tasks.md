@@ -18,7 +18,7 @@
 - [x] 2.11 `it_should_list_a_continue_watching_video_once_across_sources`: `once_per_youtube_video` keeps the channel copy
 - [x] 2.12 `it_should_honor_and_cap_the_continue_watching_limit`: default 20, explicit N, capped at 100
 - [x] 2.13 `it_should_list_no_quick_watches_if_none_short`: empty listing when no short videos
-- [ ] 2.14 `it_should_list_short_unwatched_videos_as_quick_watches_newest_first`: `list_quick_watches` filters on `is_quick_watch`, sorted by `created_at` desc
+- [x] 2.14 `it_should_list_short_unwatched_videos_as_quick_watches_newest_first`: `list_quick_watches` filters on `is_quick_watch`, sorted by `created_at` desc
 - [ ] 2.15 `it_should_exclude_videos_of_15_minutes_or_more_from_quick_watches`: duration < 900s (boundary: 899 in, 900 out)
 - [ ] 2.16 `it_should_exclude_videos_without_duration_from_quick_watches`: unknown duration is not quick
 - [ ] 2.17 `it_should_exclude_watched_and_not_downloaded_videos_from_quick_watches`: unwatched and `Downloaded` only
