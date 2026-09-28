@@ -10,6 +10,7 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 /// Reads videos, listed by playlist or by channel.
@@ -134,7 +135,7 @@ impl VideoSearcherApi for VideoSearcher {
             .collect();
 
         in_progress.sort_by_key(|r| std::cmp::Reverse(r.video.last_played_at));
-        Ok(in_progress)
+        Ok(Self::once_per_youtube_video(in_progress))
     }
 
     fn list_quick_watches(&self, _limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
@@ -154,6 +155,18 @@ impl VideoSearcher {
         let mut videos = self.recent_from_channels()?;
         videos.extend(self.recent_from_playlists()?);
         Ok(videos)
+    }
+
+    /// Keeps the first copy of each YouTube video. Channels are collected
+    /// before playlists and sorts are stable, so that is the channel copy when
+    /// there is one (its card has an avatar). Watch state is shared by every
+    /// copy, so any copy is correct.
+    fn once_per_youtube_video(videos: Vec<RecentVideo>) -> Vec<RecentVideo> {
+        let mut seen = HashSet::new();
+        videos
+            .into_iter()
+            .filter(|recent| seen.insert(recent.video.youtube_id.clone()))
+            .collect()
     }
 
     fn recent_from_playlists(&self) -> Result<Vec<RecentVideo>, ListVideosError> {

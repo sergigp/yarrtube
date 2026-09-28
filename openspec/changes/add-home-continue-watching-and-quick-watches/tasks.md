@@ -15,7 +15,7 @@
 - [x] 2.8 `it_should_exclude_barely_started_videos_from_continue_watching`: position must be > 30s
 - [x] 2.9 `it_should_exclude_watched_and_never_played_videos_from_continue_watching`: unwatched and `last_played_at` present
 - [x] 2.10 `it_should_exclude_not_downloaded_videos_from_continue_watching`: only `Downloaded` videos
-- [ ] 2.11 `it_should_list_a_continue_watching_video_once_across_sources`: `once_per_youtube_video` keeps the channel copy
+- [x] 2.11 `it_should_list_a_continue_watching_video_once_across_sources`: `once_per_youtube_video` keeps the channel copy
 - [ ] 2.12 `it_should_honor_and_cap_the_continue_watching_limit`: default 20, explicit N, capped at 100
 - [ ] 2.13 `it_should_list_no_quick_watches_if_none_short`: empty listing when no short videos
 - [ ] 2.14 `it_should_list_short_unwatched_videos_as_quick_watches_newest_first`: `list_quick_watches` filters on `is_quick_watch`, sorted by `created_at` desc
