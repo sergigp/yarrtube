@@ -25,7 +25,7 @@
   - The description is clamped to 4 lines with a "Show more" that appears only on overflow. Keep line breaks and link URLs with `target="_blank" rel="noopener"`.
   - Verify with `npm run build` and `npm run lint` in `web/`.
 - [x] 4.2 Update `waitForVideoStatus` in `smoke-tests/helpers/video.js`: for `DOWNLOADED`, wait for the meta line's "Synced" text instead of a "Downloaded" badge. Verify with `scripts/run-smoke-tests.sh`, where all specs pass.
-- [ ] 4.3 Run `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings`. All must pass.
+- [x] 4.3 Run `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings`. All must pass.
 - [ ] 4.4 Manual check with `scripts/run-local.sh`, at desktop width and at a mobile width of about 375px:
   - A playlist view shows the channel name; a channel view doesn't.
   - The collapsed mobile pane still shows the meta line.
