@@ -141,7 +141,9 @@ function SidebarSection({
 
   return (
     <div>
-      <h3 className="mb-1 px-2 text-sm font-medium text-muted-foreground">{title}</h3>
+      <h3 className="mb-2 px-2 font-heading text-base font-semibold tracking-tight text-foreground">
+        {title}
+      </h3>
       {error && <p className="px-2 text-sm text-destructive">Failed to load: {error.message}</p>}
       {!error && !items && <p className="px-2 text-sm text-muted-foreground">Loading…</p>}
       {!error && items && items.length === 0 && (
