@@ -69,7 +69,7 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
-    use chrono::{DateTime, Utc};
+    use chrono::{DateTime, Duration, Utc};
     use rusqlite::Connection;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
@@ -658,8 +658,8 @@ mod tests {
         let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(Vec::new()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = my_video()
-            .start_download(fixed_timestamp())
-            .mark_errored(fixed_timestamp());
+            .start_download(a_day_ago())
+            .mark_errored(a_day_ago());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -714,8 +714,8 @@ mod tests {
         let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(Vec::new()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = my_video()
-            .start_download(fixed_timestamp())
-            .mark_errored(fixed_timestamp());
+            .start_download(a_day_ago())
+            .mark_errored(a_day_ago());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -738,8 +738,8 @@ mod tests {
                 &video
                     .clone()
                     .reset_for_redownload(fixed_timestamp())
-                    .start_download(fixed_timestamp())
-                    .mark_errored(fixed_timestamp()),
+                    .start_download(a_day_ago())
+                    .mark_errored(a_day_ago()),
             )
             .unwrap();
         let result = run(&task, &payload_for("PL1"));
@@ -748,6 +748,55 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![video.reset_for_redownload(fixed_timestamp())]
+        );
+    }
+
+    #[test]
+    fn it_should_not_retry_videos_errored_within_the_last_day() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(Vec::new()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let errored_at = fixed_timestamp() - Duration::hours(23);
+        let video = my_video()
+            .start_download(errored_at)
+            .mark_errored(errored_at);
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &video,
+            0,
+        );
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            vec![member_playlist_item()],
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                updated_at: fixed_timestamp(),
+                ..video
+            }]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![next_reconcile(1)]
         );
     }
 
@@ -1784,6 +1833,10 @@ mod tests {
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn a_day_ago() -> DateTime<Utc> {
+        fixed_timestamp() - Duration::hours(24)
     }
 
     fn payload_for(playlist_id: &str) -> String {

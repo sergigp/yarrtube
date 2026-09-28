@@ -291,9 +291,9 @@ impl PlaylistVideoReconciler {
     /// before yt-dlp was made to always remux to mp4 — see
     /// `args_for_quality`), by resetting it and scheduling a fresh download.
     /// Also resets any `Errored` video (one that permanently exhausted its
-    /// download retries) the same way, with no limit on how many times a
-    /// given video may be recovered this way — see design.md's "Reconcile
-    /// also recovers Errored videos" decision. Also deletes a file that
+    /// download retries) the same way once it has been errored for the
+    /// recovery cooldown (`Video::is_due_for_recovery`), with no limit on
+    /// how many times a given video may be recovered this way. Also deletes a file that
     /// doesn't belong to any currently-`Downloaded` video (an orphan) — this
     /// is what clears out a stale non-mp4 file once its video has been
     /// redownloaded under a fresh filename.
@@ -377,7 +377,7 @@ impl PlaylistVideoReconciler {
 
         for video in stored_videos
             .iter()
-            .filter(|v| v.status == VideoStatus::Errored)
+            .filter(|v| v.is_due_for_recovery(self.clock.now()))
         {
             let now = self.clock.now();
             warn!(
