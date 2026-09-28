@@ -1341,7 +1341,13 @@ mod tests {
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                last_played_at: Some(watched_timestamp()),
+                ..video
+            }]
+        );
     }
 
     #[tokio::test]
@@ -1388,7 +1394,13 @@ mod tests {
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                last_played_at: Some(watched_timestamp()),
+                ..video
+            }]
+        );
     }
 
     #[tokio::test]
@@ -1500,6 +1512,32 @@ mod tests {
                     ..playlist_copy
                 },
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_record_the_last_played_time_even_if_the_watch_state_is_unchanged() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(5);
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                last_played_at: Some(watched_timestamp()),
+                ..video
+            }]
         );
     }
 
