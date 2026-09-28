@@ -5,7 +5,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `it_should_include_channel_name_in_recent_videos`: the recent-videos response's channel source carries the channel's name. Verified by that test plus a green `cargo test --locked`.
-- [ ] 2.2 `it_should_include_playlist_name_in_recent_videos`: the recent-videos response's playlist source carries the playlist's name. Verified by that test plus a green `cargo test --locked`.
+- [x] 2.2 `it_should_include_playlist_name_in_recent_videos`: the recent-videos response's playlist source carries the playlist's name. Verified by that test plus a green `cargo test --locked`.
 
 ## 3. Infrastructure adapters (TDD)
 

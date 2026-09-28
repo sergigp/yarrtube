@@ -67,10 +67,10 @@ pub struct RecentVideoResponse {
 impl From<RecentVideo> for RecentVideoResponse {
     fn from(recent_video: RecentVideo) -> Self {
         let source = match recent_video.source {
-            VideoSource::Playlist { id, path, .. } => RecentVideoSourceResponse {
+            VideoSource::Playlist { id, name, path } => RecentVideoSourceResponse {
                 kind: "playlist".to_string(),
                 id: id.as_str().to_string(),
-                name: String::new(),
+                name: name.as_str().to_string(),
                 path: path.as_str().to_string(),
                 avatar_filename: None,
             },
