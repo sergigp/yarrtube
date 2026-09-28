@@ -15,7 +15,7 @@
 Each test here moves an existing rule onto `/videos/home`. It pins behaviour that already exists, so it is expected to pass on its first run; there is no red step.
 
 - [x] 2.1 `it_should_list_no_home_videos_if_nothing_downloaded`: three empty sections
-- [ ] 2.2 `it_should_list_videos_from_playlists_and_channels_on_home`: both sources under `latest`, each with its own source
+- [x] 2.2 `it_should_list_videos_from_playlists_and_channels_on_home`: both sources under `latest`, each with its own source
 - [ ] 2.3 `it_should_include_the_channel_source_on_home`: channel name and avatar filename
 - [ ] 2.4 `it_should_include_the_playlist_source_on_home`: playlist name, no avatar
 - [ ] 2.5 `it_should_include_whether_a_video_was_watched_on_home`: a watched video under `latest` with `watched: true`
