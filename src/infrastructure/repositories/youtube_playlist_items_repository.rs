@@ -28,6 +28,15 @@ struct PlaylistItemsResponse {
 #[derive(Debug, Deserialize)]
 struct PlaylistItem {
     snippet: PlaylistItemSnippet,
+    status: Option<PlaylistItemStatus>,
+}
+
+impl PlaylistItem {
+    /// True only for `public` and `unlisted`; private, missing and any
+    /// other status (e.g. deleted videos) are not watchable.
+    fn is_watchable(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +46,12 @@ struct PlaylistItemSnippet {
     resource_id: ResourceId,
     #[serde(rename = "position")]
     position: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlaylistItemStatus {
+    #[serde(rename = "privacyStatus")]
+    privacy_status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -116,6 +131,7 @@ impl YoutubeApiPlaylistItemsRepository {
         let videos = parsed
             .items
             .into_iter()
+            .filter(PlaylistItem::is_watchable)
             .map(|item| YoutubePlaylistItem {
                 video_id: item.snippet.resource_id.video_id,
                 title: item.snippet.title,
