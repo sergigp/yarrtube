@@ -496,6 +496,20 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_a_video_never_played() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let video = Video {
+            last_played_at: None,
+            ..video("First", now)
+        };
+
+        repo.save(&video).unwrap();
+
+        assert_eq!(repo.find(&video.id).unwrap(), Some(video));
+    }
+
+    #[test]
     fn it_should_find_every_copy_of_a_youtube_video() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
