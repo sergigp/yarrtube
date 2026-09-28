@@ -1,6 +1,6 @@
 ## 1. Walking skeleton
 
-- [ ] 1.1 Reshape the types and remove the three listings, per design.md (## Files, ## Types & Signatures):
+- [x] 1.1 Reshape the types and remove the three listings, per design.md (## Files, ## Types & Signatures):
   - rename `RecentVideo` to `SourcedVideo` (`sourced_video.rs`) and `recent_from_*` to `downloaded_from_*`
   - add `HomeVideoView` (`home_video_view.rs`) with `From<SourcedVideo>`; this mapping is real, not a stub, because it reshapes card fields the API already returns and the six existing home tests pin them
   - `HomeVideos` holds `HomeVideoView`s

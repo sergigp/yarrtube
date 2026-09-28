@@ -1,8 +1,8 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::video::{
-    HomeLimits, HomeVideos, ListVideosError, RecentVideo, Video, VideoId, VideoSource, VideoStatus,
-    VideoView,
+    HomeLimits, HomeVideoView, HomeVideos, ListVideosError, SourcedVideo, Video, VideoId,
+    VideoSource, VideoStatus, VideoView,
 };
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -53,7 +53,10 @@ pub trait VideoSearcherApi: Send + Sync {
     /// Lists every video recorded for a playlist, confirming the playlist
     /// exists first, ordered by playlist position, each with its generated
     /// metadata when it has any.
-    fn list(&self, playlist_id: &PlaylistId) -> Result<Vec<VideoView>, ListVideosError>;
+    fn list_for_playlist(
+        &self,
+        playlist_id: &PlaylistId,
+    ) -> Result<Vec<VideoView>, ListVideosError>;
 
     /// Lists every video recorded for a channel, confirming the channel
     /// exists first, ordered by recency (most recent first), each with its
@@ -63,21 +66,6 @@ pub trait VideoSearcherApi: Send + Sync {
         channel_id: &ChannelHandle,
     ) -> Result<Vec<VideoView>, ListVideosError>;
 
-    /// Lists downloaded videos across every tracked playlist and channel,
-    /// newest sync first, truncated to `limit`. A video tracked by more than
-    /// one source appears once per source.
-    fn list_recent(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
-
-    /// Lists videos in progress across every tracked playlist and channel
-    /// (see `Video::is_in_progress`), last played first, truncated to
-    /// `limit`. A video tracked by more than one source appears once.
-    fn list_continue_watching(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
-
-    /// Lists quick watches across every tracked playlist and channel (see
-    /// `Video::is_quick_watch`), newest sync first, truncated to `limit`. A
-    /// video tracked by more than one source appears once.
-    fn list_quick_watches(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
-
     /// Lists the three home sections from one collection across sources:
     /// continue watching, then quick watches without the videos shown above,
     /// then latest videos (once per source, newest sync first) without the
@@ -86,7 +74,10 @@ pub trait VideoSearcherApi: Send + Sync {
 }
 
 impl VideoSearcherApi for VideoSearcher {
-    fn list(&self, playlist_id: &PlaylistId) -> Result<Vec<VideoView>, ListVideosError> {
+    fn list_for_playlist(
+        &self,
+        playlist_id: &PlaylistId,
+    ) -> Result<Vec<VideoView>, ListVideosError> {
         self.playlist_repository
             .find(playlist_id)
             .map_err(ListVideosError::Repository)?
@@ -125,30 +116,6 @@ impl VideoSearcherApi for VideoSearcher {
             .map_err(ListVideosError::Repository)
     }
 
-    fn list_recent(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
-        let mut recent = self.recent_from_playlists()?;
-        recent.extend(self.recent_from_channels()?);
-
-        recent.sort_by_key(|r| std::cmp::Reverse(r.video.created_at));
-        recent.truncate(limit);
-        Ok(recent)
-    }
-
-    fn list_continue_watching(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
-        Ok(Self::continue_watching_in(
-            &self.downloaded_across_sources()?,
-            self.clock.now(),
-            limit,
-        ))
-    }
-
-    fn list_quick_watches(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
-        Ok(Self::quick_watches_in(
-            &self.downloaded_across_sources()?,
-            limit,
-        ))
-    }
-
     fn list_home(&self, limits: HomeLimits) -> Result<HomeVideos, ListVideosError> {
         let videos = self.downloaded_across_sources()?;
         let continue_watching =
@@ -160,9 +127,9 @@ impl VideoSearcherApi for VideoSearcher {
             limits.latest,
         );
         Ok(HomeVideos {
-            continue_watching,
-            quick_watches,
-            latest,
+            continue_watching: Self::views(continue_watching),
+            quick_watches: Self::views(quick_watches),
+            latest: Self::views(latest),
         })
     }
 }
@@ -173,23 +140,25 @@ impl VideoSearcher {
         Ok(VideoView { video, metadata })
     }
 
+    fn views(videos: Vec<SourcedVideo>) -> Vec<HomeVideoView> {
+        videos.into_iter().map(HomeVideoView::from).collect()
+    }
+
     /// Every downloaded video of every tracked channel, then of every tracked
     /// playlist, once per source.
-    fn downloaded_across_sources(&self) -> Result<Vec<RecentVideo>, ListVideosError> {
-        let mut videos = self.recent_from_channels()?;
-        videos.extend(self.recent_from_playlists()?);
+    fn downloaded_across_sources(&self) -> Result<Vec<SourcedVideo>, ListVideosError> {
+        let mut videos = self.downloaded_from_channels()?;
+        videos.extend(self.downloaded_from_playlists()?);
         Ok(videos)
     }
 
-    /// Downloaded videos across sources that `keep` accepts, highest `newest`
-    /// first, once per YouTube video, truncated to `limit`.
     /// In progress videos of `videos` (see `Video::is_in_progress`), last
     /// played first, once per YouTube video, up to `limit`.
     fn continue_watching_in(
-        videos: &[RecentVideo],
+        videos: &[SourcedVideo],
         now: DateTime<Utc>,
         limit: usize,
-    ) -> Vec<RecentVideo> {
+    ) -> Vec<SourcedVideo> {
         Self::pick_once(
             videos,
             |video| video.is_in_progress(now),
@@ -200,7 +169,7 @@ impl VideoSearcher {
 
     /// Quick watches of `videos` (see `Video::is_quick_watch`), newest sync
     /// first, once per YouTube video, up to `limit`.
-    fn quick_watches_in(videos: &[RecentVideo], limit: usize) -> Vec<RecentVideo> {
+    fn quick_watches_in(videos: &[SourcedVideo], limit: usize) -> Vec<SourcedVideo> {
         Self::pick_once(
             videos,
             Video::is_quick_watch,
@@ -210,8 +179,8 @@ impl VideoSearcher {
     }
 
     /// `videos` newest sync first, once per source, up to `limit`.
-    fn latest_in(mut videos: Vec<RecentVideo>, limit: usize) -> Vec<RecentVideo> {
-        videos.sort_by_key(|recent| std::cmp::Reverse(recent.video.created_at));
+    fn latest_in(mut videos: Vec<SourcedVideo>, limit: usize) -> Vec<SourcedVideo> {
+        videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.created_at));
         videos.truncate(limit);
         videos
     }
@@ -219,33 +188,33 @@ impl VideoSearcher {
     /// The videos of `videos` that `keep` accepts, once per YouTube video,
     /// highest `newest` first, truncated to `limit`.
     fn pick_once<K: Ord>(
-        videos: &[RecentVideo],
+        videos: &[SourcedVideo],
         keep: impl Fn(&Video) -> bool,
         newest: impl Fn(&Video) -> K,
         limit: usize,
-    ) -> Vec<RecentVideo> {
+    ) -> Vec<SourcedVideo> {
         let mut picked = Self::once_per_youtube_video(
             videos
                 .iter()
-                .filter(|recent| keep(&recent.video))
+                .filter(|sourced| keep(&sourced.video))
                 .cloned()
                 .collect(),
         );
 
-        picked.sort_by_key(|recent| std::cmp::Reverse(newest(&recent.video)));
+        picked.sort_by_key(|sourced| std::cmp::Reverse(newest(&sourced.video)));
         picked.truncate(limit);
         picked
     }
 
     /// `videos` without any copy of the YouTube videos in `shown`.
-    fn not_shown_in(videos: &[RecentVideo], shown: &[RecentVideo]) -> Vec<RecentVideo> {
+    fn not_shown_in(videos: &[SourcedVideo], shown: &[SourcedVideo]) -> Vec<SourcedVideo> {
         let shown: HashSet<&VideoId> = shown
             .iter()
-            .map(|recent| &recent.video.youtube_id)
+            .map(|sourced| &sourced.video.youtube_id)
             .collect();
         videos
             .iter()
-            .filter(|recent| !shown.contains(&recent.video.youtube_id))
+            .filter(|sourced| !shown.contains(&sourced.video.youtube_id))
             .cloned()
             .collect()
     }
@@ -255,14 +224,14 @@ impl VideoSearcher {
     /// copy when there is one (its card has an avatar), whatever each copy's
     /// own timestamps. Watch state is shared by every copy, so any copy is
     /// correct.
-    fn once_per_youtube_video(videos: Vec<RecentVideo>) -> Vec<RecentVideo> {
+    fn once_per_youtube_video(videos: Vec<SourcedVideo>) -> Vec<SourcedVideo> {
         videos
             .into_iter()
             .fold(
                 (HashSet::new(), Vec::new()),
-                |(mut seen, mut kept), recent| {
-                    if seen.insert(recent.video.youtube_id.clone()) {
-                        kept.push(recent);
+                |(mut seen, mut kept), sourced| {
+                    if seen.insert(sourced.video.youtube_id.clone()) {
+                        kept.push(sourced);
                     }
                     (seen, kept)
                 },
@@ -270,7 +239,7 @@ impl VideoSearcher {
             .1
     }
 
-    fn recent_from_playlists(&self) -> Result<Vec<RecentVideo>, ListVideosError> {
+    fn downloaded_from_playlists(&self) -> Result<Vec<SourcedVideo>, ListVideosError> {
         let playlists = self
             .playlist_repository
             .list()
@@ -278,7 +247,7 @@ impl VideoSearcher {
 
         playlists
             .iter()
-            .map(|playlist| -> anyhow::Result<Vec<RecentVideo>> {
+            .map(|playlist| -> anyhow::Result<Vec<SourcedVideo>> {
                 let playlist_videos = self
                     .playlist_video_repository
                     .list_for_playlist(&playlist.id)?;
@@ -293,7 +262,7 @@ impl VideoSearcher {
                         videos
                             .into_iter()
                             .filter(|video| video.status == VideoStatus::Downloaded)
-                            .map(|video| RecentVideo {
+                            .map(|video| SourcedVideo {
                                 video,
                                 source: VideoSource::Playlist {
                                     id: playlist.id.clone(),
@@ -304,12 +273,12 @@ impl VideoSearcher {
                             .collect()
                     })
             })
-            .collect::<anyhow::Result<Vec<Vec<RecentVideo>>>>()
+            .collect::<anyhow::Result<Vec<Vec<SourcedVideo>>>>()
             .map(|nested| nested.into_iter().flatten().collect())
             .map_err(ListVideosError::Repository)
     }
 
-    fn recent_from_channels(&self) -> Result<Vec<RecentVideo>, ListVideosError> {
+    fn downloaded_from_channels(&self) -> Result<Vec<SourcedVideo>, ListVideosError> {
         let channels = self
             .channel_repository
             .list()
@@ -317,7 +286,7 @@ impl VideoSearcher {
 
         channels
             .iter()
-            .map(|channel| -> anyhow::Result<Vec<RecentVideo>> {
+            .map(|channel| -> anyhow::Result<Vec<SourcedVideo>> {
                 let channel_videos = self
                     .channel_video_repository
                     .list_for_channel(&channel.id)?;
@@ -332,7 +301,7 @@ impl VideoSearcher {
                         videos
                             .into_iter()
                             .filter(|video| video.status == VideoStatus::Downloaded)
-                            .map(|video| RecentVideo {
+                            .map(|video| SourcedVideo {
                                 video,
                                 source: VideoSource::Channel {
                                     handle: channel.id.clone(),
@@ -344,7 +313,7 @@ impl VideoSearcher {
                             .collect()
                     })
             })
-            .collect::<anyhow::Result<Vec<Vec<RecentVideo>>>>()
+            .collect::<anyhow::Result<Vec<Vec<SourcedVideo>>>>()
             .map(|nested| nested.into_iter().flatten().collect())
             .map_err(ListVideosError::Repository)
     }

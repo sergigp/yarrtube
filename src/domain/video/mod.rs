@@ -1,8 +1,9 @@
 pub mod errors;
 pub mod home_limits;
+pub mod home_video_view;
 pub mod home_videos;
 pub mod playback_position;
-pub mod recent_video;
+pub mod sourced_video;
 pub mod thumbnail_filename;
 #[allow(clippy::module_inception)]
 pub mod video;
@@ -16,9 +17,10 @@ pub mod video_view;
 
 pub use errors::{ListVideosError, UpdateWatchStateError};
 pub use home_limits::HomeLimits;
+pub use home_video_view::HomeVideoView;
 pub use home_videos::HomeVideos;
 pub use playback_position::PlaybackPosition;
-pub use recent_video::{RecentVideo, VideoSource};
+pub use sourced_video::{SourcedVideo, VideoSource};
 pub use video::Video;
 pub use video_duration::VideoDuration;
 pub use video_id::VideoId;
