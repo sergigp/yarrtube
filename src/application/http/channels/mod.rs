@@ -107,8 +107,8 @@ mod tests {
     use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::ThumbnailFetcher;
-    use crate::domain::video::Video;
     use crate::domain::video::VideoId;
+    use crate::domain::video::{PlaybackPosition, Video};
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -1016,6 +1016,49 @@ mod tests {
                 shared.mark_watched(watched_timestamp()),
                 playlist_copy.mark_watched(watched_timestamp()),
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_not_change_the_last_played_time_when_marking_a_channel_watched() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let played_at = DateTime::<Utc>::from_timestamp(1_750_000_000, 0).unwrap();
+        let video = Video {
+            playback_position: PlaybackPosition::new(40).unwrap(),
+            last_played_at: Some(played_at),
+            ..downloaded_video("vid1")
+        };
+        video_repository.save(&video).unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                handle("@somechannel"),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            channel_repository,
+            channel_video_repository,
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = mark_watched(video_watch_state_updater, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                watched_at: Some(watched_timestamp()),
+                playback_position: PlaybackPosition::start(),
+                last_played_at: Some(played_at),
+                ..video
+            }]
         );
     }
 

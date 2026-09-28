@@ -7,7 +7,7 @@
 - [x] 2.1 `it_should_record_the_last_played_time_on_every_copy`: `update_watch_state` sets `last_played_at` to now on every copy
 - [x] 2.2 `it_should_record_the_last_played_time_even_if_the_watch_state_is_unchanged`: the watched ≤10% branch still sets `last_played_at`
 - [x] 2.2b Existing `it_should_mark_the_video_watched_at_90_percent` and `it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch` expect `last_played_at`: the two branches that change the watch state also set it, so every branch of `update_watch_state` does
-- [ ] 2.3 `it_should_not_change_the_last_played_time_when_marking_a_channel_watched`: `mark_watched` leaves `last_played_at` untouched
+- [x] 2.3 `it_should_not_change_the_last_played_time_when_marking_a_channel_watched`: `mark_watched` leaves `last_played_at` untouched
 - [ ] 2.4 `it_should_list_no_continue_watching_videos_if_none_in_progress`: empty listing when nothing is in progress
 - [ ] 2.5 `it_should_list_a_recently_started_video_in_continue_watching`: `list_continue_watching` collects across sources, filters on `is_in_progress`, and the response carries `position_seconds`
 - [ ] 2.6 `it_should_order_continue_watching_by_last_played_first`: sort by `last_played_at` desc
