@@ -973,6 +973,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_no_home_videos_if_nothing_downloaded() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(response, Ok(empty_home()));
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
