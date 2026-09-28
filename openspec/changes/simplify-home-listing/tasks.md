@@ -23,7 +23,7 @@ Each test here moves an existing rule onto `/videos/home`. It pins behaviour tha
 - [x] 2.7 `it_should_exclude_not_downloaded_videos_from_home`: a pending in-progress video and a pending short video appear nowhere
 - [x] 2.8 `it_should_order_continue_watching_by_last_played_first_on_home`
 - [x] 2.9 `it_should_continue_only_videos_played_within_a_week_on_home`: exactly 7 days under `continue_watching`, 7 days + 1s under `latest`
-- [ ] 2.10 `it_should_continue_only_videos_started_past_30_seconds_on_home`: 31s under `continue_watching`, 30s under `latest`
+- [x] 2.10 `it_should_continue_only_videos_started_past_30_seconds_on_home`: 31s under `continue_watching`, 30s under `latest`
 - [ ] 2.11 `it_should_not_continue_watched_or_never_played_videos_on_home`: both under `latest`
 - [ ] 2.12 `it_should_list_a_continue_watching_video_once_from_the_channel_on_home`: channel copy only, even when the playlist copy was played later
 - [ ] 2.13 `it_should_order_quick_watches_newest_first_on_home`
