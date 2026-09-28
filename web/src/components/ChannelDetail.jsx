@@ -7,14 +7,14 @@ import {
   fetchChannelVideos,
   markChannelWatched,
   videoMediaUrl,
-  avatarMediaUrl,
 } from '../api'
 import { formatDuration } from '../formatDuration'
 import { useWatchProgress } from '../useWatchProgress'
 import { Thumbnail } from './Thumbnail'
 import { WatchedTick } from './WatchedTick'
 import { Beacon } from './Beacon'
-import { Badge } from '@/components/ui/badge'
+import { VideoPlayer } from './VideoPlayer'
+import { VideoDetail } from './VideoDetail'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -22,20 +22,6 @@ const STATUS_MESSAGES = {
   PENDING: 'This video is pending.',
   ERRORED_RETRYING: 'This video failed to download and will be retried.',
   ERRORED: 'This video failed to download.',
-}
-
-const STATUS_LABELS = {
-  DOWNLOADED: 'Downloaded',
-  IN_PROGRESS: 'Downloading',
-  PENDING: 'Pending',
-  ERRORED_RETRYING: 'Retrying',
-  ERRORED: 'Errored',
-}
-
-const QUALITY_LABELS = {
-  high: 'High quality',
-  mid: 'Medium quality',
-  low: 'Low quality',
 }
 
 function VideoStatusIndicator({ status }) {
@@ -56,41 +42,6 @@ function VideoStatusIndicator({ status }) {
     >
       <title>{message}</title>
     </TriangleAlert>
-  )
-}
-
-function VideoDetail({ channel, video }) {
-  const path = video.filename ? `${channel.path}/${video.filename}` : channel.path
-
-  return (
-    <div className="rounded-lg border border-border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-start gap-2.5">
-          <Thumbnail
-            src={channel.avatar_filename ? avatarMediaUrl(channel.avatar_filename) : null}
-            className="mt-0.5 size-8 shrink-0 rounded-full object-cover"
-          />
-          <h3 className="min-w-0 flex-1 font-heading text-xl font-semibold text-foreground">
-            {video.title}
-          </h3>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <Badge variant={video.status === 'DOWNLOADED' ? 'secondary' : 'outline'}>
-            {STATUS_LABELS[video.status] ?? video.status}
-          </Badge>
-          <Badge variant="outline">{QUALITY_LABELS[video.quality] ?? '—'}</Badge>
-        </div>
-      </div>
-      <p className="mt-2 text-xs break-words text-muted-foreground">{path}</p>
-      <a
-        className="mt-3 inline-block text-sm text-primary underline-offset-4 hover:underline"
-        href={`https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`}
-        target="_blank"
-        rel="noopener"
-      >
-        Open on YouTube
-      </a>
-    </div>
   )
 }
 
@@ -132,32 +83,15 @@ export function ChannelDetail() {
     <div className="flex h-full min-h-[480px] flex-col">
       <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-6 overflow-hidden md:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-4 h-full overflow-hidden overflow-y-auto">
-          <div className="flex min-h-80 items-center justify-center rounded-lg bg-secondary/60">
-            {selectedVideo?.status === 'DOWNLOADED' && selectedVideo.filename ? (
-              // eslint-disable-next-line jsx-a11y/media-has-caption
-              <video
-                ref={setVideoElement}
-                controls
-                autoPlay={autoplay}
-                className="block max-h-[70vh] w-full rounded-lg"
-                src={videoMediaUrl(channel.path, selectedVideo.filename)}
-                poster={
-                  selectedVideo.thumbnail_filename
-                    ? videoMediaUrl(channel.path, selectedVideo.thumbnail_filename)
-                    : undefined
-                }
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {selectedVideo
-                  ? 'This video has not been downloaded yet.'
-                  : 'Select a video to play it.'}
-              </p>
-            )}
-          </div>
+          <VideoPlayer
+            basePath={channel.path}
+            video={selectedVideo}
+            autoplay={autoplay}
+            onVideoElement={setVideoElement}
+          />
 
           {selectedVideo ? (
-            <VideoDetail channel={channel} video={selectedVideo} />
+            <VideoDetail basePath={channel.path} video={selectedVideo} channel={channel} />
           ) : (
             <p className="text-sm text-muted-foreground">No video selected.</p>
           )}
