@@ -137,7 +137,7 @@ impl Video {
     /// reported. An unwatched video becomes watched at 90%; a watched one
     /// becomes unwatched again once a rewatch passes 10%, as long as it is
     /// still below 90%. With no known duration an unwatched video only keeps
-    /// the position.
+    /// the position. Whatever the outcome, the video counts as played `now`.
     pub fn update_watch_state(
         self,
         position: PlaybackPosition,
@@ -147,7 +147,7 @@ impl Video {
         let progress = self
             .known_duration_seconds(reported_duration)
             .map(|duration| position.seconds() as f64 / duration as f64);
-        match (self.is_watched(), progress) {
+        let updated = match (self.is_watched(), progress) {
             (true, Some(progress))
                 if progress > REWATCH_RESET_THRESHOLD && progress < WATCHED_THRESHOLD =>
             {
@@ -157,16 +157,16 @@ impl Video {
                     ..self
                 }
             }
-            (true, _) => Self {
-                last_played_at: Some(now),
-                ..self
-            },
+            (true, _) => self,
             (false, Some(progress)) if progress >= WATCHED_THRESHOLD => self.mark_watched(now),
             (false, _) => Self {
                 playback_position: position,
-                last_played_at: Some(now),
                 ..self
             },
+        };
+        Self {
+            last_played_at: Some(now),
+            ..updated
         }
     }
 

@@ -1263,6 +1263,7 @@ mod tests {
             vec![Video {
                 watched_at: Some(watched_timestamp()),
                 playback_position: PlaybackPosition::start(),
+                last_played_at: Some(watched_timestamp()),
                 ..video
             }]
         );
@@ -1292,6 +1293,7 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 watched_at: Some(watched_timestamp()),
+                last_played_at: Some(watched_timestamp()),
                 ..video
             }]
         );
@@ -1372,6 +1374,7 @@ mod tests {
             vec![Video {
                 watched_at: None,
                 playback_position: PlaybackPosition::new(11).unwrap(),
+                last_played_at: Some(watched_timestamp()),
                 ..video
             }]
         );
