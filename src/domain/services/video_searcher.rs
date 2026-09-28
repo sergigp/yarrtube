@@ -155,14 +155,14 @@ impl VideoSearcherApi for VideoSearcher {
             |video| video.last_played_at,
             limits.continue_watching,
         );
+        let not_continue_watching = Self::not_shown_in(&videos, &continue_watching);
         let quick_watches = Self::pick_once(
-            &videos,
+            &not_continue_watching,
             Video::is_quick_watch,
             |video| video.created_at,
             limits.quick_watches,
         );
-        let shown = [continue_watching.as_slice(), quick_watches.as_slice()].concat();
-        let latest = Self::not_shown_in(videos, &shown);
+        let latest = Self::not_shown_in(&not_continue_watching, &quick_watches);
         Ok(HomeVideos {
             continue_watching,
             quick_watches,
@@ -223,14 +223,15 @@ impl VideoSearcher {
     }
 
     /// `videos` without any copy of the YouTube videos in `shown`.
-    fn not_shown_in(videos: Vec<RecentVideo>, shown: &[RecentVideo]) -> Vec<RecentVideo> {
+    fn not_shown_in(videos: &[RecentVideo], shown: &[RecentVideo]) -> Vec<RecentVideo> {
         let shown: HashSet<&VideoId> = shown
             .iter()
             .map(|recent| &recent.video.youtube_id)
             .collect();
         videos
-            .into_iter()
+            .iter()
             .filter(|recent| !shown.contains(&recent.video.youtube_id))
+            .cloned()
             .collect()
     }
 
