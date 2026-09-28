@@ -3,7 +3,8 @@ use crate::domain::video::{PlaybackPosition, Video, VideoStatus};
 use crate::domain::video::{VideoId, VideoRecordId};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at";
@@ -32,6 +33,9 @@ pub trait VideoRepository: Send + Sync {
     /// policy. Callers decide what `Video` value to persist.
     fn save(&self, video: &Video) -> anyhow::Result<()>;
     fn find(&self, id: &VideoRecordId) -> anyhow::Result<Option<Video>>;
+    /// The stored videos among `ids`, in the order given, skipping ids with
+    /// no stored video. One query however many ids.
+    fn find_many(&self, ids: &[VideoRecordId]) -> anyhow::Result<Vec<Video>>;
     /// Writes every mutable column, including `status` — unlike `save`,
     /// which is a plain insert-or-replace, `update` only touches a row that
     /// still exists.
@@ -134,6 +138,35 @@ impl VideoRepository for SqliteVideoRepository {
         .context("failed to find video")?
         .map(Self::row_to_video)
         .transpose()
+    }
+
+    fn find_many(&self, ids: &[VideoRecordId]) -> anyhow::Result<Vec<Video>> {
+        let conn = self
+            .conn
+            .lock()
+            .inspect_err(|_| tracing::error!("database lock poisoned"))
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let placeholders = vec!["?"; ids.len()].join(", ");
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {VIDEO_COLUMNS} FROM videos WHERE id IN ({placeholders})"
+            ))
+            .context("failed to prepare find many videos")?;
+        let mut found: HashMap<String, VideoRow> = stmt
+            .query_map(
+                params_from_iter(ids.iter().map(|id| id.as_str())),
+                Self::read_row,
+            )
+            .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+            .inspect_err(|e| tracing::error!(error = %e, "failed to find many videos"))
+            .context("failed to find many videos")?
+            .into_iter()
+            .map(|row| (row.id.clone(), row))
+            .collect();
+        ids.iter()
+            .filter_map(|id| found.remove(id.as_str()))
+            .map(Self::row_to_video)
+            .collect()
     }
 
     fn update(&self, video: &Video) -> anyhow::Result<()> {
@@ -291,6 +324,37 @@ mod tests {
         assert_eq!(found.youtube_id.as_str(), "yt1");
         assert_eq!(found.status, VideoStatus::Pending);
         assert_eq!(found.quality, None);
+    }
+
+    #[test]
+    fn it_should_find_many_videos_in_the_order_given_skipping_missing_ones() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let first = video("First", now);
+        let second = video("Second", now);
+        let unrequested = video("Unrequested", now);
+        repo.save(&first).unwrap();
+        repo.save(&second).unwrap();
+        repo.save(&unrequested).unwrap();
+
+        let found = repo.find_many(&[
+            second.id.clone(),
+            VideoRecordId::new_generated(),
+            first.id.clone(),
+        ]);
+
+        assert_eq!(found.unwrap(), vec![second, first]);
+    }
+
+    #[test]
+    fn it_should_find_many_of_no_ids() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        repo.save(&video("First", now)).unwrap();
+
+        let found = repo.find_many(&[]);
+
+        assert_eq!(found.unwrap(), vec![]);
     }
 
     #[test]
