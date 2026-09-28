@@ -198,7 +198,7 @@ impl TaskRepository for SqliteTaskRepository {
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
             .prepare(&format!(
-                "SELECT {SELECT_COLUMNS} FROM tasks WHERE status = 'pending' AND run_at <= ?1 ORDER BY id ASC"
+                "SELECT {SELECT_COLUMNS} FROM tasks WHERE status = 'pending' AND run_at <= ?1 ORDER BY run_at ASC, id ASC"
             ))
             .inspect_err(|e| {
                 tracing::error!(error = %e, "failed to prepare list-eligible-tasks query")
@@ -344,6 +344,25 @@ mod tests {
         }
     }
 
+    fn pending_task(
+        id: i64,
+        task: &Task,
+        run_at: DateTime<Utc>,
+        now: DateTime<Utc>,
+    ) -> ScheduledTask {
+        ScheduledTask {
+            id,
+            task_type: task.task_type().to_string(),
+            payload: task.payload().to_string(),
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at,
+            created_at: now,
+            updated_at: now,
+            last_error: None,
+        }
+    }
+
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
 
     /// Mirrors what `TaskExecutor` does on a dispatch failure: read the task,
@@ -377,6 +396,52 @@ mod tests {
         repo.schedule(&task(), future).unwrap();
 
         assert!(repo.list_eligible().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_list_eligible_tasks_by_run_time_regardless_of_scheduling_order() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let later_due = now - chrono::Duration::seconds(1);
+        let earlier_due = now - chrono::Duration::seconds(60);
+        let reconcile = task();
+        let download = Task::DownloadVideo {
+            video_id: "rec1".to_string(),
+            quality: "high".to_string(),
+            output_dir: "/videos/my-playlist".to_string(),
+        };
+
+        repo.schedule(&reconcile, later_due).unwrap();
+        repo.schedule(&download, earlier_due).unwrap();
+
+        assert_eq!(
+            repo.list_eligible().unwrap(),
+            vec![
+                pending_task(2, &download, earlier_due, now),
+                pending_task(1, &reconcile, later_due, now),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_list_eligible_tasks_due_at_the_same_time_in_scheduling_order() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let first = task();
+        let second = Task::ReconcilePlaylist {
+            playlist_id: "PL2".to_string(),
+        };
+
+        repo.schedule(&first, now).unwrap();
+        repo.schedule(&second, now).unwrap();
+
+        assert_eq!(
+            repo.list_eligible().unwrap(),
+            vec![
+                pending_task(1, &first, now, now),
+                pending_task(2, &second, now, now),
+            ]
+        );
     }
 
     #[test]

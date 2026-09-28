@@ -11,7 +11,7 @@
 
 ## 3. Task dispatch order
 
-- [ ] 3.1 Change `list_eligible` in `src/infrastructure/repositories/sqlite_task_repository.rs` to `ORDER BY run_at ASC, id ASC`. Add repository tests verifying that a later-scheduled task with an earlier `run_at` is listed first, and that tasks with equal `run_at` are listed in id order
+- [x] 3.1 Change `list_eligible` in `src/infrastructure/repositories/sqlite_task_repository.rs` to `ORDER BY run_at ASC, id ASC`. Add repository tests verifying that a later-scheduled task with an earlier `run_at` is listed first, and that tasks with equal `run_at` are listed in id order
 
 ## 4. Verification
 
