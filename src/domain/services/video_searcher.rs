@@ -149,7 +149,7 @@ impl VideoSearcherApi for VideoSearcher {
             .collect();
 
         quick_watches.sort_by_key(|r| std::cmp::Reverse(r.video.created_at));
-        Ok(quick_watches)
+        Ok(Self::once_per_youtube_video(quick_watches))
     }
 }
 
