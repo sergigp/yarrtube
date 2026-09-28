@@ -29,6 +29,7 @@ pub struct Video {
     pub watched_at: Option<DateTime<Utc>>,
     pub playback_position: PlaybackPosition,
     pub synced_at: Option<DateTime<Utc>>,
+    pub last_errored_at: Option<DateTime<Utc>>,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -50,6 +51,7 @@ impl Video {
             watched_at: None,
             playback_position: PlaybackPosition::start(),
             synced_at: None,
+            last_errored_at: None,
         }
     }
 
@@ -93,6 +95,7 @@ impl Video {
         Self {
             status: VideoStatus::Errored,
             updated_at: now,
+            last_errored_at: Some(now),
             ..self
         }
     }
@@ -174,9 +177,14 @@ impl Video {
     }
 
     /// Whether reconcile should reset this video for another download: it
-    /// has been permanently errored for at least the recovery cooldown.
+    /// has been permanently errored for at least the recovery cooldown,
+    /// counted from when it last errored. An errored video with no recorded
+    /// time (errored before that time was tracked) is due straight away.
     pub fn is_due_for_recovery(&self, now: DateTime<Utc>) -> bool {
-        self.status == VideoStatus::Errored && now - self.updated_at >= ERRORED_RECOVERY_COOLDOWN
+        self.status == VideoStatus::Errored
+            && self
+                .last_errored_at
+                .is_none_or(|errored_at| now - errored_at >= ERRORED_RECOVERY_COOLDOWN)
     }
 
     /// The recorded duration, else the reported one. The reported one is
@@ -335,6 +343,17 @@ mod tests {
         assert_eq!(video.status, VideoStatus::Errored);
         assert_eq!(video.quality, None);
         assert_eq!(video.updated_at, now);
+        assert_eq!(video.last_errored_at, Some(now));
+    }
+
+    #[test]
+    fn it_should_keep_when_it_last_errored_when_reset_for_redownload() {
+        let errored_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
+
+        let reset = video().mark_errored(errored_at).reset_for_redownload(later);
+
+        assert_eq!(reset.last_errored_at, Some(errored_at));
     }
 
     #[test]
@@ -353,6 +372,32 @@ mod tests {
         let video = video().mark_errored(errored_at);
 
         assert!(video.is_due_for_recovery(errored_at + Duration::days(3)));
+    }
+
+    #[test]
+    fn it_should_measure_the_recovery_cooldown_from_when_it_errored() {
+        let errored_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let refreshed_at = errored_at + Duration::hours(23);
+
+        let video = Video {
+            updated_at: refreshed_at,
+            ..video().mark_errored(errored_at)
+        };
+
+        assert!(video.is_due_for_recovery(errored_at + Duration::hours(24)));
+    }
+
+    #[test]
+    fn it_should_be_due_for_recovery_if_errored_with_no_recorded_time() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+
+        let video = Video {
+            status: VideoStatus::Errored,
+            last_errored_at: None,
+            ..video()
+        };
+
+        assert!(video.is_due_for_recovery(now));
     }
 
     #[test]

@@ -29,7 +29,8 @@ _None._
 ## Impact
 
 - `Dockerfile` (runtime stage: copy the `deno` binary from `denoland/deno:bin`).
-- `src/domain/services/playlist_video_reconciler.rs`, `src/domain/services/channel_video_reconciler.rs` (errored-video recovery filter), and possibly a small predicate on `Video` in `src/domain/video/video.rs`.
+- `src/domain/video/video.rs` (new `last_errored_at` field and a recovery-due predicate), `src/domain/services/playlist_video_reconciler.rs`, `src/domain/services/channel_video_reconciler.rs` (errored-video recovery filter).
+- `src/infrastructure/repositories/sqlite_video_repository.rs` (row mapping) and a new migration adding a nullable `videos.last_errored_at` column.
 - `src/infrastructure/repositories/sqlite_task_repository.rs` (`list_eligible` ordering).
-- No DB migration, no HTTP API change. Image grows by the Deno binary (~100 MB uncompressed).
+- No HTTP API change. Image grows by the Deno binary (~100 MB uncompressed).
 - Already-queued failing tasks on a running deployment are not touched by this change; they resolve on their own once the new image (with Deno) is running.
