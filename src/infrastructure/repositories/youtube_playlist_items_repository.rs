@@ -35,8 +35,7 @@ impl PlaylistItem {
     /// True only for `public` and `unlisted`; private, missing and any
     /// other status (e.g. deleted videos) are not watchable.
     fn is_watchable(&self) -> bool {
-        self.privacy_status()
-            .is_some_and(|privacy_status| privacy_status != "private")
+        matches!(self.privacy_status(), Some("public"))
     }
 
     fn privacy_status(&self) -> Option<&str> {
@@ -329,6 +328,38 @@ mod tests {
             .with_body(
                 r#"{"items": [
                     {"snippet": {"title": "Deleted video", "resourceId": {"videoId": "1"}, "position": 0}},
+                    {"snippet": {"title": "Two", "resourceId": {"videoId": "2"}, "position": 1}, "status": {"privacyStatus": "public"}}
+                ]}"#,
+            )
+            .create();
+
+        let repository =
+            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+
+        let videos = repository
+            .list_current_videos(&PlaylistId::new("PL1").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            videos,
+            vec![YoutubePlaylistItem {
+                video_id: "2".to_string(),
+                title: "Two".to_string(),
+                position: 1,
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_skip_items_with_an_unrecognised_privacy_status() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"items": [
+                    {"snippet": {"title": "One", "resourceId": {"videoId": "1"}, "position": 0}, "status": {"privacyStatus": "privacyStatusUnspecified"}},
                     {"snippet": {"title": "Two", "resourceId": {"videoId": "2"}, "position": 1}, "status": {"privacyStatus": "public"}}
                 ]}"#,
             )
