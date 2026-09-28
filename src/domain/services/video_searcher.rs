@@ -155,10 +155,17 @@ impl VideoSearcherApi for VideoSearcher {
             |video| video.last_played_at,
             limits.continue_watching,
         );
-        let latest = Self::not_shown_in(videos, &continue_watching);
+        let quick_watches = Self::pick_once(
+            &videos,
+            Video::is_quick_watch,
+            |video| video.created_at,
+            limits.quick_watches,
+        );
+        let shown = [continue_watching.as_slice(), quick_watches.as_slice()].concat();
+        let latest = Self::not_shown_in(videos, &shown);
         Ok(HomeVideos {
             continue_watching,
-            quick_watches: vec![],
+            quick_watches,
             latest,
         })
     }

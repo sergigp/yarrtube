@@ -54,7 +54,7 @@ Migrations:
 - [x] 6.1 Walking skeleton: `HomeVideos` (`home_videos.rs`) and `HomeLimits` (`home_limits.rs`); `VideoSearcherApi::list_home` returning empty sections; `HomeResponse` DTO; `list_home_videos` handler with the home limits, routed at `/videos/home`; `fetchHomeVideos` in `api.js` (`Home.jsx` not switched yet). Done when `cargo build` succeeds and all existing tests pass. No new behaviour and no new tests.
 - [x] 6.2 `it_should_list_a_downloaded_video_under_latest_on_home`: `list_home` collects once and fills `latest`
 - [x] 6.3 `it_should_list_a_started_video_under_continue_watching_only_on_home`: `continue_watching` filled, its videos left out of `latest`
-- [ ] 6.4 `it_should_list_a_short_video_under_quick_watches_only_on_home`: `quick_watches` filled, its videos left out of `latest`
+- [x] 6.4 `it_should_list_a_short_video_under_quick_watches_only_on_home`: `quick_watches` filled, its videos left out of `latest`
 - [ ] 6.5 `it_should_not_repeat_a_continue_watching_video_in_quick_watches_on_home`: quick watches skip videos shown under continue watching
 - [ ] 6.6 `it_should_show_videos_left_out_of_a_full_section_further_down_on_home`: limits of 6 applied, exclusion by shown videos only
 - [ ] 6.7 `it_should_cap_latest_on_home_at_18`: latest truncated to its limit
