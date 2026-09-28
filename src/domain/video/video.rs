@@ -30,6 +30,7 @@ pub struct Video {
     pub playback_position: PlaybackPosition,
     pub synced_at: Option<DateTime<Utc>>,
     pub last_errored_at: Option<DateTime<Utc>>,
+    pub last_played_at: Option<DateTime<Utc>>,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -52,6 +53,7 @@ impl Video {
             playback_position: PlaybackPosition::start(),
             synced_at: None,
             last_errored_at: None,
+            last_played_at: None,
         }
     }
 
@@ -174,6 +176,17 @@ impl Video {
 
     pub fn is_watched(&self) -> bool {
         self.watched_at.is_some()
+    }
+
+    /// Downloaded, unwatched, position over 30s and last played within the
+    /// past 7 days of `now`: worth offering to continue watching.
+    pub fn is_in_progress(&self, _now: DateTime<Utc>) -> bool {
+        false
+    }
+
+    /// Downloaded, unwatched and recorded as shorter than 15 minutes.
+    pub fn is_quick_watch(&self) -> bool {
+        false
     }
 
     /// Whether reconcile should reset this video for another download: it

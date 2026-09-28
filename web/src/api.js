@@ -18,6 +18,14 @@ export function fetchRecentVideos() {
   return request('/videos/recent')
 }
 
+export function fetchContinueWatchingVideos() {
+  return request('/videos/continue-watching')
+}
+
+export function fetchQuickWatchVideos() {
+  return request('/videos/quick-watches')
+}
+
 export function fetchTasks() {
   return request('/tasks')
 }

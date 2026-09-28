@@ -1,16 +1,23 @@
 import { Link } from 'react-router-dom'
 import { usePolling } from '../usePolling'
-import { fetchRecentVideos, videoMediaUrl, avatarMediaUrl } from '../api'
+import {
+  fetchContinueWatchingVideos,
+  fetchQuickWatchVideos,
+  fetchRecentVideos,
+  videoMediaUrl,
+  avatarMediaUrl,
+} from '../api'
 import { formatDuration } from '../formatDuration'
 import { Thumbnail } from './Thumbnail'
 import { WatchedTick } from './WatchedTick'
+import { WatchProgressBar } from './WatchProgressBar'
 
 function videoDetailPath(source) {
   const base = source.kind === 'channel' ? `/channels/${source.id}` : `/playlists/${source.id}`
   return `${base}?video=`
 }
 
-function VideoGrid({ videos }) {
+function VideoGrid({ videos, showProgress }) {
   if (videos.length === 0) {
     return <p className="text-sm text-muted-foreground">No videos synced yet.</p>
   }
@@ -37,6 +44,12 @@ function VideoGrid({ videos }) {
                   className="aspect-video w-full rounded-lg object-cover transition-opacity group-hover:opacity-90"
                 />
                 <WatchedTick watched={video.watched} />
+                {showProgress && (
+                  <WatchProgressBar
+                    positionSeconds={video.position_seconds}
+                    durationSeconds={video.duration_seconds}
+                  />
+                )}
                 {formatDuration(video.duration_seconds) && (
                   <span className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-xs font-medium text-white">
                     {formatDuration(video.duration_seconds)}
@@ -81,21 +94,61 @@ function VideoGrid({ videos }) {
   )
 }
 
-export function Home() {
-  const { data: videos, error: videosError } = usePolling(fetchRecentVideos, [])
+/**
+ * One home section: a heading over a grid of video cards. With `hideWhenEmpty`
+ * the whole section, heading included, renders nothing unless it has videos
+ * to show; otherwise it reports loading, errors and emptiness in place.
+ */
+function HomeSection({ title, name, videos, error, hideWhenEmpty, showProgress }) {
+  if (hideWhenEmpty && (error || !videos || videos.length === 0)) {
+    return null
+  }
 
   return (
-    <div className="min-w-0">
-      <h2 className="mb-4 font-heading text-lg font-semibold text-foreground">Latest videos</h2>
-      {videosError && (
+    <section className="min-w-0">
+      <h2 className="mb-4 font-heading text-lg font-semibold text-foreground">{title}</h2>
+      {error && (
         <p className="text-sm text-destructive">
-          Failed to load recent videos: {videosError.message}
+          Failed to load {name}: {error.message}
         </p>
       )}
-      {!videosError && !videos && (
-        <p className="text-sm text-muted-foreground">Loading recent videos…</p>
-      )}
-      {!videosError && videos && <VideoGrid videos={videos} />}
+      {!error && !videos && <p className="text-sm text-muted-foreground">Loading {name}…</p>}
+      {!error && videos && <VideoGrid videos={videos} showProgress={showProgress} />}
+    </section>
+  )
+}
+
+export function Home() {
+  const { data: continueWatching, error: continueWatchingError } = usePolling(
+    fetchContinueWatchingVideos,
+    [],
+  )
+  const { data: videos, error: videosError } = usePolling(fetchRecentVideos, [])
+  const { data: quickWatches, error: quickWatchesError } = usePolling(fetchQuickWatchVideos, [])
+
+  return (
+    <div className="flex min-w-0 flex-col gap-10">
+      <HomeSection
+        title="Continue watching"
+        name="continue watching videos"
+        videos={continueWatching}
+        error={continueWatchingError}
+        hideWhenEmpty
+        showProgress
+      />
+      <HomeSection
+        title="Latest videos"
+        name="recent videos"
+        videos={videos}
+        error={videosError}
+      />
+      <HomeSection
+        title="Quick watches"
+        name="quick watches"
+        videos={quickWatches}
+        error={quickWatchesError}
+        hideWhenEmpty
+      />
     </div>
   )
 }

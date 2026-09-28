@@ -59,6 +59,14 @@ pub fn api_router(api_services: ApiServices) -> Router {
             get(videos::list_videos_for_playlist),
         )
         .route("/videos/recent", get(videos::list_recent_videos))
+        .route(
+            "/videos/continue-watching",
+            get(videos::list_continue_watching_videos),
+        )
+        .route(
+            "/videos/quick-watches",
+            get(videos::list_quick_watch_videos),
+        )
         .route("/videos/{id}/progress", post(videos::record_video_progress))
         .route("/tasks", get(tasks::list_tasks))
         .route(

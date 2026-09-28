@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::sync::Mutex;
 
-const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at";
+const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at";
 
 /// A `videos` row as read, before its values are parsed into a `Video`.
 struct VideoRow {
@@ -24,6 +24,7 @@ struct VideoRow {
     playback_position_seconds: i64,
     synced_at: Option<String>,
     last_errored_at: Option<String>,
+    last_played_at: Option<String>,
 }
 
 pub trait VideoRepository: Send + Sync {
@@ -75,8 +76,8 @@ impl VideoRepository for SqliteVideoRepository {
             .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
              ON CONFLICT (id) DO UPDATE SET
                 youtube_id = excluded.youtube_id,
                 title = excluded.title,
@@ -90,7 +91,8 @@ impl VideoRepository for SqliteVideoRepository {
                 watched_at = excluded.watched_at,
                 playback_position_seconds = excluded.playback_position_seconds,
                 synced_at = excluded.synced_at,
-                last_errored_at = excluded.last_errored_at",
+                last_errored_at = excluded.last_errored_at,
+                last_played_at = excluded.last_played_at",
             params![
                 video.id.as_str(),
                 video.youtube_id.as_str(),
@@ -106,6 +108,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.playback_position.seconds(),
                 video.synced_at.map(|s| s.to_rfc3339()),
                 video.last_errored_at.map(|e| e.to_rfc3339()),
+                video.last_played_at.map(|p| p.to_rfc3339()),
             ],
         )
         .inspect_err(|e| {
@@ -140,7 +143,7 @@ impl VideoRepository for SqliteVideoRepository {
             .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
-            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13
+            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14
              WHERE id = ?1",
             params![
                 video.id.as_str(),
@@ -156,6 +159,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.playback_position.seconds(),
                 video.synced_at.map(|s| s.to_rfc3339()),
                 video.last_errored_at.map(|e| e.to_rfc3339()),
+                video.last_played_at.map(|p| p.to_rfc3339()),
             ],
         )
         .inspect_err(|e| {
@@ -217,6 +221,7 @@ impl SqliteVideoRepository {
             playback_position_seconds: row.get(11)?,
             synced_at: row.get(12)?,
             last_errored_at: row.get(13)?,
+            last_played_at: row.get(14)?,
         })
     }
 
@@ -244,6 +249,10 @@ impl SqliteVideoRepository {
             last_errored_at: row
                 .last_errored_at
                 .map(|e| Self::parse_timestamp(&e, "last_errored_at"))
+                .transpose()?,
+            last_played_at: row
+                .last_played_at
+                .map(|p| Self::parse_timestamp(&p, "last_played_at"))
                 .transpose()?,
         })
     }

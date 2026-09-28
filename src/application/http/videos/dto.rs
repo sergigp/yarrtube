@@ -76,6 +76,7 @@ pub struct RecentVideoResponse {
     pub thumbnail_filename: Option<String>,
     pub duration_seconds: Option<i64>,
     pub watched: bool,
+    pub position_seconds: i64,
     pub source: RecentVideoSourceResponse,
 }
 
@@ -104,6 +105,7 @@ impl From<RecentVideo> for RecentVideoResponse {
         };
         Self {
             watched: recent_video.video.is_watched(),
+            position_seconds: recent_video.video.playback_position.seconds(),
             id: recent_video.video.youtube_id.as_str().to_string(),
             title: recent_video.video.title,
             thumbnail_filename: recent_video.video.thumbnail_filename,

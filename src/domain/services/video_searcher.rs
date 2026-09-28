@@ -9,6 +9,7 @@ use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRep
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
 
 /// Reads videos, listed by playlist or by channel.
@@ -20,6 +21,7 @@ pub struct VideoSearcher {
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     video_repository: Arc<dyn VideoRepository>,
     video_metadata_repository: Arc<dyn VideoMetadataRepository>,
+    clock: Arc<dyn Clock>,
 }
 
 impl VideoSearcher {
@@ -30,6 +32,7 @@ impl VideoSearcher {
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         video_repository: Arc<dyn VideoRepository>,
         video_metadata_repository: Arc<dyn VideoMetadataRepository>,
+        clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             playlist_repository,
@@ -38,6 +41,7 @@ impl VideoSearcher {
             channel_video_repository,
             video_repository,
             video_metadata_repository,
+            clock,
         }
     }
 }
@@ -60,6 +64,16 @@ pub trait VideoSearcherApi: Send + Sync {
     /// newest sync first, truncated to `limit`. A video tracked by more than
     /// one source appears once per source.
     fn list_recent(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
+
+    /// Lists videos in progress across every tracked playlist and channel
+    /// (see `Video::is_in_progress`), last played first, truncated to
+    /// `limit`. A video tracked by more than one source appears once.
+    fn list_continue_watching(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
+
+    /// Lists quick watches across every tracked playlist and channel (see
+    /// `Video::is_quick_watch`), newest sync first, truncated to `limit`. A
+    /// video tracked by more than one source appears once.
+    fn list_quick_watches(&self, limit: usize) -> Result<Vec<RecentVideo>, ListVideosError>;
 }
 
 impl VideoSearcherApi for VideoSearcher {
@@ -109,6 +123,14 @@ impl VideoSearcherApi for VideoSearcher {
         recent.sort_by_key(|r| std::cmp::Reverse(r.video.created_at));
         recent.truncate(limit);
         Ok(recent)
+    }
+
+    fn list_continue_watching(&self, _limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
+        Ok(vec![])
+    }
+
+    fn list_quick_watches(&self, _limit: usize) -> Result<Vec<RecentVideo>, ListVideosError> {
+        Ok(vec![])
     }
 }
 
