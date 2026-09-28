@@ -1055,6 +1055,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_the_channel_source_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        channel_repository
+            .insert(&channel("@somechannel", Some("@somechannel.jpg")))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &downloaded_video("vid1", "My Video", None, 100),
+            0,
+        );
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: vec![home_video_response(
+                    "vid1",
+                    "My Video",
+                    HomeVideoSourceResponse {
+                        kind: "channel".to_string(),
+                        id: "@somechannel".to_string(),
+                        name: "Some Channel".to_string(),
+                        path: "creators/somechannel".to_string(),
+                        avatar_filename: Some("@somechannel.jpg".to_string()),
+                    }
+                )],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
