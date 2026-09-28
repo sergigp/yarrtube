@@ -1,4 +1,4 @@
-use crate::domain::video::{RecentVideo, Video, VideoSource};
+use crate::domain::video::{RecentVideo, VideoSource, VideoView};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -24,10 +24,14 @@ pub struct VideoResponse {
     pub watched: bool,
     pub position_seconds: i64,
     pub synced_at: Option<DateTime<Utc>>,
+    pub published_at: Option<DateTime<Utc>>,
+    pub description: Option<String>,
+    pub channel_name: Option<String>,
 }
 
-impl From<Video> for VideoResponse {
-    fn from(video: Video) -> Self {
+impl From<VideoView> for VideoResponse {
+    fn from(view: VideoView) -> Self {
+        let video = view.video;
         Self {
             watched: video.is_watched(),
             position_seconds: video.playback_position.seconds(),
@@ -41,6 +45,9 @@ impl From<Video> for VideoResponse {
             created_at: video.created_at,
             updated_at: video.updated_at,
             synced_at: video.synced_at,
+            published_at: None,
+            description: None,
+            channel_name: None,
         }
     }
 }

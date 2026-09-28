@@ -10,6 +10,7 @@ pub mod video_id;
 pub mod video_output_entry;
 pub mod video_record_id;
 pub mod video_status;
+pub mod video_view;
 
 pub use errors::{ListVideosError, UpdateWatchStateError};
 pub use playback_position::PlaybackPosition;
@@ -20,3 +21,4 @@ pub use video_id::VideoId;
 pub use video_output_entry::{resolve_output_dir, top_level_entry, video_dir_for_filename};
 pub use video_record_id::VideoRecordId;
 pub use video_status::VideoStatus;
+pub use video_view::VideoView;

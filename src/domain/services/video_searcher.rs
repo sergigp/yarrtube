@@ -1,10 +1,13 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
-use crate::domain::video::{ListVideosError, RecentVideo, Video, VideoSource, VideoStatus};
+use crate::domain::video::{
+    ListVideosError, RecentVideo, Video, VideoSource, VideoStatus, VideoView,
+};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use std::sync::Arc;
 
@@ -16,6 +19,7 @@ pub struct VideoSearcher {
     channel_repository: Arc<dyn ChannelRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    video_metadata_repository: Arc<dyn VideoMetadataRepository>,
 }
 
 impl VideoSearcher {
@@ -25,6 +29,7 @@ impl VideoSearcher {
         channel_repository: Arc<dyn ChannelRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         video_repository: Arc<dyn VideoRepository>,
+        video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     ) -> Self {
         Self {
             playlist_repository,
@@ -32,18 +37,24 @@ impl VideoSearcher {
             channel_repository,
             channel_video_repository,
             video_repository,
+            video_metadata_repository,
         }
     }
 }
 
 pub trait VideoSearcherApi: Send + Sync {
     /// Lists every video recorded for a playlist, confirming the playlist
-    /// exists first, ordered by playlist position.
-    fn list(&self, playlist_id: &PlaylistId) -> Result<Vec<Video>, ListVideosError>;
+    /// exists first, ordered by playlist position, each with its generated
+    /// metadata when it has any.
+    fn list(&self, playlist_id: &PlaylistId) -> Result<Vec<VideoView>, ListVideosError>;
 
     /// Lists every video recorded for a channel, confirming the channel
-    /// exists first, ordered by recency (most recent first).
-    fn list_for_channel(&self, channel_id: &ChannelHandle) -> Result<Vec<Video>, ListVideosError>;
+    /// exists first, ordered by recency (most recent first), each with its
+    /// generated metadata when it has any.
+    fn list_for_channel(
+        &self,
+        channel_id: &ChannelHandle,
+    ) -> Result<Vec<VideoView>, ListVideosError>;
 
     /// Lists downloaded videos across every tracked playlist and channel,
     /// newest sync first, truncated to `limit`. A video tracked by more than
@@ -52,7 +63,7 @@ pub trait VideoSearcherApi: Send + Sync {
 }
 
 impl VideoSearcherApi for VideoSearcher {
-    fn list(&self, playlist_id: &PlaylistId) -> Result<Vec<Video>, ListVideosError> {
+    fn list(&self, playlist_id: &PlaylistId) -> Result<Vec<VideoView>, ListVideosError> {
         self.playlist_repository
             .find(playlist_id)
             .map_err(ListVideosError::Repository)?
@@ -65,11 +76,15 @@ impl VideoSearcherApi for VideoSearcher {
         playlist_videos
             .iter()
             .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
-            .collect::<anyhow::Result<Vec<Video>>>()
+            .map(|video| video.and_then(|video| self.view(video)))
+            .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
     }
 
-    fn list_for_channel(&self, channel_id: &ChannelHandle) -> Result<Vec<Video>, ListVideosError> {
+    fn list_for_channel(
+        &self,
+        channel_id: &ChannelHandle,
+    ) -> Result<Vec<VideoView>, ListVideosError> {
         self.channel_repository
             .find(channel_id)
             .map_err(ListVideosError::Repository)?
@@ -82,7 +97,8 @@ impl VideoSearcherApi for VideoSearcher {
         channel_videos
             .iter()
             .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
-            .collect::<anyhow::Result<Vec<Video>>>()
+            .map(|video| video.and_then(|video| self.view(video)))
+            .collect::<anyhow::Result<Vec<VideoView>>>()
             .map_err(ListVideosError::Repository)
     }
 
@@ -97,6 +113,13 @@ impl VideoSearcherApi for VideoSearcher {
 }
 
 impl VideoSearcher {
+    fn view(&self, video: Video) -> anyhow::Result<VideoView> {
+        Ok(VideoView {
+            video,
+            metadata: None,
+        })
+    }
+
     fn recent_from_playlists(&self) -> Result<Vec<RecentVideo>, ListVideosError> {
         let playlists = self
             .playlist_repository

@@ -200,6 +200,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_repository.clone(),
             infrastructure.channel_video_repository.clone(),
             infrastructure.video_repository.clone(),
+            infrastructure.video_metadata_repository.clone(),
         ),
         task_view_searcher: TaskViewSearcher::new(
             infrastructure.task_repository.clone(),

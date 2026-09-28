@@ -125,6 +125,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
@@ -156,6 +157,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -195,6 +197,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -237,6 +240,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -284,6 +288,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -344,6 +349,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -375,6 +381,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_for_playlist(video_searcher, "PL1").await;
@@ -393,6 +400,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_for_playlist(video_searcher, "PL404").await;
@@ -442,6 +450,7 @@ mod tests {
             channel_repository,
             channel_video_repository,
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_for_channel(video_searcher, "@somechannel").await;
@@ -496,6 +505,7 @@ mod tests {
             channel_repository,
             channel_video_repository,
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_for_channel(video_searcher, "@somechannel").await;
@@ -529,6 +539,7 @@ mod tests {
             channel_repository,
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_for_channel(video_searcher, "@somechannel").await;
@@ -547,6 +558,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_for_channel(video_searcher, "@missing").await;
@@ -580,6 +592,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
@@ -624,6 +637,7 @@ mod tests {
             channel_repository,
             channel_video_repository,
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
@@ -672,6 +686,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
@@ -707,6 +722,7 @@ mod tests {
             channel_repository,
             channel_video_repository,
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
@@ -743,6 +759,7 @@ mod tests {
             channel_repository,
             channel_video_repository,
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
@@ -780,6 +797,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
@@ -817,6 +835,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
@@ -854,6 +873,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
@@ -894,6 +914,7 @@ mod tests {
             channel_repository,
             channel_video_repository,
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
@@ -926,6 +947,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_recent(video_searcher, ListRecentVideosQuery { limit: None }).await;
@@ -952,6 +974,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response = list_recent(video_searcher, ListRecentVideosQuery { limit: Some(2) }).await;
@@ -978,6 +1001,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.connection())),
             Arc::new(SqliteChannelVideoRepository::new(db.connection())),
             video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
         );
 
         let response =
@@ -1296,6 +1320,7 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
             Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
         )
     }
 
@@ -1387,6 +1412,9 @@ mod tests {
             watched: false,
             position_seconds: 0,
             synced_at: None,
+            published_at: None,
+            description: None,
+            channel_name: None,
         }
     }
 
