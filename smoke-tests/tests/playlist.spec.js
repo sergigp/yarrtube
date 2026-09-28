@@ -51,6 +51,12 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   })
   await expect(continueWatching.getByText(videoTitle, { exact: true })).toBeVisible()
   await expect(continueWatching.getByRole('progressbar', { name: 'Watch progress' })).toBeVisible()
+  // A video shows in one home section only, so it isn't repeated below.
+  const latestVideos = page.locator('section', {
+    has: page.getByRole('heading', { name: 'Latest videos' }),
+  })
+  await expect(latestVideos).toBeVisible()
+  await expect(latestVideos.getByText(videoTitle, { exact: true })).toHaveCount(0)
 
   // The home sections render in order: the two short shelves, then the
   // longer "Latest videos". "Quick watches" only shows when a short video is

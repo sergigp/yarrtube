@@ -59,6 +59,6 @@ Migrations:
 - [x] 6.6 `it_should_show_videos_left_out_of_a_full_section_further_down_on_home`: limits of 6 applied, exclusion by shown videos only
 - [x] 6.7 `it_should_cap_latest_on_home_at_18`: latest truncated to its limit
 - [x] 6.8 Web: `Home.jsx` polls only `fetchHomeVideos`; `api.js` drops the per-section home fetchers. Verify with `npm run lint` and `npm run build` in `web/`.
-- [ ] 6.9 Extend `smoke-tests/tests/playlist.spec.js`: the part-played video is not under "Latest videos" (this exercises `/videos/home`). Verify with `./scripts/run-smoke-tests.sh`.
+- [x] 6.9 Extend `smoke-tests/tests/playlist.spec.js`: the part-played video is not under "Latest videos" (this exercises `/videos/home`). Verify with `./scripts/run-smoke-tests.sh`.
 - [x] 6.10 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass
 
