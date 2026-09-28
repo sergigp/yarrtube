@@ -31,8 +31,26 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
 
   await assertVideoPlays(page)
 
+  // Pausing halfway through records the position. The playlist's video (Big
+  // Buck Bunny, about 10 minutes) is long enough that halfway is past the 30
+  // seconds a video must reach to count as started, so the home view offers
+  // it to continue watching.
+  const progressReported = page.waitForResponse(
+    (response) => response.url().endsWith('/progress') && response.request().method() === 'POST',
+  )
+  await page.locator('video').evaluate((el) => {
+    el.currentTime = el.duration / 2
+    el.pause()
+  })
+  expect((await progressReported).status()).toBe(204)
+
   // Same video, with thumbnail + duration, on the home feed.
   await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
+  const continueWatching = page.locator('section', {
+    has: page.getByRole('heading', { name: 'Continue watching' }),
+  })
+  await expect(continueWatching.getByText(videoTitle, { exact: true })).toBeVisible()
+  await expect(continueWatching.getByRole('progressbar', { name: 'Watch progress' })).toBeVisible()
   const homeCard = page.locator('main').getByRole('link').filter({ has: page.locator('img') }).first()
   await expect(homeCard).toBeVisible()
   await expect(homeCard.getByText(/^\d+:\d{2}(:\d{2})?$/)).toBeVisible()
