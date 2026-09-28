@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { CheckCheck, RotateCw, X } from 'lucide-react'
+import { CheckCheck, Ellipsis, RotateCw, Trash2, X } from 'lucide-react'
 import { usePolling } from '../usePolling'
 import {
   fetchChannels,
@@ -14,6 +14,12 @@ import {
 } from '../api'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 
 function activeIdFrom(pathname, prefix) {
@@ -22,6 +28,53 @@ function activeIdFrom(pathname, prefix) {
   }
   const rest = pathname.slice(prefix.length).split('/')[0]
   return rest ? decodeURIComponent(rest) : null
+}
+
+function SidebarRowMenu({ item, onSync, onMarkWatched, onDeleteRequest }) {
+  const [syncing, setSyncing] = useState(false)
+
+  return (
+    // Non-modal so opening the delete confirmation from it doesn't leave the
+    // page with pointer events disabled.
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
+        aria-label={`Actions for ${item.name}`}
+      >
+        {syncing ? (
+          <RotateCw className="size-3.5 animate-spin" />
+        ) : (
+          <Ellipsis className="size-4" />
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-auto min-w-44">
+        <DropdownMenuItem
+          disabled={syncing}
+          onSelect={async () => {
+            setSyncing(true)
+            try {
+              await onSync()
+            } finally {
+              setSyncing(false)
+            }
+          }}
+        >
+          <RotateCw />
+          Sync
+        </DropdownMenuItem>
+        {onMarkWatched && (
+          <DropdownMenuItem onSelect={onMarkWatched}>
+            <CheckCheck />
+            Mark all watched
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem variant="destructive" onSelect={onDeleteRequest}>
+          <Trash2 />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 function SidebarRow({
@@ -34,10 +87,8 @@ function SidebarRow({
   showAvatar,
   onNavigate,
 }) {
-  const [syncing, setSyncing] = useState(false)
-
   return (
-    <li className={cn('group flex items-center rounded-md', active && 'bg-accent')}>
+    <li className={cn('flex items-center gap-1 rounded-md pr-1', active && 'bg-accent')}>
       <Link
         to={href}
         onClick={onNavigate}
@@ -63,45 +114,12 @@ function SidebarRow({
           </span>
         )}
       </Link>
-      <span className="flex shrink-0 items-center gap-0.5 pr-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-        <button
-          type="button"
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
-          onClick={async () => {
-            setSyncing(true)
-            try {
-              await onSync()
-            } finally {
-              setSyncing(false)
-            }
-          }}
-          disabled={syncing}
-          aria-label={`Sync ${item.name}`}
-          title="Sync"
-        >
-          <RotateCw className={cn('size-3.5', syncing && 'animate-spin')} />
-        </button>
-        {onMarkWatched && (
-          <button
-            type="button"
-            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            onClick={onMarkWatched}
-            aria-label={`Mark ${item.name} watched`}
-            title="Mark all watched"
-          >
-            <CheckCheck className="size-3.5" />
-          </button>
-        )}
-        <button
-          type="button"
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          onClick={onDeleteRequest}
-          aria-label={`Delete ${item.name}`}
-          title="Delete"
-        >
-          <X className="size-3.5" />
-        </button>
-      </span>
+      <SidebarRowMenu
+        item={item}
+        onSync={onSync}
+        onMarkWatched={onMarkWatched}
+        onDeleteRequest={onDeleteRequest}
+      />
     </li>
   )
 }
@@ -185,6 +203,17 @@ export function Sidebar({ open = false, onClose }) {
   const { data: channels, error: channelsError } = usePolling(fetchChannels, [])
   const { data: playlists, error: playlistsError } = usePolling(fetchPlaylists, [])
 
+  // The drawer scrolls on its own; keep the page behind it still.
+  useEffect(() => {
+    if (!open) {
+      return undefined
+    }
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [open])
+
   const activeChannelId = activeIdFrom(location.pathname, '/channels/')
   const activePlaylistId = activeIdFrom(location.pathname, '/playlists/')
 
@@ -199,7 +228,7 @@ export function Sidebar({ open = false, onClose }) {
       )}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-72 max-w-[85%] flex-col gap-6 overflow-y-auto border-r border-border bg-background px-3 py-4 shadow-lg transition-transform duration-200 ease-in-out',
+          'fixed inset-y-0 left-0 z-40 flex w-64 max-w-[85%] flex-col gap-6 overflow-y-auto border-r border-border bg-background px-3 py-4 shadow-lg transition-transform duration-200 ease-in-out',
           open ? 'translate-x-0' : '-translate-x-full',
           'md:static md:z-auto md:h-full md:w-60 md:max-w-none md:translate-x-0 md:shadow-none md:transition-none md:py-6',
         )}
