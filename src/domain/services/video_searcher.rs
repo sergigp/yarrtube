@@ -180,11 +180,18 @@ impl VideoSearcher {
     /// own timestamps. Watch state is shared by every copy, so any copy is
     /// correct.
     fn once_per_youtube_video(videos: Vec<RecentVideo>) -> Vec<RecentVideo> {
-        let mut seen = HashSet::new();
         videos
             .into_iter()
-            .filter(|recent| seen.insert(recent.video.youtube_id.clone()))
-            .collect()
+            .fold(
+                (HashSet::new(), Vec::new()),
+                |(mut seen, mut kept), recent| {
+                    if seen.insert(recent.video.youtube_id.clone()) {
+                        kept.push(recent);
+                    }
+                    (seen, kept)
+                },
+            )
+            .1
     }
 
     fn recent_from_playlists(&self) -> Result<Vec<RecentVideo>, ListVideosError> {
