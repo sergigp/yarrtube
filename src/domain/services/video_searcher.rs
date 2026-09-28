@@ -206,10 +206,13 @@ impl VideoSearcher {
                 let playlist_videos = self
                     .playlist_video_repository
                     .list_for_playlist(&playlist.id)?;
-                playlist_videos
-                    .iter()
-                    .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
-                    .collect::<anyhow::Result<Vec<Video>>>()
+                self.video_repository
+                    .find_many(
+                        &playlist_videos
+                            .iter()
+                            .map(|pv| pv.video_id.clone())
+                            .collect::<Vec<_>>(),
+                    )
                     .map(|videos| {
                         videos
                             .into_iter()
@@ -242,10 +245,13 @@ impl VideoSearcher {
                 let channel_videos = self
                     .channel_video_repository
                     .list_for_channel(&channel.id)?;
-                channel_videos
-                    .iter()
-                    .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
-                    .collect::<anyhow::Result<Vec<Video>>>()
+                self.video_repository
+                    .find_many(
+                        &channel_videos
+                            .iter()
+                            .map(|cv| cv.video_id.clone())
+                            .collect::<Vec<_>>(),
+                    )
                     .map(|videos| {
                         videos
                             .into_iter()
