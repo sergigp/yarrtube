@@ -21,6 +21,26 @@ export function formatDateTime(isoString) {
   })
 }
 
+/**
+ * Formats an ISO timestamp as an absolute date, without a time of day.
+ */
+export function formatDate(isoString) {
+  if (!isoString) {
+    return '—'
+  }
+
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) {
+    return isoString
+  }
+
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
 const RELATIVE_UNITS = [
   ['y', 31536000],
   ['mo', 2592000],

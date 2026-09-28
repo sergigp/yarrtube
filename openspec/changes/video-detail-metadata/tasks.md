@@ -19,7 +19,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Update `VideoDetail.jsx` to match the web-ui spec delta:
+- [x] 4.1 Update `VideoDetail.jsx` to match the web-ui spec delta:
   - The meta line is always visible. The channel name appears only without the `channel` prop. Show "Published <date>" and "Synced <relative>", with the full date and time on hover.
   - The status badge shows only when not `DOWNLOADED`, and the quality badge is removed.
   - The description is clamped to 4 lines with a "Show more" that appears only on overflow. Keep line breaks and link URLs with `target="_blank" rel="noopener"`.
