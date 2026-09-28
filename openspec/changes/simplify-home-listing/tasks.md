@@ -28,7 +28,7 @@ Each test here moves an existing rule onto `/videos/home`. It pins behaviour tha
 - [x] 2.12 `it_should_list_a_continue_watching_video_once_from_the_channel_on_home`: channel copy only, even when the playlist copy was played later
 - [x] 2.13 `it_should_order_quick_watches_newest_first_on_home`
 - [x] 2.14 `it_should_list_only_videos_under_15_minutes_as_quick_watches_on_home`: 899s under `quick_watches`, 900s under `latest`
-- [ ] 2.15 `it_should_not_list_videos_without_duration_as_quick_watches_on_home`: under `latest`
+- [x] 2.15 `it_should_not_list_videos_without_duration_as_quick_watches_on_home`: under `latest`
 - [ ] 2.16 `it_should_not_list_watched_videos_as_quick_watches_on_home`: under `latest`, `watched: true`
 - [ ] 2.17 `it_should_list_a_quick_watch_once_from_the_channel_on_home`: channel copy only, even when the playlist copy is newer
 
