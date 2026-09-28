@@ -4,7 +4,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_record_the_last_played_time_on_every_copy`: `update_watch_state` sets `last_played_at` to now on every copy
+- [x] 2.1 `it_should_record_the_last_played_time_on_every_copy`: `update_watch_state` sets `last_played_at` to now on every copy
 - [ ] 2.2 `it_should_record_the_last_played_time_even_if_the_watch_state_is_unchanged`: the watched ≤10% branch still sets `last_played_at`
 - [ ] 2.3 `it_should_not_change_the_last_played_time_when_marking_a_channel_watched`: `mark_watched` leaves `last_played_at` untouched
 - [ ] 2.4 `it_should_list_no_continue_watching_videos_if_none_in_progress`: empty listing when nothing is in progress

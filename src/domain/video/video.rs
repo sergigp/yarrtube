@@ -161,6 +161,7 @@ impl Video {
             (false, Some(progress)) if progress >= WATCHED_THRESHOLD => self.mark_watched(now),
             (false, _) => Self {
                 playback_position: position,
+                last_played_at: Some(now),
                 ..self
             },
         }
