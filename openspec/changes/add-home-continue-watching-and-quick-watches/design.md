@@ -11,10 +11,10 @@
 - `src/serve.rs`: passes the clock to `VideoSearcher::new`.
 - `src/application/http/channels/mod.rs`: test only (marking a channel watched keeps last played times).
 - `src/application/http/tasks/mod.rs`: test only (a `Video` fixture gains `last_played_at: None`).
-- `web/src/api.js`: `fetchContinueWatchingVideos` and `fetchQuickWatchVideos`.
-- `web/src/components/Home.jsx`: renders three sections in order; the new ones are hidden when empty, loading or failing.
+- `web/src/api.js`: `fetchContinueWatchingVideos` and `fetchQuickWatchVideos`; the three home fetchers take a `limit` passed as the `limit` query parameter.
+- `web/src/components/Home.jsx`: renders Continue watching (6), Quick watches (6) and Latest videos (18), in that order; the new ones are hidden when empty, loading or failing.
 - `web/src/components/WatchProgressBar.jsx`: thin bar over a thumbnail showing position / duration.
-- `smoke-tests/tests/playlist.spec.js`: pauses the playlist's video (about 10 minutes long) halfway; the home view shows it under "Continue watching" with a progress bar.
+- `smoke-tests/tests/playlist.spec.js`: pauses the playlist's video (about 10 minutes long) halfway; the home view shows it under "Continue watching" with a progress bar, and the section headings render in order.
 - `smoke-tests/tests/channel.spec.js`: its part-playback seeks to half the duration instead of 5s, so the resume check holds whatever the channel's newest video lasts.
 
 ## Types & Signatures
@@ -137,7 +137,7 @@ pub struct RecentVideoResponse {
 `GET /videos/quick-watches?limit=N` → `list_quick_watch_videos` → `list_across_sources` → `VideoSearcher::list_quick_watches(limit)` → `list_once_across_sources` → `downloaded_across_sources()` → filter `video.is_quick_watch()` → `once_per_youtube_video` → sort by `created_at` desc → truncate(limit) → `RecentVideoResponse::from`
 
 **Home view**:
-`Home` → `usePolling(fetchContinueWatchingVideos)`, `usePolling(fetchRecentVideos)`, `usePolling(fetchQuickWatchVideos)` → `HomeSection` per list (a new section renders nothing while loading, on error or when its list is empty) → `VideoGrid` (continue-watching cards render `WatchProgressBar` with `position_seconds / duration_seconds`)
+`Home` → `usePolling(() => fetchContinueWatchingVideos(6))`, `usePolling(() => fetchQuickWatchVideos(6))`, `usePolling(() => fetchRecentVideos(18))` (→ `GET /videos/…?limit=N`) → `HomeSection` per list, in that order (a new section renders nothing while loading, on error or when its list is empty) → `VideoGrid` (continue-watching cards render `WatchProgressBar` with `position_seconds / duration_seconds`)
 
 ## Test Plan
 

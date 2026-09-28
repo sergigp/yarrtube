@@ -8,7 +8,7 @@ The home view only shows "Latest videos", so a video you started yesterday or a 
 - New endpoint listing **continue watching** videos: downloaded, unwatched, playback position over 30 seconds, last played within the past 7 days, most recently played first, one entry per YouTube video. Videos not played for a week drop out, since they're probably not worth finishing.
 - New endpoint listing **quick watches**: downloaded, unwatched videos shorter than 15 minutes, newest sync first, one entry per YouTube video.
 - Both endpoints take the same optional `limit` as the recent videos endpoint (default 20, capped at 100) and return the same card shape, with the saved playback position added.
-- The home view shows three sections, in this order: "Continue watching" (cards show a progress bar), "Latest videos" (unchanged), "Quick watches". The two new sections are hidden when empty.
+- The home view shows three sections, in this order: "Continue watching" (cards show a progress bar, up to 6 videos), "Quick watches" (up to 6 videos), "Latest videos" (up to 18 videos, down from 20). The two short shelves come first so they can be glanced at; the longer browsing list comes last. The two new sections are hidden when empty.
 
 ## Capabilities
 
@@ -28,5 +28,5 @@ _None._
 - **Domain**: `Video` gains `last_played_at` and the continue-watching / quick-watch rules. `VideoSearcher` gains two listings and a clock dependency (for the 7-day window).
 - **Infrastructure**: `VideoRepository` gains `find_many`, so listing across sources loads each source's videos in one query instead of one per video (this also speeds up the recent videos listing).
 - **HTTP API**: new `GET /videos/continue-watching` and `GET /videos/quick-watches`. The recent videos card response gains `position_seconds` (additive).
-- **Web**: `Home.jsx` renders three sections, plus a progress bar on continue-watching cards. `api.js` gains two fetchers.
-- **Smoke tests**: the playlist spec part-plays its video and checks it appears under "Continue watching" on the home view, with a progress bar.
+- **Web**: `Home.jsx` renders three sections, plus a progress bar on continue-watching cards, each asking its endpoint for a fixed number of videos through the existing `limit` parameter. `api.js` gains two fetchers, and the three home fetchers take a limit. No backend change.
+- **Smoke tests**: the playlist spec part-plays its video and checks it appears under "Continue watching" on the home view, with a progress bar, and that the sections render in order.

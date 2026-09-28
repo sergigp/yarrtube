@@ -42,3 +42,9 @@ Migrations:
 - [x] 4.2 Extend `smoke-tests/tests/playlist.spec.js`: pause its video (about 10 minutes long) halfway, navigate home and assert it appears under "Continue watching" with a progress bar (this exercises `/videos/continue-watching`). `channel.spec.js` seeks to half the duration for its resume check, since the channel's newest video can be too short for a fixed 45s. Verify with `./scripts/run-smoke-tests.sh`.
 - [x] 4.3 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass
 - [ ] 4.4 Manual check with `scripts/run-local.sh` against a copy of the prod DB: the part-watched video ("How to set up Herdr…"), backfilled as played at migration time, shows under "Continue watching" with a progress bar, "Quick watches" lists videos under 15 min, and "Latest videos" is unchanged
+
+## 5. Home page refinement: order and section sizes
+
+- [ ] 5.1 `api.js`: `fetchContinueWatchingVideos`, `fetchQuickWatchVideos` and `fetchRecentVideos` take a `limit` and pass it as the `limit` query parameter
+- [ ] 5.2 `Home.jsx`: sections in the order Continue watching, Quick watches, Latest videos, requesting 6, 6 and 18 videos. Verify with `npm run lint` and `npm run build` in `web/`.
+- [ ] 5.3 Extend `smoke-tests/tests/playlist.spec.js`: on the home view the section headings render in the order Continue watching, Quick watches (when present), Latest videos. Verify with `./scripts/run-smoke-tests.sh`.
