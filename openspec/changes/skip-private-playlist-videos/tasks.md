@@ -18,5 +18,5 @@ _None: reconciler behaviour is unchanged (see design.md Test Plan)._
 
 ## 4. Verification
 
-- [ ] 4.1 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cargo test --locked`, and verify all pass
+- [x] 4.1 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cargo test --locked`, and verify all pass
 - [ ] 4.2 Run `scripts/run-local.sh` against a playlist containing a private video. Verify that no "Private video" entry is stored or downloaded, and that an existing stuck "Private video" row is removed on the first reconcile pass
