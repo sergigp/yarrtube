@@ -477,6 +477,25 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_a_video_with_a_last_played_time() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let video = Video {
+            last_played_at: Some(DateTime::<Utc>::from_timestamp(100, 0).unwrap()),
+            ..video("First", now)
+        };
+        repo.save(&video).unwrap();
+        let replayed = Video {
+            last_played_at: Some(DateTime::<Utc>::from_timestamp(200, 0).unwrap()),
+            ..video.clone()
+        };
+
+        repo.update(&replayed).unwrap();
+
+        assert_eq!(repo.find(&video.id).unwrap(), Some(replayed));
+    }
+
+    #[test]
     fn it_should_find_every_copy_of_a_youtube_video() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();

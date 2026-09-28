@@ -28,7 +28,7 @@
 ## 3. Infrastructure adapters (TDD)
 
 `SqliteVideoRepository`:
-- [ ] 3.1 `it_should_round_trip_a_video_with_a_last_played_time`: the column is written by `save`/`update` and read back
+- [x] 3.1 `it_should_round_trip_a_video_with_a_last_played_time`: the column is written by `save`/`update` and read back
 - [ ] 3.2 `it_should_round_trip_a_video_never_played`: NULL maps to `None`
 
 Migrations:
