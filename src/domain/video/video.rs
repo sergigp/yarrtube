@@ -193,7 +193,8 @@ impl Video {
     /// Downloaded, unwatched, position over 30s and last played within the
     /// past 7 days of `now`: worth offering to continue watching.
     pub fn is_in_progress(&self, now: DateTime<Utc>) -> bool {
-        self.playback_position.seconds() > IN_PROGRESS_MIN_POSITION_SECONDS
+        !self.is_watched()
+            && self.playback_position.seconds() > IN_PROGRESS_MIN_POSITION_SECONDS
             && self
                 .last_played_at
                 .is_some_and(|played_at| now - played_at <= IN_PROGRESS_WINDOW)

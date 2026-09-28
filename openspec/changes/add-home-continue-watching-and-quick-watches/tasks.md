@@ -13,7 +13,7 @@
 - [x] 2.6 `it_should_order_continue_watching_by_last_played_first`: sort by `last_played_at` desc
 - [x] 2.7 `it_should_exclude_videos_last_played_over_a_week_ago_from_continue_watching`: 7-day window against the clock (boundary: exactly 7 days is included)
 - [x] 2.8 `it_should_exclude_barely_started_videos_from_continue_watching`: position must be > 30s
-- [ ] 2.9 `it_should_exclude_watched_and_never_played_videos_from_continue_watching`: unwatched and `last_played_at` present
+- [x] 2.9 `it_should_exclude_watched_and_never_played_videos_from_continue_watching`: unwatched and `last_played_at` present
 - [ ] 2.10 `it_should_exclude_not_downloaded_videos_from_continue_watching`: only `Downloaded` videos
 - [ ] 2.11 `it_should_list_a_continue_watching_video_once_across_sources`: `once_per_youtube_video` keeps the channel copy
 - [ ] 2.12 `it_should_honor_and_cap_the_continue_watching_limit`: default 20, explicit N, capped at 100
