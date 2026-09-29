@@ -5,8 +5,21 @@ RUN npm ci
 COPY web/ ./
 RUN npm run build
 
-FROM rust:slim-bookworm AS build
+# Dependencies are compiled from a cargo-chef recipe (derived only from the
+# manifests) in their own layer, so a source-only change reuses the cached
+# dependency build instead of recompiling every crate.
+FROM rust:slim-bookworm AS chef
+RUN cargo install cargo-chef --locked
 WORKDIR /build
+
+FROM chef AS planner
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS build
+COPY --from=planner /build/recipe.json recipe.json
+RUN cargo chef cook --release --locked --recipe-path recipe.json
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY migrations ./migrations
