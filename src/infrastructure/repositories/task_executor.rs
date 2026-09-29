@@ -598,6 +598,45 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_not_block_reconciles_behind_thumbnail_fetches() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(BlockingHandler::default());
+        let _releases = [
+            handler.gate(&fetch_thumbnail("rec1")),
+            handler.gate(&reconcile("PL1")),
+        ];
+        task_repository
+            .schedule(&fetch_thumbnail("rec1"), now())
+            .unwrap();
+        task_repository
+            .schedule(&fetch_thumbnail("rec2"), now())
+            .unwrap();
+        task_repository.schedule(&reconcile("PL1"), now()).unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            blocking_registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            2,
+        ));
+
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                running(1, &fetch_thumbnail("rec1")),
+                pending(2, &fetch_thumbnail("rec2")),
+                running(3, &reconcile("PL1")),
+            ]
+        );
+    }
+
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
     const TEST_DOWNLOAD_CONCURRENCY: usize = 2;
 
@@ -630,6 +669,13 @@ mod tests {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
             quality: "high".to_string(),
+            output_dir: "/videos/my-playlist".to_string(),
+        }
+    }
+
+    fn fetch_thumbnail(video_id: &str) -> Task {
+        Task::FetchThumbnail {
+            video_id: video_id.to_string(),
             output_dir: "/videos/my-playlist".to_string(),
         }
     }
