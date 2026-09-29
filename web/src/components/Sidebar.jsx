@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { CheckCheck, Ellipsis, RotateCw, Trash2, X } from 'lucide-react'
-import { useChannels, usePlaylists } from '../queries'
+import { useChannels, useInvalidateLibrary, usePlaylists } from '../queries'
 import {
   reconcileChannel,
   reconcilePlaylist,
@@ -202,6 +202,7 @@ export function Sidebar({ open = false, onClose }) {
   const navigate = useNavigate()
   const { data: channels, error: channelsError } = useChannels()
   const { data: playlists, error: playlistsError } = usePlaylists()
+  const invalidateLibrary = useInvalidateLibrary()
 
   // The drawer scrolls on its own; keep the page behind it still.
   useEffect(() => {
@@ -252,10 +253,17 @@ export function Sidebar({ open = false, onClose }) {
           hrefFor={(channel) => `/channels/${channel.id}`}
           showAvatar
           onNavigate={onClose}
-          onSync={reconcileChannel}
-          onMarkWatched={markChannelWatched}
+          onSync={async (id) => {
+            await reconcileChannel(id)
+            invalidateLibrary()
+          }}
+          onMarkWatched={async (id) => {
+            await markChannelWatched(id)
+            invalidateLibrary()
+          }}
           onDelete={async (id) => {
             await deleteChannel(id)
+            invalidateLibrary()
             if (activeChannelId === id) {
               navigate('/')
             }
@@ -269,9 +277,13 @@ export function Sidebar({ open = false, onClose }) {
           activeId={activePlaylistId}
           hrefFor={(playlist) => `/playlists/${playlist.id}`}
           onNavigate={onClose}
-          onSync={reconcilePlaylist}
+          onSync={async (id) => {
+            await reconcilePlaylist(id)
+            invalidateLibrary()
+          }}
           onDelete={async (id) => {
             await deletePlaylist(id)
+            invalidateLibrary()
             if (activePlaylistId === id) {
               navigate('/')
             }

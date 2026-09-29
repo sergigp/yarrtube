@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
-import { usePlaylists, usePlaylistVideos } from '../queries'
+import { useInvalidateLibrary, usePlaylists, usePlaylistVideos } from '../queries'
 import {
   reconcilePlaylist,
   deletePlaylist,
@@ -49,6 +49,7 @@ export function PlaylistDetail() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { data: playlists, error: playlistsError } = usePlaylists()
+  const invalidateLibrary = useInvalidateLibrary()
   const playlist = playlists?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = usePlaylistVideos(id)
@@ -84,9 +85,13 @@ export function PlaylistDetail() {
         name={playlist.name}
         videos={videos}
         unwatchedCount={playlist.unwatched_count}
-        onSync={() => reconcilePlaylist(id)}
+        onSync={async () => {
+          await reconcilePlaylist(id)
+          invalidateLibrary()
+        }}
         onDelete={async () => {
           await deletePlaylist(id)
+          invalidateLibrary()
           navigate('/')
         }}
         deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."

@@ -19,7 +19,7 @@
 ## 4. Verification
 
 - [x] 4.1 Add `@tanstack/react-query` and wrap `App` in a `QueryClientProvider` in `main.jsx`. Create `web/src/queries.js` as in design.md. Replace every `usePolling` call (Sidebar, ChannelDetail, PlaylistDetail, Home, TasksView) with its query hook, then delete `usePolling.js`. Verify with `npm run build` and `npm run lint` in `web/`.
-- [ ] 4.2 Call `useInvalidateLibrary` after sync, mark watched and delete (sidebar rows and detail headers) and after a successful add (`AddDialog`). In `useWatchProgress`, invalidate `queryKeys.channels` after each successful non-beacon progress report. Verify with `npm run build` and `npm run lint`.
+- [x] 4.2 Call `useInvalidateLibrary` after sync, mark watched and delete (sidebar rows and detail headers) and after a successful add (`AddDialog`). In `useWatchProgress`, invalidate `queryKeys.channels` after each successful non-beacon progress report. Verify with `npm run build` and `npm run lint`.
 - [ ] 4.3 Create `web/src/sidebarSections.js` (`orderChannels`, `collapse`, `channelLeadCount`, `matchesSearch` and the thresholds 10 / 5 / 15). In `Sidebar.jsx` add:
   - collapsed sections with a "Show N more" / "Show less" control
   - the active entry always visible

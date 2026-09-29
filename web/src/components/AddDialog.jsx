@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Info } from 'lucide-react'
 import { createPlaylist, createChannel } from '../api'
+import { useInvalidateLibrary } from '../queries'
 import { deriveChannelPathSegment } from '../channelHandle'
 import { LocationField } from './LocationField'
 import {
@@ -70,6 +71,7 @@ export function AddDialog({ open, onOpenChange }) {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const invalidateLibrary = useInvalidateLibrary()
 
   const resetAll = () => {
     setMode('playlist')
@@ -128,6 +130,7 @@ export function AddDialog({ open, onOpenChange }) {
           path: location.path,
         })
       }
+      invalidateLibrary()
       resetAll()
       onOpenChange(false)
     } catch (err) {

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { beaconVideoProgress, recordVideoProgress } from './api'
+import { queryKeys } from './queries'
 
 const REPORT_INTERVAL_MS = 15000
 
@@ -11,8 +13,11 @@ const REPORT_INTERVAL_MS = 15000
  * hidden or closed. Takes the element itself (from a callback ref) rather
  * than a ref object, so it re-attaches whenever the element mounts later
  * than the video is selected (e.g. while the view is still loading).
+ * After each successful non-beacon report it refetches the channel list, so
+ * unwatched badges follow a video crossing the watched threshold.
  */
 export function useWatchProgress(videoElement, video) {
+  const queryClient = useQueryClient()
   const latestVideo = useRef(video)
   const videoId = video?.id ?? null
   const playable = video?.status === 'DOWNLOADED' && Boolean(video?.filename)
@@ -49,7 +54,13 @@ export function useWatchProgress(videoElement, video) {
       }
       lastReportedPosition = progress.position_seconds
       lastReportAt = Date.now()
-      Promise.resolve(send(videoId, progress)).catch(() => {})
+      Promise.resolve(send(videoId, progress))
+        .then(() => {
+          if (send === recordVideoProgress) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.channels })
+          }
+        })
+        .catch(() => {})
     }
 
     const resume = () => {
@@ -93,7 +104,7 @@ export function useWatchProgress(videoElement, video) {
       window.removeEventListener('pagehide', onPageHide)
       report()
     }
-  }, [videoElement, videoId, playable])
+  }, [videoElement, videoId, playable, queryClient])
 }
 
 function seekTo(element, seconds) {

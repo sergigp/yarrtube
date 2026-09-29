@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
-import { useChannels, useChannelVideos } from '../queries'
+import { useChannels, useChannelVideos, useInvalidateLibrary } from '../queries'
 import {
   reconcileChannel,
   deleteChannel,
@@ -51,6 +51,7 @@ export function ChannelDetail() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { data: channels, error: channelsError } = useChannels()
+  const invalidateLibrary = useInvalidateLibrary()
   const channel = channels?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = useChannelVideos(id)
@@ -88,10 +89,17 @@ export function ChannelDetail() {
         avatarSrc={channel.avatar_filename ? avatarMediaUrl(channel.avatar_filename) : null}
         videos={videos}
         unwatchedCount={channel.unwatched_count}
-        onSync={() => reconcileChannel(id)}
-        onMarkWatched={() => markChannelWatched(id)}
+        onSync={async () => {
+          await reconcileChannel(id)
+          invalidateLibrary()
+        }}
+        onMarkWatched={async () => {
+          await markChannelWatched(id)
+          invalidateLibrary()
+        }}
         onDelete={async () => {
           await deleteChannel(id)
+          invalidateLibrary()
           navigate('/')
         }}
         deleteDescription="This removes the channel from tracking."
