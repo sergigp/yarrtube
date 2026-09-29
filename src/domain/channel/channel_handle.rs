@@ -25,6 +25,12 @@ impl ChannelHandle {
         &self.0
     }
 
+    /// YouTube treats handles that differ only in case (`@Name`, `@name`) as
+    /// the same channel.
+    pub fn is_same_channel_as(&self, other: &ChannelHandle) -> bool {
+        self.0.to_lowercase() == other.0.to_lowercase()
+    }
+
     /// Parses a bare channel handle (`@name`) or a YouTube channel URL
     /// carrying a handle (`youtube.com/@name`) into a `ChannelHandle`.
     /// Anything else (an unrecognized host, a legacy `/channel/UC...` URL, a

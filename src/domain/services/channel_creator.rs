@@ -87,9 +87,16 @@ impl ChannelCreatorApi for ChannelCreator {
 }
 
 impl ChannelCreator {
+    /// Matches every stored channel rather than calling `find`, since the
+    /// stored handle may differ from `id` in case.
     fn find_existing(&self, id: &ChannelHandle) -> Result<Option<Channel>, CreateChannelError> {
         self.repository
-            .find(id)
+            .list()
+            .map(|channels| {
+                channels
+                    .into_iter()
+                    .find(|channel| channel.id.is_same_channel_as(id))
+            })
             .map_err(CreateChannelError::Repository)
     }
 
