@@ -87,7 +87,7 @@ The system SHALL provide an HTTP endpoint that deletes a previously created chan
 - **THEN** the system reports that nothing was found, makes no change to storage, and returns a bad request with a meaningful error description
 
 ### Requirement: List Channels
-The system SHALL provide an HTTP endpoint that returns every currently stored channel. Each returned channel SHALL include only its handle, name, path and avatar filename (when present), plus its count of unwatched videos, counting only videos that have finished downloading.
+The system SHALL provide an HTTP endpoint that returns every currently stored channel, sorted alphabetically by name, ignoring case. Each returned channel SHALL include only its handle, name, path and avatar filename (when present), plus its count of unwatched videos, counting only videos that have finished downloading.
 
 #### Scenario: Channels exist
 - **WHEN** one or more channels have been created
@@ -100,6 +100,10 @@ The system SHALL provide an HTTP endpoint that returns every currently stored ch
 #### Scenario: Unwatched count only includes downloaded, unwatched videos
 - **WHEN** a channel has downloaded videos that are unwatched, downloaded videos that are watched, and videos that have not finished downloading
 - **THEN** its unwatched video count equals the number of downloaded, unwatched videos only
+
+#### Scenario: Channels are sorted by name regardless of creation order
+- **WHEN** channels named "veritasium", "Kurzgesagt" and "3Blue1Brown" were created in that order
+- **THEN** the system returns them in the order "3Blue1Brown", "Kurzgesagt", "veritasium"
 
 ### Requirement: Channel Avatar Is Recorded
 The system SHALL record, on the channel itself, the local filename of its downloaded avatar image, whenever one was successfully resolved and downloaded during channel creation. A channel whose avatar could not be resolved or downloaded SHALL have no recorded avatar filename.

@@ -86,7 +86,7 @@ The system SHALL provide an HTTP endpoint that deletes a previously created play
 - **THEN** the system reports that nothing was found and makes no change to storage, including no change to any video records, and returns a bad request with a meaningful error description
 
 ### Requirement: List All Playlists
-The system SHALL provide an HTTP endpoint that returns every currently stored playlist.
+The system SHALL provide an HTTP endpoint that returns every currently stored playlist, sorted alphabetically by name, ignoring case.
 
 #### Scenario: Playlists exist
 - **WHEN** one or more playlists have been created
@@ -95,6 +95,10 @@ The system SHALL provide an HTTP endpoint that returns every currently stored pl
 #### Scenario: No playlists exist
 - **WHEN** no playlists have been created
 - **THEN** the system returns an empty list rather than an error
+
+#### Scenario: Playlists are sorted by name regardless of creation order
+- **WHEN** playlists named "watch later", "Courses" and "Ambient" were created in that order
+- **THEN** the system returns them in the order "Ambient", "Courses", "watch later"
 
 ### Requirement: Playlist Creation Publishes a Domain Event
 The system SHALL publish a PlaylistCreated domain event, containing the playlist's ID, whenever a playlist is newly created — and SHALL NOT publish it when creation is a no-op because the playlist already existed.

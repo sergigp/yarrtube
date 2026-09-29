@@ -22,15 +22,15 @@ The system SHALL record, for each video, whether it has been watched and its sav
 - **THEN** the video stays watched
 
 ### Requirement: Record Playback Progress
-The system SHALL provide an HTTP endpoint that, given a YouTube video ID and a playback position in whole seconds (plus, optionally, the duration reported by the player), records playback progress for every stored copy of that video. The recorded duration SHALL be used. The reported duration SHALL be used only when no duration is recorded. When included, the reported duration SHALL be a positive number of whole seconds. The endpoint SHALL respond with HTTP status 204 on success. It SHALL accept requests sent as a browser beacon on page unload.
+The system SHALL provide an HTTP endpoint that, given a YouTube video ID and a playback position in whole seconds (plus, optionally, the duration reported by the player), records playback progress for every stored copy of that video. The recorded duration SHALL be used. The reported duration SHALL be used only when no duration is recorded. When included, the reported duration SHALL be a positive number of whole seconds. The endpoint SHALL respond with HTTP status 200 on success, with a body stating whether the video is watched once the report is applied (`{ "watched": true }` or `{ "watched": false }`). It SHALL accept requests sent as a browser beacon on page unload.
 
 #### Scenario: Progress on an unwatched video
 - **WHEN** a client records a position below 90% of the video's duration for an unwatched video
-- **THEN** the daemon responds with HTTP status 204, the video stays unwatched, and its saved position becomes the given position
+- **THEN** the daemon responds with HTTP status 200 and `watched: false`, the video stays unwatched, and its saved position becomes the given position
 
 #### Scenario: Progress reaches 90%
 - **WHEN** a client records a position at or above 90% of the video's duration for an unwatched video
-- **THEN** the video becomes watched and its saved position resets to 0
+- **THEN** the daemon responds with `watched: true`, the video becomes watched and its saved position resets to 0
 
 #### Scenario: Duration only known by the player
 - **WHEN** a client records progress for a video with no recorded duration and includes the player's duration
@@ -46,7 +46,7 @@ The system SHALL provide an HTTP endpoint that, given a YouTube video ID and a p
 
 #### Scenario: Rewatch passes 10%
 - **WHEN** a client records a position above 10% and below 90% of the duration for a watched video
-- **THEN** the video becomes unwatched and its saved position becomes the given position
+- **THEN** the daemon responds with `watched: false`, the video becomes unwatched and its saved position becomes the given position
 
 #### Scenario: Playing on past 90%
 - **WHEN** a client records a position at or above 90% of the duration for a watched video
