@@ -54,7 +54,7 @@ Download and task listing:
 
 Domain and composition:
 - [x] 2.31 `task.rs` › `it_should_map_task_types_to_lanes`: `download_video` → Download, `fetch_thumbnail` → Thumbnail, `update_ytdlp` → Exclusive, others → Light.
-- [ ] 2.32 `task.rs` › `it_should_key_video_tasks_by_video_id`: `download_video`/`fetch_thumbnail` → `Some("video:<id>")`, others → `None`.
+- [x] 2.32 `task.rs` › `it_should_key_video_tasks_by_video_id`: `download_video`/`fetch_thumbnail` → `Some("video:<id>")`, others → `None`.
 - [ ] 2.33 `serve.rs` › `it_should_default_download_concurrency_when_invalid`: unset, `0`, `-1` and `abc` → 2, and `4` → 4.
 
 ## 3. Infrastructure adapters (TDD)

@@ -225,8 +225,17 @@ impl Task {
     /// `Some("video:<id>")` for `download_video` and `fetch_thumbnail`: two
     /// tasks sharing a key never run at the same time, and a task with a key
     /// is not scheduled twice while one is pending or running.
-    pub fn exclusivity_key(_task_type: &str, _payload: &str) -> Option<String> {
-        None
+    pub fn exclusivity_key(task_type: &str, payload: &str) -> Option<String> {
+        let video_id = match task_type {
+            "download_video" => Self::decode_download_video_payload(payload)
+                .ok()
+                .map(|(video_id, _, _)| video_id),
+            "fetch_thumbnail" => Self::decode_fetch_thumbnail_payload(payload)
+                .ok()
+                .map(|(video_id, _)| video_id),
+            _ => None,
+        }?;
+        Some(format!("video:{video_id}"))
     }
 }
 
@@ -479,6 +488,36 @@ mod tests {
                 TaskLane::Light,
                 TaskLane::Light,
                 TaskLane::Light,
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_key_video_tasks_by_video_id() {
+        let download = Task::DownloadVideo {
+            video_id: "rec1".to_string(),
+            quality: "high".to_string(),
+            output_dir: "/videos/music".to_string(),
+        };
+        let fetch_thumbnail = Task::FetchThumbnail {
+            video_id: "rec2".to_string(),
+            output_dir: "/videos/music".to_string(),
+        };
+        let reconcile = Task::ReconcilePlaylist {
+            playlist_id: "PL1".to_string(),
+        };
+
+        let keys: Vec<Option<String>> = [download, fetch_thumbnail, reconcile]
+            .iter()
+            .map(|task| Task::exclusivity_key(task.task_type(), &task.payload().to_string()))
+            .collect();
+
+        assert_eq!(
+            keys,
+            vec![
+                Some("video:rec1".to_string()),
+                Some("video:rec2".to_string()),
+                None,
             ]
         );
     }
