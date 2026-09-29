@@ -107,7 +107,7 @@ While its tab is visible, the application SHALL refresh the sidebar's channel an
 ## MODIFIED Requirements
 
 ### Requirement: Unwatched Badge On Sidebar Channels
-Each channel row in the sidebar SHALL display a badge with the channel's unwatched video count when that count is above 0, and no badge when it is 0. The badge SHALL update without a manual page reload. After an action in the application that changes a channel's unwatched count (a video becoming watched or unwatched during playback, marking the channel watched, syncing, adding or deleting a channel), the badge and the channel's sidebar position SHALL update promptly, without waiting for the periodic refresh.
+Each channel row in the sidebar SHALL display a badge with the channel's unwatched video count when that count is above 0, and no badge when it is 0. The badge SHALL update without a manual page reload. After an action in the application that changes a channel's unwatched count (a video becoming watched or unwatched during playback, marking the channel watched, syncing, adding or deleting a channel), the badge and the channel's sidebar position SHALL update promptly, without waiting for the periodic refresh. During playback, the channel list SHALL be refetched only when a progress report changes the video's watched state.
 
 #### Scenario: Channel with unwatched videos
 - **WHEN** a channel has 3 downloaded, unwatched videos
@@ -120,6 +120,10 @@ Each channel row in the sidebar SHALL display a badge with the channel's unwatch
 #### Scenario: Badge updates after watching
 - **WHEN** a user finishes watching one of a channel's unwatched videos
 - **THEN** the channel's badge count decreases promptly without a page reload
+
+#### Scenario: Progress that leaves the watched state unchanged
+- **WHEN** a progress report during playback leaves the video's watched state as it was
+- **THEN** the application does not refetch the channel list because of it
 
 #### Scenario: Badge updates after marking watched
 - **WHEN** a user marks a channel watched from its sidebar row or its detail view

@@ -137,13 +137,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
             })
             .context("failed to list channel videos")?;
 
-        rows.map(|row| {
-            let columns = row
-                .inspect_err(|e| tracing::error!(error = %e, "failed to read channel video row"))
-                .context("failed to read channel video row")?;
-            columns_to_channel_video(columns)
-        })
-        .collect()
+        rows_to_channel_videos(rows)
     }
 
     fn list(&self) -> anyhow::Result<Vec<ChannelVideo>> {
@@ -166,13 +160,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
             .inspect_err(|e| tracing::error!(error = %e, "failed to list all channel videos"))
             .context("failed to list all channel videos")?;
 
-        rows.map(|row| {
-            let columns = row
-                .inspect_err(|e| tracing::error!(error = %e, "failed to read channel video row"))
-                .context("failed to read channel video row")?;
-            columns_to_channel_video(columns)
-        })
-        .collect()
+        rows_to_channel_videos(rows)
     }
 
     fn delete(&self, channel_id: &ChannelHandle, youtube_video_id: &VideoId) -> anyhow::Result<()> {
@@ -223,6 +211,18 @@ fn row_to_columns(row: &rusqlite::Row) -> rusqlite::Result<Columns> {
         row.get::<_, i64>(3)?,
         row.get::<_, String>(4)?,
     ))
+}
+
+fn rows_to_channel_videos(
+    rows: impl Iterator<Item = rusqlite::Result<Columns>>,
+) -> anyhow::Result<Vec<ChannelVideo>> {
+    rows.map(|row| {
+        let columns = row
+            .inspect_err(|e| tracing::error!(error = %e, "failed to read channel video row"))
+            .context("failed to read channel video row")?;
+        columns_to_channel_video(columns)
+    })
+    .collect()
 }
 
 fn columns_to_channel_video(columns: Columns) -> anyhow::Result<ChannelVideo> {

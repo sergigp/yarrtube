@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
-import { useChannels, useChannelVideos, useInvalidateLibrary } from '../queries'
+import {
+  queryKeys,
+  useChannels,
+  useChannelVideos,
+  useLibraryAction,
+  useRemoveQuery,
+} from '../queries'
 import {
   reconcileChannel,
   deleteChannel,
@@ -51,7 +57,8 @@ export function ChannelDetail() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { data: channels, error: channelsError } = useChannels()
-  const invalidateLibrary = useInvalidateLibrary()
+  const refreshing = useLibraryAction()
+  const removeQuery = useRemoveQuery()
   const channel = channels?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = useChannelVideos(id)
@@ -89,19 +96,13 @@ export function ChannelDetail() {
         avatarSrc={channel.avatar_filename ? avatarMediaUrl(channel.avatar_filename) : null}
         videos={videos}
         unwatchedCount={channel.unwatched_count}
-        onSync={async () => {
-          await reconcileChannel(id)
-          invalidateLibrary()
-        }}
-        onMarkWatched={async () => {
-          await markChannelWatched(id)
-          invalidateLibrary()
-        }}
-        onDelete={async () => {
+        onSync={refreshing(() => reconcileChannel(id))}
+        onMarkWatched={refreshing(() => markChannelWatched(id))}
+        onDelete={refreshing(async () => {
           await deleteChannel(id)
-          invalidateLibrary()
+          removeQuery(queryKeys.channelVideos(id))
           navigate('/')
-        }}
+        })}
         deleteDescription="This removes the channel from tracking."
       />
       <div className="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_360px] md:items-start md:gap-6 md:overflow-hidden">

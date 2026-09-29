@@ -86,3 +86,31 @@ export function useInvalidateLibrary() {
     [queryClient],
   )
 }
+
+/**
+ * Returns a function that wraps an async action so the channel and playlist
+ * lists refetch once it succeeds.
+ */
+export function useLibraryAction() {
+  const invalidateLibrary = useInvalidateLibrary()
+  return useCallback(
+    (action) =>
+      async (...args) => {
+        await action(...args)
+        invalidateLibrary()
+      },
+    [invalidateLibrary],
+  )
+}
+
+/**
+ * Returns a function that drops a cached query outright, e.g. a deleted
+ * entry's video list, so refetching the library doesn't request it again.
+ */
+export function useRemoveQuery() {
+  const queryClient = useQueryClient()
+  return useCallback(
+    (queryKey) => queryClient.removeQueries({ queryKey, exact: true }),
+    [queryClient],
+  )
+}

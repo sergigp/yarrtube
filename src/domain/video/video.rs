@@ -193,6 +193,11 @@ impl Video {
         self.watched_at.is_some()
     }
 
+    /// Downloaded and not yet watched: counted in unwatched badges.
+    pub fn is_downloaded_and_unwatched(&self) -> bool {
+        self.status == VideoStatus::Downloaded && !self.is_watched()
+    }
+
     /// Downloaded, unwatched, position over 30s and last played within the
     /// past 7 days of `now`: worth offering to continue watching.
     pub fn is_in_progress(&self, now: DateTime<Utc>) -> bool {

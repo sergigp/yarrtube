@@ -1,6 +1,6 @@
 use crate::domain::channel::{Channel, ChannelHandle, ChannelView};
 use crate::domain::channel_video::ChannelVideo;
-use crate::domain::video::{VideoRecordId, VideoStatus};
+use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -39,7 +39,7 @@ impl ChannelViewSearcherApi for ChannelViewSearcher {
         let counts = self.unwatched_counts()?;
         Ok(channels
             .into_iter()
-            .map(|channel| self.channel_view(channel, &counts))
+            .map(|channel| Self::channel_view(channel, &counts))
             .collect())
     }
 }
@@ -70,16 +70,12 @@ impl ChannelViewSearcher {
             .video_repository
             .find_many(&video_ids)?
             .into_iter()
-            .filter(|video| video.status == VideoStatus::Downloaded && !video.is_watched())
+            .filter(|video| video.is_downloaded_and_unwatched())
             .map(|video| video.id)
             .collect())
     }
 
-    fn channel_view(
-        &self,
-        channel: Channel,
-        counts: &HashMap<ChannelHandle, usize>,
-    ) -> ChannelView {
+    fn channel_view(channel: Channel, counts: &HashMap<ChannelHandle, usize>) -> ChannelView {
         ChannelView {
             unwatched_count: counts.get(&channel.id).copied().unwrap_or(0),
             id: channel.id,

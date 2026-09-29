@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.jsx'
 
-const queryClient = new QueryClient()
+// A failed fetch shows its error at once; the next poll retries anyway.
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

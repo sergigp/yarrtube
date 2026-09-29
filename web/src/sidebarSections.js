@@ -32,6 +32,7 @@ export function channelLeadCount(orderedChannels) {
   return Math.min(unread, UNREAD_CAP) || CAUGHT_UP_PREVIEW
 }
 
+/** Case-insensitive name match; expects `text` already trimmed. */
 export function matchesSearch(item, text) {
-  return item.name.toLowerCase().includes(text.trim().toLowerCase())
+  return item.name.toLowerCase().includes(text.toLowerCase())
 }

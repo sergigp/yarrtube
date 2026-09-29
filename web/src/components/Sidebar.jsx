@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { CheckCheck, Ellipsis, RotateCw, Trash2, X } from 'lucide-react'
-import { useChannels, useInvalidateLibrary, usePlaylists } from '../queries'
+import {
+  queryKeys,
+  useChannels,
+  useLibraryAction,
+  usePlaylists,
+  useRemoveQuery,
+} from '../queries'
 import {
   reconcileChannel,
   reconcilePlaylist,
@@ -277,7 +283,8 @@ export function Sidebar({ open = false, onClose }) {
   const navigate = useNavigate()
   const { data: channels, error: channelsError } = useChannels()
   const { data: playlists, error: playlistsError } = usePlaylists()
-  const invalidateLibrary = useInvalidateLibrary()
+  const refreshing = useLibraryAction()
+  const removeQuery = useRemoveQuery()
   const [search, setSearch] = useState('')
   const [channelsExpanded, toggleChannelsExpanded] = useExpandedState('channels')
   const [playlistsExpanded, togglePlaylistsExpanded] = useExpandedState('playlists')
@@ -366,21 +373,15 @@ export function Sidebar({ open = false, onClose }) {
             hrefFor={(channel) => `/channels/${channel.id}`}
             showAvatar
             onNavigate={onClose}
-            onSync={async (id) => {
-              await reconcileChannel(id)
-              invalidateLibrary()
-            }}
-            onMarkWatched={async (id) => {
-              await markChannelWatched(id)
-              invalidateLibrary()
-            }}
-            onDelete={async (id) => {
+            onSync={refreshing(reconcileChannel)}
+            onMarkWatched={refreshing(markChannelWatched)}
+            onDelete={refreshing(async (id) => {
               await deleteChannel(id)
-              invalidateLibrary()
+              removeQuery(queryKeys.channelVideos(id))
               if (activeChannelId === id) {
                 navigate('/')
               }
-            }}
+            })}
             deleteDescription="This removes the channel from tracking."
           />
         )}
@@ -396,17 +397,14 @@ export function Sidebar({ open = false, onClose }) {
             activeId={activePlaylistId}
             hrefFor={(playlist) => `/playlists/${playlist.id}`}
             onNavigate={onClose}
-            onSync={async (id) => {
-              await reconcilePlaylist(id)
-              invalidateLibrary()
-            }}
-            onDelete={async (id) => {
+            onSync={refreshing(reconcilePlaylist)}
+            onDelete={refreshing(async (id) => {
               await deletePlaylist(id)
-              invalidateLibrary()
+              removeQuery(queryKeys.playlistVideos(id))
               if (activePlaylistId === id) {
                 navigate('/')
               }
-            }}
+            })}
             deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
           />
         )}

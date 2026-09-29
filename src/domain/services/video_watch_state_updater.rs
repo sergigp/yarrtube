@@ -1,6 +1,6 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::video::{
-    PlaybackPosition, UpdateWatchStateError, Video, VideoDuration, VideoId, VideoStatus,
+    PlaybackPosition, UpdateWatchStateError, Video, VideoDuration, VideoId,
 };
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -100,7 +100,7 @@ impl VideoWatchStateUpdater {
         Ok(self
             .channel_videos(channel_id)?
             .into_iter()
-            .filter(|video| video.status == VideoStatus::Downloaded && !video.is_watched())
+            .filter(|video| video.is_downloaded_and_unwatched())
             .map(|video| video.youtube_id)
             .collect())
     }
