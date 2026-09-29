@@ -753,6 +753,45 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_start_a_later_task_when_the_earlier_one_is_held_back() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(BlockingHandler::default());
+        let _releases = [
+            handler.gate(&download("rec1")),
+            handler.gate(&fetch_thumbnail("rec2")),
+        ];
+        task_repository.schedule(&download("rec1"), now()).unwrap();
+        task_repository
+            .schedule(&fetch_thumbnail("rec1"), now())
+            .unwrap();
+        task_repository
+            .schedule(&fetch_thumbnail("rec2"), now())
+            .unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            blocking_registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            2,
+        ));
+
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                running(1, &download("rec1")),
+                pending(2, &fetch_thumbnail("rec1")),
+                running(3, &fetch_thumbnail("rec2")),
+            ]
+        );
+    }
+
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
     const TEST_DOWNLOAD_CONCURRENCY: usize = 2;
 
