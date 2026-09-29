@@ -45,7 +45,7 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
   - Remove `showDestination` and the destination box from `LocationField`, and adapt `addDialogLocation.spec.js` to assert through `destinationNotice` (see design.md Files).
   - `playlistNoticeLead` handles the counts 0, 1 and many.
 - [x] 2.14 `addPlaylistDialog.spec.js` › `it should expand advanced options from the change action`: `[change]` expands "Advanced options", and `Folder name` holds the slug of the title.
-- [ ] 2.15 `playlist.spec.js` › lifecycle:
+- [x] 2.15 `playlist.spec.js` › lifecycle:
   - Add by ID only, and find the sidebar entry under the YouTube title.
   - Reopening with the same ID shows "Already added as" and disables `Create Playlist`: the dialog matches the preview's `id` against `usePlaylists()`.
   - The old path-conflict step is replaced.

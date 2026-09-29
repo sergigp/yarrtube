@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { createPlaylist } from '../api'
-import { useInvalidateLibrary, usePlaylistPreview } from '../queries'
+import { useInvalidateLibrary, usePlaylistPreview, usePlaylists } from '../queries'
 import { useDebouncedValue } from '../useDebouncedValue'
 import { playlistNoticeLead } from '../playlistNotice'
 import { DestinationNotice, DestinationPath } from './DestinationNotice'
@@ -16,12 +16,15 @@ const emptyLocation = { path: '', destination: '', valid: false }
 const LOOKUP_DEBOUNCE_MS = 400
 
 /** The first case that applies wins: an error blocks, so it outranks the destination. */
-function PlaylistNotice({ lookingUp, preview, location, onChange }) {
+function PlaylistNotice({ lookingUp, preview, tracked, location, onChange }) {
   if (lookingUp) {
     return <DestinationNotice tone="info">Looking up playlist…</DestinationNotice>
   }
   if (preview.error) {
     return <DestinationNotice tone="error">{preview.error.message}</DestinationNotice>
+  }
+  if (tracked) {
+    return <DestinationNotice tone="error">Already added as “{tracked.name}”</DestinationNotice>
   }
   const destination = <DestinationPath>{location.destination}</DestinationPath>
   if (location.occupiedBy) {
@@ -54,6 +57,8 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
   // Until the lookup has caught up with the field, whatever the preview holds
   // belongs to an earlier value.
   const lookingUp = debounced !== entered || preview.isFetching
+  const playlists = usePlaylists()
+  const tracked = preview.data && playlists.data?.find((playlist) => playlist.id === preview.data.id)
 
   const resetAll = () => {
     setForm(emptyForm)
@@ -77,7 +82,8 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
   // Stable: `LocationField` reports the composed destination from an effect.
   const handleLocationChange = useCallback((next) => setLocation(next), [])
 
-  const canSubmit = Boolean(preview.data) && !lookingUp && location.valid && !submitting
+  const canSubmit =
+    Boolean(preview.data) && !tracked && !lookingUp && location.valid && !submitting
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -131,6 +137,7 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
               <PlaylistNotice
                 lookingUp={lookingUp}
                 preview={preview}
+                tracked={tracked}
                 location={location}
                 onChange={() => setAdvancedOpen(true)}
               />

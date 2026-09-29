@@ -86,14 +86,12 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   // Sync from the sidebar completes without an error dialog/alert.
   await syncItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
 
-  // The same playlist's title auto-derives the same folder under the same
-  // default parent as the already-tracked playlist. That conflict is caught
-  // in the dialog, before submission, so the notice reports it and the
-  // submit button stays disabled — there is no rejected request to recover
-  // from.
+  // Adding the same playlist again is caught in the dialog, before
+  // submission: the notice names what it was added as and the submit button
+  // stays disabled.
   await openAddPlaylistDialog(page)
   const dialog = await fillPlaylist(page, { url: PLAYLIST_ID })
-  await expect(destinationNotice(dialog)).toContainText('is already used by')
+  await expect(destinationNotice(dialog)).toHaveText(`Already added as “${PLAYLIST_NAME}”`)
   await expect(dialog.getByRole('button', { name: /^Create Playlist/ })).toBeDisabled()
   await dialog.getByRole('button', { name: 'Close' }).click()
 
