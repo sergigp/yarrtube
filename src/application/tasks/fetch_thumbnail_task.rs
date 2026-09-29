@@ -45,6 +45,7 @@ impl TaskHandler for FetchThumbnailTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::shared::Quality;
     use crate::domain::video::{Video, VideoId};
     use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
@@ -182,6 +183,60 @@ mod tests {
         assert_eq!(
             *video_downloader_repository.thumbnail_calls.lock().unwrap(),
             vec![thumbnail_call()]
+        );
+    }
+
+    #[test]
+    fn it_should_fetch_into_the_recorded_video_folder() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
+                FetchedThumbnail {
+                    folder: "My Video".to_string(),
+                    filename: "My Video.jpg".to_string(),
+                },
+            )),
+        );
+        let video = my_video()
+            .start_download(fixed_timestamp())
+            .mark_downloaded(
+                Quality::High,
+                "My Video/My Video.mp4",
+                None,
+                None,
+                fixed_timestamp(),
+            );
+        video_repository.save(&video).unwrap();
+        let task = FetchThumbnailTask::new(
+            video_repository.clone(),
+            Arc::new(ThumbnailFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.shared_connection(),
+                    Arc::new(FixedClock(later())),
+                )),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &payload_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.with_thumbnail("My Video/My Video.jpg", later())]
+        );
+        assert_eq!(
+            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
+            vec![(
+                "https://www.youtube.com/watch?v=yt1".to_string(),
+                "My Video".to_string(),
+                "yt1".to_string(),
+                PathBuf::from("/videos/my-playlist"),
+                Some("My Video".to_string()),
+            )]
         );
     }
 

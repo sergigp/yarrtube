@@ -2,7 +2,7 @@ use crate::domain::event::DomainEvent;
 use crate::domain::playlist::Playlist;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist_video::PlaylistVideo;
-use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
+use crate::domain::services::ThumbnailFetcher;
 use crate::domain::task::Task;
 use crate::domain::video::{
     Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
@@ -194,7 +194,6 @@ impl PlaylistVideoReconciler {
     /// stored videos no longer present on YouTube.
     fn sync_playlist_membership(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let id = &playlist.id;
-        let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
         let current_videos = self
             .youtube_playlist_items_repository
             .list_current_videos(id)?;
@@ -219,7 +218,6 @@ impl PlaylistVideoReconciler {
                         now,
                     );
                     self.playlist_video_repository.save(&playlist_video)?;
-                    self.thumbnail_fetcher.fetch(&video, &output_dir);
                     info!(
                         playlist_id = %id,
                         video_id = %youtube_id,
@@ -397,9 +395,6 @@ impl PlaylistVideoReconciler {
                 now,
             )?;
         }
-
-        self.thumbnail_fetcher
-            .fetch_missing(&stored_videos, &reset_video_ids, &output_dir);
 
         for file in &files {
             if protected_top_level.contains(file.as_str()) {
