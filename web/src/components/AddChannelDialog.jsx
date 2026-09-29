@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { createChannel } from '../api'
 import { useInvalidateLibrary } from '../queries'
 import { deriveChannelPathSegment } from '../channelHandle'
+import { channelNoticeLead } from '../channelNotice'
 import { LocationField } from './LocationField'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -11,6 +12,10 @@ import { Button } from '@/components/ui/button'
 
 const emptyForm = { channel: '', quality: 'high', video_limit: '3' }
 const emptyLocation = { path: '', valid: false }
+
+function DestinationNotice({ videoLimit }) {
+  return <p data-testid="destination-notice">{channelNoticeLead(videoLimit)}</p>
+}
 
 export function AddChannelDialog({ open, onOpenChange }) {
   const [form, setForm] = useState(emptyForm)
@@ -92,6 +97,8 @@ export function AddChannelDialog({ open, onOpenChange }) {
               required
             />
           </div>
+
+          {form.channel.trim() && <DestinationNotice videoLimit={form.video_limit} />}
 
           <LocationField
             mode="channel"

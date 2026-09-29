@@ -48,6 +48,10 @@ export function destinationPreview(dialog) {
   return dialog.getByTestId('destination-path')
 }
 
+export function destinationNotice(dialog) {
+  return dialog.getByTestId('destination-notice')
+}
+
 async function isPresent(locator, timeout = 3000) {
   try {
     await locator.first().waitFor({ state: 'visible', timeout })

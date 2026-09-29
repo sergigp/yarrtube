@@ -17,7 +17,7 @@
 Each task is one red-green-refactor cycle with the named smoke test. Red means the test fails on an assertion. Green means `npm run build`, `npm run lint` and the full `scripts/run-smoke-tests.sh` pass.
 
 - [x] 2.1 `tasks.spec.js` › also assert the header has no `Tasks` link and no `Add` button, and Tasks is reached only through the `Settings` menu.
-- [ ] 2.2 `addChannelDialog.spec.js` › `it should show no notice until a handle is entered`: the `destination-notice` element exists only once the handle is non-empty.
+- [x] 2.2 `addChannelDialog.spec.js` › `it should show no notice until a handle is entered`: the `destination-notice` element exists only once the handle is non-empty.
 - [ ] 2.3 `addChannelDialog.spec.js` › `it should state the video limit and destination for a handle`:
   - Render `DestinationNotice` above "Advanced options".
   - Build it from `channelNoticeLead(video_limit)` and the `destination` that `LocationField` now reports.
