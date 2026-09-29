@@ -117,7 +117,9 @@ impl Video {
     /// Records a thumbnail fetched independently of, and ahead of, the
     /// video's full download — see the `video-thumbnails` capability.
     /// Touches only `thumbnail_filename`/`updated_at`, leaving `status`,
-    /// `filename`, and `quality` exactly as they were.
+    /// `filename`, and `quality` exactly as they were. Stored through
+    /// `VideoRepository::update_thumbnail`, which writes only that column.
+    #[cfg(test)]
     pub fn with_thumbnail(self, thumbnail_filename: impl Into<String>, now: DateTime<Utc>) -> Self {
         Self {
             thumbnail_filename: Some(thumbnail_filename.into()),

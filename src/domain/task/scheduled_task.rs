@@ -75,6 +75,9 @@ pub enum TaskFailureOutcome {
 }
 
 impl ScheduledTask {
+    /// The running task `TaskRepository::claim` stores and returns; the claim
+    /// itself makes this transition atomically in storage.
+    #[cfg(test)]
     pub fn start(self, now: DateTime<Utc>) -> Self {
         Self {
             status: TaskStatus::Running,
