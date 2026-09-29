@@ -12,7 +12,10 @@ use tracing::{error, info, warn};
 pub type HandlerRegistry = HashMap<String, Arc<dyn TaskHandler>>;
 
 /// Task-agnostic: polls `TaskRepository` for eligible tasks and dispatches
-/// each to the single handler registered for its type.
+/// each to the single handler registered for its type, running tasks in
+/// lanes (see `TaskLane`): each lane has its own concurrency cap, two tasks
+/// with the same exclusivity key never run together, and an `Exclusive`
+/// task runs alone once everything else has drained.
 pub struct TaskExecutor {
     repository: Arc<dyn TaskRepository>,
     handlers: HandlerRegistry,
@@ -141,12 +144,16 @@ impl TaskExecutor {
         Ok(())
     }
 
-    /// Polls forever on `interval`, matching `heartbeat_loop`'s shape. Meant
-    /// to be handed to `tokio::spawn` by the composition root.
+    /// Runs a scheduling pass on every `interval` tick and whenever a task
+    /// finishes, so a freed slot is refilled straight away. Meant to be
+    /// handed to `tokio::spawn` by the composition root.
     pub async fn run(self: Arc<Self>, interval: Duration) {
         let mut ticker = tokio::time::interval(interval);
         loop {
-            ticker.tick().await;
+            tokio::select! {
+                _ = ticker.tick() => {}
+                _ = self.wake.notified() => {}
+            }
             let executor = self.clone();
             match tokio::task::spawn_blocking(move || executor.schedule_pass()).await {
                 Ok(Ok(_)) => {}
