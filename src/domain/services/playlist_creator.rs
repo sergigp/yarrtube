@@ -45,7 +45,6 @@ pub trait PlaylistCreatorApi: Send + Sync {
     fn create(
         &self,
         id: PlaylistId,
-        name: PlaylistName,
         path: PlaylistPath,
         quality: Quality,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError>;
@@ -55,7 +54,6 @@ impl PlaylistCreatorApi for PlaylistCreator {
     fn create(
         &self,
         id: PlaylistId,
-        name: PlaylistName,
         path: PlaylistPath,
         quality: Quality,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError> {
@@ -64,7 +62,7 @@ impl PlaylistCreatorApi for PlaylistCreator {
         }
 
         self.ensure_path_free(&path)?;
-        self.ensure_exists_on_youtube(&id)?;
+        let name = self.resolve_on_youtube(&id)?;
         let now = self.clock.now();
         let playlist = Playlist::create(id, name, path, quality, PlaylistKind::YoutubeLinked, now);
         self.insert_and_publish(&playlist)?;
@@ -90,10 +88,10 @@ impl PlaylistCreator {
         Ok(())
     }
 
-    fn ensure_exists_on_youtube(&self, id: &PlaylistId) -> Result<(), CreatePlaylistError> {
-        match self.lookup.exists(id) {
-            Ok(true) => Ok(()),
-            Ok(false) => Err(CreatePlaylistError::YoutubePlaylistNotFound(id.clone())),
+    fn resolve_on_youtube(&self, id: &PlaylistId) -> Result<PlaylistName, CreatePlaylistError> {
+        match self.lookup.resolve(id) {
+            Ok(Some(resolved)) => Ok(PlaylistName::from_youtube_title(&resolved.title, id)),
+            Ok(None) => Err(CreatePlaylistError::YoutubePlaylistNotFound(id.clone())),
             Err(e) => Err(CreatePlaylistError::Lookup(e)),
         }
     }

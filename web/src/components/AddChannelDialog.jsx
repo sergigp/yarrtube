@@ -3,6 +3,7 @@ import { createChannel } from '../api'
 import { useInvalidateLibrary } from '../queries'
 import { deriveChannelPathSegment } from '../channelHandle'
 import { channelNoticeLead } from '../channelNotice'
+import { DestinationNotice, DestinationPath } from './DestinationNotice'
 import { LocationField } from './LocationField'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -13,40 +14,19 @@ import { Button } from '@/components/ui/button'
 const emptyForm = { channel: '', quality: 'high', video_limit: '3' }
 const emptyLocation = { path: '', destination: '', valid: false }
 
-function DestinationNotice({ videoLimit, location, onChange }) {
-  const destination = (
-    <code className="wrap-anywhere font-mono text-foreground/80">
-      {location.destination}
-    </code>
-  )
-  const change = (
-    <button
-      type="button"
-      className="text-primary underline underline-offset-2"
-      onClick={onChange}
-    >
-      change
-    </button>
-  )
-
+function ChannelNotice({ videoLimit, location, onChange }) {
+  const destination = <DestinationPath>{location.destination}</DestinationPath>
   if (location.occupiedBy) {
     return (
-      <p
-        className="mt-1 min-w-0 text-xs leading-relaxed text-destructive"
-        data-testid="destination-notice"
-      >
-        {destination} is already used by {location.occupiedBy}. Choose a different folder.{' '}
-        {change}
-      </p>
+      <DestinationNotice tone="error" onChange={onChange}>
+        {destination} is already used by {location.occupiedBy}. Choose a different folder.
+      </DestinationNotice>
     )
   }
   return (
-    <p
-      className="mt-1 min-w-0 text-xs leading-relaxed text-muted-foreground"
-      data-testid="destination-notice"
-    >
-      {channelNoticeLead(videoLimit)} {destination} {change}
-    </p>
+    <DestinationNotice tone="info" onChange={onChange}>
+      {channelNoticeLead(videoLimit)} {destination}
+    </DestinationNotice>
   )
 }
 
@@ -132,7 +112,7 @@ export function AddChannelDialog({ open, onOpenChange }) {
             {/* Helper text under the field, not a block of its own: it
                 confirms the defaults without competing with the form. */}
             {form.channel.trim() && location.destination && (
-              <DestinationNotice
+              <ChannelNotice
                 videoLimit={form.video_limit}
                 location={location}
                 onChange={() => setAdvancedOpen(true)}

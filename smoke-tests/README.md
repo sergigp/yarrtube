@@ -38,7 +38,7 @@ Optional overrides (defaults shown):
 | Env var                      | Default                 |
 | ----------------------------- | ------------------------ |
 | `SMOKE_PLAYLIST_ID`           | `PLXWRoRTUXjks` (https://www.youtube.com/playlist?list=PLXWRoRTUXjks) |
-| `SMOKE_PLAYLIST_NAME`         | `yarrtube smoke tests`  |
+| `SMOKE_PLAYLIST_NAME`         | `test` (the playlist's YouTube title) |
 | `SMOKE_CHANNEL_HANDLE`        | `@BlenderOfficial`      |
 | `SMOKE_CHANNEL_VIDEO_LIMIT`   | `1`                      |
 | `YARRTUBE_PORT`               | `8080`                   |

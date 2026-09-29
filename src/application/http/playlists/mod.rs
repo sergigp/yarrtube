@@ -5,18 +5,18 @@ use super::error::ApiError;
 use super::validation::{MISSING_QUALITY, required};
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{
-    CreatePlaylistError, DeletePlaylistError, PlaylistName, PlaylistPath,
+    CreatePlaylistError, DeletePlaylistError, PlaylistPath, PreviewPlaylistError,
 };
 use crate::domain::services::{
     CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi, PlaylistDeleter,
-    PlaylistDeleterApi, PlaylistSearcher, PlaylistSearcherApi, PlaylistVideoReconciler,
-    PlaylistVideoReconcilerApi,
+    PlaylistDeleterApi, PlaylistPreviewer, PlaylistPreviewerApi, PlaylistSearcher,
+    PlaylistSearcherApi, PlaylistVideoReconciler, PlaylistVideoReconcilerApi,
 };
 use crate::domain::shared::Quality;
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use dto::{CreatePlaylistRequest, PlaylistResponse};
+use dto::{CreatePlaylistRequest, PlaylistPreviewResponse, PlaylistResponse, PreviewPlaylistQuery};
 
 const MISSING_PATH: &str = "Playlist path must not be empty";
 
@@ -25,11 +25,10 @@ pub async fn create_playlist(
     Json(request): Json<CreatePlaylistRequest>,
 ) -> Result<(StatusCode, Json<PlaylistResponse>), ApiError> {
     let id = PlaylistId::from_url_or_id(request.playlist)?;
-    let name = PlaylistName::new(request.name)?;
     let path = PlaylistPath::new(required(request.path, MISSING_PATH)?)?;
     let quality = Quality::new(required(request.quality, MISSING_QUALITY)?)?;
 
-    let outcome = run_blocking(move || playlist_creator.create(id, name, path, quality)).await?;
+    let outcome = run_blocking(move || playlist_creator.create(id, path, quality)).await?;
 
     match outcome {
         Ok(CreatePlaylistOutcome::Created(playlist)) => {
@@ -42,6 +41,21 @@ pub async fn create_playlist(
         Err(e @ CreatePlaylistError::PathAlreadyInUse(_)) => Err(ApiError::bad_request(e)),
         Err(e @ CreatePlaylistError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e)),
         Err(e @ CreatePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
+    }
+}
+
+pub async fn preview_playlist(
+    State(playlist_previewer): State<PlaylistPreviewer>,
+    Query(query): Query<PreviewPlaylistQuery>,
+) -> Result<Json<PlaylistPreviewResponse>, ApiError> {
+    let id = PlaylistId::from_url_or_id(query.playlist.unwrap_or_default())?;
+
+    match run_blocking(move || playlist_previewer.preview(id)).await? {
+        Ok(preview) => Ok(Json(PlaylistPreviewResponse::from(preview))),
+        Err(e @ PreviewPlaylistError::YoutubePlaylistNotFound(_)) => {
+            Err(ApiError::new(StatusCode::NOT_FOUND, e))
+        }
+        Err(e @ PreviewPlaylistError::Lookup(_)) => Err(ApiError::new(StatusCode::BAD_GATEWAY, e)),
     }
 }
 
@@ -86,7 +100,7 @@ pub async fn list_playlists(
 mod tests {
     use super::*;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
-    use crate::domain::playlist::{Playlist, PlaylistKind};
+    use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
@@ -111,7 +125,7 @@ mod tests {
         FakeYoutubePlaylistItemsRepository, YoutubePlaylistItem,
     };
     use crate::infrastructure::repositories::youtube_playlist_repository::{
-        FakeYoutubePlaylistRepository, YoutubePlaylistRepository,
+        FakeYoutubePlaylistRepository, ResolvedPlaylist, YoutubePlaylistRepository,
     };
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
@@ -133,7 +147,9 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.shared_connection());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
-            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -161,7 +177,9 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.shared_connection());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
-            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -196,12 +214,13 @@ mod tests {
             .unwrap();
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
-            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
         let request = CreatePlaylistRequest {
-            name: "Different Name".to_string(),
             path: Some("different/path".to_string()),
             quality: Some("low".to_string()),
             ..create_request("PL1")
@@ -227,7 +246,9 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.shared_connection());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
-            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -303,7 +324,9 @@ mod tests {
             .unwrap();
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
-            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -334,7 +357,7 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.shared_connection());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
-            Arc::new(FakeYoutubePlaylistRepository { exists: false }),
+            Arc::new(FakeYoutubePlaylistRepository { resolved: None }),
             event_publisher(&db),
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -827,7 +850,9 @@ mod tests {
     fn any_playlist_creator() -> PlaylistCreator {
         PlaylistCreator::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
-            Arc::new(FakeYoutubePlaylistRepository { exists: true }),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
             unused_event_publisher(),
             Arc::new(FixedClock(fixed_timestamp())),
         )
@@ -912,7 +937,7 @@ mod tests {
     struct FailingYoutubePlaylistRepository;
 
     impl YoutubePlaylistRepository for FailingYoutubePlaylistRepository {
-        fn exists(&self, _id: &PlaylistId) -> anyhow::Result<bool> {
+        fn resolve(&self, _id: &PlaylistId) -> anyhow::Result<Option<ResolvedPlaylist>> {
             anyhow::bail!("YouTube API request failed")
         }
     }
@@ -983,7 +1008,7 @@ mod tests {
     fn playlist(id: &str, path: &str) -> Playlist {
         Playlist::create(
             playlist_id(id),
-            PlaylistName::new("My Playlist").unwrap(),
+            PlaylistName::new("Lofi beats").unwrap(),
             PlaylistPath::new(path).unwrap(),
             Quality::High,
             PlaylistKind::YoutubeLinked,
@@ -1029,6 +1054,13 @@ mod tests {
         }
     }
 
+    fn resolved_playlist() -> ResolvedPlaylist {
+        ResolvedPlaylist {
+            title: "Lofi beats".to_string(),
+            item_count: 42,
+        }
+    }
+
     fn playlist_created(playlist_id: &str) -> DomainEvent {
         DomainEvent::PlaylistCreated {
             playlist_id: playlist_id.to_string(),
@@ -1038,7 +1070,6 @@ mod tests {
     fn create_request(playlist: &str) -> CreatePlaylistRequest {
         CreatePlaylistRequest {
             playlist: playlist.to_string(),
-            name: "My Playlist".to_string(),
             path: Some(DEFAULT_PATH.to_string()),
             quality: Some("high".to_string()),
         }
@@ -1047,7 +1078,7 @@ mod tests {
     fn playlist_response(id: &str, path: &str) -> PlaylistResponse {
         PlaylistResponse {
             id: id.to_string(),
-            name: "My Playlist".to_string(),
+            name: "Lofi beats".to_string(),
             path: path.to_string(),
             quality: "high".to_string(),
             kind: "youtube_linked".to_string(),

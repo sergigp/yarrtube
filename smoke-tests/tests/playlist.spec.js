@@ -4,7 +4,7 @@ import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
 import { syncItem, deleteItem, sectionRows } from '../helpers/sidebar.js'
 
 const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
-const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'yarrtube smoke tests'
+const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
 
 test('playlist lifecycle: add, download, play, sync, duplicate error, delete', async ({ page }) => {
   test.skip(!PLAYLIST_ID, 'SMOKE_PLAYLIST_ID is not set')

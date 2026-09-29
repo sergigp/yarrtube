@@ -22,7 +22,7 @@ fi
 : "${YOUTUBE_API_KEY:?YOUTUBE_API_KEY must be set (in the environment or $REPO_ROOT/.env)}"
 # The maintainer-owned "yarrtube-smoke-tests" playlist (see smoke-tests/README.md).
 SMOKE_PLAYLIST_ID="${SMOKE_PLAYLIST_ID:-PLXWRoRTUXjks}"
-SMOKE_PLAYLIST_NAME="${SMOKE_PLAYLIST_NAME:-yarrtube smoke tests}"
+SMOKE_PLAYLIST_NAME="${SMOKE_PLAYLIST_NAME:-test}"
 SMOKE_CHANNEL_HANDLE="${SMOKE_CHANNEL_HANDLE:-@BlenderOfficial}"
 SMOKE_CHANNEL_VIDEO_LIMIT="${SMOKE_CHANNEL_VIDEO_LIMIT:-1}"
 

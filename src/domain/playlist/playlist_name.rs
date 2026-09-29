@@ -1,3 +1,4 @@
+use super::playlist_id::PlaylistId;
 use crate::domain::shared::ValidationError;
 use std::fmt;
 
@@ -21,6 +22,11 @@ impl PlaylistName {
             )));
         }
         Ok(Self(name))
+    }
+
+    /// Names a playlist after the title YouTube reports for it.
+    pub fn from_youtube_title(title: &str, _id: &PlaylistId) -> Self {
+        Self(title.to_string())
     }
 
     pub fn as_str(&self) -> &str {

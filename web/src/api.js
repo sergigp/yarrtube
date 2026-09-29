@@ -43,16 +43,31 @@ export function avatarMediaUrl(filename) {
   return `/avatars/${encodeURIComponent(filename)}`
 }
 
-export async function createPlaylist({ playlist, name, path, quality }) {
+export async function createPlaylist({ playlist, path, quality }) {
   const response = await fetch('/api/playlists', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ playlist, name, path, quality }),
+    body: JSON.stringify({ playlist, path, quality }),
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
     throw new Error(
       body?.error ?? `request to /playlists failed with status ${response.status}`,
+    )
+  }
+  return response.json()
+}
+
+/**
+ * Looks a playlist ID or URL up on YouTube without tracking it. Resolves to
+ * `{ id, title, video_count }`; rejects with the server's error message.
+ */
+export async function previewPlaylist(playlist) {
+  const response = await fetch(`/api/playlists/preview?playlist=${encodeURIComponent(playlist)}`)
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(
+      body?.error ?? `request to preview playlist failed with status ${response.status}`,
     )
   }
   return response.json()

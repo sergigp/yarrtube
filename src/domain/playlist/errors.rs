@@ -49,3 +49,25 @@ impl fmt::Display for DeletePlaylistError {
 }
 
 impl std::error::Error for DeletePlaylistError {}
+
+#[derive(Debug)]
+pub enum PreviewPlaylistError {
+    YoutubePlaylistNotFound(PlaylistId),
+    Lookup(anyhow::Error),
+}
+
+impl fmt::Display for PreviewPlaylistError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::YoutubePlaylistNotFound(id) => {
+                write!(
+                    f,
+                    "YouTube playlist {id} does not exist or is not accessible"
+                )
+            }
+            Self::Lookup(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for PreviewPlaylistError {}

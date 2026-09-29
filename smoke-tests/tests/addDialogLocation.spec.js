@@ -13,7 +13,7 @@ import { waitForVideoStatus } from '../helpers/video.js'
 import { deleteItem } from '../helpers/sidebar.js'
 
 const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
-const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'yarrtube smoke tests'
+const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
 
 /** The immediate subdirectory names the daemon reports for `path`. */
 async function listDirectories(page, path) {

@@ -1,15 +1,20 @@
-use crate::domain::playlist::Playlist;
+use crate::domain::playlist::{Playlist, PlaylistPreview};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct CreatePlaylistRequest {
     pub playlist: String,
-    pub name: String,
     #[serde(default)]
     pub path: Option<String>,
     #[serde(default)]
     pub quality: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PreviewPlaylistQuery {
+    #[serde(default)]
+    pub playlist: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -31,6 +36,23 @@ impl From<Playlist> for PlaylistResponse {
             quality: playlist.quality.as_str().to_string(),
             kind: playlist.kind.as_str().to_string(),
             created_at: playlist.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct PlaylistPreviewResponse {
+    pub id: String,
+    pub title: String,
+    pub video_count: u64,
+}
+
+impl From<PlaylistPreview> for PlaylistPreviewResponse {
+    fn from(preview: PlaylistPreview) -> Self {
+        Self {
+            id: preview.id.as_str().to_string(),
+            title: preview.name.as_str().to_string(),
+            video_count: preview.video_count,
         }
     }
 }
