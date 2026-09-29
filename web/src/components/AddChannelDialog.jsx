@@ -15,14 +15,14 @@ const emptyLocation = { path: '', destination: '', valid: false }
 
 function DestinationNotice({ videoLimit, location, onChange }) {
   const destination = (
-    <code className="wrap-anywhere font-mono font-medium text-foreground">
+    <code className="wrap-anywhere font-mono text-foreground/80">
       {location.destination}
     </code>
   )
   const change = (
     <button
       type="button"
-      className="text-primary underline-offset-2 hover:underline"
+      className="text-primary underline underline-offset-2"
       onClick={onChange}
     >
       change
@@ -32,7 +32,7 @@ function DestinationNotice({ videoLimit, location, onChange }) {
   if (location.occupiedBy) {
     return (
       <p
-        className="min-w-0 rounded-md border-l-2 border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        className="min-w-0 text-xs text-destructive"
         data-testid="destination-notice"
       >
         {destination} is already used by {location.occupiedBy}. Choose a different folder.{' '}
@@ -42,7 +42,7 @@ function DestinationNotice({ videoLimit, location, onChange }) {
   }
   return (
     <p
-      className="min-w-0 rounded-md border-l-2 border-primary bg-muted/40 px-3 py-2 text-sm"
+      className="min-w-0 text-xs text-muted-foreground"
       data-testid="destination-notice"
     >
       {channelNoticeLead(videoLimit)} {destination} {change}
@@ -129,15 +129,16 @@ export function AddChannelDialog({ open, onOpenChange }) {
               placeholder="@somechannel"
               required
             />
+            {/* Helper text under the field, not a block of its own: it
+                confirms the defaults without competing with the form. */}
+            {form.channel.trim() && location.destination && (
+              <DestinationNotice
+                videoLimit={form.video_limit}
+                location={location}
+                onChange={() => setAdvancedOpen(true)}
+              />
+            )}
           </div>
-
-          {form.channel.trim() && location.destination && (
-            <DestinationNotice
-              videoLimit={form.video_limit}
-              location={location}
-              onChange={() => setAdvancedOpen(true)}
-            />
-          )}
 
           <div className="border-t border-border pt-3">
             <button
