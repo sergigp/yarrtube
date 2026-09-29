@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 const emptyForm = { channel: '', quality: 'high', video_limit: '3' }
 const emptyLocation = { path: '', destination: '', valid: false }
 
-function DestinationNotice({ videoLimit, location }) {
+function DestinationNotice({ videoLimit, location, onChange }) {
   return (
     <p
       className="min-w-0 rounded-md border-l-2 border-primary bg-muted/40 px-3 py-2 text-sm"
@@ -22,7 +22,14 @@ function DestinationNotice({ videoLimit, location }) {
       {channelNoticeLead(videoLimit)}{' '}
       <code className="wrap-anywhere font-mono font-medium text-foreground">
         {location.destination}
-      </code>
+      </code>{' '}
+      <button
+        type="button"
+        className="text-primary underline-offset-2 hover:underline"
+        onClick={onChange}
+      >
+        change
+      </button>
     </p>
   )
 }
@@ -109,7 +116,11 @@ export function AddChannelDialog({ open, onOpenChange }) {
           </div>
 
           {form.channel.trim() && location.destination && (
-            <DestinationNotice videoLimit={form.video_limit} location={location} />
+            <DestinationNotice
+              videoLimit={form.video_limit}
+              location={location}
+              onChange={() => setAdvancedOpen(true)}
+            />
           )}
 
           <div className="border-t border-border pt-3">

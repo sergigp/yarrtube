@@ -47,3 +47,19 @@ test('it should update the notice from the advanced options', async ({ page }) =
   await dialog.getByLabel('Video Limit').fill('0')
   await expect(notice).toContainText('Videos from this channel will be downloaded to')
 })
+
+test('it should expand advanced options from the change action', async ({ page }) => {
+  await page.goto('/')
+  await openAddChannelDialog(page)
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Channel Handle or URL').fill('@some-handle')
+
+  await destinationNotice(dialog).getByRole('button', { name: 'change' }).click()
+
+  await expect(dialog.getByRole('button', { name: /Advanced options/ })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expect(dialog.getByLabel('Folder name')).toBeVisible()
+  await expect(dialog.getByLabel('Folder name')).toHaveValue('some-handle')
+})
