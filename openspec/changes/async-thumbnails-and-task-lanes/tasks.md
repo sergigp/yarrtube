@@ -41,7 +41,7 @@ Download and task listing:
 - [x] 2.20 `http/tasks` › `it_should_list_a_fetch_thumbnail_task_with_video_and_playlist_names`: `TaskViewSearcher` resolves `fetch_thumbnail` context.
 
 `TaskExecutor`:
-- [ ] 2.21 `it_should_run_downloads_in_parallel_up_to_the_lane_concurrency`: the download lane honours its concurrency and refills when a slot frees.
+- [x] 2.21 `it_should_run_downloads_in_parallel_up_to_the_lane_concurrency`: the download lane honours its concurrency and refills when a slot frees.
 - [ ] 2.22 `it_should_not_block_light_tasks_behind_downloads`: the light lane is independent of a busy download lane.
 - [ ] 2.23 `it_should_run_light_tasks_one_at_a_time`: light lane concurrency is 1.
 - [ ] 2.24 `it_should_not_block_reconciles_behind_thumbnail_fetches`: a thumbnail backlog doesn't hold the light lane.

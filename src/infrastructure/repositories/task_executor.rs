@@ -1,9 +1,9 @@
-use crate::domain::task::{TaskFailureOutcome, TaskLane};
+use crate::domain::task::{ScheduledTask, Task, TaskFailureOutcome, TaskLane};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
@@ -33,6 +33,22 @@ struct SchedulerState {
     exclusive_running: bool,
 }
 
+impl SchedulerState {
+    fn running_in(&self, lane: TaskLane) -> usize {
+        self.running.get(&lane).copied().unwrap_or(0)
+    }
+
+    fn start(&mut self, lane: TaskLane) {
+        *self.running.entry(lane).or_insert(0) += 1;
+    }
+
+    fn finish(&mut self, lane: TaskLane) {
+        if let Some(count) = self.running.get_mut(&lane) {
+            *count = count.saturating_sub(1);
+        }
+    }
+}
+
 impl TaskExecutor {
     pub fn new(
         repository: Arc<dyn TaskRepository>,
@@ -56,64 +72,20 @@ impl TaskExecutor {
     /// (lane capacity, held keys, exclusive drain). Returns the handles of
     /// the tasks it started, so tests can await them.
     pub fn schedule_pass(self: &Arc<Self>) -> anyhow::Result<Vec<JoinHandle<()>>> {
-        self.poll_once()?;
-        Ok(Vec::new())
-    }
-
-    fn poll_once(&self) -> anyhow::Result<()> {
+        let mut state = self.lock_state()?;
+        let mut handles = Vec::new();
         for task in self.repository.list_eligible()? {
-            let id = task.id;
-            let task_type = task.task_type.clone();
-            let payload = task.payload.clone();
-            let running = task.start(self.clock.now());
-            self.repository.update(&running)?;
-            let is_last_attempt = running.is_last_attempt();
-            info!(task_id = id, task_type = %task_type, "dispatching task");
-
-            let outcome = match self.handlers.get(&task_type) {
-                Some(handler) => handler.handle(&payload, is_last_attempt),
-                None => Err(anyhow::anyhow!(
-                    "no handler registered for task type '{}'",
-                    task_type
-                )),
-            };
-
-            match outcome {
-                Ok(()) => {
-                    self.repository.delete(id)?;
-                    info!(task_id = id, "task done");
-                }
-                Err(e) => {
-                    let error = e.to_string();
-                    match running.fail(
-                        error.clone(),
-                        self.clock.now(),
-                        self.base_retry_delay_seconds,
-                    ) {
-                        TaskFailureOutcome::Retry(retried) => {
-                            warn!(
-                                task_id = id,
-                                retries = retried.retries,
-                                run_at = %retried.run_at,
-                                error,
-                                "task failed, retrying"
-                            );
-                            self.repository.update(&retried)?;
-                        }
-                        TaskFailureOutcome::DeadLetter(dead) => {
-                            error!(
-                                task_id = id,
-                                retries = dead.retries,
-                                error,
-                                "task failed permanently"
-                            );
-                            self.repository.dead_letter(&dead)?;
-                        }
-                    }
-                }
+            let lane = Task::lane_for(&task.task_type);
+            if state.running_in(lane) >= self.capacity(lane) {
+                continue;
             }
+            let Some(running) = self.repository.claim(task.id, self.clock.now())? else {
+                continue;
+            };
+            state.start(lane);
+            handles.push(self.spawn(running, lane));
         }
-        Ok(())
+        Ok(handles)
     }
 
     /// Recovers every task left `running` by a previous, interrupted
@@ -152,6 +124,100 @@ impl TaskExecutor {
             }
         }
     }
+
+    fn lock_state(&self) -> anyhow::Result<MutexGuard<'_, SchedulerState>> {
+        self.state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("task scheduler state lock poisoned"))
+    }
+
+    fn capacity(&self, _lane: TaskLane) -> usize {
+        self.download_concurrency
+    }
+
+    /// Runs `running` on the blocking pool, then frees its lane slot and
+    /// wakes the scheduler so the slot is refilled straight away.
+    fn spawn(self: &Arc<Self>, running: ScheduledTask, lane: TaskLane) -> JoinHandle<()> {
+        let executor = Arc::clone(self);
+        tokio::task::spawn_blocking(move || {
+            let id = running.id;
+            if let Err(e) = executor.execute(running) {
+                error!(task_id = id, error = %e, "failed to record task outcome");
+            }
+            match executor.lock_state() {
+                Ok(mut state) => state.finish(lane),
+                Err(e) => error!(task_id = id, error = %e, "failed to release task slot"),
+            }
+            executor.wake.notify_one();
+        })
+    }
+
+    /// Dispatches a claimed task and records its outcome: deleted on
+    /// success, retried or dead-lettered on failure.
+    fn execute(&self, running: ScheduledTask) -> anyhow::Result<()> {
+        let id = running.id;
+        info!(task_id = id, task_type = %running.task_type, "dispatching task");
+        match self.dispatch(&running) {
+            Ok(()) => {
+                self.repository.delete(id)?;
+                info!(task_id = id, "task done");
+                Ok(())
+            }
+            Err(e) => self.record_failure(running, e),
+        }
+    }
+
+    fn dispatch(&self, running: &ScheduledTask) -> anyhow::Result<()> {
+        match self.handlers.get(&running.task_type) {
+            Some(handler) => handler.handle(&running.payload, running.is_last_attempt()),
+            None => Err(anyhow::anyhow!(
+                "no handler registered for task type '{}'",
+                running.task_type
+            )),
+        }
+    }
+
+    fn record_failure(&self, running: ScheduledTask, error: anyhow::Error) -> anyhow::Result<()> {
+        let id = running.id;
+        let error = error.to_string();
+        match running.fail(
+            error.clone(),
+            self.clock.now(),
+            self.base_retry_delay_seconds,
+        ) {
+            TaskFailureOutcome::Retry(retried) => {
+                warn!(
+                    task_id = id,
+                    retries = retried.retries,
+                    run_at = %retried.run_at,
+                    error,
+                    "task failed, retrying"
+                );
+                self.repository.update(&retried)
+            }
+            TaskFailureOutcome::DeadLetter(dead) => {
+                error!(
+                    task_id = id,
+                    retries = dead.retries,
+                    error,
+                    "task failed permanently"
+                );
+                self.repository.dead_letter(&dead)
+            }
+        }
+    }
+
+    /// Runs every eligible task inline, one at a time. Only the tests not
+    /// yet moved to `schedule_pass` still use it.
+    #[cfg(test)]
+    fn poll_once(&self) -> anyhow::Result<()> {
+        for task in self.repository.list_eligible()? {
+            let running = task.start(self.clock.now());
+            self.repository.update(&running)?;
+            self.execute(running)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -162,6 +228,7 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
+    use std::sync::mpsc::{Receiver, Sender, channel};
 
     #[test]
     fn it_should_dispatch_an_eligible_task_and_delete_it_on_success() {
@@ -416,6 +483,50 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_run_downloads_in_parallel_up_to_the_lane_concurrency() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(BlockingHandler::default());
+        let releases = [
+            handler.gate(&download("rec1")),
+            handler.gate(&download("rec2")),
+            handler.gate(&download("rec3")),
+        ];
+        [download("rec1"), download("rec2"), download("rec3")]
+            .iter()
+            .for_each(|task| task_repository.schedule(task, now()).unwrap());
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            blocking_registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            2,
+        ));
+
+        let mut handles = executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                running(1, &download("rec1")),
+                running(2, &download("rec2")),
+                pending(3, &download("rec3")),
+            ]
+        );
+
+        release(&releases[0], handles.remove(0)).await;
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![running(2, &download("rec2")), running(3, &download("rec3")),]
+        );
+    }
+
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
     const TEST_DOWNLOAD_CONCURRENCY: usize = 2;
 
@@ -444,6 +555,39 @@ mod tests {
         }
     }
 
+    fn download(video_id: &str) -> Task {
+        Task::DownloadVideo {
+            video_id: video_id.to_string(),
+            quality: "high".to_string(),
+            output_dir: "/videos/my-playlist".to_string(),
+        }
+    }
+
+    fn pending(id: i64, task: &Task) -> ScheduledTask {
+        ScheduledTask {
+            id,
+            task_type: task.task_type().to_string(),
+            payload: task.payload().to_string(),
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at: now(),
+            created_at: now(),
+            updated_at: now(),
+            last_error: None,
+        }
+    }
+
+    fn running(id: i64, task: &Task) -> ScheduledTask {
+        pending(id, task).start(now())
+    }
+
+    /// Opens `gate`, letting its blocked task finish, and waits for the
+    /// executor's bookkeeping of that task to complete.
+    async fn release(gate: &Sender<()>, handle: JoinHandle<()>) {
+        gate.send(()).unwrap();
+        handle.await.unwrap();
+    }
+
     fn dead_lettered_task(last_error: &str) -> DeadLetteredTask {
         DeadLetteredTask {
             original_task_id: 1,
@@ -460,6 +604,54 @@ mod tests {
         let mut registry: HandlerRegistry = HashMap::new();
         registry.insert(task().task_type().to_string(), handler);
         registry
+    }
+
+    /// Every task type handled by one `BlockingHandler`.
+    fn blocking_registry(handler: Arc<BlockingHandler>) -> HandlerRegistry {
+        [
+            "download_video",
+            "fetch_thumbnail",
+            "reconcile_playlist",
+            "update_ytdlp",
+        ]
+        .into_iter()
+        .map(|task_type| {
+            (
+                task_type.to_string(),
+                handler.clone() as Arc<dyn TaskHandler>,
+            )
+        })
+        .collect()
+    }
+
+    /// Records every payload it handles, and holds a task whose payload has
+    /// a gate until that gate is opened (or dropped).
+    #[derive(Default)]
+    struct BlockingHandler {
+        started: Mutex<Vec<String>>,
+        gates: Mutex<HashMap<String, Receiver<()>>>,
+    }
+
+    impl BlockingHandler {
+        fn gate(&self, task: &Task) -> Sender<()> {
+            let (sender, receiver) = channel();
+            self.gates
+                .lock()
+                .unwrap()
+                .insert(task.payload().to_string(), receiver);
+            sender
+        }
+    }
+
+    impl TaskHandler for BlockingHandler {
+        fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
+            self.started.lock().unwrap().push(payload.to_string());
+            let gate = self.gates.lock().unwrap().remove(payload);
+            if let Some(gate) = gate {
+                let _ = gate.recv();
+            }
+            Ok(())
+        }
     }
 
     struct FakeHandler {
