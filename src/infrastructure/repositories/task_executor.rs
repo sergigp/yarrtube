@@ -287,18 +287,6 @@ impl TaskExecutor {
             }
         }
     }
-
-    /// Runs every eligible task inline, one at a time. Only the tests not
-    /// yet moved to `schedule_pass` still use it.
-    #[cfg(test)]
-    fn poll_once(&self) -> anyhow::Result<()> {
-        for task in self.repository.list_eligible()? {
-            let running = task.start(self.clock.now());
-            self.repository.update(&running)?;
-            self.execute(running)?;
-        }
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -311,8 +299,8 @@ mod tests {
     use chrono::{DateTime, Utc};
     use std::sync::mpsc::{Receiver, Sender, channel};
 
-    #[test]
-    fn it_should_dispatch_an_eligible_task_and_delete_it_on_success() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_dispatch_an_eligible_task_and_delete_it_on_success() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -320,15 +308,15 @@ mod tests {
         ));
         let handler = Arc::new(FakeHandler::succeeding());
         task_repository.schedule(&task(), now()).unwrap();
-        let executor = TaskExecutor::new(
+        let executor = Arc::new(TaskExecutor::new(
             task_repository.clone(),
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
             TEST_DOWNLOAD_CONCURRENCY,
-        );
+        ));
 
-        let result = executor.poll_once();
+        let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
         assert_eq!(
@@ -345,8 +333,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn it_should_retry_a_task_whose_handler_fails() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_retry_a_task_whose_handler_fails() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -354,15 +342,15 @@ mod tests {
         ));
         let handler = Arc::new(FakeHandler::failing());
         task_repository.schedule(&task(), now()).unwrap();
-        let executor = TaskExecutor::new(
+        let executor = Arc::new(TaskExecutor::new(
             task_repository.clone(),
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
             TEST_DOWNLOAD_CONCURRENCY,
-        );
+        ));
 
-        let result = executor.poll_once();
+        let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
         assert_eq!(
@@ -384,8 +372,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn it_should_dead_letter_a_task_whose_handler_fails_on_the_fifth_attempt() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_dead_letter_a_task_whose_handler_fails_on_the_fifth_attempt() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -394,15 +382,15 @@ mod tests {
         let handler = Arc::new(FakeHandler::failing());
         task_repository.schedule(&task(), now()).unwrap();
         task_repository.update(&pending_task(4)).unwrap();
-        let executor = TaskExecutor::new(
+        let executor = Arc::new(TaskExecutor::new(
             task_repository.clone(),
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
             TEST_DOWNLOAD_CONCURRENCY,
-        );
+        ));
 
-        let result = executor.poll_once();
+        let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
         assert_eq!(
@@ -419,8 +407,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn it_should_tell_the_handler_this_is_not_the_last_attempt_when_retries_remain() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_tell_the_handler_this_is_not_the_last_attempt_when_retries_remain() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -429,15 +417,15 @@ mod tests {
         let handler = Arc::new(FakeHandler::succeeding());
         task_repository.schedule(&task(), now()).unwrap();
         task_repository.update(&pending_task(3)).unwrap();
-        let executor = TaskExecutor::new(
+        let executor = Arc::new(TaskExecutor::new(
             task_repository.clone(),
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
             TEST_DOWNLOAD_CONCURRENCY,
-        );
+        ));
 
-        let result = executor.poll_once();
+        let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
         assert_eq!(
@@ -450,8 +438,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn it_should_tell_the_handler_this_is_the_last_attempt_when_no_retries_remain() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_tell_the_handler_this_is_the_last_attempt_when_no_retries_remain() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
@@ -460,15 +448,15 @@ mod tests {
         let handler = Arc::new(FakeHandler::succeeding());
         task_repository.schedule(&task(), now()).unwrap();
         task_repository.update(&pending_task(4)).unwrap();
-        let executor = TaskExecutor::new(
+        let executor = Arc::new(TaskExecutor::new(
             task_repository.clone(),
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
             TEST_DOWNLOAD_CONCURRENCY,
-        );
+        ));
 
-        let result = executor.poll_once();
+        let result = run_pass(&executor).await;
 
         assert!(result.is_ok());
         assert_eq!(
@@ -931,6 +919,45 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_start_tasks_of_a_lane_in_run_at_order() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(BlockingHandler::default());
+        let _releases = [
+            handler.gate(&download("rec1")),
+            handler.gate(&download("rec2")),
+        ];
+        let earlier = now() - chrono::Duration::seconds(60);
+        task_repository.schedule(&download("rec1"), now()).unwrap();
+        task_repository
+            .schedule(&download("rec2"), earlier)
+            .unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            blocking_registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            1,
+        ));
+
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending(1, &download("rec1")),
+                ScheduledTask {
+                    run_at: earlier,
+                    ..running(2, &download("rec2"))
+                },
+            ]
+        );
+    }
+
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
     const TEST_DOWNLOAD_CONCURRENCY: usize = 2;
 
@@ -996,6 +1023,14 @@ mod tests {
 
     fn running(id: i64, task: &Task) -> ScheduledTask {
         pending(id, task).start(now())
+    }
+
+    /// Runs one scheduling pass and waits for every task it started.
+    async fn run_pass(executor: &Arc<TaskExecutor>) -> anyhow::Result<()> {
+        for handle in executor.schedule_pass()? {
+            handle.await?;
+        }
+        Ok(())
     }
 
     /// Opens `gate`, letting its blocked task finish, and waits for the

@@ -50,7 +50,7 @@ Download and task listing:
 - [x] 2.27 `it_should_start_a_later_task_when_the_earlier_one_is_held_back`: a `fetch_thumbnail` held back by its video's running download doesn't block the next fetch in the thumbnail lane.
 - [x] 2.28 `it_should_run_update_ytdlp_only_when_nothing_else_runs`: the exclusive drain. Nothing new starts while the update waits, and it runs alone.
 - [x] 2.29 `it_should_not_start_tasks_while_update_ytdlp_runs`: no task starts during the update.
-- [ ] 2.30 `it_should_start_tasks_of_a_lane_in_run_at_order`: `run_at, id` ordering within a lane. Adapt the existing dispatch, retry, dead-letter, last-attempt and recovery tests to `schedule_pass` plus awaiting the handles, and keep them green.
+- [x] 2.30 `it_should_start_tasks_of_a_lane_in_run_at_order`: `run_at, id` ordering within a lane. Adapt the existing dispatch, retry, dead-letter, last-attempt and recovery tests to `schedule_pass` plus awaiting the handles, and keep them green.
 
 Domain and composition:
 - [x] 2.31 `task.rs` › `it_should_map_task_types_to_lanes`: `download_video` → Download, `fetch_thumbnail` → Thumbnail, `update_ytdlp` → Exclusive, others → Light.
