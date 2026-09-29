@@ -60,7 +60,7 @@ Domain and composition:
 ## 3. Infrastructure adapters (TDD)
 
 `SqliteTaskRepository`:
-- [ ] 3.1 `it_should_claim_a_pending_task`: `claim` flips `pending` to `running` and returns the task.
+- [x] 3.1 `it_should_claim_a_pending_task`: `claim` flips `pending` to `running` and returns the task.
 - [ ] 3.2 `it_should_not_claim_a_task_already_running`: `claim` returns `None`.
 - [x] 3.3 `it_should_not_schedule_a_duplicate_download_for_the_same_video`: `INSERT … WHERE NOT EXISTS` on type + `json_extract(payload,'$.video_id')`.
 - [x] 3.4 `it_should_not_schedule_a_duplicate_thumbnail_fetch_for_the_same_video`: the same dedupe for `fetch_thumbnail`.

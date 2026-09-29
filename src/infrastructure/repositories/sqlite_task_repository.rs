@@ -2,9 +2,7 @@ use crate::domain::task::{DeadLetteredTask, ScheduledTask, Task, TaskStatus};
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-#[cfg(test)]
-use rusqlite::OptionalExtension;
-use rusqlite::{Connection, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::sync::{Arc, Mutex};
 use tracing::info;
 
@@ -217,8 +215,22 @@ impl TaskRepository for SqliteTaskRepository {
         Ok(())
     }
 
-    fn claim(&self, _id: i64, _now: DateTime<Utc>) -> anyhow::Result<Option<ScheduledTask>> {
-        Ok(None)
+    fn claim(&self, id: i64, now: DateTime<Utc>) -> anyhow::Result<Option<ScheduledTask>> {
+        let conn = self
+            .conn
+            .lock()
+            .inspect_err(|_| tracing::error!(task_id = id, "database lock poisoned"))
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        conn.query_row(
+            &format!(
+                "UPDATE tasks SET status = 'running', updated_at = ?2 WHERE id = ?1 RETURNING {SELECT_COLUMNS}"
+            ),
+            params![id, now.to_rfc3339()],
+            row_to_scheduled_task,
+        )
+        .optional()
+        .inspect_err(|e| tracing::error!(task_id = id, error = %e, "failed to claim task"))
+        .context("failed to claim task")
     }
 
     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {
@@ -721,6 +733,24 @@ mod tests {
                 pending_task(2, &task(), now, now),
             ]
         );
+    }
+
+    #[test]
+    fn it_should_claim_a_pending_task() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let later = now + chrono::Duration::seconds(30);
+        let repo = repo_with_clock(now);
+        repo.schedule(&task(), now).unwrap();
+
+        let claimed = repo.claim(1, later).unwrap();
+
+        let running = ScheduledTask {
+            status: TaskStatus::Running,
+            updated_at: later,
+            ..pending_task(1, &task(), now, now)
+        };
+        assert_eq!(claimed, Some(running.clone()));
+        assert_eq!(repo.list_non_completed().unwrap(), vec![running]);
     }
 
     fn download_task(video_id: &str) -> Task {
