@@ -610,6 +610,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_preview_if_channel_not_found_on_youtube() {
+        let channel_previewer = ChannelPreviewer::new(resolving(None));
+
+        let response = preview(channel_previewer, preview_query("@somechannel")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "YouTube channel @somechannel does not exist or is not accessible"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
