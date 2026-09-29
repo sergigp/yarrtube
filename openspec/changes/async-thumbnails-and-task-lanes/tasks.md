@@ -25,7 +25,7 @@ Subscribers:
 `ReconcilePlaylistTask`:
 - [x] 2.9 `it_should_not_fetch_thumbnails_when_adding_new_videos`: new videos are stored `Pending` without thumbnails, events are published, and there are zero fake thumbnail calls. Update existing tests that expected inline thumbnails.
 - [x] 2.10 `it_should_schedule_a_thumbnail_fetch_for_a_video_missing_one`: recovery schedules a `fetch_thumbnail` task instead of fetching.
-- [ ] 2.11 `it_should_not_schedule_a_second_thumbnail_fetch_if_one_is_queued`: still exactly one `fetch_thumbnail` task.
+- [x] 2.11 `it_should_not_schedule_a_second_thumbnail_fetch_if_one_is_queued`: still exactly one `fetch_thumbnail` task.
 - [ ] 2.12 `it_should_not_schedule_a_thumbnail_fetch_for_a_video_being_downloaded`: an `InProgress` video gets no task.
 - [ ] 2.13 `it_should_keep_the_folder_of_a_download_in_progress`: the bare-title folder of an `InProgress` video without a thumbnail is not deleted.
 - [ ] 2.14 `it_should_keep_the_suffixed_folder_of_a_download_in_progress`: the `"{title} [{id}]"` folder is not deleted.

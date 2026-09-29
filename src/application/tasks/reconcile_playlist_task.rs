@@ -1328,6 +1328,70 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_schedule_a_second_thumbnail_fetch_if_one_is_queued() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_downloader_repository = Arc::new(FakeVideoDownloaderRepository::default());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = my_video();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &video,
+            0,
+        );
+        task_repository
+            .schedule(
+                &Task::FetchThumbnail {
+                    video_id: video.id.as_str().to_string(),
+                    output_dir: "/videos/my-playlist".to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let task = ReconcilePlaylistTask::new(PlaylistVideoReconciler::new(
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository,
+            Arc::new(FakeYoutubePlaylistItemsRepository {
+                videos: Mutex::new(vec![member_playlist_item()]),
+            }),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteEventPublisher::new(
+                db.shared_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(ThumbnailFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                task_repository.clone(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![fetch_thumbnail_task(1, &video.id), next_reconcile(2)]
+        );
+    }
+
+    #[test]
     fn it_should_not_refetch_existing_thumbnails() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
