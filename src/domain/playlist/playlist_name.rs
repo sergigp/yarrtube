@@ -5,8 +5,6 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaylistName(String);
 
-const FILESYSTEM_UNSAFE_CHARS: &[char] = &['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
-
 impl PlaylistName {
     pub fn new(name: impl Into<String>) -> Result<Self, ValidationError> {
         let name = name.into();
@@ -14,12 +12,6 @@ impl PlaylistName {
             return Err(ValidationError(
                 "Playlist name must not be empty".to_string(),
             ));
-        }
-        if name.contains(FILESYSTEM_UNSAFE_CHARS) {
-            return Err(ValidationError(format!(
-                "Playlist name must not contain any of these characters: {}",
-                FILESYSTEM_UNSAFE_CHARS.iter().collect::<String>()
-            )));
         }
         Ok(Self(name))
     }
@@ -48,9 +40,6 @@ impl fmt::Display for PlaylistName {
 mod tests {
     use super::*;
 
-    const UNSAFE_CHARACTERS_MESSAGE: &str =
-        "Playlist name must not contain any of these characters: /\\:*?\"<>|";
-
     #[test]
     fn it_should_accept_a_name() {
         assert_eq!(
@@ -72,22 +61,6 @@ mod tests {
         assert_eq!(
             PlaylistName::new("   "),
             Err(error("Playlist name must not be empty"))
-        );
-    }
-
-    #[test]
-    fn it_should_reject_a_name_with_a_slash() {
-        assert_eq!(
-            PlaylistName::new("a/b"),
-            Err(error(UNSAFE_CHARACTERS_MESSAGE))
-        );
-    }
-
-    #[test]
-    fn it_should_reject_a_name_with_a_backslash() {
-        assert_eq!(
-            PlaylistName::new("a\\b"),
-            Err(error(UNSAFE_CHARACTERS_MESSAGE))
         );
     }
 

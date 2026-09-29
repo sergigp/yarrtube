@@ -247,6 +247,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_create_a_playlist_with_a_title_unsafe_for_filesystems() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(ResolvedPlaylist {
+                    title: "AC/DC: greatest hits?".to_string(),
+                    ..resolved_playlist()
+                }),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(playlist_creator, create_request("PLabc123")).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                PlaylistResponse {
+                    name: "AC/DC: greatest hits?".to_string(),
+                    ..playlist_response("PLabc123", DEFAULT_PATH)
+                }
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![Playlist {
+                name: PlaylistName::new("AC/DC: greatest hits?").unwrap(),
+                ..playlist("PLabc123", DEFAULT_PATH)
+            }]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, playlist_created("PLabc123"))]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_return_the_existing_playlist_if_already_created() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
