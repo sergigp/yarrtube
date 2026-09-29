@@ -39,7 +39,7 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 `it_should_return_none_when_youtube_omits_items`: YouTube's real reply for an unknown handle, which has no `items` field, resolves to no channel instead of failing to parse. 2.10 depends on this task, so it is done before 2.10.
+- [x] 3.1 `it_should_return_none_when_youtube_omits_items`: YouTube's real reply for an unknown handle, which has no `items` field, resolves to no channel instead of failing to parse. 2.10 depends on this task, so it is done before 2.10.
 
 ## 4. Verification
 

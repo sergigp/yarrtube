@@ -17,6 +17,8 @@ pub trait YoutubeChannelRepository: Send + Sync {
 
 #[derive(Debug, Deserialize)]
 struct ChannelsResponse {
+    /// Absent, not empty, when the handle matches no channel.
+    #[serde(default)]
     items: Vec<ChannelItem>,
 }
 
@@ -242,5 +244,34 @@ mod tests {
         let handle = ChannelHandle::new("@missing").unwrap();
 
         assert!(repository.resolve(&handle).unwrap().is_none());
+    }
+
+    #[test]
+    fn it_should_return_none_when_youtube_omits_items() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("forHandle".into(), "@missing".into()),
+                mockito::Matcher::UrlEncoded("part".into(), "id,snippet".into()),
+            ]))
+            .with_status(200)
+            // YouTube's real reply for a handle that matches nothing: no `items`.
+            .with_body(
+                r#"{
+                    "kind": "youtube#channelListResponse",
+                    "etag": "abc",
+                    "pageInfo": {"totalResults": 0, "resultsPerPage": 5}
+                }"#,
+            )
+            .create();
+
+        let repository =
+            YoutubeApiChannelRepository::with_base_url("api-key".to_string(), server.url());
+        let handle = ChannelHandle::new("@missing").unwrap();
+
+        let resolved = repository.resolve(&handle).map_err(|e| e.to_string());
+
+        assert_eq!(resolved, Ok(None));
     }
 }
