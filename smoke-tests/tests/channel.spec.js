@@ -2,9 +2,7 @@ import { test, expect } from '@playwright/test'
 import {
   openAddChannelDialog,
   fillChannel,
-  submitChannel,
   destinationNotice,
-  dialogErrorText,
 } from '../helpers/addDialog.js'
 import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
 import {
@@ -81,11 +79,13 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, invali
   // Sync from the sidebar completes without an error dialog/alert.
   await syncItem(page, { section: 'Channels', name: CHANNEL_HANDLE })
 
-  // An invalid handle surfaces a visible error in the dialog.
+  // An invalid handle is explained in the notice and can't be submitted.
   await openAddChannelDialog(page)
-  await submitChannel(page, { handle: 'this-handle-should-not-exist-abc123' })
-  await expect(dialogErrorText(page)).toBeVisible()
-  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
+  await fillChannel(page, { handle: 'this-handle-should-not-exist-abc123' })
+  await expect(destinationNotice(dialog)).toHaveText(/must start with "@"/)
+  await expect(destinationNotice(dialog)).toHaveClass(/text-destructive/)
+  await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Close' }).click()
 
   // Delete from the sidebar; it disappears from both the sidebar and home feed.
   await deleteItem(page, { section: 'Channels', name: CHANNEL_HANDLE })

@@ -18,6 +18,7 @@ import { deleteItem } from '../helpers/sidebar.js'
 
 const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
 const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
+const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 
 /** The immediate subdirectory names the daemon reports for `path`. */
 async function listDirectories(page, path) {
@@ -111,7 +112,7 @@ test('it should create a playlist into a staged parent folder that did not exist
 test('it should reach a sibling of the default parent via the breadcrumb', async ({ page }) => {
   await page.goto('/')
   await openAddChannelDialog(page)
-  const dialog = await fillChannel(page, { handle: '@some-handle' })
+  const dialog = await fillChannel(page, { handle: CHANNEL_HANDLE })
   await openAdvancedOptions(dialog)
   await openFolderBrowser(dialog)
 
@@ -124,7 +125,7 @@ test('it should reach a sibling of the default parent via the breadcrumb', async
   await folderEntry(dialog, 'playlists').click()
 
   await expect(destinationNotice(dialog).locator('code')).toHaveText(
-    endingIn('playlists/some-handle'),
+    endingIn(`playlists/${slugOf(CHANNEL_HANDLE)}`),
   )
   await expect(dialog.getByRole('navigation', { name: 'Folder path' })).toContainText('playlists')
 })
@@ -134,7 +135,7 @@ test('it should descend into an existing directory when the create-folder step n
 }) => {
   await page.goto('/')
   await openAddChannelDialog(page)
-  const dialog = await fillChannel(page, { handle: '@some-handle' })
+  const dialog = await fillChannel(page, { handle: CHANNEL_HANDLE })
   await openAdvancedOptions(dialog)
   await openFolderBrowser(dialog)
   await breadcrumbLinks(dialog).first().click()
@@ -171,7 +172,7 @@ test('it should block submission when the destination is already used by another
   // the playlist's folder runs into the same conflict.
   await openAddChannelDialog(page)
   const dialog = await fillChannel(page, {
-    handle: '@some-handle',
+    handle: CHANNEL_HANDLE,
     parent: 'playlists',
     folderName: slugOf(PLAYLIST_NAME),
   })

@@ -147,12 +147,6 @@ export async function fillChannel(page, { handle, videoLimit, parent, folderName
   return dialog
 }
 
-export async function submitChannel(page, { handle, videoLimit, parent, folderName }) {
-  const dialog = await fillChannel(page, { handle, videoLimit, parent, folderName })
-  await dialog.getByRole('button', { name: /^Create Channel/ }).click()
-  await submitAndSettle(dialog)
-}
-
 export function dialogErrorText(page) {
   return page.getByRole('dialog').locator('p.text-destructive')
 }

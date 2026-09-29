@@ -26,7 +26,7 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
 - [x] 2.5 `it_should_fail_to_preview_if_channel_missing`: an absent `channel` query parameter is rejected as empty.
 - [x] 2.6 `it_should_fail_to_preview_if_channel_not_found_on_youtube`: a channel YouTube doesn't know is reported as not found.
 - [x] 2.7 `it_should_fail_to_preview_if_youtube_lookup_fails`: a failed lookup is reported as a bad gateway.
-- [ ] 2.8 `addChannelDialog.spec.js` › `it should explain a value that is not a channel`: the debounced preview's 400 message shows as an error notice, and submit is disabled while the preview has failed.
+- [x] 2.8 `addChannelDialog.spec.js` › `it should explain a value that is not a channel`: the debounced preview's 400 message shows as an error notice, and submit is disabled while the preview has failed.
   - `channel.spec.js`'s invalid-handle step can no longer submit, so it asserts the error notice and the disabled submit instead.
 - [ ] 2.9 `addChannelDialog.spec.js` › `it should state the video limit, title and destination for a handle`:
   - The info notice waits for the lookup: show "Looking up channel…", gate submit on the preview, and render the avatar through `Thumbnail` in the `leading` slot.

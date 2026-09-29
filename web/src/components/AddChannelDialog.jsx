@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { createChannel } from '../api'
-import { useInvalidateLibrary } from '../queries'
+import { useChannelPreview, useInvalidateLibrary } from '../queries'
+import { useDebouncedValue } from '../useDebouncedValue'
 import { deriveChannelPathSegment } from '../channelHandle'
 import { channelNoticeLead } from '../channelNotice'
 import { DestinationNotice, DestinationPath } from './DestinationNotice'
@@ -13,8 +14,12 @@ import { Button } from '@/components/ui/button'
 
 const emptyForm = { channel: '', quality: 'high', video_limit: '3' }
 const emptyLocation = { path: '', destination: '', valid: false }
+const LOOKUP_DEBOUNCE_MS = 400
 
-function ChannelNotice({ videoLimit, location, onChange }) {
+function ChannelNotice({ preview, videoLimit, location, onChange }) {
+  if (preview.error) {
+    return <DestinationNotice tone="error">{preview.error.message}</DestinationNotice>
+  }
   const destination = <DestinationPath>{location.destination}</DestinationPath>
   if (location.occupiedBy) {
     return (
@@ -37,6 +42,9 @@ export function AddChannelDialog({ open, onOpenChange }) {
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const invalidateLibrary = useInvalidateLibrary()
+  const entered = form.channel.trim()
+  const debounced = useDebouncedValue(entered, LOOKUP_DEBOUNCE_MS)
+  const preview = useChannelPreview(debounced)
 
   const resetAll = () => {
     setForm(emptyForm)
@@ -62,7 +70,7 @@ export function AddChannelDialog({ open, onOpenChange }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    if (!location.valid) {
+    if (preview.error || !location.valid) {
       return
     }
     setSubmitting(true)
@@ -111,8 +119,9 @@ export function AddChannelDialog({ open, onOpenChange }) {
             />
             {/* Helper text under the field, not a block of its own: it
                 confirms the defaults without competing with the form. */}
-            {form.channel.trim() && location.destination && (
+            {entered && (preview.error || location.destination) && (
               <ChannelNotice
+                preview={preview}
                 videoLimit={form.video_limit}
                 location={location}
                 onChange={() => setAdvancedOpen(true)}
@@ -161,7 +170,7 @@ export function AddChannelDialog({ open, onOpenChange }) {
           </div>
 
           {error && <p className="text-sm text-destructive">{error.message}</p>}
-          <Button type="submit" disabled={submitting || !location.valid} className="self-start">
+          <Button type="submit" disabled={submitting || Boolean(preview.error) || !location.valid} className="self-start">
             {submitting ? 'Creating…' : 'Create Channel'}
           </Button>
         </form>

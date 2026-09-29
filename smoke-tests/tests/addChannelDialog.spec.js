@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test'
-import { openAddChannelDialog, destinationNotice } from '../helpers/addDialog.js'
+import { openAddChannelDialog, destinationNotice, slugOf } from '../helpers/addDialog.js'
+
+const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 
 test('it should show no notice until a handle is entered', async ({ page }) => {
   await page.goto('/')
@@ -8,8 +10,21 @@ test('it should show no notice until a handle is entered', async ({ page }) => {
 
   await expect(destinationNotice(dialog)).toHaveCount(0)
 
-  await dialog.getByLabel('Channel Handle or URL').fill('@some-handle')
+  await dialog.getByLabel('Channel Handle or URL').fill(CHANNEL_HANDLE)
   await expect(destinationNotice(dialog)).toBeVisible()
+})
+
+test('it should explain a value that is not a channel', async ({ page }) => {
+  await page.goto('/')
+  await openAddChannelDialog(page)
+  const dialog = page.getByRole('dialog')
+
+  await dialog.getByLabel('Channel Handle or URL').fill('somechannel')
+
+  const notice = destinationNotice(dialog)
+  await expect(notice).toHaveText('Channel handle must start with "@" (got "somechannel")')
+  await expect(notice).toHaveClass(/text-destructive/)
+  await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
 })
 
 test('it should state the video limit and destination for a handle', async ({ page }) => {
@@ -17,12 +32,12 @@ test('it should state the video limit and destination for a handle', async ({ pa
   await openAddChannelDialog(page)
   const dialog = page.getByRole('dialog')
 
-  await dialog.getByLabel('Channel Handle or URL').fill('@some-handle')
+  await dialog.getByLabel('Channel Handle or URL').fill(CHANNEL_HANDLE)
 
   const notice = destinationNotice(dialog)
   await expect(notice).toContainText('The latest 3 videos')
   // Absolute: the videos root, the default `channels` parent and the slug.
-  await expect(notice.locator('code')).toHaveText(/^\/.+\/channels\/some-handle$/)
+  await expect(notice.locator('code')).toHaveText(new RegExp(`^/.+/channels/${slugOf(CHANNEL_HANDLE)}$`))
   await expect(dialog.getByRole('button', { name: /Advanced options/ })).toHaveAttribute(
     'aria-expanded',
     'false',
@@ -33,7 +48,7 @@ test('it should update the notice from the advanced options', async ({ page }) =
   await page.goto('/')
   await openAddChannelDialog(page)
   const dialog = page.getByRole('dialog')
-  await dialog.getByLabel('Channel Handle or URL').fill('@some-handle')
+  await dialog.getByLabel('Channel Handle or URL').fill(CHANNEL_HANDLE)
   await dialog.getByRole('button', { name: /Advanced options/ }).click()
 
   await dialog.getByLabel('Video Limit').fill('1')
@@ -52,7 +67,7 @@ test('it should expand advanced options from the change action', async ({ page }
   await page.goto('/')
   await openAddChannelDialog(page)
   const dialog = page.getByRole('dialog')
-  await dialog.getByLabel('Channel Handle or URL').fill('@some-handle')
+  await dialog.getByLabel('Channel Handle or URL').fill(CHANNEL_HANDLE)
 
   await destinationNotice(dialog).getByRole('button', { name: 'change' }).click()
 
@@ -61,5 +76,5 @@ test('it should expand advanced options from the change action', async ({ page }
     'true',
   )
   await expect(dialog.getByLabel('Folder name')).toBeVisible()
-  await expect(dialog.getByLabel('Folder name')).toHaveValue('some-handle')
+  await expect(dialog.getByLabel('Folder name')).toHaveValue(slugOf(CHANNEL_HANDLE))
 })
