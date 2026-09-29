@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react'
 import { createPlaylist } from '../api'
-import { useInvalidateLibrary } from '../queries'
+import { useInvalidateLibrary, usePlaylistPreview } from '../queries'
+import { useDebouncedValue } from '../useDebouncedValue'
+import { DestinationNotice } from './DestinationNotice'
 import { LocationField } from './LocationField'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -10,6 +12,7 @@ import { Button } from '@/components/ui/button'
 
 const emptyForm = { playlist: '', name: '', quality: 'high' }
 const emptyLocation = { path: '', valid: false }
+const LOOKUP_DEBOUNCE_MS = 400
 
 export function AddPlaylistDialog({ open, onOpenChange }) {
   const [form, setForm] = useState(emptyForm)
@@ -18,6 +21,8 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const invalidateLibrary = useInvalidateLibrary()
+  const debounced = useDebouncedValue(form.playlist.trim(), LOOKUP_DEBOUNCE_MS)
+  const preview = usePlaylistPreview(debounced)
 
   const resetAll = () => {
     setForm(emptyForm)
@@ -90,6 +95,9 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
               onChange={setField('playlist')}
               required
             />
+            {form.playlist.trim() && preview.error && (
+              <DestinationNotice tone="error">{preview.error.message}</DestinationNotice>
+            )}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="add-playlist-name">Name</Label>
