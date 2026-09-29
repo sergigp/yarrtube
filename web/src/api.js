@@ -1,7 +1,9 @@
+/** GETs `path` under `/api`; rejects with the server's error message when it gives one. */
 async function request(path) {
   const response = await fetch(`/api${path}`)
   if (!response.ok) {
-    throw new Error(`request to ${path} failed with status ${response.status}`)
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.error ?? `request to ${path} failed with status ${response.status}`)
   }
   return response.json()
 }
@@ -62,26 +64,12 @@ export async function createPlaylist({ playlist, path, quality }) {
  * Looks a playlist ID or URL up on YouTube without tracking it. Resolves to
  * `{ id, title, video_count }`; rejects with the server's error message.
  */
-export async function previewPlaylist(playlist) {
-  const response = await fetch(`/api/playlists/preview?playlist=${encodeURIComponent(playlist)}`)
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    throw new Error(
-      body?.error ?? `request to preview playlist failed with status ${response.status}`,
-    )
-  }
-  return response.json()
+export function previewPlaylist(playlist) {
+  return request(`/playlists/preview?playlist=${encodeURIComponent(playlist)}`)
 }
 
-export async function previewChannel(channel) {
-  const response = await fetch(`/api/channels/preview?channel=${encodeURIComponent(channel)}`)
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    throw new Error(
-      body?.error ?? `request to preview channel failed with status ${response.status}`,
-    )
-  }
-  return response.json()
+export function previewChannel(channel) {
+  return request(`/channels/preview?channel=${encodeURIComponent(channel)}`)
 }
 
 export async function deletePlaylist(id) {
