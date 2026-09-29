@@ -502,6 +502,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_preview_a_playlist_from_a_youtube_url() {
+        let playlist_previewer = PlaylistPreviewer::new(Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }));
+
+        let response = preview(
+            playlist_previewer,
+            preview_query("https://www.youtube.com/watch?v=vid1&list=PLabc123"),
+        )
+        .await;
+
+        assert_eq!(response, Ok(playlist_preview_response("PLabc123")));
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
