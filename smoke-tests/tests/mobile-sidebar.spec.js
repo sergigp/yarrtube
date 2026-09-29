@@ -22,3 +22,19 @@ test('mobile sidebar opens via the menu button and closes', async ({ page }) => 
   await overlay.click({ position: { x: 370, y: 20 } })
   await expect(overlay).toHaveCount(0)
 })
+
+test('it should close the drawer and open the add channel dialog', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+
+  // Scoped below the app root: while the dialog is open, Radix marks the root
+  // itself `aria-hidden`, and the dialog's own overlay is portalled to body.
+  const overlay = page.locator('#root div[aria-hidden="true"]')
+  await page.getByRole('button', { name: 'Open menu' }).click()
+  await expect(overlay).toBeVisible()
+
+  await page.getByRole('button', { name: 'Add channel', exact: true }).click()
+
+  await expect(overlay).toHaveCount(0)
+  await expect(page.getByRole('dialog', { name: 'Add channel' })).toBeVisible()
+})
