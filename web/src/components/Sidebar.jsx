@@ -10,6 +10,14 @@ import {
   markChannelWatched,
   avatarMediaUrl,
 } from '../api'
+import {
+  CAUGHT_UP_PREVIEW,
+  SEARCH_THRESHOLD,
+  channelLeadCount,
+  collapse,
+  matchesSearch,
+  orderChannels,
+} from '../sidebarSections'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
 import {
@@ -18,6 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 function activeIdFrom(pathname, prefix) {
@@ -26,6 +35,58 @@ function activeIdFrom(pathname, prefix) {
   }
   const rest = pathname.slice(prefix.length).split('/')[0]
   return rest ? decodeURIComponent(rest) : null
+}
+
+/**
+ * Whether a sidebar section is expanded, remembered per browser. Storage may
+ * be unavailable (private mode, blocked site data): the section then starts
+ * collapsed and the choice lasts until reload.
+ */
+function useExpandedState(section) {
+  const key = `yarrtube.sidebar.expanded.${section}`
+  const [expanded, setExpanded] = useState(() => {
+    try {
+      return window.localStorage.getItem(key) === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  const toggle = () => {
+    const next = !expanded
+    setExpanded(next)
+    try {
+      window.localStorage.setItem(key, String(next))
+    } catch {
+      // Not remembered; the in-memory state still applies.
+    }
+  }
+
+  return [expanded, toggle]
+}
+
+/**
+ * The rows a section shows: every match while searching, otherwise all rows
+ * when expanded or its leading rows (plus the active one) when collapsed.
+ * `collapsible` says whether collapsing would hide anything.
+ */
+function sectionView(items, { searchText, expanded, leadCount, activeId }) {
+  if (!items) {
+    return { rows: items, hiddenCount: 0, collapsible: false }
+  }
+  if (searchText) {
+    return {
+      rows: items.filter((item) => matchesSearch(item, searchText)),
+      hiddenCount: 0,
+      collapsible: false,
+    }
+  }
+  const collapsed = collapse(items, leadCount, activeId)
+  return {
+    rows: expanded ? items : collapsed.shown,
+    hiddenCount: expanded ? 0 : collapsed.hiddenCount,
+    collapsible: collapsed.hiddenCount > 0,
+  }
 }
 
 function SidebarRowMenu({ item, onSync, onMarkWatched, onDeleteRequest }) {
@@ -125,6 +186,10 @@ function SidebarRow({
 function SidebarSection({
   title,
   items,
+  hiddenCount,
+  expanded,
+  collapsible,
+  onToggleExpanded,
   error,
   activeId,
   hrefFor,
@@ -179,6 +244,16 @@ function SidebarSection({
           ))}
         </ul>
       )}
+      {!error && collapsible && (
+        <button
+          type="button"
+          className="mt-1 px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          aria-expanded={expanded}
+          onClick={onToggleExpanded}
+        >
+          {expanded ? 'Show less' : `Show ${hiddenCount} more`}
+        </button>
+      )}
 
       <ConfirmDialog
         open={pendingDelete !== null}
@@ -203,6 +278,9 @@ export function Sidebar({ open = false, onClose }) {
   const { data: channels, error: channelsError } = useChannels()
   const { data: playlists, error: playlistsError } = usePlaylists()
   const invalidateLibrary = useInvalidateLibrary()
+  const [search, setSearch] = useState('')
+  const [channelsExpanded, toggleChannelsExpanded] = useExpandedState('channels')
+  const [playlistsExpanded, togglePlaylistsExpanded] = useExpandedState('playlists')
 
   // The drawer scrolls on its own; keep the page behind it still.
   useEffect(() => {
@@ -217,6 +295,24 @@ export function Sidebar({ open = false, onClose }) {
 
   const activeChannelId = activeIdFrom(location.pathname, '/channels/')
   const activePlaylistId = activeIdFrom(location.pathname, '/playlists/')
+
+  const searchable = (channels?.length ?? 0) + (playlists?.length ?? 0) > SEARCH_THRESHOLD
+  const searchText = searchable ? search.trim() : ''
+  const orderedChannels = channels && orderChannels(channels)
+  const channelsView = sectionView(orderedChannels, {
+    searchText,
+    expanded: channelsExpanded,
+    leadCount: orderedChannels && channelLeadCount(orderedChannels),
+    activeId: activeChannelId,
+  })
+  const playlistsView = sectionView(playlists, {
+    searchText,
+    expanded: playlistsExpanded,
+    leadCount: CAUGHT_UP_PREVIEW,
+    activeId: activePlaylistId,
+  })
+  const showChannels = !searchText || channelsView.rows?.length !== 0
+  const showPlaylists = !searchText || playlistsView.rows?.length !== 0
 
   return (
     <>
@@ -245,51 +341,75 @@ export function Sidebar({ open = false, onClose }) {
             <X className="size-4" />
           </button>
         </div>
-        <SidebarSection
-          title="Channels"
-          items={channels}
-          error={channelsError}
-          activeId={activeChannelId}
-          hrefFor={(channel) => `/channels/${channel.id}`}
-          showAvatar
-          onNavigate={onClose}
-          onSync={async (id) => {
-            await reconcileChannel(id)
-            invalidateLibrary()
-          }}
-          onMarkWatched={async (id) => {
-            await markChannelWatched(id)
-            invalidateLibrary()
-          }}
-          onDelete={async (id) => {
-            await deleteChannel(id)
-            invalidateLibrary()
-            if (activeChannelId === id) {
-              navigate('/')
-            }
-          }}
-          deleteDescription="This removes the channel from tracking."
-        />
-        <SidebarSection
-          title="Playlists"
-          items={playlists}
-          error={playlistsError}
-          activeId={activePlaylistId}
-          hrefFor={(playlist) => `/playlists/${playlist.id}`}
-          onNavigate={onClose}
-          onSync={async (id) => {
-            await reconcilePlaylist(id)
-            invalidateLibrary()
-          }}
-          onDelete={async (id) => {
-            await deletePlaylist(id)
-            invalidateLibrary()
-            if (activePlaylistId === id) {
-              navigate('/')
-            }
-          }}
-          deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
-        />
+        {searchable && (
+          <Input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search"
+            aria-label="Search channels and playlists"
+          />
+        )}
+        {!showChannels && !showPlaylists && (
+          <p className="px-2 text-sm text-muted-foreground">Nothing matches "{searchText}".</p>
+        )}
+        {showChannels && (
+          <SidebarSection
+            title="Channels"
+            items={channelsView.rows}
+            hiddenCount={channelsView.hiddenCount}
+            expanded={channelsExpanded}
+            collapsible={channelsView.collapsible}
+            onToggleExpanded={toggleChannelsExpanded}
+            error={channelsError}
+            activeId={activeChannelId}
+            hrefFor={(channel) => `/channels/${channel.id}`}
+            showAvatar
+            onNavigate={onClose}
+            onSync={async (id) => {
+              await reconcileChannel(id)
+              invalidateLibrary()
+            }}
+            onMarkWatched={async (id) => {
+              await markChannelWatched(id)
+              invalidateLibrary()
+            }}
+            onDelete={async (id) => {
+              await deleteChannel(id)
+              invalidateLibrary()
+              if (activeChannelId === id) {
+                navigate('/')
+              }
+            }}
+            deleteDescription="This removes the channel from tracking."
+          />
+        )}
+        {showPlaylists && (
+          <SidebarSection
+            title="Playlists"
+            items={playlistsView.rows}
+            hiddenCount={playlistsView.hiddenCount}
+            expanded={playlistsExpanded}
+            collapsible={playlistsView.collapsible}
+            onToggleExpanded={togglePlaylistsExpanded}
+            error={playlistsError}
+            activeId={activePlaylistId}
+            hrefFor={(playlist) => `/playlists/${playlist.id}`}
+            onNavigate={onClose}
+            onSync={async (id) => {
+              await reconcilePlaylist(id)
+              invalidateLibrary()
+            }}
+            onDelete={async (id) => {
+              await deletePlaylist(id)
+              invalidateLibrary()
+              if (activePlaylistId === id) {
+                navigate('/')
+              }
+            }}
+            deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
+          />
+        )}
       </aside>
     </>
   )
