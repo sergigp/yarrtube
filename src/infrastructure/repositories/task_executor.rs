@@ -527,6 +527,36 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_not_block_light_tasks_behind_downloads() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(BlockingHandler::default());
+        let _releases = [
+            handler.gate(&download("rec1")),
+            handler.gate(&reconcile("PL1")),
+        ];
+        task_repository.schedule(&download("rec1"), now()).unwrap();
+        task_repository.schedule(&reconcile("PL1"), now()).unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            blocking_registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            1,
+        ));
+
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![running(1, &download("rec1")), running(2, &reconcile("PL1")),]
+        );
+    }
+
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
     const TEST_DOWNLOAD_CONCURRENCY: usize = 2;
 
@@ -560,6 +590,12 @@ mod tests {
             video_id: video_id.to_string(),
             quality: "high".to_string(),
             output_dir: "/videos/my-playlist".to_string(),
+        }
+    }
+
+    fn reconcile(playlist_id: &str) -> Task {
+        Task::ReconcilePlaylist {
+            playlist_id: playlist_id.to_string(),
         }
     }
 
