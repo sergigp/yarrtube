@@ -689,6 +689,23 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_schedule_a_download_for_another_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+
+        repo.schedule(&download_task("rec1"), now).unwrap();
+        repo.schedule(&download_task("rec2"), now).unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &download_task("rec1"), now, now),
+                pending_task(2, &download_task("rec2"), now, now),
+            ]
+        );
+    }
+
     fn download_task(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
