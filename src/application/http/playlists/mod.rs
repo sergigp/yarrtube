@@ -517,6 +517,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_preview_if_invalid_playlist_provided() {
+        let response = preview(
+            any_playlist_previewer(),
+            preview_query("https://www.youtube.com/watch?v=abc"),
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "YouTube URL is missing a \"list\" query parameter (got \"https://www.youtube.com/watch?v=abc\")"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
@@ -973,6 +989,13 @@ mod tests {
             unused_event_publisher(),
             Arc::new(FixedClock(fixed_timestamp())),
         )
+    }
+
+    /// A previewer for tests whose request is rejected before reaching it. Its
+    /// YouTube lookup fails, so a request that wrongly got through would
+    /// fail loudly instead of passing.
+    fn any_playlist_previewer() -> PlaylistPreviewer {
+        PlaylistPreviewer::new(Arc::new(FailingYoutubePlaylistRepository))
     }
 
     /// A deleter for tests whose request is rejected before reaching it (see

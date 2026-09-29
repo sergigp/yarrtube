@@ -29,7 +29,7 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
 - [x] 2.2 `it_should_create_a_playlist_with_a_title_unsafe_for_filesystems`: a title such as "AC/DC: greatest hits?" is stored and listed back. This drives dropping the unsafe-character rule from `PlaylistName::new`, which the SQLite read path goes through.
 - [x] 2.3 `it_should_preview_a_playlist`: the preview returns the playlist's ID, title and video count and persists nothing.
 - [x] 2.4 `it_should_preview_a_playlist_from_a_youtube_url`: the ID is extracted from a watch URL carrying `list=`.
-- [ ] 2.5 `it_should_fail_to_preview_if_invalid_playlist_provided`: a value that isn't a playlist is rejected with the value object's message without contacting YouTube.
+- [x] 2.5 `it_should_fail_to_preview_if_invalid_playlist_provided`: a value that isn't a playlist is rejected with the value object's message without contacting YouTube.
 - [ ] 2.6 `it_should_fail_to_preview_if_playlist_missing`: an absent `playlist` query parameter is rejected as empty.
 - [ ] 2.7 `it_should_fail_to_preview_if_playlist_not_found_on_youtube`: a playlist YouTube doesn't know is reported as not found.
 - [ ] 2.8 `it_should_fail_to_preview_if_youtube_lookup_fails`: a failed lookup is reported as a bad gateway.
