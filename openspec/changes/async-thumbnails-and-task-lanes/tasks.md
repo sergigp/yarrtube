@@ -65,7 +65,7 @@ Domain and composition:
 - [x] 3.3 `it_should_not_schedule_a_duplicate_download_for_the_same_video`: `INSERT … WHERE NOT EXISTS` on type + `json_extract(payload,'$.video_id')`.
 - [x] 3.4 `it_should_not_schedule_a_duplicate_thumbnail_fetch_for_the_same_video`: the same dedupe for `fetch_thumbnail`.
 - [x] 3.5 `it_should_schedule_a_download_for_another_video`: different video ids both get rows.
-- [ ] 3.6 `it_should_schedule_duplicates_of_tasks_without_a_video`: `reconcile_playlist` is not deduped.
+- [x] 3.6 `it_should_schedule_duplicates_of_tasks_without_a_video`: `reconcile_playlist` is not deduped.
 
 `SqliteVideoRepository`:
 - [ ] 3.7 `it_should_update_only_the_title`: `update_title` leaves status and download fields intact.

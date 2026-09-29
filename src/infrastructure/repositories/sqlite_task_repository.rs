@@ -706,6 +706,23 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_schedule_duplicates_of_tasks_without_a_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+
+        repo.schedule(&task(), now).unwrap();
+        repo.schedule(&task(), now).unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &task(), now, now),
+                pending_task(2, &task(), now, now),
+            ]
+        );
+    }
+
     fn download_task(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
