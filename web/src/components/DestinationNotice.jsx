@@ -1,15 +1,16 @@
 /**
  * The helper line under an add dialog's main field, stating where videos
- * will go or why they can't. `onChange`, when given, renders a "change"
- * action after the text.
+ * will go or why they can't. `leading`, when given, is rendered before the
+ * text. `onChange`, when given, renders a "change" action after the text.
  */
-export function DestinationNotice({ tone, children, onChange }) {
+export function DestinationNotice({ tone, leading, children, onChange }) {
   const color = tone === 'error' ? 'text-destructive' : 'text-muted-foreground'
   return (
     <p
       className={`mt-1 min-w-0 text-xs leading-relaxed ${color}`}
       data-testid="destination-notice"
     >
+      {leading}
       {children}
       {onChange && (
         <>

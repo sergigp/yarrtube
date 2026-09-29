@@ -4,7 +4,8 @@
  * follows it. `videoLimit` is the raw field value, so a limit the dialog
  * would reject leaves the count out rather than stating a wrong one.
  */
-export function channelNoticeLead(videoLimit) {
+// eslint-disable-next-line no-unused-vars -- named from 2.9 on
+export function channelNoticeLead(videoLimit, title) {
   const limit = Number(videoLimit)
   if (String(videoLimit).trim() === '' || !Number.isInteger(limit) || limit < 1 || limit > 1000) {
     return 'Videos from this channel will be downloaded to'

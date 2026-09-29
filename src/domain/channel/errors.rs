@@ -41,3 +41,25 @@ impl fmt::Display for DeleteChannelError {
 }
 
 impl std::error::Error for DeleteChannelError {}
+
+#[derive(Debug)]
+pub enum PreviewChannelError {
+    YoutubeChannelNotFound(ChannelHandle),
+    Lookup(anyhow::Error),
+}
+
+impl fmt::Display for PreviewChannelError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::YoutubeChannelNotFound(handle) => {
+                write!(
+                    f,
+                    "YouTube channel {handle} does not exist or is not accessible"
+                )
+            }
+            Self::Lookup(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for PreviewChannelError {}

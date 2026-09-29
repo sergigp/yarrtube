@@ -8,9 +8,9 @@ pub mod validation;
 pub mod videos;
 
 use crate::domain::services::{
-    ChannelCreator, ChannelDeleter, ChannelVideoReconciler, ChannelViewSearcher, DirectorySearcher,
-    PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher, PlaylistVideoReconciler,
-    TaskViewSearcher, VideoSearcher, VideoWatchStateUpdater,
+    ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelVideoReconciler, ChannelViewSearcher,
+    DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher,
+    PlaylistVideoReconciler, TaskViewSearcher, VideoSearcher, VideoWatchStateUpdater,
 };
 use axum::Router;
 use axum::extract::FromRef;
@@ -33,6 +33,7 @@ pub struct ApiServices {
     pub task_view_searcher: TaskViewSearcher,
     pub channel_creator: ChannelCreator,
     pub channel_deleter: ChannelDeleter,
+    pub channel_previewer: ChannelPreviewer,
     pub channel_view_searcher: ChannelViewSearcher,
     pub channel_video_reconciler: ChannelVideoReconciler,
     pub directory_searcher: DirectorySearcher,
@@ -67,6 +68,7 @@ pub fn api_router(api_services: ApiServices) -> Router {
             "/channels",
             post(channels::create_channel).get(channels::list_channels),
         )
+        .route("/channels/preview", get(channels::preview_channel))
         .route(
             "/channels/{handle}",
             axum::routing::delete(channels::delete_channel),

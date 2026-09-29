@@ -1,4 +1,4 @@
-use crate::domain::channel::{Channel, ChannelView};
+use crate::domain::channel::{Channel, ChannelPreview, ChannelView};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +12,12 @@ pub struct CreateChannelRequest {
     pub video_limit: Option<i64>,
     #[serde(default)]
     pub path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PreviewChannelQuery {
+    #[serde(default)]
+    pub channel: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -58,6 +64,23 @@ impl From<ChannelView> for ChannelListItemResponse {
             path: channel.path.as_str().to_string(),
             avatar_filename: channel.avatar_filename,
             unwatched_count: channel.unwatched_count,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ChannelPreviewResponse {
+    pub id: String,
+    pub title: String,
+    pub avatar_url: Option<String>,
+}
+
+impl From<ChannelPreview> for ChannelPreviewResponse {
+    fn from(preview: ChannelPreview) -> Self {
+        Self {
+            id: preview.id.as_str().to_string(),
+            title: preview.name,
+            avatar_url: preview.avatar_url,
         }
     }
 }

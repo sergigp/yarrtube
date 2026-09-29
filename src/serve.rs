@@ -1,10 +1,10 @@
 use crate::application::http::{self, ApiServices, VideosRoot};
 use crate::application::{subscribers, tasks};
 use crate::domain::services::{
-    ChannelCreator, ChannelDeleter, ChannelVideoReconciler, ChannelViewSearcher, DirectorySearcher,
-    PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher, PlaylistVideoReconciler,
-    TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher,
-    VideoWatchStateUpdater,
+    ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelVideoReconciler, ChannelViewSearcher,
+    DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher,
+    PlaylistVideoReconciler, TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter,
+    VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::infrastructure_container::{
@@ -229,6 +229,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_avatar_repository.clone(),
             infrastructure.event_publisher.clone(),
         ),
+        channel_previewer: ChannelPreviewer::new(infrastructure.youtube_channel_repository.clone()),
         channel_view_searcher: ChannelViewSearcher::new(
             infrastructure.channel_repository.clone(),
             infrastructure.channel_video_repository.clone(),

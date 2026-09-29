@@ -73,6 +73,17 @@ export async function previewPlaylist(playlist) {
   return response.json()
 }
 
+export async function previewChannel(channel) {
+  const response = await fetch(`/api/channels/preview?channel=${encodeURIComponent(channel)}`)
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(
+      body?.error ?? `request to preview channel failed with status ${response.status}`,
+    )
+  }
+  return response.json()
+}
+
 export async function deletePlaylist(id) {
   const response = await fetch(`/api/playlists/${encodeURIComponent(id)}`, {
     method: 'DELETE',
