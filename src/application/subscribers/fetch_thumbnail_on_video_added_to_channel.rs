@@ -7,6 +7,7 @@ use crate::infrastructure::shared::system_clock::Clock;
 use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
+use tracing::debug;
 
 #[derive(Debug, Deserialize)]
 struct VideoAddedToChannelPayload {
@@ -45,10 +46,10 @@ impl EventSubscriber for FetchThumbnailOnVideoAddedToChannel {
     fn handle(&self, payload: &str) -> anyhow::Result<()> {
         let payload: VideoAddedToChannelPayload = serde_json::from_str(payload)?;
         let channel_id = ChannelHandle::new(payload.channel_id.as_str())?;
-        let channel = self
-            .channel_repository
-            .find(&channel_id)?
-            .ok_or_else(|| anyhow::anyhow!("channel {channel_id} not found"))?;
+        let Some(channel) = self.channel_repository.find(&channel_id)? else {
+            debug!(channel_id = %channel_id, "channel no longer exists, skipping thumbnail scheduling");
+            return Ok(());
+        };
 
         let output_dir = Path::new(&self.videos_path).join(channel.path.as_str());
         self.task_repository.schedule(
@@ -106,6 +107,29 @@ mod tests {
                 },
             )]
         );
+    }
+
+    #[test]
+    fn it_should_skip_if_channel_no_longer_exists() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let subscriber = FetchThumbnailOnVideoAddedToChannel::new(
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        );
+
+        let result = handle(
+            &subscriber,
+            r#"{"channel_id": "@missing", "video_id": "rec1"}"#,
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
     fn channel(channel_handle: &str) -> Channel {
