@@ -533,6 +533,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_preview_if_playlist_missing() {
+        let query = PreviewPlaylistQuery { playlist: None };
+
+        let response = preview(any_playlist_previewer(), query).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Playlist ID or URL must not be empty"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
