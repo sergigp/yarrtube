@@ -32,7 +32,7 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
 - [x] 2.5 `it_should_fail_to_preview_if_invalid_playlist_provided`: a value that isn't a playlist is rejected with the value object's message without contacting YouTube.
 - [x] 2.6 `it_should_fail_to_preview_if_playlist_missing`: an absent `playlist` query parameter is rejected as empty.
 - [x] 2.7 `it_should_fail_to_preview_if_playlist_not_found_on_youtube`: a playlist YouTube doesn't know is reported as not found.
-- [ ] 2.8 `it_should_fail_to_preview_if_youtube_lookup_fails`: a failed lookup is reported as a bad gateway.
+- [x] 2.8 `it_should_fail_to_preview_if_youtube_lookup_fails`: a failed lookup is reported as a bad gateway.
 - [ ] 2.9 `PlaylistName` › `it_should_accept_a_name_with_filesystem_unsafe_characters`: replaces the slash and backslash rejection tests.
 - [ ] 2.10 `PlaylistName` › `it_should_name_after_the_id_if_youtube_title_blank`: `from_youtube_title` falls back to the ID.
 - [ ] 2.11 `addPlaylistDialog.spec.js` › `it should show no notice until a playlist is entered`: the `destination-notice` element is absent and `Create Playlist` is disabled while the field is empty.

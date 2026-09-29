@@ -563,6 +563,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_preview_if_youtube_lookup_fails() {
+        let playlist_previewer = PlaylistPreviewer::new(Arc::new(FailingYoutubePlaylistRepository));
+
+        let response = preview(playlist_previewer, preview_query("PLabc123")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                "YouTube API request failed"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));

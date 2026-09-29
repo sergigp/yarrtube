@@ -1,5 +1,7 @@
 use crate::domain::playlist::{PlaylistId, PlaylistName, PlaylistPreview, PreviewPlaylistError};
-use crate::infrastructure::repositories::youtube_playlist_repository::YoutubePlaylistRepository;
+use crate::infrastructure::repositories::youtube_playlist_repository::{
+    ResolvedPlaylist, YoutubePlaylistRepository,
+};
 use std::sync::Arc;
 
 /// Looks a YouTube playlist up without tracking it.
@@ -22,13 +24,24 @@ pub trait PlaylistPreviewerApi: Send + Sync {
 
 impl PlaylistPreviewerApi for PlaylistPreviewer {
     fn preview(&self, id: PlaylistId) -> Result<PlaylistPreview, PreviewPlaylistError> {
-        match self.lookup.resolve(&id) {
-            Ok(Some(resolved)) => Ok(PlaylistPreview {
-                name: PlaylistName::from_youtube_title(&resolved.title, &id),
-                video_count: resolved.item_count,
-                id,
-            }),
-            _ => Err(PreviewPlaylistError::YoutubePlaylistNotFound(id)),
+        let resolved = self.resolve_on_youtube(&id)?;
+        Ok(PlaylistPreview {
+            name: PlaylistName::from_youtube_title(&resolved.title, &id),
+            video_count: resolved.item_count,
+            id,
+        })
+    }
+}
+
+impl PlaylistPreviewer {
+    fn resolve_on_youtube(
+        &self,
+        id: &PlaylistId,
+    ) -> Result<ResolvedPlaylist, PreviewPlaylistError> {
+        match self.lookup.resolve(id) {
+            Ok(Some(resolved)) => Ok(resolved),
+            Ok(None) => Err(PreviewPlaylistError::YoutubePlaylistNotFound(id.clone())),
+            Err(e) => Err(PreviewPlaylistError::Lookup(e)),
         }
     }
 }
