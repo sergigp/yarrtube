@@ -43,6 +43,6 @@
 
 - [x] 5.1 `it_should_respond_watched_when_progress_reaches_the_watched_threshold`: `VideoWatchStateUpdater::update` returns the resulting watched state; the handler responds `200 RecordProgressResponse { watched }`. Update the existing progress tests from `204` to the response body.
 - [x] 5.2 `it_should_respond_unwatched_when_progress_stays_below_the_watched_threshold`.
-- [ ] 5.3 `recordVideoProgress` returns the parsed body. `useWatchProgress` tracks `lastWatched` (from `video.watched`) and invalidates `queryKeys.channels` with `exact: true` only when a non-beacon report returns a different `watched`. Verify with `npm run build` and `npm run lint`.
+- [x] 5.3 `recordVideoProgress` returns the parsed body. `useWatchProgress` tracks `lastWatched` (from `video.watched`) and invalidates `queryKeys.channels` with `exact: true` only when a non-beacon report returns a different `watched`. Verify with `npm run build` and `npm run lint`.
 - [ ] 5.4 Smoke specs expect `200` from the progress report. Run `scripts/run-smoke-tests.sh`, `cargo test --locked`, fmt and clippy; all pass.
 - [ ] 5.5 Manual check with `scripts/run-local.sh`: while a video plays, the network tab shows no `/api/channels` request after each progress POST, and exactly one when the video crosses 90%.

@@ -153,6 +153,7 @@ export async function recordVideoProgress(youtubeId, { position_seconds, duratio
       body?.error ?? `request to record progress of video ${youtubeId} failed with status ${response.status}`,
     )
   }
+  return response.json()
 }
 
 /**
