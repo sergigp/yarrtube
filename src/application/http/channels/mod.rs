@@ -625,6 +625,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_preview_if_youtube_lookup_fails() {
+        let channel_previewer = ChannelPreviewer::new(Arc::new(FailingYoutubeChannelRepository));
+
+        let response = preview(channel_previewer, preview_query("@somechannel")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                "YouTube API request failed"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));

@@ -1,5 +1,7 @@
 use crate::domain::channel::{ChannelHandle, ChannelPreview, PreviewChannelError};
-use crate::infrastructure::repositories::youtube_channel_repository::YoutubeChannelRepository;
+use crate::infrastructure::repositories::youtube_channel_repository::{
+    ResolvedChannel, YoutubeChannelRepository,
+};
 use std::sync::Arc;
 
 /// Looks a YouTube channel up without tracking it or storing its avatar.
@@ -22,13 +24,24 @@ pub trait ChannelPreviewerApi: Send + Sync {
 
 impl ChannelPreviewerApi for ChannelPreviewer {
     fn preview(&self, id: ChannelHandle) -> Result<ChannelPreview, PreviewChannelError> {
-        match self.lookup.resolve(&id) {
-            Ok(Some(resolved)) => Ok(ChannelPreview {
-                id,
-                name: resolved.title,
-                avatar_url: resolved.avatar_url,
-            }),
-            _ => Err(PreviewChannelError::YoutubeChannelNotFound(id)),
+        let resolved = self.resolve_on_youtube(&id)?;
+        Ok(ChannelPreview {
+            id,
+            name: resolved.title,
+            avatar_url: resolved.avatar_url,
+        })
+    }
+}
+
+impl ChannelPreviewer {
+    fn resolve_on_youtube(
+        &self,
+        id: &ChannelHandle,
+    ) -> Result<ResolvedChannel, PreviewChannelError> {
+        match self.lookup.resolve(id) {
+            Ok(Some(resolved)) => Ok(resolved),
+            Ok(None) => Err(PreviewChannelError::YoutubeChannelNotFound(id.clone())),
+            Err(e) => Err(PreviewChannelError::Lookup(e)),
         }
     }
 }
