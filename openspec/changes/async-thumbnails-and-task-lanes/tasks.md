@@ -53,7 +53,7 @@ Download and task listing:
 - [ ] 2.30 `it_should_start_tasks_of_a_lane_in_run_at_order`: `run_at, id` ordering within a lane. Adapt the existing dispatch, retry, dead-letter, last-attempt and recovery tests to `schedule_pass` plus awaiting the handles, and keep them green.
 
 Domain and composition:
-- [ ] 2.31 `task.rs` › `it_should_map_task_types_to_lanes`: `download_video` → Download, `fetch_thumbnail` → Thumbnail, `update_ytdlp` → Exclusive, others → Light.
+- [x] 2.31 `task.rs` › `it_should_map_task_types_to_lanes`: `download_video` → Download, `fetch_thumbnail` → Thumbnail, `update_ytdlp` → Exclusive, others → Light.
 - [ ] 2.32 `task.rs` › `it_should_key_video_tasks_by_video_id`: `download_video`/`fetch_thumbnail` → `Some("video:<id>")`, others → `None`.
 - [ ] 2.33 `serve.rs` › `it_should_default_download_concurrency_when_invalid`: unset, `0`, `-1` and `abc` → 2, and `4` → 4.
 

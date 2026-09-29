@@ -213,8 +213,13 @@ impl Task {
 
     /// The executor lane a task of `task_type` runs in. Unknown types fall
     /// into `Light`.
-    pub fn lane_for(_task_type: &str) -> TaskLane {
-        TaskLane::Light
+    pub fn lane_for(task_type: &str) -> TaskLane {
+        match task_type {
+            "download_video" => TaskLane::Download,
+            "fetch_thumbnail" => TaskLane::Thumbnail,
+            "update_ytdlp" => TaskLane::Exclusive,
+            _ => TaskLane::Light,
+        }
     }
 
     /// `Some("video:<id>")` for `download_video` and `fetch_thumbnail`: two
@@ -443,5 +448,38 @@ mod tests {
     #[test]
     fn it_should_reject_a_malformed_update_ytdlp_payload() {
         assert!(Task::decode_update_ytdlp_payload("not json").is_err());
+    }
+
+    #[test]
+    fn it_should_map_task_types_to_lanes() {
+        let lanes: Vec<TaskLane> = [
+            "download_video",
+            "fetch_thumbnail",
+            "update_ytdlp",
+            "reconcile_playlist",
+            "reconcile_channel",
+            "delete_video_file",
+            "delete_playlist_files",
+            "delete_channel_files",
+            "unknown",
+        ]
+        .into_iter()
+        .map(Task::lane_for)
+        .collect();
+
+        assert_eq!(
+            lanes,
+            vec![
+                TaskLane::Download,
+                TaskLane::Thumbnail,
+                TaskLane::Exclusive,
+                TaskLane::Light,
+                TaskLane::Light,
+                TaskLane::Light,
+                TaskLane::Light,
+                TaskLane::Light,
+                TaskLane::Light,
+            ]
+        );
     }
 }
