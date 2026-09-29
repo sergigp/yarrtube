@@ -95,6 +95,36 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_skip_if_video_already_has_a_thumbnail() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_downloader_repository = Arc::new(FakeVideoDownloaderRepository::default());
+        let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let task = FetchThumbnailTask::new(
+            video_repository.clone(),
+            Arc::new(ThumbnailFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.shared_connection(),
+                    Arc::new(FixedClock(later())),
+                )),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &payload_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
+            vec![]
+        );
+    }
+
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }

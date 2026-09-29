@@ -18,7 +18,7 @@ Subscribers:
 
 `FetchThumbnailTask`:
 - [x] 2.5 `it_should_fetch_and_record_the_thumbnail`: the fetched thumbnail is recorded on the video (whole-row assert).
-- [ ] 2.6 `it_should_skip_if_video_already_has_a_thumbnail`: no fetcher call, row unchanged.
+- [x] 2.6 `it_should_skip_if_video_already_has_a_thumbnail`: no fetcher call, row unchanged.
 - [ ] 2.7 `it_should_skip_if_video_no_longer_exists`: `Ok(())`, no fetcher call.
 - [ ] 2.8 `it_should_succeed_without_recording_if_thumbnail_fetch_fails`: best-effort, `Ok(())`, row unchanged.
 
