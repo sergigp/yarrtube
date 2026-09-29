@@ -33,7 +33,7 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
   - `channelNoticeLead` names the title for limits 1, many and out of range.
   - `fillChannel` waits for the lookup to settle.
   - The existing `addChannelDialog.spec.js` cases and the channel cases in `addDialogLocation.spec.js` move from `@some-handle` to `SMOKE_CHANNEL_HANDLE`, since a made-up handle now reports "not found".
-- [ ] 2.10 `addChannelDialog.spec.js` › `it should report a channel YouTube doesn't know`: a random handle shows "does not exist" as an error notice, and submit stays disabled.
+- [x] 2.10 `addChannelDialog.spec.js` › `it should report a channel YouTube doesn't know`: a random handle shows "does not exist" as an error notice, and submit stays disabled.
   - Done after 3.1. In the same cycle, change 2.9's avatar check to accept the `img` or its placeholder, and to assert the `img`'s `src` against `avatar_url` from `GET /api/channels/preview` when an `img` renders.
 - [ ] 2.11 `channel.spec.js` › lifecycle: re-adding the same handle shows "Already added as" and disables `Create Channel`. The dialog matches the preview's handle against `useChannels()`, ignoring case.
 
