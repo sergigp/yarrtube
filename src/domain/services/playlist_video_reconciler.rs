@@ -318,7 +318,7 @@ impl PlaylistVideoReconciler {
         // folder an in-flight download is writing into is protected by name.
         let in_flight_folders: Vec<String> = stored_videos
             .iter()
-            .filter(|v| v.status == VideoStatus::InProgress)
+            .filter(|v| v.has_download_in_flight())
             .flat_map(|v| video_folder_candidates(&v.title, &v.youtube_id))
             .collect();
         let protected_top_level: HashSet<&str> = downloaded

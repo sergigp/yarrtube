@@ -227,6 +227,16 @@ impl Video {
                 .is_none_or(|errored_at| now - errored_at >= ERRORED_RECOVERY_COOLDOWN)
     }
 
+    /// Whether a download of this video may be writing into its folder right
+    /// now: it is running, or it failed and is waiting to be retried. That
+    /// folder isn't recorded until the download completes.
+    pub fn has_download_in_flight(&self) -> bool {
+        matches!(
+            self.status,
+            VideoStatus::InProgress | VideoStatus::ErroredRetrying
+        )
+    }
+
     /// The recorded duration, else the reported one. The reported one is
     /// always positive (`VideoDuration`), but yt-dlp truncates a sub-second
     /// video's duration to a recorded 0, which counts as unknown so progress
