@@ -32,7 +32,7 @@ function DestinationNotice({ videoLimit, location, onChange }) {
   if (location.occupiedBy) {
     return (
       <p
-        className="min-w-0 text-xs text-destructive"
+        className="mt-1 min-w-0 text-xs leading-relaxed text-destructive"
         data-testid="destination-notice"
       >
         {destination} is already used by {location.occupiedBy}. Choose a different folder.{' '}
@@ -42,7 +42,7 @@ function DestinationNotice({ videoLimit, location, onChange }) {
   }
   return (
     <p
-      className="min-w-0 text-xs text-muted-foreground"
+      className="mt-1 min-w-0 text-xs leading-relaxed text-muted-foreground"
       data-testid="destination-notice"
     >
       {channelNoticeLead(videoLimit)} {destination} {change}
