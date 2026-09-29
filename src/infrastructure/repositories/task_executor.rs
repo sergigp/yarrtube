@@ -54,6 +54,10 @@ impl SchedulerState {
         self.running.get(&lane).copied().unwrap_or(0)
     }
 
+    fn is_idle(&self) -> bool {
+        self.running.values().all(|count| *count == 0)
+    }
+
     fn is_held(&self, key: Option<&String>) -> bool {
         key.is_some_and(|key| self.held_keys.contains(key))
     }
@@ -99,21 +103,14 @@ impl TaskExecutor {
     /// the tasks it started, so tests can await them.
     pub fn schedule_pass(self: &Arc<Self>) -> anyhow::Result<Vec<JoinHandle<()>>> {
         let mut state = self.lock_state()?;
-        let mut handles = Vec::new();
-        for task in self.repository.list_eligible()? {
-            let slot = Slot::for_task(&task);
-            if state.running_in(slot.lane) >= self.capacity(slot.lane)
-                || state.is_held(slot.key.as_ref())
-            {
-                continue;
-            }
-            let Some(running) = self.repository.claim(task.id, self.clock.now())? else {
-                continue;
-            };
-            state.start(&slot);
-            handles.push(self.spawn(running, slot));
+        let eligible = self.repository.list_eligible()?;
+        match eligible
+            .iter()
+            .find(|task| Task::lane_for(&task.task_type) == TaskLane::Exclusive)
+        {
+            Some(exclusive) => self.start_exclusive(&mut state, exclusive),
+            None => self.start_fitting(&mut state, &eligible),
         }
-        Ok(handles)
     }
 
     /// Recovers every task left `running` by a previous, interrupted
@@ -157,6 +154,53 @@ impl TaskExecutor {
         self.state
             .lock()
             .map_err(|_| anyhow::anyhow!("task scheduler state lock poisoned"))
+    }
+
+    /// An exclusive task starts only once nothing else runs; until then no
+    /// task starts at all, so the running ones drain.
+    fn start_exclusive(
+        self: &Arc<Self>,
+        state: &mut SchedulerState,
+        exclusive: &ScheduledTask,
+    ) -> anyhow::Result<Vec<JoinHandle<()>>> {
+        if !state.is_idle() {
+            return Ok(Vec::new());
+        }
+        Ok(self.start(state, exclusive)?.into_iter().collect())
+    }
+
+    /// Starts, in eligibility order, every task whose lane has room and whose
+    /// exclusivity key is free; the rest are passed over, not waited for.
+    fn start_fitting(
+        self: &Arc<Self>,
+        state: &mut SchedulerState,
+        eligible: &[ScheduledTask],
+    ) -> anyhow::Result<Vec<JoinHandle<()>>> {
+        let mut handles = Vec::new();
+        for task in eligible {
+            let slot = Slot::for_task(task);
+            if state.running_in(slot.lane) >= self.capacity(slot.lane)
+                || state.is_held(slot.key.as_ref())
+            {
+                continue;
+            }
+            handles.extend(self.start(state, task)?);
+        }
+        Ok(handles)
+    }
+
+    /// Claims `task` and spawns it; `None` if it was claimed elsewhere first.
+    fn start(
+        self: &Arc<Self>,
+        state: &mut SchedulerState,
+        task: &ScheduledTask,
+    ) -> anyhow::Result<Option<JoinHandle<()>>> {
+        let Some(running) = self.repository.claim(task.id, self.clock.now())? else {
+            return Ok(None);
+        };
+        let slot = Slot::for_task(&running);
+        state.start(&slot);
+        Ok(Some(self.spawn(running, slot)))
     }
 
     fn capacity(&self, lane: TaskLane) -> usize {
@@ -788,6 +832,53 @@ mod tests {
                 running(1, &download("rec1")),
                 pending(2, &fetch_thumbnail("rec1")),
                 running(3, &fetch_thumbnail("rec2")),
+            ]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_run_update_ytdlp_only_when_nothing_else_runs() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(BlockingHandler::default());
+        let releases = [
+            handler.gate(&download("rec1")),
+            handler.gate(&Task::UpdateYtdlp),
+        ];
+        task_repository.schedule(&download("rec1"), now()).unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            blocking_registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            2,
+        ));
+        let mut handles = executor.schedule_pass().unwrap();
+        task_repository.schedule(&Task::UpdateYtdlp, now()).unwrap();
+        task_repository.schedule(&download("rec2"), now()).unwrap();
+
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                running(1, &download("rec1")),
+                pending(2, &Task::UpdateYtdlp),
+                pending(3, &download("rec2")),
+            ]
+        );
+
+        release(&releases[0], handles.remove(0)).await;
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                running(2, &Task::UpdateYtdlp),
+                pending(3, &download("rec2")),
             ]
         );
     }
