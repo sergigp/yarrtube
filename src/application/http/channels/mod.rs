@@ -596,6 +596,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_preview_if_channel_missing() {
+        let query = PreviewChannelQuery { channel: None };
+
+        let response = preview(any_channel_previewer(), query).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Channel handle or URL must not be empty"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
