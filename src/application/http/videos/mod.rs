@@ -14,7 +14,7 @@ use crate::domain::video::{
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use dto::{HomeResponse, RecordProgressRequest, VideoResponse};
+use dto::{HomeResponse, RecordProgressRequest, RecordProgressResponse, VideoResponse};
 
 const HOME_LIMITS: HomeLimits = HomeLimits {
     continue_watching: 6,
@@ -59,7 +59,7 @@ pub async fn record_video_progress(
     State(video_watch_state_updater): State<VideoWatchStateUpdater>,
     Path(youtube_id): Path<String>,
     Json(request): Json<RecordProgressRequest>,
-) -> Result<StatusCode, ApiError> {
+) -> Result<Json<RecordProgressResponse>, ApiError> {
     let youtube_id = VideoId::new(youtube_id)?;
     let position = PlaybackPosition::new(required(request.position_seconds, MISSING_POSITION)?)?;
     let reported_duration = request
@@ -67,13 +67,13 @@ pub async fn record_video_progress(
         .map(VideoDuration::new)
         .transpose()?;
 
-    run_blocking(move || {
+    let watched = run_blocking(move || {
         video_watch_state_updater.update(&youtube_id, position, reported_duration)
     })
     .await?
     .map_err(update_watch_state_error)?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(RecordProgressResponse { watched }))
 }
 
 pub fn update_watch_state_error(error: UpdateWatchStateError) -> ApiError {
@@ -1809,11 +1809,38 @@ mod tests {
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
-        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(response, Ok(RecordProgressResponse { watched: false }));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
                 playback_position: PlaybackPosition::new(30).unwrap(),
+                last_played_at: Some(watched_timestamp()),
+                ..video
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_respond_watched_when_progress_reaches_the_watched_threshold() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video = video_with_duration("vid1", Some(100));
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+        let request = progress_request(95);
+
+        let response = record_progress(video_watch_state_updater, "vid1", request).await;
+
+        assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                watched_at: Some(watched_timestamp()),
                 last_played_at: Some(watched_timestamp()),
                 ..video
             }]
@@ -1839,7 +1866,7 @@ mod tests {
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
-        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1870,7 +1897,7 @@ mod tests {
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
-        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1897,7 +1924,7 @@ mod tests {
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
-        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(response, Ok(RecordProgressResponse { watched: false }));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1924,7 +1951,7 @@ mod tests {
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
-        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(response, Ok(RecordProgressResponse { watched: false }));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -1952,7 +1979,7 @@ mod tests {
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
-        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -2000,7 +2027,7 @@ mod tests {
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
-        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(response, Ok(RecordProgressResponse { watched: false }));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![
@@ -2034,7 +2061,7 @@ mod tests {
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
-        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(response, Ok(RecordProgressResponse { watched: true }));
         assert_eq!(
             video_repository.list().unwrap(),
             vec![Video {
@@ -2430,13 +2457,14 @@ mod tests {
         video_watch_state_updater: VideoWatchStateUpdater,
         youtube_id: &str,
         request: RecordProgressRequest,
-    ) -> Result<StatusCode, ApiError> {
+    ) -> Result<RecordProgressResponse, ApiError> {
         record_video_progress(
             State(video_watch_state_updater),
             Path(youtube_id.to_string()),
             Json(request),
         )
         .await
+        .map(|Json(response)| response)
     }
 
     async fn list_for_playlist(

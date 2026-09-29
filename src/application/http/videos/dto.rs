@@ -11,6 +11,11 @@ pub struct RecordProgressRequest {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
+pub struct RecordProgressResponse {
+    pub watched: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
 pub struct VideoResponse {
     pub id: String,
     pub title: String,
