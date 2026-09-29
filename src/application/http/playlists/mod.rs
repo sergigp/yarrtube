@@ -484,6 +484,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_preview_a_playlist() {
+        let db = TestDatabase::new();
+        let playlist_repository = SqlitePlaylistRepository::new(db.connection());
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let task_repository = task_repository(&db);
+        let playlist_previewer = PlaylistPreviewer::new(Arc::new(FakeYoutubePlaylistRepository {
+            resolved: Some(resolved_playlist()),
+        }));
+
+        let response = preview(playlist_previewer, preview_query("PLabc123")).await;
+
+        assert_eq!(response, Ok(playlist_preview_response("PLabc123")));
+        assert_eq!(playlist_repository.list().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
@@ -1159,6 +1177,20 @@ mod tests {
         }
     }
 
+    fn preview_query(playlist: &str) -> PreviewPlaylistQuery {
+        PreviewPlaylistQuery {
+            playlist: Some(playlist.to_string()),
+        }
+    }
+
+    fn playlist_preview_response(id: &str) -> PlaylistPreviewResponse {
+        PlaylistPreviewResponse {
+            id: id.to_string(),
+            title: "Lofi beats".to_string(),
+            video_count: 42,
+        }
+    }
+
     fn playlist_response(id: &str, path: &str) -> PlaylistResponse {
         PlaylistResponse {
             id: id.to_string(),
@@ -1177,6 +1209,15 @@ mod tests {
         create_playlist(State(playlist_creator), Json(request))
             .await
             .map(|(status, Json(playlist))| (status, playlist))
+    }
+
+    async fn preview(
+        playlist_previewer: PlaylistPreviewer,
+        query: PreviewPlaylistQuery,
+    ) -> Result<PlaylistPreviewResponse, ApiError> {
+        preview_playlist(State(playlist_previewer), Query(query))
+            .await
+            .map(|Json(preview)| preview)
     }
 
     async fn delete(playlist_deleter: PlaylistDeleter, id: &str) -> Result<StatusCode, ApiError> {

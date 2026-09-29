@@ -1,4 +1,4 @@
-use crate::domain::playlist::{PlaylistId, PlaylistPreview, PreviewPlaylistError};
+use crate::domain::playlist::{PlaylistId, PlaylistName, PlaylistPreview, PreviewPlaylistError};
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubePlaylistRepository;
 use std::sync::Arc;
 
@@ -22,6 +22,13 @@ pub trait PlaylistPreviewerApi: Send + Sync {
 
 impl PlaylistPreviewerApi for PlaylistPreviewer {
     fn preview(&self, id: PlaylistId) -> Result<PlaylistPreview, PreviewPlaylistError> {
-        Err(PreviewPlaylistError::YoutubePlaylistNotFound(id))
+        match self.lookup.resolve(&id) {
+            Ok(Some(resolved)) => Ok(PlaylistPreview {
+                name: PlaylistName::from_youtube_title(&resolved.title, &id),
+                video_count: resolved.item_count,
+                id,
+            }),
+            _ => Err(PreviewPlaylistError::YoutubePlaylistNotFound(id)),
+        }
     }
 }
