@@ -72,6 +72,16 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_name_after_the_id_if_youtube_title_blank() {
+        let id = PlaylistId::new("PLabc123").unwrap();
+
+        assert_eq!(
+            PlaylistName::from_youtube_title("  ", &id),
+            PlaylistName("PLabc123".to_string())
+        );
+    }
+
     fn error(message: &str) -> ValidationError {
         ValidationError(message.to_string())
     }
