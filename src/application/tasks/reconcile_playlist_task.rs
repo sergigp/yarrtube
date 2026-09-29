@@ -1392,6 +1392,62 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_schedule_a_thumbnail_fetch_for_a_video_being_downloaded() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_downloader_repository = Arc::new(FakeVideoDownloaderRepository::default());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = my_video().start_download(fixed_timestamp());
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &video,
+            0,
+        );
+        let task = ReconcilePlaylistTask::new(PlaylistVideoReconciler::new(
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository,
+            Arc::new(FakeYoutubePlaylistItemsRepository {
+                videos: Mutex::new(vec![member_playlist_item()]),
+            }),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteEventPublisher::new(
+                db.shared_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(ThumbnailFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                task_repository.clone(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![next_reconcile(1)]
+        );
+    }
+
+    #[test]
     fn it_should_not_refetch_existing_thumbnails() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
@@ -1448,7 +1504,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_not_fetch_thumbnails_of_videos_being_redownloaded() {
+    fn it_should_not_schedule_a_thumbnail_fetch_for_a_video_being_redownloaded() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -1522,65 +1578,6 @@ mod tests {
                 next_reconcile(2),
             ]
         );
-    }
-
-    #[test]
-    fn it_should_not_fetch_thumbnails_of_videos_downloading() {
-        let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_thumbnail_result(Some(fetched_thumbnail())),
-        );
-        playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = my_video().start_download(fixed_timestamp());
-        save_playlist_video(
-            video_repository.as_ref(),
-            playlist_video_repository.as_ref(),
-            &video,
-            0,
-        );
-        let task = ReconcilePlaylistTask::new(PlaylistVideoReconciler::new(
-            playlist_repository,
-            video_repository.clone(),
-            playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(vec![member_playlist_item()]),
-            }),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
-            Arc::new(SqliteEventPublisher::new(
-                db.shared_connection(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(ThumbnailFetcher::new(
-                video_repository.clone(),
-                video_downloader_repository.clone(),
-                task_repository.clone(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        ));
-
-        let result = run(&task, &payload_for("PL1"));
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![]
-        );
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
     }
 
     /// Builds a reconciler around the repositories and fakes a test seeds,

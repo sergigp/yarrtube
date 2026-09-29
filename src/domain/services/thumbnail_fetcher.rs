@@ -120,7 +120,11 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
     ) -> anyhow::Result<()> {
         videos
             .iter()
-            .filter(|v| v.thumbnail_filename.is_none() && !skip_ids.contains(&v.id))
+            .filter(|v| {
+                v.thumbnail_filename.is_none()
+                    && !skip_ids.contains(&v.id)
+                    && v.status != VideoStatus::InProgress
+            })
             .try_for_each(|video| self.schedule_fetch(video, output_dir))
     }
 }
