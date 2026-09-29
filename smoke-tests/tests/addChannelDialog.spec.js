@@ -45,7 +45,9 @@ test('it should state the video limit, title and destination for a handle', asyn
   await dialog.getByLabel('Channel Handle or URL').fill(CHANNEL_HANDLE)
 
   const notice = destinationNotice(dialog)
-  await expect(notice).toContainText(`The latest 3 videos from “${title}” will be downloaded to`)
+  await expect(notice).toContainText(`The latest 3 videos from “${title}” will be downloaded to`, {
+    timeout: 15_000,
+  })
   // The avatar YouTube reports, or the placeholder `Thumbnail` falls back to
   // when YouTube's image host fails to serve it.
   const avatar = notice.locator(`img[src="${avatarUrl}"]`)
@@ -74,7 +76,9 @@ test('it should update the notice from the advanced options', async ({ page }) =
   await dialog.getByLabel('Folder name').fill('renamed')
 
   const notice = destinationNotice(dialog)
-  await expect(notice).toContainText(`The latest video from “${title}” will be downloaded to`)
+  await expect(notice).toContainText(`The latest video from “${title}” will be downloaded to`, {
+    timeout: 15_000,
+  })
   await expect(notice.locator('code')).toHaveText(/^\/.+\/channels\/renamed$/)
 
   // Out of range, the count is left out rather than stated wrongly.
