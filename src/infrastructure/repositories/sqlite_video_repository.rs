@@ -40,6 +40,23 @@ pub trait VideoRepository: Send + Sync {
     /// which is a plain insert-or-replace, `update` only touches a row that
     /// still exists.
     fn update(&self, video: &Video) -> anyhow::Result<()>;
+    /// Writes only `title` (and `updated_at`), leaving the download's fields
+    /// untouched even if they changed since the caller read the video.
+    fn update_title(
+        &self,
+        id: &VideoRecordId,
+        title: &str,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<()>;
+    /// Writes only `thumbnail_filename` (and `updated_at`), leaving the
+    /// download's fields untouched even if they changed since the caller
+    /// read the video.
+    fn update_thumbnail(
+        &self,
+        id: &VideoRecordId,
+        thumbnail_filename: &str,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<()>;
     fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()>;
     /// Every stored copy of a YouTube video, across all playlists/channels.
     fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>>;
@@ -199,6 +216,24 @@ impl VideoRepository for SqliteVideoRepository {
             tracing::error!(video_id = %video.id, error = %e, "failed to update video")
         })
         .context("failed to update video")?;
+        Ok(())
+    }
+
+    fn update_title(
+        &self,
+        _id: &VideoRecordId,
+        _title: &str,
+        _now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn update_thumbnail(
+        &self,
+        _id: &VideoRecordId,
+        _thumbnail_filename: &str,
+        _now: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 

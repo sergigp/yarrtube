@@ -136,6 +136,7 @@ mod tests {
         let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::default()),
+            task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         ChannelVideoReconciler::new(
@@ -161,6 +162,10 @@ mod tests {
     /// passing.
     fn any_subscriber() -> ReconcileOnChannelCreated {
         let video_repository = Arc::new(SqliteVideoRepository::new(unused_connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            Arc::new(std::sync::Mutex::new(unused_connection())),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
         ReconcileOnChannelCreated::new(ChannelVideoReconciler::new(
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             video_repository.clone(),
@@ -172,14 +177,12 @@ mod tests {
                 Arc::new(Mutex::new(unused_connection())),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
-            Arc::new(SqliteTaskRepository::new(
-                Arc::new(Mutex::new(unused_connection())),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
+            task_repository.clone(),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(ThumbnailFetcher::new(
                 video_repository,
                 Arc::new(FakeVideoDownloaderRepository::default()),
+                task_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),

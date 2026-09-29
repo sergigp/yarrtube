@@ -3,6 +3,7 @@ use crate::domain::video::VideoRecordId;
 use crate::domain::video::VideoStatus;
 use crate::domain::video::top_level_entry;
 use crate::domain::video::video_filename::VideoFilename;
+use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::{
     FetchedThumbnail, VideoDownloaderRepository,
@@ -22,6 +23,7 @@ use tracing::warn;
 pub struct ThumbnailFetcher {
     video_repository: Arc<dyn VideoRepository>,
     video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+    task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
 }
 
@@ -29,11 +31,13 @@ impl ThumbnailFetcher {
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
         video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+        task_repository: Arc<dyn TaskRepository>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             video_repository,
             video_downloader_repository,
+            task_repository,
             clock,
         }
     }
@@ -65,6 +69,16 @@ pub trait ThumbnailFetcherApi: Send + Sync {
         skip_ids: &HashSet<&VideoRecordId>,
         output_dir: &Path,
     );
+
+    /// Schedules a `FetchThumbnail` for each video with no thumbnail, not in
+    /// `skip_ids` and not `InProgress`. Dedupe is left to
+    /// `TaskRepository::schedule`.
+    fn schedule_missing(
+        &self,
+        videos: &[Video],
+        skip_ids: &HashSet<&VideoRecordId>,
+        output_dir: &Path,
+    ) -> anyhow::Result<()>;
 }
 
 impl ThumbnailFetcherApi for ThumbnailFetcher {
@@ -95,6 +109,15 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
         }) {
             self.fetch(video, output_dir);
         }
+    }
+
+    fn schedule_missing(
+        &self,
+        _videos: &[Video],
+        _skip_ids: &HashSet<&VideoRecordId>,
+        _output_dir: &Path,
+    ) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 

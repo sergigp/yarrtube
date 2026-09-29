@@ -4,6 +4,8 @@ pub mod delete_video_file_on_video_removed_from_channel;
 pub mod delete_video_file_on_video_removed_from_playlist;
 pub mod download_video_on_video_added_to_channel;
 pub mod download_video_on_video_added_to_playlist;
+pub mod fetch_thumbnail_on_video_added_to_channel;
+pub mod fetch_thumbnail_on_video_added_to_playlist;
 pub mod reconcile_on_channel_created;
 pub mod reconcile_on_playlist_created;
 
@@ -19,6 +21,8 @@ use delete_video_file_on_video_removed_from_channel::DeleteVideoFileOnVideoRemov
 use delete_video_file_on_video_removed_from_playlist::DeleteVideoFileOnVideoRemovedFromPlaylist;
 use download_video_on_video_added_to_channel::DownloadVideoOnVideoAddedToChannel;
 use download_video_on_video_added_to_playlist::DownloadVideoOnVideoAddedToPlaylist;
+use fetch_thumbnail_on_video_added_to_channel::FetchThumbnailOnVideoAddedToChannel;
+use fetch_thumbnail_on_video_added_to_playlist::FetchThumbnailOnVideoAddedToPlaylist;
 use reconcile_on_channel_created::ReconcileOnChannelCreated;
 use reconcile_on_playlist_created::ReconcileOnPlaylistCreated;
 use std::collections::HashMap;
@@ -52,21 +56,37 @@ pub fn registry(
     );
     registry.insert(
         "video_added_to_playlist".to_string(),
-        vec![Arc::new(DownloadVideoOnVideoAddedToPlaylist::new(
-            playlist_repository.clone(),
-            task_repository.clone(),
-            clock.clone(),
-            videos_path.clone(),
-        ))],
+        vec![
+            Arc::new(FetchThumbnailOnVideoAddedToPlaylist::new(
+                playlist_repository.clone(),
+                task_repository.clone(),
+                clock.clone(),
+                videos_path.clone(),
+            )),
+            Arc::new(DownloadVideoOnVideoAddedToPlaylist::new(
+                playlist_repository.clone(),
+                task_repository.clone(),
+                clock.clone(),
+                videos_path.clone(),
+            )),
+        ],
     );
     registry.insert(
         "video_added_to_channel".to_string(),
-        vec![Arc::new(DownloadVideoOnVideoAddedToChannel::new(
-            channel_repository.clone(),
-            task_repository.clone(),
-            clock.clone(),
-            videos_path.clone(),
-        ))],
+        vec![
+            Arc::new(FetchThumbnailOnVideoAddedToChannel::new(
+                channel_repository.clone(),
+                task_repository.clone(),
+                clock.clone(),
+                videos_path.clone(),
+            )),
+            Arc::new(DownloadVideoOnVideoAddedToChannel::new(
+                channel_repository.clone(),
+                task_repository.clone(),
+                clock.clone(),
+                videos_path.clone(),
+            )),
+        ],
     );
     registry.insert(
         "video_removed_from_playlist".to_string(),

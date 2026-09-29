@@ -1,3 +1,4 @@
+use crate::domain::video::VideoId;
 use std::fmt;
 use unicode_general_category::get_general_category;
 use unicode_normalization::UnicodeNormalization;
@@ -42,6 +43,20 @@ impl fmt::Display for VideoFilename {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
+}
+
+/// The folder names a download of this video may be writing into: the bare
+/// sanitized title, and the collision-suffixed one.
+pub fn video_folder_candidates(title: &str, youtube_id: &VideoId) -> [String; 2] {
+    let folder = VideoFilename::from_title(title).as_str().to_string();
+    let suffixed = collision_suffixed_folder(&folder, youtube_id.as_str());
+    [folder, suffixed]
+}
+
+/// The folder a video falls back to when `folder` is already taken on disk:
+/// `"{folder} [{youtube_id}]"`, unique per video.
+pub fn collision_suffixed_folder(folder: &str, youtube_id: &str) -> String {
+    format!("{folder} [{youtube_id}]")
 }
 
 /// Keeps letters, marks, numbers and punctuation (Unicode general category

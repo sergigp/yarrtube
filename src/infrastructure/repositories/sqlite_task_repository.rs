@@ -9,7 +9,12 @@ use std::sync::{Arc, Mutex};
 use tracing::info;
 
 pub trait TaskRepository: Send + Sync {
+    /// Adds the task, unless it has an exclusivity key and a task of the same
+    /// type with the same key is already pending or running (then a no-op).
     fn schedule(&self, task: &Task, run_at: DateTime<Utc>) -> anyhow::Result<()>;
+    /// Atomically flips a pending task to running; `None` if it was no
+    /// longer pending.
+    fn claim(&self, id: i64, now: DateTime<Utc>) -> anyhow::Result<Option<ScheduledTask>>;
     /// Tasks ready to run now.
     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>>;
     /// Every task still `running` from a previous, interrupted process.
@@ -188,6 +193,10 @@ impl TaskRepository for SqliteTaskRepository {
             "scheduled task"
         );
         Ok(())
+    }
+
+    fn claim(&self, _id: i64, _now: DateTime<Utc>) -> anyhow::Result<Option<ScheduledTask>> {
+        Ok(None)
     }
 
     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {

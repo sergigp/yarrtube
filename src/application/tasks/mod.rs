@@ -2,21 +2,25 @@ pub mod delete_channel_files_task;
 pub mod delete_playlist_files_task;
 pub mod delete_video_file_task;
 pub mod download_video_task;
+pub mod fetch_thumbnail_task;
 pub mod reconcile_channel_task;
 pub mod reconcile_playlist_task;
 pub mod update_ytdlp_task;
 
 use crate::domain::services::{
-    ChannelVideoReconciler, PlaylistVideoReconciler, VideoDownloader, VideoFileDeleter,
+    ChannelVideoReconciler, PlaylistVideoReconciler, ThumbnailFetcher, VideoDownloader,
+    VideoFileDeleter,
 };
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
+use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::task_executor::HandlerRegistry;
 use crate::infrastructure::shared::system_clock::Clock;
 use delete_channel_files_task::DeleteChannelFilesTask;
 use delete_playlist_files_task::DeletePlaylistFilesTask;
 use delete_video_file_task::DeleteVideoFileTask;
 use download_video_task::DownloadVideoTask;
+use fetch_thumbnail_task::FetchThumbnailTask;
 use reconcile_channel_task::ReconcileChannelTask;
 use reconcile_playlist_task::ReconcilePlaylistTask;
 use std::collections::HashMap;
@@ -31,6 +35,8 @@ pub fn registry(
     playlist_video_reconciler: PlaylistVideoReconciler,
     channel_video_reconciler: ChannelVideoReconciler,
     video_downloader: VideoDownloader,
+    thumbnail_fetcher: Arc<ThumbnailFetcher>,
+    video_repository: Arc<dyn VideoRepository>,
     video_file_deleter: VideoFileDeleter,
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
@@ -49,6 +55,10 @@ pub fn registry(
     registry.insert(
         "download_video".to_string(),
         Arc::new(DownloadVideoTask::new(video_downloader)),
+    );
+    registry.insert(
+        "fetch_thumbnail".to_string(),
+        Arc::new(FetchThumbnailTask::new(video_repository, thumbnail_fetcher)),
     );
     registry.insert(
         "delete_video_file".to_string(),

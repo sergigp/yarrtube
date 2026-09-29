@@ -33,6 +33,7 @@ const DEFAULT_DB_PATH: &str = "yarrtube.sqlite3";
 const DEFAULT_RECONCILE_INTERVAL_SECONDS: i64 = 3600;
 const DEFAULT_RETRY_BASE_DELAY_SECONDS: i64 = 150;
 const DEFAULT_VIDEOS_PATH: &str = "/videos";
+const DEFAULT_DOWNLOAD_CONCURRENCY: usize = 2;
 const DEFAULT_AVATARS_PATH: &str = "avatars";
 /// The parent directories the add dialog's folder browser defaults to, seeded
 /// under the videos root at startup so the browser is never empty on a fresh
@@ -66,6 +67,15 @@ fn retry_base_delay_seconds() -> i64 {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(DEFAULT_RETRY_BASE_DELAY_SECONDS)
+}
+
+fn download_concurrency() -> usize {
+    parse_download_concurrency(std::env::var("YARRTUBE_DOWNLOAD_CONCURRENCY").ok())
+}
+
+/// Keeps only a positive integer, defaulting otherwise.
+fn parse_download_concurrency(_value: Option<String>) -> usize {
+    DEFAULT_DOWNLOAD_CONCURRENCY
 }
 
 fn videos_path() -> String {
@@ -270,6 +280,8 @@ fn task_executor(infrastructure: &InfrastructureContainer) -> TaskExecutor {
             playlist_video_reconciler(infrastructure),
             channel_video_reconciler(infrastructure),
             video_downloader(infrastructure),
+            thumbnail_fetcher(infrastructure),
+            infrastructure.video_repository.clone(),
             VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
             infrastructure.task_repository.clone(),
             infrastructure.clock.clone(),
@@ -278,6 +290,7 @@ fn task_executor(infrastructure: &InfrastructureContainer) -> TaskExecutor {
         ),
         infrastructure.clock.clone(),
         retry_base_delay_seconds(),
+        download_concurrency(),
     )
 }
 
@@ -333,6 +346,7 @@ fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailF
     Arc::new(ThumbnailFetcher::new(
         infrastructure.video_repository.clone(),
         infrastructure.video_downloader_repository.clone(),
+        infrastructure.task_repository.clone(),
         infrastructure.clock.clone(),
     ))
 }

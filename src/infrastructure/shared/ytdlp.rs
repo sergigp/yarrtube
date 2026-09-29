@@ -1,4 +1,5 @@
 use crate::domain::shared::Quality;
+use crate::domain::video::video_filename::collision_suffixed_folder;
 use anyhow::{Result, anyhow};
 use std::io;
 use std::path::Path;
@@ -392,7 +393,7 @@ pub fn list_channel_videos(
 /// a by-stem scan.
 fn resolve_folder_collision(output_path: &Path, desired_folder: &str, video_id: &str) -> String {
     if output_path.join(desired_folder).exists() {
-        format!("{desired_folder} [{video_id}]")
+        collision_suffixed_folder(desired_folder, video_id)
     } else {
         desired_folder.to_string()
     }

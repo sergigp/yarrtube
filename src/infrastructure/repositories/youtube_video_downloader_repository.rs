@@ -118,6 +118,10 @@ pub struct FakeVideoDownloaderRepository {
     #[allow(clippy::type_complexity)]
     pub(crate) thumbnail_calls:
         std::sync::Mutex<Vec<(String, String, String, std::path::PathBuf, Option<String>)>>,
+    /// Runs while `download` is in flight, e.g. to delete the video
+    /// mid-download.
+    #[allow(clippy::type_complexity)]
+    pub(crate) on_download: Option<Box<dyn Fn() + Send + Sync>>,
 }
 
 #[cfg(test)]
@@ -177,12 +181,21 @@ impl FakeVideoDownloaderRepository {
         }
     }
 
+    /// Runs `hook` while `download` is in flight.
+    pub fn with_on_download(self, hook: impl Fn() + Send + Sync + 'static) -> Self {
+        Self {
+            on_download: Some(Box::new(hook)),
+            ..self
+        }
+    }
+
     fn with_result(result: DownloadAttempt) -> Self {
         Self {
             result: std::sync::Mutex::new(result),
             calls: Default::default(),
             thumbnail_result: Default::default(),
             thumbnail_calls: Default::default(),
+            on_download: None,
         }
     }
 }
@@ -206,6 +219,9 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
             output_dir.to_path_buf(),
             existing_folder.map(str::to_string),
         ));
+        if let Some(hook) = &self.on_download {
+            hook();
+        }
         Ok(self.result.lock().unwrap().clone())
     }
 

@@ -1,4 +1,5 @@
 use super::errors::TaskError;
+use super::task_lane::TaskLane;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -29,6 +30,10 @@ pub enum Task {
         path: String,
     },
     UpdateYtdlp,
+    FetchThumbnail {
+        video_id: String,
+        output_dir: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,6 +75,12 @@ struct DeleteChannelFilesPayload {
 #[derive(Debug, Deserialize)]
 struct UpdateYtdlpPayload {}
 
+#[derive(Debug, Deserialize)]
+struct FetchThumbnailPayload {
+    video_id: String,
+    output_dir: String,
+}
+
 impl Task {
     pub fn task_type(&self) -> &'static str {
         match self {
@@ -80,6 +91,7 @@ impl Task {
             Self::DeletePlaylistFiles { .. } => "delete_playlist_files",
             Self::DeleteChannelFiles { .. } => "delete_channel_files",
             Self::UpdateYtdlp => "update_ytdlp",
+            Self::FetchThumbnail { .. } => "fetch_thumbnail",
         }
     }
 
@@ -110,6 +122,10 @@ impl Task {
                 "path": path,
             }),
             Self::UpdateYtdlp => json!({}),
+            Self::FetchThumbnail {
+                video_id,
+                output_dir,
+            } => json!({ "video_id": video_id, "output_dir": output_dir }),
         }
     }
 
@@ -184,6 +200,28 @@ impl Task {
         serde_json::from_str::<UpdateYtdlpPayload>(payload)
             .map_err(|e| TaskError(format!("invalid update_ytdlp payload: {e}")))?;
         Ok(())
+    }
+
+    /// Decodes a `fetch_thumbnail` task's raw JSON payload, as handed to a
+    /// `TaskHandler`, back into the video's surrogate ID and the output
+    /// directory it targets.
+    pub fn decode_fetch_thumbnail_payload(payload: &str) -> Result<(String, String), TaskError> {
+        let parsed: FetchThumbnailPayload = serde_json::from_str(payload)
+            .map_err(|e| TaskError(format!("invalid fetch_thumbnail payload: {e}")))?;
+        Ok((parsed.video_id, parsed.output_dir))
+    }
+
+    /// The executor lane a task of `task_type` runs in. Unknown types fall
+    /// into `Light`.
+    pub fn lane_for(_task_type: &str) -> TaskLane {
+        TaskLane::Light
+    }
+
+    /// `Some("video:<id>")` for `download_video` and `fetch_thumbnail`: two
+    /// tasks sharing a key never run at the same time, and a task with a key
+    /// is not scheduled twice while one is pending or running.
+    pub fn exclusivity_key(_task_type: &str, _payload: &str) -> Option<String> {
+        None
     }
 }
 

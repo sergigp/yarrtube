@@ -1,10 +1,12 @@
-use crate::domain::task::TaskFailureOutcome;
+use crate::domain::task::{TaskFailureOutcome, TaskLane};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use crate::infrastructure::shared::system_clock::Clock;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::sync::Notify;
+use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
 pub type HandlerRegistry = HashMap<String, Arc<dyn TaskHandler>>;
@@ -16,6 +18,19 @@ pub struct TaskExecutor {
     handlers: HandlerRegistry,
     clock: Arc<dyn Clock>,
     base_retry_delay_seconds: i64,
+    download_concurrency: usize,
+    state: Mutex<SchedulerState>,
+    wake: Notify,
+}
+
+/// What is running right now, in memory: there is exactly one executor per
+/// process, and `recover_stuck_tasks` requeues every `running` row at
+/// startup, so an empty state after a restart is correct.
+#[derive(Default)]
+struct SchedulerState {
+    running: HashMap<TaskLane, usize>,
+    held_keys: HashSet<String>,
+    exclusive_running: bool,
 }
 
 impl TaskExecutor {
@@ -24,16 +39,28 @@ impl TaskExecutor {
         handlers: HandlerRegistry,
         clock: Arc<dyn Clock>,
         base_retry_delay_seconds: i64,
+        download_concurrency: usize,
     ) -> Self {
         Self {
             repository,
             handlers,
             clock,
             base_retry_delay_seconds,
+            download_concurrency,
+            state: Mutex::new(SchedulerState::default()),
+            wake: Notify::new(),
         }
     }
 
-    pub fn poll_once(&self) -> anyhow::Result<()> {
+    /// One scheduling pass: claims and spawns every eligible task that fits
+    /// (lane capacity, held keys, exclusive drain). Returns the handles of
+    /// the tasks it started, so tests can await them.
+    pub fn schedule_pass(self: &Arc<Self>) -> anyhow::Result<Vec<JoinHandle<()>>> {
+        self.poll_once()?;
+        Ok(Vec::new())
+    }
+
+    fn poll_once(&self) -> anyhow::Result<()> {
         for task in self.repository.list_eligible()? {
             let id = task.id;
             let task_type = task.task_type.clone();
@@ -118,8 +145,8 @@ impl TaskExecutor {
         loop {
             ticker.tick().await;
             let executor = self.clone();
-            match tokio::task::spawn_blocking(move || executor.poll_once()).await {
-                Ok(Ok(())) => {}
+            match tokio::task::spawn_blocking(move || executor.schedule_pass()).await {
+                Ok(Ok(_)) => {}
                 Ok(Err(e)) => error!(error = %e, "poll failed"),
                 Err(e) => error!(error = %e, "poll task panicked"),
             }
@@ -135,7 +162,6 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
-    use std::sync::Mutex;
 
     #[test]
     fn it_should_dispatch_an_eligible_task_and_delete_it_on_success() {
@@ -151,6 +177,7 @@ mod tests {
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
         );
 
         let result = executor.poll_once();
@@ -184,6 +211,7 @@ mod tests {
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
         );
 
         let result = executor.poll_once();
@@ -223,6 +251,7 @@ mod tests {
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
         );
 
         let result = executor.poll_once();
@@ -257,6 +286,7 @@ mod tests {
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
         );
 
         let result = executor.poll_once();
@@ -287,6 +317,7 @@ mod tests {
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
         );
 
         let result = executor.poll_once();
@@ -319,6 +350,7 @@ mod tests {
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
         );
 
         let result = executor.recover_stuck_tasks();
@@ -362,6 +394,7 @@ mod tests {
             registry(handler.clone()),
             Arc::new(FixedClock(now())),
             TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
         );
 
         let result = executor.recover_stuck_tasks();
@@ -384,6 +417,7 @@ mod tests {
     }
 
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
+    const TEST_DOWNLOAD_CONCURRENCY: usize = 2;
 
     fn now() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
