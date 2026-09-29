@@ -32,6 +32,20 @@ describe('describeTask', () => {
     ).toBe('Downloading Intro in Chan')
   })
 
+  it('describes a thumbnail fetch with its video and container', () => {
+    expect(
+      describeTask(
+        aTask({
+          task_type: 'fetch_thumbnail',
+          payload: { video_title: 'Intro', playlist_name: 'Mix' },
+        }),
+      ),
+    ).toBe('Fetching thumbnail of Intro in Mix')
+    expect(describeTask(aTask({ task_type: 'fetch_thumbnail', payload: {} }))).toBe(
+      'Fetching thumbnail of a video in an unknown playlist or channel',
+    )
+  })
+
   it('describes file removals', () => {
     expect(
       describeTask(aTask({ task_type: 'delete_video_file', payload: { filename: 'a.mp4' } })),

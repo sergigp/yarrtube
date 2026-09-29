@@ -15,6 +15,12 @@ export function describeTask(task: Task): string {
         payload.playlist_name ?? payload.channel_name ?? 'an unknown playlist or channel'
       return `Downloading ${video} in ${container}`
     }
+    case 'fetch_thumbnail': {
+      const video = payload.video_title ?? 'a video'
+      const container =
+        payload.playlist_name ?? payload.channel_name ?? 'an unknown playlist or channel'
+      return `Fetching thumbnail of ${video} in ${container}`
+    }
     case 'delete_video_file':
       return payload.filename ? `Removing file ${payload.filename}` : 'Removing a video file'
     default:
