@@ -38,7 +38,7 @@ Subscribers:
 
 Download and task listing:
 - [x] 2.19 `download_video_task` › `it_should_remove_the_folder_if_video_deleted_during_download`: the video is deleted mid-download via the fake's `on_download` hook. The download's folder is removed and nothing is recorded.
-- [ ] 2.20 `http/tasks` › `it_should_list_a_fetch_thumbnail_task_with_video_and_playlist_names`: `TaskViewSearcher` resolves `fetch_thumbnail` context.
+- [x] 2.20 `http/tasks` › `it_should_list_a_fetch_thumbnail_task_with_video_and_playlist_names`: `TaskViewSearcher` resolves `fetch_thumbnail` context.
 
 `TaskExecutor`:
 - [ ] 2.21 `it_should_run_downloads_in_parallel_up_to_the_lane_concurrency`: the download lane honours its concurrency and refills when a slot frees.

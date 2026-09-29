@@ -79,6 +79,7 @@ impl TaskViewSearcher {
             "reconcile_playlist" => self.resolve_reconcile_playlist(&task.payload),
             "reconcile_channel" => self.resolve_reconcile_channel(&task.payload),
             "download_video" => self.resolve_download_video(&task.payload),
+            "fetch_thumbnail" => self.resolve_fetch_thumbnail(&task.payload),
             "delete_video_file" => self.resolve_delete_video_file(&task.payload),
             "delete_playlist_files" => self.resolve_delete_playlist_files(&task.payload),
             "delete_channel_files" => self.resolve_delete_channel_files(&task.payload),
@@ -108,9 +109,19 @@ impl TaskViewSearcher {
     }
 
     fn resolve_download_video(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
-        let mut view = HashMap::new();
         let (video_id, _quality, _output_dir) = Task::decode_download_video_payload(payload)?;
-        let video_id = VideoRecordId::new(video_id)?;
+        self.resolve_video(VideoRecordId::new(video_id)?)
+    }
+
+    fn resolve_fetch_thumbnail(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
+        let (video_id, _output_dir) = Task::decode_fetch_thumbnail_payload(payload)?;
+        self.resolve_video(VideoRecordId::new(video_id)?)
+    }
+
+    /// The video's title, plus the name of the playlist or channel it
+    /// belongs to.
+    fn resolve_video(&self, video_id: VideoRecordId) -> anyhow::Result<HashMap<String, String>> {
+        let mut view = HashMap::new();
 
         if let Some(video) = self.video_repository.find(&video_id)? {
             view.insert("video_title".to_string(), video.title.clone());
