@@ -671,6 +671,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_not_schedule_a_duplicate_thumbnail_fetch_for_the_same_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let fetch_thumbnail = Task::FetchThumbnail {
+            video_id: "rec1".to_string(),
+            output_dir: "/videos/my-playlist".to_string(),
+        };
+
+        repo.schedule(&fetch_thumbnail, now).unwrap();
+        repo.schedule(&fetch_thumbnail, now).unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![pending_task(1, &fetch_thumbnail, now, now)]
+        );
+    }
+
     fn download_task(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
