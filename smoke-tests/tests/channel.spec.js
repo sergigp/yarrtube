@@ -42,7 +42,7 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, invali
     el.currentTime = el.duration / 2
     el.pause()
   })
-  expect((await progressReported).status()).toBe(204)
+  expect((await progressReported).status()).toBe(200)
   await page.reload()
   await expect.poll(() => video.evaluate((el) => el.currentTime), { timeout: 15_000 }).toBeGreaterThan(0)
 

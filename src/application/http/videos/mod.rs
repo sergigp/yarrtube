@@ -13,7 +13,6 @@ use crate::domain::video::{
 };
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
 use dto::{HomeResponse, RecordProgressRequest, RecordProgressResponse, VideoResponse};
 
 const HOME_LIMITS: HomeLimits = HomeLimits {

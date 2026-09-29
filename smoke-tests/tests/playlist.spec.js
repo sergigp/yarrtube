@@ -42,7 +42,7 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     el.currentTime = el.duration / 2
     el.pause()
   })
-  expect((await progressReported).status()).toBe(204)
+  expect((await progressReported).status()).toBe(200)
 
   // Same video, with thumbnail + duration, on the home feed.
   await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
