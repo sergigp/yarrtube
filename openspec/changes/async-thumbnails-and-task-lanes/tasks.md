@@ -43,7 +43,7 @@ Download and task listing:
 `TaskExecutor`:
 - [x] 2.21 `it_should_run_downloads_in_parallel_up_to_the_lane_concurrency`: the download lane honours its concurrency and refills when a slot frees.
 - [x] 2.22 `it_should_not_block_light_tasks_behind_downloads`: the light lane is independent of a busy download lane.
-- [ ] 2.23 `it_should_run_light_tasks_one_at_a_time`: light lane concurrency is 1.
+- [x] 2.23 `it_should_run_light_tasks_one_at_a_time`: light lane concurrency is 1.
 - [ ] 2.24 `it_should_not_block_reconciles_behind_thumbnail_fetches`: a thumbnail backlog doesn't hold the light lane.
 - [ ] 2.25 `it_should_run_thumbnail_fetches_one_at_a_time`: thumbnail lane concurrency is 1.
 - [ ] 2.26 `it_should_not_run_two_tasks_for_the_same_video_at_once`: a held exclusivity key blocks a task for the same video.

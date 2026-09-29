@@ -131,8 +131,11 @@ impl TaskExecutor {
             .map_err(|_| anyhow::anyhow!("task scheduler state lock poisoned"))
     }
 
-    fn capacity(&self, _lane: TaskLane) -> usize {
-        self.download_concurrency
+    fn capacity(&self, lane: TaskLane) -> usize {
+        match lane {
+            TaskLane::Download => self.download_concurrency,
+            _ => 1,
+        }
     }
 
     /// Runs `running` on the blocking pool, then frees its lane slot and
@@ -554,6 +557,44 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![running(1, &download("rec1")), running(2, &reconcile("PL1")),]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_run_light_tasks_one_at_a_time() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(BlockingHandler::default());
+        let releases = [
+            handler.gate(&reconcile("PL1")),
+            handler.gate(&reconcile("PL2")),
+        ];
+        task_repository.schedule(&reconcile("PL1"), now()).unwrap();
+        task_repository.schedule(&reconcile("PL2"), now()).unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            blocking_registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            2,
+        ));
+
+        let mut handles = executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![running(1, &reconcile("PL1")), pending(2, &reconcile("PL2")),]
+        );
+
+        release(&releases[0], handles.remove(0)).await;
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![running(2, &reconcile("PL2"))]
         );
     }
 
