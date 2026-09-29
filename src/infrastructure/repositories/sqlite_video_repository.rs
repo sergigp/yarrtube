@@ -221,10 +221,23 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn update_title(
         &self,
-        _id: &VideoRecordId,
-        _title: &str,
-        _now: DateTime<Utc>,
+        id: &VideoRecordId,
+        title: &str,
+        now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        conn.execute(
+            "UPDATE videos SET title = ?2, updated_at = ?3 WHERE id = ?1",
+            params![id.as_str(), title, now.to_rfc3339()],
+        )
+        .inspect_err(
+            |e| tracing::error!(video_id = %id, error = %e, "failed to update video title"),
+        )
+        .context("failed to update video title")?;
         Ok(())
     }
 
@@ -546,6 +559,26 @@ mod tests {
         let found = repo.find(&original.id).unwrap().unwrap();
         assert_eq!(found.status, VideoStatus::InProgress);
         assert_eq!(found.updated_at, later);
+    }
+
+    #[test]
+    fn it_should_update_only_the_title() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let original = video("First", now).start_download(now);
+        repo.save(&original).unwrap();
+
+        repo.update_title(&original.id, "Renamed", later).unwrap();
+
+        assert_eq!(
+            repo.find(&original.id).unwrap(),
+            Some(Video {
+                title: "Renamed".to_string(),
+                updated_at: later,
+                ..original
+            })
+        );
     }
 
     #[test]

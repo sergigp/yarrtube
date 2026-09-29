@@ -220,13 +220,8 @@ impl ChannelVideoReconciler {
                         })?;
                 }
                 Some(existing) => {
-                    if let Some(video) = self.video_repository.find(&existing.video_id)? {
-                        self.video_repository.update(&Video {
-                            title: current.title.clone(),
-                            updated_at: now,
-                            ..video
-                        })?;
-                    }
+                    self.video_repository
+                        .update_title(&existing.video_id, &current.title, now)?;
                     if existing.position != current.position {
                         self.channel_video_repository.save(&ChannelVideo {
                             position: current.position,
