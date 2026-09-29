@@ -1,5 +1,6 @@
 use super::playback_position::PlaybackPosition;
 use super::video_duration::VideoDuration;
+use super::video_filename::video_folder_candidates;
 use super::video_id::VideoId;
 use super::video_record_id::VideoRecordId;
 use super::video_status::VideoStatus;
@@ -227,14 +228,17 @@ impl Video {
                 .is_none_or(|errored_at| now - errored_at >= ERRORED_RECOVERY_COOLDOWN)
     }
 
-    /// Whether a download of this video may be writing into its folder right
-    /// now: it is running, or it failed and is waiting to be retried. That
-    /// folder isn't recorded until the download completes.
-    pub fn has_download_in_flight(&self) -> bool {
-        matches!(
-            self.status,
-            VideoStatus::InProgress | VideoStatus::ErroredRetrying
-        )
+    /// The folders a download of this video may be writing into right now,
+    /// while it runs or waits to be retried: that folder isn't recorded until
+    /// the download completes, so it is predicted from the title. Empty when
+    /// no download is in flight.
+    pub fn in_flight_download_folders(&self) -> Vec<String> {
+        match self.status {
+            VideoStatus::InProgress | VideoStatus::ErroredRetrying => {
+                video_folder_candidates(&self.title, &self.youtube_id).to_vec()
+            }
+            _ => Vec::new(),
+        }
     }
 
     /// The recorded duration, else the reported one. The reported one is
