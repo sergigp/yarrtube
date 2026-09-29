@@ -28,3 +28,22 @@ test('it should state the video limit and destination for a handle', async ({ pa
     'false',
   )
 })
+
+test('it should update the notice from the advanced options', async ({ page }) => {
+  await page.goto('/')
+  await openAddChannelDialog(page)
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Channel Handle or URL').fill('@some-handle')
+  await dialog.getByRole('button', { name: /Advanced options/ }).click()
+
+  await dialog.getByLabel('Video Limit').fill('1')
+  await dialog.getByLabel('Folder name').fill('renamed')
+
+  const notice = destinationNotice(dialog)
+  await expect(notice).toContainText('The latest video from this channel will be downloaded to')
+  await expect(notice.locator('code')).toHaveText(/^\/.+\/channels\/renamed$/)
+
+  // Out of range, the count is left out rather than stated wrongly.
+  await dialog.getByLabel('Video Limit').fill('0')
+  await expect(notice).toContainText('Videos from this channel will be downloaded to')
+})
