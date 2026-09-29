@@ -77,7 +77,7 @@ Domain and composition:
 Composition, frontend and docs (no tests):
 - [ ] 3.10 Wire the real lane scheduler into `TaskExecutor::run`: timer tick plus `Notify` on completion. Verify with `scripts/run-local.sh`: the logs show `dispatching task` for two `download_video` tasks before either finishes.
 - [x] 3.11 Add the `fetch_thumbnail` case to `web/src/components/TasksView.jsx` ("Fetching thumbnail of {video} in {container}", with generic placeholders). Verify that `npm run build` and `npm run lint` in `web/` pass.
-- [ ] 3.12 Document `YARRTUBE_DOWNLOAD_CONCURRENCY` in `README.md` (default 2, throttling note). Verify the README env table lists it.
+- [x] 3.12 Document `YARRTUBE_DOWNLOAD_CONCURRENCY` in `README.md` (default 2, throttling note). Verify the README env table lists it.
 
 ## 4. Verification
 

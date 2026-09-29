@@ -69,6 +69,7 @@ command):
 | `YARRTUBE_RECONCILE_INTERVAL_SECONDS` | `3600`             | How often each tracked playlist or channel is reconciled                                 |
 | `YARRTUBE_DB_PATH`                    | `yarrtube.sqlite3` | Path to the internal SQLite file (inside the container)                                  |
 | `YARRTUBE_VIDEOS_PATH`                | `/videos`          | Root directory downloaded videos are saved under (inside the container)                  |
+| `YARRTUBE_DOWNLOAD_CONCURRENCY`       | `2`                | How many videos download at the same time. Higher values download faster but make YouTube more likely to throttle or bot-check you |
 | `YTDLP_PATH`                          | `/app/bin/yt-dlp`  | Path to the managed `yt-dlp` binary (also the path bundled into the image at build time) |
 | `RUST_LOG`                            | `info`             | Log verbosity (e.g. `RUST_LOG=debug`)                                                    |
 
