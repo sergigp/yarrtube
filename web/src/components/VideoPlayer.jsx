@@ -16,7 +16,7 @@ export function VideoPlayer({ basePath, video, autoplay, onVideoElement }) {
     <div
       className={cn(
         'sticky top-(--header-height) z-10 -mx-4 flex aspect-video items-center justify-center sm:-mx-6',
-        'md:static md:m-0 md:aspect-auto md:min-h-80 md:rounded-lg',
+        'md:static md:m-0 md:aspect-auto md:min-h-80 md:shrink-0 md:rounded-lg',
         playable ? 'bg-black md:bg-secondary/60' : 'bg-secondary md:bg-secondary/60',
       )}
     >
