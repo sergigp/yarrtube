@@ -27,8 +27,8 @@
   - the shared search field, shown when channels + playlists > 15, which ignores collapse, hides sections with no matches and shows a "nothing matches" message when both are empty
 
   Verify with `npm run build` and `npm run lint`.
-- [ ] 4.4 Check that the smoke tests' sidebar lookups (`helpers/sidebar.js`, `channel.spec.js`, `playlist.spec.js`) still find their rows under the new ordering and collapse. Verify with `scripts/run-smoke-tests.sh`, where all specs pass.
-- [ ] 4.5 Run `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings`. All must pass.
+- [x] 4.4 Check that the smoke tests' sidebar lookups (`helpers/sidebar.js`, `channel.spec.js`, `playlist.spec.js`) still find their rows under the new ordering and collapse. Verify with `scripts/run-smoke-tests.sh`, where all specs pass.
+- [x] 4.5 Run `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings`. All must pass.
 - [ ] 4.6 Manual check with `scripts/run-local.sh`, at desktop width and at a mobile width of about 375px:
   - Unread channels come first, most unread first, and the rest are alphabetical.
   - A channel with 10 or more unwatched is ordered above one with 9.
