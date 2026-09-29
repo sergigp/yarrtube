@@ -62,7 +62,7 @@ Domain and composition:
 `SqliteTaskRepository`:
 - [ ] 3.1 `it_should_claim_a_pending_task`: `claim` flips `pending` to `running` and returns the task.
 - [ ] 3.2 `it_should_not_claim_a_task_already_running`: `claim` returns `None`.
-- [ ] 3.3 `it_should_not_schedule_a_duplicate_download_for_the_same_video`: `INSERT … WHERE NOT EXISTS` on type + `json_extract(payload,'$.video_id')`.
+- [x] 3.3 `it_should_not_schedule_a_duplicate_download_for_the_same_video`: `INSERT … WHERE NOT EXISTS` on type + `json_extract(payload,'$.video_id')`.
 - [ ] 3.4 `it_should_not_schedule_a_duplicate_thumbnail_fetch_for_the_same_video`: the same dedupe for `fetch_thumbnail`.
 - [ ] 3.5 `it_should_schedule_a_download_for_another_video`: different video ids both get rows.
 - [ ] 3.6 `it_should_schedule_duplicates_of_tasks_without_a_video`: `reconcile_playlist` is not deduped.

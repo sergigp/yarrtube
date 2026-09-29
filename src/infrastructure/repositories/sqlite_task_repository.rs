@@ -80,6 +80,20 @@ fn row_to_scheduled_task(row: &Row) -> rusqlite::Result<ScheduledTask> {
 const SELECT_COLUMNS: &str =
     "id, task_type, payload, status, retries, run_at, created_at, updated_at, last_error";
 
+/// The `WHERE` clause guarding `schedule`'s insert: a task with an
+/// exclusivity key is only added if no task of its type for the same video
+/// is pending or running; any other task is always added.
+fn dedupe_predicate(task: &Task, payload: &str) -> &'static str {
+    match Task::exclusivity_key(task.task_type(), payload) {
+        Some(_) => {
+            "NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1
+               AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')
+               AND status IN ('pending', 'running'))"
+        }
+        None => "1",
+    }
+}
+
 pub struct SqliteTaskRepository {
     conn: Arc<Mutex<Connection>>,
     clock: Arc<dyn Clock>,
@@ -171,21 +185,29 @@ impl TaskRepository for SqliteTaskRepository {
                 tracing::error!(task_type = task.task_type(), "database lock poisoned")
             })
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let payload = task.payload().to_string();
         let now = self.clock.now().to_rfc3339();
-        conn.execute(
-            "INSERT INTO tasks (task_type, payload, status, retries, run_at, created_at, updated_at, last_error)
-             VALUES (?1, ?2, 'pending', 0, ?3, ?4, ?4, NULL)",
-            params![
-                task.task_type(),
-                task.payload().to_string(),
-                run_at.to_rfc3339(),
-                now
-            ],
-        )
-        .inspect_err(|e| {
-            tracing::error!(task_type = task.task_type(), error = %e, "failed to schedule task")
-        })
-        .context("failed to schedule task")?;
+        let inserted = conn
+            .execute(
+                &format!(
+                    "INSERT INTO tasks (task_type, payload, status, retries, run_at, created_at, updated_at, last_error)
+                     SELECT ?1, ?2, 'pending', 0, ?3, ?4, ?4, NULL
+                     WHERE {}",
+                    dedupe_predicate(task, &payload)
+                ),
+                params![task.task_type(), payload, run_at.to_rfc3339(), now],
+            )
+            .inspect_err(|e| {
+                tracing::error!(task_type = task.task_type(), error = %e, "failed to schedule task")
+            })
+            .context("failed to schedule task")?;
+        if inserted == 0 {
+            info!(
+                task_type = task.task_type(),
+                "task already pending or running for this video, not scheduling a duplicate"
+            );
+            return Ok(());
+        }
         info!(
             task_id = conn.last_insert_rowid(),
             task_type = task.task_type(),
@@ -632,5 +654,28 @@ mod tests {
         }
 
         assert!(repo.list_non_completed().unwrap().is_empty());
+    }
+
+    #[test]
+    fn it_should_not_schedule_a_duplicate_download_for_the_same_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let download = download_task("rec1");
+
+        repo.schedule(&download, now).unwrap();
+        repo.schedule(&download, now).unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![pending_task(1, &download, now, now)]
+        );
+    }
+
+    fn download_task(video_id: &str) -> Task {
+        Task::DownloadVideo {
+            video_id: video_id.to_string(),
+            quality: "high".to_string(),
+            output_dir: "/videos/my-playlist".to_string(),
+        }
     }
 }
