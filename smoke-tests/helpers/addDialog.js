@@ -120,9 +120,12 @@ export async function submitPlaylist(page, { url, name, parent, folderName }) {
 export async function fillChannel(page, { handle, videoLimit, parent, folderName }) {
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Channel Handle or URL').fill(handle)
+  // The channel dialog keeps its location inside "Advanced options".
+  if (parent !== undefined || folderName !== undefined || videoLimit !== undefined) {
+    await openAdvancedOptions(dialog)
+  }
   await setLocation(dialog, { parent, folderName })
   if (videoLimit !== undefined) {
-    await openAdvancedOptions(dialog)
     await dialog.getByLabel('Video Limit').fill(String(videoLimit))
   }
   return dialog

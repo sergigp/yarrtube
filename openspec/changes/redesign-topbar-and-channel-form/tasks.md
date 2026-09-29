@@ -18,7 +18,7 @@ Each task is one red-green-refactor cycle with the named smoke test. Red means t
 
 - [x] 2.1 `tasks.spec.js` › also assert the header has no `Tasks` link and no `Add` button, and Tasks is reached only through the `Settings` menu.
 - [x] 2.2 `addChannelDialog.spec.js` › `it should show no notice until a handle is entered`: the `destination-notice` element exists only once the handle is non-empty.
-- [ ] 2.3 `addChannelDialog.spec.js` › `it should state the video limit and destination for a handle`:
+- [x] 2.3 `addChannelDialog.spec.js` › `it should state the video limit and destination for a handle`:
   - Render `DestinationNotice` above "Advanced options".
   - Build it from `channelNoticeLead(video_limit)` and the `destination` that `LocationField` now reports.
   - Pass `showDestination={false}` and keep the advanced block mounted (`hidden`), which drops the destination box and its hints.

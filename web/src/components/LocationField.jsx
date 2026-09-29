@@ -165,9 +165,12 @@ export function LocationField({ mode, nameSource, onChange, showDestination = tr
   }, [folderName])
 
   const valid = !folderNameError && !occupiedBy
+  // Absolute only once the videos root is known, so no caller ever shows a
+  // path that reads as absolute but is missing its prefix.
+  const destination = root && !folderNameError ? `${root}/${destinationPath}` : ''
   useEffect(() => {
-    onChange({ path: destinationPath, valid })
-  }, [onChange, destinationPath, valid])
+    onChange({ path: destinationPath, destination, valid })
+  }, [onChange, destinationPath, destination, valid])
 
   const goTo = (next) => {
     setParent(next)
@@ -353,40 +356,43 @@ export function LocationField({ mode, nameSource, onChange, showDestination = tr
       )}
 
       {/* The result of every control above it, so it carries the weight: the
-          user is choosing where videos end up, not which widget to click. */}
-      <div className="min-w-0 rounded-md border-l-2 border-primary bg-muted/40 px-3 py-2">
-        <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
-          Download destination
-        </p>
-        <p
-          className="mt-1 wrap-anywhere font-mono text-sm font-medium text-foreground"
-          data-testid="destination-path"
-        >
-          {root ? `${root}/` : ''}
-          {folderNameError ? (
-            <>
-              {parent && `${parent}/`}
-              <span className="text-muted-foreground">…</span>
-            </>
-          ) : (
-            destinationPath
-          )}
-        </p>
-        {folderNameError ? null : occupiedBy ? (
-          <p className="mt-1 text-xs font-medium text-destructive">
-            Already used by {occupiedBy}. Choose a different folder.
+          user is choosing where videos end up, not which widget to click.
+          A caller that shows the destination its own way turns it off. */}
+      {showDestination && (
+        <div className="min-w-0 rounded-md border-l-2 border-primary bg-muted/40 px-3 py-2">
+          <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+            Download destination
           </p>
-        ) : newDirectories.length > 0 ? (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Will create {newDirectories.length === 1 ? 'a new folder' : 'new folders'}:{' '}
-            {newDirectories.join(', ')}
+          <p
+            className="mt-1 wrap-anywhere font-mono text-sm font-medium text-foreground"
+            data-testid="destination-path"
+          >
+            {root ? `${root}/` : ''}
+            {folderNameError ? (
+              <>
+                {parent && `${parent}/`}
+                <span className="text-muted-foreground">…</span>
+              </>
+            ) : (
+              destinationPath
+            )}
           </p>
-        ) : destinationPath ? (
-          <p className="mt-1 text-xs text-muted-foreground">
-            This folder already exists. Videos will be added to its contents.
-          </p>
-        ) : null}
-      </div>
+          {folderNameError ? null : occupiedBy ? (
+            <p className="mt-1 text-xs font-medium text-destructive">
+              Already used by {occupiedBy}. Choose a different folder.
+            </p>
+          ) : newDirectories.length > 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Will create {newDirectories.length === 1 ? 'a new folder' : 'new folders'}:{' '}
+              {newDirectories.join(', ')}
+            </p>
+          ) : destinationPath ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              This folder already exists. Videos will be added to its contents.
+            </p>
+          ) : null}
+        </div>
+      )}
     </div>
   )
 }

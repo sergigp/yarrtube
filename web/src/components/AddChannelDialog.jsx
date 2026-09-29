@@ -11,10 +11,20 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 
 const emptyForm = { channel: '', quality: 'high', video_limit: '3' }
-const emptyLocation = { path: '', valid: false }
+const emptyLocation = { path: '', destination: '', valid: false }
 
-function DestinationNotice({ videoLimit }) {
-  return <p data-testid="destination-notice">{channelNoticeLead(videoLimit)}</p>
+function DestinationNotice({ videoLimit, location }) {
+  return (
+    <p
+      className="min-w-0 rounded-md border-l-2 border-primary bg-muted/40 px-3 py-2 text-sm"
+      data-testid="destination-notice"
+    >
+      {channelNoticeLead(videoLimit)}{' '}
+      <code className="wrap-anywhere font-mono font-medium text-foreground">
+        {location.destination}
+      </code>
+    </p>
+  )
 }
 
 export function AddChannelDialog({ open, onOpenChange }) {
@@ -98,13 +108,9 @@ export function AddChannelDialog({ open, onOpenChange }) {
             />
           </div>
 
-          {form.channel.trim() && <DestinationNotice videoLimit={form.video_limit} />}
-
-          <LocationField
-            mode="channel"
-            nameSource={deriveChannelPathSegment(form.channel)}
-            onChange={handleLocationChange}
-          />
+          {form.channel.trim() && location.destination && (
+            <DestinationNotice videoLimit={form.video_limit} location={location} />
+          )}
 
           <div className="border-t border-border pt-3">
             <button
@@ -116,28 +122,35 @@ export function AddChannelDialog({ open, onOpenChange }) {
               {advancedOpen ? '▾' : '▸'} Advanced options
             </button>
 
-            {advancedOpen && (
-              <div className="mt-3 flex flex-col gap-4">
-                <VideoQualityField
-                  id="add-channel-quality"
-                  value={form.quality}
-                  onChange={setField('quality')}
+            {/* Kept mounted while collapsed: `LocationField` holds the
+                browsed parent and edited folder name, and reports the
+                destination the notice above shows. */}
+            <div className="mt-3 flex flex-col gap-4" hidden={!advancedOpen}>
+              <LocationField
+                mode="channel"
+                nameSource={deriveChannelPathSegment(form.channel)}
+                onChange={handleLocationChange}
+                showDestination={false}
+              />
+              <VideoQualityField
+                id="add-channel-quality"
+                value={form.quality}
+                onChange={setField('quality')}
+              />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="add-channel-video-limit">Video Limit</Label>
+                <Input
+                  id="add-channel-video-limit"
+                  type="number"
+                  min="1"
+                  max="1000"
+                  step="1"
+                  value={form.video_limit}
+                  onChange={setField('video_limit')}
+                  required
                 />
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="add-channel-video-limit">Video Limit</Label>
-                  <Input
-                    id="add-channel-video-limit"
-                    type="number"
-                    min="1"
-                    max="1000"
-                    step="1"
-                    value={form.video_limit}
-                    onChange={setField('video_limit')}
-                    required
-                  />
-                </div>
               </div>
-            )}
+            </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error.message}</p>}
