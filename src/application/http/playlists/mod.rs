@@ -547,6 +547,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_preview_if_playlist_not_found_on_youtube() {
+        let playlist_previewer =
+            PlaylistPreviewer::new(Arc::new(FakeYoutubePlaylistRepository { resolved: None }));
+
+        let response = preview(playlist_previewer, preview_query("PLabc123")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "YouTube playlist PLabc123 does not exist or is not accessible"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
