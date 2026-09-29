@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { createChannel } from '../api'
-import { useChannelPreview, useInvalidateLibrary } from '../queries'
+import { useChannelPreview, useChannels, useInvalidateLibrary } from '../queries'
 import { useDebouncedValue } from '../useDebouncedValue'
 import { deriveChannelPathSegment } from '../channelHandle'
 import { channelNoticeLead } from '../channelNotice'
@@ -17,13 +17,21 @@ const emptyForm = { channel: '', quality: 'high', video_limit: '3' }
 const emptyLocation = { path: '', destination: '', valid: false }
 const LOOKUP_DEBOUNCE_MS = 400
 
+/** YouTube treats `@Name` and `@name` as the same channel. */
+function sameHandle(a, b) {
+  return a.toLowerCase() === b.toLowerCase()
+}
+
 /** The first case that applies wins: an error blocks, so it outranks the destination. */
-function ChannelNotice({ lookingUp, preview, videoLimit, location, onChange }) {
+function ChannelNotice({ lookingUp, preview, tracked, videoLimit, location, onChange }) {
   if (lookingUp) {
     return <DestinationNotice tone="info">Looking up channel…</DestinationNotice>
   }
   if (preview.error) {
     return <DestinationNotice tone="error">{preview.error.message}</DestinationNotice>
+  }
+  if (tracked) {
+    return <DestinationNotice tone="error">Already added as “{tracked.name}”</DestinationNotice>
   }
   const destination = <DestinationPath>{location.destination}</DestinationPath>
   if (location.occupiedBy) {
@@ -62,6 +70,9 @@ export function AddChannelDialog({ open, onOpenChange }) {
   // Until the lookup has caught up with the field, whatever the preview holds
   // belongs to an earlier value.
   const lookingUp = debounced !== entered || preview.isFetching
+  const channels = useChannels()
+  const tracked =
+    preview.data && channels.data?.find((channel) => sameHandle(channel.id, preview.data.id))
 
   const resetAll = () => {
     setForm(emptyForm)
@@ -85,7 +96,8 @@ export function AddChannelDialog({ open, onOpenChange }) {
   // Stable: `LocationField` reports the composed destination from an effect.
   const handleLocationChange = useCallback((next) => setLocation(next), [])
 
-  const canSubmit = Boolean(preview.data) && !lookingUp && location.valid && !submitting
+  const canSubmit =
+    Boolean(preview.data) && !tracked && !lookingUp && location.valid && !submitting
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -142,6 +154,7 @@ export function AddChannelDialog({ open, onOpenChange }) {
               <ChannelNotice
                 lookingUp={lookingUp}
                 preview={preview}
+                tracked={tracked}
                 videoLimit={form.video_limit}
                 location={location}
                 onChange={() => setAdvancedOpen(true)}

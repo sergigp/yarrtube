@@ -38,11 +38,12 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, invali
   const sidebarLink = page.locator('h3:text-is("Channels") ~ ul li a').first()
   await expect(sidebarLink).toBeVisible()
 
-  // The same handle derives the same folder, now taken by the channel just
-  // added, so the notice turns into an error and submission is blocked.
+  // The channel just added can't be added again, whatever the handle's case:
+  // YouTube treats `@Name` and `@name` as the same channel.
   await openAddChannelDialog(page)
-  await fillChannel(page, { handle: CHANNEL_HANDLE })
-  await expect(destinationNotice(dialog)).toContainText('already used by')
+  await fillChannel(page, { handle: CHANNEL_HANDLE.toLowerCase() })
+  await expect(destinationNotice(dialog)).toContainText('Already added as “')
+  await expect(destinationNotice(dialog)).toHaveClass(/text-destructive/)
   await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
   await dialog.getByRole('button', { name: 'Close' }).click()
 
