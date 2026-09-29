@@ -1,7 +1,7 @@
 use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::DomainEvent;
-use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
+use crate::domain::services::ThumbnailFetcher;
 use crate::domain::task::Task;
 use crate::domain::video::{
     Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
@@ -187,7 +187,6 @@ impl ChannelVideoReconciler {
     /// current top-N (whether removed on YouTube or aged past the limit).
     fn sync_channel_membership(&self, channel: &Channel) -> anyhow::Result<()> {
         let id = &channel.id;
-        let output_dir = resolve_output_dir(&self.videos_path, channel.path.as_str());
         let current_videos = self
             .channel_videos_repository
             .list_current_videos(id, channel.video_limit.value())?;
@@ -208,7 +207,6 @@ impl ChannelVideoReconciler {
                     let channel_video =
                         ChannelVideo::create(id.clone(), video.id.clone(), current.position, now);
                     self.channel_video_repository.save(&channel_video)?;
-                    self.thumbnail_fetcher.fetch(&video, &output_dir);
                     info!(
                         channel_id = %id,
                         video_id = %youtube_id,
@@ -376,9 +374,6 @@ impl ChannelVideoReconciler {
                 now,
             )?;
         }
-
-        self.thumbnail_fetcher
-            .fetch_missing(&stored_videos, &reset_video_ids, &output_dir);
 
         for file in &files {
             if protected_top_level.contains(file.as_str()) {

@@ -16,10 +16,9 @@ use std::sync::Arc;
 use tracing::warn;
 
 /// Best-effort thumbnail fetch, independent of and ahead of a video's full
-/// download — see the `video-thumbnails` capability. Called from every
-/// video-creation site and from each reconciler's missing-thumbnail
-/// recovery pass; never returns an error to its caller, so no call site
-/// needs its own try/catch-and-ignore boilerplate.
+/// download — see the `video-thumbnails` capability. The fetch itself runs
+/// from the `fetch_thumbnail` task and never returns an error to its caller;
+/// each reconciler's missing-thumbnail recovery pass only schedules it.
 #[derive(Clone)]
 pub struct ThumbnailFetcher {
     video_repository: Arc<dyn VideoRepository>,
@@ -56,24 +55,12 @@ pub trait ThumbnailFetcherApi: Send + Sync {
     fn fetch(&self, video: &Video, output_dir: &Path);
 
     /// Missing-thumbnail recovery pass over `videos`, shared by both
-    /// reconcilers' `reconcile_filesystem`. Skips a video with no
-    /// thumbnail if it's in `skip_ids` (just reset for redownload this same
-    /// pass — see `fetch`'s own reasons this must not run for it) or if its
-    /// real download is currently `InProgress` (a concurrent `DownloadVideo`
-    /// task owns its not-yet-recorded output folder; fetching now would
-    /// resolve `existing_folder` to `None` and collide with it, spawning a
-    /// stray sibling folder that then gets permanently protected from the
-    /// orphan sweep).
-    fn fetch_missing(
-        &self,
-        videos: &[Video],
-        skip_ids: &HashSet<&VideoRecordId>,
-        output_dir: &Path,
-    );
-
-    /// Schedules a `FetchThumbnail` for each video with no thumbnail, not in
-    /// `skip_ids` and not `InProgress`. Dedupe is left to
-    /// `TaskRepository::schedule`.
+    /// reconcilers' `reconcile_filesystem`: schedules a `FetchThumbnail` for
+    /// each video with no thumbnail, except one in `skip_ids` (just reset for
+    /// redownload this same pass, so its download writes its own thumbnail)
+    /// or one whose download is `InProgress` (it records its own thumbnail).
+    /// A video that already has a fetch pending or running gets no second
+    /// one: `TaskRepository::schedule` dedupes it.
     fn schedule_missing(
         &self,
         videos: &[Video],
@@ -94,21 +81,6 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
             Err(e) => {
                 warn!(video_id = %video.id, error = %e, "failed to fetch video thumbnail");
             }
-        }
-    }
-
-    fn fetch_missing(
-        &self,
-        videos: &[Video],
-        skip_ids: &HashSet<&VideoRecordId>,
-        output_dir: &Path,
-    ) {
-        for video in videos.iter().filter(|v| {
-            v.thumbnail_filename.is_none()
-                && !skip_ids.contains(&v.id)
-                && v.status != VideoStatus::InProgress
-        }) {
-            self.fetch(video, output_dir);
         }
     }
 

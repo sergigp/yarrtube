@@ -1004,7 +1004,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_fetch_thumbnails_of_new_videos() {
+    fn it_should_not_fetch_thumbnails_when_adding_new_videos() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
@@ -1024,7 +1024,8 @@ mod tests {
             video_repository.clone(),
             channel_video_repository,
             Arc::new(FakeChannelVideosRepository::with_videos(vec![
-                listed_video("yt1", "My Video", 0),
+                listed_video("yt1", "One", 0),
+                listed_video("yt2", "Two", 1),
             ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
@@ -1049,215 +1050,42 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         let videos = video_repository.list().unwrap();
-        let video_id = videos[0].id.clone();
+        let (first_id, second_id) = (videos[0].id.clone(), videos[1].id.clone());
         assert_eq!(
             videos,
-            vec![Video {
-                id: video_id.clone(),
-                ..my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp())
-            }]
+            vec![
+                Video {
+                    id: first_id.clone(),
+                    ..Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp())
+                },
+                Video {
+                    id: second_id.clone(),
+                    ..Video::create(VideoId::new("yt2").unwrap(), "Two", fixed_timestamp())
+                },
+            ]
         );
         assert_eq!(
             *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![thumbnail_call(None)]
+            vec![]
         );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
-            vec![pending_event(
-                1,
-                DomainEvent::VideoAddedToChannel {
-                    channel_id: "@somechannel".to_string(),
-                    video_id: video_id.as_str().to_string(),
-                }
-            )]
-        );
-    }
-
-    #[test]
-    fn it_should_add_new_videos_if_thumbnail_fetch_fails() {
-        let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
-        let video_downloader_repository =
-            Arc::new(FakeVideoDownloaderRepository::default().with_thumbnail_error());
-        channel_repository.insert(&channel("@somechannel")).unwrap();
-        let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
-            channel_repository,
-            video_repository.clone(),
-            channel_video_repository,
-            Arc::new(FakeChannelVideosRepository::with_videos(vec![
-                listed_video("yt1", "My Video", 0),
-            ])),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
-            Arc::new(SqliteEventPublisher::new(
-                db.shared_connection(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(ThumbnailFetcher::new(
-                video_repository.clone(),
-                video_downloader_repository.clone(),
-                task_repository.clone(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        ));
-
-        let result = run(&task, &payload_for("@somechannel"));
-
-        assert_eq!(result, Ok(()));
-        let videos = video_repository.list().unwrap();
-        let video_id = videos[0].id.clone();
-        assert_eq!(
-            videos,
-            vec![Video {
-                id: video_id.clone(),
-                ..my_video()
-            }]
-        );
-        assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![thumbnail_call(None), thumbnail_call(None)]
-        );
-        assert_eq!(
-            event_repository.list_eligible().unwrap(),
-            vec![pending_event(
-                1,
-                DomainEvent::VideoAddedToChannel {
-                    channel_id: "@somechannel".to_string(),
-                    video_id: video_id.as_str().to_string(),
-                }
-            )]
-        );
-    }
-
-    #[test]
-    fn it_should_fetch_missing_thumbnails() {
-        let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_thumbnail_result(Some(fetched_thumbnail())),
-        );
-        channel_repository.insert(&channel("@somechannel")).unwrap();
-        let video = my_video();
-        save_channel_video(
-            video_repository.as_ref(),
-            channel_video_repository.as_ref(),
-            &video,
-        );
-        let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
-            channel_repository,
-            video_repository.clone(),
-            channel_video_repository,
-            Arc::new(FakeChannelVideosRepository::with_videos(vec![
-                listed_video("yt1", "My Video", 0),
-            ])),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
-            Arc::new(SqliteEventPublisher::new(
-                db.shared_connection(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(ThumbnailFetcher::new(
-                video_repository.clone(),
-                video_downloader_repository.clone(),
-                task_repository.clone(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        ));
-
-        let result = run(&task, &payload_for("@somechannel"));
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(
-            video_repository.list().unwrap(),
-            vec![video.with_thumbnail("My Video/My Video.jpg", fixed_timestamp())]
-        );
-        assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![thumbnail_call(None)]
-        );
-    }
-
-    #[test]
-    fn it_should_fetch_missing_thumbnails_into_the_video_folder() {
-        let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default()
-                .with_thumbnail_result(Some(fetched_thumbnail())),
-        );
-        channel_repository.insert(&channel("@somechannel")).unwrap();
-        let video = downloaded_video("My Video/My Video.mp4", None);
-        save_channel_video(
-            video_repository.as_ref(),
-            channel_video_repository.as_ref(),
-            &video,
-        );
-        let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
-            channel_repository,
-            video_repository.clone(),
-            channel_video_repository,
-            Arc::new(FakeChannelVideosRepository::with_videos(vec![
-                listed_video("yt1", "My Video", 0),
-            ])),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
-            Arc::new(SqliteEventPublisher::new(
-                db.shared_connection(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::with_file_exists(true)),
-            Arc::new(ThumbnailFetcher::new(
-                video_repository.clone(),
-                video_downloader_repository.clone(),
-                task_repository.clone(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            Arc::new(FixedClock(fixed_timestamp())),
-            3600,
-            "/videos",
-        ));
-
-        let result = run(&task, &payload_for("@somechannel"));
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(
-            video_repository.list().unwrap(),
-            vec![video.with_thumbnail("My Video/My Video.jpg", fixed_timestamp())]
-        );
-        assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![thumbnail_call(Some("My Video"))]
+            vec![
+                pending_event(
+                    1,
+                    DomainEvent::VideoAddedToChannel {
+                        channel_id: "@somechannel".to_string(),
+                        video_id: first_id.as_str().to_string(),
+                    }
+                ),
+                pending_event(
+                    2,
+                    DomainEvent::VideoAddedToChannel {
+                        channel_id: "@somechannel".to_string(),
+                        video_id: second_id.as_str().to_string(),
+                    }
+                ),
+            ]
         );
     }
 
@@ -1605,20 +1433,6 @@ mod tests {
             folder: "My Video".to_string(),
             filename: "My Video.jpg".to_string(),
         }
-    }
-
-    /// One `fetch_thumbnail` call as `FakeVideoDownloaderRepository` records
-    /// it, for `my_video()` in `@somechannel`'s output directory.
-    fn thumbnail_call(
-        existing_folder: Option<&str>,
-    ) -> (String, String, String, PathBuf, Option<String>) {
-        (
-            "https://www.youtube.com/watch?v=yt1".to_string(),
-            "My Video".to_string(),
-            "yt1".to_string(),
-            PathBuf::from("/videos/creators/somechannel"),
-            existing_folder.map(str::to_string),
-        )
     }
 
     /// The `(output_dir, entry)` pair the fake records for one delete call.
