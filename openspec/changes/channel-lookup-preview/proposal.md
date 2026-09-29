@@ -32,6 +32,7 @@ None.
   - New `ChannelPreviewer` domain service over the existing `YoutubeChannelRepository::resolve`, and a `ChannelPreview` read model with a `PreviewChannelError`.
   - The channels HTTP module gains a `preview_channel` handler, and `ApiServices`/`serve.rs` wire the previewer.
   - The route `GET /channels/preview` is registered ahead of `/channels/{handle}`.
+  - `YoutubeApiChannelRepository` treats a YouTube response with no `items` field as "no such channel". YouTube leaves the field out when a handle matches nothing, so today an unknown channel fails to parse and shows up as a bad gateway, in Create Channel as well as in the new preview.
 - **Frontend**:
   - `web/src/api.js` and `web/src/queries.js` gain the channel preview call.
   - `web/src/channelNotice.js` names the channel's title.

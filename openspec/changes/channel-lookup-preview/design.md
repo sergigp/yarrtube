@@ -11,7 +11,7 @@
 - `src/application/http/mod.rs`: `ApiServices.channel_previewer`; route `GET /channels/preview`, registered before `/channels/{handle}` (axum prefers the static segment either way, but keeping it first reads right).
 - `src/serve.rs`: wires `ChannelPreviewer` with `youtube_channel_repository`.
 
-No infrastructure change: `YoutubeChannelRepository::resolve` already returns the title and avatar URL.
+- `src/infrastructure/repositories/youtube_channel_repository.rs`: `ChannelsResponse.items` gets `#[serde(default)]`. YouTube's channels endpoint leaves `items` out entirely when a handle matches nothing (the reply has only `kind`, `etag` and `pageInfo`), so without the default an unknown channel fails to parse and becomes `Lookup` (502) instead of `None` (404). `resolve` otherwise already returns the title and avatar URL. The playlists endpoint does return `"items": []`, so the playlist adapter is unchanged.
 
 **Frontend**
 - `web/src/api.js`: new `previewChannel`.
@@ -153,11 +153,12 @@ The walking skeleton's previewer returns `Err(YoutubeChannelNotFound(id))`.
 6. `it_should_fail_to_preview_if_channel_not_found_on_youtube`: `resolved: None` → `Err(ApiError::new(NOT_FOUND, "YouTube channel @somechannel does not exist or is not accessible"))`.
 7. `it_should_fail_to_preview_if_youtube_lookup_fails`: a failing lookup → `Err(ApiError::new(BAD_GATEWAY, ..))`.
 
-**Infrastructure tests**: none; no adapter changes.
+**Infrastructure tests** (`youtube_channel_repository.rs`, mockito)
+- `it_should_return_none_when_youtube_omits_items`: a 200 reply of `{"kind": "youtube#channelListResponse", "etag": "…", "pageInfo": {"totalResults": 0, "resultsPerPage": 5}}` resolves to `None`.
 
 **Smoke tests** (need `SMOKE_CHANNEL_HANDLE`)
 8. `addChannelDialog.spec.js` › `it should explain a value that is not a channel`: `somechannel` → an error notice with the `@` message, and submit disabled.
-9. `addChannelDialog.spec.js` › `it should state the video limit, title and destination for a handle`: the notice contains `“<title>”`, where the title is read from `GET /api/channels/preview`. It shows an avatar `img`, and its path ends with `/channels/<slug of handle>`.
+9. `addChannelDialog.spec.js` › `it should state the video limit, title and destination for a handle`: the notice contains `“<title>”`, where the title is read from `GET /api/channels/preview`. It shows the avatar, either an `img` or `Thumbnail`'s placeholder (YouTube's image host can fail, and the placeholder is the intended fallback). When an `img` renders, its `src` equals the preview's `avatar_url`. Its path ends with `/channels/<slug of handle>`.
 10. `addChannelDialog.spec.js` › `it should report a channel YouTube doesn't know`: a random handle → an error notice with "does not exist", and submit disabled.
 11. `channel.spec.js` › lifecycle:
     - Re-adding shows "Already added as" with submit disabled.

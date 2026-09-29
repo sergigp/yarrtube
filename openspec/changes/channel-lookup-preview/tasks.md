@@ -34,11 +34,12 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
   - `fillChannel` waits for the lookup to settle.
   - The existing `addChannelDialog.spec.js` cases and the channel cases in `addDialogLocation.spec.js` move from `@some-handle` to `SMOKE_CHANNEL_HANDLE`, since a made-up handle now reports "not found".
 - [ ] 2.10 `addChannelDialog.spec.js` › `it should report a channel YouTube doesn't know`: a random handle shows "does not exist" as an error notice, and submit stays disabled.
+  - Done after 3.1. In the same cycle, change 2.9's avatar check to accept the `img` or its placeholder, and to assert the `img`'s `src` against `avatar_url` from `GET /api/channels/preview` when an `img` renders.
 - [ ] 2.11 `channel.spec.js` › lifecycle: re-adding the same handle shows "Already added as" and disables `Create Channel`. The dialog matches the preview's handle against `useChannels()`, ignoring case.
 
 ## 3. Infrastructure adapters (TDD)
 
-None: `YoutubeChannelRepository::resolve` already returns the title and avatar URL.
+- [ ] 3.1 `it_should_return_none_when_youtube_omits_items`: YouTube's real reply for an unknown handle, which has no `items` field, resolves to no channel instead of failing to parse. 2.10 depends on this task, so it is done before 2.10.
 
 ## 4. Verification
 
