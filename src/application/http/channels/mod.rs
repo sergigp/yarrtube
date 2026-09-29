@@ -535,6 +535,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_preview_a_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = SqliteChannelRepository::new(db.connection());
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let task_repository = SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let channel_previewer =
+            ChannelPreviewer::new(resolving(Some(resolved_channel_with_avatar())));
+
+        let response = preview(channel_previewer, preview_query("@somechannel")).await;
+
+        assert_eq!(response, Ok(channel_preview_response()));
+        assert_eq!(channel_repository.list().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
@@ -1440,6 +1460,20 @@ mod tests {
         }
     }
 
+    fn preview_query(channel: &str) -> PreviewChannelQuery {
+        PreviewChannelQuery {
+            channel: Some(channel.to_string()),
+        }
+    }
+
+    fn channel_preview_response() -> ChannelPreviewResponse {
+        ChannelPreviewResponse {
+            id: "@somechannel".to_string(),
+            title: "Some Channel".to_string(),
+            avatar_url: Some(AVATAR_URL.to_string()),
+        }
+    }
+
     fn some_channel_response() -> ChannelResponse {
         ChannelResponse {
             id: "@somechannel".to_string(),
@@ -1470,6 +1504,15 @@ mod tests {
         create_channel(State(channel_creator), Json(request))
             .await
             .map(|(status, Json(channel))| (status, channel))
+    }
+
+    async fn preview(
+        channel_previewer: ChannelPreviewer,
+        query: PreviewChannelQuery,
+    ) -> Result<ChannelPreviewResponse, ApiError> {
+        preview_channel(State(channel_previewer), Query(query))
+            .await
+            .map(|Json(preview)| preview)
     }
 
     async fn delete(

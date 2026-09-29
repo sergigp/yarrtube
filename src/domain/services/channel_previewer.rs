@@ -22,7 +22,13 @@ pub trait ChannelPreviewerApi: Send + Sync {
 
 impl ChannelPreviewerApi for ChannelPreviewer {
     fn preview(&self, id: ChannelHandle) -> Result<ChannelPreview, PreviewChannelError> {
-        let _ = &self.lookup;
-        Err(PreviewChannelError::YoutubeChannelNotFound(id))
+        match self.lookup.resolve(&id) {
+            Ok(Some(resolved)) => Ok(ChannelPreview {
+                id,
+                name: resolved.title,
+                avatar_url: resolved.avatar_url,
+            }),
+            _ => Err(PreviewChannelError::YoutubeChannelNotFound(id)),
+        }
     }
 }
