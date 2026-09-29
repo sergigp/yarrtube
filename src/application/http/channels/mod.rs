@@ -584,6 +584,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_preview_if_invalid_channel_provided() {
+        let response = preview(any_channel_previewer(), preview_query("somechannel")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Channel handle must start with \"@\" (got \"somechannel\")"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
@@ -1226,6 +1238,12 @@ mod tests {
             unused_event_publisher(),
             Arc::new(FixedClock(fixed_timestamp())),
         )
+    }
+
+    /// A previewer for tests whose request is rejected before reaching it. Its
+    /// lookup fails, so a request that wrongly reaches YouTube fails loudly.
+    fn any_channel_previewer() -> ChannelPreviewer {
+        ChannelPreviewer::new(Arc::new(FailingYoutubeChannelRepository))
     }
 
     /// A deleter for tests whose request is rejected before reaching it (see
