@@ -1,7 +1,7 @@
 use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::event::DomainEvent;
-use crate::domain::services::ThumbnailFetcher;
+use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
 use crate::domain::task::Task;
 use crate::domain::video::{
     Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
@@ -374,6 +374,9 @@ impl ChannelVideoReconciler {
                 now,
             )?;
         }
+
+        self.thumbnail_fetcher
+            .schedule_missing(&stored_videos, &reset_video_ids, &output_dir)?;
 
         for file in &files {
             if protected_top_level.contains(file.as_str()) {

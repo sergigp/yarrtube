@@ -33,7 +33,7 @@ Subscribers:
 
 `ReconcileChannelTask`:
 - [x] 2.16 `it_should_not_fetch_thumbnails_when_adding_new_videos`: channel equivalent of 2.9.
-- [ ] 2.17 `it_should_schedule_a_thumbnail_fetch_for_a_video_missing_one`: channel equivalent of 2.10.
+- [x] 2.17 `it_should_schedule_a_thumbnail_fetch_for_a_video_missing_one`: channel equivalent of 2.10.
 - [ ] 2.18 `it_should_keep_the_folder_of_a_download_in_progress`: channel equivalent of 2.13.
 
 Download and task listing:
