@@ -5,6 +5,7 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use std::path::Path;
 use std::sync::Arc;
+use tracing::debug;
 
 /// Fetches one video's thumbnail ahead of its download, scheduled by
 /// `subscribers::fetch_thumbnail_on_video_added_to_playlist`/
@@ -32,10 +33,10 @@ impl TaskHandler for FetchThumbnailTask {
     fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
         let (video_id, output_dir) = Task::decode_fetch_thumbnail_payload(payload)?;
         let video_id = VideoRecordId::new(video_id)?;
-        let video = self
-            .video_repository
-            .find(&video_id)?
-            .ok_or_else(|| anyhow::anyhow!("video {video_id} not found"))?;
+        let Some(video) = self.video_repository.find(&video_id)? else {
+            debug!(video_id = %video_id, "video no longer exists, skipping thumbnail fetch");
+            return Ok(());
+        };
         self.thumbnail_fetcher.fetch(&video, Path::new(&output_dir));
         Ok(())
     }
@@ -119,6 +120,34 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn it_should_skip_if_video_no_longer_exists() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_downloader_repository = Arc::new(FakeVideoDownloaderRepository::default());
+        let task = FetchThumbnailTask::new(
+            video_repository.clone(),
+            Arc::new(ThumbnailFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.shared_connection(),
+                    Arc::new(FixedClock(later())),
+                )),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &payload_for("missing"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             *video_downloader_repository.thumbnail_calls.lock().unwrap(),
             vec![]
