@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { openAddDialog, submitPlaylist, fillPlaylist } from '../helpers/addDialog.js'
+import { openAddPlaylistDialog, submitPlaylist, fillPlaylist } from '../helpers/addDialog.js'
 import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
 import { syncItem, deleteItem, sectionRows } from '../helpers/sidebar.js'
 
@@ -11,8 +11,8 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
 
   await page.goto('/')
 
-  // Add via the Add dialog and confirm it lands in the sidebar.
-  await openAddDialog(page)
+  // Add via the sidebar's "Add playlist" and confirm it lands in the sidebar.
+  await openAddPlaylistDialog(page)
   await submitPlaylist(page, { url: PLAYLIST_ID, name: PLAYLIST_NAME })
   const sidebarLink = page.locator('h3:text-is("Playlists") ~ ul').getByRole('link', { name: PLAYLIST_NAME })
   await expect(sidebarLink).toBeVisible()
@@ -85,7 +85,7 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   // parent as the already-tracked playlist. That conflict is now caught in
   // the dialog, before submission, so the preview reports it and the submit
   // button stays disabled — there is no rejected request to recover from.
-  await openAddDialog(page)
+  await openAddPlaylistDialog(page)
   const dialog = await fillPlaylist(page, {
     url: 'not-a-real-playlist-id-path-conflict-check',
     name: PLAYLIST_NAME,

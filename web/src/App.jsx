@@ -5,12 +5,14 @@ import { Home } from './components/Home'
 import { PlaylistDetail } from './components/PlaylistDetail'
 import { ChannelDetail } from './components/ChannelDetail'
 import { TasksView } from './components/TasksView'
-import { AddDialog } from './components/AddDialog'
+import { AddChannelDialog } from './components/AddChannelDialog'
+import { AddPlaylistDialog } from './components/AddPlaylistDialog'
 import { Sidebar } from './components/Sidebar'
+import { SettingsMenu } from './components/SettingsMenu'
 import { Button } from '@/components/ui/button'
 
 export default function App() {
-  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [addDialog, setAddDialog] = useState(null) // 'channel' | 'playlist' | null
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
@@ -30,14 +32,16 @@ export default function App() {
             <img src="/logo.png" alt="Yarrtube" className="h-10 w-auto sm:h-12" />
           </Link>
           <div className="ml-auto flex items-center gap-2">
-            <Button asChild variant="ghost">
-              <Link to="/tasks">Tasks</Link>
-            </Button>
-            <Button onClick={() => setAddDialogOpen(true)}>Add</Button>
+            <SettingsMenu />
           </div>
         </header>
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          <Sidebar
+            open={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            onAddChannel={() => setAddDialog('channel')}
+            onAddPlaylist={() => setAddDialog('playlist')}
+          />
           <main className="min-w-0 flex-1 md:min-h-0 md:overflow-y-auto">
             <div className="h-full px-4 pt-4 pb-6 sm:px-6 md:pt-6">
               <Routes>
@@ -49,7 +53,14 @@ export default function App() {
             </div>
           </main>
         </div>
-        <AddDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} />
+        <AddChannelDialog
+          open={addDialog === 'channel'}
+          onOpenChange={(open) => !open && setAddDialog(null)}
+        />
+        <AddPlaylistDialog
+          open={addDialog === 'playlist'}
+          onOpenChange={(open) => !open && setAddDialog(null)}
+        />
       </div>
     </BrowserRouter>
   )

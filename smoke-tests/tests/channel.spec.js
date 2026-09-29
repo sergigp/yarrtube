@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { openAddDialog, submitChannel, dialogErrorText } from '../helpers/addDialog.js'
+import { openAddChannelDialog, submitChannel, dialogErrorText } from '../helpers/addDialog.js'
 import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
 import {
   syncItem,
@@ -15,10 +15,10 @@ const VIDEO_LIMIT = process.env.SMOKE_CHANNEL_VIDEO_LIMIT ?? '1'
 test('channel lifecycle: add, download, play, resume, mark watched, sync, invalid handle error, delete', async ({ page }) => {
   await page.goto('/')
 
-  // Add via the Add dialog and confirm it lands in the sidebar. The
+  // Add via the sidebar's "Add channel" and confirm it lands in the sidebar. The
   // channel's display name comes from YouTube, not the handle we typed,
   // so identify it by section rather than by name.
-  await openAddDialog(page)
+  await openAddChannelDialog(page)
   await submitChannel(page, { handle: CHANNEL_HANDLE, videoLimit: VIDEO_LIMIT })
   const sidebarLink = page.locator('h3:text-is("Channels") ~ ul li a').first()
   await expect(sidebarLink).toBeVisible()
@@ -57,7 +57,7 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, invali
   await syncItem(page, { section: 'Channels', name: CHANNEL_HANDLE })
 
   // An invalid handle surfaces a visible error in the dialog.
-  await openAddDialog(page)
+  await openAddChannelDialog(page)
   await submitChannel(page, { handle: 'this-handle-should-not-exist-abc123' })
   await expect(dialogErrorText(page)).toBeVisible()
   await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import {
-  openAddDialog,
+  openAddPlaylistDialog,
   openFolderBrowser,
   browseToParent,
   breadcrumbLinks,
@@ -28,7 +28,7 @@ test('it should create a playlist into a browsed parent folder', async ({ page }
   const folderName = 'browsed-parent-target'
 
   await page.goto('/')
-  await openAddDialog(page)
+  await openAddPlaylistDialog(page)
   const dialog = await fillPlaylist(page, {
     url: PLAYLIST_ID,
     name: PLAYLIST_NAME,
@@ -65,7 +65,7 @@ test('it should create a playlist into a staged parent folder that did not exist
   // The staged parent must genuinely not exist, or this proves nothing.
   expect(await listDirectories(page, '')).not.toContain(stagedParent)
 
-  await openAddDialog(page)
+  await openAddPlaylistDialog(page)
   const dialog = await fillPlaylist(page, {
     url: PLAYLIST_ID,
     name: PLAYLIST_NAME,
@@ -97,7 +97,7 @@ test('it should create a playlist into a staged parent folder that did not exist
 
 test('it should reach a sibling of the default parent via the breadcrumb', async ({ page }) => {
   await page.goto('/')
-  await openAddDialog(page)
+  await openAddPlaylistDialog(page)
   const dialog = page.getByRole('dialog')
   await openFolderBrowser(dialog)
 
@@ -117,7 +117,7 @@ test('it should descend into an existing directory when the create-folder step n
   page,
 }) => {
   await page.goto('/')
-  await openAddDialog(page)
+  await openAddPlaylistDialog(page)
   const dialog = page.getByRole('dialog')
   await openFolderBrowser(dialog)
   await breadcrumbLinks(dialog).first().click()
@@ -141,7 +141,7 @@ test('it should block submission when the destination is already used by another
   test.skip(!PLAYLIST_ID, 'SMOKE_PLAYLIST_ID is not set')
 
   await page.goto('/')
-  await openAddDialog(page)
+  await openAddPlaylistDialog(page)
   await submitPlaylist(page, { url: PLAYLIST_ID, name: PLAYLIST_NAME })
   const sidebarLink = page
     .locator('h3:text-is("Playlists") ~ ul')
@@ -149,7 +149,7 @@ test('it should block submission when the destination is already used by another
   await expect(sidebarLink).toBeVisible()
 
   // The same name derives the same folder under the same default parent.
-  await openAddDialog(page)
+  await openAddPlaylistDialog(page)
   const dialog = await fillPlaylist(page, {
     url: 'not-a-real-playlist-id-conflict-check',
     name: PLAYLIST_NAME,
@@ -164,7 +164,7 @@ test('it should block submission when the destination is already used by another
 
 test('it should reject a folder name containing a slash', async ({ page }) => {
   await page.goto('/')
-  await openAddDialog(page)
+  await openAddPlaylistDialog(page)
   const dialog = page.getByRole('dialog')
 
   await dialog.getByLabel('Folder name').fill('kids/movies')

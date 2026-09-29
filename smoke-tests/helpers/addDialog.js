@@ -1,6 +1,14 @@
-export async function openAddDialog(page) {
-  await page.getByRole('button', { name: 'Add', exact: true }).click()
+async function openFromSidebar(page, label) {
+  await page.getByRole('button', { name: label, exact: true }).click()
   await page.getByRole('dialog').waitFor({ state: 'visible' })
+}
+
+export async function openAddChannelDialog(page) {
+  await openFromSidebar(page, 'Add channel')
+}
+
+export async function openAddPlaylistDialog(page) {
+  await openFromSidebar(page, 'Add playlist')
 }
 
 async function openAdvancedOptions(dialog) {
@@ -93,7 +101,6 @@ async function submitAndSettle(dialog) {
 
 export async function fillPlaylist(page, { url, name, parent, folderName }) {
   const dialog = page.getByRole('dialog')
-  await dialog.getByRole('tab', { name: 'Playlist' }).click()
   await dialog.getByLabel('Playlist ID or URL').fill(url)
   await dialog.getByLabel('Name', { exact: true }).fill(name)
   await setLocation(dialog, { parent, folderName })
@@ -108,7 +115,6 @@ export async function submitPlaylist(page, { url, name, parent, folderName }) {
 
 export async function fillChannel(page, { handle, videoLimit, parent, folderName }) {
   const dialog = page.getByRole('dialog')
-  await dialog.getByRole('tab', { name: 'Channel' }).click()
   await dialog.getByLabel('Channel Handle or URL').fill(handle)
   await setLocation(dialog, { parent, folderName })
   if (videoLimit !== undefined) {

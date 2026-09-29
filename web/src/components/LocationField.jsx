@@ -63,7 +63,7 @@ function shortRootLabel(root) {
  * called from an effect whenever the composed destination or its validity
  * changes.
  */
-export function LocationField({ mode, nameSource, onChange }) {
+export function LocationField({ mode, nameSource, onChange, showDestination = true }) {
   const [parent, setParent] = useState(DEFAULT_PARENTS[mode])
   const [stagedFrom, setStagedFrom] = useState(null)
   const [browserOpen, setBrowserOpen] = useState(false)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { CheckCheck, Ellipsis, RotateCw, Trash2, X } from 'lucide-react'
+import { CheckCheck, Ellipsis, Plus, RotateCw, Trash2, X } from 'lucide-react'
 import {
   queryKeys,
   useChannels,
@@ -191,6 +191,9 @@ function SidebarRow({
 
 function SidebarSection({
   title,
+  addLabel,
+  onAdd,
+  onClose,
   items,
   hiddenCount,
   expanded,
@@ -213,6 +216,19 @@ function SidebarSection({
       <h3 className="mb-2 px-2 font-heading text-base font-semibold tracking-tight text-foreground">
         {title}
       </h3>
+      {/* Closing first lets the mobile drawer get out of the dialog's way;
+          on desktop the sidebar is static and `onClose` changes nothing. */}
+      <button
+        type="button"
+        className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        onClick={() => {
+          onClose()
+          onAdd()
+        }}
+      >
+        <Plus className="size-4 shrink-0" />
+        {addLabel}
+      </button>
       {error && <p className="px-2 text-sm text-destructive">Failed to load: {error.message}</p>}
       {!error && !items && <p className="px-2 text-sm text-muted-foreground">Loading…</p>}
       {!error && items && items.length === 0 && (
@@ -278,7 +294,7 @@ function SidebarSection({
   )
 }
 
-export function Sidebar({ open = false, onClose }) {
+export function Sidebar({ open = false, onClose, onAddChannel, onAddPlaylist }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { data: channels, error: channelsError } = useChannels()
@@ -363,6 +379,9 @@ export function Sidebar({ open = false, onClose }) {
         {showChannels && (
           <SidebarSection
             title="Channels"
+            addLabel="Add channel"
+            onAdd={onAddChannel}
+            onClose={onClose}
             items={channelsView.rows}
             hiddenCount={channelsView.hiddenCount}
             expanded={channelsExpanded}
@@ -388,6 +407,9 @@ export function Sidebar({ open = false, onClose }) {
         {showPlaylists && (
           <SidebarSection
             title="Playlists"
+            addLabel="Add playlist"
+            onAdd={onAddPlaylist}
+            onClose={onClose}
             items={playlistsView.rows}
             hiddenCount={playlistsView.hiddenCount}
             expanded={playlistsExpanded}
