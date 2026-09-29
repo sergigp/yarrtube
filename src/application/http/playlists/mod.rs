@@ -548,7 +548,11 @@ mod tests {
     async fn it_should_list_playlists_sorted_by_name_ignoring_case() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
-        for (id, name) in [("PL1", "watch later"), ("PL2", "Courses"), ("PL3", "Ambient")] {
+        for (id, name) in [
+            ("PL1", "watch later"),
+            ("PL2", "Courses"),
+            ("PL3", "Ambient"),
+        ] {
             playlist_repository
                 .insert(&Playlist {
                     name: PlaylistName::new(name).unwrap(),

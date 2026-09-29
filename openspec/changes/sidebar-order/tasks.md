@@ -14,7 +14,7 @@
 
 **`SqliteChannelVideoRepository`**
 - [x] 3.1 `it_should_list_every_channel_video`: `list` returns every stored `ChannelVideo` across all channels in one query.
-- [ ] 3.2 Refactor `ChannelViewSearcher` to count from 3 bulk reads, as in design.md's Call Stack: `ChannelRepository::list`, `ChannelVideoRepository::list`, then `VideoRepository::find_many`. Fold into `HashMap<ChannelHandle, usize>` in Rust (missing entry = 0) and remove the per-video `count_unwatched`. Done when `it_should_count_unwatched_downloaded_videos_when_listing_channels`, `it_should_list_all_channels` and the full suite pass unchanged.
+- [x] 3.2 Refactor `ChannelViewSearcher` to count from 3 bulk reads, as in design.md's Call Stack: `ChannelRepository::list`, `ChannelVideoRepository::list`, then `VideoRepository::find_many`. Fold into `HashMap<ChannelHandle, usize>` in Rust (missing entry = 0) and remove the per-video `count_unwatched`. Done when `it_should_count_unwatched_downloaded_videos_when_listing_channels`, `it_should_list_all_channels` and the full suite pass unchanged.
 
 ## 4. Verification
 

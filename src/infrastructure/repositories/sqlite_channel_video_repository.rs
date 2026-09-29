@@ -157,9 +157,9 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
                 "SELECT id, channel_id, video_id, position, created_at
                  FROM channel_videos ORDER BY id ASC",
             )
-            .inspect_err(|e| {
-                tracing::error!(error = %e, "failed to prepare list-all-channel-videos query")
-            })
+            .inspect_err(
+                |e| tracing::error!(error = %e, "failed to prepare list-all-channel-videos query"),
+            )
             .context("failed to prepare list-all-channel-videos query")?;
         let rows = stmt
             .query_map([], row_to_columns)
