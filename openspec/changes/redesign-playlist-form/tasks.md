@@ -56,7 +56,7 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass.
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass.
 - [ ] 4.2 `npm run build` and `npm run lint` pass in `web/`, and `scripts/run-smoke-tests.sh` is fully green.
 - [ ] 4.3 Manual check with `scripts/run-local.sh` at desktop width and at about 375px:
   - The playlist dialog shows only the ID/URL field until something is typed. It then shows "Looking up playlist…", followed by the count, the title and the path.
