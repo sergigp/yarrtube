@@ -831,7 +831,17 @@ mod tests {
                 )
             }]
         );
-        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::FetchThumbnail {
+                    video_id: video_id.as_str().to_string(),
+                    output_dir: "/videos/music/chill".to_string(),
+                },
+                fixed_timestamp(),
+            )]
+        );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
@@ -939,7 +949,17 @@ mod tests {
                 .unwrap(),
             playlist_videos_after_first_reconcile
         );
-        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::FetchThumbnail {
+                    video_id: videos_after_first_reconcile[0].id.as_str().to_string(),
+                    output_dir: "/videos/music/chill".to_string(),
+                },
+                fixed_timestamp(),
+            )]
+        );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
             events_after_first_reconcile

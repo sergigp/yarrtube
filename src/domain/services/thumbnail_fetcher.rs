@@ -1,3 +1,4 @@
+use crate::domain::task::Task;
 use crate::domain::video::Video;
 use crate::domain::video::VideoRecordId;
 use crate::domain::video::VideoStatus;
@@ -113,11 +114,14 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
 
     fn schedule_missing(
         &self,
-        _videos: &[Video],
-        _skip_ids: &HashSet<&VideoRecordId>,
-        _output_dir: &Path,
+        videos: &[Video],
+        skip_ids: &HashSet<&VideoRecordId>,
+        output_dir: &Path,
     ) -> anyhow::Result<()> {
-        Ok(())
+        videos
+            .iter()
+            .filter(|v| v.thumbnail_filename.is_none() && !skip_ids.contains(&v.id))
+            .try_for_each(|video| self.schedule_fetch(video, output_dir))
     }
 }
 
@@ -136,6 +140,16 @@ impl ThumbnailFetcher {
             video.youtube_id.as_str(),
             output_dir,
             existing_folder,
+        )
+    }
+
+    fn schedule_fetch(&self, video: &Video, output_dir: &Path) -> anyhow::Result<()> {
+        self.task_repository.schedule(
+            &Task::FetchThumbnail {
+                video_id: video.id.as_str().to_string(),
+                output_dir: output_dir.to_string_lossy().to_string(),
+            },
+            self.clock.now(),
         )
     }
 
