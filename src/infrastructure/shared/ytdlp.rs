@@ -99,7 +99,7 @@ fn parse_duration_seconds(line: &str) -> Option<i64> {
 /// Runs `<ytdlp_path> <args> <video_url>` inside the video's own dedicated
 /// folder under `output_path`, named from `desired_filename` (disambiguated
 /// on collision by appending `video_id`, the same way a filename collision
-/// used to be resolved — see `resolve_folder_collision`), and reused as the
+/// used to be resolved — see `create_fresh_video_dir`), and reused as the
 /// saved file's base name too (extension chosen by `yt-dlp`). Creates that
 /// folder before invoking `yt-dlp`. This is a pure process-invocation layer
 /// with no YouTube API or XML knowledge — the video's `movie.nfo` metadata
@@ -387,20 +387,32 @@ pub fn list_channel_videos(
         .collect()
 }
 
-/// Returns `desired_folder` unchanged, unless an entry (file or folder)
-/// already exists at exactly that name in `output_path` — a video's own
-/// folder has no extension, so the check is an exact path match rather than
-/// a by-stem scan.
-fn resolve_folder_collision(output_path: &Path, desired_folder: &str, video_id: &str) -> String {
-    if output_path.join(desired_folder).exists() {
-        collision_suffixed_folder(desired_folder, video_id)
-    } else {
-        desired_folder.to_string()
+/// Claims `desired_folder` in `output_path` with a single atomic
+/// `create_dir`, so two concurrent downloads of same-titled videos can't
+/// both take it. If an entry (file or folder) already exists at exactly that
+/// name, falls back to this video's own collision-suffixed folder instead.
+fn create_fresh_video_dir(
+    output_path: &Path,
+    desired_folder: &str,
+    video_id: &str,
+) -> Result<String> {
+    ensure_output_dir(output_path)?;
+    match std::fs::create_dir(output_path.join(desired_folder)) {
+        Ok(()) => Ok(desired_folder.to_string()),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+            let folder = collision_suffixed_folder(desired_folder, video_id);
+            ensure_output_dir(&output_path.join(&folder))?;
+            Ok(folder)
+        }
+        Err(e) => Err(anyhow!(
+            "Failed to create video folder {:?}: {e}",
+            output_path.join(desired_folder)
+        )),
     }
 }
 
 /// The video's resolved per-video folder (`existing_folder` reused verbatim
-/// when given, otherwise a fresh `resolve_folder_collision` result), created
+/// when given, otherwise a fresh one from `create_fresh_video_dir`), created
 /// on disk before either `download_video` or `fetch_thumbnail` invokes
 /// `yt-dlp` inside it.
 struct VideoDir {
@@ -415,11 +427,13 @@ fn prepare_video_dir(
     existing_folder: Option<&str>,
 ) -> Result<VideoDir> {
     let folder = match existing_folder {
-        Some(folder) => folder.to_string(),
-        None => resolve_folder_collision(output_path, desired_filename, video_id),
+        Some(folder) => {
+            ensure_output_dir(&output_path.join(folder))?;
+            folder.to_string()
+        }
+        None => create_fresh_video_dir(output_path, desired_filename, video_id)?,
     };
     let path = output_path.join(&folder);
-    ensure_output_dir(&path)?;
     Ok(VideoDir { folder, path })
 }
 
@@ -1273,6 +1287,49 @@ mod tests {
 
         assert!(result.is_err());
         std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_give_concurrent_same_title_videos_distinct_folders() {
+        use std::collections::HashSet;
+        use std::sync::{Arc, Barrier};
+        use test_support::unique_temp_dir;
+
+        let outcomes: Vec<HashSet<String>> = (0..200)
+            .map(|_| {
+                let output_dir = unique_temp_dir("ytdlp-concurrent-folders");
+                let barrier = Arc::new(Barrier::new(2));
+                let folders: HashSet<String> = ["idA", "idB"]
+                    .into_iter()
+                    .map(|video_id| {
+                        let (output_dir, barrier) = (output_dir.clone(), barrier.clone());
+                        std::thread::spawn(move || {
+                            barrier.wait();
+                            prepare_video_dir(&output_dir, "Song", video_id, None)
+                                .unwrap()
+                                .folder
+                        })
+                    })
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .map(|handle| handle.join().unwrap())
+                    .collect();
+                std::fs::remove_dir_all(&output_dir).unwrap();
+                folders
+            })
+            .collect();
+
+        let valid: [HashSet<String>; 2] = [
+            HashSet::from(["Song".to_string(), "Song [idB]".to_string()]),
+            HashSet::from(["Song [idA]".to_string(), "Song".to_string()]),
+        ];
+        assert_eq!(
+            outcomes
+                .into_iter()
+                .filter(|folders| !valid.contains(folders))
+                .collect::<Vec<_>>(),
+            Vec::<HashSet<String>>::new()
+        );
     }
 
     #[test]

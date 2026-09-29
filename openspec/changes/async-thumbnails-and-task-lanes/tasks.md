@@ -72,7 +72,7 @@ Domain and composition:
 - [x] 3.8 `it_should_update_only_the_thumbnail`: `update_thumbnail` leaves status and download fields intact.
 
 `ytdlp.rs`:
-- [ ] 3.9 `it_should_give_concurrent_same_title_videos_distinct_folders`: atomic `create_dir` in `prepare_video_dir`, falling back to the suffixed name. The existing collision and retry-folder tests stay green.
+- [x] 3.9 `it_should_give_concurrent_same_title_videos_distinct_folders`: atomic `create_dir` in `prepare_video_dir`, falling back to the suffixed name. The existing collision and retry-folder tests stay green.
 
 Composition, frontend and docs (no tests):
 - [ ] 3.10 Wire the real lane scheduler into `TaskExecutor::run`: timer tick plus `Notify` on completion. Verify with `scripts/run-local.sh`: the logs show `dispatching task` for two `download_video` tasks before either finishes.
