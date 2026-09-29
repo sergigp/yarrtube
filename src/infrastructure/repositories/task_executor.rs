@@ -30,7 +30,6 @@ pub struct TaskExecutor {
 struct SchedulerState {
     running: HashMap<TaskLane, usize>,
     held_keys: HashSet<String>,
-    exclusive_running: bool,
 }
 
 /// What a running task holds while it runs: a slot in its lane, and its
@@ -52,6 +51,10 @@ impl Slot {
 impl SchedulerState {
     fn running_in(&self, lane: TaskLane) -> usize {
         self.running.get(&lane).copied().unwrap_or(0)
+    }
+
+    fn exclusive_running(&self) -> bool {
+        self.running_in(TaskLane::Exclusive) > 0
     }
 
     fn is_idle(&self) -> bool {
@@ -103,6 +106,9 @@ impl TaskExecutor {
     /// the tasks it started, so tests can await them.
     pub fn schedule_pass(self: &Arc<Self>) -> anyhow::Result<Vec<JoinHandle<()>>> {
         let mut state = self.lock_state()?;
+        if state.exclusive_running() {
+            return Ok(Vec::new());
+        }
         let eligible = self.repository.list_eligible()?;
         match eligible
             .iter()
@@ -880,6 +886,48 @@ mod tests {
                 running(2, &Task::UpdateYtdlp),
                 pending(3, &download("rec2")),
             ]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_not_start_tasks_while_update_ytdlp_runs() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(BlockingHandler::default());
+        let releases = [
+            handler.gate(&Task::UpdateYtdlp),
+            handler.gate(&reconcile("PL1")),
+        ];
+        task_repository.schedule(&Task::UpdateYtdlp, now()).unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            blocking_registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            2,
+        ));
+        let mut handles = executor.schedule_pass().unwrap();
+        task_repository.schedule(&reconcile("PL1"), now()).unwrap();
+
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                running(1, &Task::UpdateYtdlp),
+                pending(2, &reconcile("PL1")),
+            ]
+        );
+
+        release(&releases[0], handles.remove(0)).await;
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![running(2, &reconcile("PL1"))]
         );
     }
 
