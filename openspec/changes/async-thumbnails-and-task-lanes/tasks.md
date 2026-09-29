@@ -29,7 +29,7 @@ Subscribers:
 - [x] 2.12 `it_should_not_schedule_a_thumbnail_fetch_for_a_video_being_downloaded`: an `InProgress` video gets no task.
 - [x] 2.13 `it_should_keep_the_folder_of_a_download_in_progress`: the bare-title folder of an `InProgress` video without a thumbnail is not deleted.
 - [x] 2.14 `it_should_keep_the_suffixed_folder_of_a_download_in_progress`: the `"{title} [{id}]"` folder is not deleted.
-- [ ] 2.15 `it_should_still_delete_a_folder_no_video_accounts_for`: the orphan sweep still removes unaccounted folders.
+- [x] 2.15 `it_should_still_delete_a_folder_no_video_accounts_for`: the orphan sweep still removes unaccounted folders.
 
 `ReconcileChannelTask`:
 - [ ] 2.16 `it_should_not_fetch_thumbnails_when_adding_new_videos`: channel equivalent of 2.9.
