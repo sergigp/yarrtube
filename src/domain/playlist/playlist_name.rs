@@ -64,6 +64,14 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_accept_a_name_with_filesystem_unsafe_characters() {
+        assert_eq!(
+            PlaylistName::new("AC/DC: hits?"),
+            Ok(PlaylistName("AC/DC: hits?".to_string()))
+        );
+    }
+
     fn error(message: &str) -> ValidationError {
         ValidationError(message.to_string())
     }
