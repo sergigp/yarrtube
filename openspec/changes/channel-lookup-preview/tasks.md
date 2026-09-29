@@ -21,7 +21,7 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
 
 - [x] 2.1 `it_should_preview_a_channel`: the preview returns the channel's handle, title and avatar URL and persists nothing.
 - [x] 2.2 `it_should_preview_a_channel_from_a_youtube_url`: the handle is extracted from a channel URL with trailing segments.
-- [ ] 2.3 `it_should_preview_a_channel_without_an_avatar`: a channel YouTube reports no avatar for previews with no avatar.
+- [x] 2.3 `it_should_preview_a_channel_without_an_avatar`: a channel YouTube reports no avatar for previews with no avatar.
 - [ ] 2.4 `it_should_fail_to_preview_if_invalid_channel_provided`: a handle without `@` is rejected with the value object's message without contacting YouTube.
 - [ ] 2.5 `it_should_fail_to_preview_if_channel_missing`: an absent `channel` query parameter is rejected as empty.
 - [ ] 2.6 `it_should_fail_to_preview_if_channel_not_found_on_youtube`: a channel YouTube doesn't know is reported as not found.

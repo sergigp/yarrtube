@@ -569,6 +569,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_preview_a_channel_without_an_avatar() {
+        let channel_previewer = ChannelPreviewer::new(resolving(Some(resolved_channel())));
+
+        let response = preview(channel_previewer, preview_query("@somechannel")).await;
+
+        assert_eq!(
+            response,
+            Ok(ChannelPreviewResponse {
+                avatar_url: None,
+                ..channel_preview_response()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_delete_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
