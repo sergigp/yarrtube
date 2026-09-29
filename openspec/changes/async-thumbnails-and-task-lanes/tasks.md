@@ -46,7 +46,7 @@ Download and task listing:
 - [x] 2.23 `it_should_run_light_tasks_one_at_a_time`: light lane concurrency is 1.
 - [x] 2.24 `it_should_not_block_reconciles_behind_thumbnail_fetches`: a thumbnail backlog doesn't hold the light lane.
 - [x] 2.25 `it_should_run_thumbnail_fetches_one_at_a_time`: thumbnail lane concurrency is 1.
-- [ ] 2.26 `it_should_not_run_two_tasks_for_the_same_video_at_once`: a held exclusivity key blocks a task for the same video.
+- [x] 2.26 `it_should_not_run_two_tasks_for_the_same_video_at_once`: a held exclusivity key blocks a task for the same video.
 - [ ] 2.27 `it_should_start_a_later_task_when_the_earlier_one_is_held_back`: a `fetch_thumbnail` held back by its video's running download doesn't block the next fetch in the thumbnail lane.
 - [ ] 2.28 `it_should_run_update_ytdlp_only_when_nothing_else_runs`: the exclusive drain. Nothing new starts while the update waits, and it runs alone.
 - [ ] 2.29 `it_should_not_start_tasks_while_update_ytdlp_runs`: no task starts during the update.

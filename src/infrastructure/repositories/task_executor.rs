@@ -33,18 +33,44 @@ struct SchedulerState {
     exclusive_running: bool,
 }
 
+/// What a running task holds while it runs: a slot in its lane, and its
+/// exclusivity key, if it has one.
+struct Slot {
+    lane: TaskLane,
+    key: Option<String>,
+}
+
+impl Slot {
+    fn for_task(task: &ScheduledTask) -> Self {
+        Self {
+            lane: Task::lane_for(&task.task_type),
+            key: Task::exclusivity_key(&task.task_type, &task.payload),
+        }
+    }
+}
+
 impl SchedulerState {
     fn running_in(&self, lane: TaskLane) -> usize {
         self.running.get(&lane).copied().unwrap_or(0)
     }
 
-    fn start(&mut self, lane: TaskLane) {
-        *self.running.entry(lane).or_insert(0) += 1;
+    fn is_held(&self, key: Option<&String>) -> bool {
+        key.is_some_and(|key| self.held_keys.contains(key))
     }
 
-    fn finish(&mut self, lane: TaskLane) {
-        if let Some(count) = self.running.get_mut(&lane) {
+    fn start(&mut self, slot: &Slot) {
+        *self.running.entry(slot.lane).or_insert(0) += 1;
+        if let Some(key) = &slot.key {
+            self.held_keys.insert(key.clone());
+        }
+    }
+
+    fn finish(&mut self, slot: &Slot) {
+        if let Some(count) = self.running.get_mut(&slot.lane) {
             *count = count.saturating_sub(1);
+        }
+        if let Some(key) = &slot.key {
+            self.held_keys.remove(key);
         }
     }
 }
@@ -75,15 +101,17 @@ impl TaskExecutor {
         let mut state = self.lock_state()?;
         let mut handles = Vec::new();
         for task in self.repository.list_eligible()? {
-            let lane = Task::lane_for(&task.task_type);
-            if state.running_in(lane) >= self.capacity(lane) {
+            let slot = Slot::for_task(&task);
+            if state.running_in(slot.lane) >= self.capacity(slot.lane)
+                || state.is_held(slot.key.as_ref())
+            {
                 continue;
             }
             let Some(running) = self.repository.claim(task.id, self.clock.now())? else {
                 continue;
             };
-            state.start(lane);
-            handles.push(self.spawn(running, lane));
+            state.start(&slot);
+            handles.push(self.spawn(running, slot));
         }
         Ok(handles)
     }
@@ -138,9 +166,9 @@ impl TaskExecutor {
         }
     }
 
-    /// Runs `running` on the blocking pool, then frees its lane slot and
-    /// wakes the scheduler so the slot is refilled straight away.
-    fn spawn(self: &Arc<Self>, running: ScheduledTask, lane: TaskLane) -> JoinHandle<()> {
+    /// Runs `running` on the blocking pool, then frees its slot (lane and
+    /// key) and wakes the scheduler so it is refilled straight away.
+    fn spawn(self: &Arc<Self>, running: ScheduledTask, slot: Slot) -> JoinHandle<()> {
         let executor = Arc::clone(self);
         tokio::task::spawn_blocking(move || {
             let id = running.id;
@@ -148,7 +176,7 @@ impl TaskExecutor {
                 error!(task_id = id, error = %e, "failed to record task outcome");
             }
             match executor.lock_state() {
-                Ok(mut state) => state.finish(lane),
+                Ok(mut state) => state.finish(&slot),
                 Err(e) => error!(task_id = id, error = %e, "failed to release task slot"),
             }
             executor.wake.notify_one();
@@ -679,6 +707,49 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![running(2, &fetch_thumbnail("rec2"))]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_not_run_two_tasks_for_the_same_video_at_once() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(BlockingHandler::default());
+        let releases = [
+            handler.gate(&download("rec1")),
+            handler.gate(&fetch_thumbnail("rec1")),
+        ];
+        task_repository.schedule(&download("rec1"), now()).unwrap();
+        task_repository
+            .schedule(&fetch_thumbnail("rec1"), now())
+            .unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            blocking_registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            2,
+        ));
+
+        let mut handles = executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                running(1, &download("rec1")),
+                pending(2, &fetch_thumbnail("rec1")),
+            ]
+        );
+
+        release(&releases[0], handles.remove(0)).await;
+        executor.schedule_pass().unwrap();
+
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![running(2, &fetch_thumbnail("rec1"))]
         );
     }
 
