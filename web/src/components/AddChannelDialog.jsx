@@ -14,22 +14,38 @@ const emptyForm = { channel: '', quality: 'high', video_limit: '3' }
 const emptyLocation = { path: '', destination: '', valid: false }
 
 function DestinationNotice({ videoLimit, location, onChange }) {
+  const destination = (
+    <code className="wrap-anywhere font-mono font-medium text-foreground">
+      {location.destination}
+    </code>
+  )
+  const change = (
+    <button
+      type="button"
+      className="text-primary underline-offset-2 hover:underline"
+      onClick={onChange}
+    >
+      change
+    </button>
+  )
+
+  if (location.occupiedBy) {
+    return (
+      <p
+        className="min-w-0 rounded-md border-l-2 border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        data-testid="destination-notice"
+      >
+        {destination} is already used by {location.occupiedBy}. Choose a different folder.{' '}
+        {change}
+      </p>
+    )
+  }
   return (
     <p
       className="min-w-0 rounded-md border-l-2 border-primary bg-muted/40 px-3 py-2 text-sm"
       data-testid="destination-notice"
     >
-      {channelNoticeLead(videoLimit)}{' '}
-      <code className="wrap-anywhere font-mono font-medium text-foreground">
-        {location.destination}
-      </code>{' '}
-      <button
-        type="button"
-        className="text-primary underline-offset-2 hover:underline"
-        onClick={onChange}
-      >
-        change
-      </button>
+      {channelNoticeLead(videoLimit)} {destination} {change}
     </p>
   )
 }

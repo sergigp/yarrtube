@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { openAddChannelDialog, submitChannel, dialogErrorText } from '../helpers/addDialog.js'
+import {
+  openAddChannelDialog,
+  fillChannel,
+  submitChannel,
+  destinationNotice,
+  dialogErrorText,
+} from '../helpers/addDialog.js'
 import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
 import {
   syncItem,
@@ -11,6 +17,11 @@ import {
 
 const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 const VIDEO_LIMIT = process.env.SMOKE_CHANNEL_VIDEO_LIMIT ?? '1'
+// The folder the dialog derives from a bare handle: without the `@`, slugified.
+const CHANNEL_FOLDER = CHANNEL_HANDLE.replace(/^@+/, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '')
 
 test('channel lifecycle: add, download, play, resume, mark watched, sync, invalid handle error, delete', async ({ page }) => {
   await page.goto('/')
@@ -18,10 +29,24 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, invali
   // Add via the sidebar's "Add channel" and confirm it lands in the sidebar. The
   // channel's display name comes from YouTube, not the handle we typed,
   // so identify it by section rather than by name.
+  // Before submitting, the notice names the destination the videos land in.
   await openAddChannelDialog(page)
-  await submitChannel(page, { handle: CHANNEL_HANDLE, videoLimit: VIDEO_LIMIT })
+  const dialog = await fillChannel(page, { handle: CHANNEL_HANDLE, videoLimit: VIDEO_LIMIT })
+  await expect(destinationNotice(dialog).locator('code')).toHaveText(
+    new RegExp(`/channels/${CHANNEL_FOLDER}$`),
+  )
+  await dialog.getByRole('button', { name: /^Create Channel/ }).click()
+  await dialog.waitFor({ state: 'hidden' })
   const sidebarLink = page.locator('h3:text-is("Channels") ~ ul li a').first()
   await expect(sidebarLink).toBeVisible()
+
+  // The same handle derives the same folder, now taken by the channel just
+  // added, so the notice turns into an error and submission is blocked.
+  await openAddChannelDialog(page)
+  await fillChannel(page, { handle: CHANNEL_HANDLE })
+  await expect(destinationNotice(dialog)).toContainText('already used by')
+  await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Close' }).click()
 
   // Follow it into the detail view and wait for a video to download. No
   // fixed title is asserted, since the channel's newest video can change;

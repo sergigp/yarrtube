@@ -25,7 +25,7 @@ Each task is one red-green-refactor cycle with the named smoke test. Red means t
 - [x] 2.4 `addChannelDialog.spec.js` › `it should update the notice from the advanced options`: limit 1 gives "The latest video". A renamed folder shows in the path. `channelNoticeLead` handles the singular, plural and invalid-limit cases.
 - [x] 2.5 `addChannelDialog.spec.js` › `it should expand advanced options from the change action`: `[change]` sets `advancedOpen`, and `Folder name` is visible with the derived value.
 - [x] 2.6 `mobile-sidebar.spec.js` › `it should close the drawer and open the add channel dialog`: at 390px, "Add channel" closes the drawer and shows the dialog.
-- [ ] 2.7 `channel.spec.js` › lifecycle:
+- [x] 2.7 `channel.spec.js` › lifecycle:
   - Before submitting, the notice names `/channels/<slug>`.
   - After creation, reopening with the same handle shows the error notice ("already used by"), and `Create Channel` is disabled.
   - `LocationField` reports `occupiedBy`, and the notice switches to its error style.

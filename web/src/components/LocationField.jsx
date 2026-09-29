@@ -169,8 +169,8 @@ export function LocationField({ mode, nameSource, onChange, showDestination = tr
   // path that reads as absolute but is missing its prefix.
   const destination = root && !folderNameError ? `${root}/${destinationPath}` : ''
   useEffect(() => {
-    onChange({ path: destinationPath, destination, valid })
-  }, [onChange, destinationPath, destination, valid])
+    onChange({ path: destinationPath, destination, valid, occupiedBy })
+  }, [onChange, destinationPath, destination, valid, occupiedBy])
 
   const goTo = (next) => {
     setParent(next)
