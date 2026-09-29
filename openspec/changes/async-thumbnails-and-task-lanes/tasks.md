@@ -13,7 +13,7 @@
 Subscribers:
 - [x] 2.1 `fetch_thumbnail_on_video_added_to_playlist` › `it_should_schedule_a_thumbnail_fetch`: a `VideoAddedToPlaylist` schedules a `fetch_thumbnail` task for the video in the playlist's output dir.
 - [x] 2.2 `fetch_thumbnail_on_video_added_to_playlist` › `it_should_skip_if_playlist_no_longer_exists`: no task, `Ok(())`.
-- [ ] 2.3 `fetch_thumbnail_on_video_added_to_channel` › `it_should_schedule_a_thumbnail_fetch`: channel equivalent of 2.1.
+- [x] 2.3 `fetch_thumbnail_on_video_added_to_channel` › `it_should_schedule_a_thumbnail_fetch`: channel equivalent of 2.1.
 - [ ] 2.4 `fetch_thumbnail_on_video_added_to_channel` › `it_should_skip_if_channel_no_longer_exists`: channel equivalent of 2.2.
 
 `FetchThumbnailTask`:
