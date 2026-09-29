@@ -4,7 +4,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
 use crate::domain::task::Task;
-use crate::domain::video::video_filename::VideoFilename;
+use crate::domain::video::video_filename::video_folder_candidates;
 use crate::domain::video::{
     Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
 };
@@ -319,7 +319,7 @@ impl PlaylistVideoReconciler {
         let in_flight_folders: Vec<String> = stored_videos
             .iter()
             .filter(|v| v.status == VideoStatus::InProgress)
-            .map(|v| VideoFilename::from_title(&v.title).as_str().to_string())
+            .flat_map(|v| video_folder_candidates(&v.title, &v.youtube_id))
             .collect();
         let protected_top_level: HashSet<&str> = downloaded
             .iter()
