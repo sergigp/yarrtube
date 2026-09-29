@@ -4,6 +4,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
 use crate::domain::task::Task;
+use crate::domain::video::video_filename::VideoFilename;
 use crate::domain::video::{
     Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
 };
@@ -313,6 +314,13 @@ impl PlaylistVideoReconciler {
         // status: a `Pending`/`InProgress` video may already have a
         // pre-fetched thumbnail on disk, ahead of its own download — see
         // the `video-thumbnails` capability.
+        // A download's folder is only recorded once it completes, so the
+        // folder an in-flight download is writing into is protected by name.
+        let in_flight_folders: Vec<String> = stored_videos
+            .iter()
+            .filter(|v| v.status == VideoStatus::InProgress)
+            .map(|v| VideoFilename::from_title(&v.title).as_str().to_string())
+            .collect();
         let protected_top_level: HashSet<&str> = downloaded
             .iter()
             .filter_map(|v| v.filename.as_deref())
@@ -321,6 +329,7 @@ impl PlaylistVideoReconciler {
                     .iter()
                     .filter_map(|v| v.thumbnail_filename.as_deref()),
             )
+            .chain(in_flight_folders.iter().map(String::as_str))
             .map(top_level_entry)
             .collect();
         let playlist_position_by_video: HashMap<&VideoRecordId, Option<i64>> =
