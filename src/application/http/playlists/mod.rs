@@ -205,6 +205,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_name_the_playlist_after_its_id_if_youtube_title_blank() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(ResolvedPlaylist {
+                    title: "  ".to_string(),
+                    ..resolved_playlist()
+                }),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(playlist_creator, create_request("PLabc123")).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                PlaylistResponse {
+                    name: "PLabc123".to_string(),
+                    ..playlist_response("PLabc123", DEFAULT_PATH)
+                }
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![Playlist {
+                name: PlaylistName::new("PLabc123").unwrap(),
+                ..playlist("PLabc123", DEFAULT_PATH)
+            }]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, playlist_created("PLabc123"))]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_return_the_existing_playlist_if_already_created() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));

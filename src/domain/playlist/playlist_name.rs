@@ -24,8 +24,12 @@ impl PlaylistName {
         Ok(Self(name))
     }
 
-    /// Names a playlist after the title YouTube reports for it.
-    pub fn from_youtube_title(title: &str, _id: &PlaylistId) -> Self {
+    /// Names a playlist after the title YouTube reports for it, or after its
+    /// ID when that title is blank.
+    pub fn from_youtube_title(title: &str, id: &PlaylistId) -> Self {
+        if title.trim().is_empty() {
+            return Self(id.as_str().to_string());
+        }
         Self(title.to_string())
     }
 

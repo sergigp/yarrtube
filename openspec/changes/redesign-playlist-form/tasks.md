@@ -25,7 +25,7 @@
 
 Rust cycles: red is an assertion failure, and green is `cargo test --locked` fully passing. Smoke cycles: green is `npm run build`, `npm run lint` and the full `scripts/run-smoke-tests.sh` passing.
 
-- [ ] 2.1 `it_should_name_the_playlist_after_its_id_if_youtube_title_blank`: when the YouTube title is blank, the created playlist is named after its ID.
+- [x] 2.1 `it_should_name_the_playlist_after_its_id_if_youtube_title_blank`: when the YouTube title is blank, the created playlist is named after its ID.
 - [ ] 2.2 `it_should_create_a_playlist_with_a_title_unsafe_for_filesystems`: a title such as "AC/DC: greatest hits?" is stored and listed back. This drives dropping the unsafe-character rule from `PlaylistName::new`, which the SQLite read path goes through.
 - [ ] 2.3 `it_should_preview_a_playlist`: the preview returns the playlist's ID, title and video count and persists nothing.
 - [ ] 2.4 `it_should_preview_a_playlist_from_a_youtube_url`: the ID is extracted from a watch URL carrying `list=`.
