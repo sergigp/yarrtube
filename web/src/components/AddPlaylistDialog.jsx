@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react'
 import { createPlaylist } from '../api'
 import { useInvalidateLibrary, usePlaylistPreview, usePlaylists } from '../queries'
-import { useDebouncedValue } from '../useDebouncedValue'
+import { useLookup } from '../useLookup'
 import { playlistNoticeLead } from '../playlistNotice'
 import { DestinationNotice, DestinationPath } from './DestinationNotice'
+import { lookupNotice } from './lookupNotice'
 import { LocationField } from './LocationField'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -13,19 +14,18 @@ import { Button } from '@/components/ui/button'
 
 const emptyForm = { playlist: '', quality: 'high' }
 const emptyLocation = { path: '', destination: '', valid: false }
-const LOOKUP_DEBOUNCE_MS = 400
+
+function sameId(a, b) {
+  return a === b
+}
 
 /** The first case that applies wins: an error blocks, so it outranks the destination. */
-function PlaylistNotice({ lookingUp, preview, tracked, location, onChange }) {
-  if (lookingUp) {
-    return <DestinationNotice tone="info">Looking up playlist…</DestinationNotice>
+function PlaylistNotice({ lookup, location, onChange }) {
+  const pending = lookupNotice('playlist', lookup)
+  if (pending) {
+    return pending
   }
-  if (preview.error) {
-    return <DestinationNotice tone="error">{preview.error.message}</DestinationNotice>
-  }
-  if (tracked) {
-    return <DestinationNotice tone="error">Already added as “{tracked.name}”</DestinationNotice>
-  }
+  const { preview } = lookup
   const destination = <DestinationPath>{location.destination}</DestinationPath>
   if (location.occupiedBy) {
     return (
@@ -52,13 +52,8 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
   const [submitting, setSubmitting] = useState(false)
   const invalidateLibrary = useInvalidateLibrary()
   const entered = form.playlist.trim()
-  const debounced = useDebouncedValue(entered, LOOKUP_DEBOUNCE_MS)
-  const preview = usePlaylistPreview(debounced)
-  // Until the lookup has caught up with the field, whatever the preview holds
-  // belongs to an earlier value.
-  const lookingUp = debounced !== entered || preview.isFetching
   const playlists = usePlaylists()
-  const tracked = preview.data && playlists.data?.find((playlist) => playlist.id === preview.data.id)
+  const lookup = useLookup(entered, usePlaylistPreview, playlists.data, sameId)
 
   const resetAll = () => {
     setForm(emptyForm)
@@ -82,8 +77,7 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
   // Stable: `LocationField` reports the composed destination from an effect.
   const handleLocationChange = useCallback((next) => setLocation(next), [])
 
-  const canSubmit =
-    Boolean(preview.data) && !tracked && !lookingUp && location.valid && !submitting
+  const canSubmit = lookup.addable && location.valid && !submitting
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -135,9 +129,7 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
             {/* Helper text under the field, as in the channel dialog. */}
             {entered && (
               <PlaylistNotice
-                lookingUp={lookingUp}
-                preview={preview}
-                tracked={tracked}
+                lookup={lookup}
                 location={location}
                 onChange={() => setAdvancedOpen(true)}
               />
@@ -160,7 +152,7 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
             <div className="mt-3 flex flex-col gap-4" hidden={!advancedOpen}>
               <LocationField
                 mode="playlist"
-                nameSource={preview.data?.title ?? ''}
+                nameSource={lookup.preview.data?.title ?? ''}
                 onChange={handleLocationChange}
               />
               <VideoQualityField

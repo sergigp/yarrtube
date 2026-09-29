@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react'
 import { createChannel } from '../api'
 import { useChannelPreview, useChannels, useInvalidateLibrary } from '../queries'
-import { useDebouncedValue } from '../useDebouncedValue'
+import { useLookup } from '../useLookup'
 import { deriveChannelPathSegment } from '../channelHandle'
 import { channelNoticeLead } from '../channelNotice'
 import { DestinationNotice, DestinationPath } from './DestinationNotice'
+import { lookupNotice } from './lookupNotice'
 import { LocationField } from './LocationField'
 import { Thumbnail } from './Thumbnail'
 import { VideoQualityField } from './VideoQualityField'
@@ -15,7 +16,6 @@ import { Button } from '@/components/ui/button'
 
 const emptyForm = { channel: '', quality: 'high', video_limit: '3' }
 const emptyLocation = { path: '', destination: '', valid: false }
-const LOOKUP_DEBOUNCE_MS = 400
 
 /** YouTube treats `@Name` and `@name` as the same channel. */
 function sameHandle(a, b) {
@@ -23,16 +23,12 @@ function sameHandle(a, b) {
 }
 
 /** The first case that applies wins: an error blocks, so it outranks the destination. */
-function ChannelNotice({ lookingUp, preview, tracked, videoLimit, location, onChange }) {
-  if (lookingUp) {
-    return <DestinationNotice tone="info">Looking up channel…</DestinationNotice>
+function ChannelNotice({ lookup, videoLimit, location, onChange }) {
+  const pending = lookupNotice('channel', lookup)
+  if (pending) {
+    return pending
   }
-  if (preview.error) {
-    return <DestinationNotice tone="error">{preview.error.message}</DestinationNotice>
-  }
-  if (tracked) {
-    return <DestinationNotice tone="error">Already added as “{tracked.name}”</DestinationNotice>
-  }
+  const { preview } = lookup
   const destination = <DestinationPath>{location.destination}</DestinationPath>
   if (location.occupiedBy) {
     return (
@@ -65,14 +61,8 @@ export function AddChannelDialog({ open, onOpenChange }) {
   const [submitting, setSubmitting] = useState(false)
   const invalidateLibrary = useInvalidateLibrary()
   const entered = form.channel.trim()
-  const debounced = useDebouncedValue(entered, LOOKUP_DEBOUNCE_MS)
-  const preview = useChannelPreview(debounced)
-  // Until the lookup has caught up with the field, whatever the preview holds
-  // belongs to an earlier value.
-  const lookingUp = debounced !== entered || preview.isFetching
   const channels = useChannels()
-  const tracked =
-    preview.data && channels.data?.find((channel) => sameHandle(channel.id, preview.data.id))
+  const lookup = useLookup(entered, useChannelPreview, channels.data, sameHandle)
 
   const resetAll = () => {
     setForm(emptyForm)
@@ -96,8 +86,7 @@ export function AddChannelDialog({ open, onOpenChange }) {
   // Stable: `LocationField` reports the composed destination from an effect.
   const handleLocationChange = useCallback((next) => setLocation(next), [])
 
-  const canSubmit =
-    Boolean(preview.data) && !tracked && !lookingUp && location.valid && !submitting
+  const canSubmit = lookup.addable && location.valid && !submitting
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -152,9 +141,7 @@ export function AddChannelDialog({ open, onOpenChange }) {
                 confirms the defaults without competing with the form. */}
             {entered && (
               <ChannelNotice
-                lookingUp={lookingUp}
-                preview={preview}
-                tracked={tracked}
+                lookup={lookup}
                 videoLimit={form.video_limit}
                 location={location}
                 onChange={() => setAdvancedOpen(true)}
