@@ -9,6 +9,8 @@ The system SHALL provide an HTTP endpoint that creates a channel given a `channe
 
 The stored ID is the handle, not the immutable channel ID, so the HTTP surface stays human-readable (e.g. `DELETE /channels/@somechannel`). The immutable ID is stored alongside it because a handle can be changed later by the channel's owner, while the immutable ID cannot.
 
+When deciding whether a channel already exists in storage, the system SHALL compare handles ignoring case, since YouTube treats handles that differ only in case (`@Name`, `@name`) as the same channel.
+
 The storage path identifies where the channel's videos are saved, relative to the configured videos root directory, and may contain multiple `/`-separated segments to express nested subdirectories (e.g. `creators/somechannel`), the same as a playlist's storage path.
 
 #### Scenario: Successful creation from a bare handle
@@ -22,6 +24,10 @@ The storage path identifies where the channel's videos are saved, relative to th
 #### Scenario: Duplicate channel handle
 - **WHEN** a request supplies a `channel` value (bare handle or URL) whose handle already exists in storage
 - **THEN** the system accepts the request but makes no change because the endpoint is idempotent, and returns the existing channel record
+
+#### Scenario: Duplicate channel handle in a different case
+- **WHEN** a request supplies a `channel` value whose handle differs only in case from one already in storage (e.g. `@SomeChannel` when `@somechannel` is stored)
+- **THEN** the system makes no change and returns the existing channel record, with its stored handle
 
 #### Scenario: Duplicate channel handle with a different quality
 - **WHEN** a request supplies a `channel` value whose handle already exists in storage, with a quality value different from the stored record's
