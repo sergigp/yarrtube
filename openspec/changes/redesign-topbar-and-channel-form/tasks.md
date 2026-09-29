@@ -38,7 +38,7 @@ None. The change is frontend only.
 
 - [x] 4.1 `playlist.spec.js` and `addDialogLocation.spec.js` pass unchanged apart from the opener. `scripts/run-smoke-tests.sh` is fully green.
 - [x] 4.2 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass (no Rust changes expected).
-- [ ] 4.3 Manual check with `scripts/run-local.sh` at desktop width and at about 375px:
+- [x] 4.3 Manual check with `scripts/run-local.sh` at desktop width and at about 375px:
   - The header shows only the logo (plus the menu button on mobile) and the gear, and the gear menu leads to Tasks.
   - "Add channel" and "Add playlist" sit under their headings, including when a section is empty or collapsed.
   - The channel dialog shows only the handle field until something is typed. Then the notice appears above "Advanced options" and follows limit and folder edits, and `[change]` expands the section.
