@@ -1,3 +1,5 @@
+import { expect } from '@playwright/test'
+
 async function openFromSidebar(page, label) {
   await page.getByRole('button', { name: label, exact: true }).click()
   await page.getByRole('dialog').waitFor({ state: 'visible' })
@@ -11,7 +13,7 @@ export async function openAddPlaylistDialog(page) {
   await openFromSidebar(page, 'Add playlist')
 }
 
-async function openAdvancedOptions(dialog) {
+export async function openAdvancedOptions(dialog) {
   const toggle = dialog.getByRole('button', { name: /Advanced options/ })
   if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
     await toggle.click()
@@ -44,8 +46,12 @@ export function breadcrumbLinks(dialog) {
   return dialog.getByRole('navigation', { name: 'Folder path' }).getByRole('button')
 }
 
-export function destinationPreview(dialog) {
-  return dialog.getByTestId('destination-path')
+/** The folder name the dialogs derive from a title (see `web/src/slugify.js`). */
+export function slugOf(title) {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 export function destinationNotice(dialog) {
@@ -103,16 +109,26 @@ async function submitAndSettle(dialog) {
   ])
 }
 
-export async function fillPlaylist(page, { url, name, parent, folderName }) {
+/**
+ * Enters `url` and waits for the lookup to settle, so the folder name has
+ * been derived from the playlist's title before any location is set. The
+ * playlist dialog keeps its location inside "Advanced options".
+ */
+export async function fillPlaylist(page, { url, parent, folderName }) {
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Playlist ID or URL').fill(url)
-  await dialog.getByLabel('Name', { exact: true }).fill(name)
+  const notice = destinationNotice(dialog)
+  await expect(notice).toBeVisible()
+  await expect(notice).not.toHaveText(/Looking up playlist/, { timeout: 15_000 })
+  if (parent !== undefined || folderName !== undefined) {
+    await openAdvancedOptions(dialog)
+  }
   await setLocation(dialog, { parent, folderName })
   return dialog
 }
 
-export async function submitPlaylist(page, { url, name, parent, folderName }) {
-  const dialog = await fillPlaylist(page, { url, name, parent, folderName })
+export async function submitPlaylist(page, { url, parent, folderName }) {
+  const dialog = await fillPlaylist(page, { url, parent, folderName })
   await dialog.getByRole('button', { name: /^Create Playlist/ }).click()
   await submitAndSettle(dialog)
 }

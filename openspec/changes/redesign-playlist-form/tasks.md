@@ -37,7 +37,7 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
 - [x] 2.10 `PlaylistName` › `it_should_name_after_the_id_if_youtube_title_blank`: `from_youtube_title` falls back to the ID.
 - [x] 2.11 `addPlaylistDialog.spec.js` › `it should show no notice until a playlist is entered`: the `destination-notice` element is absent and `Create Playlist` is disabled while the field is empty.
 - [x] 2.12 `addPlaylistDialog.spec.js` › `it should explain a value that is not a playlist`: the debounced preview's 400 message shows as an error notice, and submit stays disabled.
-- [ ] 2.13 `addPlaylistDialog.spec.js` › `it should state the title, count and destination`:
+- [x] 2.13 `addPlaylistDialog.spec.js` › `it should state the title, count and destination`:
   - Remove the `Name` field.
   - Feed `LocationField` the preview's title.
   - Move location and quality into the mounted-but-`hidden` "Advanced options".

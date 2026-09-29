@@ -2,7 +2,8 @@ import { useCallback, useState } from 'react'
 import { createPlaylist } from '../api'
 import { useInvalidateLibrary, usePlaylistPreview } from '../queries'
 import { useDebouncedValue } from '../useDebouncedValue'
-import { DestinationNotice } from './DestinationNotice'
+import { playlistNoticeLead } from '../playlistNotice'
+import { DestinationNotice, DestinationPath } from './DestinationNotice'
 import { LocationField } from './LocationField'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -10,9 +11,35 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 
-const emptyForm = { playlist: '', name: '', quality: 'high' }
-const emptyLocation = { path: '', valid: false }
+const emptyForm = { playlist: '', quality: 'high' }
+const emptyLocation = { path: '', destination: '', valid: false }
 const LOOKUP_DEBOUNCE_MS = 400
+
+/** The first case that applies wins: an error blocks, so it outranks the destination. */
+function PlaylistNotice({ lookingUp, preview, location, onChange }) {
+  if (lookingUp) {
+    return <DestinationNotice tone="info">Looking up playlist…</DestinationNotice>
+  }
+  if (preview.error) {
+    return <DestinationNotice tone="error">{preview.error.message}</DestinationNotice>
+  }
+  const destination = <DestinationPath>{location.destination}</DestinationPath>
+  if (location.occupiedBy) {
+    return (
+      <DestinationNotice tone="error" onChange={onChange}>
+        {destination} is already used by {location.occupiedBy}. Choose a different folder.
+      </DestinationNotice>
+    )
+  }
+  if (preview.data && location.destination) {
+    return (
+      <DestinationNotice tone="info" onChange={onChange}>
+        {playlistNoticeLead(preview.data.video_count, preview.data.title)} {destination}
+      </DestinationNotice>
+    )
+  }
+  return null
+}
 
 export function AddPlaylistDialog({ open, onOpenChange }) {
   const [form, setForm] = useState(emptyForm)
@@ -21,8 +48,12 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const invalidateLibrary = useInvalidateLibrary()
-  const debounced = useDebouncedValue(form.playlist.trim(), LOOKUP_DEBOUNCE_MS)
+  const entered = form.playlist.trim()
+  const debounced = useDebouncedValue(entered, LOOKUP_DEBOUNCE_MS)
   const preview = usePlaylistPreview(debounced)
+  // Until the lookup has caught up with the field, whatever the preview holds
+  // belongs to an earlier value.
+  const lookingUp = debounced !== entered || preview.isFetching
 
   const resetAll = () => {
     setForm(emptyForm)
@@ -46,9 +77,11 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
   // Stable: `LocationField` reports the composed destination from an effect.
   const handleLocationChange = useCallback((next) => setLocation(next), [])
 
+  const canSubmit = Boolean(preview.data) && !lookingUp && location.valid && !submitting
+
   const handleSubmit = async (event) => {
     event.preventDefault()
-    if (!location.valid) {
+    if (!canSubmit) {
       return
     }
     setSubmitting(true)
@@ -56,7 +89,6 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
     try {
       await createPlaylist({
         playlist: form.playlist,
-        name: form.name,
         path: location.path,
         quality: form.quality,
       })
@@ -72,12 +104,11 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      {/* The location controls make this dialog tall enough to outgrow a short
-          viewport, and `DialogContent` is centered with no height cap, so
-          without the max-height the submit button can end up off-screen.
-          `overflow-x-hidden` is not redundant: capping one axis makes CSS
-          compute the other to `auto`, which would let a long path scroll the
-          dialog sideways. */}
+      {/* `DialogContent` is centered with no height cap, so without the
+          max-height an expanded "Advanced options" can push the submit button
+          off a short viewport. `overflow-x-hidden` is not redundant: capping
+          one axis makes CSS compute the other to `auto`, which would let a
+          long path scroll the dialog sideways. */}
       <DialogContent
         className="max-h-[calc(100dvh-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-md"
         onPointerDownOutside={(event) => event.preventDefault()}
@@ -95,22 +126,16 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
               onChange={setField('playlist')}
               required
             />
-            {form.playlist.trim() && preview.error && (
-              <DestinationNotice tone="error">{preview.error.message}</DestinationNotice>
+            {/* Helper text under the field, as in the channel dialog. */}
+            {entered && (
+              <PlaylistNotice
+                lookingUp={lookingUp}
+                preview={preview}
+                location={location}
+                onChange={() => setAdvancedOpen(true)}
+              />
             )}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="add-playlist-name">Name</Label>
-            <Input
-              id="add-playlist-name"
-              type="text"
-              value={form.name}
-              onChange={setField('name')}
-              required
-            />
-          </div>
-
-          <LocationField mode="playlist" nameSource={form.name} onChange={handleLocationChange} />
 
           <div className="border-t border-border pt-3">
             <button
@@ -122,19 +147,25 @@ export function AddPlaylistDialog({ open, onOpenChange }) {
               {advancedOpen ? '▾' : '▸'} Advanced options
             </button>
 
-            {advancedOpen && (
-              <div className="mt-3 flex flex-col gap-4">
-                <VideoQualityField
-                  id="add-playlist-quality"
-                  value={form.quality}
-                  onChange={setField('quality')}
-                />
-              </div>
-            )}
+            {/* Kept mounted while collapsed: `LocationField` holds the
+                browsed parent and edited folder name, and reports the
+                destination the notice above shows. */}
+            <div className="mt-3 flex flex-col gap-4" hidden={!advancedOpen}>
+              <LocationField
+                mode="playlist"
+                nameSource={preview.data?.title ?? ''}
+                onChange={handleLocationChange}
+              />
+              <VideoQualityField
+                id="add-playlist-quality"
+                value={form.quality}
+                onChange={setField('quality')}
+              />
+            </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error.message}</p>}
-          <Button type="submit" disabled={submitting || !location.valid} className="self-start">
+          <Button type="submit" disabled={!canSubmit} className="self-start">
             {submitting ? 'Creating…' : 'Create Playlist'}
           </Button>
         </form>

@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { openAddPlaylistDialog, submitPlaylist, fillPlaylist } from '../helpers/addDialog.js'
+import {
+  openAddPlaylistDialog,
+  submitPlaylist,
+  fillPlaylist,
+  destinationNotice,
+} from '../helpers/addDialog.js'
 import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
 import { syncItem, deleteItem, sectionRows } from '../helpers/sidebar.js'
 
@@ -13,7 +18,7 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
 
   // Add via the sidebar's "Add playlist" and confirm it lands in the sidebar.
   await openAddPlaylistDialog(page)
-  await submitPlaylist(page, { url: PLAYLIST_ID, name: PLAYLIST_NAME })
+  await submitPlaylist(page, { url: PLAYLIST_ID })
   const sidebarLink = page.locator('h3:text-is("Playlists") ~ ul').getByRole('link', { name: PLAYLIST_NAME })
   await expect(sidebarLink).toBeVisible()
 
@@ -81,16 +86,14 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   // Sync from the sidebar completes without an error dialog/alert.
   await syncItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
 
-  // The same name auto-derives the same folder under the same default
-  // parent as the already-tracked playlist. That conflict is now caught in
-  // the dialog, before submission, so the preview reports it and the submit
-  // button stays disabled — there is no rejected request to recover from.
+  // The same playlist's title auto-derives the same folder under the same
+  // default parent as the already-tracked playlist. That conflict is caught
+  // in the dialog, before submission, so the notice reports it and the
+  // submit button stays disabled — there is no rejected request to recover
+  // from.
   await openAddPlaylistDialog(page)
-  const dialog = await fillPlaylist(page, {
-    url: 'not-a-real-playlist-id-path-conflict-check',
-    name: PLAYLIST_NAME,
-  })
-  await expect(dialog.getByText(/Already used by/)).toBeVisible()
+  const dialog = await fillPlaylist(page, { url: PLAYLIST_ID })
+  await expect(destinationNotice(dialog)).toContainText('is already used by')
   await expect(dialog.getByRole('button', { name: /^Create Playlist/ })).toBeDisabled()
   await dialog.getByRole('button', { name: 'Close' }).click()
 

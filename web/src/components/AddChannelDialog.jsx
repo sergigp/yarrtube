@@ -138,7 +138,6 @@ export function AddChannelDialog({ open, onOpenChange }) {
                 mode="channel"
                 nameSource={deriveChannelPathSegment(form.channel)}
                 onChange={handleLocationChange}
-                showDestination={false}
               />
               <VideoQualityField
                 id="add-channel-quality"

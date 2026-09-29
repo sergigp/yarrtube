@@ -19,18 +19,6 @@ function isStaged(path, stagedFrom) {
   return Boolean(stagedFrom) && (path === stagedFrom || path.startsWith(`${stagedFrom}/`))
 }
 
-/**
- * The segments of `parent` that do not exist yet: everything from the staged
- * ancestor downwards. A parent adopted through the create-folder step can be
- * several levels deep, so this is a list, not a single name.
- */
-function stagedSegments(parent, stagedFrom) {
-  if (!isStaged(parent, stagedFrom)) {
-    return []
-  }
-  return parent.split('/').slice(stagedFrom.split('/').length - 1)
-}
-
 function breadcrumb(parent, rootLabel) {
   const segments = parent ? parent.split('/') : []
   return [
@@ -45,8 +33,8 @@ function breadcrumb(parent, rootLabel) {
 /**
  * The videos root's own directory name. The breadcrumb only needs to identify
  * the root, and spelling out a deep absolute path there is what used to force
- * the dialog wider than its own width; the full path belongs in the
- * destination, which is the one place it is the point.
+ * the dialog wider than its own width; the full path belongs in the dialog's
+ * destination notice, which is the one place it is the point.
  */
 function shortRootLabel(root) {
   return root.split('/').filter(Boolean).pop() ?? 'videos'
@@ -55,15 +43,14 @@ function shortRootLabel(root) {
 /**
  * The storage location: a parent folder chosen only by browsing what is on
  * disk, and a folder name for the directory the videos land in. The two read
- * as one path-shaped control, with the resolved destination below it carrying
- * the visual weight — the destination is the outcome the user is deciding,
- * the controls are only how it gets composed.
+ * as one path-shaped control. The resolved destination is not shown here: it
+ * is reported through `onChange`, and each dialog states it in its notice.
  *
  * `onChange` must be referentially stable (wrap it in `useCallback`): it is
  * called from an effect whenever the composed destination or its validity
  * changes.
  */
-export function LocationField({ mode, nameSource, onChange, showDestination = true }) {
+export function LocationField({ mode, nameSource, onChange }) {
   const [parent, setParent] = useState(DEFAULT_PARENTS[mode])
   const [stagedFrom, setStagedFrom] = useState(null)
   const [browserOpen, setBrowserOpen] = useState(false)
@@ -148,11 +135,8 @@ export function LocationField({ mode, nameSource, onChange, showDestination = tr
   // session.
   const folderName = folderNameEdited ? editedFolderName : slugify(nameSource)
 
-  const newParentSegments = stagedSegments(parent, stagedFrom)
   const destinationPath = folderName ? join(parent, folderName) : ''
   const occupiedBy = destinationPath ? occupied.get(destinationPath) : undefined
-  const leafExists = !staged && entries.includes(folderName)
-  const newDirectories = [...newParentSegments, ...(folderName && !leafExists ? [folderName] : [])]
 
   const folderNameError = useMemo(() => {
     if (!folderName) {
@@ -352,45 +336,6 @@ export function LocationField({ mode, nameSource, onChange, showDestination = tr
               New folder
             </button>
           )}
-        </div>
-      )}
-
-      {/* The result of every control above it, so it carries the weight: the
-          user is choosing where videos end up, not which widget to click.
-          A caller that shows the destination its own way turns it off. */}
-      {showDestination && (
-        <div className="min-w-0 rounded-md border-l-2 border-primary bg-muted/40 px-3 py-2">
-          <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
-            Download destination
-          </p>
-          <p
-            className="mt-1 wrap-anywhere font-mono text-sm font-medium text-foreground"
-            data-testid="destination-path"
-          >
-            {root ? `${root}/` : ''}
-            {folderNameError ? (
-              <>
-                {parent && `${parent}/`}
-                <span className="text-muted-foreground">…</span>
-              </>
-            ) : (
-              destinationPath
-            )}
-          </p>
-          {folderNameError ? null : occupiedBy ? (
-            <p className="mt-1 text-xs font-medium text-destructive">
-              Already used by {occupiedBy}. Choose a different folder.
-            </p>
-          ) : newDirectories.length > 0 ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Will create {newDirectories.length === 1 ? 'a new folder' : 'new folders'}:{' '}
-              {newDirectories.join(', ')}
-            </p>
-          ) : destinationPath ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              This folder already exists. Videos will be added to its contents.
-            </p>
-          ) : null}
         </div>
       )}
     </div>
