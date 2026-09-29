@@ -243,10 +243,23 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn update_thumbnail(
         &self,
-        _id: &VideoRecordId,
-        _thumbnail_filename: &str,
-        _now: DateTime<Utc>,
+        id: &VideoRecordId,
+        thumbnail_filename: &str,
+        now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
+            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        conn.execute(
+            "UPDATE videos SET thumbnail_filename = ?2, updated_at = ?3 WHERE id = ?1",
+            params![id.as_str(), thumbnail_filename, now.to_rfc3339()],
+        )
+        .inspect_err(
+            |e| tracing::error!(video_id = %id, error = %e, "failed to update video thumbnail"),
+        )
+        .context("failed to update video thumbnail")?;
         Ok(())
     }
 
@@ -575,6 +588,27 @@ mod tests {
             repo.find(&original.id).unwrap(),
             Some(Video {
                 title: "Renamed".to_string(),
+                updated_at: later,
+                ..original
+            })
+        );
+    }
+
+    #[test]
+    fn it_should_update_only_the_thumbnail() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let original = video("First", now).start_download(now);
+        repo.save(&original).unwrap();
+
+        repo.update_thumbnail(&original.id, "First/First.jpg", later)
+            .unwrap();
+
+        assert_eq!(
+            repo.find(&original.id).unwrap(),
+            Some(Video {
+                thumbnail_filename: Some("First/First.jpg".to_string()),
                 updated_at: later,
                 ..original
             })

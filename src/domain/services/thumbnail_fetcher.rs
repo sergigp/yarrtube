@@ -129,12 +129,14 @@ impl ThumbnailFetcher {
         )
     }
 
+    /// Writes only the thumbnail: a download of the same video may have
+    /// changed its status since `video` was read.
     fn record_thumbnail(&self, video: &Video, fetched: FetchedThumbnail) {
         let thumbnail_filename = format!("{}/{}", fetched.folder, fetched.filename);
-        let updated = video
-            .clone()
-            .with_thumbnail(thumbnail_filename, self.clock.now());
-        if let Err(e) = self.video_repository.update(&updated) {
+        if let Err(e) =
+            self.video_repository
+                .update_thumbnail(&video.id, &thumbnail_filename, self.clock.now())
+        {
             warn!(video_id = %video.id, error = %e, "failed to persist fetched thumbnail");
         }
     }

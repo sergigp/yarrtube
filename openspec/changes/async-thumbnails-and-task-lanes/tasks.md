@@ -69,7 +69,7 @@ Domain and composition:
 
 `SqliteVideoRepository`:
 - [x] 3.7 `it_should_update_only_the_title`: `update_title` leaves status and download fields intact.
-- [ ] 3.8 `it_should_update_only_the_thumbnail`: `update_thumbnail` leaves status and download fields intact.
+- [x] 3.8 `it_should_update_only_the_thumbnail`: `update_thumbnail` leaves status and download fields intact.
 
 `ytdlp.rs`:
 - [ ] 3.9 `it_should_give_concurrent_same_title_videos_distinct_folders`: atomic `create_dir` in `prepare_video_dir`, falling back to the suffixed name. The existing collision and retry-folder tests stay green.
