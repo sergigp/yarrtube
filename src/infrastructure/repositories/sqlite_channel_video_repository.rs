@@ -19,6 +19,8 @@ pub trait ChannelVideoRepository: Send + Sync {
     fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<ChannelVideo>>;
     /// Ordered by recency position (`0` = most recent).
     fn list_for_channel(&self, channel_id: &ChannelHandle) -> anyhow::Result<Vec<ChannelVideo>>;
+    /// Every stored channel video, across all channels.
+    fn list(&self) -> anyhow::Result<Vec<ChannelVideo>>;
     fn delete(&self, channel_id: &ChannelHandle, youtube_video_id: &VideoId) -> anyhow::Result<()>;
     fn delete_all_for_channel(&self, channel_id: &ChannelHandle) -> anyhow::Result<()>;
 }
@@ -142,6 +144,10 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
             columns_to_channel_video(columns)
         })
         .collect()
+    }
+
+    fn list(&self) -> anyhow::Result<Vec<ChannelVideo>> {
+        Ok(Vec::new())
     }
 
     fn delete(&self, channel_id: &ChannelHandle, youtube_video_id: &VideoId) -> anyhow::Result<()> {
