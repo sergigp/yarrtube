@@ -133,9 +133,16 @@ export async function submitPlaylist(page, { url, parent, folderName }) {
   await submitAndSettle(dialog)
 }
 
+/**
+ * Enters `handle` and waits for the lookup to settle, so the notice shows
+ * the channel (or why it can't be added) before anything else is changed.
+ */
 export async function fillChannel(page, { handle, videoLimit, parent, folderName }) {
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Channel Handle or URL').fill(handle)
+  const notice = destinationNotice(dialog)
+  await expect(notice).toBeVisible()
+  await expect(notice).not.toHaveText(/Looking up channel/, { timeout: 15_000 })
   // The channel dialog keeps its location inside "Advanced options".
   if (parent !== undefined || folderName !== undefined || videoLimit !== undefined) {
     await openAdvancedOptions(dialog)

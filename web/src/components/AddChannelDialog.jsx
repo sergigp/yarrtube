@@ -6,6 +6,7 @@ import { deriveChannelPathSegment } from '../channelHandle'
 import { channelNoticeLead } from '../channelNotice'
 import { DestinationNotice, DestinationPath } from './DestinationNotice'
 import { LocationField } from './LocationField'
+import { Thumbnail } from './Thumbnail'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -16,7 +17,11 @@ const emptyForm = { channel: '', quality: 'high', video_limit: '3' }
 const emptyLocation = { path: '', destination: '', valid: false }
 const LOOKUP_DEBOUNCE_MS = 400
 
-function ChannelNotice({ preview, videoLimit, location, onChange }) {
+/** The first case that applies wins: an error blocks, so it outranks the destination. */
+function ChannelNotice({ lookingUp, preview, videoLimit, location, onChange }) {
+  if (lookingUp) {
+    return <DestinationNotice tone="info">Looking up channel…</DestinationNotice>
+  }
   if (preview.error) {
     return <DestinationNotice tone="error">{preview.error.message}</DestinationNotice>
   }
@@ -28,11 +33,20 @@ function ChannelNotice({ preview, videoLimit, location, onChange }) {
       </DestinationNotice>
     )
   }
-  return (
-    <DestinationNotice tone="info" onChange={onChange}>
-      {channelNoticeLead(videoLimit)} {destination}
-    </DestinationNotice>
-  )
+  if (preview.data && location.destination) {
+    const avatar = (
+      <Thumbnail
+        src={preview.data.avatar_url}
+        className="mr-1.5 inline-block size-4 rounded-full object-cover align-text-bottom"
+      />
+    )
+    return (
+      <DestinationNotice tone="info" leading={avatar} onChange={onChange}>
+        {channelNoticeLead(videoLimit, preview.data.title)} {destination}
+      </DestinationNotice>
+    )
+  }
+  return null
 }
 
 export function AddChannelDialog({ open, onOpenChange }) {
@@ -45,6 +59,9 @@ export function AddChannelDialog({ open, onOpenChange }) {
   const entered = form.channel.trim()
   const debounced = useDebouncedValue(entered, LOOKUP_DEBOUNCE_MS)
   const preview = useChannelPreview(debounced)
+  // Until the lookup has caught up with the field, whatever the preview holds
+  // belongs to an earlier value.
+  const lookingUp = debounced !== entered || preview.isFetching
 
   const resetAll = () => {
     setForm(emptyForm)
@@ -68,9 +85,11 @@ export function AddChannelDialog({ open, onOpenChange }) {
   // Stable: `LocationField` reports the composed destination from an effect.
   const handleLocationChange = useCallback((next) => setLocation(next), [])
 
+  const canSubmit = Boolean(preview.data) && !lookingUp && location.valid && !submitting
+
   const handleSubmit = async (event) => {
     event.preventDefault()
-    if (preview.error || !location.valid) {
+    if (!canSubmit) {
       return
     }
     setSubmitting(true)
@@ -119,8 +138,9 @@ export function AddChannelDialog({ open, onOpenChange }) {
             />
             {/* Helper text under the field, not a block of its own: it
                 confirms the defaults without competing with the form. */}
-            {entered && (preview.error || location.destination) && (
+            {entered && (
               <ChannelNotice
+                lookingUp={lookingUp}
                 preview={preview}
                 videoLimit={form.video_limit}
                 location={location}
@@ -170,7 +190,7 @@ export function AddChannelDialog({ open, onOpenChange }) {
           </div>
 
           {error && <p className="text-sm text-destructive">{error.message}</p>}
-          <Button type="submit" disabled={submitting || Boolean(preview.error) || !location.valid} className="self-start">
+          <Button type="submit" disabled={!canSubmit} className="self-start">
             {submitting ? 'Creating…' : 'Create Channel'}
           </Button>
         </form>
