@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
-import { usePolling } from '../usePolling'
+import { usePlaylists, usePlaylistVideos } from '../queries'
 import {
-  fetchPlaylists,
-  fetchVideos,
   reconcilePlaylist,
   deletePlaylist,
   videoMediaUrl,
@@ -50,10 +48,10 @@ export function PlaylistDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { data: playlists, error: playlistsError } = usePolling(fetchPlaylists, [])
+  const { data: playlists, error: playlistsError } = usePlaylists()
   const playlist = playlists?.find((item) => item.id === id) ?? null
 
-  const { data: videos, error } = usePolling(() => fetchVideos(id), [id])
+  const { data: videos, error } = usePlaylistVideos(id)
   const [manualSelectionId, setManualSelectionId] = useState(null)
   const manualSelection = manualSelectionId
     ? (videos?.find((video) => video.id === manualSelectionId) ?? null)

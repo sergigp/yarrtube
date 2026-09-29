@@ -1,5 +1,4 @@
-import { usePolling } from '../usePolling'
-import { fetchTasks } from '../api'
+import { useTasks } from '../queries'
 import { formatRelativeTime } from '../formatDateTime'
 import { Beacon } from './Beacon'
 import { Badge } from '@/components/ui/badge'
@@ -57,7 +56,7 @@ const CATEGORY_BADGE_VARIANT = {
 }
 
 export function TasksView() {
-  const { data: tasks, error } = usePolling(fetchTasks, [])
+  const { data: tasks, error } = useTasks()
 
   if (error) {
     return <p className="text-sm text-destructive">Failed to load tasks: {error.message}</p>

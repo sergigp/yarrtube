@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
-import { usePolling } from '../usePolling'
-import { fetchHomeVideos, videoMediaUrl, avatarMediaUrl } from '../api'
+import { useRecentVideos } from '../queries'
+import { videoMediaUrl, avatarMediaUrl } from '../api'
 import { formatDuration } from '../formatDuration'
 import { Thumbnail } from './Thumbnail'
 import { WatchedTick } from './WatchedTick'
@@ -113,7 +113,7 @@ function HomeSection({ title, name, videos, error, hideWhenEmpty, showProgress }
 }
 
 export function Home() {
-  const { data: home, error } = usePolling(fetchHomeVideos, [])
+  const { data: home, error } = useRecentVideos()
 
   return (
     <div className="flex min-w-0 flex-col gap-10">

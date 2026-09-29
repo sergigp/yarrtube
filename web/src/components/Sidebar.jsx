@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { CheckCheck, Ellipsis, RotateCw, Trash2, X } from 'lucide-react'
-import { usePolling } from '../usePolling'
+import { useChannels, usePlaylists } from '../queries'
 import {
-  fetchChannels,
-  fetchPlaylists,
   reconcileChannel,
   reconcilePlaylist,
   deleteChannel,
@@ -202,8 +200,8 @@ function SidebarSection({
 export function Sidebar({ open = false, onClose }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { data: channels, error: channelsError } = usePolling(fetchChannels, [])
-  const { data: playlists, error: playlistsError } = usePolling(fetchPlaylists, [])
+  const { data: channels, error: channelsError } = useChannels()
+  const { data: playlists, error: playlistsError } = usePlaylists()
 
   // The drawer scrolls on its own; keep the page behind it still.
   useEffect(() => {
