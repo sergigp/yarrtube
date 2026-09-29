@@ -58,7 +58,9 @@ impl VideoDownloader {
 
 pub trait VideoDownloaderApi: Send + Sync {
     /// No-ops (without touching status) if the video no longer exists,
-    /// since that means the download no longer needs to happen. Returns
+    /// since that means the download no longer needs to happen. A video
+    /// deleted while its download ran gets nothing recorded, and the folder
+    /// the download wrote is removed. Returns
     /// `Err` on a failed download so the task queue retries/dead-letters it.
     fn download(
         &self,
@@ -86,7 +88,7 @@ impl VideoDownloaderApi for VideoDownloader {
         self.video_repository.update(&started)?;
         match self.run_download(&started, quality, output_dir) {
             Ok(DownloadAttempt::Succeeded(downloaded)) => {
-                self.record_downloaded(started, downloaded, quality, output_dir)
+                self.record_unless_deleted(started, downloaded, quality, output_dir)
             }
             Ok(DownloadAttempt::Failed { stderr }) => {
                 self.record_failed(started, stderr, is_last_attempt)
@@ -116,6 +118,35 @@ impl VideoDownloader {
             output_dir,
             existing_folder,
         )
+    }
+
+    /// The video (or its whole playlist/channel) may have been deleted while
+    /// it downloaded: then the folder the download wrote is removed instead
+    /// of recorded, so no stray folder outlives it.
+    fn record_unless_deleted(
+        &self,
+        started: Video,
+        downloaded: DownloadedVideo,
+        quality: Quality,
+        output_dir: &Path,
+    ) -> anyhow::Result<()> {
+        if self.video_repository.find(&started.id)?.is_none() {
+            self.discard_download(&started, &downloaded, output_dir);
+            return Ok(());
+        }
+        self.record_downloaded(started, downloaded, quality, output_dir)
+    }
+
+    /// Best-effort: a folder that can't be removed is logged, and the next
+    /// reconcile's orphan sweep (if the container still exists) removes it.
+    fn discard_download(&self, video: &Video, downloaded: &DownloadedVideo, output_dir: &Path) {
+        info!(video_id = %video.id, folder = %downloaded.folder, "video deleted during its download, removing the downloaded folder");
+        if let Err(e) = self
+            .video_file_repository
+            .delete(output_dir, &downloaded.folder)
+        {
+            warn!(video_id = %video.id, error = %e, "failed to remove the folder of a download whose video was deleted");
+        }
     }
 
     fn record_downloaded(

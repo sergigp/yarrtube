@@ -237,6 +237,41 @@ mod tests {
     }
 
     #[test]
+    fn it_should_remove_the_folder_if_video_deleted_during_download() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let deleting_repository = video_repository.clone();
+        let deleted_id = video.id.clone();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(
+                FakeVideoDownloaderRepository::new(true).with_on_download(move || {
+                    deleting_repository.delete(&deleted_id).unwrap();
+                }),
+            ),
+            video_file_repository.clone(),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            *video_file_repository.deleted_calls.lock().unwrap(),
+            vec![(
+                PathBuf::from("/videos/my-playlist"),
+                "fake-output".to_string()
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_use_the_sanitized_title_as_filename() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));

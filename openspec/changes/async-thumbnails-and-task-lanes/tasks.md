@@ -37,7 +37,7 @@ Subscribers:
 - [x] 2.18 `it_should_keep_the_folder_of_a_download_in_progress`: channel equivalent of 2.13.
 
 Download and task listing:
-- [ ] 2.19 `download_video_task` › `it_should_remove_the_folder_if_video_deleted_during_download`: the video is deleted mid-download via the fake's `on_download` hook. The download's folder is removed and nothing is recorded.
+- [x] 2.19 `download_video_task` › `it_should_remove_the_folder_if_video_deleted_during_download`: the video is deleted mid-download via the fake's `on_download` hook. The download's folder is removed and nothing is recorded.
 - [ ] 2.20 `http/tasks` › `it_should_list_a_fetch_thumbnail_task_with_video_and_playlist_names`: `TaskViewSearcher` resolves `fetch_thumbnail` context.
 
 `TaskExecutor`:
