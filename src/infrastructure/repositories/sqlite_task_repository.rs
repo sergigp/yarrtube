@@ -223,7 +223,7 @@ impl TaskRepository for SqliteTaskRepository {
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
             &format!(
-                "UPDATE tasks SET status = 'running', updated_at = ?2 WHERE id = ?1 RETURNING {SELECT_COLUMNS}"
+                "UPDATE tasks SET status = 'running', updated_at = ?2 WHERE id = ?1 AND status = 'pending' RETURNING {SELECT_COLUMNS}"
             ),
             params![id, now.to_rfc3339()],
             row_to_scheduled_task,
@@ -751,6 +751,24 @@ mod tests {
         };
         assert_eq!(claimed, Some(running.clone()));
         assert_eq!(repo.list_non_completed().unwrap(), vec![running]);
+    }
+
+    #[test]
+    fn it_should_not_claim_a_task_already_running() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let later = now + chrono::Duration::seconds(30);
+        let repo = repo_with_clock(now);
+        repo.schedule(&task(), now).unwrap();
+        repo.update(&pending_task(1, &task(), now, now).start(now))
+            .unwrap();
+
+        let claimed = repo.claim(1, later).unwrap();
+
+        assert_eq!(claimed, None);
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![pending_task(1, &task(), now, now).start(now)]
+        );
     }
 
     fn download_task(video_id: &str) -> Task {
