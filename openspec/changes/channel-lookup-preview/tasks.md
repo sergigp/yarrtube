@@ -43,7 +43,7 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass.
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass.
 - [ ] 4.2 `npm run build` and `npm run lint` pass in `web/`, and `scripts/run-smoke-tests.sh` is fully green.
 - [ ] 4.3 Manual check at desktop width and at about 375px, with a scratch database and videos directory so local data is untouched:
   - The channel dialog shows only the handle field until something is typed. It then shows "Looking up channel…", followed by the avatar, the limit, the title and the path.
