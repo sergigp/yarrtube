@@ -7,6 +7,7 @@ use crate::infrastructure::shared::system_clock::Clock;
 use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
+use tracing::debug;
 
 #[derive(Debug, Deserialize)]
 struct VideoAddedToPlaylistPayload {
@@ -45,10 +46,10 @@ impl EventSubscriber for FetchThumbnailOnVideoAddedToPlaylist {
     fn handle(&self, payload: &str) -> anyhow::Result<()> {
         let payload: VideoAddedToPlaylistPayload = serde_json::from_str(payload)?;
         let playlist_id = PlaylistId::new(payload.playlist_id.as_str())?;
-        let playlist = self
-            .playlist_repository
-            .find(&playlist_id)?
-            .ok_or_else(|| anyhow::anyhow!("playlist {playlist_id} not found"))?;
+        let Some(playlist) = self.playlist_repository.find(&playlist_id)? else {
+            debug!(playlist_id = %playlist_id, "playlist no longer exists, skipping thumbnail scheduling");
+            return Ok(());
+        };
 
         let output_dir = Path::new(&self.videos_path).join(playlist.path.as_str());
         self.task_repository.schedule(
@@ -102,6 +103,29 @@ mod tests {
                 },
             )]
         );
+    }
+
+    #[test]
+    fn it_should_skip_if_playlist_no_longer_exists() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let subscriber = FetchThumbnailOnVideoAddedToPlaylist::new(
+            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        );
+
+        let result = handle(
+            &subscriber,
+            r#"{"playlist_id": "PL404", "video_id": "rec1"}"#,
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
     fn playlist(id: &str) -> Playlist {
