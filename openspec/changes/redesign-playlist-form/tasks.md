@@ -52,7 +52,7 @@ Rust cycles: red is an assertion failure, and green is `cargo test --locked` ful
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 `YoutubeApiPlaylistRepository` › `it_should_resolve_the_playlist_title_and_item_count`: request add `contentDetails` to `part` and map `contentDetails.itemCount` into `ResolvedPlaylist.item_count`, replacing the skeleton's placeholder 0.
+- [x] 3.1 `YoutubeApiPlaylistRepository` › `it_should_resolve_the_playlist_title_and_item_count`: request add `contentDetails` to `part` and map `contentDetails.itemCount` into `ResolvedPlaylist.item_count`, replacing the skeleton's placeholder 0.
 
 ## 4. Verification
 

@@ -23,11 +23,19 @@ struct PlaylistsResponse {
 #[derive(Debug, Deserialize)]
 struct PlaylistItem {
     snippet: PlaylistSnippet,
+    #[serde(rename = "contentDetails")]
+    content_details: PlaylistContentDetails,
 }
 
 #[derive(Debug, Deserialize)]
 struct PlaylistSnippet {
     title: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlaylistContentDetails {
+    #[serde(rename = "itemCount")]
+    item_count: u64,
 }
 
 pub struct YoutubeApiPlaylistRepository {
@@ -55,7 +63,7 @@ impl YoutubePlaylistRepository for YoutubeApiPlaylistRepository {
         let response = client
             .get(&self.base_url)
             .query(&[
-                ("part", "snippet"),
+                ("part", "snippet,contentDetails"),
                 ("id", id.as_str()),
                 ("key", self.api_key.as_str()),
             ])
@@ -83,7 +91,7 @@ impl YoutubePlaylistRepository for YoutubeApiPlaylistRepository {
             .next()
             .map(|item| ResolvedPlaylist {
                 title: item.snippet.title,
-                item_count: 0,
+                item_count: item.content_details.item_count,
             }))
     }
 }
@@ -105,13 +113,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn it_should_resolve_the_playlist_title_and_item_count() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("id".into(), "PLexists".into()),
+                mockito::Matcher::UrlEncoded("part".into(), "snippet,contentDetails".into()),
+            ]))
+            .with_status(200)
+            .with_body(
+                r#"{"items": [{
+                    "id": "PLexists",
+                    "snippet": {"title": "Lofi beats"},
+                    "contentDetails": {"itemCount": 42}
+                }]}"#,
+            )
+            .create();
+
+        let repository =
+            YoutubeApiPlaylistRepository::with_base_url("api-key".to_string(), server.url());
+        let id = PlaylistId::new("PLexists").unwrap();
+
+        assert_eq!(
+            repository.resolve(&id).unwrap(),
+            Some(ResolvedPlaylist {
+                title: "Lofi beats".to_string(),
+                item_count: 42,
+            })
+        );
+    }
+
+    #[test]
     fn it_should_resolve_nothing_if_the_playlist_does_not_exist() {
         let mut server = mockito::Server::new();
         let _mock = server
             .mock("GET", "/")
             .match_query(mockito::Matcher::AllOf(vec![
                 mockito::Matcher::UrlEncoded("id".into(), "PLmissing".into()),
-                mockito::Matcher::UrlEncoded("part".into(), "snippet".into()),
+                mockito::Matcher::UrlEncoded("part".into(), "snippet,contentDetails".into()),
             ]))
             .with_status(200)
             .with_body(r#"{"items": []}"#)
