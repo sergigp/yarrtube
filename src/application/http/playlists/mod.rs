@@ -545,6 +545,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_playlists_sorted_by_name_ignoring_case() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        for (id, name) in [("PL1", "watch later"), ("PL2", "Courses"), ("PL3", "Ambient")] {
+            playlist_repository
+                .insert(&Playlist {
+                    name: PlaylistName::new(name).unwrap(),
+                    ..playlist(id, "music/list")
+                })
+                .unwrap();
+        }
+        let playlist_searcher = PlaylistSearcher::new(playlist_repository);
+
+        let response = list(playlist_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                PlaylistResponse {
+                    name: "Ambient".to_string(),
+                    ..playlist_response("PL3", "music/list")
+                },
+                PlaylistResponse {
+                    name: "Courses".to_string(),
+                    ..playlist_response("PL2", "music/list")
+                },
+                PlaylistResponse {
+                    name: "watch later".to_string(),
+                    ..playlist_response("PL1", "music/list")
+                },
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_add_new_videos_on_reconcile() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));

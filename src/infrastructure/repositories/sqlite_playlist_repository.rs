@@ -99,7 +99,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, path, quality, kind, created_at FROM playlists ORDER BY rowid ASC",
+                "SELECT id, name, path, quality, kind, created_at FROM playlists ORDER BY name COLLATE NOCASE, rowid",
             )
             .inspect_err(|e| tracing::error!(error = %e, "failed to prepare list query"))
             .context("failed to prepare list query")?;
