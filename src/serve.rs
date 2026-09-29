@@ -74,8 +74,11 @@ fn download_concurrency() -> usize {
 }
 
 /// Keeps only a positive integer, defaulting otherwise.
-fn parse_download_concurrency(_value: Option<String>) -> usize {
-    DEFAULT_DOWNLOAD_CONCURRENCY
+fn parse_download_concurrency(value: Option<String>) -> usize {
+    value
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|concurrency| *concurrency > 0)
+        .unwrap_or(DEFAULT_DOWNLOAD_CONCURRENCY)
 }
 
 fn videos_path() -> String {
@@ -684,6 +687,16 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn it_should_default_download_concurrency_when_invalid() {
+        let concurrencies: Vec<usize> = [None, Some("0"), Some("-1"), Some("abc"), Some("4")]
+            .into_iter()
+            .map(|value| parse_download_concurrency(value.map(str::to_string)))
+            .collect();
+
+        assert_eq!(concurrencies, vec![2, 2, 2, 2, 4]);
     }
 
     #[test]
