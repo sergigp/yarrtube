@@ -7,7 +7,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_list_channels_sorted_by_name_ignoring_case`: `GET /api/channels` returns channels by name, case-insensitive, regardless of creation order (`ORDER BY name COLLATE NOCASE, rowid`).
+- [x] 2.1 `it_should_list_channels_sorted_by_name_ignoring_case`: `GET /api/channels` returns channels by name, case-insensitive, regardless of creation order (`ORDER BY name COLLATE NOCASE, rowid`).
 - [ ] 2.2 `it_should_list_playlists_sorted_by_name_ignoring_case`: `GET /api/playlists` returns playlists by name, case-insensitive, regardless of creation order.
 
 ## 3. Infrastructure adapters (TDD)

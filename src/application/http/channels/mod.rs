@@ -705,6 +705,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_channels_sorted_by_name_ignoring_case() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        for (channel_handle, name) in [
+            ("@veritasium", "veritasium"),
+            ("@kurzgesagt", "Kurzgesagt"),
+            ("@3blue1brown", "3Blue1Brown"),
+        ] {
+            channel_repository
+                .insert(&Channel {
+                    name: name.to_string(),
+                    ..channel(channel_handle)
+                })
+                .unwrap();
+        }
+        let channel_view_searcher = ChannelViewSearcher::new(
+            channel_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteVideoRepository::new(db.connection())),
+        );
+
+        let response = list(channel_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                ChannelListItemResponse {
+                    id: "@3blue1brown".to_string(),
+                    name: "3Blue1Brown".to_string(),
+                    ..some_channel_list_item_response()
+                },
+                ChannelListItemResponse {
+                    id: "@kurzgesagt".to_string(),
+                    name: "Kurzgesagt".to_string(),
+                    ..some_channel_list_item_response()
+                },
+                ChannelListItemResponse {
+                    id: "@veritasium".to_string(),
+                    name: "veritasium".to_string(),
+                    ..some_channel_list_item_response()
+                },
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_count_unwatched_downloaded_videos_when_listing_channels() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));

@@ -114,7 +114,7 @@ impl ChannelRepository for SqliteChannelRepository {
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at FROM channels ORDER BY rowid ASC",
+                "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at FROM channels ORDER BY name COLLATE NOCASE, rowid",
             )
             .inspect_err(|e| tracing::error!(error = %e, "failed to prepare list query"))
             .context("failed to prepare list query")?;
