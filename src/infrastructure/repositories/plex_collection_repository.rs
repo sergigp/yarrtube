@@ -170,8 +170,8 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
         ))
     }
 
-    fn delete_collection(&self, _collection_rating_key: &str) -> anyhow::Result<()> {
-        Ok(())
+    fn delete_collection(&self, collection_rating_key: &str) -> anyhow::Result<()> {
+        self.delete(&format!("/library/collections/{collection_rating_key}"))
     }
 }
 
@@ -654,6 +654,22 @@ mod tests {
 
         assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
         remove_mock.assert();
+    }
+
+    #[test]
+    fn it_should_delete_a_collection() {
+        let mut server = mockito::Server::new();
+        let delete_mock = server
+            .mock("DELETE", "/library/collections/c1")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.delete_collection("c1");
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        delete_mock.assert();
     }
 
     fn repository(server: &mockito::Server) -> HttpPlexCollectionRepository {
