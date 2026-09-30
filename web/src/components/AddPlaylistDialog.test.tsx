@@ -127,6 +127,40 @@ describe('AddPlaylistDialog', () => {
     ).toBeInTheDocument()
   })
 
+  it('opens the browser from choose-another and keeps the chosen folder selected', async () => {
+    renderDialog({
+      'GET /api/playlists': [aPlaylist({ name: 'Kids Mix', path: 'playlists/kids' })],
+      'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
+      'GET /api/directories?path=playlists': {
+        root: '/videos',
+        path: 'playlists',
+        entries: [{ name: 'kids' }, { name: 'music' }],
+      },
+      'GET /api/directories?path=playlists%2Fmusic': {
+        root: '/videos',
+        path: 'playlists/music',
+        entries: [],
+      },
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
+    await screen.findByText('/videos/playlists/my-mix')
+
+    await user.click(screen.getByRole('button', { name: 'Choose another folder…' }))
+    expect(await screen.findByText('in use by Kids Mix')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /music/ }))
+    expect(await screen.findByText('No subfolders here.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Use this folder' }))
+
+    expect(
+      await screen.findByRole('radio', { name: 'playlists/music/', checked: true }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('/videos/playlists/music/my-mix')).toBeInTheDocument()
+  })
+
   it('looks the entered playlist up and states the destination', async () => {
     renderDialog({
       'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
