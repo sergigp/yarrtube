@@ -1,5 +1,7 @@
 pub mod delete_channel_files_on_channel_deleted;
 pub mod delete_playlist_files_on_playlist_deleted;
+pub mod delete_plex_collection_on_channel_deleted;
+pub mod delete_plex_collection_on_playlist_deleted;
 pub mod delete_video_file_on_video_removed_from_channel;
 pub mod delete_video_file_on_video_removed_from_playlist;
 pub mod download_video_on_video_added_to_channel;
@@ -9,7 +11,9 @@ pub mod fetch_thumbnail_on_video_added_to_playlist;
 pub mod reconcile_on_channel_created;
 pub mod reconcile_on_playlist_created;
 
-use crate::domain::services::{ChannelVideoReconciler, PlaylistVideoReconciler};
+use crate::domain::services::{
+    ChannelVideoReconciler, PlaylistVideoReconciler, PlexCollectionDeleter,
+};
 use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -17,6 +21,8 @@ use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use delete_channel_files_on_channel_deleted::DeleteChannelFilesOnChannelDeleted;
 use delete_playlist_files_on_playlist_deleted::DeletePlaylistFilesOnPlaylistDeleted;
+use delete_plex_collection_on_channel_deleted::DeletePlexCollectionOnChannelDeleted;
+use delete_plex_collection_on_playlist_deleted::DeletePlexCollectionOnPlaylistDeleted;
 use delete_video_file_on_video_removed_from_channel::DeleteVideoFileOnVideoRemovedFromChannel;
 use delete_video_file_on_video_removed_from_playlist::DeleteVideoFileOnVideoRemovedFromPlaylist;
 use download_video_on_video_added_to_channel::DownloadVideoOnVideoAddedToChannel;
@@ -39,6 +45,7 @@ pub fn registry(
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
     videos_path: impl Into<String>,
+    plex_collection_deleter: Option<PlexCollectionDeleter>,
 ) -> SubscriberRegistry {
     let videos_path = videos_path.into();
     let mut registry: SubscriberRegistry = HashMap::new();
@@ -120,5 +127,17 @@ pub fn registry(
             clock,
         ))],
     );
+    if let Some(deleter) = plex_collection_deleter {
+        registry
+            .get_mut("playlist_deleted")
+            .expect("playlist_deleted subscribers registered above")
+            .push(Arc::new(DeletePlexCollectionOnPlaylistDeleted::new(
+                deleter.clone(),
+            )));
+        registry
+            .get_mut("channel_deleted")
+            .expect("channel_deleted subscribers registered above")
+            .push(Arc::new(DeletePlexCollectionOnChannelDeleted::new(deleter)));
+    }
     registry
 }

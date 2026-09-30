@@ -99,6 +99,7 @@ impl ChannelDeleter {
         self.event_publisher
             .publish(&DomainEvent::ChannelDeleted {
                 channel_id: id.as_str().to_string(),
+                name: String::new(),
                 path: channel.path.as_str().to_string(),
             })
             .map_err(DeleteChannelError::Repository)

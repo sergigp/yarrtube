@@ -34,6 +34,7 @@ pub enum Task {
         video_id: String,
         output_dir: String,
     },
+    ReconcilePlexCollections,
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,6 +82,9 @@ struct FetchThumbnailPayload {
     output_dir: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct ReconcilePlexCollectionsPayload {}
+
 impl Task {
     pub fn task_type(&self) -> &'static str {
         match self {
@@ -92,6 +96,7 @@ impl Task {
             Self::DeleteChannelFiles { .. } => "delete_channel_files",
             Self::UpdateYtdlp => "update_ytdlp",
             Self::FetchThumbnail { .. } => "fetch_thumbnail",
+            Self::ReconcilePlexCollections => "reconcile_plex_collections",
         }
     }
 
@@ -126,6 +131,7 @@ impl Task {
                 video_id,
                 output_dir,
             } => json!({ "video_id": video_id, "output_dir": output_dir }),
+            Self::ReconcilePlexCollections => json!({}),
         }
     }
 
@@ -209,6 +215,15 @@ impl Task {
         let parsed: FetchThumbnailPayload = serde_json::from_str(payload)
             .map_err(|e| TaskError(format!("invalid fetch_thumbnail payload: {e}")))?;
         Ok((parsed.video_id, parsed.output_dir))
+    }
+
+    /// Decodes a `reconcile_plex_collections` task's raw JSON payload, as
+    /// handed to a `TaskHandler`. The payload carries no fields; this only
+    /// confirms it's well-formed.
+    pub fn decode_reconcile_plex_collections_payload(payload: &str) -> Result<(), TaskError> {
+        serde_json::from_str::<ReconcilePlexCollectionsPayload>(payload)
+            .map_err(|e| TaskError(format!("invalid reconcile_plex_collections payload: {e}")))?;
+        Ok(())
     }
 
     /// The executor lane a task of `task_type` runs in. Unknown types fall

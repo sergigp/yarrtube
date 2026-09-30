@@ -7,6 +7,7 @@ pub enum DomainEvent {
     },
     PlaylistDeleted {
         playlist_id: String,
+        name: String,
         path: String,
     },
     VideoAddedToPlaylist {
@@ -26,6 +27,7 @@ pub enum DomainEvent {
     },
     ChannelDeleted {
         channel_id: String,
+        name: String,
         path: String,
     },
     VideoAddedToChannel {
@@ -59,8 +61,13 @@ impl DomainEvent {
     pub fn payload(&self) -> Value {
         match self {
             Self::PlaylistCreated { playlist_id } => json!({ "playlist_id": playlist_id }),
-            Self::PlaylistDeleted { playlist_id, path } => json!({
+            Self::PlaylistDeleted {
+                playlist_id,
+                name,
+                path,
+            } => json!({
                 "playlist_id": playlist_id,
+                "name": name,
                 "path": path,
             }),
             Self::VideoAddedToPlaylist {
@@ -86,8 +93,13 @@ impl DomainEvent {
                 "was_downloaded": was_downloaded,
             }),
             Self::ChannelCreated { channel_id } => json!({ "channel_id": channel_id }),
-            Self::ChannelDeleted { channel_id, path } => json!({
+            Self::ChannelDeleted {
+                channel_id,
+                name,
+                path,
+            } => json!({
                 "channel_id": channel_id,
+                "name": name,
                 "path": path,
             }),
             Self::VideoAddedToChannel {
@@ -134,13 +146,14 @@ mod tests {
     fn it_should_map_playlist_deleted_to_a_stable_type_and_payload() {
         let event = DomainEvent::PlaylistDeleted {
             playlist_id: "PL1".to_string(),
+            name: "Lofi beats".to_string(),
             path: "music/chill".to_string(),
         };
 
         assert_eq!(event.event_type(), "playlist_deleted");
         assert_eq!(
             event.payload(),
-            json!({ "playlist_id": "PL1", "path": "music/chill" })
+            json!({ "playlist_id": "PL1", "name": "Lofi beats", "path": "music/chill" })
         );
     }
 
@@ -221,13 +234,18 @@ mod tests {
     fn it_should_map_channel_deleted_to_a_stable_type_and_payload() {
         let event = DomainEvent::ChannelDeleted {
             channel_id: "@somechannel".to_string(),
+            name: "Some Channel".to_string(),
             path: "creators/somechannel".to_string(),
         };
 
         assert_eq!(event.event_type(), "channel_deleted");
         assert_eq!(
             event.payload(),
-            json!({ "channel_id": "@somechannel", "path": "creators/somechannel" })
+            json!({
+                "channel_id": "@somechannel",
+                "name": "Some Channel",
+                "path": "creators/somechannel",
+            })
         );
     }
 

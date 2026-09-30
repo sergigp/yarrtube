@@ -85,6 +85,7 @@ impl PlaylistDeleter {
         self.event_publisher
             .publish(&DomainEvent::PlaylistDeleted {
                 playlist_id: id.as_str().to_string(),
+                name: String::new(),
                 path: playlist.path.as_str().to_string(),
             })
             .map_err(DeletePlaylistError::Repository)

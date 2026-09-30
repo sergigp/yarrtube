@@ -602,6 +602,7 @@ mod tests {
                 1,
                 DomainEvent::PlaylistDeleted {
                     playlist_id: "PL1".to_string(),
+                    name: String::new(),
                     path: DEFAULT_PATH.to_string(),
                 }
             )]

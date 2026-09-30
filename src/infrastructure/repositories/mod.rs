@@ -3,6 +3,7 @@ pub mod event_subscriber;
 pub mod filesystem_channel_avatar_repository;
 pub mod filesystem_directory_repository;
 pub mod filesystem_video_file_repository;
+pub mod plex_collection_repository;
 pub mod sqlite_channel_repository;
 pub mod sqlite_channel_video_repository;
 pub mod sqlite_playlist_repository;

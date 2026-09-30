@@ -1,0 +1,41 @@
+# Tasks — plex-collections-sync
+
+## 1. Walking skeleton
+
+- [x] 1.1 Create every file, type and signature from design.md across all layers, wired end-to-end: `domain/plex/` (`PlexItem`, `PlexCollection`), `PlexCollectionRepository` port + `HttpPlexCollectionRepository` + `FakePlexCollectionRepository`, `PlexCollectionReconciler` + `PlexCollectionDeleter` domain services, `ReconcilePlexCollectionsTask` + `schedule_reconcile_plex_collections_if_absent`, both delete subscribers, `Task::ReconcilePlexCollections` variant (kind `reconcile_plex_collections`, empty payload, Light lane via default arm), `name` field added to `PlaylistDeleted`/`ChannelDeleted` events (deleters publish it), task routed in `task_executor.rs`, and `serve.rs` reading `YARRTUBE_PLEX_URL`/`YARRTUBE_PLEX_TOKEN`/`YARRTUBE_PLEX_SECTION_ID`/`YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS` and wiring repository/services/task/subscribers/seed only when the first three are set. Bodies return trivial hardcoded values (`Ok(())`, empty `Vec`), never `todo!()`. Done when `cargo build` succeeds and all existing tests pass.
+
+## 2. Behaviour (TDD)
+
+- [ ] 2.1 `it_should_create_a_collection_for_a_playlist_with_scanned_videos` — the reconcile pass creates a collection (alphabetical sort, seeded members) for a playlist whose downloaded videos Plex has scanned, and schedules the next task.
+- [ ] 2.2 `it_should_create_a_collection_for_a_channel_with_scanned_videos` — same convergence for a channel.
+- [ ] 2.3 `it_should_skip_creating_a_collection_if_no_video_is_scanned_yet` — no empty collection when Plex has scanned none of the playlist's downloaded videos.
+- [ ] 2.4 `it_should_ignore_videos_that_are_not_downloaded` — pending/errored videos never become collection members even when scanned.
+- [ ] 2.5 `it_should_add_newly_scanned_videos_to_an_existing_collection` — only the missing rating key is added to an existing collection.
+- [ ] 2.6 `it_should_remove_videos_no_longer_tracked_from_the_collection` — a member whose video left yarrtube's state is removed.
+- [ ] 2.7 `it_should_do_nothing_if_already_in_sync` — a pass over converged state performs no collection mutations (idempotence).
+- [ ] 2.8 `it_should_continue_reconciling_remaining_collections_if_one_fails` — one collection's failure is logged and skipped; the rest still reconcile and the task returns Ok.
+- [ ] 2.9 `it_should_reschedule_the_next_reconcile_if_the_pass_fails` — a pass-wide failure (`list_items`) returns Err but the next task is still scheduled.
+- [ ] 2.10 `it_should_delete_the_collection_if_a_playlist_is_deleted` — the `playlist_deleted` subscriber deletes the collection matching the event's `name`.
+- [ ] 2.11 `it_should_skip_if_no_collection_matches_the_playlist_name` — missing collection is a no-op, not an error.
+- [ ] 2.12 `it_should_delete_the_collection_if_a_channel_is_deleted` — proves the channel subscriber's wiring.
+- [ ] 2.13 `it_should_publish_the_playlist_name_on_deletion` — the outbox `playlist_deleted` payload includes `name` (existing playlist-delete adapter tests).
+- [ ] 2.14 `it_should_publish_the_channel_name_on_deletion` — same for `channel_deleted`.
+
+## 3. Infrastructure adapters (TDD)
+
+`HttpPlexCollectionRepository` against mockito:
+
+- [ ] 3.1 `it_should_list_section_items_with_their_youtube_ids` — parses the section listing (JSON via `Accept: application/json`), keeping only items with a `youtube://` guid.
+- [ ] 3.2 `it_should_list_collections` — parses `/library/sections/<id>/collections` into `PlexCollection`s.
+- [ ] 3.3 `it_should_list_collection_items` — parses a collection's children into `PlexItem`s.
+- [ ] 3.4 `it_should_create_a_collection_with_alphabetical_sort` — fetches the machine id from `/identity` (cached), POSTs `/library/collections` with `sectionId`/`title`/`uri`, then sets the `collectionSort` pref.
+- [ ] 3.5 `it_should_add_items_to_a_collection` — PUT `/library/metadata/<key>/items` with the members `uri`.
+- [ ] 3.6 `it_should_remove_an_item_from_a_collection` — DELETE `/library/metadata/<key>/items/<ratingKey>`.
+- [ ] 3.7 `it_should_delete_a_collection` — DELETE `/library/collections/<key>`.
+- [ ] 3.8 `it_should_fail_if_the_server_replies_with_an_error` — a non-2xx response maps to `Err`.
+
+## 4. Verification
+
+- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
+- [ ] 4.2 Manual check against the real NAS Plex via `scripts/run-local.sh` with the `YARRTUBE_PLEX_*` env vars set: a tracked playlist gets its collection created/updated in the Plex UI with alphabetical sort, and deleting a playlist removes its collection. Also verify a start *without* the Plex env vars schedules no `reconcile_plex_collections` task.
+- [ ] 4.3 Update `README.md` with the Plex integration setup (env vars, how to obtain a token, recommend the "hide items which are in collections" library setting) and verify the docs match the implemented env var names.
