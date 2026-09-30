@@ -80,6 +80,8 @@ pub fn schedule_reconcile_plex_collections_if_absent(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
+    use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::plex::PlexItem;
@@ -90,8 +92,12 @@ mod tests {
     use crate::infrastructure::repositories::plex_collection_repository::{
         FakePlexCollection, FakePlexCollectionRepository,
     };
-    use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
-    use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::{
+        ChannelRepository, SqliteChannelRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, SqliteChannelVideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         PlaylistRepository, SqlitePlaylistRepository,
     };
@@ -107,6 +113,71 @@ mod tests {
     use chrono::{DateTime, Utc};
 
     const INTERVAL_SECONDS: i64 = 900;
+
+    #[test]
+    fn it_should_create_a_collection_for_a_channel_with_scanned_videos() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items(vec![
+            plex_item("101", "yt1"),
+            plex_item("102", "yt2"),
+        ]));
+        channel_repository
+            .insert(&channel("@somechannel", "Some Channel"))
+            .unwrap();
+        seed_downloaded_channel_video(
+            &channel_video_repository,
+            &video_repository,
+            "@somechannel",
+            "yt1",
+            0,
+        );
+        seed_downloaded_channel_video(
+            &channel_video_repository,
+            &video_repository,
+            "@somechannel",
+            "yt2",
+            1,
+        );
+        let task = ReconcilePlexCollectionsTask::new(
+            PlexCollectionReconciler::new(
+                Arc::new(SqlitePlaylistRepository::new(db.connection())),
+                channel_repository.clone(),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+                channel_video_repository.clone(),
+                video_repository.clone(),
+                plex_repository.clone(),
+            ),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            INTERVAL_SECONDS,
+        );
+
+        let result = run(&task, "{}");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            plex_repository.collections(),
+            vec![FakePlexCollection {
+                rating_key: "collection:Some Channel".to_string(),
+                title: "Some Channel".to_string(),
+                member_rating_keys: vec!["101".to_string(), "102".to_string()],
+            }]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                fixed_timestamp() + chrono::Duration::seconds(INTERVAL_SECONDS),
+            )]
+        );
+    }
 
     #[test]
     fn it_should_create_a_collection_for_a_playlist_with_scanned_videos() {
@@ -179,6 +250,44 @@ mod tests {
             rating_key: rating_key.to_string(),
             youtube_video_id: youtube_video_id.to_string(),
         }
+    }
+
+    fn channel(handle: &str, name: &str) -> Channel {
+        Channel::create(
+            ChannelHandle::new(handle).unwrap(),
+            name,
+            "UC123",
+            Quality::High,
+            VideoLimit::new(10).unwrap(),
+            PlaylistPath::new("creators/somechannel").unwrap(),
+            None,
+            fixed_timestamp(),
+        )
+    }
+
+    /// Saves a downloaded video and its channel membership at `position`.
+    fn seed_downloaded_channel_video(
+        channel_video_repository: &Arc<SqliteChannelVideoRepository>,
+        video_repository: &Arc<SqliteVideoRepository>,
+        channel_id: &str,
+        youtube_id: &str,
+        position: i64,
+    ) {
+        let video = Video::create(
+            VideoId::new(youtube_id).unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                ChannelHandle::new(channel_id).unwrap(),
+                video.id,
+                position,
+                fixed_timestamp(),
+            ))
+            .unwrap();
     }
 
     fn playlist(id: &str, name: &str) -> Playlist {

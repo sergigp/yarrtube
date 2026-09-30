@@ -1,3 +1,4 @@
+use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::video::{VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::plex_collection_repository::PlexCollectionRepository;
@@ -14,10 +15,8 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct PlexCollectionReconciler {
     playlist_repository: Arc<dyn PlaylistRepository>,
-    #[allow(dead_code)]
     channel_repository: Arc<dyn ChannelRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
-    #[allow(dead_code)]
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     video_repository: Arc<dyn VideoRepository>,
     plex_collection_repository: Arc<dyn PlexCollectionRepository>,
@@ -59,6 +58,10 @@ impl PlexCollectionReconcilerApi for PlexCollectionReconciler {
             let desired = self.playlist_desired_rating_keys(&playlist.id, &scanned)?;
             self.reconcile_collection(playlist.name.as_str(), desired, &collections)?;
         }
+        for channel in self.channel_repository.list()? {
+            let desired = self.channel_desired_rating_keys(&channel.id, &scanned)?;
+            self.reconcile_collection(&channel.name, desired, &collections)?;
+        }
         Ok(())
     }
 }
@@ -95,6 +98,22 @@ impl PlexCollectionReconciler {
             .list_for_playlist(playlist_id)?
             .into_iter()
             .map(|playlist_video| playlist_video.video_id)
+            .collect();
+        self.downloaded_scanned_rating_keys(&video_ids, scanned)
+    }
+
+    /// The rating keys of the channel's downloaded videos that Plex has
+    /// scanned, most recent first.
+    fn channel_desired_rating_keys(
+        &self,
+        channel_id: &ChannelHandle,
+        scanned: &HashMap<String, String>,
+    ) -> anyhow::Result<Vec<String>> {
+        let video_ids: Vec<VideoRecordId> = self
+            .channel_video_repository
+            .list_for_channel(channel_id)?
+            .into_iter()
+            .map(|channel_video| channel_video.video_id)
             .collect();
         self.downloaded_scanned_rating_keys(&video_ids, scanned)
     }
