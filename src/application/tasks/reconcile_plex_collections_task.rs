@@ -345,6 +345,70 @@ mod tests {
     }
 
     #[test]
+    fn it_should_do_nothing_if_already_in_sync() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items_and_collections(
+            vec![plex_item("101", "yt1"), plex_item("102", "yt2")],
+            vec![FakePlexCollection {
+                rating_key: "c1".to_string(),
+                title: "Lofi beats".to_string(),
+                member_rating_keys: vec!["101".to_string(), "102".to_string()],
+            }],
+        ));
+        playlist_repository
+            .insert(&playlist("PL1", "Lofi beats"))
+            .unwrap();
+        seed_downloaded_playlist_video(
+            &playlist_video_repository,
+            &video_repository,
+            "PL1",
+            "yt1",
+            0,
+        );
+        seed_downloaded_playlist_video(
+            &playlist_video_repository,
+            &video_repository,
+            "PL1",
+            "yt2",
+            1,
+        );
+        let task = ReconcilePlexCollectionsTask::new(
+            PlexCollectionReconciler::new(
+                playlist_repository.clone(),
+                Arc::new(SqliteChannelRepository::new(db.connection())),
+                playlist_video_repository.clone(),
+                Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+                video_repository.clone(),
+                plex_repository.clone(),
+            ),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            INTERVAL_SECONDS,
+        );
+
+        let result = run(&task, "{}");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex_repository.mutations(), Vec::<String>::new());
+        assert_eq!(
+            plex_repository.collections(),
+            vec![FakePlexCollection {
+                rating_key: "c1".to_string(),
+                title: "Lofi beats".to_string(),
+                member_rating_keys: vec!["101".to_string(), "102".to_string()],
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_create_a_collection_for_a_channel_with_scanned_videos() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));

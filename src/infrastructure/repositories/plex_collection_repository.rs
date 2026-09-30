@@ -102,6 +102,9 @@ pub struct FakePlexCollection {
 pub struct FakePlexCollectionRepository {
     items: Vec<PlexItem>,
     collections: Mutex<Vec<FakePlexCollection>>,
+    /// Every mutating call, in order, e.g. `create:Lofi beats`,
+    /// `add:c1:102`, `remove:c1:101`, `delete:c1`.
+    mutations: Mutex<Vec<String>>,
 }
 
 #[cfg(test)]
@@ -120,11 +123,16 @@ impl FakePlexCollectionRepository {
         Self {
             items,
             collections: Mutex::new(collections),
+            mutations: Mutex::new(vec![]),
         }
     }
 
     pub fn collections(&self) -> Vec<FakePlexCollection> {
         self.collections.lock().unwrap().clone()
+    }
+
+    pub fn mutations(&self) -> Vec<String> {
+        self.mutations.lock().unwrap().clone()
     }
 }
 
@@ -168,6 +176,10 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
     }
 
     fn create_collection(&self, title: &str, rating_keys: &[String]) -> anyhow::Result<()> {
+        self.mutations
+            .lock()
+            .unwrap()
+            .push(format!("create:{title}"));
         self.collections.lock().unwrap().push(FakePlexCollection {
             rating_key: format!("collection:{title}"),
             title: title.to_string(),
@@ -177,6 +189,11 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
     }
 
     fn add_items(&self, collection_rating_key: &str, rating_keys: &[String]) -> anyhow::Result<()> {
+        self.mutations.lock().unwrap().extend(
+            rating_keys
+                .iter()
+                .map(|rating_key| format!("add:{collection_rating_key}:{rating_key}")),
+        );
         self.collections
             .lock()
             .unwrap()
@@ -191,6 +208,10 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
     }
 
     fn remove_item(&self, collection_rating_key: &str, rating_key: &str) -> anyhow::Result<()> {
+        self.mutations
+            .lock()
+            .unwrap()
+            .push(format!("remove:{collection_rating_key}:{rating_key}"));
         self.collections
             .lock()
             .unwrap()
@@ -205,6 +226,10 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
     }
 
     fn delete_collection(&self, collection_rating_key: &str) -> anyhow::Result<()> {
+        self.mutations
+            .lock()
+            .unwrap()
+            .push(format!("delete:{collection_rating_key}"));
         self.collections
             .lock()
             .unwrap()
