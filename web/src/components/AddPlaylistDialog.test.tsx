@@ -55,6 +55,24 @@ describe('AddPlaylistDialog', () => {
     expect(await screen.findByText('/videos/playlists/kids/my-mix')).toBeInTheDocument()
   })
 
+  it('orders suggestions by most recent use and caps them', async () => {
+    renderDialog({
+      'GET /api/playlists': ['a', 'b', 'c', 'd', 'e', 'f'].map((name, index) =>
+        aPlaylist({
+          path: `playlists/${name}/item`,
+          created_at: `2026-01-0${index + 1}T00:00:00Z`,
+        }),
+      ),
+    })
+
+    // The default parent plus the 4 most recently used of the 6 derived ones.
+    expect(await screen.findByRole('radio', { name: 'playlists/f/' })).toBeInTheDocument()
+    const names = screen
+      .getAllByRole('radio')
+      .map((radio) => radio.getAttribute('aria-label'))
+    expect(names).toEqual(['playlists/', 'playlists/f/', 'playlists/e/', 'playlists/d/', 'playlists/c/'])
+  })
+
   it('looks the entered playlist up and states the destination', async () => {
     renderDialog({
       'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },

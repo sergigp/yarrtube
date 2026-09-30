@@ -10,13 +10,31 @@ export interface SaveCandidate {
   count: number
 }
 
+const DEFAULT_CAP = 5
+
+/** ISO 8601 timestamps compare correctly as strings; absent ones sort last. */
+function byRecency(
+  a: { newest?: string; count: number; path: string },
+  b: { newest?: string; count: number; path: string },
+): number {
+  if (a.newest !== b.newest) {
+    if (!a.newest) {
+      return 1
+    }
+    if (!b.newest) {
+      return -1
+    }
+    return a.newest > b.newest ? -1 : 1
+  }
+  return b.count - a.count || a.path.localeCompare(b.path)
+}
+
 export function deriveSaveCandidates(
   defaultParent: string,
   items: { path: string; created_at?: string }[],
-  cap?: number,
+  cap: number = DEFAULT_CAP,
 ): SaveCandidate[] {
-  void cap
-  const groups = new Map<string, number>()
+  const groups = new Map<string, { count: number; newest?: string }>()
   for (const item of items) {
     const cut = item.path.lastIndexOf('/')
     // An item stored directly at the videos root has no parent to suggest.
@@ -24,12 +42,20 @@ export function deriveSaveCandidates(
       continue
     }
     const parent = item.path.slice(0, cut)
-    groups.set(parent, (groups.get(parent) ?? 0) + 1)
+    const group = groups.get(parent) ?? { count: 0 }
+    group.count += 1
+    if (item.created_at && (!group.newest || item.created_at > group.newest)) {
+      group.newest = item.created_at
+    }
+    groups.set(parent, group)
   }
   const derived = [...groups.entries()]
     .filter(([path]) => path !== defaultParent)
-    .map(([path, count]) => ({ path, count }))
-  return [{ path: defaultParent, count: groups.get(defaultParent) ?? 0 }, ...derived]
+    .map(([path, { count, newest }]) => ({ path, count, newest }))
+    .sort(byRecency)
+    .map(({ path, count }) => ({ path, count }))
+  const first = { path: defaultParent, count: groups.get(defaultParent)?.count ?? 0 }
+  return [first, ...derived].slice(0, cap)
 }
 
 export function readRememberedParent(mode: SaveMode): string | null {
