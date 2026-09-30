@@ -93,23 +93,7 @@ impl HttpPlexCollectionRepository {
 
 impl PlexCollectionRepository for HttpPlexCollectionRepository {
     fn list_items(&self) -> anyhow::Result<Vec<PlexItem>> {
-        let response: MediaContainerResponse = self.get_json(
-            &format!("/library/sections/{}/all", self.config.section_id),
-            &[("includeGuids", "1")],
-        )?;
-        Ok(response
-            .media_container
-            .metadata
-            .into_iter()
-            .filter_map(|metadata| {
-                metadata
-                    .youtube_video_id()
-                    .map(|youtube_video_id| PlexItem {
-                        rating_key: metadata.rating_key,
-                        youtube_video_id,
-                    })
-            })
-            .collect())
+        self.get_youtube_items(&format!("/library/sections/{}/all", self.config.section_id))
     }
 
     fn list_collections(&self) -> anyhow::Result<Vec<PlexCollection>> {
@@ -128,8 +112,10 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
             .collect())
     }
 
-    fn list_collection_items(&self, _collection_rating_key: &str) -> anyhow::Result<Vec<PlexItem>> {
-        Ok(vec![])
+    fn list_collection_items(&self, collection_rating_key: &str) -> anyhow::Result<Vec<PlexItem>> {
+        self.get_youtube_items(&format!(
+            "/library/collections/{collection_rating_key}/children"
+        ))
     }
 
     fn create_collection(&self, _title: &str, _rating_keys: &[String]) -> anyhow::Result<()> {
@@ -154,6 +140,25 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
 }
 
 impl HttpPlexCollectionRepository {
+    /// Fetches a metadata listing and keeps the items with a `youtube://`
+    /// guid, requesting guids explicitly (`includeGuids=1`).
+    fn get_youtube_items(&self, path: &str) -> anyhow::Result<Vec<PlexItem>> {
+        let response: MediaContainerResponse = self.get_json(path, &[("includeGuids", "1")])?;
+        Ok(response
+            .media_container
+            .metadata
+            .into_iter()
+            .filter_map(|metadata| {
+                metadata
+                    .youtube_video_id()
+                    .map(|youtube_video_id| PlexItem {
+                        rating_key: metadata.rating_key,
+                        youtube_video_id,
+                    })
+            })
+            .collect())
+    }
+
     fn get_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -422,6 +427,46 @@ mod tests {
                 PlexCollection {
                     rating_key: "c2".to_string(),
                     title: "Some Channel".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_list_collection_items() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/collections/c1/children")
+            .match_query(mockito::Matcher::UrlEncoded(
+                "includeGuids".into(),
+                "1".into(),
+            ))
+            .match_header("accept", "application/json")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"Metadata": [
+                    {"ratingKey": "101", "title": "First video",
+                     "Guid": [{"id": "youtube://yt1"}]},
+                    {"ratingKey": "102", "title": "Second video",
+                     "Guid": [{"id": "youtube://yt2"}]}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let items = repository.list_collection_items("c1").unwrap();
+
+        assert_eq!(
+            items,
+            vec![
+                PlexItem {
+                    rating_key: "101".to_string(),
+                    youtube_video_id: "yt1".to_string(),
+                },
+                PlexItem {
+                    rating_key: "102".to_string(),
+                    youtube_video_id: "yt2".to_string(),
                 },
             ]
         );
