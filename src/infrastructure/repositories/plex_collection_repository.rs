@@ -108,9 +108,18 @@ pub struct FakePlexCollectionRepository {
 impl FakePlexCollectionRepository {
     /// A section whose scanned items are `items`, with no collections yet.
     pub fn with_items(items: Vec<PlexItem>) -> Self {
+        Self::with_items_and_collections(items, vec![])
+    }
+
+    /// A section whose scanned items are `items` and whose collections
+    /// already hold `collections`.
+    pub fn with_items_and_collections(
+        items: Vec<PlexItem>,
+        collections: Vec<FakePlexCollection>,
+    ) -> Self {
         Self {
             items,
-            collections: Mutex::new(vec![]),
+            collections: Mutex::new(collections),
         }
     }
 

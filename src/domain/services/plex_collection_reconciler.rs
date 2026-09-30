@@ -135,16 +135,44 @@ impl PlexCollectionReconciler {
     }
 
     /// Converges one playlist's/channel's collection: creates it when
-    /// missing and there is something to put in it.
+    /// missing and there is something to put in it, or brings an existing
+    /// one's membership up to date.
     fn reconcile_collection(
         &self,
         name: &str,
         desired: Vec<String>,
         collections: &HashMap<String, String>,
     ) -> anyhow::Result<()> {
-        if collections.get(name).is_none() && !desired.is_empty() {
+        match collections.get(name) {
+            None if desired.is_empty() => Ok(()),
+            None => self
+                .plex_collection_repository
+                .create_collection(name, &desired),
+            Some(collection_rating_key) => self.converge_members(collection_rating_key, &desired),
+        }
+    }
+
+    /// Adds the desired members an existing collection is missing.
+    fn converge_members(
+        &self,
+        collection_rating_key: &str,
+        desired: &[String],
+    ) -> anyhow::Result<()> {
+        let members: Vec<String> = self
+            .plex_collection_repository
+            .list_collection_items(collection_rating_key)?
+            .into_iter()
+            .map(|item| item.rating_key)
+            .collect();
+
+        let missing: Vec<String> = desired
+            .iter()
+            .filter(|rating_key| !members.contains(rating_key))
+            .cloned()
+            .collect();
+        if !missing.is_empty() {
             self.plex_collection_repository
-                .create_collection(name, &desired)?;
+                .add_items(collection_rating_key, &missing)?;
         }
         Ok(())
     }
