@@ -31,8 +31,8 @@
 - [x] 3.4 `it_should_create_a_collection_with_alphabetical_sort` — fetches the machine id from `/identity` (cached), POSTs `/library/collections` with `sectionId`/`title`/`uri`, then sets the `collectionSort` pref.
 - [x] 3.5 `it_should_add_items_to_a_collection` — PUT `/library/metadata/<key>/items` with the members `uri`.
 - [x] 3.6 `it_should_remove_an_item_from_a_collection` — DELETE `/library/metadata/<key>/items/<ratingKey>`.
-- [ ] 3.7 `it_should_delete_a_collection` — DELETE `/library/collections/<key>`.
-- [ ] 3.8 `it_should_fail_if_the_server_replies_with_an_error` — a non-2xx response maps to `Err`.
+- [x] 3.7 `it_should_delete_a_collection` — DELETE `/library/collections/<key>`.
+- [x] 3.8 `it_should_fail_if_the_server_replies_with_an_error` — a non-2xx response maps to `Err`.
 
 ## 4. Verification
 

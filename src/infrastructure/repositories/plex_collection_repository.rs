@@ -672,6 +672,27 @@ mod tests {
         delete_mock.assert();
     }
 
+    #[test]
+    fn it_should_fail_if_the_server_replies_with_an_error() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/sections/1/all")
+            .match_query(mockito::Matcher::Any)
+            .with_status(500)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.list_items();
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(
+                "Plex request to /library/sections/1/all failed with status 500 Internal Server Error"
+                    .to_string()
+            )
+        );
+    }
+
     fn repository(server: &mockito::Server) -> HttpPlexCollectionRepository {
         HttpPlexCollectionRepository::new(PlexConfig {
             base_url: server.url(),
