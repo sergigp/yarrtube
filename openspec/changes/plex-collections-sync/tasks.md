@@ -19,7 +19,7 @@
 - [x] 2.11 `it_should_skip_if_no_collection_matches_the_playlist_name` — missing collection is a no-op, not an error.
 - [x] 2.12 `it_should_delete_the_collection_if_a_channel_is_deleted` — proves the channel subscriber's wiring.
 - [x] 2.13 `it_should_publish_the_playlist_name_on_deletion` — the outbox `playlist_deleted` payload includes `name` (existing playlist-delete adapter tests).
-- [ ] 2.14 `it_should_publish_the_channel_name_on_deletion` — same for `channel_deleted`.
+- [x] 2.14 `it_should_publish_the_channel_name_on_deletion` — same for `channel_deleted`.
 
 ## 3. Infrastructure adapters (TDD)
 

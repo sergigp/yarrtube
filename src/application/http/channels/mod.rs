@@ -1565,7 +1565,7 @@ mod tests {
     fn channel_deleted(channel_handle: &str) -> DomainEvent {
         DomainEvent::ChannelDeleted {
             channel_id: channel_handle.to_string(),
-            name: String::new(),
+            name: "Some Channel".to_string(),
             path: "creators/somechannel".to_string(),
         }
     }
