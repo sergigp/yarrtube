@@ -87,11 +87,36 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
     }
 }
 
+/// A collection as the fake stores it: the `PlexCollection` the server
+/// would report plus its members' rating keys.
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FakePlexCollection {
+    pub rating_key: String,
+    pub title: String,
+    pub member_rating_keys: Vec<String>,
+}
+
 #[cfg(test)]
 #[derive(Default)]
 pub struct FakePlexCollectionRepository {
-    pub items: Vec<PlexItem>,
-    pub collections: Mutex<Vec<PlexCollection>>,
+    items: Vec<PlexItem>,
+    collections: Mutex<Vec<FakePlexCollection>>,
+}
+
+#[cfg(test)]
+impl FakePlexCollectionRepository {
+    /// A section whose scanned items are `items`, with no collections yet.
+    pub fn with_items(items: Vec<PlexItem>) -> Self {
+        Self {
+            items,
+            collections: Mutex::new(vec![]),
+        }
+    }
+
+    pub fn collections(&self) -> Vec<FakePlexCollection> {
+        self.collections.lock().unwrap().clone()
+    }
 }
 
 #[cfg(test)]
@@ -101,30 +126,80 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
     }
 
     fn list_collections(&self) -> anyhow::Result<Vec<PlexCollection>> {
-        Ok(self.collections.lock().unwrap().clone())
+        Ok(self
+            .collections
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|collection| PlexCollection {
+                rating_key: collection.rating_key.clone(),
+                title: collection.title.clone(),
+            })
+            .collect())
     }
 
-    fn list_collection_items(&self, _collection_rating_key: &str) -> anyhow::Result<Vec<PlexItem>> {
-        Ok(vec![])
+    fn list_collection_items(&self, collection_rating_key: &str) -> anyhow::Result<Vec<PlexItem>> {
+        Ok(self
+            .collections
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|collection| collection.rating_key == collection_rating_key)
+            .flat_map(|collection| collection.member_rating_keys.clone())
+            .map(|member| PlexItem {
+                youtube_video_id: self
+                    .items
+                    .iter()
+                    .find(|item| item.rating_key == member)
+                    .map(|item| item.youtube_video_id.clone())
+                    .unwrap_or_default(),
+                rating_key: member,
+            })
+            .collect())
     }
 
-    fn create_collection(&self, _title: &str, _rating_keys: &[String]) -> anyhow::Result<()> {
+    fn create_collection(&self, title: &str, rating_keys: &[String]) -> anyhow::Result<()> {
+        self.collections.lock().unwrap().push(FakePlexCollection {
+            rating_key: format!("collection:{title}"),
+            title: title.to_string(),
+            member_rating_keys: rating_keys.to_vec(),
+        });
         Ok(())
     }
 
-    fn add_items(
-        &self,
-        _collection_rating_key: &str,
-        _rating_keys: &[String],
-    ) -> anyhow::Result<()> {
+    fn add_items(&self, collection_rating_key: &str, rating_keys: &[String]) -> anyhow::Result<()> {
+        self.collections
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .filter(|collection| collection.rating_key == collection_rating_key)
+            .for_each(|collection| {
+                collection
+                    .member_rating_keys
+                    .extend(rating_keys.iter().cloned())
+            });
         Ok(())
     }
 
-    fn remove_item(&self, _collection_rating_key: &str, _rating_key: &str) -> anyhow::Result<()> {
+    fn remove_item(&self, collection_rating_key: &str, rating_key: &str) -> anyhow::Result<()> {
+        self.collections
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .filter(|collection| collection.rating_key == collection_rating_key)
+            .for_each(|collection| {
+                collection
+                    .member_rating_keys
+                    .retain(|key| key != rating_key)
+            });
         Ok(())
     }
 
-    fn delete_collection(&self, _collection_rating_key: &str) -> anyhow::Result<()> {
+    fn delete_collection(&self, collection_rating_key: &str) -> anyhow::Result<()> {
+        self.collections
+            .lock()
+            .unwrap()
+            .retain(|collection| collection.rating_key != collection_rating_key);
         Ok(())
     }
 }

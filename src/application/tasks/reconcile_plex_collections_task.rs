@@ -15,11 +15,8 @@ use tracing::info;
 /// machinery.
 pub struct ReconcilePlexCollectionsTask {
     reconciler: PlexCollectionReconciler,
-    #[allow(dead_code)]
     task_repository: Arc<dyn TaskRepository>,
-    #[allow(dead_code)]
     clock: Arc<dyn Clock>,
-    #[allow(dead_code)]
     interval_seconds: i64,
 }
 
@@ -42,7 +39,14 @@ impl ReconcilePlexCollectionsTask {
 impl TaskHandler for ReconcilePlexCollectionsTask {
     fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
         Task::decode_reconcile_plex_collections_payload(payload)?;
-        self.reconciler.reconcile_all()
+        self.reconciler.reconcile_all()?;
+
+        let next_run_at = self.clock.now() + chrono::Duration::seconds(self.interval_seconds);
+        self.task_repository
+            .schedule(&Task::ReconcilePlexCollections, next_run_at)?;
+        info!(next_run_at = %next_run_at, "scheduled next Plex collections reconcile");
+
+        Ok(())
     }
 }
 
@@ -71,4 +75,167 @@ pub fn schedule_reconcile_plex_collections_if_absent(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
+    use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::plex::PlexItem;
+    use crate::domain::services::PlexCollectionReconciler;
+    use crate::domain::shared::Quality;
+    use crate::domain::task::{ScheduledTask, TaskStatus};
+    use crate::domain::video::{Video, VideoId};
+    use crate::infrastructure::repositories::plex_collection_repository::{
+        FakePlexCollection, FakePlexCollectionRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::{
+        PlaylistRepository, SqlitePlaylistRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+        PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        SqliteVideoRepository, VideoRepository,
+    };
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use chrono::{DateTime, Utc};
+
+    const INTERVAL_SECONDS: i64 = 900;
+
+    #[test]
+    fn it_should_create_a_collection_for_a_playlist_with_scanned_videos() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_video_repository =
+            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items(vec![
+            plex_item("101", "yt1"),
+            plex_item("102", "yt2"),
+        ]));
+        playlist_repository
+            .insert(&playlist("PL1", "Lofi beats"))
+            .unwrap();
+        seed_downloaded_playlist_video(
+            &playlist_video_repository,
+            &video_repository,
+            "PL1",
+            "yt1",
+            0,
+        );
+        seed_downloaded_playlist_video(
+            &playlist_video_repository,
+            &video_repository,
+            "PL1",
+            "yt2",
+            1,
+        );
+        let task = ReconcilePlexCollectionsTask::new(
+            PlexCollectionReconciler::new(
+                playlist_repository.clone(),
+                Arc::new(SqliteChannelRepository::new(db.connection())),
+                playlist_video_repository.clone(),
+                Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+                video_repository.clone(),
+                plex_repository.clone(),
+            ),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            INTERVAL_SECONDS,
+        );
+
+        let result = run(&task, "{}");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            plex_repository.collections(),
+            vec![FakePlexCollection {
+                rating_key: "collection:Lofi beats".to_string(),
+                title: "Lofi beats".to_string(),
+                member_rating_keys: vec!["101".to_string(), "102".to_string()],
+            }]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                fixed_timestamp() + chrono::Duration::seconds(INTERVAL_SECONDS),
+            )]
+        );
+    }
+
+    fn plex_item(rating_key: &str, youtube_video_id: &str) -> PlexItem {
+        PlexItem {
+            rating_key: rating_key.to_string(),
+            youtube_video_id: youtube_video_id.to_string(),
+        }
+    }
+
+    fn playlist(id: &str, name: &str) -> Playlist {
+        Playlist::create(
+            PlaylistId::new(id).unwrap(),
+            PlaylistName::new(name).unwrap(),
+            PlaylistPath::new("music/chill").unwrap(),
+            Quality::High,
+            PlaylistKind::YoutubeLinked,
+            fixed_timestamp(),
+        )
+    }
+
+    /// Saves a downloaded video and its playlist membership at `position`.
+    fn seed_downloaded_playlist_video(
+        playlist_video_repository: &Arc<SqlitePlaylistVideoRepository>,
+        video_repository: &Arc<SqliteVideoRepository>,
+        playlist_id: &str,
+        youtube_id: &str,
+        position: i64,
+    ) {
+        let video = Video::create(
+            VideoId::new(youtube_id).unwrap(),
+            "My Video",
+            fixed_timestamp(),
+        )
+        .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create_with_position(
+                PlaylistId::new(playlist_id).unwrap(),
+                video.id,
+                position,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    fn pending_task(id: i64, run_at: DateTime<Utc>) -> ScheduledTask {
+        ScheduledTask {
+            id,
+            task_type: Task::ReconcilePlexCollections.task_type().to_string(),
+            payload: Task::ReconcilePlexCollections.payload().to_string(),
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
+    }
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn run(task: &ReconcilePlexCollectionsTask, payload: &str) -> Result<(), String> {
+        task.handle(payload, false).map_err(|e| e.to_string())
+    }
 }

@@ -1,26 +1,25 @@
+use crate::domain::playlist::PlaylistId;
+use crate::domain::video::{VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::plex_collection_repository::PlexCollectionRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Converges every tracked playlist's and channel's Plex collection toward
 /// yarrtube's downloaded videos in one pass, matching them by YouTube ID.
 #[derive(Clone)]
 pub struct PlexCollectionReconciler {
-    #[allow(dead_code)]
     playlist_repository: Arc<dyn PlaylistRepository>,
     #[allow(dead_code)]
     channel_repository: Arc<dyn ChannelRepository>,
-    #[allow(dead_code)]
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     #[allow(dead_code)]
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
-    #[allow(dead_code)]
     video_repository: Arc<dyn VideoRepository>,
-    #[allow(dead_code)]
     plex_collection_repository: Arc<dyn PlexCollectionRepository>,
 }
 
@@ -53,6 +52,81 @@ pub trait PlexCollectionReconcilerApi: Send + Sync {
 
 impl PlexCollectionReconcilerApi for PlexCollectionReconciler {
     fn reconcile_all(&self) -> anyhow::Result<()> {
+        let scanned = self.scanned_items_by_youtube_id()?;
+        let collections = self.collections_by_title()?;
+
+        for playlist in self.playlist_repository.list()? {
+            let desired = self.playlist_desired_rating_keys(&playlist.id, &scanned)?;
+            self.reconcile_collection(playlist.name.as_str(), desired, &collections)?;
+        }
+        Ok(())
+    }
+}
+
+impl PlexCollectionReconciler {
+    /// The section's scanned items, keyed by YouTube video ID.
+    fn scanned_items_by_youtube_id(&self) -> anyhow::Result<HashMap<String, String>> {
+        Ok(self
+            .plex_collection_repository
+            .list_items()?
+            .into_iter()
+            .map(|item| (item.youtube_video_id, item.rating_key))
+            .collect())
+    }
+
+    fn collections_by_title(&self) -> anyhow::Result<HashMap<String, String>> {
+        Ok(self
+            .plex_collection_repository
+            .list_collections()?
+            .into_iter()
+            .map(|collection| (collection.title, collection.rating_key))
+            .collect())
+    }
+
+    /// The rating keys of the playlist's downloaded videos that Plex has
+    /// scanned, in playlist order.
+    fn playlist_desired_rating_keys(
+        &self,
+        playlist_id: &PlaylistId,
+        scanned: &HashMap<String, String>,
+    ) -> anyhow::Result<Vec<String>> {
+        let video_ids: Vec<VideoRecordId> = self
+            .playlist_video_repository
+            .list_for_playlist(playlist_id)?
+            .into_iter()
+            .map(|playlist_video| playlist_video.video_id)
+            .collect();
+        self.downloaded_scanned_rating_keys(&video_ids, scanned)
+    }
+
+    /// The rating keys of the videos among `video_ids` that are downloaded
+    /// and scanned by Plex, in the order given.
+    fn downloaded_scanned_rating_keys(
+        &self,
+        video_ids: &[VideoRecordId],
+        scanned: &HashMap<String, String>,
+    ) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .video_repository
+            .find_many(video_ids)?
+            .into_iter()
+            .filter(|video| video.status == VideoStatus::Downloaded)
+            .filter_map(|video| scanned.get(video.youtube_id.as_str()).cloned())
+            .collect())
+    }
+
+    /// Converges one playlist's/channel's collection: creates it when
+    /// missing and there is something to put in it.
+    fn reconcile_collection(
+        &self,
+        name: &str,
+        desired: Vec<String>,
+        collections: &HashMap<String, String>,
+    ) -> anyhow::Result<()> {
+        if collections.get(name).is_none() && !desired.is_empty() {
+            self.plex_collection_repository
+                .create_collection(name, &desired)?;
+        }
         Ok(())
     }
 }
