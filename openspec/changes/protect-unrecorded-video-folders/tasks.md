@@ -2,7 +2,7 @@ The implementation and its tests already exist on `bug-download-videps` (commits
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Confirm every file, type and signature in design.md's `## Files` and `## Types & Signatures` exists as specified (`Video::unrecorded_folder_candidates`, `MembershipChanges` in both reconcilers, `SchedulerState.running_ids`, `Slot.task_id`, `recover_orphaned_tasks`, `recover_running_tasks`, `serve::task_handlers`, `serve::event_subscribers`, `TestDatabase::path`) and that `cargo build` succeeds.
+- [x] 1.1 Confirm every file, type and signature in design.md's `## Files` and `## Types & Signatures` exists as specified (`Video::unrecorded_folder_candidates`, `MembershipChanges` in both reconcilers, `SchedulerState.running_ids`, `Slot.task_id`, `recover_orphaned_tasks`, `recover_running_tasks`, `serve::task_handlers`, `serve::event_subscribers`, `TestDatabase::path`) and that `cargo build` succeeds.
 
 ## 2. Behaviour (TDD)
 
