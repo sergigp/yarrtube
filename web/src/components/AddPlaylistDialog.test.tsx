@@ -19,6 +19,13 @@ function renderDialog(routes: Routes) {
 }
 
 describe('AddPlaylistDialog', () => {
+  it('shows the save-to list with the default parent selected on open', async () => {
+    renderDialog({})
+
+    expect(await screen.findByRole('radio', { name: /playlists\// })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Choose another folder…' })).toBeInTheDocument()
+  })
+
   it('looks the entered playlist up and states the destination', async () => {
     renderDialog({
       'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },

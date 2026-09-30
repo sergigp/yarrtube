@@ -1,20 +1,19 @@
-import { useCallback, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { createPlaylist } from '@/api/client'
 import { useInvalidateLibrary, usePlaylistPreview, usePlaylists } from '@/api/queries'
 import type { PlaylistListItem, PlaylistPreview } from '@/api/types'
 import { useLookup, type Lookup } from '@/hooks/useLookup'
+import { useSaveLocation, type LocationValue } from '@/hooks/useSaveLocation'
 import { playlistNoticeLead } from '@/lib/noticeLead'
 import { DestinationNotice, DestinationPath } from './DestinationNotice'
 import { lookupNotice } from './lookupNotice'
-import { LocationField, type LocationValue } from './LocationField'
+import { FolderNameField } from './FolderNameField'
+import { SaveToField } from './SaveToField'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-
-const emptyForm = { playlist: '', quality: 'high' }
-const emptyLocation: LocationValue = { path: '', destination: '', valid: false }
 
 function sameId(a: string, b: string): boolean {
   return a === b
@@ -57,66 +56,8 @@ interface AddPlaylistDialogProps {
 }
 
 export function AddPlaylistDialog({ open, onOpenChange }: AddPlaylistDialogProps) {
-  const [form, setForm] = useState(emptyForm)
-  const [location, setLocation] = useState(emptyLocation)
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const invalidateLibrary = useInvalidateLibrary()
-  const entered = form.playlist.trim()
-  const playlists = usePlaylists()
-  const lookup = useLookup(entered, usePlaylistPreview, playlists.data, sameId)
-
-  const resetAll = () => {
-    setForm(emptyForm)
-    setLocation(emptyLocation)
-    setAdvancedOpen(false)
-    setError(null)
-  }
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      resetAll()
-    }
-    onOpenChange(nextOpen)
-  }
-
-  const setField =
-    (field: keyof typeof emptyForm) => (event: { target: { value: string } }) => {
-      const value = event.target.value
-      setForm((prev) => ({ ...prev, [field]: value }))
-    }
-
-  // Stable: `LocationField` reports the composed destination from an effect.
-  const handleLocationChange = useCallback((next: LocationValue) => setLocation(next), [])
-
-  const canSubmit = lookup.addable && location.valid && !submitting
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!canSubmit) {
-      return
-    }
-    setSubmitting(true)
-    setError(null)
-    try {
-      await createPlaylist({
-        playlist: form.playlist,
-        path: location.path,
-        quality: form.quality,
-      })
-      invalidateLibrary()
-      resetAll()
-      onOpenChange(false)
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       {/* `DialogContent` is centered with no height cap, so without the
           max-height an expanded "Advanced options" can push the submit button
           off a short viewport. `overflow-x-hidden` is not redundant: capping
@@ -128,60 +69,105 @@ export function AddPlaylistDialog({ open, onOpenChange }: AddPlaylistDialogProps
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogTitle>Add playlist</DialogTitle>
-
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="add-playlist-id">Playlist ID or URL</Label>
-            <Input
-              id="add-playlist-id"
-              type="text"
-              value={form.playlist}
-              onChange={setField('playlist')}
-              required
-            />
-            {/* Helper text under the field, as in the channel dialog. */}
-            {entered && (
-              <PlaylistNotice
-                lookup={lookup}
-                location={location}
-                onChange={() => setAdvancedOpen(true)}
-              />
-            )}
-          </div>
-
-          <div className="border-t border-border pt-3">
-            <button
-              type="button"
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setAdvancedOpen((prev) => !prev)}
-              aria-expanded={advancedOpen}
-            >
-              {advancedOpen ? '▾' : '▸'} Advanced options
-            </button>
-
-            {/* Kept mounted while collapsed: `LocationField` holds the
-                browsed parent and edited folder name, and reports the
-                destination the notice above shows. */}
-            <div className="mt-3 flex flex-col gap-4" hidden={!advancedOpen}>
-              <LocationField
-                mode="playlist"
-                nameSource={lookup.preview.data?.title ?? ''}
-                onChange={handleLocationChange}
-              />
-              <VideoQualityField
-                id="add-playlist-quality"
-                value={form.quality}
-                onChange={setField('quality')}
-              />
-            </div>
-          </div>
-
-          {error && <p className="text-sm text-destructive">{error.message}</p>}
-          <Button type="submit" disabled={!canSubmit} className="self-start">
-            {submitting ? 'Creating…' : 'Create Playlist'}
-          </Button>
-        </form>
+        {/* The form unmounts with the dialog, so every open starts a fresh
+            session: fields, browsed parent and folder-name edits included. */}
+        <AddPlaylistForm onClose={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
+  )
+}
+
+function AddPlaylistForm({ onClose }: { onClose: () => void }) {
+  const [form, setForm] = useState({ playlist: '', quality: 'high' })
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const invalidateLibrary = useInvalidateLibrary()
+  const entered = form.playlist.trim()
+  const playlists = usePlaylists()
+  const lookup = useLookup(entered, usePlaylistPreview, playlists.data, sameId)
+  const location = useSaveLocation('playlist', lookup.preview.data?.title ?? '')
+
+  const setField =
+    (field: keyof typeof form) => (event: { target: { value: string } }) => {
+      const value = event.target.value
+      setForm((prev) => ({ ...prev, [field]: value }))
+    }
+
+  const canSubmit = lookup.addable && location.value.valid && !submitting
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!canSubmit) {
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      await createPlaylist({
+        playlist: form.playlist,
+        path: location.value.path,
+        quality: form.quality,
+      })
+      location.remember()
+      invalidateLibrary()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="add-playlist-id">Playlist ID or URL</Label>
+        <Input
+          id="add-playlist-id"
+          type="text"
+          value={form.playlist}
+          onChange={setField('playlist')}
+          required
+        />
+      </div>
+
+      <SaveToField location={location} />
+
+      {entered && (
+        <PlaylistNotice
+          lookup={lookup}
+          location={location.value}
+          onChange={() => setAdvancedOpen(true)}
+        />
+      )}
+
+      <div className="border-t border-border pt-3">
+        <button
+          type="button"
+          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+          onClick={() => setAdvancedOpen((prev) => !prev)}
+          aria-expanded={advancedOpen}
+        >
+          {advancedOpen ? '▾' : '▸'} Advanced options
+        </button>
+
+        {/* Kept mounted while collapsed: the folder-name field shows the
+            auto-filled value the notice above composes the destination from. */}
+        <div className="mt-3 flex flex-col gap-4" hidden={!advancedOpen}>
+          <FolderNameField location={location} id="add-playlist-folder-name" />
+          <VideoQualityField
+            id="add-playlist-quality"
+            value={form.quality}
+            onChange={setField('quality')}
+          />
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error.message}</p>}
+      <Button type="submit" disabled={!canSubmit} className="self-start">
+        {submitting ? 'Creating…' : 'Create Playlist'}
+      </Button>
+    </form>
   )
 }
