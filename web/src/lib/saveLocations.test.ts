@@ -16,4 +16,15 @@ describe('deriveSaveCandidates', () => {
       { path: 'playlists/music', count: 1 },
     ])
   })
+
+  it('pins the default parent first even with zero occupants', () => {
+    const candidates = deriveSaveCandidates('channels', [
+      { path: 'channels/science/veritasium', created_at: '2026-02-01T00:00:00Z' },
+    ])
+
+    expect(candidates).toEqual([
+      { path: 'channels', count: 0 },
+      { path: 'channels/science', count: 1 },
+    ])
+  })
 })

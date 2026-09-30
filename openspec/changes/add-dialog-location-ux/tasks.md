@@ -26,7 +26,7 @@ Frontend-only change: the TDD cycles run in the Vitest suite (`web/`), with `npm
 `web/src/lib/saveLocations.ts` is the change's only adapter-like module (pure derivation + localStorage boundary):
 
 - [x] 3.1 `derives distinct parents with counts from item paths` — replaces the skeleton's hardcoded return. Verified by the test.
-- [ ] 3.2 `pins the default parent first even with zero occupants` — verified by the test.
+- [x] 3.2 `pins the default parent first even with zero occupants` — verified by the test.
 - [ ] 3.3 `orders by newest created_at, then count, then name, and applies the cap` — verified by the test.
 - [ ] 3.4 `reads null and writes without throwing when storage is unavailable` — read/write wrapped against throwing storage. Verified by the test.
 
