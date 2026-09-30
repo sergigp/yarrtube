@@ -63,7 +63,7 @@ export function AddPlaylistDialog({ open, onOpenChange }: AddPlaylistDialogProps
           one axis makes CSS compute the other to `auto`, which would let a
           long path scroll the dialog sideways. */}
       <DialogContent
-        className="max-h-[calc(100dvh-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-md"
+        className="max-h-[calc(100dvh-2rem)] gap-5 overflow-x-hidden overflow-y-auto p-6 sm:max-w-lg"
         onPointerDownOutside={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
       >
@@ -119,7 +119,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+    <form className="flex min-w-0 flex-col gap-5" onSubmit={handleSubmit}>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="add-playlist-id">Playlist ID or URL</Label>
         <Input
@@ -135,7 +135,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
 
       {entered && <PlaylistNotice lookup={lookup} location={location.value} />}
 
-      <div className="border-t border-border pt-3">
+      <div className="min-w-0 border-t border-border pt-4">
         <button
           type="button"
           className="text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -147,7 +147,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
 
         {/* Kept mounted while collapsed: the folder-name field shows the
             auto-filled value the notice above composes the destination from. */}
-        <div className="mt-3 flex flex-col gap-4" hidden={!advancedOpen}>
+        <div className="mt-4 flex min-w-0 flex-col gap-5" hidden={!advancedOpen}>
           <FolderNameField location={location} id="add-playlist-folder-name" />
           <VideoQualityField
             id="add-playlist-quality"

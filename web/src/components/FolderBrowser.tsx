@@ -133,7 +133,7 @@ export function FolderBrowser({
   const crumbs = breadcrumb(parent, shortRootLabel(root))
 
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-md border border-border p-2.5">
+    <div className="flex min-w-0 flex-col gap-2 rounded-md border border-input p-3">
       <nav aria-label="Folder path" className="flex min-w-0 flex-wrap items-center gap-0.5 text-xs">
         {crumbs.map((crumb, index) => {
           const isCurrent = index === crumbs.length - 1

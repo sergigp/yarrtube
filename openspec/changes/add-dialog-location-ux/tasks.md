@@ -33,5 +33,5 @@ Frontend-only change: the TDD cycles run in the Vitest suite (`web/`), with `npm
 ## 4. Verification
 
 - [x] 4.1 Delete `LocationField.tsx` and `LocationField.test.tsx` once nothing imports them; migrate any still-relevant browser assertions into `SaveToField.test.tsx`. Verified by `npm run check` green.
-- [ ] 4.2 Design pass: widen both dialogs to `sm:max-w-lg`, open up vertical spacing so the form breathes, and ensure long "in use by …" rows truncate inside the dialog with no horizontal clipping. Verified manually via `scripts/run-local.sh` on both dialogs (open browser panel, long labels, narrow viewport).
+- [x] 4.2 Design pass: widen both dialogs to `sm:max-w-lg`, open up vertical spacing so the form breathes, and ensure long "in use by …" rows truncate inside the dialog with no horizontal clipping. Verified manually via `scripts/run-local.sh` on both dialogs (open browser panel, long labels, narrow viewport).
 - [ ] 4.3 `npm run check` (typecheck + lint + full Vitest suite) and `cargo build --release` (embeds `dist/`) both pass; manual end-to-end add of a playlist into a nested folder via `scripts/run-local.sh`.
