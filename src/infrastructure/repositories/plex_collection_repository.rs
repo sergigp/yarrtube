@@ -121,11 +121,7 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
     }
 
     fn create_collection(&self, title: &str, rating_keys: &[String]) -> anyhow::Result<()> {
-        let machine_id = self.machine_id()?;
-        let uri = format!(
-            "server://{machine_id}/com.plexapp.plugins.library/library/metadata/{}",
-            rating_keys.join(",")
-        );
+        let uri = self.members_uri(rating_keys)?;
 
         let path = "/library/collections";
         let response = self
@@ -154,12 +150,18 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
         self.set_alphabetical_sort(&collection_rating_key)
     }
 
-    fn add_items(
-        &self,
-        _collection_rating_key: &str,
-        _rating_keys: &[String],
-    ) -> anyhow::Result<()> {
-        Ok(())
+    fn add_items(&self, collection_rating_key: &str, rating_keys: &[String]) -> anyhow::Result<()> {
+        let uri = self.members_uri(rating_keys)?;
+
+        let path = format!("/library/metadata/{collection_rating_key}/items");
+        let response = self
+            .client
+            .put(format!("{}{path}", self.config.base_url))
+            .query(&[("uri", &uri)])
+            .header("Accept", "application/json")
+            .header("X-Plex-Token", &self.config.token)
+            .send()?;
+        Self::ensure_success(&path, &response)
     }
 
     fn remove_item(&self, _collection_rating_key: &str, _rating_key: &str) -> anyhow::Result<()> {
@@ -187,6 +189,16 @@ impl HttpPlexCollectionRepository {
             .ok_or_else(|| anyhow::anyhow!("Plex /identity response held no machineIdentifier"))?;
         *machine_id = Some(fetched.clone());
         Ok(fetched)
+    }
+
+    /// The `uri` value Plex's collection endpoints take to identify a set
+    /// of items on this server.
+    fn members_uri(&self, rating_keys: &[String]) -> anyhow::Result<String> {
+        let machine_id = self.machine_id()?;
+        Ok(format!(
+            "server://{machine_id}/com.plexapp.plugins.library/library/metadata/{}",
+            rating_keys.join(",")
+        ))
     }
 
     /// Sets the collection to sort alphabetically, so yarrtube's
@@ -589,6 +601,31 @@ mod tests {
         identity_mock.assert();
         create_mock.assert();
         sort_mock.assert();
+    }
+
+    #[test]
+    fn it_should_add_items_to_a_collection() {
+        let mut server = mockito::Server::new();
+        let _identity_mock = server
+            .mock("GET", "/identity")
+            .with_status(200)
+            .with_body(r#"{"MediaContainer": {"machineIdentifier": "machine-1"}}"#)
+            .create();
+        let add_mock = server
+            .mock("PUT", "/library/metadata/c1/items")
+            .match_query(mockito::Matcher::UrlEncoded(
+                "uri".into(),
+                "server://machine-1/com.plexapp.plugins.library/library/metadata/103,104".into(),
+            ))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.add_items("c1", &["103".to_string(), "104".to_string()]);
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        add_mock.assert();
     }
 
     fn repository(server: &mockito::Server) -> HttpPlexCollectionRepository {
