@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { deriveSaveCandidates } from './saveLocations'
+import {
+  deriveSaveCandidates,
+  readRememberedParent,
+  writeRememberedParent,
+} from './saveLocations'
 
 describe('deriveSaveCandidates', () => {
   it('derives distinct parents with counts from item paths', () => {
@@ -50,5 +54,25 @@ describe('deriveSaveCandidates', () => {
       { path: 'playlists/dropped', count: 1 },
       { path: 'playlists/undated-busy', count: 2 },
     ])
+  })
+})
+
+describe('remembered parent storage', () => {
+  it('reads null and writes without throwing when storage is unavailable', () => {
+    const original = Object.getOwnPropertyDescriptor(window, 'localStorage')
+    const denied = () => {
+      throw new Error('storage denied')
+    }
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get: denied,
+    })
+
+    try {
+      expect(readRememberedParent('playlist')).toBeNull()
+      expect(() => writeRememberedParent('playlist', 'playlists/kids')).not.toThrow()
+    } finally {
+      Object.defineProperty(window, 'localStorage', original!)
+    }
   })
 })
