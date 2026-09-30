@@ -45,6 +45,8 @@ struct MediaContainer {
 struct Metadata {
     #[serde(rename = "ratingKey")]
     rating_key: String,
+    #[serde(default)]
+    title: String,
     #[serde(rename = "Guid", default)]
     guids: Vec<Guid>,
 }
@@ -111,7 +113,19 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
     }
 
     fn list_collections(&self) -> anyhow::Result<Vec<PlexCollection>> {
-        Ok(vec![])
+        let response: MediaContainerResponse = self.get_json(
+            &format!("/library/sections/{}/collections", self.config.section_id),
+            &[],
+        )?;
+        Ok(response
+            .media_container
+            .metadata
+            .into_iter()
+            .map(|metadata| PlexCollection {
+                rating_key: metadata.rating_key,
+                title: metadata.title,
+            })
+            .collect())
     }
 
     fn list_collection_items(&self, _collection_rating_key: &str) -> anyhow::Result<Vec<PlexItem>> {
@@ -376,6 +390,40 @@ mod tests {
                 rating_key: "101".to_string(),
                 youtube_video_id: "yt1".to_string(),
             }]
+        );
+    }
+
+    #[test]
+    fn it_should_list_collections() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/sections/1/collections")
+            .match_header("accept", "application/json")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"Metadata": [
+                    {"ratingKey": "c1", "title": "Lofi beats"},
+                    {"ratingKey": "c2", "title": "Some Channel"}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let collections = repository.list_collections().unwrap();
+
+        assert_eq!(
+            collections,
+            vec![
+                PlexCollection {
+                    rating_key: "c1".to_string(),
+                    title: "Lofi beats".to_string(),
+                },
+                PlexCollection {
+                    rating_key: "c2".to_string(),
+                    title: "Some Channel".to_string(),
+                },
+            ]
         );
     }
 
