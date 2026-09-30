@@ -76,6 +76,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_skip_if_no_collection_matches_the_playlist_name() {
+        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items_and_collections(
+            vec![],
+            vec![FakePlexCollection {
+                rating_key: "c2".to_string(),
+                title: "Other".to_string(),
+                member_rating_keys: vec![],
+            }],
+        ));
+        let subscriber = DeletePlexCollectionOnPlaylistDeleted::new(PlexCollectionDeleter::new(
+            plex_repository.clone(),
+        ));
+
+        let result = handle(
+            &subscriber,
+            r#"{"playlist_id": "PL1", "name": "Ghost", "path": "music/chill"}"#,
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex_repository.mutations(), Vec::<String>::new());
+        assert_eq!(
+            plex_repository.collections(),
+            vec![FakePlexCollection {
+                rating_key: "c2".to_string(),
+                title: "Other".to_string(),
+                member_rating_keys: vec![],
+            }]
+        );
+    }
+
     fn handle(
         subscriber: &DeletePlexCollectionOnPlaylistDeleted,
         payload: &str,
