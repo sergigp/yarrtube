@@ -25,7 +25,7 @@
 
 `HttpPlexCollectionRepository` against mockito:
 
-- [ ] 3.1 `it_should_list_section_items_with_their_youtube_ids` — parses the section listing (JSON via `Accept: application/json`), keeping only items with a `youtube://` guid.
+- [x] 3.1 `it_should_list_section_items_with_their_youtube_ids` — parses the section listing (JSON via `Accept: application/json`), keeping only items with a `youtube://` guid.
 - [ ] 3.2 `it_should_list_collections` — parses `/library/sections/<id>/collections` into `PlexCollection`s.
 - [ ] 3.3 `it_should_list_collection_items` — parses a collection's children into `PlexItem`s.
 - [ ] 3.4 `it_should_create_a_collection_with_alphabetical_sort` — fetches the machine id from `/identity` (cached), POSTs `/library/collections` with `sectionId`/`title`/`uri`, then sets the `collectionSort` pref.

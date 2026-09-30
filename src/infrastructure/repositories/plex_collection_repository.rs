@@ -1,4 +1,5 @@
 use crate::domain::plex::{PlexCollection, PlexItem};
+use serde::Deserialize;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -22,11 +23,46 @@ pub trait PlexCollectionRepository: Send + Sync {
     fn delete_collection(&self, collection_rating_key: &str) -> anyhow::Result<()>;
 }
 
-#[allow(dead_code)] // read once the HTTP adapter issues real requests
 pub struct PlexConfig {
     pub base_url: String,
     pub token: String,
     pub section_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct MediaContainerResponse {
+    #[serde(rename = "MediaContainer")]
+    media_container: MediaContainer,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct MediaContainer {
+    #[serde(rename = "Metadata", default)]
+    metadata: Vec<Metadata>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Metadata {
+    #[serde(rename = "ratingKey")]
+    rating_key: String,
+    #[serde(rename = "Guid", default)]
+    guids: Vec<Guid>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Guid {
+    id: String,
+}
+
+impl Metadata {
+    /// The YouTube video ID Plex's NFO agent derived from yarrtube's
+    /// `<uniqueid type="youtube">`, if this item has one.
+    fn youtube_video_id(&self) -> Option<String> {
+        self.guids
+            .iter()
+            .find_map(|guid| guid.id.strip_prefix("youtube://"))
+            .map(str::to_string)
+    }
 }
 
 pub struct HttpPlexCollectionRepository {
@@ -55,7 +91,23 @@ impl HttpPlexCollectionRepository {
 
 impl PlexCollectionRepository for HttpPlexCollectionRepository {
     fn list_items(&self) -> anyhow::Result<Vec<PlexItem>> {
-        Ok(vec![])
+        let response: MediaContainerResponse = self.get_json(
+            &format!("/library/sections/{}/all", self.config.section_id),
+            &[("includeGuids", "1")],
+        )?;
+        Ok(response
+            .media_container
+            .metadata
+            .into_iter()
+            .filter_map(|metadata| {
+                metadata
+                    .youtube_video_id()
+                    .map(|youtube_video_id| PlexItem {
+                        rating_key: metadata.rating_key,
+                        youtube_video_id,
+                    })
+            })
+            .collect())
     }
 
     fn list_collections(&self) -> anyhow::Result<Vec<PlexCollection>> {
@@ -83,6 +135,32 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
     }
 
     fn delete_collection(&self, _collection_rating_key: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+impl HttpPlexCollectionRepository {
+    fn get_json<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> anyhow::Result<T> {
+        let response = self
+            .client
+            .get(format!("{}{path}", self.config.base_url))
+            .query(query)
+            .header("Accept", "application/json")
+            .header("X-Plex-Token", &self.config.token)
+            .send()?;
+        Self::ensure_success(path, &response)?;
+        Ok(response.json()?)
+    }
+
+    fn ensure_success(path: &str, response: &reqwest::blocking::Response) -> anyhow::Result<()> {
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("Plex request to {path} failed with status {status}");
+        }
         Ok(())
     }
 }
@@ -259,5 +337,53 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
             .unwrap()
             .retain(|collection| collection.rating_key != collection_rating_key);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_list_section_items_with_their_youtube_ids() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/sections/1/all")
+            .match_query(mockito::Matcher::UrlEncoded(
+                "includeGuids".into(),
+                "1".into(),
+            ))
+            .match_header("accept", "application/json")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"Metadata": [
+                    {"ratingKey": "101", "title": "First video",
+                     "Guid": [{"id": "youtube://yt1"}]},
+                    {"ratingKey": "102", "title": "Local file without guids"},
+                    {"ratingKey": "103", "title": "Non-youtube guid",
+                     "Guid": [{"id": "imdb://tt42"}]}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let items = repository.list_items().unwrap();
+
+        assert_eq!(
+            items,
+            vec![PlexItem {
+                rating_key: "101".to_string(),
+                youtube_video_id: "yt1".to_string(),
+            }]
+        );
+    }
+
+    fn repository(server: &mockito::Server) -> HttpPlexCollectionRepository {
+        HttpPlexCollectionRepository::new(PlexConfig {
+            base_url: server.url(),
+            token: "secret-token".to_string(),
+            section_id: "1".to_string(),
+        })
     }
 }
