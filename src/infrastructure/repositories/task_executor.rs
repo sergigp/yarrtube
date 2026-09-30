@@ -35,11 +35,13 @@ pub struct TaskExecutor {
 struct SchedulerState {
     running: HashMap<TaskLane, usize>,
     held_keys: HashSet<String>,
+    running_ids: HashSet<i64>,
 }
 
 /// What a running task holds while it runs: a slot in its lane, and its
 /// exclusivity key, if it has one.
 struct Slot {
+    task_id: i64,
     lane: TaskLane,
     key: Option<String>,
 }
@@ -47,6 +49,7 @@ struct Slot {
 impl Slot {
     fn for_task(task: &ScheduledTask) -> Self {
         Self {
+            task_id: task.id,
             lane: Task::lane_for(&task.task_type),
             key: Task::exclusivity_key(&task.task_type, &task.payload),
         }
@@ -71,6 +74,7 @@ impl SchedulerState {
     }
 
     fn start(&mut self, slot: &Slot) {
+        self.running_ids.insert(slot.task_id);
         *self.running.entry(slot.lane).or_insert(0) += 1;
         if let Some(key) = &slot.key {
             self.held_keys.insert(key.clone());
@@ -78,6 +82,7 @@ impl SchedulerState {
     }
 
     fn finish(&mut self, slot: &Slot) {
+        self.running_ids.remove(&slot.task_id);
         if let Some(count) = self.running.get_mut(&slot.lane) {
             *count = count.saturating_sub(1);
         }
@@ -111,6 +116,7 @@ impl TaskExecutor {
     /// the tasks it started, so tests can await them.
     pub fn schedule_pass(self: &Arc<Self>) -> anyhow::Result<Vec<JoinHandle<()>>> {
         let mut state = self.lock_state();
+        self.recover_orphaned_tasks(&state)?;
         if state.exclusive_running() {
             return Ok(Vec::new());
         }
@@ -128,22 +134,10 @@ impl TaskExecutor {
     /// process, applying the same failed-attempt handling as a dispatch
     /// failure to each. Meant to be called once at startup.
     pub fn recover_stuck_tasks(&self) -> anyhow::Result<()> {
-        for task in self.repository.list_running()? {
-            let id = task.id;
-            warn!(
-                task_id = id,
-                "recovering task left running after an unclean shutdown"
-            );
-            match task.fail(
-                "recovered as a failed attempt after an unclean shutdown",
-                self.clock.now(),
-                self.base_retry_delay_seconds,
-            ) {
-                TaskFailureOutcome::Retry(retried) => self.repository.update(&retried)?,
-                TaskFailureOutcome::DeadLetter(dead) => self.repository.dead_letter(&dead)?,
-            }
-        }
-        Ok(())
+        self.recover_running_tasks(
+            &HashSet::new(),
+            "recovered as a failed attempt after an unclean shutdown",
+        )
     }
 
     /// Runs a scheduling pass on every `interval` tick and whenever a task
@@ -167,6 +161,29 @@ impl TaskExecutor {
 
     /// The state is plain counters and keys, always left consistent, so a
     /// lock poisoned by a panic elsewhere is safe to keep using.
+    /// A `running` row this executor isn't running had its outcome lost (e.g.
+    /// recording it hit a database error). Left alone it would stay running
+    /// until a restart, and block every later task for its video through the
+    /// schedule-time dedupe, so it's recovered as a failed attempt instead.
+    fn recover_orphaned_tasks(&self, state: &SchedulerState) -> anyhow::Result<()> {
+        self.recover_running_tasks(
+            &state.running_ids,
+            "recovered as a failed attempt: left running with no attempt in progress",
+        )
+    }
+
+    /// Records every `running` task not in `in_progress` as a failed attempt.
+    fn recover_running_tasks(&self, in_progress: &HashSet<i64>, error: &str) -> anyhow::Result<()> {
+        self.repository
+            .list_running()?
+            .into_iter()
+            .filter(|task| !in_progress.contains(&task.id))
+            .try_for_each(|task| {
+                warn!(task_id = task.id, error, "recovering task left running");
+                self.record_failure(task, anyhow::anyhow!(error.to_string()))
+            })
+    }
+
     fn lock_state(&self) -> MutexGuard<'_, SchedulerState> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -1065,6 +1082,47 @@ mod tests {
         assert_eq!(
             *handler.received_is_last_attempt.lock().unwrap(),
             vec![false, false]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_retry_a_task_left_running_without_waiting_for_a_restart() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::succeeding());
+        task_repository.schedule(&task(), now()).unwrap();
+        task_repository
+            .update(&pending_task(0).start(now()))
+            .unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
+        ));
+
+        let result = run_pass(&executor).await;
+
+        assert!(result.is_ok());
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            Vec::<bool>::new()
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![ScheduledTask {
+                retries: 1,
+                run_at: now() + chrono::Duration::seconds(450),
+                last_error: Some(
+                    "recovered as a failed attempt: left running with no attempt in progress"
+                        .to_string()
+                ),
+                ..pending_task(0)
+            }]
         );
     }
 
