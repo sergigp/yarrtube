@@ -106,6 +106,7 @@ pub struct FakePlexCollectionRepository {
     /// `add:c1:102`, `remove:c1:101`, `delete:c1`.
     mutations: Mutex<Vec<String>>,
     failing_create_titles: Vec<String>,
+    unreachable: bool,
 }
 
 #[cfg(test)]
@@ -126,6 +127,15 @@ impl FakePlexCollectionRepository {
             collections: Mutex::new(collections),
             mutations: Mutex::new(vec![]),
             failing_create_titles: vec![],
+            unreachable: false,
+        }
+    }
+
+    /// A Plex server that is down: every call fails.
+    pub fn failing() -> Self {
+        Self {
+            unreachable: true,
+            ..Self::with_items(vec![])
         }
     }
 
@@ -147,6 +157,9 @@ impl FakePlexCollectionRepository {
 #[cfg(test)]
 impl PlexCollectionRepository for FakePlexCollectionRepository {
     fn list_items(&self) -> anyhow::Result<Vec<PlexItem>> {
+        if self.unreachable {
+            anyhow::bail!("Plex is unreachable");
+        }
         Ok(self.items.clone())
     }
 

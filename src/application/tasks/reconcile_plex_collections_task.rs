@@ -39,14 +39,14 @@ impl ReconcilePlexCollectionsTask {
 impl TaskHandler for ReconcilePlexCollectionsTask {
     fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
         Task::decode_reconcile_plex_collections_payload(payload)?;
-        self.reconciler.reconcile_all()?;
+        let result = self.reconciler.reconcile_all();
 
         let next_run_at = self.clock.now() + chrono::Duration::seconds(self.interval_seconds);
         self.task_repository
             .schedule(&Task::ReconcilePlexCollections, next_run_at)?;
         info!(next_run_at = %next_run_at, "scheduled next Plex collections reconcile");
 
-        Ok(())
+        result
     }
 }
 
@@ -471,6 +471,40 @@ mod tests {
                 member_rating_keys: vec!["102".to_string()],
             }]
         );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                fixed_timestamp() + chrono::Duration::seconds(INTERVAL_SECONDS),
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_reschedule_the_next_reconcile_if_the_pass_fails() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let plex_repository = Arc::new(FakePlexCollectionRepository::failing());
+        let task = ReconcilePlexCollectionsTask::new(
+            PlexCollectionReconciler::new(
+                Arc::new(SqlitePlaylistRepository::new(db.connection())),
+                Arc::new(SqliteChannelRepository::new(db.connection())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+                Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+                Arc::new(SqliteVideoRepository::new(db.connection())),
+                plex_repository.clone(),
+            ),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            INTERVAL_SECONDS,
+        );
+
+        let result = run(&task, "{}");
+
+        assert_eq!(result, Err("Plex is unreachable".to_string()));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(
