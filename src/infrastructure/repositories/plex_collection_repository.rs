@@ -105,6 +105,7 @@ pub struct FakePlexCollectionRepository {
     /// Every mutating call, in order, e.g. `create:Lofi beats`,
     /// `add:c1:102`, `remove:c1:101`, `delete:c1`.
     mutations: Mutex<Vec<String>>,
+    failing_create_titles: Vec<String>,
 }
 
 #[cfg(test)]
@@ -124,7 +125,14 @@ impl FakePlexCollectionRepository {
             items,
             collections: Mutex::new(collections),
             mutations: Mutex::new(vec![]),
+            failing_create_titles: vec![],
         }
+    }
+
+    /// The same fake, but `create_collection` fails for `title`.
+    pub fn failing_create_for(mut self, title: &str) -> Self {
+        self.failing_create_titles.push(title.to_string());
+        self
     }
 
     pub fn collections(&self) -> Vec<FakePlexCollection> {
@@ -176,6 +184,9 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
     }
 
     fn create_collection(&self, title: &str, rating_keys: &[String]) -> anyhow::Result<()> {
+        if self.failing_create_titles.iter().any(|t| t == title) {
+            anyhow::bail!("Plex refused to create the collection {title}");
+        }
         self.mutations
             .lock()
             .unwrap()

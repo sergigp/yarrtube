@@ -9,6 +9,7 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::error;
 
 /// Converges every tracked playlist's and channel's Plex collection toward
 /// yarrtube's downloaded videos in one pass, matching them by YouTube ID.
@@ -55,14 +56,29 @@ impl PlexCollectionReconcilerApi for PlexCollectionReconciler {
         let collections = self.collections_by_title()?;
 
         for playlist in self.playlist_repository.list()? {
-            let desired = self.playlist_desired_rating_keys(&playlist.id, &scanned)?;
-            self.reconcile_collection(playlist.name.as_str(), desired, &collections)?;
+            let result = self
+                .playlist_desired_rating_keys(&playlist.id, &scanned)
+                .and_then(|desired| {
+                    self.reconcile_collection(playlist.name.as_str(), desired, &collections)
+                });
+            log_and_skip_failure(playlist.name.as_str(), result);
         }
         for channel in self.channel_repository.list()? {
-            let desired = self.channel_desired_rating_keys(&channel.id, &scanned)?;
-            self.reconcile_collection(&channel.name, desired, &collections)?;
+            let result = self
+                .channel_desired_rating_keys(&channel.id, &scanned)
+                .and_then(|desired| {
+                    self.reconcile_collection(&channel.name, desired, &collections)
+                });
+            log_and_skip_failure(&channel.name, result);
         }
         Ok(())
+    }
+}
+
+/// One collection's failure never aborts the pass; the next pass retries it.
+fn log_and_skip_failure(name: &str, result: anyhow::Result<()>) {
+    if let Err(e) = result {
+        error!(collection = name, error = %e, "failed to reconcile Plex collection, skipping");
     }
 }
 
