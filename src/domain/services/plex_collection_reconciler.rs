@@ -9,7 +9,7 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::error;
+use tracing::{debug, error, info};
 
 /// Converges every tracked playlist's and channel's Plex collection toward
 /// yarrtube's downloaded videos in one pass, matching them by YouTube ID.
@@ -54,6 +54,11 @@ impl PlexCollectionReconcilerApi for PlexCollectionReconciler {
     fn reconcile_all(&self) -> anyhow::Result<()> {
         let scanned = self.scanned_items_by_youtube_id()?;
         let collections = self.collections_by_title()?;
+        info!(
+            scanned_items = scanned.len(),
+            collections = collections.len(),
+            "starting Plex collections reconcile pass"
+        );
 
         for playlist in self.playlist_repository.list()? {
             let result = self
@@ -160,11 +165,26 @@ impl PlexCollectionReconciler {
         collections: &HashMap<String, String>,
     ) -> anyhow::Result<()> {
         match collections.get(name) {
-            None if desired.is_empty() => Ok(()),
-            None => self
-                .plex_collection_repository
-                .create_collection(name, &desired),
-            Some(collection_rating_key) => self.converge_members(collection_rating_key, &desired),
+            None if desired.is_empty() => {
+                debug!(
+                    collection = name,
+                    "no scanned videos yet, not creating the collection"
+                );
+                Ok(())
+            }
+            None => {
+                self.plex_collection_repository
+                    .create_collection(name, &desired)?;
+                info!(
+                    collection = name,
+                    members = desired.len(),
+                    "created Plex collection"
+                );
+                Ok(())
+            }
+            Some(collection_rating_key) => {
+                self.converge_members(name, collection_rating_key, &desired)
+            }
         }
     }
 
@@ -172,6 +192,7 @@ impl PlexCollectionReconciler {
     /// removes the members no longer desired.
     fn converge_members(
         &self,
+        name: &str,
         collection_rating_key: &str,
         desired: &[String],
     ) -> anyhow::Result<()> {
@@ -190,11 +211,21 @@ impl PlexCollectionReconciler {
         if !missing.is_empty() {
             self.plex_collection_repository
                 .add_items(collection_rating_key, &missing)?;
+            info!(
+                collection = name,
+                added = missing.len(),
+                "added items to Plex collection"
+            );
         }
 
         for member in members.iter().filter(|member| !desired.contains(member)) {
             self.plex_collection_repository
                 .remove_item(collection_rating_key, member)?;
+            info!(
+                collection = name,
+                rating_key = member,
+                "removed item from Plex collection"
+            );
         }
         Ok(())
     }
