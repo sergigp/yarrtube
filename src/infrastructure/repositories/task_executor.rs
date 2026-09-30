@@ -2,8 +2,10 @@ use crate::domain::task::{ScheduledTask, Task, TaskFailureOutcome, TaskLane};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use crate::infrastructure::shared::system_clock::Clock;
+use std::any::Any;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::panic::{self, AssertUnwindSafe};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
@@ -108,7 +110,7 @@ impl TaskExecutor {
     /// (lane capacity, held keys, exclusive drain). Returns the handles of
     /// the tasks it started, so tests can await them.
     pub fn schedule_pass(self: &Arc<Self>) -> anyhow::Result<Vec<JoinHandle<()>>> {
-        let mut state = self.lock_state()?;
+        let mut state = self.lock_state();
         if state.exclusive_running() {
             return Ok(Vec::new());
         }
@@ -163,10 +165,10 @@ impl TaskExecutor {
         }
     }
 
-    fn lock_state(&self) -> anyhow::Result<MutexGuard<'_, SchedulerState>> {
-        self.state
-            .lock()
-            .map_err(|_| anyhow::anyhow!("task scheduler state lock poisoned"))
+    /// The state is plain counters and keys, always left consistent, so a
+    /// lock poisoned by a panic elsewhere is safe to keep using.
+    fn lock_state(&self) -> MutexGuard<'_, SchedulerState> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// An exclusive task starts only once nothing else runs; until then no
@@ -224,19 +226,18 @@ impl TaskExecutor {
     }
 
     /// Runs `running` on the blocking pool, then frees its slot (lane and
-    /// key) and wakes the scheduler so it is refilled straight away.
+    /// key) and wakes the scheduler so it is refilled straight away. The slot
+    /// is freed by a guard, so it is released even if something panics.
     fn spawn(self: &Arc<Self>, running: ScheduledTask, slot: Slot) -> JoinHandle<()> {
-        let executor = Arc::clone(self);
+        let release = SlotRelease {
+            executor: Arc::clone(self),
+            slot,
+        };
         tokio::task::spawn_blocking(move || {
             let id = running.id;
-            if let Err(e) = executor.execute(running) {
+            if let Err(e) = release.executor.execute(running) {
                 error!(task_id = id, error = %e, "failed to record task outcome");
             }
-            match executor.lock_state() {
-                Ok(mut state) => state.finish(&slot),
-                Err(e) => error!(task_id = id, error = %e, "failed to release task slot"),
-            }
-            executor.wake.notify_one();
         })
     }
 
@@ -255,14 +256,24 @@ impl TaskExecutor {
         }
     }
 
+    /// A handler that panics counts as a failed attempt, like one that
+    /// returns an error, so its task is retried or dead-lettered.
     fn dispatch(&self, running: &ScheduledTask) -> anyhow::Result<()> {
-        match self.handlers.get(&running.task_type) {
-            Some(handler) => handler.handle(&running.payload, running.is_last_attempt()),
-            None => Err(anyhow::anyhow!(
+        let Some(handler) = self.handlers.get(&running.task_type) else {
+            return Err(anyhow::anyhow!(
                 "no handler registered for task type '{}'",
                 running.task_type
-            )),
-        }
+            ));
+        };
+        panic::catch_unwind(AssertUnwindSafe(|| {
+            handler.handle(&running.payload, running.is_last_attempt())
+        }))
+        .unwrap_or_else(|payload| {
+            Err(anyhow::anyhow!(
+                "handler panicked: {}",
+                panic_message(payload.as_ref())
+            ))
+        })
     }
 
     fn record_failure(&self, running: ScheduledTask, error: anyhow::Error) -> anyhow::Result<()> {
@@ -294,6 +305,28 @@ impl TaskExecutor {
             }
         }
     }
+}
+
+/// Frees a running task's slot when dropped: when its task finishes, and
+/// also if the task's thread unwinds from a panic.
+struct SlotRelease {
+    executor: Arc<TaskExecutor>,
+    slot: Slot,
+}
+
+impl Drop for SlotRelease {
+    fn drop(&mut self) {
+        self.executor.lock_state().finish(&self.slot);
+        self.executor.wake.notify_one();
+    }
+}
+
+fn panic_message(payload: &(dyn Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("unknown panic")
 }
 
 #[cfg(test)]
@@ -965,6 +998,47 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_retry_a_task_whose_handler_panics_and_free_its_slot() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        task_repository.schedule(&reconcile("PL1"), now()).unwrap();
+        task_repository.schedule(&reconcile("PL2"), now()).unwrap();
+        let mut registry: HandlerRegistry = HashMap::new();
+        registry.insert(
+            "reconcile_playlist".to_string(),
+            Arc::new(PanickingHandler {
+                panics_on: reconcile("PL1").payload().to_string(),
+            }),
+        );
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            registry,
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
+        ));
+
+        for handle in executor.schedule_pass().unwrap() {
+            let _ = handle.await;
+        }
+        let result = run_pass(&executor).await;
+
+        assert!(result.is_ok());
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![ScheduledTask {
+                retries: 1,
+                run_at: now() + chrono::Duration::seconds(450),
+                last_error: Some("handler panicked: boom".to_string()),
+                ..pending(1, &reconcile("PL1"))
+            }]
+        );
+    }
+
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
     const TEST_DOWNLOAD_CONCURRENCY: usize = 2;
 
@@ -1108,6 +1182,20 @@ mod tests {
             let gate = self.gates.lock().unwrap().remove(payload);
             if let Some(gate) = gate {
                 let _ = gate.recv();
+            }
+            Ok(())
+        }
+    }
+
+    /// Panics on the task whose payload is `panics_on`, succeeds otherwise.
+    struct PanickingHandler {
+        panics_on: String,
+    }
+
+    impl TaskHandler for PanickingHandler {
+        fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
+            if payload == self.panics_on {
+                panic!("boom");
             }
             Ok(())
         }
