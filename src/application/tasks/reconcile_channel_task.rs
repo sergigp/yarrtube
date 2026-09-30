@@ -164,7 +164,7 @@ mod tests {
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![fetch_thumbnail_task(1, &video_id), next_reconcile(2)]
+            vec![next_reconcile(1)]
         );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
@@ -1200,6 +1200,38 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![fetch_thumbnail_task(1, &video.id), next_reconcile(2)]
+        );
+    }
+
+    #[test]
+    fn it_should_not_schedule_a_thumbnail_fetch_for_a_video_added_in_the_same_pass() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "One", 0),
+            ])),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![next_reconcile(1)]
         );
     }
 

@@ -177,15 +177,17 @@ impl ChannelVideoReconciler {
     fn run_reconcile_pass(&self, channel: &Channel) -> anyhow::Result<()> {
         info!(channel_id = %channel.id, "reconciling channel");
 
-        self.sync_channel_membership(channel)?;
-        self.reconcile_filesystem(channel)
+        let added_ids = self.sync_channel_membership(channel)?;
+
+        self.reconcile_filesystem(channel, &added_ids)
     }
 
     /// Diffs the channel's current `video_limit` most recent uploads against
     /// its stored `ChannelVideo` rows: adds newly-seen videos as `PENDING`
     /// at their recency position, evicts stored videos no longer among the
     /// current top-N (whether removed on YouTube or aged past the limit).
-    fn sync_channel_membership(&self, channel: &Channel) -> anyhow::Result<()> {
+    /// Returns the ids of the videos it added.
+    fn sync_channel_membership(&self, channel: &Channel) -> anyhow::Result<Vec<VideoRecordId>> {
         let id = &channel.id;
         let current_videos = self
             .channel_videos_repository
@@ -194,6 +196,7 @@ impl ChannelVideoReconciler {
 
         let now = self.clock.now();
         let mut current_youtube_ids = Vec::with_capacity(current_videos.len());
+        let mut added_ids = Vec::new();
         for current in &current_videos {
             let youtube_id = VideoId::new(&current.youtube_id)?;
             let existing = self
@@ -218,6 +221,7 @@ impl ChannelVideoReconciler {
                             channel_id: id.as_str().to_string(),
                             video_id: video.id.as_str().to_string(),
                         })?;
+                    added_ids.push(video.id);
                 }
                 Some(existing) => {
                     self.video_repository
@@ -264,7 +268,7 @@ impl ChannelVideoReconciler {
                 })?;
         }
 
-        Ok(())
+        Ok(added_ids)
     }
 
     /// Reconciles `channel`'s output directory against its recorded
@@ -275,7 +279,11 @@ impl ChannelVideoReconciler {
     /// for the recovery cooldown (`Video::is_due_for_recovery`). Also deletes a file
     /// that doesn't belong to any currently-`Downloaded` video (an orphan).
     /// Mirrors `PlaylistVideoReconciler::reconcile_filesystem`.
-    fn reconcile_filesystem(&self, channel: &Channel) -> anyhow::Result<()> {
+    fn reconcile_filesystem(
+        &self,
+        channel: &Channel,
+        added_ids: &[VideoRecordId],
+    ) -> anyhow::Result<()> {
         let output_dir = resolve_output_dir(&self.videos_path, channel.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
         let stored_channel_videos = self
@@ -308,13 +316,12 @@ impl ChannelVideoReconciler {
             .chain(in_flight_folders.iter().map(String::as_str))
             .map(top_level_entry)
             .collect();
-        // Videos reset for redownload below: their in-memory `stored_videos`
-        // snapshot goes stale the instant the reset is persisted, and their
-        // thumbnail is expected to arrive with their own fresh download (see
-        // design.md's Non-Goals) — so the recovery loop must skip them
-        // rather than fetch a thumbnail for, and persist over, a video
-        // object that no longer matches what's in the database.
-        let mut reset_video_ids: HashSet<&VideoRecordId> = HashSet::new();
+        // Videos the missing-thumbnail recovery below must skip. A video
+        // added by this same pass gets its fetch from its own video-added
+        // event, so recovery only covers videos stored before the pass. A
+        // video reset for redownload below gets its thumbnail with its own
+        // fresh download (see design.md's Non-Goals).
+        let mut skip_thumbnail_ids: HashSet<&VideoRecordId> = added_ids.iter().collect();
 
         for video in &downloaded {
             let healthy = video.filename.as_deref().is_some_and(|filename| {
@@ -334,7 +341,7 @@ impl ChannelVideoReconciler {
                 );
                 let reset = (*video).clone().reset_for_redownload(now);
                 self.video_repository.update(&reset)?;
-                reset_video_ids.insert(&video.id);
+                skip_thumbnail_ids.insert(&video.id);
                 self.task_repository.schedule(
                     &Task::DownloadVideo {
                         video_id: video.id.as_str().to_string(),
@@ -364,7 +371,7 @@ impl ChannelVideoReconciler {
             );
             let reset = video.clone().reset_for_redownload(now);
             self.video_repository.update(&reset)?;
-            reset_video_ids.insert(&video.id);
+            skip_thumbnail_ids.insert(&video.id);
             self.task_repository.schedule(
                 &Task::DownloadVideo {
                     video_id: video.id.as_str().to_string(),
@@ -375,8 +382,11 @@ impl ChannelVideoReconciler {
             )?;
         }
 
-        self.thumbnail_fetcher
-            .schedule_missing(&stored_videos, &reset_video_ids, &output_dir)?;
+        self.thumbnail_fetcher.schedule_missing(
+            &stored_videos,
+            &skip_thumbnail_ids,
+            &output_dir,
+        )?;
 
         for file in &files {
             if protected_top_level.contains(file.as_str()) {

@@ -128,7 +128,6 @@ mod tests {
     use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::ThumbnailFetcher;
-    use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::VideoId;
     use crate::domain::video::{PlaybackPosition, Video};
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
@@ -998,25 +997,7 @@ mod tests {
                 )
             }]
         );
-        assert_eq!(
-            task_repository.list_non_completed().unwrap(),
-            vec![ScheduledTask {
-                id: 1,
-                task_type: "fetch_thumbnail".to_string(),
-                payload: Task::FetchThumbnail {
-                    video_id: video_id.as_str().to_string(),
-                    output_dir: "/videos/creators/somechannel".to_string(),
-                }
-                .payload()
-                .to_string(),
-                status: TaskStatus::Pending,
-                retries: 0,
-                run_at: fixed_timestamp(),
-                created_at: fixed_timestamp(),
-                updated_at: fixed_timestamp(),
-                last_error: None,
-            }]
-        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
         assert_eq!(
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
