@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AddChannelDialog } from './AddChannelDialog'
@@ -19,6 +19,24 @@ function renderDialog(routes: Routes) {
 }
 
 describe('AddChannelDialog', () => {
+  afterEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('keeps a separate remembered parent per dialog', async () => {
+    window.localStorage.setItem('yarrtube.save-to.playlist', 'playlists/kids')
+    window.localStorage.setItem('yarrtube.save-to.channel', 'channels/science')
+    renderDialog({
+      'GET /api/playlists': [aPlaylist({ path: 'playlists/kids/contes' })],
+      'GET /api/channels': [aChannel({ path: 'channels/science/veritasium' })],
+    })
+
+    expect(
+      await screen.findByRole('radio', { name: 'channels/science/', checked: true }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'playlists/kids/' })).not.toBeInTheDocument()
+  })
+
   it('suggests only parents of tracked channels in the channel dialog', async () => {
     renderDialog({
       'GET /api/playlists': [aPlaylist({ path: 'playlists/kids/contes' })],
