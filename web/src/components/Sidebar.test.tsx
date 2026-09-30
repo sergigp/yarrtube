@@ -1,0 +1,176 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { Sidebar } from './Sidebar'
+import { aChannel, aPlaylist, mockApi, renderWithProviders, type Routes } from '@/test/helpers'
+
+function renderSidebar(routes: Routes, { route = '/' } = {}) {
+  mockApi(routes)
+  return renderWithProviders(
+    <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+    { route },
+  )
+}
+
+describe('Sidebar', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('lists channels and playlists with unwatched badges', async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A', unwatched_count: 3 })],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+    })
+
+    expect(await screen.findByText('Chan A')).toBeInTheDocument()
+    expect(await screen.findByText('List B')).toBeInTheDocument()
+    expect(screen.getByTitle('3 unwatched')).toHaveTextContent('3')
+  })
+
+  it('orders channels by unwatched count', async () => {
+    renderSidebar({
+      'GET /api/channels': [
+        aChannel({ name: 'Barely Behind', unwatched_count: 1 }),
+        aChannel({ name: 'Busy', unwatched_count: 5 }),
+      ],
+      'GET /api/playlists': [],
+    })
+
+    await screen.findByText('Busy')
+    // Row link text includes the unwatched badge, so match by substring.
+    const names = screen.getAllByRole('link').map((link) => link.textContent ?? '')
+    const busyIndex = names.findIndex((name) => name.includes('Busy'))
+    const behindIndex = names.findIndex((name) => name.includes('Barely Behind'))
+    expect(busyIndex).toBeGreaterThanOrEqual(0)
+    expect(busyIndex).toBeLessThan(behindIndex)
+  })
+
+  it('collapses long caught-up sections behind a "show more" toggle', async () => {
+    const channels = Array.from({ length: 8 }, (_, index) =>
+      aChannel({ name: `Channel ${String.fromCharCode(65 + index)}`, unwatched_count: 0 }),
+    )
+    renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] })
+
+    await screen.findByText('Channel A')
+
+    // Five caught-up channels lead; the other three hide behind the toggle.
+    expect(screen.queryByText('Channel F')).not.toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Show 3 more' }))
+    expect(screen.getByText('Channel F')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show less' }))
+    expect(screen.queryByText('Channel F')).not.toBeInTheDocument()
+  })
+
+  it('offers search only above the threshold and filters both sections', async () => {
+    const channels = Array.from({ length: 10 }, (_, index) =>
+      aChannel({ name: `Chan ${index}`, unwatched_count: 1 }),
+    )
+    const playlists = Array.from({ length: 10 }, (_, index) => aPlaylist({ name: `List ${index}` }))
+    renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': playlists })
+
+    const search = await screen.findByRole('searchbox', { name: 'Search channels and playlists' })
+    const user = userEvent.setup()
+    await user.type(search, 'List 3')
+
+    expect(screen.getByText('List 3')).toBeInTheDocument()
+    expect(screen.queryByText('Chan 3')).not.toBeInTheDocument()
+    // The channels section disappears entirely once nothing in it matches.
+    expect(screen.queryByText('Channels')).not.toBeInTheDocument()
+  })
+
+  it('says when nothing matches the search', async () => {
+    const channels = Array.from({ length: 16 }, (_, index) => aChannel({ name: `Chan ${index}` }))
+    renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] })
+
+    const search = await screen.findByRole('searchbox', { name: 'Search channels and playlists' })
+    await userEvent.setup().type(search, 'zzz')
+
+    expect(screen.getByText('Nothing matches "zzz".')).toBeInTheDocument()
+  })
+
+  it('hides the search box for small libraries', async () => {
+    renderSidebar({ 'GET /api/channels': [aChannel()], 'GET /api/playlists': [] })
+
+    await screen.findByText('Channels')
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+  })
+
+  it('reports section load failures', async () => {
+    renderSidebar({
+      'GET /api/channels': { status: 500, error: 'boom' },
+      'GET /api/playlists': [],
+    })
+
+    expect(await screen.findByText('Failed to load: boom')).toBeInTheDocument()
+  })
+
+  it('deletes a playlist after confirmation', async () => {
+    const playlist = aPlaylist({ name: 'Doomed' })
+    let playlistRows = [playlist]
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': () => playlistRows,
+      [`DELETE /api/playlists/${playlist.id}`]: () => {
+        playlistRows = []
+        return null
+      },
+    })
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Doomed' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Delete "Doomed"?')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByText('Doomed')).not.toBeInTheDocument())
+  })
+
+  it('syncs a channel from its row menu', async () => {
+    const channel = aChannel({ name: 'Chan A' })
+    const reconcile = vi.fn(() => null)
+    renderSidebar({
+      'GET /api/channels': [channel],
+      'GET /api/playlists': [],
+      [`POST /api/channels/${channel.id}/reconcile`]: reconcile,
+    })
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Chan A' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Sync' }))
+
+    expect(reconcile).toHaveBeenCalledOnce()
+  })
+
+  it('marks a channel watched from its row menu', async () => {
+    const channel = aChannel({ name: 'Chan A', unwatched_count: 2 })
+    const markWatched = vi.fn(() => null)
+    renderSidebar({
+      'GET /api/channels': [channel],
+      'GET /api/playlists': [],
+      [`POST /api/channels/${channel.id}/watched`]: markWatched,
+    })
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Chan A' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+
+    expect(markWatched).toHaveBeenCalledOnce()
+  })
+
+  it('does not offer mark-all-watched for playlists', async () => {
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+    })
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for List B' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Sync' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Mark all watched' })).not.toBeInTheDocument()
+  })
+})
