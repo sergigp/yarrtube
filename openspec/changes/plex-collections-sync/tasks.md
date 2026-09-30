@@ -41,7 +41,7 @@ integration reconciles a list of sections (`YARRTUBE_PLEX_SECTION_ID`
 accepts a comma-separated list).
 
 - [x] 4.1 Rework the port and wiring for section-per-call: `list_items`/`list_collections`/`create_collection` take a `section_id`, `PlexConfig` loses its `section_id`, the reconciler and deleter take `section_ids: Vec<String>` and loop them (a failing section is logged, remaining sections still reconcile), `serve.rs` parses `YARRTUBE_PLEX_SECTION_ID` as a comma-separated list, and the fake keeps per-section state. Existing tests updated to a single configured section, all passing.
-- [ ] 4.2 `it_should_create_collections_in_their_own_sections` — two configured sections; a playlist's videos scanned in one, a channel's in the other; each collection is created in its own section only.
+- [x] 4.2 `it_should_create_collections_in_their_own_sections` — two configured sections; a playlist's videos scanned in one, a channel's in the other; each collection is created in its own section only.
 - [ ] 4.3 `it_should_delete_the_collection_from_every_configured_section` — the deleter removes the name-matching collection from both configured sections.
 - [ ] 4.4 Update the docs (`doc/INSTALLATION.md`, `doc/PLEX.md`) for the comma-separated section list and the multi-library behavior.
 

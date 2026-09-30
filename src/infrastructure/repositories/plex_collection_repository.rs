@@ -363,6 +363,15 @@ impl FakePlexCollectionRepository {
             .collect()
     }
 
+    pub fn collections_in(&self, section_id: &str) -> Vec<FakePlexCollection> {
+        self.sections
+            .lock()
+            .unwrap()
+            .get(section_id)
+            .map(|section| section.collections.clone())
+            .unwrap_or_default()
+    }
+
     pub fn mutations(&self) -> Vec<String> {
         self.mutations.lock().unwrap().clone()
     }
