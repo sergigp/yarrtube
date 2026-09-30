@@ -8,7 +8,7 @@
 
 - [x] 2.1 `it_should_create_a_collection_for_a_playlist_with_scanned_videos` — the reconcile pass creates a collection (alphabetical sort, seeded members) for a playlist whose downloaded videos Plex has scanned, and schedules the next task.
 - [x] 2.2 `it_should_create_a_collection_for_a_channel_with_scanned_videos` — same convergence for a channel.
-- [ ] 2.3 `it_should_skip_creating_a_collection_if_no_video_is_scanned_yet` — no empty collection when Plex has scanned none of the playlist's downloaded videos.
+- [x] 2.3 `it_should_skip_creating_a_collection_if_no_video_is_scanned_yet` — no empty collection when Plex has scanned none of the playlist's downloaded videos.
 - [ ] 2.4 `it_should_ignore_videos_that_are_not_downloaded` — pending/errored videos never become collection members even when scanned.
 - [ ] 2.5 `it_should_add_newly_scanned_videos_to_an_existing_collection` — only the missing rating key is added to an existing collection.
 - [ ] 2.6 `it_should_remove_videos_no_longer_tracked_from_the_collection` — a member whose video left yarrtube's state is removed.
