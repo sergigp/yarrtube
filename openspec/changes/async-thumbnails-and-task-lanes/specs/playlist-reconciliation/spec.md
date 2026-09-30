@@ -74,7 +74,8 @@ status or triggering a redownload. The pass SHALL NOT fetch the thumbnail
 itself, and SHALL NOT schedule one for:
 - a video that already has a thumbnail fetch pending or running,
 - a video the same pass resets for redownload (its download writes its own thumbnail),
-- a video whose download is In Progress.
+- a video whose download is In Progress,
+- a video the same pass newly added: its thumbnail fetch is scheduled in reaction to its `VideoAddedToPlaylist` event (see `video-thumbnails`), so recovery only covers videos already stored before the pass.
 
 #### Scenario: Video has no recorded thumbnail
 - **WHEN** a reconcile pass finds a video belonging to the playlist with no recorded thumbnail filename and no thumbnail fetch pending or running for it
@@ -83,6 +84,10 @@ itself, and SHALL NOT schedule one for:
 #### Scenario: Video already has a recorded thumbnail
 - **WHEN** a reconcile pass finds a video belonging to the playlist that already has a recorded thumbnail filename
 - **THEN** the system does not schedule a thumbnail fetch for it
+
+#### Scenario: Video newly added by the same pass
+- **WHEN** a reconcile pass adds a new video to the playlist, and that video has no recorded thumbnail filename
+- **THEN** the pass itself does not schedule a thumbnail fetch for that video; its fetch is scheduled in reaction to its `VideoAddedToPlaylist` event
 
 #### Scenario: Thumbnail fetch already queued
 - **WHEN** a reconcile pass finds a video with no recorded thumbnail filename that already has a thumbnail fetch task pending or running

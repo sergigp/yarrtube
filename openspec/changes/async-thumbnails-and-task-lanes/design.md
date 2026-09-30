@@ -42,6 +42,7 @@ See proposal.md, "Why", for the incident. The current state that shapes the desi
 - **Reconcilers:**
   - Both drop the inline `fetch` for new videos.
   - `ThumbnailFetcher::fetch_missing` becomes a scheduling pass. It keeps its current filters (no thumbnail, not in `skip_ids`, not `InProgress`) and schedules `FetchThumbnail` instead of fetching. Dedupe comes from D3, so the reconciler needs no `list_non_completed` lookup.
+  - Recovery only covers videos stored before the pass. The membership sync returns the ids of the videos it added, and the reconciler adds them to `skip_ids` (next to the videos reset for redownload), so a new video's fetch comes only from its subscriber. Without this, the recovery pass schedules every new video's fetch first and the subscriber is always deduped away.
   - `ThumbnailFetcher` therefore needs the `TaskRepository` (for scheduling). Its synchronous `fetch` stays for the handler.
 - **Alternative rejected:** scheduling `FetchThumbnail` directly inside the reconciler's new-video branch. The subscriber approach keeps the reconcile focused on recording facts, and matches how downloads are already triggered, which was your preference.
 
@@ -365,7 +366,7 @@ fn download_concurrency() -> usize; // YARRTUBE_DOWNLOAD_CONCURRENCY, > 0, else 
 - every recorded thumbnail folder,
 - `video_folder_candidates` for `InProgress`/`ErroredRetrying` videos.
 
-It then calls `schedule_missing` and deletes whatever is left unprotected.
+It then calls `schedule_missing` (skipping videos reset for redownload and videos the same pass added) and deletes whatever is left unprotected.
 
 ## Test Plan
 

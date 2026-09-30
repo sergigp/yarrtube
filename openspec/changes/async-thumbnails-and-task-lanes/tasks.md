@@ -88,3 +88,11 @@ Composition, frontend and docs (no tests):
   - Two downloads run at once.
   - Thumbnails fill in while downloads progress.
   - No stray folders are left in `videos/` after the downloads complete.
+
+## 5. Recovery skips videos added in the same pass (TDD)
+
+Found during 4.3: recovery also scheduled every new video's fetch, so the fetch-thumbnail subscribers were always deduped away.
+
+- [ ] 5.1 `reconcile_playlist_task` › `it_should_not_schedule_a_thumbnail_fetch_for_a_video_added_in_the_same_pass`: a pass that adds a video schedules no `fetch_thumbnail` task (only the next reconcile). Restore the playlist tests changed in 2.10 (`it_should_add_new_videos`, `http/playlists` `it_should_add_new_videos_on_reconcile` and `it_should_be_idempotent_on_repeated_reconciles`) to expect no `fetch_thumbnail` task for new videos.
+- [ ] 5.2 `reconcile_channel_task` › `it_should_not_schedule_a_thumbnail_fetch_for_a_video_added_in_the_same_pass`: channel equivalent of 5.1. Restore `it_should_add_new_videos_within_the_limit` and `http/channels` `it_should_add_new_videos_on_reconcile`.
+- [ ] 5.3 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
