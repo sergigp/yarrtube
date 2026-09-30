@@ -17,7 +17,7 @@
 - [x] 2.9 `it_should_reschedule_the_next_reconcile_if_the_pass_fails` — a pass-wide failure (`list_items`) returns Err but the next task is still scheduled.
 - [x] 2.10 `it_should_delete_the_collection_if_a_playlist_is_deleted` — the `playlist_deleted` subscriber deletes the collection matching the event's `name`.
 - [x] 2.11 `it_should_skip_if_no_collection_matches_the_playlist_name` — missing collection is a no-op, not an error.
-- [ ] 2.12 `it_should_delete_the_collection_if_a_channel_is_deleted` — proves the channel subscriber's wiring.
+- [x] 2.12 `it_should_delete_the_collection_if_a_channel_is_deleted` — proves the channel subscriber's wiring.
 - [ ] 2.13 `it_should_publish_the_playlist_name_on_deletion` — the outbox `playlist_deleted` payload includes `name` (existing playlist-delete adapter tests).
 - [ ] 2.14 `it_should_publish_the_channel_name_on_deletion` — same for `channel_deleted`.
 
