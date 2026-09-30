@@ -74,7 +74,7 @@ command):
 | `RUST_LOG`                            | `info`             | Log verbosity (e.g. `RUST_LOG=debug`)                                                    |
 | `YARRTUBE_PLEX_URL`                   | —                  | Base URL of your Plex server (e.g. `http://192.168.1.10:32400`). Enables the [Plex collections integration](#plex-collections) |
 | `YARRTUBE_PLEX_TOKEN`                 | —                  | Plex authentication token (`X-Plex-Token`)                                               |
-| `YARRTUBE_PLEX_SECTION_ID`            | —                  | ID of the Plex library section holding yarrtube's videos                                 |
+| `YARRTUBE_PLEX_SECTION_ID`            | —                  | ID(s) of the Plex library section(s) holding yarrtube's videos, comma-separated when content is spread across several libraries (e.g. `2,5`) |
 | `YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS` | `900`         | How often Plex collections are synced toward yarrtube's state                            |
 
 ## Plex collections

@@ -70,19 +70,26 @@ Short version: in the Plex web app, open any library item → `⋯` →
 *Get Info* → *View XML*, and copy the `X-Plex-Token=...` value from the
 opened page's URL.
 
-## 4. Find the library's section ID (`YARRTUBE_PLEX_SECTION_ID`)
+## 4. Find the library section ID(s) (`YARRTUBE_PLEX_SECTION_ID`)
 
 Two ways:
 
 - **Browser URL**: open the library in the Plex web app and look at the
   address bar — the number after `source=` is the section ID.
-- **API**: list all libraries and pick the `key` of the one you created in
-  step 1:
+- **API**: list all libraries and pick the `key` of the one(s) holding
+  yarrtube content:
 
   ```bash
   curl -H "Accept: application/json" \
     "http://<YOUR_PLEX_IP>:32400/library/sections?X-Plex-Token=<YOUR_TOKEN>"
   ```
+
+If yarrtube's content is spread across **several Plex libraries** (e.g. one
+library per family member), collect every library's section ID — the
+variable takes a comma-separated list, and yarrtube keeps each library's
+collections in sync independently: a playlist's/channel's collection is
+created in whichever listed library its videos were scanned into.
+Libraries *not* in the list are never touched.
 
 ## 5. Configure yarrtube
 
@@ -92,6 +99,8 @@ Set the environment variables on the yarrtube container and restart it:
 environment:
   - YARRTUBE_PLEX_URL=http://<YOUR_PLEX_IP>:32400
   - YARRTUBE_PLEX_TOKEN=<YOUR_TOKEN>
+  # one section id, or a comma-separated list (e.g. 2,5) when yarrtube's
+  # content is spread across several libraries:
   - YARRTUBE_PLEX_SECTION_ID=<YOUR_SECTION_ID>
   # optional, defaults to 900 (15 minutes):
   # - YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS=900
