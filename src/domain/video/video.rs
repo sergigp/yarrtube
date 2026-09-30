@@ -233,12 +233,17 @@ impl Video {
     /// The folders a download or thumbnail fetch of this video may be writing
     /// into right now. Until the video is downloaded its folder isn't
     /// recorded (a thumbnail fetch records it only once it finishes), so it
-    /// is predicted from the title. Empty once the download recorded its
+    /// is predicted from the title, and also from `previous_title` when the
+    /// video was just renamed: a download started before the rename still
+    /// writes under the old name. Empty once the download recorded its
     /// folder.
-    pub fn unrecorded_folder_candidates(&self) -> Vec<String> {
+    pub fn unrecorded_folder_candidates(&self, previous_title: Option<&str>) -> Vec<String> {
         match self.filename {
             Some(_) => Vec::new(),
-            None => video_folder_candidates(&self.title, &self.youtube_id).to_vec(),
+            None => std::iter::once(self.title.as_str())
+                .chain(previous_title)
+                .flat_map(|title| video_folder_candidates(title, &self.youtube_id))
+                .collect(),
         }
     }
 

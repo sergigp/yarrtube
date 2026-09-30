@@ -18,10 +18,21 @@ use crate::infrastructure::repositories::youtube_channel_videos_repository::Chan
 use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadataRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{info, warn};
+
+/// What a membership sync changed that the filesystem pass of the same
+/// reconcile must know about.
+struct MembershipChanges {
+    /// Videos added by the sync: their thumbnail fetch comes from their own
+    /// video-added event, not from the missing-thumbnail recovery.
+    added_ids: Vec<VideoRecordId>,
+    /// The title each renamed video had before the sync: a download started
+    /// before the rename is still writing into the folder named after it.
+    previous_titles: HashMap<VideoRecordId, String>,
+}
 
 /// Reconciles a channel's stored videos against its current `video_limit`
 /// most recent uploads on YouTube, and its output directory against
@@ -177,17 +188,16 @@ impl ChannelVideoReconciler {
     fn run_reconcile_pass(&self, channel: &Channel) -> anyhow::Result<()> {
         info!(channel_id = %channel.id, "reconciling channel");
 
-        let added_ids = self.sync_channel_membership(channel)?;
+        let changes = self.sync_channel_membership(channel)?;
 
-        self.reconcile_filesystem(channel, &added_ids)
+        self.reconcile_filesystem(channel, &changes)
     }
 
     /// Diffs the channel's current `video_limit` most recent uploads against
     /// its stored `ChannelVideo` rows: adds newly-seen videos as `PENDING`
     /// at their recency position, evicts stored videos no longer among the
     /// current top-N (whether removed on YouTube or aged past the limit).
-    /// Returns the ids of the videos it added.
-    fn sync_channel_membership(&self, channel: &Channel) -> anyhow::Result<Vec<VideoRecordId>> {
+    fn sync_channel_membership(&self, channel: &Channel) -> anyhow::Result<MembershipChanges> {
         let id = &channel.id;
         let current_videos = self
             .channel_videos_repository
@@ -197,6 +207,7 @@ impl ChannelVideoReconciler {
         let now = self.clock.now();
         let mut current_youtube_ids = Vec::with_capacity(current_videos.len());
         let mut added_ids = Vec::new();
+        let mut previous_titles = HashMap::new();
         for current in &current_videos {
             let youtube_id = VideoId::new(&current.youtube_id)?;
             let existing = self
@@ -224,8 +235,13 @@ impl ChannelVideoReconciler {
                     added_ids.push(video.id);
                 }
                 Some(existing) => {
-                    self.video_repository
-                        .update_title(&existing.video_id, &current.title, now)?;
+                    if let Some(video) = self.video_repository.find(&existing.video_id)?
+                        && video.title != current.title
+                    {
+                        self.video_repository
+                            .update_title(&video.id, &current.title, now)?;
+                        previous_titles.insert(video.id, video.title);
+                    }
                     if existing.position != current.position {
                         self.channel_video_repository.save(&ChannelVideo {
                             position: current.position,
@@ -268,7 +284,10 @@ impl ChannelVideoReconciler {
                 })?;
         }
 
-        Ok(added_ids)
+        Ok(MembershipChanges {
+            added_ids,
+            previous_titles,
+        })
     }
 
     /// Reconciles `channel`'s output directory against its recorded
@@ -282,7 +301,7 @@ impl ChannelVideoReconciler {
     fn reconcile_filesystem(
         &self,
         channel: &Channel,
-        added_ids: &[VideoRecordId],
+        changes: &MembershipChanges,
     ) -> anyhow::Result<()> {
         let output_dir = resolve_output_dir(&self.videos_path, channel.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
@@ -301,7 +320,11 @@ impl ChannelVideoReconciler {
         // into isn't recorded yet, so it is protected by its predicted name.
         let unrecorded_folders: Vec<String> = stored_videos
             .iter()
-            .flat_map(Video::unrecorded_folder_candidates)
+            .flat_map(|video| {
+                video.unrecorded_folder_candidates(
+                    changes.previous_titles.get(&video.id).map(String::as_str),
+                )
+            })
             .collect();
         // Every stored video's thumbnail folder is protected regardless of
         // status: a `Pending`/`InProgress` video may already have a
@@ -323,7 +346,7 @@ impl ChannelVideoReconciler {
         // event, so recovery only covers videos stored before the pass. A
         // video reset for redownload below gets its thumbnail with its own
         // fresh download (see design.md's Non-Goals).
-        let mut skip_thumbnail_ids: HashSet<&VideoRecordId> = added_ids.iter().collect();
+        let mut skip_thumbnail_ids: HashSet<&VideoRecordId> = changes.added_ids.iter().collect();
 
         for video in &downloaded {
             let healthy = video.filename.as_deref().is_some_and(|filename| {

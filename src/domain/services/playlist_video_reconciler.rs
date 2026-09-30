@@ -24,6 +24,17 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
+/// What a membership sync changed that the filesystem pass of the same
+/// reconcile must know about.
+struct MembershipChanges {
+    /// Videos added by the sync: their thumbnail fetch comes from their own
+    /// video-added event, not from the missing-thumbnail recovery.
+    added_ids: Vec<VideoRecordId>,
+    /// The title each renamed video had before the sync: a download started
+    /// before the rename is still writing into the folder named after it.
+    previous_titles: HashMap<VideoRecordId, String>,
+}
+
 /// Reconciles a playlist's stored videos against YouTube membership and its
 /// output directory against recorded downloads.
 #[derive(Clone)]
@@ -184,16 +195,15 @@ impl PlaylistVideoReconciler {
     fn run_reconcile_pass(&self, playlist: &Playlist) -> anyhow::Result<()> {
         info!(playlist_id = %playlist.id, kind = %playlist.kind, "reconciling playlist");
 
-        let added_ids = self.sync_playlist_membership(playlist)?;
+        let changes = self.sync_playlist_membership(playlist)?;
 
-        self.reconcile_filesystem(playlist, &added_ids)
+        self.reconcile_filesystem(playlist, &changes)
     }
 
     /// Diffs a YouTube-linked playlist's stored videos against YouTube's
     /// playlist-items API: adds newly-seen videos as `PENDING`, deletes
     /// stored videos no longer present on YouTube.
-    /// Returns the ids of the videos it added.
-    fn sync_playlist_membership(&self, playlist: &Playlist) -> anyhow::Result<Vec<VideoRecordId>> {
+    fn sync_playlist_membership(&self, playlist: &Playlist) -> anyhow::Result<MembershipChanges> {
         let id = &playlist.id;
         let current_videos = self
             .youtube_playlist_items_repository
@@ -203,6 +213,7 @@ impl PlaylistVideoReconciler {
         let now = self.clock.now();
         let mut current_youtube_ids = Vec::with_capacity(current_videos.len());
         let mut added_ids = Vec::new();
+        let mut previous_titles = HashMap::new();
         for current in &current_videos {
             let youtube_id = VideoId::new(&current.video_id)?;
             let existing = self
@@ -234,8 +245,13 @@ impl PlaylistVideoReconciler {
                     added_ids.push(video.id);
                 }
                 Some(existing) => {
-                    self.video_repository
-                        .update_title(&existing.video_id, &current.title, now)?;
+                    if let Some(video) = self.video_repository.find(&existing.video_id)?
+                        && video.title != current.title
+                    {
+                        self.video_repository
+                            .update_title(&video.id, &current.title, now)?;
+                        previous_titles.insert(video.id, video.title);
+                    }
                     if existing.position != Some(current.position) {
                         self.playlist_video_repository.save(&PlaylistVideo {
                             position: Some(current.position),
@@ -278,7 +294,10 @@ impl PlaylistVideoReconciler {
                 })?;
         }
 
-        Ok(added_ids)
+        Ok(MembershipChanges {
+            added_ids,
+            previous_titles,
+        })
     }
 
     /// Reconciles `playlist`'s output directory against its recorded
@@ -296,7 +315,7 @@ impl PlaylistVideoReconciler {
     fn reconcile_filesystem(
         &self,
         playlist: &Playlist,
-        added_ids: &[VideoRecordId],
+        changes: &MembershipChanges,
     ) -> anyhow::Result<()> {
         let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
@@ -315,7 +334,11 @@ impl PlaylistVideoReconciler {
         // into isn't recorded yet, so it is protected by its predicted name.
         let unrecorded_folders: Vec<String> = stored_videos
             .iter()
-            .flat_map(Video::unrecorded_folder_candidates)
+            .flat_map(|video| {
+                video.unrecorded_folder_candidates(
+                    changes.previous_titles.get(&video.id).map(String::as_str),
+                )
+            })
             .collect();
         // Every stored video's thumbnail folder is protected regardless of
         // status: a `Pending`/`InProgress` video may already have a
@@ -342,7 +365,7 @@ impl PlaylistVideoReconciler {
         // event, so recovery only covers videos stored before the pass. A
         // video reset for redownload below gets its thumbnail with its own
         // fresh download (see design.md's Non-Goals).
-        let mut skip_thumbnail_ids: HashSet<&VideoRecordId> = added_ids.iter().collect();
+        let mut skip_thumbnail_ids: HashSet<&VideoRecordId> = changes.added_ids.iter().collect();
 
         for video in &downloaded {
             let healthy = video.filename.as_deref().is_some_and(|filename| {
