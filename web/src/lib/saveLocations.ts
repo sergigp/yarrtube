@@ -58,9 +58,16 @@ export function deriveSaveCandidates(
   return [first, ...derived].slice(0, cap)
 }
 
+const STORAGE_PREFIX = 'yarrtube.save-to.'
+
 export function readRememberedParent(mode: SaveMode): string | null {
-  void mode
-  return null
+  try {
+    return window.localStorage.getItem(STORAGE_PREFIX + mode)
+  } catch {
+    // Unreadable storage (private windows, blocked site data) means nothing
+    // remembered, never an error.
+    return null
+  }
 }
 
 export function writeRememberedParent(mode: SaveMode, parent: string): void {

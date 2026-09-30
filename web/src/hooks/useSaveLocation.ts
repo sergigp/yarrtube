@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchDirectories } from '@/api/client'
 import { useChannels, usePlaylists } from '@/api/queries'
-import { deriveSaveCandidates, type SaveCandidate, type SaveMode } from '@/lib/saveLocations'
+import {
+  deriveSaveCandidates,
+  readRememberedParent,
+  type SaveCandidate,
+  type SaveMode,
+} from '@/lib/saveLocations'
 import { slugify } from '@/lib/slugify'
 
 const DEFAULT_PARENTS: Record<SaveMode, string> = { playlist: 'playlists', channel: 'channels' }
@@ -70,6 +75,7 @@ function isStaged(path: string, stagedFrom: string | null): boolean {
 export function useSaveLocation(mode: SaveMode, nameSource: string): SaveLocation {
   const defaultParent = DEFAULT_PARENTS[mode]
   const [parent, setParent] = useState(defaultParent)
+  const [parentTouched, setParentTouched] = useState(false)
   const [sessionCandidate, setSessionCandidate] = useState<string | null>(null)
   const [stagedFrom, setStagedFrom] = useState<string | null>(null)
   const [browserOpen, setBrowserOpen] = useState(false)
@@ -121,12 +127,31 @@ export function useSaveLocation(mode: SaveMode, nameSource: string): SaveLocatio
     return derived
   }, [defaultParent, ownItems, sessionCandidate])
 
+  // The remembered parent only preselects while it is still among the
+  // derived candidates: a stale one falls back to the default silently. It
+  // never overrides a selection the user already made this session.
+  useEffect(() => {
+    if (parentTouched || !ownItems.length) {
+      return
+    }
+    const remembered = readRememberedParent(mode)
+    if (
+      remembered &&
+      remembered !== defaultParent &&
+      deriveSaveCandidates(defaultParent, ownItems).some((c) => c.path === remembered)
+    ) {
+      setParent(remembered)
+    }
+  }, [mode, defaultParent, ownItems, parentTouched])
+
   const selectParent = useCallback((next: string) => {
+    setParentTouched(true)
     setParent(next)
     setStagedFrom((prev) => (isStaged(next, prev) ? prev : null))
   }, [])
 
   const stage = useCallback((next: string) => {
+    setParentTouched(true)
     setParent(next)
     setStagedFrom((prev) => prev ?? next)
   }, [])

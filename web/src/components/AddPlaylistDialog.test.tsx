@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AddPlaylistDialog } from './AddPlaylistDialog'
@@ -19,6 +19,10 @@ function renderDialog(routes: Routes) {
 }
 
 describe('AddPlaylistDialog', () => {
+  afterEach(() => {
+    window.localStorage.clear()
+  })
+
   it('shows the save-to list with the default parent selected on open', async () => {
     renderDialog({})
 
@@ -71,6 +75,17 @@ describe('AddPlaylistDialog', () => {
       .getAllByRole('radio')
       .map((radio) => radio.getAttribute('aria-label'))
     expect(names).toEqual(['playlists/', 'playlists/f/', 'playlists/e/', 'playlists/d/', 'playlists/c/'])
+  })
+
+  it('preselects the remembered parent when still suggested', async () => {
+    window.localStorage.setItem('yarrtube.save-to.playlist', 'playlists/kids')
+    renderDialog({
+      'GET /api/playlists': [aPlaylist({ path: 'playlists/kids/contes' })],
+    })
+
+    expect(
+      await screen.findByRole('radio', { name: 'playlists/kids/', checked: true }),
+    ).toBeInTheDocument()
   })
 
   it('looks the entered playlist up and states the destination', async () => {
