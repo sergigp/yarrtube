@@ -72,6 +72,47 @@ command):
 | `YARRTUBE_DOWNLOAD_CONCURRENCY`       | `2`                | How many videos download at the same time. Higher values download faster but make YouTube more likely to throttle or bot-check you |
 | `YTDLP_PATH`                          | `/app/bin/yt-dlp`  | Path to the managed `yt-dlp` binary (also the path bundled into the image at build time) |
 | `RUST_LOG`                            | `info`             | Log verbosity (e.g. `RUST_LOG=debug`)                                                    |
+| `YARRTUBE_PLEX_URL`                   | —                  | Base URL of your Plex server (e.g. `http://192.168.1.10:32400`). Enables the [Plex collections integration](#plex-collections) |
+| `YARRTUBE_PLEX_TOKEN`                 | —                  | Plex authentication token (`X-Plex-Token`)                                               |
+| `YARRTUBE_PLEX_SECTION_ID`            | —                  | ID of the Plex library section holding yarrtube's videos                                 |
+| `YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS` | `900`         | How often Plex collections are synced toward yarrtube's state                            |
+
+## Plex collections
+
+Yarrtube can keep one Plex collection per tracked playlist and channel,
+turning a flat library of thousands of loose videos into one tile per
+playlist/channel, with correct in-playlist ordering and autoplay across
+episodes.
+
+The integration is off by default: it activates only when
+`YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN` and `YARRTUBE_PLEX_SECTION_ID`
+are all set. A recurring background task then converges the collections
+toward yarrtube's downloaded videos (creating collections with alphabetical
+sorting so videos keep their playlist order, adding videos as Plex scans
+them, and removing videos that leave yarrtube's state), and deleting a
+playlist or channel deletes its collection.
+
+To configure it:
+
+1. **Token** — follow Plex's guide to
+   [find your `X-Plex-Token`](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)
+   (open any library item in the Plex web app, `⋯` → *Get Info* →
+   *View XML*, and copy the `X-Plex-Token` value from the URL).
+2. **Section ID** — list your libraries and note the `key` of the one
+   holding yarrtube's videos:
+
+   ```bash
+   curl "http://<YOUR_PLEX_IP>:32400/library/sections?X-Plex-Token=<YOUR_TOKEN>" \
+     -H "Accept: application/json" | grep -o '"key":"[0-9]*","title":"[^"]*"'
+   ```
+
+3. Set the `YARRTUBE_PLEX_*` variables on the container and restart it.
+
+> [!TIP]
+> In the library's settings in Plex, enable **"Hide items which are in
+> collections"** (Manage Library → Edit → Advanced). The library then
+> shows one tile per playlist/channel instead of every video, which is
+> the browsing experience this integration is built for.
 
 ## Updating
 
