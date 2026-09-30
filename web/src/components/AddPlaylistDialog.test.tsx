@@ -161,6 +161,28 @@ describe('AddPlaylistDialog', () => {
     expect(screen.getByText('/videos/playlists/music/my-mix')).toBeInTheDocument()
   })
 
+  it('shows no change action in the notice', async () => {
+    renderDialog({
+      'GET /api/playlists': [
+        aPlaylist({ name: 'Other Mix', path: 'playlists/my-mix' }),
+        aPlaylist({ path: 'playlists/kids/contes' }),
+      ],
+      'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
+
+    // The destination-occupied error offers no change action…
+    await screen.findByText(/is already used by Other Mix/)
+    expect(screen.queryByRole('button', { name: 'change' })).not.toBeInTheDocument()
+
+    // …and neither does the info notice once the destination is free.
+    await user.click(screen.getByRole('radio', { name: 'playlists/kids/' }))
+    await screen.findByText(/All 3 videos from “My Mix” will be downloaded to/)
+    expect(screen.queryByRole('button', { name: 'change' })).not.toBeInTheDocument()
+  })
+
   it('looks the entered playlist up and states the destination', async () => {
     renderDialog({
       'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },

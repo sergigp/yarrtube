@@ -22,11 +22,10 @@ function sameId(a: string, b: string): boolean {
 interface PlaylistNoticeProps {
   lookup: Lookup<PlaylistPreview, PlaylistListItem>
   location: LocationValue
-  onChange: () => void
 }
 
 /** The first case that applies wins: an error blocks, so it outranks the destination. */
-function PlaylistNotice({ lookup, location, onChange }: PlaylistNoticeProps) {
+function PlaylistNotice({ lookup, location }: PlaylistNoticeProps) {
   const pending = lookupNotice('playlist', lookup)
   if (pending) {
     return pending
@@ -35,14 +34,14 @@ function PlaylistNotice({ lookup, location, onChange }: PlaylistNoticeProps) {
   const destination = <DestinationPath>{location.destination}</DestinationPath>
   if (location.occupiedBy) {
     return (
-      <DestinationNotice tone="error" onChange={onChange}>
+      <DestinationNotice tone="error">
         {destination} is already used by {location.occupiedBy}. Choose a different folder.
       </DestinationNotice>
     )
   }
   if (preview.data && location.destination) {
     return (
-      <DestinationNotice tone="info" onChange={onChange}>
+      <DestinationNotice tone="info">
         {playlistNoticeLead(preview.data.video_count, preview.data.title)} {destination}
       </DestinationNotice>
     )
@@ -134,13 +133,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
 
       <SaveToField location={location} />
 
-      {entered && (
-        <PlaylistNotice
-          lookup={lookup}
-          location={location.value}
-          onChange={() => setAdvancedOpen(true)}
-        />
-      )}
+      {entered && <PlaylistNotice lookup={lookup} location={location.value} />}
 
       <div className="border-t border-border pt-3">
         <button
