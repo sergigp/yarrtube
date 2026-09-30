@@ -164,8 +164,10 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
         Self::ensure_success(&path, &response)
     }
 
-    fn remove_item(&self, _collection_rating_key: &str, _rating_key: &str) -> anyhow::Result<()> {
-        Ok(())
+    fn remove_item(&self, collection_rating_key: &str, rating_key: &str) -> anyhow::Result<()> {
+        self.delete(&format!(
+            "/library/metadata/{collection_rating_key}/items/{rating_key}"
+        ))
     }
 
     fn delete_collection(&self, _collection_rating_key: &str) -> anyhow::Result<()> {
@@ -189,6 +191,16 @@ impl HttpPlexCollectionRepository {
             .ok_or_else(|| anyhow::anyhow!("Plex /identity response held no machineIdentifier"))?;
         *machine_id = Some(fetched.clone());
         Ok(fetched)
+    }
+
+    fn delete(&self, path: &str) -> anyhow::Result<()> {
+        let response = self
+            .client
+            .delete(format!("{}{path}", self.config.base_url))
+            .header("Accept", "application/json")
+            .header("X-Plex-Token", &self.config.token)
+            .send()?;
+        Self::ensure_success(path, &response)
     }
 
     /// The `uri` value Plex's collection endpoints take to identify a set
@@ -626,6 +638,22 @@ mod tests {
 
         assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
         add_mock.assert();
+    }
+
+    #[test]
+    fn it_should_remove_an_item_from_a_collection() {
+        let mut server = mockito::Server::new();
+        let remove_mock = server
+            .mock("DELETE", "/library/metadata/c1/items/101")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.remove_item("c1", "101");
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        remove_mock.assert();
     }
 
     fn repository(server: &mockito::Server) -> HttpPlexCollectionRepository {
