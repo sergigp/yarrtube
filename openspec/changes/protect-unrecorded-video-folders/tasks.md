@@ -21,6 +21,6 @@ No adapter changes in this change; nothing to do.
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
 - [ ] 4.2 `cargo mutants` on `TaskExecutor::run`, `tasks::registry` and `subscribers::registry` reports every mutant caught.
 - [ ] 4.3 `scripts/run-smoke-tests.sh` passes.
