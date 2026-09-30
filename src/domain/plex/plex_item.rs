@@ -2,7 +2,6 @@
 /// matched to yarrtube by the `youtube://<id>` GUID its NFO agent derives
 /// from the `<uniqueid type="youtube">` element yarrtube writes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)] // constructed once the HTTP adapter parses responses
 pub struct PlexItem {
     pub rating_key: String,
     pub youtube_video_id: String,

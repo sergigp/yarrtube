@@ -36,6 +36,6 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
 - [ ] 4.2 Manual check against the real NAS Plex via `scripts/run-local.sh` with the `YARRTUBE_PLEX_*` env vars set: a tracked playlist gets its collection created/updated in the Plex UI with alphabetical sort, and deleting a playlist removes its collection. Also verify a start *without* the Plex env vars schedules no `reconcile_plex_collections` task.
 - [ ] 4.3 Update `README.md` with the Plex integration setup (env vars, how to obtain a token, recommend the "hide items which are in collections" library setting) and verify the docs match the implemented env var names.

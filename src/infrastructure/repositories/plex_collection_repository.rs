@@ -9,7 +9,6 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Port to the Plex server's collections HTTP API for the configured
 /// library section, authenticated via `X-Plex-Token`.
-#[allow(dead_code)] // methods become used as the reconciler/deleter grow
 pub trait PlexCollectionRepository: Send + Sync {
     /// Every scanned item in the section carrying a `youtube://` guid.
     fn list_items(&self) -> anyhow::Result<Vec<PlexItem>>;
@@ -70,13 +69,10 @@ impl Metadata {
 }
 
 pub struct HttpPlexCollectionRepository {
-    #[allow(dead_code)]
     config: PlexConfig,
-    #[allow(dead_code)]
     client: reqwest::blocking::Client,
     /// The server's machine identifier, fetched from `/identity` on first
     /// use and cached for the process lifetime.
-    #[allow(dead_code)]
     machine_id: Mutex<Option<String>>,
 }
 
