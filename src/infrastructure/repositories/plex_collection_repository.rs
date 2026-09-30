@@ -39,6 +39,8 @@ struct MediaContainerResponse {
 struct MediaContainer {
     #[serde(rename = "Metadata", default)]
     metadata: Vec<Metadata>,
+    #[serde(rename = "machineIdentifier")]
+    machine_identifier: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,8 +120,38 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
         ))
     }
 
-    fn create_collection(&self, _title: &str, _rating_keys: &[String]) -> anyhow::Result<()> {
-        Ok(())
+    fn create_collection(&self, title: &str, rating_keys: &[String]) -> anyhow::Result<()> {
+        let machine_id = self.machine_id()?;
+        let uri = format!(
+            "server://{machine_id}/com.plexapp.plugins.library/library/metadata/{}",
+            rating_keys.join(",")
+        );
+
+        let path = "/library/collections";
+        let response = self
+            .client
+            .post(format!("{}{path}", self.config.base_url))
+            .query(&[
+                ("type", "1"),
+                ("smart", "0"),
+                ("sectionId", &self.config.section_id),
+                ("title", title),
+                ("uri", &uri),
+            ])
+            .header("Accept", "application/json")
+            .header("X-Plex-Token", &self.config.token)
+            .send()?;
+        Self::ensure_success(path, &response)?;
+        let created: MediaContainerResponse = response.json()?;
+
+        let collection_rating_key = created
+            .media_container
+            .metadata
+            .into_iter()
+            .next()
+            .map(|metadata| metadata.rating_key)
+            .ok_or_else(|| anyhow::anyhow!("Plex create collection response held no metadata"))?;
+        self.set_alphabetical_sort(&collection_rating_key)
     }
 
     fn add_items(
@@ -140,6 +172,38 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
 }
 
 impl HttpPlexCollectionRepository {
+    /// The server's machine identifier, from `/identity`, fetched once and
+    /// cached for the process lifetime.
+    fn machine_id(&self) -> anyhow::Result<String> {
+        let mut machine_id = self.machine_id.lock().unwrap();
+        if let Some(machine_id) = machine_id.as_ref() {
+            return Ok(machine_id.clone());
+        }
+
+        let response: MediaContainerResponse = self.get_json("/identity", &[])?;
+        let fetched = response
+            .media_container
+            .machine_identifier
+            .ok_or_else(|| anyhow::anyhow!("Plex /identity response held no machineIdentifier"))?;
+        *machine_id = Some(fetched.clone());
+        Ok(fetched)
+    }
+
+    /// Sets the collection to sort alphabetically, so yarrtube's
+    /// position-prefixed `sorttitle` values order members by playlist
+    /// position / publish date.
+    fn set_alphabetical_sort(&self, collection_rating_key: &str) -> anyhow::Result<()> {
+        let path = format!("/library/metadata/{collection_rating_key}/prefs");
+        let response = self
+            .client
+            .put(format!("{}{path}", self.config.base_url))
+            .query(&[("collectionSort", "1")])
+            .header("Accept", "application/json")
+            .header("X-Plex-Token", &self.config.token)
+            .send()?;
+        Self::ensure_success(&path, &response)
+    }
+
     /// Fetches a metadata listing and keeps the items with a `youtube://`
     /// guid, requesting guids explicitly (`includeGuids=1`).
     fn get_youtube_items(&self, path: &str) -> anyhow::Result<Vec<PlexItem>> {
@@ -470,6 +534,61 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn it_should_create_a_collection_with_alphabetical_sort() {
+        let mut server = mockito::Server::new();
+        let identity_mock = server
+            .mock("GET", "/identity")
+            .match_header("accept", "application/json")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(r#"{"MediaContainer": {"machineIdentifier": "machine-1"}}"#)
+            .expect(1)
+            .create();
+        let create_mock = server
+            .mock("POST", "/library/collections")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("type".into(), "1".into()),
+                mockito::Matcher::UrlEncoded("smart".into(), "0".into()),
+                mockito::Matcher::UrlEncoded("sectionId".into(), "1".into()),
+                mockito::Matcher::UrlEncoded("title".into(), "Lofi beats".into()),
+                mockito::Matcher::UrlEncoded(
+                    "uri".into(),
+                    "server://machine-1/com.plexapp.plugins.library/library/metadata/101,102"
+                        .into(),
+                ),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"Metadata": [{"ratingKey": "c9", "title": "Lofi beats"}]}}"#,
+            )
+            .expect(2)
+            .create();
+        let sort_mock = server
+            .mock("PUT", "/library/metadata/c9/prefs")
+            .match_query(mockito::Matcher::UrlEncoded(
+                "collectionSort".into(),
+                "1".into(),
+            ))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .expect(2)
+            .create();
+        let repository = repository(&server);
+
+        let first =
+            repository.create_collection("Lofi beats", &["101".to_string(), "102".to_string()]);
+        let second =
+            repository.create_collection("Lofi beats", &["101".to_string(), "102".to_string()]);
+
+        assert_eq!(first.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(second.map_err(|e| e.to_string()), Ok(()));
+        identity_mock.assert();
+        create_mock.assert();
+        sort_mock.assert();
     }
 
     fn repository(server: &mockito::Server) -> HttpPlexCollectionRepository {
