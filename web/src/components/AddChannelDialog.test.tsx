@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AddChannelDialog } from './AddChannelDialog'
-import { aChannel, mockApi, renderWithProviders, type Routes } from '@/test/helpers'
+import { aChannel, aPlaylist, mockApi, renderWithProviders, type Routes } from '@/test/helpers'
 
 const baseRoutes: Routes = {
   'GET /api/channels': [],
@@ -19,6 +19,17 @@ function renderDialog(routes: Routes) {
 }
 
 describe('AddChannelDialog', () => {
+  it('suggests only parents of tracked channels in the channel dialog', async () => {
+    renderDialog({
+      'GET /api/playlists': [aPlaylist({ path: 'playlists/kids/contes' })],
+      'GET /api/channels': [aChannel({ path: 'channels/science/veritasium' })],
+    })
+
+    expect(await screen.findByRole('radio', { name: 'channels/science/' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'channels/', checked: true })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'playlists/kids/' })).not.toBeInTheDocument()
+  })
+
   it('looks the entered handle up and states the limit and destination', async () => {
     renderDialog({
       'GET /api/channels/preview?channel=%40chan': {

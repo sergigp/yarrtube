@@ -4,32 +4,20 @@ interface DestinationNoticeProps {
   tone: 'info' | 'error'
   leading?: ReactNode
   children: ReactNode
-  onChange?: () => void
 }
 
 /**
- * The helper line under an add dialog's main field, stating where videos
- * will go or why they can't. `leading`, when given, is rendered before the
- * text. `onChange`, when given, renders a "change" action after the text.
+ * The confirmation line under an add dialog's "Save to" list, stating where
+ * videos will go or why they can't. The location itself is changed through
+ * the list above, so the notice offers no action of its own. `leading`, when
+ * given, is rendered before the text.
  */
-export function DestinationNotice({ tone, leading, children, onChange }: DestinationNoticeProps) {
+export function DestinationNotice({ tone, leading, children }: DestinationNoticeProps) {
   const color = tone === 'error' ? 'text-destructive' : 'text-muted-foreground'
   return (
     <p className={`mt-1 min-w-0 text-xs leading-relaxed ${color}`} data-testid="destination-notice">
       {leading}
       {children}
-      {onChange && (
-        <>
-          {' '}
-          <button
-            type="button"
-            className="text-primary underline underline-offset-2"
-            onClick={onChange}
-          >
-            change
-          </button>
-        </>
-      )}
     </p>
   )
 }

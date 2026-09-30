@@ -18,7 +18,7 @@ Frontend-only change: the TDD cycles run in the Vitest suite (`web/`), with `npm
 - [x] 2.8 `opens the browser from choose-another and keeps the chosen folder selected` — "Choose another folder…" reveals `FolderBrowser` on the current parent; after browsing to a subfolder and closing, the list shows it selected and the notice matches. Verified by the test.
 - [x] 2.9 `shows no change action in the notice` — info and destination-occupied error notices render without a "change" link (`DestinationNotice` loses `onChange`). Verified by the test and by removing the now-dead assertions from existing dialog tests.
 - [x] 2.10 `keeps the folder name and quality under advanced options` — Advanced options collapsed by default hold `FolderNameField` (auto-fill, manual-edit stickiness, `/` and empty rejection intact) and quality; the parent control is gone from Advanced. Verified by the test.
-- [ ] 2.11 `suggests only parents of tracked channels in the channel dialog` — AddChannelDialog gets the same layout; playlist-only parents are absent from its list. Verified by the test.
+- [x] 2.11 `suggests only parents of tracked channels in the channel dialog` — AddChannelDialog gets the same layout; playlist-only parents are absent from its list. Verified by the test.
 - [ ] 2.12 `keeps a separate remembered parent per dialog` — a playlist submit leaves the channel dialog's preselection untouched. Verified by the test.
 
 ## 3. Infrastructure adapters (TDD)
