@@ -1039,6 +1039,35 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_start_the_next_task_as_soon_as_one_finishes() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.shared_connection(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::succeeding());
+        task_repository.schedule(&reconcile("PL1"), now()).unwrap();
+        task_repository.schedule(&reconcile("PL2"), now()).unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
+        ));
+
+        let running = tokio::spawn(executor.run(Duration::from_secs(3600)));
+        let remaining = wait_for_no_tasks(&task_repository).await;
+        running.abort();
+
+        assert_eq!(remaining, Vec::<ScheduledTask>::new());
+        assert_eq!(
+            *handler.received_is_last_attempt.lock().unwrap(),
+            vec![false, false]
+        );
+    }
+
     const TEST_BASE_RETRY_DELAY_SECONDS: i64 = 150;
     const TEST_DOWNLOAD_CONCURRENCY: usize = 2;
 
@@ -1104,6 +1133,17 @@ mod tests {
 
     fn running(id: i64, task: &Task) -> ScheduledTask {
         pending(id, task).start(now())
+    }
+
+    /// Waits up to 5s for every task to finish, and returns what is left.
+    async fn wait_for_no_tasks(task_repository: &SqliteTaskRepository) -> Vec<ScheduledTask> {
+        for _ in 0..100 {
+            if task_repository.list_non_completed().unwrap().is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        task_repository.list_non_completed().unwrap()
     }
 
     /// Runs one scheduling pass and waits for every task it started.
