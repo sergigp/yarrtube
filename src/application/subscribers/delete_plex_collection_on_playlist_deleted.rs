@@ -79,6 +79,42 @@ mod tests {
     }
 
     #[test]
+    fn it_should_delete_the_collection_from_every_configured_section() {
+        let plex_repository = Arc::new(
+            FakePlexCollectionRepository::with_items_and_collections(
+                "2",
+                vec![],
+                vec![FakePlexCollection {
+                    rating_key: "c1".to_string(),
+                    title: "Lofi beats".to_string(),
+                    member_rating_keys: vec![],
+                }],
+            )
+            .and_section(
+                "5",
+                vec![],
+                vec![FakePlexCollection {
+                    rating_key: "c2".to_string(),
+                    title: "Lofi beats".to_string(),
+                    member_rating_keys: vec![],
+                }],
+            ),
+        );
+        let subscriber = DeletePlexCollectionOnPlaylistDeleted::new(PlexCollectionDeleter::new(
+            vec!["2".to_string(), "5".to_string()],
+            plex_repository.clone(),
+        ));
+
+        let result = handle(
+            &subscriber,
+            r#"{"playlist_id": "PL1", "name": "Lofi beats", "path": "music/chill"}"#,
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex_repository.collections(), vec![]);
+    }
+
+    #[test]
     fn it_should_skip_if_no_collection_matches_the_playlist_name() {
         let plex_repository = Arc::new(FakePlexCollectionRepository::with_items_and_collections(
             "1",
