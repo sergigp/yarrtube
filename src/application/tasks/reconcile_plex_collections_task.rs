@@ -129,7 +129,7 @@ mod tests {
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items(vec![]));
+        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items("1", vec![]));
         playlist_repository
             .insert(&playlist("PL1", "Lofi beats"))
             .unwrap();
@@ -142,6 +142,7 @@ mod tests {
         );
         let task = ReconcilePlexCollectionsTask::new(
             PlexCollectionReconciler::new(
+                vec!["1".to_string()],
                 playlist_repository.clone(),
                 Arc::new(SqliteChannelRepository::new(db.connection())),
                 playlist_video_repository.clone(),
@@ -178,10 +179,10 @@ mod tests {
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items(vec![
-            plex_item("101", "yt1"),
-            plex_item("102", "yt2"),
-        ]));
+        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items(
+            "1",
+            vec![plex_item("101", "yt1"), plex_item("102", "yt2")],
+        ));
         playlist_repository
             .insert(&playlist("PL1", "Lofi beats"))
             .unwrap();
@@ -204,6 +205,7 @@ mod tests {
             .unwrap();
         let task = ReconcilePlexCollectionsTask::new(
             PlexCollectionReconciler::new(
+                vec!["1".to_string()],
                 playlist_repository.clone(),
                 Arc::new(SqliteChannelRepository::new(db.connection())),
                 playlist_video_repository.clone(),
@@ -241,6 +243,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let plex_repository = Arc::new(FakePlexCollectionRepository::with_items_and_collections(
+            "1",
             vec![plex_item("101", "yt1"), plex_item("102", "yt2")],
             vec![FakePlexCollection {
                 rating_key: "c1".to_string(),
@@ -267,6 +270,7 @@ mod tests {
         );
         let task = ReconcilePlexCollectionsTask::new(
             PlexCollectionReconciler::new(
+                vec!["1".to_string()],
                 playlist_repository.clone(),
                 Arc::new(SqliteChannelRepository::new(db.connection())),
                 playlist_video_repository.clone(),
@@ -304,6 +308,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let plex_repository = Arc::new(FakePlexCollectionRepository::with_items_and_collections(
+            "1",
             vec![plex_item("101", "yt1"), plex_item("102", "yt2")],
             vec![FakePlexCollection {
                 rating_key: "c1".to_string(),
@@ -323,6 +328,7 @@ mod tests {
         );
         let task = ReconcilePlexCollectionsTask::new(
             PlexCollectionReconciler::new(
+                vec!["1".to_string()],
                 playlist_repository.clone(),
                 Arc::new(SqliteChannelRepository::new(db.connection())),
                 playlist_video_repository.clone(),
@@ -360,6 +366,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let plex_repository = Arc::new(FakePlexCollectionRepository::with_items_and_collections(
+            "1",
             vec![plex_item("101", "yt1"), plex_item("102", "yt2")],
             vec![FakePlexCollection {
                 rating_key: "c1".to_string(),
@@ -386,6 +393,7 @@ mod tests {
         );
         let task = ReconcilePlexCollectionsTask::new(
             PlexCollectionReconciler::new(
+                vec!["1".to_string()],
                 playlist_repository.clone(),
                 Arc::new(SqliteChannelRepository::new(db.connection())),
                 playlist_video_repository.clone(),
@@ -424,10 +432,10 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let plex_repository = Arc::new(
-            FakePlexCollectionRepository::with_items(vec![
-                plex_item("101", "yt1"),
-                plex_item("102", "yt2"),
-            ])
+            FakePlexCollectionRepository::with_items(
+                "1",
+                vec![plex_item("101", "yt1"), plex_item("102", "yt2")],
+            )
             .failing_create_for("Alpha"),
         );
         playlist_repository
@@ -452,6 +460,7 @@ mod tests {
         );
         let task = ReconcilePlexCollectionsTask::new(
             PlexCollectionReconciler::new(
+                vec!["1".to_string()],
                 playlist_repository.clone(),
                 Arc::new(SqliteChannelRepository::new(db.connection())),
                 playlist_video_repository.clone(),
@@ -494,6 +503,7 @@ mod tests {
         let plex_repository = Arc::new(FakePlexCollectionRepository::failing());
         let task = ReconcilePlexCollectionsTask::new(
             PlexCollectionReconciler::new(
+                vec!["1".to_string()],
                 Arc::new(SqlitePlaylistRepository::new(db.connection())),
                 Arc::new(SqliteChannelRepository::new(db.connection())),
                 Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
@@ -528,10 +538,10 @@ mod tests {
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items(vec![
-            plex_item("101", "yt1"),
-            plex_item("102", "yt2"),
-        ]));
+        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items(
+            "1",
+            vec![plex_item("101", "yt1"), plex_item("102", "yt2")],
+        ));
         channel_repository
             .insert(&channel("@somechannel", "Some Channel"))
             .unwrap();
@@ -551,6 +561,7 @@ mod tests {
         );
         let task = ReconcilePlexCollectionsTask::new(
             PlexCollectionReconciler::new(
+                vec!["1".to_string()],
                 Arc::new(SqlitePlaylistRepository::new(db.connection())),
                 channel_repository.clone(),
                 Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
@@ -594,10 +605,10 @@ mod tests {
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items(vec![
-            plex_item("101", "yt1"),
-            plex_item("102", "yt2"),
-        ]));
+        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items(
+            "1",
+            vec![plex_item("101", "yt1"), plex_item("102", "yt2")],
+        ));
         playlist_repository
             .insert(&playlist("PL1", "Lofi beats"))
             .unwrap();
@@ -617,6 +628,7 @@ mod tests {
         );
         let task = ReconcilePlexCollectionsTask::new(
             PlexCollectionReconciler::new(
+                vec!["1".to_string()],
                 playlist_repository.clone(),
                 Arc::new(SqliteChannelRepository::new(db.connection())),
                 playlist_video_repository.clone(),

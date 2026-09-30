@@ -39,6 +39,7 @@ mod tests {
     #[test]
     fn it_should_delete_the_collection_if_a_playlist_is_deleted() {
         let plex_repository = Arc::new(FakePlexCollectionRepository::with_items_and_collections(
+            "1",
             vec![PlexItem {
                 rating_key: "101".to_string(),
                 youtube_video_id: "yt1".to_string(),
@@ -57,6 +58,7 @@ mod tests {
             ],
         ));
         let subscriber = DeletePlexCollectionOnPlaylistDeleted::new(PlexCollectionDeleter::new(
+            vec!["1".to_string()],
             plex_repository.clone(),
         ));
 
@@ -79,6 +81,7 @@ mod tests {
     #[test]
     fn it_should_skip_if_no_collection_matches_the_playlist_name() {
         let plex_repository = Arc::new(FakePlexCollectionRepository::with_items_and_collections(
+            "1",
             vec![],
             vec![FakePlexCollection {
                 rating_key: "c2".to_string(),
@@ -87,6 +90,7 @@ mod tests {
             }],
         ));
         let subscriber = DeletePlexCollectionOnPlaylistDeleted::new(PlexCollectionDeleter::new(
+            vec!["1".to_string()],
             plex_repository.clone(),
         ));
 

@@ -158,21 +158,39 @@ fn plex_reconcile_interval_seconds() -> i64 {
         .unwrap_or(DEFAULT_PLEX_RECONCILE_INTERVAL_SECONDS)
 }
 
-/// The Plex integration's adapter, present only when the daemon is
-/// configured to talk to a Plex server: all of `YARRTUBE_PLEX_URL`,
-/// `YARRTUBE_PLEX_TOKEN` and `YARRTUBE_PLEX_SECTION_ID` must be set to a
-/// non-empty value (wrappers like `run-local.sh` pass empty strings for
-/// unset variables). When absent, nothing Plex-related is wired and the
-/// daemon behaves exactly as without the integration.
-fn plex_collection_repository() -> Option<Arc<dyn PlexCollectionRepository>> {
+/// The Plex integration's adapter and target sections, present only when
+/// the daemon is configured to talk to a Plex server: all of
+/// `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN` and `YARRTUBE_PLEX_SECTION_ID`
+/// (one section id, or a comma-separated list for content spread across
+/// several libraries) must be set to a non-empty value (wrappers like
+/// `run-local.sh` pass empty strings for unset variables). When absent,
+/// nothing Plex-related is wired and the daemon behaves exactly as without
+/// the integration.
+#[derive(Clone)]
+struct PlexIntegration {
+    repository: Arc<dyn PlexCollectionRepository>,
+    section_ids: Vec<String>,
+}
+
+fn plex_integration() -> Option<PlexIntegration> {
     let base_url = non_empty_env("YARRTUBE_PLEX_URL")?;
     let token = non_empty_env("YARRTUBE_PLEX_TOKEN")?;
-    let section_id = non_empty_env("YARRTUBE_PLEX_SECTION_ID")?;
-    Some(Arc::new(HttpPlexCollectionRepository::new(PlexConfig {
-        base_url,
-        token,
-        section_id,
-    })))
+    let section_ids: Vec<String> = non_empty_env("YARRTUBE_PLEX_SECTION_ID")?
+        .split(',')
+        .map(str::trim)
+        .filter(|section_id| !section_id.is_empty())
+        .map(str::to_string)
+        .collect();
+    if section_ids.is_empty() {
+        return None;
+    }
+    Some(PlexIntegration {
+        repository: Arc::new(HttpPlexCollectionRepository::new(PlexConfig {
+            base_url,
+            token,
+        })),
+        section_ids,
+    })
 }
 
 fn non_empty_env(name: &str) -> Option<String> {
@@ -310,18 +328,18 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
 
 fn event_consumer(
     infrastructure: &InfrastructureContainer,
-    plex_repository: Option<Arc<dyn PlexCollectionRepository>>,
+    plex: Option<PlexIntegration>,
 ) -> DomainEventsConsumer {
     DomainEventsConsumer::new(
         infrastructure.event_repository.clone(),
-        event_subscribers(infrastructure, plex_repository),
+        event_subscribers(infrastructure, plex),
         infrastructure.clock.clone(),
     )
 }
 
 fn event_subscribers(
     infrastructure: &InfrastructureContainer,
-    plex_repository: Option<Arc<dyn PlexCollectionRepository>>,
+    plex: Option<PlexIntegration>,
 ) -> SubscriberRegistry {
     subscribers::registry(
         playlist_video_reconciler(infrastructure),
@@ -331,17 +349,17 @@ fn event_subscribers(
         infrastructure.task_repository.clone(),
         infrastructure.clock.clone(),
         videos_path(),
-        plex_repository.map(PlexCollectionDeleter::new),
+        plex.map(|plex| PlexCollectionDeleter::new(plex.section_ids, plex.repository)),
     )
 }
 
 fn task_executor(
     infrastructure: &InfrastructureContainer,
-    plex_repository: Option<Arc<dyn PlexCollectionRepository>>,
+    plex: Option<PlexIntegration>,
 ) -> TaskExecutor {
     TaskExecutor::new(
         infrastructure.task_repository.clone(),
-        task_handlers(infrastructure, plex_repository),
+        task_handlers(infrastructure, plex),
         infrastructure.clock.clone(),
         retry_base_delay_seconds(),
         download_concurrency(),
@@ -350,7 +368,7 @@ fn task_executor(
 
 fn task_handlers(
     infrastructure: &InfrastructureContainer,
-    plex_repository: Option<Arc<dyn PlexCollectionRepository>>,
+    plex: Option<PlexIntegration>,
 ) -> HandlerRegistry {
     tasks::registry(
         playlist_video_reconciler(infrastructure),
@@ -363,9 +381,9 @@ fn task_handlers(
         infrastructure.clock.clone(),
         infrastructure.ytdlp_updater.clone(),
         target_path(),
-        plex_repository.map(|plex_repository| {
+        plex.map(|plex| {
             tasks::reconcile_plex_collections_task::ReconcilePlexCollectionsTask::new(
-                plex_collection_reconciler(infrastructure, plex_repository),
+                plex_collection_reconciler(infrastructure, plex),
                 infrastructure.task_repository.clone(),
                 infrastructure.clock.clone(),
                 plex_reconcile_interval_seconds(),
@@ -376,15 +394,16 @@ fn task_handlers(
 
 fn plex_collection_reconciler(
     infrastructure: &InfrastructureContainer,
-    plex_repository: Arc<dyn PlexCollectionRepository>,
+    plex: PlexIntegration,
 ) -> PlexCollectionReconciler {
     PlexCollectionReconciler::new(
+        plex.section_ids,
         infrastructure.playlist_repository.clone(),
         infrastructure.channel_repository.clone(),
         infrastructure.playlist_video_repository.clone(),
         infrastructure.channel_video_repository.clone(),
         infrastructure.video_repository.clone(),
-        plex_repository,
+        plex.repository,
     )
 }
 
@@ -496,12 +515,10 @@ async fn serve_http(port: u16, api_services: ApiServices) -> Result<()> {
 async fn run_async(
     infrastructure: InfrastructureContainer,
     task_executor: Arc<TaskExecutor>,
-    plex_repository: Option<Arc<dyn PlexCollectionRepository>>,
+    plex: Option<PlexIntegration>,
 ) -> ExitCode {
     tokio::spawn(heartbeat_loop());
-    tokio::spawn(
-        Arc::new(event_consumer(&infrastructure, plex_repository)).run(BACKGROUND_POLL_INTERVAL),
-    );
+    tokio::spawn(Arc::new(event_consumer(&infrastructure, plex)).run(BACKGROUND_POLL_INTERVAL));
     tokio::spawn(task_executor.run(BACKGROUND_POLL_INTERVAL));
 
     if let Err(e) = serve_http(port(), api_services(&infrastructure)).await {
@@ -541,9 +558,9 @@ pub fn run() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let plex_repository = plex_collection_repository();
-    let task_executor = Arc::new(task_executor(&infrastructure, plex_repository.clone()));
-    if let Err(e) = prepare_task_queue(&infrastructure, &task_executor, plex_repository.is_some()) {
+    let plex = plex_integration();
+    let task_executor = Arc::new(task_executor(&infrastructure, plex.clone()));
+    if let Err(e) = prepare_task_queue(&infrastructure, &task_executor, plex.is_some()) {
         error!(error = %e, "failed to prepare the task queue");
         return ExitCode::FAILURE;
     }
@@ -559,7 +576,7 @@ pub fn run() -> ExitCode {
         }
     };
 
-    runtime.block_on(run_async(infrastructure, task_executor, plex_repository))
+    runtime.block_on(run_async(infrastructure, task_executor, plex))
 }
 
 #[cfg(test)]

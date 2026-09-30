@@ -7,16 +7,23 @@ use std::time::Duration;
 /// Plex server, so every request gets an explicit short timeout.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Port to the Plex server's collections HTTP API for the configured
-/// library section, authenticated via `X-Plex-Token`.
+/// Port to the Plex server's collections HTTP API, authenticated via
+/// `X-Plex-Token`. Reads and creates are scoped to a library section per
+/// call (yarrtube-fed content can span several Plex libraries); operations
+/// on a rating key take none, since rating keys are server-global in Plex.
 pub trait PlexCollectionRepository: Send + Sync {
     /// Every scanned item in the section carrying a `youtube://` guid.
-    fn list_items(&self) -> anyhow::Result<Vec<PlexItem>>;
-    fn list_collections(&self) -> anyhow::Result<Vec<PlexCollection>>;
+    fn list_items(&self, section_id: &str) -> anyhow::Result<Vec<PlexItem>>;
+    fn list_collections(&self, section_id: &str) -> anyhow::Result<Vec<PlexCollection>>;
     fn list_collection_items(&self, collection_rating_key: &str) -> anyhow::Result<Vec<PlexItem>>;
     /// Creates the collection with the given members and sets its sort to
     /// alphabetical (POST /library/collections + collectionSort pref).
-    fn create_collection(&self, title: &str, rating_keys: &[String]) -> anyhow::Result<()>;
+    fn create_collection(
+        &self,
+        section_id: &str,
+        title: &str,
+        rating_keys: &[String],
+    ) -> anyhow::Result<()>;
     fn add_items(&self, collection_rating_key: &str, rating_keys: &[String]) -> anyhow::Result<()>;
     fn remove_item(&self, collection_rating_key: &str, rating_key: &str) -> anyhow::Result<()>;
     fn delete_collection(&self, collection_rating_key: &str) -> anyhow::Result<()>;
@@ -25,7 +32,6 @@ pub trait PlexCollectionRepository: Send + Sync {
 pub struct PlexConfig {
     pub base_url: String,
     pub token: String,
-    pub section_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -90,15 +96,13 @@ impl HttpPlexCollectionRepository {
 }
 
 impl PlexCollectionRepository for HttpPlexCollectionRepository {
-    fn list_items(&self) -> anyhow::Result<Vec<PlexItem>> {
-        self.get_youtube_items(&format!("/library/sections/{}/all", self.config.section_id))
+    fn list_items(&self, section_id: &str) -> anyhow::Result<Vec<PlexItem>> {
+        self.get_youtube_items(&format!("/library/sections/{section_id}/all"))
     }
 
-    fn list_collections(&self) -> anyhow::Result<Vec<PlexCollection>> {
-        let response: MediaContainerResponse = self.get_json(
-            &format!("/library/sections/{}/collections", self.config.section_id),
-            &[],
-        )?;
+    fn list_collections(&self, section_id: &str) -> anyhow::Result<Vec<PlexCollection>> {
+        let response: MediaContainerResponse =
+            self.get_json(&format!("/library/sections/{section_id}/collections"), &[])?;
         Ok(response
             .media_container
             .metadata
@@ -116,7 +120,12 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
         ))
     }
 
-    fn create_collection(&self, title: &str, rating_keys: &[String]) -> anyhow::Result<()> {
+    fn create_collection(
+        &self,
+        section_id: &str,
+        title: &str,
+        rating_keys: &[String],
+    ) -> anyhow::Result<()> {
         let uri = self.members_uri(rating_keys)?;
 
         let path = "/library/collections";
@@ -126,7 +135,7 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
             .query(&[
                 ("type", "1"),
                 ("smart", "0"),
-                ("sectionId", &self.config.section_id),
+                ("sectionId", section_id),
                 ("title", title),
                 ("uri", &uri),
             ])
@@ -278,12 +287,20 @@ pub struct FakePlexCollection {
     pub member_rating_keys: Vec<String>,
 }
 
+/// One library section as the fake stores it: its scanned items and its
+/// collections.
+#[cfg(test)]
+#[derive(Debug, Default, Clone)]
+pub struct FakePlexSection {
+    pub items: Vec<PlexItem>,
+    pub collections: Vec<FakePlexCollection>,
+}
+
 #[cfg(test)]
 #[derive(Default)]
 pub struct FakePlexCollectionRepository {
-    items: Vec<PlexItem>,
-    collections: Mutex<Vec<FakePlexCollection>>,
-    /// Every mutating call, in order, e.g. `create:Lofi beats`,
+    sections: Mutex<std::collections::BTreeMap<String, FakePlexSection>>,
+    /// Every mutating call, in order, e.g. `create:1:Lofi beats`,
     /// `add:c1:102`, `remove:c1:101`, `delete:c1`.
     mutations: Mutex<Vec<String>>,
     failing_create_titles: Vec<String>,
@@ -292,31 +309,41 @@ pub struct FakePlexCollectionRepository {
 
 #[cfg(test)]
 impl FakePlexCollectionRepository {
-    /// A section whose scanned items are `items`, with no collections yet.
-    pub fn with_items(items: Vec<PlexItem>) -> Self {
-        Self::with_items_and_collections(items, vec![])
+    /// A single section whose scanned items are `items`, with no
+    /// collections yet.
+    pub fn with_items(section_id: &str, items: Vec<PlexItem>) -> Self {
+        Self::with_items_and_collections(section_id, items, vec![])
     }
 
-    /// A section whose scanned items are `items` and whose collections
-    /// already hold `collections`.
+    /// A single section whose scanned items are `items` and whose
+    /// collections already hold `collections`.
     pub fn with_items_and_collections(
+        section_id: &str,
         items: Vec<PlexItem>,
         collections: Vec<FakePlexCollection>,
     ) -> Self {
-        Self {
-            items,
-            collections: Mutex::new(collections),
-            mutations: Mutex::new(vec![]),
-            failing_create_titles: vec![],
-            unreachable: false,
-        }
+        Self::default().and_section(section_id, items, collections)
     }
 
-    /// A Plex server that is down: every call fails.
+    /// The same fake with another section added.
+    pub fn and_section(
+        self,
+        section_id: &str,
+        items: Vec<PlexItem>,
+        collections: Vec<FakePlexCollection>,
+    ) -> Self {
+        self.sections.lock().unwrap().insert(
+            section_id.to_string(),
+            FakePlexSection { items, collections },
+        );
+        self
+    }
+
+    /// A Plex server that is down: the pass's first call fails.
     pub fn failing() -> Self {
         Self {
             unreachable: true,
-            ..Self::with_items(vec![])
+            ..Self::default()
         }
     }
 
@@ -326,8 +353,14 @@ impl FakePlexCollectionRepository {
         self
     }
 
+    /// Every section's collections, ordered by section id.
     pub fn collections(&self) -> Vec<FakePlexCollection> {
-        self.collections.lock().unwrap().clone()
+        self.sections
+            .lock()
+            .unwrap()
+            .values()
+            .flat_map(|section| section.collections.clone())
+            .collect()
     }
 
     pub fn mutations(&self) -> Vec<String> {
@@ -337,37 +370,48 @@ impl FakePlexCollectionRepository {
 
 #[cfg(test)]
 impl PlexCollectionRepository for FakePlexCollectionRepository {
-    fn list_items(&self) -> anyhow::Result<Vec<PlexItem>> {
+    fn list_items(&self, section_id: &str) -> anyhow::Result<Vec<PlexItem>> {
         if self.unreachable {
             anyhow::bail!("Plex is unreachable");
         }
-        Ok(self.items.clone())
-    }
-
-    fn list_collections(&self) -> anyhow::Result<Vec<PlexCollection>> {
         Ok(self
-            .collections
+            .sections
             .lock()
             .unwrap()
-            .iter()
+            .get(section_id)
+            .map(|section| section.items.clone())
+            .unwrap_or_default())
+    }
+
+    fn list_collections(&self, section_id: &str) -> anyhow::Result<Vec<PlexCollection>> {
+        Ok(self
+            .sections
+            .lock()
+            .unwrap()
+            .get(section_id)
+            .map(|section| section.collections.clone())
+            .unwrap_or_default()
+            .into_iter()
             .map(|collection| PlexCollection {
-                rating_key: collection.rating_key.clone(),
-                title: collection.title.clone(),
+                rating_key: collection.rating_key,
+                title: collection.title,
             })
             .collect())
     }
 
     fn list_collection_items(&self, collection_rating_key: &str) -> anyhow::Result<Vec<PlexItem>> {
-        Ok(self
-            .collections
-            .lock()
-            .unwrap()
-            .iter()
+        let sections = self.sections.lock().unwrap();
+        let all_items: Vec<PlexItem> = sections
+            .values()
+            .flat_map(|section| section.items.clone())
+            .collect();
+        Ok(sections
+            .values()
+            .flat_map(|section| section.collections.iter())
             .filter(|collection| collection.rating_key == collection_rating_key)
             .flat_map(|collection| collection.member_rating_keys.clone())
             .map(|member| PlexItem {
-                youtube_video_id: self
-                    .items
+                youtube_video_id: all_items
                     .iter()
                     .find(|item| item.rating_key == member)
                     .map(|item| item.youtube_video_id.clone())
@@ -377,19 +421,30 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
             .collect())
     }
 
-    fn create_collection(&self, title: &str, rating_keys: &[String]) -> anyhow::Result<()> {
+    fn create_collection(
+        &self,
+        section_id: &str,
+        title: &str,
+        rating_keys: &[String],
+    ) -> anyhow::Result<()> {
         if self.failing_create_titles.iter().any(|t| t == title) {
             anyhow::bail!("Plex refused to create the collection {title}");
         }
         self.mutations
             .lock()
             .unwrap()
-            .push(format!("create:{title}"));
-        self.collections.lock().unwrap().push(FakePlexCollection {
-            rating_key: format!("collection:{title}"),
-            title: title.to_string(),
-            member_rating_keys: rating_keys.to_vec(),
-        });
+            .push(format!("create:{section_id}:{title}"));
+        self.sections
+            .lock()
+            .unwrap()
+            .entry(section_id.to_string())
+            .or_default()
+            .collections
+            .push(FakePlexCollection {
+                rating_key: format!("collection:{title}"),
+                title: title.to_string(),
+                member_rating_keys: rating_keys.to_vec(),
+            });
         Ok(())
     }
 
@@ -399,10 +454,11 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
                 .iter()
                 .map(|rating_key| format!("add:{collection_rating_key}:{rating_key}")),
         );
-        self.collections
+        self.sections
             .lock()
             .unwrap()
-            .iter_mut()
+            .values_mut()
+            .flat_map(|section| section.collections.iter_mut())
             .filter(|collection| collection.rating_key == collection_rating_key)
             .for_each(|collection| {
                 collection
@@ -417,10 +473,11 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
             .lock()
             .unwrap()
             .push(format!("remove:{collection_rating_key}:{rating_key}"));
-        self.collections
+        self.sections
             .lock()
             .unwrap()
-            .iter_mut()
+            .values_mut()
+            .flat_map(|section| section.collections.iter_mut())
             .filter(|collection| collection.rating_key == collection_rating_key)
             .for_each(|collection| {
                 collection
@@ -435,10 +492,15 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
             .lock()
             .unwrap()
             .push(format!("delete:{collection_rating_key}"));
-        self.collections
+        self.sections
             .lock()
             .unwrap()
-            .retain(|collection| collection.rating_key != collection_rating_key);
+            .values_mut()
+            .for_each(|section| {
+                section
+                    .collections
+                    .retain(|collection| collection.rating_key != collection_rating_key)
+            });
         Ok(())
     }
 }
@@ -471,7 +533,7 @@ mod tests {
             .create();
         let repository = repository(&server);
 
-        let items = repository.list_items().unwrap();
+        let items = repository.list_items("1").unwrap();
 
         assert_eq!(
             items,
@@ -499,7 +561,7 @@ mod tests {
             .create();
         let repository = repository(&server);
 
-        let collections = repository.list_collections().unwrap();
+        let collections = repository.list_collections("1").unwrap();
 
         assert_eq!(
             collections,
@@ -599,10 +661,16 @@ mod tests {
             .create();
         let repository = repository(&server);
 
-        let first =
-            repository.create_collection("Lofi beats", &["101".to_string(), "102".to_string()]);
-        let second =
-            repository.create_collection("Lofi beats", &["101".to_string(), "102".to_string()]);
+        let first = repository.create_collection(
+            "1",
+            "Lofi beats",
+            &["101".to_string(), "102".to_string()],
+        );
+        let second = repository.create_collection(
+            "1",
+            "Lofi beats",
+            &["101".to_string(), "102".to_string()],
+        );
 
         assert_eq!(first.map_err(|e| e.to_string()), Ok(()));
         assert_eq!(second.map_err(|e| e.to_string()), Ok(()));
@@ -678,7 +746,7 @@ mod tests {
             .create();
         let repository = repository(&server);
 
-        let result = repository.list_items();
+        let result = repository.list_items("1");
 
         assert_eq!(
             result.map_err(|e| e.to_string()),
@@ -693,7 +761,6 @@ mod tests {
         HttpPlexCollectionRepository::new(PlexConfig {
             base_url: server.url(),
             token: "secret-token".to_string(),
-            section_id: "1".to_string(),
         })
     }
 }

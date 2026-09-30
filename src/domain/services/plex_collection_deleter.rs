@@ -2,41 +2,51 @@ use crate::infrastructure::repositories::plex_collection_repository::PlexCollect
 use std::sync::Arc;
 use tracing::info;
 
-/// Deletes the Plex collection left behind by a deleted playlist/channel.
+/// Deletes the Plex collections left behind by a deleted playlist/channel,
+/// across every configured library section.
 #[derive(Clone)]
 pub struct PlexCollectionDeleter {
+    section_ids: Vec<String>,
     plex_collection_repository: Arc<dyn PlexCollectionRepository>,
 }
 
 impl PlexCollectionDeleter {
-    pub fn new(plex_collection_repository: Arc<dyn PlexCollectionRepository>) -> Self {
+    pub fn new(
+        section_ids: Vec<String>,
+        plex_collection_repository: Arc<dyn PlexCollectionRepository>,
+    ) -> Self {
         Self {
+            section_ids,
             plex_collection_repository,
         }
     }
 }
 
 pub trait PlexCollectionDeleterApi: Send + Sync {
-    /// Deletes the collection with this title, if any; missing is a no-op.
+    /// Deletes the collection with this title from every configured
+    /// section where one exists; missing everywhere is a no-op.
     fn delete(&self, name: &str) -> anyhow::Result<()>;
 }
 
 impl PlexCollectionDeleterApi for PlexCollectionDeleter {
     fn delete(&self, name: &str) -> anyhow::Result<()> {
-        let collection = self
-            .plex_collection_repository
-            .list_collections()?
-            .into_iter()
-            .find(|collection| collection.title == name);
+        for section_id in &self.section_ids {
+            let collection = self
+                .plex_collection_repository
+                .list_collections(section_id)?
+                .into_iter()
+                .find(|collection| collection.title == name);
 
-        match collection {
-            Some(collection) => {
+            if let Some(collection) = collection {
                 self.plex_collection_repository
                     .delete_collection(&collection.rating_key)?;
-                info!(collection = name, "deleted Plex collection");
-                Ok(())
+                info!(
+                    section = section_id,
+                    collection = name,
+                    "deleted Plex collection"
+                );
             }
-            None => Ok(()),
         }
+        Ok(())
     }
 }
