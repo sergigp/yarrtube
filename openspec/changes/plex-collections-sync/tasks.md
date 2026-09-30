@@ -11,7 +11,7 @@
 - [x] 2.3 `it_should_skip_creating_a_collection_if_no_video_is_scanned_yet` — no empty collection when Plex has scanned none of the playlist's downloaded videos.
 - [x] 2.4 `it_should_ignore_videos_that_are_not_downloaded` — pending/errored videos never become collection members even when scanned.
 - [x] 2.5 `it_should_add_newly_scanned_videos_to_an_existing_collection` — only the missing rating key is added to an existing collection.
-- [ ] 2.6 `it_should_remove_videos_no_longer_tracked_from_the_collection` — a member whose video left yarrtube's state is removed.
+- [x] 2.6 `it_should_remove_videos_no_longer_tracked_from_the_collection` — a member whose video left yarrtube's state is removed.
 - [ ] 2.7 `it_should_do_nothing_if_already_in_sync` — a pass over converged state performs no collection mutations (idempotence).
 - [ ] 2.8 `it_should_continue_reconciling_remaining_collections_if_one_fails` — one collection's failure is logged and skipped; the rest still reconcile and the task returns Ok.
 - [ ] 2.9 `it_should_reschedule_the_next_reconcile_if_the_pass_fails` — a pass-wide failure (`list_items`) returns Err but the next task is still scheduled.

@@ -152,7 +152,8 @@ impl PlexCollectionReconciler {
         }
     }
 
-    /// Adds the desired members an existing collection is missing.
+    /// Adds the desired members an existing collection is missing and
+    /// removes the members no longer desired.
     fn converge_members(
         &self,
         collection_rating_key: &str,
@@ -173,6 +174,11 @@ impl PlexCollectionReconciler {
         if !missing.is_empty() {
             self.plex_collection_repository
                 .add_items(collection_rating_key, &missing)?;
+        }
+
+        for member in members.iter().filter(|member| !desired.contains(member)) {
+            self.plex_collection_repository
+                .remove_item(collection_rating_key, member)?;
         }
         Ok(())
     }
