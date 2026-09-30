@@ -1,10 +1,10 @@
 use crate::infrastructure::repositories::plex_collection_repository::PlexCollectionRepository;
 use std::sync::Arc;
+use tracing::info;
 
 /// Deletes the Plex collection left behind by a deleted playlist/channel.
 #[derive(Clone)]
 pub struct PlexCollectionDeleter {
-    #[allow(dead_code)]
     plex_collection_repository: Arc<dyn PlexCollectionRepository>,
 }
 
@@ -22,7 +22,21 @@ pub trait PlexCollectionDeleterApi: Send + Sync {
 }
 
 impl PlexCollectionDeleterApi for PlexCollectionDeleter {
-    fn delete(&self, _name: &str) -> anyhow::Result<()> {
-        Ok(())
+    fn delete(&self, name: &str) -> anyhow::Result<()> {
+        let collection = self
+            .plex_collection_repository
+            .list_collections()?
+            .into_iter()
+            .find(|collection| collection.title == name);
+
+        match collection {
+            Some(collection) => {
+                self.plex_collection_repository
+                    .delete_collection(&collection.rating_key)?;
+                info!(collection = name, "deleted Plex collection");
+                Ok(())
+            }
+            None => Ok(()),
+        }
     }
 }

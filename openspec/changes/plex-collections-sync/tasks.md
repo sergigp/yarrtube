@@ -15,7 +15,7 @@
 - [x] 2.7 `it_should_do_nothing_if_already_in_sync` — a pass over converged state performs no collection mutations (idempotence).
 - [x] 2.8 `it_should_continue_reconciling_remaining_collections_if_one_fails` — one collection's failure is logged and skipped; the rest still reconcile and the task returns Ok.
 - [x] 2.9 `it_should_reschedule_the_next_reconcile_if_the_pass_fails` — a pass-wide failure (`list_items`) returns Err but the next task is still scheduled.
-- [ ] 2.10 `it_should_delete_the_collection_if_a_playlist_is_deleted` — the `playlist_deleted` subscriber deletes the collection matching the event's `name`.
+- [x] 2.10 `it_should_delete_the_collection_if_a_playlist_is_deleted` — the `playlist_deleted` subscriber deletes the collection matching the event's `name`.
 - [ ] 2.11 `it_should_skip_if_no_collection_matches_the_playlist_name` — missing collection is a no-op, not an error.
 - [ ] 2.12 `it_should_delete_the_collection_if_a_channel_is_deleted` — proves the channel subscriber's wiring.
 - [ ] 2.13 `it_should_publish_the_playlist_name_on_deletion` — the outbox `playlist_deleted` payload includes `name` (existing playlist-delete adapter tests).
