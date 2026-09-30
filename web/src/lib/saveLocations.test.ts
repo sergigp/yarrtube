@@ -27,4 +27,28 @@ describe('deriveSaveCandidates', () => {
       { path: 'channels/science', count: 1 },
     ])
   })
+
+  it('orders by newest created_at, then count, then name, and applies the cap', () => {
+    const candidates = deriveSaveCandidates(
+      'playlists',
+      [
+        { path: 'playlists/older/a', created_at: '2026-01-01T00:00:00Z' },
+        { path: 'playlists/newest/b', created_at: '2026-03-01T00:00:00Z' },
+        // No created_at: falls back to count, then name, after dated parents.
+        { path: 'playlists/undated-busy/c' },
+        { path: 'playlists/undated-busy/d' },
+        { path: 'playlists/undated-quiet/e' },
+        { path: 'playlists/dropped/f', created_at: '2025-01-01T00:00:00Z' },
+      ],
+      5,
+    )
+
+    expect(candidates).toEqual([
+      { path: 'playlists', count: 0 },
+      { path: 'playlists/newest', count: 1 },
+      { path: 'playlists/older', count: 1 },
+      { path: 'playlists/dropped', count: 1 },
+      { path: 'playlists/undated-busy', count: 2 },
+    ])
+  })
 })
