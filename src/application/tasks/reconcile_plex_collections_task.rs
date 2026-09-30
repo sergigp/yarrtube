@@ -4,15 +4,16 @@ use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{error, info};
 
 /// Recurring global Plex collections convergence pass, reachable only via
 /// the task queue (seeded once at daemon startup by
 /// `schedule_reconcile_plex_collections_if_absent`, only when the Plex
 /// integration is enabled). Like `UpdateYtdlpTask`, it always reschedules
-/// its next occurrence, whether or not this pass succeeded — a failed pass
-/// is retried by the next one, not by the task queue's retry/dead-letter
-/// machinery.
+/// its next occurrence and returns `Ok` whether or not this pass succeeded —
+/// a failed pass is logged and retried by the next one, never by the task
+/// queue's retry/dead-letter machinery, whose retrying attempts would each
+/// seed yet another recurring chain.
 pub struct ReconcilePlexCollectionsTask {
     reconciler: PlexCollectionReconciler,
     task_repository: Arc<dyn TaskRepository>,
@@ -39,14 +40,17 @@ impl ReconcilePlexCollectionsTask {
 impl TaskHandler for ReconcilePlexCollectionsTask {
     fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
         Task::decode_reconcile_plex_collections_payload(payload)?;
-        let result = self.reconciler.reconcile_all();
+        match self.reconciler.reconcile_all() {
+            Ok(()) => info!("Plex collections reconcile pass succeeded"),
+            Err(e) => error!(error = %e, "Plex collections reconcile pass failed"),
+        }
 
         let next_run_at = self.clock.now() + chrono::Duration::seconds(self.interval_seconds);
         self.task_repository
             .schedule(&Task::ReconcilePlexCollections, next_run_at)?;
         info!(next_run_at = %next_run_at, "scheduled next Plex collections reconcile");
 
-        result
+        Ok(())
     }
 }
 
@@ -504,7 +508,7 @@ mod tests {
 
         let result = run(&task, "{}");
 
-        assert_eq!(result, Err("Plex is unreachable".to_string()));
+        assert_eq!(result, Ok(()));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_task(

@@ -107,6 +107,10 @@ impl ReconcilePlexCollectionsTask {
     ) -> Self;
 }
 impl TaskHandler for ReconcilePlexCollectionsTask {
+    /// Runs one pass and always schedules the next occurrence. A failed
+    /// pass is logged and swallowed (Ok), like UpdateYtdlp: returning Err
+    /// would put the task through the queue's retry/dead-letter machinery,
+    /// and every retrying attempt would seed yet another recurring chain.
     fn handle(&self, payload: &str, is_last_attempt: bool) -> anyhow::Result<()>;
 }
 /// Seeds the recurring task at startup unless a non-terminal one exists.
@@ -155,7 +159,7 @@ TaskExecutor ("reconcile_plex_collections")
           members = plex_collection_repository.list_collection_items(collection_key)
           plex_collection_repository.add_items(collection_key, desired \ members)
           plex_collection_repository.remove_item(collection_key, m) for m in members \ desired
-    task_repository.schedule(&Task::ReconcilePlexCollections, now + interval)   // always, like UpdateYtdlp
+    task_repository.schedule(&Task::ReconcilePlexCollections, now + interval)   // always, like UpdateYtdlp; handle returns Ok even on a failed pass
 ```
 
 Collection deletion:
@@ -191,7 +195,7 @@ Behaviour tests — `reconcile_plex_collections_task.rs` (primary adapter; real 
 6. `it_should_remove_videos_no_longer_tracked_from_the_collection` — collection holds a member whose video is gone from yarrtube state; asserts it is removed.
 7. `it_should_do_nothing_if_already_in_sync` — second pass over converged state; asserts fake recorded no mutations.
 8. `it_should_continue_reconciling_remaining_collections_if_one_fails` — fake fails one collection's create; asserts the other playlist's collection still reconciled and the task Ok.
-9. `it_should_reschedule_the_next_reconcile_if_the_pass_fails` — fake `failing()` on `list_items`; asserts Err and next task scheduled.
+9. `it_should_reschedule_the_next_reconcile_if_the_pass_fails` — fake `failing()` on `list_items`; asserts the failure is only logged (handler returns Ok, keeping the task out of the queue's retry/dead-letter machinery, whose retries would each seed another recurring chain) and the next task is scheduled.
 
 Behaviour tests — `delete_plex_collection_on_playlist_deleted.rs`:
 
