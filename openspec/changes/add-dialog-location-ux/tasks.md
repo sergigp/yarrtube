@@ -13,7 +13,7 @@ Frontend-only change: the TDD cycles run in the Vitest suite (`web/`), with `npm
 - [x] 2.3 `selects a suggested folder in one click and the notice follows` — clicking the candidate updates the destination notice to `<root>/playlists/kids/<slug>`. Verified by the test.
 - [x] 2.4 `orders suggestions by most recent use and caps them` — with 6 distinct parents, the default plus the 4 most recently used are shown. Verified by the test.
 - [x] 2.5 `preselects the remembered parent when still suggested` — seeded storage preselects `playlists/kids` on open. Verified by the test.
-- [ ] 2.6 `falls back to the default parent when the remembered one is stale` — remembered parent with no tracked items falls back to `playlists/` without an error. Verified by the test.
+- [x] 2.6 `falls back to the default parent when the remembered one is stale` — remembered parent with no tracked items falls back to `playlists/` without an error. Verified by the test.
 - [ ] 2.7 `remembers the submitted parent for the next open` — successful submit into `playlists/kids` preselects it when the dialog reopens. Verified by the test.
 - [ ] 2.8 `opens the browser from choose-another and keeps the chosen folder selected` — "Choose another folder…" reveals `FolderBrowser` on the current parent; after browsing to a subfolder and closing, the list shows it selected and the notice matches. Verified by the test.
 - [ ] 2.9 `shows no change action in the notice` — info and destination-occupied error notices render without a "change" link (`DestinationNotice` loses `onChange`). Verified by the test and by removing the now-dead assertions from existing dialog tests.

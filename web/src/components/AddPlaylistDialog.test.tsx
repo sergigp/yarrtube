@@ -88,6 +88,17 @@ describe('AddPlaylistDialog', () => {
     ).toBeInTheDocument()
   })
 
+  it('falls back to the default parent when the remembered one is stale', async () => {
+    window.localStorage.setItem('yarrtube.save-to.playlist', 'playlists/gone')
+    renderDialog({
+      'GET /api/playlists': [aPlaylist({ path: 'playlists/kids/contes' })],
+    })
+
+    expect(await screen.findByRole('radio', { name: 'playlists/kids/' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'playlists/', checked: true })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'playlists/gone/' })).not.toBeInTheDocument()
+  })
+
   it('looks the entered playlist up and states the destination', async () => {
     renderDialog({
       'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
