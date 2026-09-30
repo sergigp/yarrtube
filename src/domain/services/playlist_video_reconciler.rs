@@ -311,14 +311,16 @@ impl PlaylistVideoReconciler {
             .iter()
             .filter(|v| v.status == VideoStatus::Downloaded)
             .collect();
+        // The folder a download or thumbnail fetch still in flight is writing
+        // into isn't recorded yet, so it is protected by its predicted name.
+        let unrecorded_folders: Vec<String> = stored_videos
+            .iter()
+            .flat_map(Video::unrecorded_folder_candidates)
+            .collect();
         // Every stored video's thumbnail folder is protected regardless of
         // status: a `Pending`/`InProgress` video may already have a
         // pre-fetched thumbnail on disk, ahead of its own download — see
         // the `video-thumbnails` capability.
-        let in_flight_folders: Vec<String> = stored_videos
-            .iter()
-            .flat_map(Video::in_flight_download_folders)
-            .collect();
         let protected_top_level: HashSet<&str> = downloaded
             .iter()
             .filter_map(|v| v.filename.as_deref())
@@ -327,7 +329,7 @@ impl PlaylistVideoReconciler {
                     .iter()
                     .filter_map(|v| v.thumbnail_filename.as_deref()),
             )
-            .chain(in_flight_folders.iter().map(String::as_str))
+            .chain(unrecorded_folders.iter().map(String::as_str))
             .map(top_level_entry)
             .collect();
         let playlist_position_by_video: HashMap<&VideoRecordId, Option<i64>> =

@@ -230,16 +230,15 @@ impl Video {
                 .is_none_or(|errored_at| now - errored_at >= ERRORED_RECOVERY_COOLDOWN)
     }
 
-    /// The folders a download of this video may be writing into right now,
-    /// while it runs or waits to be retried: that folder isn't recorded until
-    /// the download completes, so it is predicted from the title. Empty when
-    /// no download is in flight.
-    pub fn in_flight_download_folders(&self) -> Vec<String> {
-        match self.status {
-            VideoStatus::InProgress | VideoStatus::ErroredRetrying => {
-                video_folder_candidates(&self.title, &self.youtube_id).to_vec()
-            }
-            _ => Vec::new(),
+    /// The folders a download or thumbnail fetch of this video may be writing
+    /// into right now. Until the video is downloaded its folder isn't
+    /// recorded (a thumbnail fetch records it only once it finishes), so it
+    /// is predicted from the title. Empty once the download recorded its
+    /// folder.
+    pub fn unrecorded_folder_candidates(&self) -> Vec<String> {
+        match self.filename {
+            Some(_) => Vec::new(),
+            None => video_folder_candidates(&self.title, &self.youtube_id).to_vec(),
         }
     }
 
