@@ -99,6 +99,34 @@ describe('AddPlaylistDialog', () => {
     expect(screen.queryByRole('radio', { name: 'playlists/gone/' })).not.toBeInTheDocument()
   })
 
+  it('remembers the submitted parent for the next open', async () => {
+    mockApi({
+      ...baseRoutes,
+      'GET /api/playlists': [aPlaylist({ path: 'playlists/kids/contes' })],
+      'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
+      'POST /api/playlists': aPlaylist(),
+    })
+    const onOpenChange = vi.fn()
+    const { rerender } = renderWithProviders(
+      <AddPlaylistDialog open onOpenChange={onOpenChange} />,
+    )
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
+    await user.click(await screen.findByRole('radio', { name: 'playlists/kids/' }))
+    const submit = screen.getByRole('button', { name: 'Create Playlist' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+
+    rerender(<AddPlaylistDialog open={false} onOpenChange={onOpenChange} />)
+    rerender(<AddPlaylistDialog open onOpenChange={onOpenChange} />)
+
+    expect(
+      await screen.findByRole('radio', { name: 'playlists/kids/', checked: true }),
+    ).toBeInTheDocument()
+  })
+
   it('looks the entered playlist up and states the destination', async () => {
     renderDialog({
       'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },

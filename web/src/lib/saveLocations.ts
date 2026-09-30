@@ -71,6 +71,9 @@ export function readRememberedParent(mode: SaveMode): string | null {
 }
 
 export function writeRememberedParent(mode: SaveMode, parent: string): void {
-  void mode
-  void parent
+  try {
+    window.localStorage.setItem(STORAGE_PREFIX + mode, parent)
+  } catch {
+    // Unwritable storage loses the convenience, never the submit.
+  }
 }

@@ -4,6 +4,7 @@ import { useChannels, usePlaylists } from '@/api/queries'
 import {
   deriveSaveCandidates,
   readRememberedParent,
+  writeRememberedParent,
   type SaveCandidate,
   type SaveMode,
 } from '@/lib/saveLocations'
@@ -204,6 +205,6 @@ export function useSaveLocation(mode: SaveMode, nameSource: string): SaveLocatio
     stagedFrom,
     stage,
     value: { path: destinationPath, destination, valid, occupiedBy },
-    remember: () => {},
+    remember: () => writeRememberedParent(mode, parent),
   }
 }
