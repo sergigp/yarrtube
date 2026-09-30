@@ -83,7 +83,7 @@ Composition, frontend and docs (no tests):
 
 - [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
 - [x] 4.2 `scripts/run-smoke-test.sh` passes.
-- [ ] 4.3 Manual check with `scripts/run-local.sh`: add a playlist with 20+ videos.
+- [x] 4.3 Manual check with `scripts/run-local.sh`: add a playlist with 20+ videos.
   - Within seconds, the tasks tab lists `fetch_thumbnail` and `download_video` tasks.
   - Two downloads run at once.
   - Thumbnails fill in while downloads progress.
