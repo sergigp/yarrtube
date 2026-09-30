@@ -12,7 +12,7 @@ The implementation and its tests already exist on `bug-download-videps` (commits
 - [x] 2.4 `reconcile_channel_task` › `it_should_keep_the_folder_of_a_download_in_progress_if_video_renamed`: channel equivalent of 2.2. Verify with the same filter.
 - [x] 2.5 `task_executor` › `it_should_retry_a_task_left_running_without_waiting_for_a_restart`: a `running` row with no attempt in progress is recovered as a failed attempt on the next pass. Verify with `cargo test it_should_retry_a_task_left_running_without_waiting_for_a_restart`.
 - [x] 2.6 `task_executor` › `it_should_start_the_next_task_as_soon_as_one_finishes`: the run loop runs a pass on start and after every completion. Verify with `cargo test it_should_start_the_next_task_as_soon_as_one_finishes`.
-- [ ] 2.7 `serve` › `it_should_register_a_handler_for_every_task_type`: the production handler registry covers all 8 task types. Verify with `cargo test it_should_register_a_handler_for_every_task_type`.
+- [x] 2.7 `serve` › `it_should_register_a_handler_for_every_task_type`: the production handler registry covers all 8 task types. Verify with `cargo test it_should_register_a_handler_for_every_task_type`.
 - [ ] 2.8 `serve` › `it_should_register_the_subscribers_of_every_event_type`: the production subscriber registry covers all 8 event types with the right subscriber counts. Verify with `cargo test it_should_register_the_subscribers_of_every_event_type`.
 
 ## 3. Infrastructure adapters (TDD)
