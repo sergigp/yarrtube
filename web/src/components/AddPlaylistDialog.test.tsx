@@ -183,6 +183,29 @@ describe('AddPlaylistDialog', () => {
     expect(screen.queryByRole('button', { name: 'change' })).not.toBeInTheDocument()
   })
 
+  it('keeps the folder name and quality under advanced options', async () => {
+    renderDialog({
+      'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
+    await screen.findByText('/videos/playlists/my-mix')
+
+    expect(screen.getByLabelText('Folder name')).not.toBeVisible()
+    expect(screen.getByText('Video quality')).not.toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: /Advanced options/ }))
+    const folderName = screen.getByLabelText('Folder name')
+    expect(folderName).toBeVisible()
+    expect(folderName).toHaveValue('my-mix')
+
+    await user.clear(folderName)
+    await user.type(folderName, 'custom-folder')
+
+    expect(await screen.findByText('/videos/playlists/custom-folder')).toBeInTheDocument()
+  })
+
   it('looks the entered playlist up and states the destination', async () => {
     renderDialog({
       'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
