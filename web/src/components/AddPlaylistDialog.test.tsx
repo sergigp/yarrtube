@@ -26,6 +26,20 @@ describe('AddPlaylistDialog', () => {
     expect(screen.getByRole('button', { name: 'Choose another folder…' })).toBeInTheDocument()
   })
 
+  it('suggests parent folders of tracked playlists with their counts', async () => {
+    renderDialog({
+      'GET /api/playlists': [
+        aPlaylist({ path: 'playlists/kids/contes' }),
+        aPlaylist({ path: 'playlists/kids/fa-la-la' }),
+      ],
+    })
+
+    const kids = await screen.findByRole('radio', { name: 'playlists/kids/' })
+    expect(kids).not.toBeChecked()
+    expect(screen.getByText('· 2 items')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'playlists/', checked: true })).toBeInTheDocument()
+  })
+
   it('looks the entered playlist up and states the destination', async () => {
     renderDialog({
       'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },

@@ -15,9 +15,21 @@ export function deriveSaveCandidates(
   items: { path: string; created_at?: string }[],
   cap?: number,
 ): SaveCandidate[] {
-  void items
   void cap
-  return [{ path: defaultParent, count: 0 }]
+  const groups = new Map<string, number>()
+  for (const item of items) {
+    const cut = item.path.lastIndexOf('/')
+    // An item stored directly at the videos root has no parent to suggest.
+    if (cut <= 0) {
+      continue
+    }
+    const parent = item.path.slice(0, cut)
+    groups.set(parent, (groups.get(parent) ?? 0) + 1)
+  }
+  const derived = [...groups.entries()]
+    .filter(([path]) => path !== defaultParent)
+    .map(([path, count]) => ({ path, count }))
+  return [{ path: defaultParent, count: groups.get(defaultParent) ?? 0 }, ...derived]
 }
 
 export function readRememberedParent(mode: SaveMode): string | null {

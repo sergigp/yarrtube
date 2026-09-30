@@ -26,10 +26,16 @@ export function SaveToField({ location }: { location: SaveLocation }) {
               <input
                 type="radio"
                 name="save-to"
+                aria-label={`${candidate.path}/`}
                 checked={candidate.path === location.parent}
                 onChange={() => location.selectParent(candidate.path)}
               />
-              <span className="truncate font-mono text-xs">{candidate.path}/</span>
+              <span className="truncate font-mono text-xs">{`${candidate.path}/`}</span>
+              {candidate.count > 0 && (
+                <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                  {`· ${candidate.count} ${candidate.count === 1 ? 'item' : 'items'}`}
+                </span>
+              )}
             </label>
           ))}
           <button type="button" onClick={location.openBrowser} className="self-start text-xs">
