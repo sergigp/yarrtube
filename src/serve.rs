@@ -10,8 +10,10 @@ use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdate
 use crate::infrastructure::infrastructure_container::{
     InfrastructureContainer, InfrastructureSettings,
 };
-use crate::infrastructure::repositories::domain_events_consumer::DomainEventsConsumer;
-use crate::infrastructure::repositories::task_executor::TaskExecutor;
+use crate::infrastructure::repositories::domain_events_consumer::{
+    DomainEventsConsumer, SubscriberRegistry,
+};
+use crate::infrastructure::repositories::task_executor::{HandlerRegistry, TaskExecutor};
 use crate::infrastructure::shared::web_assets::WebAssets;
 use crate::infrastructure::shared::{sqlite_connection, sqlite_migrations};
 use anyhow::{Context, Result};
@@ -263,37 +265,45 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
 fn event_consumer(infrastructure: &InfrastructureContainer) -> DomainEventsConsumer {
     DomainEventsConsumer::new(
         infrastructure.event_repository.clone(),
-        subscribers::registry(
-            playlist_video_reconciler(infrastructure),
-            channel_video_reconciler(infrastructure),
-            infrastructure.playlist_repository.clone(),
-            infrastructure.channel_repository.clone(),
-            infrastructure.task_repository.clone(),
-            infrastructure.clock.clone(),
-            videos_path(),
-        ),
+        event_subscribers(infrastructure),
         infrastructure.clock.clone(),
+    )
+}
+
+fn event_subscribers(infrastructure: &InfrastructureContainer) -> SubscriberRegistry {
+    subscribers::registry(
+        playlist_video_reconciler(infrastructure),
+        channel_video_reconciler(infrastructure),
+        infrastructure.playlist_repository.clone(),
+        infrastructure.channel_repository.clone(),
+        infrastructure.task_repository.clone(),
+        infrastructure.clock.clone(),
+        videos_path(),
     )
 }
 
 fn task_executor(infrastructure: &InfrastructureContainer) -> TaskExecutor {
     TaskExecutor::new(
         infrastructure.task_repository.clone(),
-        tasks::registry(
-            playlist_video_reconciler(infrastructure),
-            channel_video_reconciler(infrastructure),
-            video_downloader(infrastructure),
-            thumbnail_fetcher(infrastructure),
-            infrastructure.video_repository.clone(),
-            VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
-            infrastructure.task_repository.clone(),
-            infrastructure.clock.clone(),
-            infrastructure.ytdlp_updater.clone(),
-            target_path(),
-        ),
+        task_handlers(infrastructure),
         infrastructure.clock.clone(),
         retry_base_delay_seconds(),
         download_concurrency(),
+    )
+}
+
+fn task_handlers(infrastructure: &InfrastructureContainer) -> HandlerRegistry {
+    tasks::registry(
+        playlist_video_reconciler(infrastructure),
+        channel_video_reconciler(infrastructure),
+        video_downloader(infrastructure),
+        thumbnail_fetcher(infrastructure),
+        infrastructure.video_repository.clone(),
+        VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
+        infrastructure.task_repository.clone(),
+        infrastructure.clock.clone(),
+        infrastructure.ytdlp_updater.clone(),
+        target_path(),
     )
 }
 
@@ -470,8 +480,10 @@ pub fn run() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
+    use std::collections::{BTreeMap, BTreeSet};
     use tower::ServiceExt;
 
     fn spa_router() -> Router {
@@ -690,6 +702,53 @@ mod tests {
     }
 
     #[test]
+    fn it_should_register_a_handler_for_every_task_type() {
+        let db = TestDatabase::new();
+        let infrastructure = test_infrastructure(&db);
+
+        let handlers = task_handlers(&infrastructure);
+
+        assert_eq!(
+            handlers.keys().map(String::as_str).collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                "delete_channel_files",
+                "delete_playlist_files",
+                "delete_video_file",
+                "download_video",
+                "fetch_thumbnail",
+                "reconcile_channel",
+                "reconcile_playlist",
+                "update_ytdlp",
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_register_the_subscribers_of_every_event_type() {
+        let db = TestDatabase::new();
+        let infrastructure = test_infrastructure(&db);
+
+        let subscribers = event_subscribers(&infrastructure);
+
+        assert_eq!(
+            subscribers
+                .iter()
+                .map(|(event_type, subscribers)| (event_type.as_str(), subscribers.len()))
+                .collect::<BTreeMap<_, _>>(),
+            BTreeMap::from([
+                ("channel_created", 1),
+                ("channel_deleted", 1),
+                ("playlist_created", 1),
+                ("playlist_deleted", 1),
+                ("video_added_to_channel", 2),
+                ("video_added_to_playlist", 2),
+                ("video_removed_from_channel", 1),
+                ("video_removed_from_playlist", 1),
+            ])
+        );
+    }
+
+    #[test]
     fn it_should_default_download_concurrency_when_invalid() {
         let concurrencies: Vec<usize> = [None, Some("0"), Some("-1"), Some("abc"), Some("4")]
             .into_iter()
@@ -741,5 +800,17 @@ mod tests {
         assert!(!videos_root.join("playlists").exists());
         assert!(!videos_root.join("channels").exists());
         std::fs::remove_dir_all(videos_root.parent().unwrap()).unwrap();
+    }
+
+    /// Production adapters over a fresh test database, as `run` builds them.
+    fn test_infrastructure(db: &TestDatabase) -> InfrastructureContainer {
+        InfrastructureContainer::new(InfrastructureSettings {
+            db_path: db.path(),
+            youtube_api_key: String::new(),
+            videos_path: unique_temp_dir("serve-registry-videos"),
+            avatars_path: unique_temp_dir("serve-registry-avatars"),
+            ytdlp_path: PathBuf::from("yt-dlp"),
+        })
+        .unwrap()
     }
 }

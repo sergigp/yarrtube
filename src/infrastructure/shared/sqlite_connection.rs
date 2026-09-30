@@ -39,7 +39,12 @@ impl TestDatabase {
     }
 
     pub fn connection(&self) -> Connection {
-        open(&self.dir.path().join("yarrtube.sqlite3")).unwrap()
+        open(&self.path()).unwrap()
+    }
+
+    /// The database file, for code that opens its own connections.
+    pub fn path(&self) -> std::path::PathBuf {
+        self.dir.path().join("yarrtube.sqlite3")
     }
 
     pub fn shared_connection(&self) -> std::sync::Arc<std::sync::Mutex<Connection>> {
