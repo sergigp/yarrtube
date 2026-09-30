@@ -15,12 +15,15 @@ autoplay across episodes.
 ## What Changes
 
 - New optional Plex integration, enabled only when `YARRTUBE_PLEX_URL` and
-  `YARRTUBE_PLEX_TOKEN` are set (plus the target library section). When
+  `YARRTUBE_PLEX_TOKEN` are set (plus the target library sections —
+  yarrtube-fed content can be split across several Plex libraries, e.g.
+  for per-user sharing, so the section selection is a list). When
   disabled, yarrtube behaves exactly as today.
 - New global recurring task (like `UpdateYtdlp`, unlike the per-entity
   reconcile tasks) that converges Plex collections toward yarrtube's state
   in a single pass:
-  - fetches the Plex section's items once and maps them to yarrtube videos
+  - reconciles each configured section independently: fetches that
+    section's items once and maps them to yarrtube videos
     by YouTube ID (Plex's NFO agent exposes yarrtube's
     `<uniqueid type="youtube">` as a `Guid youtube://<id>` on every item);
   - for each tracked playlist and channel, upserts a collection: creates it

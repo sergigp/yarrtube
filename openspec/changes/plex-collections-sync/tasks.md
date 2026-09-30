@@ -34,8 +34,19 @@
 - [x] 3.7 `it_should_delete_a_collection` — DELETE `/library/collections/<key>`.
 - [x] 3.8 `it_should_fail_if_the_server_replies_with_an_error` — a non-2xx response maps to `Err`.
 
-## 4. Verification
+## 4. Multiple libraries
 
-- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
-- [ ] 4.2 Manual check against the real NAS Plex via `scripts/run-local.sh` with the `YARRTUBE_PLEX_*` env vars set: a tracked playlist gets its collection created/updated in the Plex UI with alphabetical sort, and deleting a playlist removes its collection. Also verify a start *without* the Plex env vars schedules no `reconcile_plex_collections` task.
-- [x] 4.3 Update `README.md` with the Plex integration setup (env vars, how to obtain a token, recommend the "hide items which are in collections" library setting) and verify the docs match the implemented env var names.
+Yarrtube-fed content can be split across several Plex libraries, so the
+integration reconciles a list of sections (`YARRTUBE_PLEX_SECTION_ID`
+accepts a comma-separated list).
+
+- [ ] 4.1 Rework the port and wiring for section-per-call: `list_items`/`list_collections`/`create_collection` take a `section_id`, `PlexConfig` loses its `section_id`, the reconciler and deleter take `section_ids: Vec<String>` and loop them (a failing section is logged, remaining sections still reconcile), `serve.rs` parses `YARRTUBE_PLEX_SECTION_ID` as a comma-separated list, and the fake keeps per-section state. Existing tests updated to a single configured section, all passing.
+- [ ] 4.2 `it_should_create_collections_in_their_own_sections` — two configured sections; a playlist's videos scanned in one, a channel's in the other; each collection is created in its own section only.
+- [ ] 4.3 `it_should_delete_the_collection_from_every_configured_section` — the deleter removes the name-matching collection from both configured sections.
+- [ ] 4.4 Update the docs (`doc/INSTALLATION.md`, `doc/PLEX.md`) for the comma-separated section list and the multi-library behavior.
+
+## 5. Verification
+
+- [x] 5.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass. (Re-run after section 4.)
+- [ ] 5.2 Manual check against the real NAS Plex with the `YARRTUBE_PLEX_*` env vars set: a tracked playlist gets its collection created/updated in the Plex UI with alphabetical sort, and deleting a playlist removes its collection. Also verify a start *without* the Plex env vars schedules no `reconcile_plex_collections` task.
+- [x] 5.3 Update `README.md` with the Plex integration setup (env vars, how to obtain a token, recommend the "hide items which are in collections" library setting) and verify the docs match the implemented env var names.

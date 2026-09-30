@@ -19,7 +19,7 @@
 - `src/domain/event/domain_event.rs` — add `name` to `PlaylistDeleted` and `ChannelDeleted` (the deleted entity's display name; the subscriber can no longer look it up after deletion).
 - `src/domain/services/playlist_deleter.rs`, `src/domain/services/channel_deleter.rs` — publish the deleted events with `name`.
 - `src/infrastructure/repositories/task_executor.rs` — route `reconcile_plex_collections` tasks to the new handler.
-- `src/serve.rs` — read `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN`, `YARRTUBE_PLEX_SECTION_ID`, `YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS` (default 900); when the first three are set, wire the repository/services/task/subscribers and seed the recurring task.
+- `src/serve.rs` — read `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN`, `YARRTUBE_PLEX_SECTION_ID` (one section id or a comma-separated list), `YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS` (default 900); when the first three are set (non-empty), wire the repository/services/task/subscribers and seed the recurring task.
 - `README.md` — Plex integration setup (env vars, token, recommend "hide items which are in collections").
 
 ## Types & Signatures
@@ -40,13 +40,16 @@ pub struct PlexCollection {
 }
 
 // infrastructure/repositories/plex_collection_repository.rs
+// Section-scoped reads/creates take the section id per call (yarrtube-fed
+// content can span several Plex libraries); rating-key operations are
+// server-global in Plex and take none.
 pub trait PlexCollectionRepository: Send + Sync {
-    fn list_items(&self) -> anyhow::Result<Vec<PlexItem>>;
-    fn list_collections(&self) -> anyhow::Result<Vec<PlexCollection>>;
+    fn list_items(&self, section_id: &str) -> anyhow::Result<Vec<PlexItem>>;
+    fn list_collections(&self, section_id: &str) -> anyhow::Result<Vec<PlexCollection>>;
     fn list_collection_items(&self, collection_rating_key: &str) -> anyhow::Result<Vec<PlexItem>>;
     /// Creates the collection with the given members and sets its sort to
     /// alphabetical (POST /library/collections + collectionSort pref).
-    fn create_collection(&self, title: &str, rating_keys: &[String]) -> anyhow::Result<()>;
+    fn create_collection(&self, section_id: &str, title: &str, rating_keys: &[String]) -> anyhow::Result<()>;
     fn add_items(&self, collection_rating_key: &str, rating_keys: &[String]) -> anyhow::Result<()>;
     fn remove_item(&self, collection_rating_key: &str, rating_key: &str) -> anyhow::Result<()>;
     fn delete_collection(&self, collection_rating_key: &str) -> anyhow::Result<()>;
@@ -55,7 +58,6 @@ pub trait PlexCollectionRepository: Send + Sync {
 pub struct PlexConfig {
     pub base_url: String,
     pub token: String,
-    pub section_id: String,
 }
 
 pub struct HttpPlexCollectionRepository { /* config + reqwest::blocking::Client, machine id cached after first fetch */ }
@@ -66,9 +68,10 @@ impl HttpPlexCollectionRepository {
 pub struct FakePlexCollectionRepository { /* Mutex-held items + collections; failing() constructor */ }
 
 // domain/services/plex_collection_reconciler.rs
-pub struct PlexCollectionReconciler { /* playlist, channel, playlist_video, channel_video, video and plex_collection repositories */ }
+pub struct PlexCollectionReconciler { /* section_ids + playlist, channel, playlist_video, channel_video, video and plex_collection repositories */ }
 impl PlexCollectionReconciler {
     pub fn new(
+        section_ids: Vec<String>,
         playlist_repository: Arc<dyn PlaylistRepository>,
         channel_repository: Arc<dyn ChannelRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
@@ -79,20 +82,28 @@ impl PlexCollectionReconciler {
 }
 
 pub trait PlexCollectionReconcilerApi: Send + Sync {
-    /// One convergence pass over every playlist and channel. Per-collection
-    /// failures are logged and skipped; only pass-wide failures (e.g. the
-    /// section listing) return Err.
+    /// One convergence pass over every configured section, each covering
+    /// every playlist and channel: a collection materializes in the
+    /// section(s) whose library holds that playlist's/channel's scanned
+    /// videos. Per-collection failures are logged and skipped; a
+    /// section-wide failure (e.g. its item listing) is logged, the
+    /// remaining sections still reconcile, and the first such error is
+    /// returned.
     fn reconcile_all(&self) -> anyhow::Result<()>;
 }
 
 // domain/services/plex_collection_deleter.rs
-pub struct PlexCollectionDeleter { /* plex_collection_repository */ }
+pub struct PlexCollectionDeleter { /* section_ids + plex_collection_repository */ }
 impl PlexCollectionDeleter {
-    pub fn new(plex_collection_repository: Arc<dyn PlexCollectionRepository>) -> Self;
+    pub fn new(
+        section_ids: Vec<String>,
+        plex_collection_repository: Arc<dyn PlexCollectionRepository>,
+    ) -> Self;
 }
 
 pub trait PlexCollectionDeleterApi: Send + Sync {
-    /// Deletes the collection with this title, if any; missing is a no-op.
+    /// Deletes the collection with this title from every configured
+    /// section where one exists; missing everywhere is a no-op.
     fn delete(&self, name: &str) -> anyhow::Result<()>;
 }
 
@@ -145,20 +156,21 @@ Recurring reconcile pass:
 TaskExecutor ("reconcile_plex_collections")
   ReconcilePlexCollectionsTask::handle(payload, is_last_attempt)
     PlexCollectionReconciler::reconcile_all()
-      plex_collection_repository.list_items()            -> youtube_video_id -> rating_key map
-      plex_collection_repository.list_collections()      -> title -> rating_key map
-      playlist_repository.list() / channel_repository.list()
-      for each playlist/channel (errors logged, loop continues):
-        desired youtube ids:
-          playlist_video_repository.list_for_playlist(id) | channel_video_repository.list_for_channel(id)
-          video_repository.find_many(video record ids), keep status == Downloaded
-        desired rating keys = desired ids ∩ scanned map
-        if no collection for name && desired non-empty:
-          plex_collection_repository.create_collection(name, desired_rating_keys)
-        else if collection exists:
-          members = plex_collection_repository.list_collection_items(collection_key)
-          plex_collection_repository.add_items(collection_key, desired \ members)
-          plex_collection_repository.remove_item(collection_key, m) for m in members \ desired
+      for each configured section (a failing section is logged, the rest still run):
+        plex_collection_repository.list_items(section)        -> youtube_video_id -> rating_key map
+        plex_collection_repository.list_collections(section)  -> title -> rating_key map
+        playlist_repository.list() / channel_repository.list()
+        for each playlist/channel (errors logged, loop continues):
+          desired youtube ids:
+            playlist_video_repository.list_for_playlist(id) | channel_video_repository.list_for_channel(id)
+            video_repository.find_many(video record ids), keep status == Downloaded
+          desired rating keys = desired ids ∩ scanned map
+          if no collection for name && desired non-empty:
+            plex_collection_repository.create_collection(section, name, desired_rating_keys)
+          else if collection exists:
+            members = plex_collection_repository.list_collection_items(collection_key)
+            plex_collection_repository.add_items(collection_key, desired \ members)
+            plex_collection_repository.remove_item(collection_key, m) for m in members \ desired
     task_repository.schedule(&Task::ReconcilePlexCollections, now + interval)   // always, like UpdateYtdlp; handle returns Ok even on a failed pass
 ```
 
@@ -168,8 +180,9 @@ Collection deletion:
 DomainEventsConsumer ("playlist_deleted" / "channel_deleted")
   DeletePlexCollectionOn{Playlist,Channel}Deleted::handle(payload)
     PlexCollectionDeleter::delete(payload["name"])
-      plex_collection_repository.list_collections()
-      plex_collection_repository.delete_collection(key)   // skip if title absent
+      for each configured section:
+        plex_collection_repository.list_collections(section)
+        plex_collection_repository.delete_collection(key)   // skip if title absent
 ```
 
 Startup (serve.rs, only when `YARRTUBE_PLEX_URL` + `YARRTUBE_PLEX_TOKEN` + `YARRTUBE_PLEX_SECTION_ID` set):
@@ -210,6 +223,11 @@ Behaviour tests — deleted-event payloads (in the existing delete adapters' tes
 
 13. `it_should_publish_the_playlist_name_on_deletion` — asserts the outbox `playlist_deleted` payload includes `name`.
 14. `it_should_publish_the_channel_name_on_deletion` — same for `channel_deleted`.
+
+Behaviour tests — multiple sections (same harnesses as above):
+
+23. `it_should_create_collections_in_their_own_sections` — two configured sections; a playlist's videos scanned in one, a channel's in the other; each collection is created in its own section only.
+24. `it_should_delete_the_collection_from_every_configured_section` — the deleter removes the name-matching collection from both configured sections.
 
 Infrastructure tests — `HttpPlexCollectionRepository` against mockito:
 

@@ -29,10 +29,14 @@ and MUST behave exactly as it does today.
 ### Requirement: One collection per tracked playlist and channel
 
 For every tracked playlist and channel, a sync pass SHALL ensure a Plex
-collection named after the playlist/channel exists in the configured library
-section, creating it when missing. Collections created by the system SHALL
-be configured to sort alphabetically, so that yarrtube's position-prefixed
-`sorttitle` values order members by playlist position / publish date.
+collection named after the playlist/channel exists in each configured
+library section holding videos of that playlist/channel that Plex has
+scanned, creating it when missing. The system SHALL support multiple
+configured library sections, reconciling each independently, so
+yarrtube-fed content split across several Plex libraries is covered.
+Collections created by the system SHALL be configured to sort
+alphabetically, so that yarrtube's position-prefixed `sorttitle` values
+order members by playlist position / publish date.
 
 #### Scenario: Collection created for a playlist with scanned videos
 
@@ -41,6 +45,13 @@ be configured to sort alphabetically, so that yarrtube's position-prefixed
   in the section
 - **THEN** a collection with the playlist's name is created containing those
   videos, with alphabetical sorting configured
+
+#### Scenario: Content split across libraries
+
+- **WHEN** two library sections are configured and a playlist's scanned
+  videos live in the second one
+- **THEN** the playlist's collection is created in the second section, and
+  no collection for it is created in the first
 
 #### Scenario: No empty collection for content Plex has not scanned
 
@@ -119,8 +130,8 @@ remaining collections.
 ### Requirement: Deleting a playlist or channel deletes its collection
 
 When a playlist or channel is deleted, the system SHALL delete its Plex
-collection, if one exists. A missing collection MUST NOT be treated as an
-error.
+collection from every configured library section where one exists. A
+missing collection MUST NOT be treated as an error.
 
 #### Scenario: Playlist deleted
 
