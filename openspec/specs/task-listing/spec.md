@@ -7,7 +7,7 @@ Provides an HTTP endpoint to list tasks that have not yet completed, so pending 
 ## Requirements
 
 ### Requirement: List Non-Completed Tasks
-The system SHALL provide an HTTP endpoint that returns every scheduled task whose status is `pending` or `running`, regardless of when it is next due to run, including each task's type, status, retry count, scheduled run time, and — resolved server-side from the task's stored payload at read time — whatever context that payload makes resolvable: the name of the playlist or channel a task concerns, the title of a video being downloaded, and the raw filename or output path a file-cleanup task targets.
+The system SHALL provide an HTTP endpoint that returns every scheduled task whose status is `pending` or `running`, regardless of when it is next due to run, including each task's type, status, retry count, scheduled run time, and — resolved server-side from the task's stored payload at read time — whatever context that payload makes resolvable: the name of the playlist or channel a task concerns, the title of a video being downloaded or having its thumbnail fetched, and the raw filename or output path a file-cleanup task targets.
 
 #### Scenario: Non-completed tasks exist
 - **WHEN** a client requests the list of non-completed tasks and one or more tasks are `pending` or `running`
@@ -21,6 +21,10 @@ The system SHALL provide an HTTP endpoint that returns every scheduled task whos
 - **WHEN** a client requests the list of non-completed tasks and a `pending` task's scheduled run time is in the future
 - **THEN** that task is still included in the response
 
+#### Scenario: Several tasks are running at the same time
+- **WHEN** a client requests the list of non-completed tasks while more than one task is `running`
+- **THEN** every running task is included in the response with status `running`
+
 #### Scenario: Task concerns a tracked playlist
 - **WHEN** a client requests the list of non-completed tasks and a task's payload references a playlist that is still tracked
 - **THEN** the returned task includes that playlist's current name
@@ -31,6 +35,10 @@ The system SHALL provide an HTTP endpoint that returns every scheduled task whos
 
 #### Scenario: Task concerns a specific video
 - **WHEN** a client requests the list of non-completed tasks and a task downloads a specific video
+- **THEN** the returned task includes that video's title, and the current name of whichever playlist or channel the video belongs to
+
+#### Scenario: Task fetches a specific video's thumbnail
+- **WHEN** a client requests the list of non-completed tasks and a task fetches a specific video's thumbnail
 - **THEN** the returned task includes that video's title, and the current name of whichever playlist or channel the video belongs to
 
 #### Scenario: Task targets a specific file
