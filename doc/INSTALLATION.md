@@ -82,37 +82,13 @@ command):
 Yarrtube can keep one Plex collection per tracked playlist and channel,
 turning a flat library of thousands of loose videos into one tile per
 playlist/channel, with correct in-playlist ordering and autoplay across
-episodes.
-
-The integration is off by default: it activates only when
+episodes. The integration is off by default: it activates only when
 `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN` and `YARRTUBE_PLEX_SECTION_ID`
-are all set. A recurring background task then converges the collections
-toward yarrtube's downloaded videos (creating collections with alphabetical
-sorting so videos keep their playlist order, adding videos as Plex scans
-them, and removing videos that leave yarrtube's state), and deleting a
-playlist or channel deletes its collection.
+are all set.
 
-To configure it:
-
-1. **Token** — follow Plex's guide to
-   [find your `X-Plex-Token`](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)
-   (open any library item in the Plex web app, `⋯` → *Get Info* →
-   *View XML*, and copy the `X-Plex-Token` value from the URL).
-2. **Section ID** — list your libraries and note the `key` of the one
-   holding yarrtube's videos:
-
-   ```bash
-   curl "http://<YOUR_PLEX_IP>:32400/library/sections?X-Plex-Token=<YOUR_TOKEN>" \
-     -H "Accept: application/json" | grep -o '"key":"[0-9]*","title":"[^"]*"'
-   ```
-
-3. Set the `YARRTUBE_PLEX_*` variables on the container and restart it.
-
-> [!TIP]
-> In the library's settings in Plex, enable **"Hide items which are in
-> collections"** (Manage Library → Edit → Advanced). The library then
-> shows one tile per playlist/channel instead of every video, which is
-> the browsing experience this integration is built for.
+The Plex-side setup (library configuration, obtaining the token and
+section ID, recommended library settings) is covered step by step in
+[PLEX.md](PLEX.md).
 
 ## Updating
 

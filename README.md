@@ -41,4 +41,4 @@ It doesn't aim to compete with anything. If you want a full-featured archiver, p
 - Track entire channels and download new videos when they are published!
 - Minimalistic webapp to see the videos from the browser in both desktop and mobile.
 - Basic support for Plex, Kodi and Jellyfin.
-- [Plex collections](doc/INSTALLATION.md#plex-collections): one collection per tracked playlist/channel, kept in sync automatically.
+- [Plex collections](doc/PLEX.md): one collection per tracked playlist/channel, kept in sync automatically.

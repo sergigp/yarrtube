@@ -71,6 +71,18 @@ if [[ -z "${YOUTUBE_API_KEY:-}" ]]; then
   echo "         Tracking a YouTube-linked playlist will fail; custom playlists still work." >&2
 fi
 
+# The Plex collections integration activates only when URL, token and
+# section id are all set (see doc/PLEX.md); warn on a partial configuration,
+# which yarrtube treats as disabled.
+PLEX_VARS_SET=0
+[[ -n "${YARRTUBE_PLEX_URL:-}" ]] && PLEX_VARS_SET=$((PLEX_VARS_SET + 1))
+[[ -n "${YARRTUBE_PLEX_TOKEN:-}" ]] && PLEX_VARS_SET=$((PLEX_VARS_SET + 1))
+[[ -n "${YARRTUBE_PLEX_SECTION_ID:-}" ]] && PLEX_VARS_SET=$((PLEX_VARS_SET + 1))
+if [[ "$PLEX_VARS_SET" -gt 0 && "$PLEX_VARS_SET" -lt 3 ]]; then
+  echo "warning: only some of YARRTUBE_PLEX_URL / YARRTUBE_PLEX_TOKEN / YARRTUBE_PLEX_SECTION_ID are set." >&2
+  echo "         The Plex collections integration needs all three and will stay disabled." >&2
+fi
+
 if [[ "$SKIP_WEB_BUILD" == false ]]; then
   echo "==> building web UI"
   (cd "$REPO_ROOT/web" && npm ci && npm run build)
@@ -96,6 +108,14 @@ echo "    YARRTUBE_DB_PATH=$DB_PATH"
 echo "    YARRTUBE_VIDEOS_PATH=$VIDEOS_PATH"
 echo "    YTDLP_PATH=$YTDLP_PATH"
 echo "    RUST_LOG=$RUST_LOG_VALUE"
+if [[ "$PLEX_VARS_SET" -eq 3 ]]; then
+  echo "    YARRTUBE_PLEX_URL=$YARRTUBE_PLEX_URL"
+  echo "    YARRTUBE_PLEX_TOKEN=<set>"
+  echo "    YARRTUBE_PLEX_SECTION_ID=$YARRTUBE_PLEX_SECTION_ID"
+  echo "    YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS=${YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS:-<default: 900>}"
+else
+  echo "    YARRTUBE_PLEX_*=<not set> (Plex collections integration disabled)"
+fi
 echo "==> starting yarrtube serve on http://localhost:$PORT (Ctrl+C to stop)"
 
 cd "$REPO_ROOT"
@@ -106,4 +126,8 @@ exec env \
   YARRTUBE_VIDEOS_PATH="$VIDEOS_PATH" \
   YTDLP_PATH="$YTDLP_PATH" \
   RUST_LOG="$RUST_LOG_VALUE" \
+  YARRTUBE_PLEX_URL="${YARRTUBE_PLEX_URL:-}" \
+  YARRTUBE_PLEX_TOKEN="${YARRTUBE_PLEX_TOKEN:-}" \
+  YARRTUBE_PLEX_SECTION_ID="${YARRTUBE_PLEX_SECTION_ID:-}" \
+  YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS="${YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS:-}" \
   cargo run -- serve

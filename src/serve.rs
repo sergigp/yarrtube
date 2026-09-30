@@ -160,18 +160,25 @@ fn plex_reconcile_interval_seconds() -> i64 {
 
 /// The Plex integration's adapter, present only when the daemon is
 /// configured to talk to a Plex server: all of `YARRTUBE_PLEX_URL`,
-/// `YARRTUBE_PLEX_TOKEN` and `YARRTUBE_PLEX_SECTION_ID` must be set. When
-/// absent, nothing Plex-related is wired and the daemon behaves exactly as
-/// without the integration.
+/// `YARRTUBE_PLEX_TOKEN` and `YARRTUBE_PLEX_SECTION_ID` must be set to a
+/// non-empty value (wrappers like `run-local.sh` pass empty strings for
+/// unset variables). When absent, nothing Plex-related is wired and the
+/// daemon behaves exactly as without the integration.
 fn plex_collection_repository() -> Option<Arc<dyn PlexCollectionRepository>> {
-    let base_url = std::env::var("YARRTUBE_PLEX_URL").ok()?;
-    let token = std::env::var("YARRTUBE_PLEX_TOKEN").ok()?;
-    let section_id = std::env::var("YARRTUBE_PLEX_SECTION_ID").ok()?;
+    let base_url = non_empty_env("YARRTUBE_PLEX_URL")?;
+    let token = non_empty_env("YARRTUBE_PLEX_TOKEN")?;
+    let section_id = non_empty_env("YARRTUBE_PLEX_SECTION_ID")?;
     Some(Arc::new(HttpPlexCollectionRepository::new(PlexConfig {
         base_url,
         token,
         section_id,
     })))
+}
+
+fn non_empty_env(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
 }
 
 fn youtube_api_key() -> String {
