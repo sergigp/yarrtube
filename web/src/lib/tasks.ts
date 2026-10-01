@@ -9,6 +9,8 @@ export function describeTask(task: Task): string {
       return `Syncing playlist ${payload.playlist_name ?? 'an unknown playlist'}`
     case 'reconcile_channel':
       return `Syncing channel ${payload.channel_name ?? 'an unknown channel'}`
+    case 'reconcile_plex_collections':
+      return 'Syncing Plex collections'
     case 'download_video': {
       const video = payload.video_title ?? 'a video'
       const container =

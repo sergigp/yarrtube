@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { byCategory, describeTask, taskCategory } from './tasks'
+import {
+  byCategory,
+  describeTask,
+  matchesTask,
+  tabCounts,
+  tasksForTab,
+  taskCategory,
+  taskFamily,
+} from './tasks'
 import { aTask } from '@/test/helpers'
 
 describe('describeTask', () => {
@@ -52,6 +60,12 @@ describe('describeTask', () => {
     ).toBe('Removing file a.mp4')
     expect(describeTask(aTask({ task_type: 'delete_video_file', payload: {} }))).toBe(
       'Removing a video file',
+    )
+  })
+
+  it('describes a Plex collection reconciliation in plain language', () => {
+    expect(describeTask(aTask({ task_type: 'reconcile_plex_collections', payload: {} }))).toBe(
+      'Syncing Plex collections',
     )
   })
 

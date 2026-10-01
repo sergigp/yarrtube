@@ -15,7 +15,7 @@
 
 ## 3. Pure-logic unit tests (TDD)
 
-- [ ] 3.1 `describeTask` describes a `reconcile_plex_collections` task in plain language — verify the test fails first, then passes.
+- [x] 3.1 `describeTask` describes a `reconcile_plex_collections` task in plain language — verify the test fails first, then passes.
 - [ ] 3.2 `describeTask` describes an `update_ytdlp` task in plain language — verify the test passes.
 - [ ] 3.3 `describeTask` never returns a raw snake_case string for an unknown type (humanized fallback) — verify the test passes.
 - [ ] 3.4 `taskFamily` maps each task type to its family — verify the test passes.
