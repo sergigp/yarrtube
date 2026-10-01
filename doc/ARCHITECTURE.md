@@ -4,7 +4,7 @@ Yarrtube is a single process (`yarrtube serve`) backed by one SQLite database.
 Inside it, the HTTP API does only the synchronous part of each request: it
 validates the input, saves state and publishes a **domain event**. Everything
 slow or fallible (talking to YouTube, running `yt-dlp`, touching the
-filesystem) happens later in the background in an event driven fashion.
+filesystem) happens later in the background in an event-driven fashion.
 
 ## Architecture Overview
 
@@ -47,14 +47,14 @@ flowchart TB
     handlers -- "call service" --> services
 ```
 
-For more information on the architectural decisions and conventions used in Yarrtube you can take a look to [Rust Architect Skills](../.claude/skills/rust-architect/SKILL.md).
+For more information on the architectural decisions and conventions used in Yarrtube you can take a look at the [Rust Architect skill](../.claude/skills/rust-architect/SKILL.md).
 
 ## Example: track a channel and download its videos
 
-To illustrate this domain driven flow we can take a look on what happens when a user adds a channel subscription and all the videos end up downloaded:
+To illustrate this domain-driven flow we can take a look at what happens when a user adds a channel subscription and all the videos end up downloaded:
 
 1. `POST /api/channels` saves the channel and publishes `ChannelCreated` domain event.
-2. The `ReconcileOnChannelCreated` subscriber runs asynchrnously polling the domain events table (that acts like a queue) and runs the first channel sync.
+2. The `ReconcileOnChannelCreated` subscriber runs asynchronously, polling the domain events table (which acts like a queue), and runs the first channel sync.
    - The sync reads the channel's most recent uploads from YouTube using the YouTube API.
    - It saves each new video as `PENDING` and publishes one
      `VideoAddedToChannel` domain event per video.
@@ -76,51 +76,26 @@ sequenceDiagram
     actor User
     participant API as HTTP API
     participant Events as events table
-    participant Consumer as DomainEventsConsumer
     participant Reconciler as ChannelVideoReconciler
     participant Tasks as tasks table
     participant Executor as TaskExecutor
     participant YT as YouTube / yt-dlp
 
     User->>API: POST /api/channels
-    API->>API: ChannelCreator saves channel
-    API->>Events: publish ChannelCreated
+    API->>Events: save channel, publish ChannelCreated
     API-->>User: 201 Created
 
-    Consumer->>Events: poll
-    Events-->>Consumer: ChannelCreated
-    Consumer->>Reconciler: ReconcileOnChannelCreated
-    Reconciler->>YT: list most recent uploads
+    Events->>Reconciler: ReconcileOnChannelCreated (first sync)
+    Reconciler->>YT: list recent uploads
     YT-->>Reconciler: videos
     loop each new video
-        Reconciler->>Reconciler: save video as PENDING
-        Reconciler->>Events: publish VideoAddedToChannel
+        Reconciler->>Events: save PENDING, publish VideoAddedToChannel
     end
-    Reconciler->>Tasks: schedule ReconcileChannel (now + interval)
-    Consumer->>Events: delete ChannelCreated
+    Reconciler->>Tasks: schedule next ReconcileChannel (now + interval)
 
-    Consumer->>Events: poll
-    Events-->>Consumer: VideoAddedToChannel (xN)
-    Consumer->>Tasks: FetchThumbnailOnVideoAddedToChannel<br/>schedules FetchThumbnail (run now)
-    Consumer->>Tasks: DownloadVideoOnVideoAddedToChannel<br/>schedules DownloadVideo (run now)
+    Events->>Tasks: schedule FetchThumbnail + DownloadVideo per video
+    Executor->>Tasks: poll and run tasks
+    Executor->>YT: yt-dlp fetches thumbnail, then downloads video
 
-    Executor->>Tasks: poll, claim what fits each lane
-    par Thumbnail lane, one at a time
-        Tasks-->>Executor: FetchThumbnail
-        Executor->>YT: ThumbnailFetcher runs yt-dlp
-        Executor->>Tasks: delete task (thumbnail recorded)
-    and Download lane, up to YARRTUBE_DOWNLOAD_CONCURRENCY
-        Tasks-->>Executor: DownloadVideo
-    end
-    Executor->>YT: VideoDownloader runs yt-dlp
-    alt success
-        YT-->>Executor: file written
-        Executor->>Tasks: delete task (video DOWNLOADED)
-    else failure, attempts left
-        Executor->>Tasks: reschedule with backoff (video ERRORED_RETRYING)
-    else 5th failure
-        Executor->>Tasks: move to tasks_dead_letter (video ERRORED)
-    end
-
-    Note over Executor,Reconciler: One interval later, the ReconcileChannel task<br/>runs the same sync and schedules the next one.
+    Note over Reconciler,Executor: One interval later, ReconcileChannel<br/>re-syncs and schedules the next run.
 ```
