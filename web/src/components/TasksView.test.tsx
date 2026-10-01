@@ -1,7 +1,48 @@
 import { describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { TasksView } from './TasksView'
 import { aTask, mockApi, pendingForever, renderWithProviders } from '@/test/helpers'
+
+// A spread of tasks across every family, with one running task per the Active tab.
+function aMixOfTasks() {
+  return [
+    aTask({
+      id: 1,
+      task_type: 'download_video',
+      status: 'running',
+      payload: { video_title: 'Intro', channel_name: 'Chan' },
+    }),
+    aTask({
+      id: 2,
+      task_type: 'fetch_thumbnail',
+      status: 'pending',
+      run_at: '2999-01-01T00:00:00Z',
+      payload: { video_title: 'Intro', channel_name: 'Chan' },
+    }),
+    aTask({
+      id: 3,
+      task_type: 'reconcile_channel',
+      status: 'pending',
+      run_at: '2999-01-01T00:00:00Z',
+      payload: { channel_name: 'Chan' },
+    }),
+    aTask({
+      id: 4,
+      task_type: 'delete_video_file',
+      status: 'pending',
+      run_at: '2999-01-01T00:00:00Z',
+      payload: { filename: 'a.mp4' },
+    }),
+    aTask({
+      id: 5,
+      task_type: 'update_ytdlp',
+      status: 'pending',
+      run_at: '2999-01-01T00:00:00Z',
+      payload: {},
+    }),
+  ]
+}
 
 describe('TasksView', () => {
   it('shows a loading message until the tasks arrive', () => {
@@ -57,5 +98,17 @@ describe('TasksView', () => {
     expect(items[0]).toHaveTextContent('running')
     expect(items[0]).toHaveTextContent('2 retries')
     expect(screen.queryByText('Downloading Intro in Chan')).not.toBeInTheDocument()
+  })
+
+  it('shows each tab trigger with its task count', async () => {
+    mockApi({ 'GET /api/tasks': aMixOfTasks() })
+
+    renderWithProviders(<TasksView />)
+
+    expect(await screen.findByRole('tab', { name: /Active/ })).toHaveTextContent('1')
+    expect(screen.getByRole('tab', { name: /Downloads/ })).toHaveTextContent('2')
+    expect(screen.getByRole('tab', { name: /Syncs/ })).toHaveTextContent('1')
+    expect(screen.getByRole('tab', { name: /Cleanup/ })).toHaveTextContent('1')
+    expect(screen.getByRole('tab', { name: /All/ })).toHaveTextContent('5')
   })
 })
