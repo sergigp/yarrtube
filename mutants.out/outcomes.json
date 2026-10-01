@@ -1,0 +1,1375 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 21.643876583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 3.548735542,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:34:5: replace row_to_scheduled_task -> rusqlite::Result<ScheduledTask> with Ok(Default::default())",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "row_to_scheduled_task",
+            "return_type": "-> rusqlite::Result<ScheduledTask>",
+            "span": {
+              "start": {
+                "line": 33,
+                "column": 1
+              },
+              "end": {
+                "line": 79,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 34,
+              "column": 5
+            },
+            "end": {
+              "line": 78,
+              "column": 7
+            }
+          },
+          "replacement": "Ok(Default::default())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_34_col_5.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_34_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.18505525,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:88:5: replace dedupe_predicate -> &'static str with \"\"",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "dedupe_predicate",
+            "return_type": "-> &'static str",
+            "span": {
+              "start": {
+                "line": 84,
+                "column": 1
+              },
+              "end": {
+                "line": 96,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 88,
+              "column": 5
+            },
+            "end": {
+              "line": 95,
+              "column": 6
+            }
+          },
+          "replacement": "\"\"",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_88_col_5.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_88_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.7848746659999999,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 3.314065417,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:88:5: replace dedupe_predicate -> &'static str with \"xyzzy\"",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "dedupe_predicate",
+            "return_type": "-> &'static str",
+            "span": {
+              "start": {
+                "line": 84,
+                "column": 1
+              },
+              "end": {
+                "line": 96,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 88,
+              "column": 5
+            },
+            "end": {
+              "line": 95,
+              "column": 6
+            }
+          },
+          "replacement": "\"xyzzy\"",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_88_col_5_001.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_88_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.560185084,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 3.361474,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:109:9: replace SqliteTaskRepository::list_where -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "SqliteTaskRepository::list_where",
+            "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+            "span": {
+              "start": {
+                "line": 108,
+                "column": 5
+              },
+              "end": {
+                "line": 127,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 109,
+              "column": 9
+            },
+            "end": {
+              "line": 126,
+              "column": 48
+            }
+          },
+          "replacement": "Ok(vec![])",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_109_col_9.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_109_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.874057833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 3.6994732089999998,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:109:9: replace SqliteTaskRepository::list_where -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "SqliteTaskRepository::list_where",
+            "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+            "span": {
+              "start": {
+                "line": 108,
+                "column": 5
+              },
+              "end": {
+                "line": 127,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 109,
+              "column": 9
+            },
+            "end": {
+              "line": 126,
+              "column": 48
+            }
+          },
+          "replacement": "Ok(vec![Default::default()])",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_109_col_9_001.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_109_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.917066,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:185:9: replace <impl TaskRepository for SqliteTaskRepository>::schedule -> anyhow::Result<()> with Ok(())",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::schedule",
+            "return_type": "-> anyhow::Result<()>",
+            "span": {
+              "start": {
+                "line": 184,
+                "column": 5
+              },
+              "end": {
+                "line": 223,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 185,
+              "column": 9
+            },
+            "end": {
+              "line": 222,
+              "column": 15
+            }
+          },
+          "replacement": "Ok(())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_185_col_9.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_185_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.851764208,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 3.457080042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:209:21: replace == with != in <impl TaskRepository for SqliteTaskRepository>::schedule",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::schedule",
+            "return_type": "-> anyhow::Result<()>",
+            "span": {
+              "start": {
+                "line": 184,
+                "column": 5
+              },
+              "end": {
+                "line": 223,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 209,
+              "column": 21
+            },
+            "end": {
+              "line": 209,
+              "column": 23
+            }
+          },
+          "replacement": "!=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_209_col_21.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_209_col_21.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.845001375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 3.428823209,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:226:9: replace <impl TaskRepository for SqliteTaskRepository>::claim -> anyhow::Result<Option<ScheduledTask>> with Ok(None)",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::claim",
+            "return_type": "-> anyhow::Result<Option<ScheduledTask>>",
+            "span": {
+              "start": {
+                "line": 225,
+                "column": 5
+              },
+              "end": {
+                "line": 242,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 226,
+              "column": 9
+            },
+            "end": {
+              "line": 241,
+              "column": 41
+            }
+          },
+          "replacement": "Ok(None)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_226_col_9.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_226_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.124549167,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 7.973804334,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:226:9: replace <impl TaskRepository for SqliteTaskRepository>::claim -> anyhow::Result<Option<ScheduledTask>> with Ok(Some(Default::default()))",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::claim",
+            "return_type": "-> anyhow::Result<Option<ScheduledTask>>",
+            "span": {
+              "start": {
+                "line": 225,
+                "column": 5
+              },
+              "end": {
+                "line": 242,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 226,
+              "column": 9
+            },
+            "end": {
+              "line": 241,
+              "column": 41
+            }
+          },
+          "replacement": "Ok(Some(Default::default()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_226_col_9_001.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_226_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.983514208,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:245:9: replace <impl TaskRepository for SqliteTaskRepository>::list_eligible -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_eligible",
+            "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+            "span": {
+              "start": {
+                "line": 244,
+                "column": 5
+              },
+              "end": {
+                "line": 269,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 245,
+              "column": 9
+            },
+            "end": {
+              "line": 268,
+              "column": 57
+            }
+          },
+          "replacement": "Ok(vec![])",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_245_col_9.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_245_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.157796625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 8.210588042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:245:9: replace <impl TaskRepository for SqliteTaskRepository>::list_eligible -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_eligible",
+            "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+            "span": {
+              "start": {
+                "line": 244,
+                "column": 5
+              },
+              "end": {
+                "line": 269,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 245,
+              "column": 9
+            },
+            "end": {
+              "line": 268,
+              "column": 57
+            }
+          },
+          "replacement": "Ok(vec![Default::default()])",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_245_col_9_001.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_245_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.985828459,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:272:9: replace <impl TaskRepository for SqliteTaskRepository>::list_running -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_running",
+            "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+            "span": {
+              "start": {
+                "line": 271,
+                "column": 5
+              },
+              "end": {
+                "line": 273,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 272,
+              "column": 9
+            },
+            "end": {
+              "line": 272,
+              "column": 46
+            }
+          },
+          "replacement": "Ok(vec![])",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_272_col_9.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_272_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.695792417,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 3.3060004579999998,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:272:9: replace <impl TaskRepository for SqliteTaskRepository>::list_running -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_running",
+            "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+            "span": {
+              "start": {
+                "line": 271,
+                "column": 5
+              },
+              "end": {
+                "line": 273,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 272,
+              "column": 9
+            },
+            "end": {
+              "line": 272,
+              "column": 46
+            }
+          },
+          "replacement": "Ok(vec![Default::default()])",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_272_col_9_001.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_272_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.964869459,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:276:9: replace <impl TaskRepository for SqliteTaskRepository>::list_non_completed -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_non_completed",
+            "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+            "span": {
+              "start": {
+                "line": 275,
+                "column": 5
+              },
+              "end": {
+                "line": 277,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 276,
+              "column": 9
+            },
+            "end": {
+              "line": 276,
+              "column": 60
+            }
+          },
+          "replacement": "Ok(vec![])",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_276_col_9.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_276_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.651027083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 3.598729166,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:276:9: replace <impl TaskRepository for SqliteTaskRepository>::list_non_completed -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_non_completed",
+            "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+            "span": {
+              "start": {
+                "line": 275,
+                "column": 5
+              },
+              "end": {
+                "line": 277,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 276,
+              "column": 9
+            },
+            "end": {
+              "line": 276,
+              "column": 60
+            }
+          },
+          "replacement": "Ok(vec![Default::default()])",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_276_col_9_001.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_276_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.020337334,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:280:9: replace <impl TaskRepository for SqliteTaskRepository>::update -> anyhow::Result<()> with Ok(())",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::update",
+            "return_type": "-> anyhow::Result<()>",
+            "span": {
+              "start": {
+                "line": 279,
+                "column": 5
+              },
+              "end": {
+                "line": 300,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 280,
+              "column": 9
+            },
+            "end": {
+              "line": 299,
+              "column": 15
+            }
+          },
+          "replacement": "Ok(())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_280_col_9.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_280_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.721786292,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 3.520586667,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:303:9: replace <impl TaskRepository for SqliteTaskRepository>::delete -> anyhow::Result<()> with Ok(())",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::delete",
+            "return_type": "-> anyhow::Result<()>",
+            "span": {
+              "start": {
+                "line": 302,
+                "column": 5
+              },
+              "end": {
+                "line": 313,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 303,
+              "column": 9
+            },
+            "end": {
+              "line": 312,
+              "column": 15
+            }
+          },
+          "replacement": "Ok(())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_303_col_9.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_303_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.738498458,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 8.259910875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/repositories/sqlite_task_repository.rs:316:9: replace <impl TaskRepository for SqliteTaskRepository>::dead_letter -> anyhow::Result<()> with Ok(())",
+          "package": "yarrtube",
+          "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+          "function": {
+            "function_name": "<impl TaskRepository for SqliteTaskRepository>::dead_letter",
+            "return_type": "-> anyhow::Result<()>",
+            "span": {
+              "start": {
+                "line": 315,
+                "column": 5
+              },
+              "end": {
+                "line": 377,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 316,
+              "column": 9
+            },
+            "end": {
+              "line": 376,
+              "column": 15
+            }
+          },
+          "replacement": "Ok(())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__infrastructure__repositories__sqlite_task_repository.rs_line_316_col_9.log",
+      "diff_path": "diff/src__infrastructure__repositories__sqlite_task_repository.rs_line_316_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.110602625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 3.630494333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=yarrtube@0.1.0",
+            "--locked"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/shared/sqlite_connection.rs:17:5: replace open -> anyhow::Result<Connection> with Ok(Default::default())",
+          "package": "yarrtube",
+          "file": "src/infrastructure/shared/sqlite_connection.rs",
+          "function": {
+            "function_name": "open",
+            "return_type": "-> anyhow::Result<Connection>",
+            "span": {
+              "start": {
+                "line": 6,
+                "column": 1
+              },
+              "end": {
+                "line": 26,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 17,
+              "column": 5
+            },
+            "end": {
+              "line": 25,
+              "column": 13
+            }
+          },
+          "replacement": "Ok(Default::default())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__infrastructure__shared__sqlite_connection.rs_line_17_col_5.log",
+      "diff_path": "diff/src__infrastructure__shared__sqlite_connection.rs_line_17_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.070069875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/shared/sqlite_connection.rs:51:9: replace Database::open -> anyhow::Result<Self> with Ok(Default::default())",
+          "package": "yarrtube",
+          "file": "src/infrastructure/shared/sqlite_connection.rs",
+          "function": {
+            "function_name": "Database::open",
+            "return_type": "-> anyhow::Result<Self>",
+            "span": {
+              "start": {
+                "line": 50,
+                "column": 5
+              },
+              "end": {
+                "line": 55,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 51,
+              "column": 9
+            },
+            "end": {
+              "line": 54,
+              "column": 11
+            }
+          },
+          "replacement": "Ok(Default::default())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__infrastructure__shared__sqlite_connection.rs_line_51_col_9.log",
+      "diff_path": "diff/src__infrastructure__shared__sqlite_connection.rs_line_51_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.028598791,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/shared/sqlite_connection.rs:59:9: replace Database::read -> &Mutex<Connection> with Box::leak(Box::new(Mutex::new(Default::default())))",
+          "package": "yarrtube",
+          "file": "src/infrastructure/shared/sqlite_connection.rs",
+          "function": {
+            "function_name": "Database::read",
+            "return_type": "-> &Mutex<Connection>",
+            "span": {
+              "start": {
+                "line": 57,
+                "column": 5
+              },
+              "end": {
+                "line": 60,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 59,
+              "column": 9
+            },
+            "end": {
+              "line": 59,
+              "column": 19
+            }
+          },
+          "replacement": "Box::leak(Box::new(Mutex::new(Default::default())))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__infrastructure__shared__sqlite_connection.rs_line_59_col_9.log",
+      "diff_path": "diff/src__infrastructure__shared__sqlite_connection.rs_line_59_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.059538667,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/infrastructure/shared/sqlite_connection.rs:65:9: replace Database::write -> &Mutex<Connection> with Box::leak(Box::new(Mutex::new(Default::default())))",
+          "package": "yarrtube",
+          "file": "src/infrastructure/shared/sqlite_connection.rs",
+          "function": {
+            "function_name": "Database::write",
+            "return_type": "-> &Mutex<Connection>",
+            "span": {
+              "start": {
+                "line": 62,
+                "column": 5
+              },
+              "end": {
+                "line": 66,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 65,
+              "column": 9
+            },
+            "end": {
+              "line": 65,
+              "column": 20
+            }
+          },
+          "replacement": "Box::leak(Box::new(Mutex::new(Default::default())))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/src__infrastructure__shared__sqlite_connection.rs_line_65_col_9.log",
+      "diff_path": "diff/src__infrastructure__shared__sqlite_connection.rs_line_65_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.974514916,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=yarrtube@0.1.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 22,
+  "missed": 1,
+  "caught": 11,
+  "timeout": 0,
+  "unviable": 10,
+  "success": 0,
+  "start_time": "2026-10-01T14:09:44.419745Z",
+  "end_time": "2026-10-01T14:11:40.338144Z",
+  "cargo_mutants_version": "27.1.0"
+}

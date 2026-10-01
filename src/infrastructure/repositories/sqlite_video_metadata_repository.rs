@@ -71,12 +71,7 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
     ) -> anyhow::Result<()> {
         Self::write_movie_nfo(metadata, video_dir)?;
 
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(video_id = %video_id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         let tags = serde_json::to_string(&metadata.tags)
             .context("failed to serialize video metadata tags")?;
         conn.execute(
@@ -118,12 +113,7 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
     }
 
     fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoMetadata>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!(video_id = %video_id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         conn.query_row(
             "SELECT title, plot, studio, director, published_at, genre, tags, uniqueid, thumb, sorttitle, created_at, updated_at
              FROM video_metadata WHERE video_id = ?1",

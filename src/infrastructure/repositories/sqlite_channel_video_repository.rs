@@ -39,13 +39,7 @@ impl SqliteChannelVideoRepository {
 
 impl ChannelVideoRepository for SqliteChannelVideoRepository {
     fn save(&self, channel_video: &ChannelVideo) -> anyhow::Result<()> {
-        let conn = self
-            .db.write()
-            .lock()
-            .inspect_err(|_| {
-                tracing::error!(channel_id = %channel_video.channel_id, "database lock poisoned")
-            })
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute(
             "INSERT INTO channel_videos (channel_id, video_id, position, created_at)
              VALUES (?1, ?2, ?3, ?4)
@@ -71,12 +65,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
         channel_id: &ChannelHandle,
         youtube_video_id: &VideoId,
     ) -> anyhow::Result<Option<ChannelVideo>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!(channel_id = %channel_id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         conn.query_row(
             "SELECT cv.id, cv.channel_id, cv.video_id, cv.position, cv.created_at
              FROM channel_videos cv
@@ -95,12 +84,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
     }
 
     fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<ChannelVideo>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!(video_id = %video_id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         conn.query_row(
             "SELECT id, channel_id, video_id, position, created_at
              FROM channel_videos WHERE video_id = ?1",
@@ -117,12 +101,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
     }
 
     fn list_for_channel(&self, channel_id: &ChannelHandle) -> anyhow::Result<Vec<ChannelVideo>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!(channel_id = %channel_id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
                 "SELECT id, channel_id, video_id, position, created_at
@@ -144,12 +123,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
     }
 
     fn list(&self) -> anyhow::Result<Vec<ChannelVideo>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!("database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
                 "SELECT id, channel_id, video_id, position, created_at
@@ -168,12 +142,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
     }
 
     fn delete(&self, channel_id: &ChannelHandle, youtube_video_id: &VideoId) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(channel_id = %channel_id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute(
             "DELETE FROM channel_videos
              WHERE channel_id = ?1 AND video_id IN (
@@ -189,12 +158,7 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
     }
 
     fn delete_all_for_channel(&self, channel_id: &ChannelHandle) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(channel_id = %channel_id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute(
             "DELETE FROM channel_videos WHERE channel_id = ?1",
             params![channel_id.as_str()],
@@ -262,7 +226,7 @@ mod tests {
     fn seed_video(repo: &SqliteChannelVideoRepository, youtube_id: &str, title: &str) -> Video {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let video = Video::create(VideoId::new(youtube_id).unwrap(), title, now);
-        let conn = repo.db.write().lock().unwrap();
+        let conn = repo.db.write().unwrap();
         conn.execute(
             "INSERT INTO videos (id, youtube_id, title, status, quality, filename, created_at, updated_at)
              VALUES (?1, ?2, ?3, 'PENDING', NULL, NULL, ?4, ?4)",

@@ -1,0 +1,30 @@
+--- src/infrastructure/repositories/sqlite_task_repository.rs
++++ replace <impl TaskRepository for SqliteTaskRepository>::delete -> anyhow::Result<()> with Ok(())
+@@ -295,26 +295,17 @@
+             ],
+         )
+         .inspect_err(|e| tracing::error!(task_id = task.id, error = %e, "failed to update task"))
+         .context("failed to update task")?;
+         Ok(())
+     }
+ 
+     fn delete(&self, id: i64) -> anyhow::Result<()> {
+-        let conn = self
+-            .db
+-            .write()
+-            .lock()
+-            .inspect_err(|_| tracing::error!(task_id = id, "database lock poisoned"))
+-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+-        conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])
+-            .inspect_err(|e| tracing::error!(task_id = id, error = %e, "failed to delete task"))
+-            .context("failed to delete task")?;
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn dead_letter(&self, task: &DeadLetteredTask) -> anyhow::Result<()> {
+         let mut conn = self
+             .db
+             .write()
+             .lock()
+             .inspect_err(|_| {

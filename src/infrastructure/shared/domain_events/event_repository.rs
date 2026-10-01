@@ -67,11 +67,7 @@ impl SqliteEventRepository {
 impl SqliteEventRepository {
     #[cfg(test)]
     fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledEvent>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         conn.query_row(
             &format!("SELECT {SELECT_COLUMNS} FROM events WHERE id = ?1"),
             params![id],
@@ -84,11 +80,7 @@ impl SqliteEventRepository {
     /// Every row in the dead-letter table, which `EventRepository` cannot read.
     #[cfg(test)]
     pub fn list_dead_lettered(&self) -> anyhow::Result<Vec<DeadLetteredEvent>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
                 "SELECT original_event_id, event_type, payload, retries, last_error, created_at, failed_at
@@ -121,11 +113,7 @@ impl SqliteEventRepository {
 
 impl EventRepository for SqliteEventRepository {
     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledEvent>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(&format!(
                 "SELECT {SELECT_COLUMNS} FROM events WHERE status = 'pending' ORDER BY id ASC"
@@ -139,11 +127,7 @@ impl EventRepository for SqliteEventRepository {
     }
 
     fn update(&self, event: &ScheduledEvent) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute(
             "UPDATE events SET retries = ?2, updated_at = ?3, last_error = ?4 WHERE id = ?1",
             params![
@@ -158,22 +142,14 @@ impl EventRepository for SqliteEventRepository {
     }
 
     fn delete(&self, id: i64) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute("DELETE FROM events WHERE id = ?1", params![id])
             .context("failed to delete event")?;
         Ok(())
     }
 
     fn dead_letter(&self, event: &DeadLetteredEvent) -> anyhow::Result<()> {
-        let mut conn = self
-            .db
-            .write()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let mut conn = self.db.write()?;
         let tx = conn
             .transaction()
             .context("failed to start dead-letter transaction")?;
@@ -255,7 +231,7 @@ mod tests {
     fn it_should_create_a_queryable_empty_dead_letter_table() {
         let repo = repo();
 
-        let conn = repo.db.read().lock().unwrap();
+        let conn = repo.db.read().unwrap();
         let mut stmt = conn
             .prepare("SELECT * FROM domain_events_dead_letter")
             .unwrap();
@@ -317,7 +293,7 @@ mod tests {
         assert!(repo.list_eligible().unwrap().is_empty());
         assert!(repo.find(id).unwrap().is_none());
 
-        let conn = repo.db.read().lock().unwrap();
+        let conn = repo.db.read().unwrap();
         let (original_event_id, event_type, payload, retries, last_error): (
             i64,
             String,

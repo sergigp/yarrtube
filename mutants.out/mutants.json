@@ -1,0 +1,706 @@
+[
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace row_to_scheduled_task -> rusqlite::Result<ScheduledTask> with Ok(Default::default())\n@@ -26,61 +26,17 @@\n     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()>;\n     fn delete(&self, id: i64) -> anyhow::Result<()>;\n     /// Atomically inserts `task` into the dead-letter table and deletes the\n     /// original row.\n     fn dead_letter(&self, task: &DeadLetteredTask) -> anyhow::Result<()>;\n }\n \n fn row_to_scheduled_task(row: &Row) -> rusqlite::Result<ScheduledTask> {\n-    let status: String = row.get(3)?;\n-    let run_at: String = row.get(5)?;\n-    let created_at: String = row.get(6)?;\n-    let updated_at: String = row.get(7)?;\n-    Ok(ScheduledTask {\n-        id: row.get(0)?,\n-        task_type: row.get(1)?,\n-        payload: row.get(2)?,\n-        status: TaskStatus::parse(&status).map_err(|e| {\n-            rusqlite::Error::FromSqlConversionFailure(\n-                3,\n-                rusqlite::types::Type::Text,\n-                e.to_string().into(),\n-            )\n-        })?,\n-        retries: row.get(4)?,\n-        run_at: DateTime::parse_from_rfc3339(&run_at)\n-            .map_err(|e| {\n-                rusqlite::Error::FromSqlConversionFailure(\n-                    5,\n-                    rusqlite::types::Type::Text,\n-                    Box::new(e),\n-                )\n-            })?\n-            .with_timezone(&Utc),\n-        created_at: DateTime::parse_from_rfc3339(&created_at)\n-            .map_err(|e| {\n-                rusqlite::Error::FromSqlConversionFailure(\n-                    6,\n-                    rusqlite::types::Type::Text,\n-                    Box::new(e),\n-                )\n-            })?\n-            .with_timezone(&Utc),\n-        updated_at: DateTime::parse_from_rfc3339(&updated_at)\n-            .map_err(|e| {\n-                rusqlite::Error::FromSqlConversionFailure(\n-                    7,\n-                    rusqlite::types::Type::Text,\n-                    Box::new(e),\n-                )\n-            })?\n-            .with_timezone(&Utc),\n-        last_error: row.get(8)?,\n-    })\n+    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n }\n \n const SELECT_COLUMNS: &str =\n     \"id, task_type, payload, status, retries, run_at, created_at, updated_at, last_error\";\n \n /// The `WHERE` clause guarding `schedule`'s insert: a task with an\n /// exclusivity key is only added if no task of its type for the same video\n /// is pending or running; any other task is always added.\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "row_to_scheduled_task",
+      "return_type": "-> rusqlite::Result<ScheduledTask>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 79
+        },
+        "start": {
+          "column": 1,
+          "line": 33
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:34:5: replace row_to_scheduled_task -> rusqlite::Result<ScheduledTask> with Ok(Default::default())",
+    "package": "yarrtube",
+    "replacement": "Ok(Default::default())",
+    "span": {
+      "end": {
+        "column": 7,
+        "line": 78
+      },
+      "start": {
+        "column": 5,
+        "line": 34
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace dedupe_predicate -> &'static str with \"\"\n@@ -80,24 +80,17 @@\n \n const SELECT_COLUMNS: &str =\n     \"id, task_type, payload, status, retries, run_at, created_at, updated_at, last_error\";\n \n /// The `WHERE` clause guarding `schedule`'s insert: a task with an\n /// exclusivity key is only added if no task of its type for the same video\n /// is pending or running; any other task is always added.\n fn dedupe_predicate(task: &Task, payload: &str) -> &'static str {\n-    match Task::exclusivity_key(task.task_type(), payload) {\n-        Some(_) => {\n-            \"NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1\n-               AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')\n-               AND status IN ('pending', 'running'))\"\n-        }\n-        None => \"1\",\n-    }\n+    \"\" /* ~ changed by cargo-mutants ~ */\n }\n \n pub struct SqliteTaskRepository {\n     db: Database,\n     clock: Arc<dyn Clock>,\n }\n \n impl SqliteTaskRepository {\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "dedupe_predicate",
+      "return_type": "-> &'static str",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 96
+        },
+        "start": {
+          "column": 1,
+          "line": 84
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:88:5: replace dedupe_predicate -> &'static str with \"\"",
+    "package": "yarrtube",
+    "replacement": "\"\"",
+    "span": {
+      "end": {
+        "column": 6,
+        "line": 95
+      },
+      "start": {
+        "column": 5,
+        "line": 88
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace dedupe_predicate -> &'static str with \"xyzzy\"\n@@ -80,24 +80,17 @@\n \n const SELECT_COLUMNS: &str =\n     \"id, task_type, payload, status, retries, run_at, created_at, updated_at, last_error\";\n \n /// The `WHERE` clause guarding `schedule`'s insert: a task with an\n /// exclusivity key is only added if no task of its type for the same video\n /// is pending or running; any other task is always added.\n fn dedupe_predicate(task: &Task, payload: &str) -> &'static str {\n-    match Task::exclusivity_key(task.task_type(), payload) {\n-        Some(_) => {\n-            \"NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1\n-               AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')\n-               AND status IN ('pending', 'running'))\"\n-        }\n-        None => \"1\",\n-    }\n+    \"xyzzy\" /* ~ changed by cargo-mutants ~ */\n }\n \n pub struct SqliteTaskRepository {\n     db: Database,\n     clock: Arc<dyn Clock>,\n }\n \n impl SqliteTaskRepository {\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "dedupe_predicate",
+      "return_type": "-> &'static str",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 96
+        },
+        "start": {
+          "column": 1,
+          "line": 84
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:88:5: replace dedupe_predicate -> &'static str with \"xyzzy\"",
+    "package": "yarrtube",
+    "replacement": "\"xyzzy\"",
+    "span": {
+      "end": {
+        "column": 6,
+        "line": 95
+      },
+      "start": {
+        "column": 5,
+        "line": 88
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace SqliteTaskRepository::list_where -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])\n@@ -101,34 +101,17 @@\n }\n \n impl SqliteTaskRepository {\n     pub fn new(db: Database, clock: Arc<dyn Clock>) -> Self {\n         Self { db, clock }\n     }\n \n     fn list_where(&self, predicate: &str) -> anyhow::Result<Vec<ScheduledTask>> {\n-        let conn = self\n-            .db\n-            .read()\n-            .lock()\n-            .inspect_err(|_| tracing::error!(\"database lock poisoned\"))\n-            .map_err(|_| anyhow::anyhow!(\"database lock poisoned\"))?;\n-        let query = format!(\"SELECT {SELECT_COLUMNS} FROM tasks WHERE {predicate} ORDER BY id ASC\");\n-        let mut stmt = conn\n-            .prepare(&query)\n-            .inspect_err(|e| tracing::error!(error = %e, \"failed to prepare tasks query\"))\n-            .context(\"failed to prepare tasks query\")?;\n-        let rows = stmt\n-            .query_map([], row_to_scheduled_task)\n-            .inspect_err(|e| tracing::error!(error = %e, \"failed to list tasks\"))\n-            .context(\"failed to list tasks\")?;\n-        rows.collect::<Result<Vec<_>, _>>()\n-            .inspect_err(|e| tracing::error!(error = %e, \"failed to read task row\"))\n-            .context(\"failed to read task row\")\n+        Ok(vec![]) /* ~ changed by cargo-mutants ~ */\n     }\n \n     #[cfg(test)]\n     fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledTask>> {\n         let conn = self\n             .db\n             .read()\n             .lock()\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "SqliteTaskRepository::list_where",
+      "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 127
+        },
+        "start": {
+          "column": 5,
+          "line": 108
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:109:9: replace SqliteTaskRepository::list_where -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])",
+    "package": "yarrtube",
+    "replacement": "Ok(vec![])",
+    "span": {
+      "end": {
+        "column": 48,
+        "line": 126
+      },
+      "start": {
+        "column": 9,
+        "line": 109
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace SqliteTaskRepository::list_where -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])\n@@ -101,34 +101,17 @@\n }\n \n impl SqliteTaskRepository {\n     pub fn new(db: Database, clock: Arc<dyn Clock>) -> Self {\n         Self { db, clock }\n     }\n \n     fn list_where(&self, predicate: &str) -> anyhow::Result<Vec<ScheduledTask>> {\n-        let conn = self\n-            .db\n-            .read()\n-            .lock()\n-            .inspect_err(|_| tracing::error!(\"database lock poisoned\"))\n-            .map_err(|_| anyhow::anyhow!(\"database lock poisoned\"))?;\n-        let query = format!(\"SELECT {SELECT_COLUMNS} FROM tasks WHERE {predicate} ORDER BY id ASC\");\n-        let mut stmt = conn\n-            .prepare(&query)\n-            .inspect_err(|e| tracing::error!(error = %e, \"failed to prepare tasks query\"))\n-            .context(\"failed to prepare tasks query\")?;\n-        let rows = stmt\n-            .query_map([], row_to_scheduled_task)\n-            .inspect_err(|e| tracing::error!(error = %e, \"failed to list tasks\"))\n-            .context(\"failed to list tasks\")?;\n-        rows.collect::<Result<Vec<_>, _>>()\n-            .inspect_err(|e| tracing::error!(error = %e, \"failed to read task row\"))\n-            .context(\"failed to read task row\")\n+        Ok(vec![Default::default()]) /* ~ changed by cargo-mutants ~ */\n     }\n \n     #[cfg(test)]\n     fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledTask>> {\n         let conn = self\n             .db\n             .read()\n             .lock()\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "SqliteTaskRepository::list_where",
+      "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 127
+        },
+        "start": {
+          "column": 5,
+          "line": 108
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:109:9: replace SqliteTaskRepository::list_where -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])",
+    "package": "yarrtube",
+    "replacement": "Ok(vec![Default::default()])",
+    "span": {
+      "end": {
+        "column": 48,
+        "line": 126
+      },
+      "start": {
+        "column": 9,
+        "line": 109
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::schedule -> anyhow::Result<()> with Ok(())\n@@ -177,54 +177,17 @@\n             .context(\"failed to list dead-lettered tasks\")?;\n         rows.collect::<Result<Vec<_>, _>>()\n             .context(\"failed to read dead-lettered task row\")\n     }\n }\n \n impl TaskRepository for SqliteTaskRepository {\n     fn schedule(&self, task: &Task, run_at: DateTime<Utc>) -> anyhow::Result<()> {\n-        let conn = self\n-            .db\n-            .write()\n-            .lock()\n-            .inspect_err(|_| {\n-                tracing::error!(task_type = task.task_type(), \"database lock poisoned\")\n-            })\n-            .map_err(|_| anyhow::anyhow!(\"database lock poisoned\"))?;\n-        let payload = task.payload().to_string();\n-        let now = self.clock.now().to_rfc3339();\n-        let inserted = conn\n-            .execute(\n-                &format!(\n-                    \"INSERT INTO tasks (task_type, payload, status, retries, run_at, created_at, updated_at, last_error)\n-                     SELECT ?1, ?2, 'pending', 0, ?3, ?4, ?4, NULL\n-                     WHERE {}\",\n-                    dedupe_predicate(task, &payload)\n-                ),\n-                params![task.task_type(), payload, run_at.to_rfc3339(), now],\n-            )\n-            .inspect_err(|e| {\n-                tracing::error!(task_type = task.task_type(), error = %e, \"failed to schedule task\")\n-            })\n-            .context(\"failed to schedule task\")?;\n-        if inserted == 0 {\n-            info!(\n-                task_type = task.task_type(),\n-                \"task already pending or running for this video, not scheduling a duplicate\"\n-            );\n-            return Ok(());\n-        }\n-        info!(\n-            task_id = conn.last_insert_rowid(),\n-            task_type = task.task_type(),\n-            run_at = %run_at,\n-            \"scheduled task\"\n-        );\n-        Ok(())\n+        Ok(()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn claim(&self, id: i64, now: DateTime<Utc>) -> anyhow::Result<Option<ScheduledTask>> {\n         let conn = self\n             .db\n             .write()\n             .lock()\n             .inspect_err(|_| tracing::error!(task_id = id, \"database lock poisoned\"))\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::schedule",
+      "return_type": "-> anyhow::Result<()>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 223
+        },
+        "start": {
+          "column": 5,
+          "line": 184
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:185:9: replace <impl TaskRepository for SqliteTaskRepository>::schedule -> anyhow::Result<()> with Ok(())",
+    "package": "yarrtube",
+    "replacement": "Ok(())",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 222
+      },
+      "start": {
+        "column": 9,
+        "line": 185
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace == with != in <impl TaskRepository for SqliteTaskRepository>::schedule\n@@ -201,17 +201,17 @@\n                     dedupe_predicate(task, &payload)\n                 ),\n                 params![task.task_type(), payload, run_at.to_rfc3339(), now],\n             )\n             .inspect_err(|e| {\n                 tracing::error!(task_type = task.task_type(), error = %e, \"failed to schedule task\")\n             })\n             .context(\"failed to schedule task\")?;\n-        if inserted == 0 {\n+        if inserted != /* ~ changed by cargo-mutants ~ */ 0 {\n             info!(\n                 task_type = task.task_type(),\n                 \"task already pending or running for this video, not scheduling a duplicate\"\n             );\n             return Ok(());\n         }\n         info!(\n             task_id = conn.last_insert_rowid(),\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::schedule",
+      "return_type": "-> anyhow::Result<()>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 223
+        },
+        "start": {
+          "column": 5,
+          "line": 184
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:209:21: replace == with != in <impl TaskRepository for SqliteTaskRepository>::schedule",
+    "package": "yarrtube",
+    "replacement": "!=",
+    "span": {
+      "end": {
+        "column": 23,
+        "line": 209
+      },
+      "start": {
+        "column": 21,
+        "line": 209
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::claim -> anyhow::Result<Option<ScheduledTask>> with Ok(None)\n@@ -218,32 +218,17 @@\n             task_type = task.task_type(),\n             run_at = %run_at,\n             \"scheduled task\"\n         );\n         Ok(())\n     }\n \n     fn claim(&self, id: i64, now: DateTime<Utc>) -> anyhow::Result<Option<ScheduledTask>> {\n-        let conn = self\n-            .db\n-            .write()\n-            .lock()\n-            .inspect_err(|_| tracing::error!(task_id = id, \"database lock poisoned\"))\n-            .map_err(|_| anyhow::anyhow!(\"database lock poisoned\"))?;\n-        conn.query_row(\n-            &format!(\n-                \"UPDATE tasks SET status = 'running', updated_at = ?2 WHERE id = ?1 AND status = 'pending' RETURNING {SELECT_COLUMNS}\"\n-            ),\n-            params![id, now.to_rfc3339()],\n-            row_to_scheduled_task,\n-        )\n-        .optional()\n-        .inspect_err(|e| tracing::error!(task_id = id, error = %e, \"failed to claim task\"))\n-        .context(\"failed to claim task\")\n+        Ok(None) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n         let conn = self\n             .db\n             .read()\n             .lock()\n             .inspect_err(|_| tracing::error!(\"database lock poisoned\"))\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::claim",
+      "return_type": "-> anyhow::Result<Option<ScheduledTask>>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 242
+        },
+        "start": {
+          "column": 5,
+          "line": 225
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:226:9: replace <impl TaskRepository for SqliteTaskRepository>::claim -> anyhow::Result<Option<ScheduledTask>> with Ok(None)",
+    "package": "yarrtube",
+    "replacement": "Ok(None)",
+    "span": {
+      "end": {
+        "column": 41,
+        "line": 241
+      },
+      "start": {
+        "column": 9,
+        "line": 226
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::claim -> anyhow::Result<Option<ScheduledTask>> with Ok(Some(Default::default()))\n@@ -218,32 +218,17 @@\n             task_type = task.task_type(),\n             run_at = %run_at,\n             \"scheduled task\"\n         );\n         Ok(())\n     }\n \n     fn claim(&self, id: i64, now: DateTime<Utc>) -> anyhow::Result<Option<ScheduledTask>> {\n-        let conn = self\n-            .db\n-            .write()\n-            .lock()\n-            .inspect_err(|_| tracing::error!(task_id = id, \"database lock poisoned\"))\n-            .map_err(|_| anyhow::anyhow!(\"database lock poisoned\"))?;\n-        conn.query_row(\n-            &format!(\n-                \"UPDATE tasks SET status = 'running', updated_at = ?2 WHERE id = ?1 AND status = 'pending' RETURNING {SELECT_COLUMNS}\"\n-            ),\n-            params![id, now.to_rfc3339()],\n-            row_to_scheduled_task,\n-        )\n-        .optional()\n-        .inspect_err(|e| tracing::error!(task_id = id, error = %e, \"failed to claim task\"))\n-        .context(\"failed to claim task\")\n+        Ok(Some(Default::default())) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n         let conn = self\n             .db\n             .read()\n             .lock()\n             .inspect_err(|_| tracing::error!(\"database lock poisoned\"))\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::claim",
+      "return_type": "-> anyhow::Result<Option<ScheduledTask>>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 242
+        },
+        "start": {
+          "column": 5,
+          "line": 225
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:226:9: replace <impl TaskRepository for SqliteTaskRepository>::claim -> anyhow::Result<Option<ScheduledTask>> with Ok(Some(Default::default()))",
+    "package": "yarrtube",
+    "replacement": "Ok(Some(Default::default()))",
+    "span": {
+      "end": {
+        "column": 41,
+        "line": 241
+      },
+      "start": {
+        "column": 9,
+        "line": 226
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::list_eligible -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])\n@@ -237,40 +237,17 @@\n             row_to_scheduled_task,\n         )\n         .optional()\n         .inspect_err(|e| tracing::error!(task_id = id, error = %e, \"failed to claim task\"))\n         .context(\"failed to claim task\")\n     }\n \n     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n-        let conn = self\n-            .db\n-            .read()\n-            .lock()\n-            .inspect_err(|_| tracing::error!(\"database lock poisoned\"))\n-            .map_err(|_| anyhow::anyhow!(\"database lock poisoned\"))?;\n-        let mut stmt = conn\n-            .prepare(&format!(\n-                \"SELECT {SELECT_COLUMNS} FROM tasks WHERE status = 'pending' AND run_at <= ?1 ORDER BY run_at ASC, id ASC\"\n-            ))\n-            .inspect_err(|e| {\n-                tracing::error!(error = %e, \"failed to prepare list-eligible-tasks query\")\n-            })\n-            .context(\"failed to prepare list-eligible-tasks query\")?;\n-        let rows = stmt\n-            .query_map(\n-                params![self.clock.now().to_rfc3339()],\n-                row_to_scheduled_task,\n-            )\n-            .inspect_err(|e| tracing::error!(error = %e, \"failed to list eligible tasks\"))\n-            .context(\"failed to list eligible tasks\")?;\n-        rows.collect::<Result<Vec<_>, _>>()\n-            .inspect_err(|e| tracing::error!(error = %e, \"failed to read eligible task row\"))\n-            .context(\"failed to read eligible task row\")\n+        Ok(vec![]) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n         self.list_where(\"status = 'running'\")\n     }\n \n     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n         self.list_where(\"status IN ('pending', 'running')\")\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_eligible",
+      "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 269
+        },
+        "start": {
+          "column": 5,
+          "line": 244
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:245:9: replace <impl TaskRepository for SqliteTaskRepository>::list_eligible -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])",
+    "package": "yarrtube",
+    "replacement": "Ok(vec![])",
+    "span": {
+      "end": {
+        "column": 57,
+        "line": 268
+      },
+      "start": {
+        "column": 9,
+        "line": 245
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::list_eligible -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])\n@@ -237,40 +237,17 @@\n             row_to_scheduled_task,\n         )\n         .optional()\n         .inspect_err(|e| tracing::error!(task_id = id, error = %e, \"failed to claim task\"))\n         .context(\"failed to claim task\")\n     }\n \n     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n-        let conn = self\n-            .db\n-            .read()\n-            .lock()\n-            .inspect_err(|_| tracing::error!(\"database lock poisoned\"))\n-            .map_err(|_| anyhow::anyhow!(\"database lock poisoned\"))?;\n-        let mut stmt = conn\n-            .prepare(&format!(\n-                \"SELECT {SELECT_COLUMNS} FROM tasks WHERE status = 'pending' AND run_at <= ?1 ORDER BY run_at ASC, id ASC\"\n-            ))\n-            .inspect_err(|e| {\n-                tracing::error!(error = %e, \"failed to prepare list-eligible-tasks query\")\n-            })\n-            .context(\"failed to prepare list-eligible-tasks query\")?;\n-        let rows = stmt\n-            .query_map(\n-                params![self.clock.now().to_rfc3339()],\n-                row_to_scheduled_task,\n-            )\n-            .inspect_err(|e| tracing::error!(error = %e, \"failed to list eligible tasks\"))\n-            .context(\"failed to list eligible tasks\")?;\n-        rows.collect::<Result<Vec<_>, _>>()\n-            .inspect_err(|e| tracing::error!(error = %e, \"failed to read eligible task row\"))\n-            .context(\"failed to read eligible task row\")\n+        Ok(vec![Default::default()]) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n         self.list_where(\"status = 'running'\")\n     }\n \n     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n         self.list_where(\"status IN ('pending', 'running')\")\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_eligible",
+      "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 269
+        },
+        "start": {
+          "column": 5,
+          "line": 244
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:245:9: replace <impl TaskRepository for SqliteTaskRepository>::list_eligible -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])",
+    "package": "yarrtube",
+    "replacement": "Ok(vec![Default::default()])",
+    "span": {
+      "end": {
+        "column": 57,
+        "line": 268
+      },
+      "start": {
+        "column": 9,
+        "line": 245
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::list_running -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])\n@@ -264,17 +264,17 @@\n             .inspect_err(|e| tracing::error!(error = %e, \"failed to list eligible tasks\"))\n             .context(\"failed to list eligible tasks\")?;\n         rows.collect::<Result<Vec<_>, _>>()\n             .inspect_err(|e| tracing::error!(error = %e, \"failed to read eligible task row\"))\n             .context(\"failed to read eligible task row\")\n     }\n \n     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n-        self.list_where(\"status = 'running'\")\n+        Ok(vec![]) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n         self.list_where(\"status IN ('pending', 'running')\")\n     }\n \n     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {\n         let conn = self\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_running",
+      "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 273
+        },
+        "start": {
+          "column": 5,
+          "line": 271
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:272:9: replace <impl TaskRepository for SqliteTaskRepository>::list_running -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])",
+    "package": "yarrtube",
+    "replacement": "Ok(vec![])",
+    "span": {
+      "end": {
+        "column": 46,
+        "line": 272
+      },
+      "start": {
+        "column": 9,
+        "line": 272
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::list_running -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])\n@@ -264,17 +264,17 @@\n             .inspect_err(|e| tracing::error!(error = %e, \"failed to list eligible tasks\"))\n             .context(\"failed to list eligible tasks\")?;\n         rows.collect::<Result<Vec<_>, _>>()\n             .inspect_err(|e| tracing::error!(error = %e, \"failed to read eligible task row\"))\n             .context(\"failed to read eligible task row\")\n     }\n \n     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n-        self.list_where(\"status = 'running'\")\n+        Ok(vec![Default::default()]) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n         self.list_where(\"status IN ('pending', 'running')\")\n     }\n \n     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {\n         let conn = self\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_running",
+      "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 273
+        },
+        "start": {
+          "column": 5,
+          "line": 271
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:272:9: replace <impl TaskRepository for SqliteTaskRepository>::list_running -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])",
+    "package": "yarrtube",
+    "replacement": "Ok(vec![Default::default()])",
+    "span": {
+      "end": {
+        "column": 46,
+        "line": 272
+      },
+      "start": {
+        "column": 9,
+        "line": 272
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::list_non_completed -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])\n@@ -268,17 +268,17 @@\n             .context(\"failed to read eligible task row\")\n     }\n \n     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n         self.list_where(\"status = 'running'\")\n     }\n \n     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n-        self.list_where(\"status IN ('pending', 'running')\")\n+        Ok(vec![]) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {\n         let conn = self\n             .db\n             .write()\n             .lock()\n             .inspect_err(|_| tracing::error!(task_id = task.id, \"database lock poisoned\"))\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_non_completed",
+      "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 277
+        },
+        "start": {
+          "column": 5,
+          "line": 275
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:276:9: replace <impl TaskRepository for SqliteTaskRepository>::list_non_completed -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])",
+    "package": "yarrtube",
+    "replacement": "Ok(vec![])",
+    "span": {
+      "end": {
+        "column": 60,
+        "line": 276
+      },
+      "start": {
+        "column": 9,
+        "line": 276
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::list_non_completed -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])\n@@ -268,17 +268,17 @@\n             .context(\"failed to read eligible task row\")\n     }\n \n     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n         self.list_where(\"status = 'running'\")\n     }\n \n     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n-        self.list_where(\"status IN ('pending', 'running')\")\n+        Ok(vec![Default::default()]) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {\n         let conn = self\n             .db\n             .write()\n             .lock()\n             .inspect_err(|_| tracing::error!(task_id = task.id, \"database lock poisoned\"))\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::list_non_completed",
+      "return_type": "-> anyhow::Result<Vec<ScheduledTask>>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 277
+        },
+        "start": {
+          "column": 5,
+          "line": 275
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:276:9: replace <impl TaskRepository for SqliteTaskRepository>::list_non_completed -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])",
+    "package": "yarrtube",
+    "replacement": "Ok(vec![Default::default()])",
+    "span": {
+      "end": {
+        "column": 60,
+        "line": 276
+      },
+      "start": {
+        "column": 9,
+        "line": 276
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::update -> anyhow::Result<()> with Ok(())\n@@ -272,36 +272,17 @@\n         self.list_where(\"status = 'running'\")\n     }\n \n     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {\n         self.list_where(\"status IN ('pending', 'running')\")\n     }\n \n     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {\n-        let conn = self\n-            .db\n-            .write()\n-            .lock()\n-            .inspect_err(|_| tracing::error!(task_id = task.id, \"database lock poisoned\"))\n-            .map_err(|_| anyhow::anyhow!(\"database lock poisoned\"))?;\n-        conn.execute(\n-            \"UPDATE tasks SET status = ?2, retries = ?3, run_at = ?4, updated_at = ?5, last_error = ?6 WHERE id = ?1\",\n-            params![\n-                task.id,\n-                task.status.as_str(),\n-                task.retries,\n-                task.run_at.to_rfc3339(),\n-                task.updated_at.to_rfc3339(),\n-                task.last_error,\n-            ],\n-        )\n-        .inspect_err(|e| tracing::error!(task_id = task.id, error = %e, \"failed to update task\"))\n-        .context(\"failed to update task\")?;\n-        Ok(())\n+        Ok(()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn delete(&self, id: i64) -> anyhow::Result<()> {\n         let conn = self\n             .db\n             .write()\n             .lock()\n             .inspect_err(|_| tracing::error!(task_id = id, \"database lock poisoned\"))\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::update",
+      "return_type": "-> anyhow::Result<()>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 300
+        },
+        "start": {
+          "column": 5,
+          "line": 279
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:280:9: replace <impl TaskRepository for SqliteTaskRepository>::update -> anyhow::Result<()> with Ok(())",
+    "package": "yarrtube",
+    "replacement": "Ok(())",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 299
+      },
+      "start": {
+        "column": 9,
+        "line": 280
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::delete -> anyhow::Result<()> with Ok(())\n@@ -295,26 +295,17 @@\n             ],\n         )\n         .inspect_err(|e| tracing::error!(task_id = task.id, error = %e, \"failed to update task\"))\n         .context(\"failed to update task\")?;\n         Ok(())\n     }\n \n     fn delete(&self, id: i64) -> anyhow::Result<()> {\n-        let conn = self\n-            .db\n-            .write()\n-            .lock()\n-            .inspect_err(|_| tracing::error!(task_id = id, \"database lock poisoned\"))\n-            .map_err(|_| anyhow::anyhow!(\"database lock poisoned\"))?;\n-        conn.execute(\"DELETE FROM tasks WHERE id = ?1\", params![id])\n-            .inspect_err(|e| tracing::error!(task_id = id, error = %e, \"failed to delete task\"))\n-            .context(\"failed to delete task\")?;\n-        Ok(())\n+        Ok(()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn dead_letter(&self, task: &DeadLetteredTask) -> anyhow::Result<()> {\n         let mut conn = self\n             .db\n             .write()\n             .lock()\n             .inspect_err(|_| {\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::delete",
+      "return_type": "-> anyhow::Result<()>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 313
+        },
+        "start": {
+          "column": 5,
+          "line": 302
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:303:9: replace <impl TaskRepository for SqliteTaskRepository>::delete -> anyhow::Result<()> with Ok(())",
+    "package": "yarrtube",
+    "replacement": "Ok(())",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 312
+      },
+      "start": {
+        "column": 9,
+        "line": 303
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/repositories/sqlite_task_repository.rs\n+++ replace <impl TaskRepository for SqliteTaskRepository>::dead_letter -> anyhow::Result<()> with Ok(())\n@@ -308,77 +308,17 @@\n             .map_err(|_| anyhow::anyhow!(\"database lock poisoned\"))?;\n         conn.execute(\"DELETE FROM tasks WHERE id = ?1\", params![id])\n             .inspect_err(|e| tracing::error!(task_id = id, error = %e, \"failed to delete task\"))\n             .context(\"failed to delete task\")?;\n         Ok(())\n     }\n \n     fn dead_letter(&self, task: &DeadLetteredTask) -> anyhow::Result<()> {\n-        let mut conn = self\n-            .db\n-            .write()\n-            .lock()\n-            .inspect_err(|_| {\n-                tracing::error!(task_id = task.original_task_id, \"database lock poisoned\")\n-            })\n-            .map_err(|_| anyhow::anyhow!(\"database lock poisoned\"))?;\n-        let tx = conn\n-            .transaction()\n-            .inspect_err(|e| {\n-                tracing::error!(\n-                    task_id = task.original_task_id,\n-                    error = %e,\n-                    \"failed to start dead-letter transaction\"\n-                )\n-            })\n-            .context(\"failed to start dead-letter transaction\")?;\n-        tx.execute(\n-            \"INSERT INTO tasks_dead_letter (original_task_id, task_type, payload, retries, last_error, created_at, failed_at)\n-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)\",\n-            params![\n-                task.original_task_id,\n-                task.task_type,\n-                task.payload,\n-                task.retries,\n-                task.last_error,\n-                task.created_at.to_rfc3339(),\n-                task.failed_at.to_rfc3339(),\n-            ],\n-        )\n-        .inspect_err(|e| {\n-            tracing::error!(\n-                task_id = task.original_task_id,\n-                error = %e,\n-                \"failed to insert task into dead letter\"\n-            )\n-        })\n-        .context(\"failed to insert task into dead letter\")?;\n-        tx.execute(\n-            \"DELETE FROM tasks WHERE id = ?1\",\n-            params![task.original_task_id],\n-        )\n-        .inspect_err(|e| {\n-            tracing::error!(\n-                task_id = task.original_task_id,\n-                error = %e,\n-                \"failed to delete task after moving to dead letter\"\n-            )\n-        })\n-        .context(\"failed to delete task after moving to dead letter\")?;\n-        tx.commit()\n-            .inspect_err(|e| {\n-                tracing::error!(\n-                    task_id = task.original_task_id,\n-                    error = %e,\n-                    \"failed to commit dead-letter transaction\"\n-                )\n-            })\n-            .context(\"failed to commit dead-letter transaction\")?;\n-        Ok(())\n+        Ok(()) /* ~ changed by cargo-mutants ~ */\n     }\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use crate::domain::task::TaskFailureOutcome;\n     use crate::infrastructure::shared::system_clock::FixedClock;\n",
+    "file": "src/infrastructure/repositories/sqlite_task_repository.rs",
+    "function": {
+      "function_name": "<impl TaskRepository for SqliteTaskRepository>::dead_letter",
+      "return_type": "-> anyhow::Result<()>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 377
+        },
+        "start": {
+          "column": 5,
+          "line": 315
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/repositories/sqlite_task_repository.rs:316:9: replace <impl TaskRepository for SqliteTaskRepository>::dead_letter -> anyhow::Result<()> with Ok(())",
+    "package": "yarrtube",
+    "replacement": "Ok(())",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 376
+      },
+      "start": {
+        "column": 9,
+        "line": 316
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/shared/sqlite_connection.rs\n+++ replace open -> anyhow::Result<Connection> with Ok(Default::default())\n@@ -9,25 +9,17 @@\n /// than contending for SQLite's single write lock and the process can never\n /// lock itself out. WAL mode and `busy_timeout` remain a backstop for the\n /// short-lived connections opened at startup (migrations, the connectivity\n /// check) and for any external tool that opens the file: they let SQLite retry\n /// internally for up to 5s instead of immediately returning `SQLITE_BUSY`\n /// (\"database is locked\"). `synchronous = NORMAL` is the recommended durability\n /// level under WAL and lowers the per-commit fsync cost.\n pub fn open(path: &Path) -> anyhow::Result<Connection> {\n-    let conn =\n-        Connection::open(path).with_context(|| format!(\"failed to open database at {path:?}\"))?;\n-    conn.pragma_update(None, \"journal_mode\", \"WAL\")\n-        .context(\"failed to enable WAL journal mode\")?;\n-    conn.busy_timeout(std::time::Duration::from_secs(5))\n-        .context(\"failed to set busy timeout\")?;\n-    conn.pragma_update(None, \"synchronous\", \"NORMAL\")\n-        .context(\"failed to set synchronous mode\")?;\n-    Ok(conn)\n+    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n }\n \n /// The process's database access, injected into every repository. It holds two\n /// connections: a single `write` connection, through which every write\n /// serializes (one writer, so the process can never lock itself out), and a\n /// `read` connection. Because the two are distinct connections, WAL lets a read\n /// run concurrently with an in-progress write, so a write burst (e.g. ingesting\n /// a large playlist) does not block the web UI's reads.\n",
+    "file": "src/infrastructure/shared/sqlite_connection.rs",
+    "function": {
+      "function_name": "open",
+      "return_type": "-> anyhow::Result<Connection>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 26
+        },
+        "start": {
+          "column": 1,
+          "line": 6
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/shared/sqlite_connection.rs:17:5: replace open -> anyhow::Result<Connection> with Ok(Default::default())",
+    "package": "yarrtube",
+    "replacement": "Ok(Default::default())",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 25
+      },
+      "start": {
+        "column": 5,
+        "line": 17
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/shared/sqlite_connection.rs\n+++ replace Database::open -> anyhow::Result<Self> with Ok(Default::default())\n@@ -43,20 +43,17 @@\n     // becomes genuinely read-concurrent, grow this into a small pool; the write\n     // path does not change.\n     read: Arc<Mutex<Connection>>,\n     write: Arc<Mutex<Connection>>,\n }\n \n impl Database {\n     pub fn open(path: &Path) -> anyhow::Result<Self> {\n-        Ok(Self {\n-            read: Arc::new(Mutex::new(open(path)?)),\n-            write: Arc::new(Mutex::new(open(path)?)),\n-        })\n+        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// The read connection, for pure `SELECT`s.\n     pub fn read(&self) -> &Mutex<Connection> {\n         &self.read\n     }\n \n     /// The write connection, for every `INSERT`/`UPDATE`/`DELETE`, the\n",
+    "file": "src/infrastructure/shared/sqlite_connection.rs",
+    "function": {
+      "function_name": "Database::open",
+      "return_type": "-> anyhow::Result<Self>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 55
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/shared/sqlite_connection.rs:51:9: replace Database::open -> anyhow::Result<Self> with Ok(Default::default())",
+    "package": "yarrtube",
+    "replacement": "Ok(Default::default())",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 54
+      },
+      "start": {
+        "column": 9,
+        "line": 51
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/shared/sqlite_connection.rs\n+++ replace Database::read -> &Mutex<Connection> with Box::leak(Box::new(Mutex::new(Default::default())))\n@@ -51,17 +51,17 @@\n         Ok(Self {\n             read: Arc::new(Mutex::new(open(path)?)),\n             write: Arc::new(Mutex::new(open(path)?)),\n         })\n     }\n \n     /// The read connection, for pure `SELECT`s.\n     pub fn read(&self) -> &Mutex<Connection> {\n-        &self.read\n+        Box::leak(Box::new(Mutex::new(Default::default()))) /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// The write connection, for every `INSERT`/`UPDATE`/`DELETE`, the\n     /// read-modify-write task claim, and transactions.\n     pub fn write(&self) -> &Mutex<Connection> {\n         &self.write\n     }\n \n",
+    "file": "src/infrastructure/shared/sqlite_connection.rs",
+    "function": {
+      "function_name": "Database::read",
+      "return_type": "-> &Mutex<Connection>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 60
+        },
+        "start": {
+          "column": 5,
+          "line": 57
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/shared/sqlite_connection.rs:59:9: replace Database::read -> &Mutex<Connection> with Box::leak(Box::new(Mutex::new(Default::default())))",
+    "package": "yarrtube",
+    "replacement": "Box::leak(Box::new(Mutex::new(Default::default())))",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 59
+      },
+      "start": {
+        "column": 9,
+        "line": 59
+      }
+    }
+  },
+  {
+    "diff": "--- src/infrastructure/shared/sqlite_connection.rs\n+++ replace Database::write -> &Mutex<Connection> with Box::leak(Box::new(Mutex::new(Default::default())))\n@@ -57,17 +57,17 @@\n     /// The read connection, for pure `SELECT`s.\n     pub fn read(&self) -> &Mutex<Connection> {\n         &self.read\n     }\n \n     /// The write connection, for every `INSERT`/`UPDATE`/`DELETE`, the\n     /// read-modify-write task claim, and transactions.\n     pub fn write(&self) -> &Mutex<Connection> {\n-        &self.write\n+        Box::leak(Box::new(Mutex::new(Default::default()))) /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// A `Database` backed by one already-open connection used for both roles.\n     /// Only for tests whose connection cannot be reopened by path: an in-memory\n     /// database is private to its connection, so two connections would be two\n     /// different databases.\n     #[cfg(test)]\n     pub fn single(conn: Connection) -> Self {\n",
+    "file": "src/infrastructure/shared/sqlite_connection.rs",
+    "function": {
+      "function_name": "Database::write",
+      "return_type": "-> &Mutex<Connection>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 66
+        },
+        "start": {
+          "column": 5,
+          "line": 62
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "src/infrastructure/shared/sqlite_connection.rs:65:9: replace Database::write -> &Mutex<Connection> with Box::leak(Box::new(Mutex::new(Default::default())))",
+    "package": "yarrtube",
+    "replacement": "Box::leak(Box::new(Mutex::new(Default::default())))",
+    "span": {
+      "end": {
+        "column": 20,
+        "line": 65
+      },
+      "start": {
+        "column": 9,
+        "line": 65
+      }
+    }
+  }
+]

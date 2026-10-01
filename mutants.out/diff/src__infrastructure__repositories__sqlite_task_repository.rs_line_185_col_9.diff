@@ -1,0 +1,58 @@
+--- src/infrastructure/repositories/sqlite_task_repository.rs
++++ replace <impl TaskRepository for SqliteTaskRepository>::schedule -> anyhow::Result<()> with Ok(())
+@@ -177,54 +177,17 @@
+             .context("failed to list dead-lettered tasks")?;
+         rows.collect::<Result<Vec<_>, _>>()
+             .context("failed to read dead-lettered task row")
+     }
+ }
+ 
+ impl TaskRepository for SqliteTaskRepository {
+     fn schedule(&self, task: &Task, run_at: DateTime<Utc>) -> anyhow::Result<()> {
+-        let conn = self
+-            .db
+-            .write()
+-            .lock()
+-            .inspect_err(|_| {
+-                tracing::error!(task_type = task.task_type(), "database lock poisoned")
+-            })
+-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+-        let payload = task.payload().to_string();
+-        let now = self.clock.now().to_rfc3339();
+-        let inserted = conn
+-            .execute(
+-                &format!(
+-                    "INSERT INTO tasks (task_type, payload, status, retries, run_at, created_at, updated_at, last_error)
+-                     SELECT ?1, ?2, 'pending', 0, ?3, ?4, ?4, NULL
+-                     WHERE {}",
+-                    dedupe_predicate(task, &payload)
+-                ),
+-                params![task.task_type(), payload, run_at.to_rfc3339(), now],
+-            )
+-            .inspect_err(|e| {
+-                tracing::error!(task_type = task.task_type(), error = %e, "failed to schedule task")
+-            })
+-            .context("failed to schedule task")?;
+-        if inserted == 0 {
+-            info!(
+-                task_type = task.task_type(),
+-                "task already pending or running for this video, not scheduling a duplicate"
+-            );
+-            return Ok(());
+-        }
+-        info!(
+-            task_id = conn.last_insert_rowid(),
+-            task_type = task.task_type(),
+-            run_at = %run_at,
+-            "scheduled task"
+-        );
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn claim(&self, id: i64, now: DateTime<Utc>) -> anyhow::Result<Option<ScheduledTask>> {
+         let conn = self
+             .db
+             .write()
+             .lock()
+             .inspect_err(|_| tracing::error!(task_id = id, "database lock poisoned"))

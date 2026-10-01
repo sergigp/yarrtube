@@ -78,7 +78,7 @@ impl SqliteVideoRepository {
     #[cfg(test)]
     pub fn list(&self) -> anyhow::Result<Vec<Video>> {
         let ids: Vec<String> = {
-            let conn = self.db.read().lock().unwrap();
+            let conn = self.db.read().unwrap();
             let mut stmt = conn.prepare("SELECT id FROM videos ORDER BY rowid ASC")?;
             stmt.query_map([], |row| row.get(0))?
                 .collect::<Result<_, _>>()?
@@ -91,12 +91,7 @@ impl SqliteVideoRepository {
 
 impl VideoRepository for SqliteVideoRepository {
     fn save(&self, video: &Video) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute(
             "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
@@ -141,12 +136,7 @@ impl VideoRepository for SqliteVideoRepository {
     }
 
     fn find(&self, id: &VideoRecordId) -> anyhow::Result<Option<Video>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         conn.query_row(
             &format!("SELECT {VIDEO_COLUMNS} FROM videos WHERE id = ?1"),
             params![id.as_str()],
@@ -160,12 +150,7 @@ impl VideoRepository for SqliteVideoRepository {
     }
 
     fn find_many(&self, ids: &[VideoRecordId]) -> anyhow::Result<Vec<Video>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!("database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         let placeholders = vec!["?"; ids.len()].join(", ");
         let mut stmt = conn
             .prepare(&format!(
@@ -190,12 +175,7 @@ impl VideoRepository for SqliteVideoRepository {
     }
 
     fn update(&self, video: &Video) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute(
             "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14
              WHERE id = ?1",
@@ -229,12 +209,7 @@ impl VideoRepository for SqliteVideoRepository {
         title: &str,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute(
             "UPDATE videos SET title = ?2, updated_at = ?3 WHERE id = ?1",
             params![id.as_str(), title, now.to_rfc3339()],
@@ -252,12 +227,7 @@ impl VideoRepository for SqliteVideoRepository {
         thumbnail_filename: &str,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute(
             "UPDATE videos SET thumbnail_filename = ?2, updated_at = ?3 WHERE id = ?1",
             params![id.as_str(), thumbnail_filename, now.to_rfc3339()],
@@ -270,12 +240,7 @@ impl VideoRepository for SqliteVideoRepository {
     }
 
     fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute("DELETE FROM videos WHERE id = ?1", params![id.as_str()])
             .inspect_err(|e| tracing::error!(video_id = %id, error = %e, "failed to delete video"))
             .context("failed to delete video")?;
@@ -283,12 +248,7 @@ impl VideoRepository for SqliteVideoRepository {
     }
 
     fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!(youtube_id = %youtube_id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(&format!(
                 "SELECT {VIDEO_COLUMNS} FROM videos WHERE youtube_id = ?1 ORDER BY rowid ASC"

@@ -1,0 +1,29 @@
+--- src/infrastructure/shared/sqlite_connection.rs
++++ replace open -> anyhow::Result<Connection> with Ok(Default::default())
+@@ -9,25 +9,17 @@
+ /// than contending for SQLite's single write lock and the process can never
+ /// lock itself out. WAL mode and `busy_timeout` remain a backstop for the
+ /// short-lived connections opened at startup (migrations, the connectivity
+ /// check) and for any external tool that opens the file: they let SQLite retry
+ /// internally for up to 5s instead of immediately returning `SQLITE_BUSY`
+ /// ("database is locked"). `synchronous = NORMAL` is the recommended durability
+ /// level under WAL and lowers the per-commit fsync cost.
+ pub fn open(path: &Path) -> anyhow::Result<Connection> {
+-    let conn =
+-        Connection::open(path).with_context(|| format!("failed to open database at {path:?}"))?;
+-    conn.pragma_update(None, "journal_mode", "WAL")
+-        .context("failed to enable WAL journal mode")?;
+-    conn.busy_timeout(std::time::Duration::from_secs(5))
+-        .context("failed to set busy timeout")?;
+-    conn.pragma_update(None, "synchronous", "NORMAL")
+-        .context("failed to set synchronous mode")?;
+-    Ok(conn)
++    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// The process's database access, injected into every repository. It holds two
+ /// connections: a single `write` connection, through which every write
+ /// serializes (one writer, so the process can never lock itself out), and a
+ /// `read` connection. Because the two are distinct connections, WAL lets a read
+ /// run concurrently with an in-progress write, so a write burst (e.g. ingesting
+ /// a large playlist) does not block the web UI's reads.

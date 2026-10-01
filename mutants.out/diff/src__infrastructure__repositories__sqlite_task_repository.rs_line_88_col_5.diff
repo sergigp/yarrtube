@@ -1,0 +1,28 @@
+--- src/infrastructure/repositories/sqlite_task_repository.rs
++++ replace dedupe_predicate -> &'static str with ""
+@@ -80,24 +80,17 @@
+ 
+ const SELECT_COLUMNS: &str =
+     "id, task_type, payload, status, retries, run_at, created_at, updated_at, last_error";
+ 
+ /// The `WHERE` clause guarding `schedule`'s insert: a task with an
+ /// exclusivity key is only added if no task of its type for the same video
+ /// is pending or running; any other task is always added.
+ fn dedupe_predicate(task: &Task, payload: &str) -> &'static str {
+-    match Task::exclusivity_key(task.task_type(), payload) {
+-        Some(_) => {
+-            "NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1
+-               AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')
+-               AND status IN ('pending', 'running'))"
+-        }
+-        None => "1",
+-    }
++    "" /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ pub struct SqliteTaskRepository {
+     db: Database,
+     clock: Arc<dyn Clock>,
+ }
+ 
+ impl SqliteTaskRepository {

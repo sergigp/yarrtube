@@ -1,0 +1,21 @@
+--- src/infrastructure/shared/sqlite_connection.rs
++++ replace Database::read -> &Mutex<Connection> with Box::leak(Box::new(Mutex::new(Default::default())))
+@@ -51,17 +51,17 @@
+         Ok(Self {
+             read: Arc::new(Mutex::new(open(path)?)),
+             write: Arc::new(Mutex::new(open(path)?)),
+         })
+     }
+ 
+     /// The read connection, for pure `SELECT`s.
+     pub fn read(&self) -> &Mutex<Connection> {
+-        &self.read
++        Box::leak(Box::new(Mutex::new(Default::default()))) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// The write connection, for every `INSERT`/`UPDATE`/`DELETE`, the
+     /// read-modify-write task claim, and transactions.
+     pub fn write(&self) -> &Mutex<Connection> {
+         &self.write
+     }
+ 

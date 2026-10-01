@@ -27,12 +27,7 @@ impl SqlitePlaylistRepository {
 
 impl PlaylistRepository for SqlitePlaylistRepository {
     fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!(playlist_id = %id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         conn.query_row(
             "SELECT id, name, path, quality, kind, created_at FROM playlists WHERE id = ?1",
             params![id.as_str()],
@@ -57,12 +52,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
     }
 
     fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(playlist_id = %playlist.id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute(
             "INSERT INTO playlists (id, name, path, quality, kind, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
@@ -80,12 +70,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
     }
 
     fn delete(&self, id: &PlaylistId) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(playlist_id = %id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute("DELETE FROM playlists WHERE id = ?1", params![id.as_str()])
             .inspect_err(
                 |e| tracing::error!(playlist_id = %id, error = %e, "failed to delete playlist"),
@@ -95,12 +80,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
     }
 
     fn list(&self) -> anyhow::Result<Vec<Playlist>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!("database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
                 "SELECT id, name, path, quality, kind, created_at FROM playlists ORDER BY name COLLATE NOCASE, rowid",

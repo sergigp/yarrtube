@@ -1,0 +1,21 @@
+--- src/infrastructure/repositories/sqlite_task_repository.rs
++++ replace <impl TaskRepository for SqliteTaskRepository>::list_running -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])
+@@ -264,17 +264,17 @@
+             .inspect_err(|e| tracing::error!(error = %e, "failed to list eligible tasks"))
+             .context("failed to list eligible tasks")?;
+         rows.collect::<Result<Vec<_>, _>>()
+             .inspect_err(|e| tracing::error!(error = %e, "failed to read eligible task row"))
+             .context("failed to read eligible task row")
+     }
+ 
+     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+-        self.list_where("status = 'running'")
++        Ok(vec![]) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+         self.list_where("status IN ('pending', 'running')")
+     }
+ 
+     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {
+         let conn = self

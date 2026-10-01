@@ -1,7 +1,7 @@
 use anyhow::Context;
 use rusqlite::Connection;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Opens a connection to the database file. In production the process shares a
 /// single `Database` (a write connection and a read connection; see
@@ -54,15 +54,15 @@ impl Database {
         })
     }
 
-    /// The read connection, for pure `SELECT`s.
-    pub fn read(&self) -> &Mutex<Connection> {
-        &self.read
+    /// Locks the read connection, for pure `SELECT`s.
+    pub fn read(&self) -> anyhow::Result<MutexGuard<'_, Connection>> {
+        lock(&self.read)
     }
 
-    /// The write connection, for every `INSERT`/`UPDATE`/`DELETE`, the
+    /// Locks the write connection, for every `INSERT`/`UPDATE`/`DELETE`, the
     /// read-modify-write task claim, and transactions.
-    pub fn write(&self) -> &Mutex<Connection> {
-        &self.write
+    pub fn write(&self) -> anyhow::Result<MutexGuard<'_, Connection>> {
+        lock(&self.write)
     }
 
     /// A `Database` backed by one already-open connection used for both roles.
@@ -79,6 +79,16 @@ impl Database {
     }
 }
 
+/// A poisoned connection mutex means a thread panicked mid-operation; it is a
+/// fatal, process-wide, one-shot condition, so every caller maps it to the
+/// same opaque error rather than carrying per-call context.
+fn lock(connection: &Arc<Mutex<Connection>>) -> anyhow::Result<MutexGuard<'_, Connection>> {
+    connection
+        .lock()
+        .inspect_err(|_| tracing::error!("database lock poisoned"))
+        .map_err(|_| anyhow::anyhow!("database lock poisoned"))
+}
+
 /// A freshly migrated database file, private to one test and removed when
 /// dropped. Connections are opened exactly as in production (via `open`: WAL,
 /// busy timeout, `synchronous = NORMAL`), so tests exercise the same setup the
@@ -86,17 +96,20 @@ impl Database {
 #[cfg(test)]
 pub struct TestDatabase {
     dir: tempfile::TempDir,
+    database: Database,
 }
 
 #[cfg(test)]
 impl TestDatabase {
     pub fn new() -> Self {
-        let database = Self {
-            dir: tempfile::tempdir().unwrap(),
-        };
-        crate::infrastructure::shared::sqlite_migrations::apply(&mut database.connection())
-            .unwrap();
-        database
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("yarrtube.sqlite3");
+        let mut migration_conn = open(&path).unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut migration_conn).unwrap();
+        Self {
+            dir,
+            database: Database::open(&path).unwrap(),
+        }
     }
 
     pub fn connection(&self) -> Connection {
@@ -108,10 +121,12 @@ impl TestDatabase {
         self.dir.path().join("yarrtube.sqlite3")
     }
 
-    /// A `Database` over this test's file, with its own read and write
-    /// connections — the same two-connection setup production uses.
+    /// The one `Database` shared across this test, matching production: every
+    /// repository built from it (each `database()` returns a clone) uses the
+    /// same write connection, so the tests exercise the real single-writer
+    /// topology rather than giving each repository its own connection pair.
     pub fn database(&self) -> Database {
-        Database::open(&self.path()).unwrap()
+        self.database.clone()
     }
 }
 
@@ -206,7 +221,6 @@ mod tests {
         let database = TestDatabase::new();
         let db = database.database();
         db.write()
-            .lock()
             .unwrap()
             .execute(
                 "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, created_at)
@@ -218,10 +232,9 @@ mod tests {
         // Hold the write connection open, as an in-progress write would, then
         // read: with a separate read connection this must not wait on the write
         // lock (sharing one connection would deadlock here instead).
-        let _write_guard = db.write().lock().unwrap();
+        let _write_guard = db.write().unwrap();
         let name: String = db
             .read()
-            .lock()
             .unwrap()
             .query_row("SELECT name FROM channels", [], |row| row.get(0))
             .unwrap();

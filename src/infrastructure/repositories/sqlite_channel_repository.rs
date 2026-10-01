@@ -27,12 +27,7 @@ impl SqliteChannelRepository {
 
 impl ChannelRepository for SqliteChannelRepository {
     fn find(&self, id: &ChannelHandle) -> anyhow::Result<Option<Channel>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!(channel_id = %id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         conn.query_row(
             "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at FROM channels WHERE id = ?1",
             params![id.as_str()],
@@ -70,12 +65,7 @@ impl ChannelRepository for SqliteChannelRepository {
     }
 
     fn insert(&self, channel: &Channel) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(channel_id = %channel.id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute(
             "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
@@ -95,12 +85,7 @@ impl ChannelRepository for SqliteChannelRepository {
     }
 
     fn delete(&self, id: &ChannelHandle) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .inspect_err(|_| tracing::error!(channel_id = %id, "database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         conn.execute("DELETE FROM channels WHERE id = ?1", params![id.as_str()])
             .inspect_err(
                 |e| tracing::error!(channel_id = %id, error = %e, "failed to delete channel"),
@@ -110,12 +95,7 @@ impl ChannelRepository for SqliteChannelRepository {
     }
 
     fn list(&self) -> anyhow::Result<Vec<Channel>> {
-        let conn = self
-            .db
-            .read()
-            .lock()
-            .inspect_err(|_| tracing::error!("database lock poisoned"))
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
                 "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at FROM channels ORDER BY name COLLATE NOCASE, rowid",

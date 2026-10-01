@@ -1,0 +1,24 @@
+--- src/infrastructure/shared/sqlite_connection.rs
++++ replace Database::open -> anyhow::Result<Self> with Ok(Default::default())
+@@ -43,20 +43,17 @@
+     // becomes genuinely read-concurrent, grow this into a small pool; the write
+     // path does not change.
+     read: Arc<Mutex<Connection>>,
+     write: Arc<Mutex<Connection>>,
+ }
+ 
+ impl Database {
+     pub fn open(path: &Path) -> anyhow::Result<Self> {
+-        Ok(Self {
+-            read: Arc::new(Mutex::new(open(path)?)),
+-            write: Arc::new(Mutex::new(open(path)?)),
+-        })
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// The read connection, for pure `SELECT`s.
+     pub fn read(&self) -> &Mutex<Connection> {
+         &self.read
+     }
+ 
+     /// The write connection, for every `INSERT`/`UPDATE`/`DELETE`, the

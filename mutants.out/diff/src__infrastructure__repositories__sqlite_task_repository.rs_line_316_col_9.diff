@@ -1,0 +1,81 @@
+--- src/infrastructure/repositories/sqlite_task_repository.rs
++++ replace <impl TaskRepository for SqliteTaskRepository>::dead_letter -> anyhow::Result<()> with Ok(())
+@@ -308,77 +308,17 @@
+             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+         conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])
+             .inspect_err(|e| tracing::error!(task_id = id, error = %e, "failed to delete task"))
+             .context("failed to delete task")?;
+         Ok(())
+     }
+ 
+     fn dead_letter(&self, task: &DeadLetteredTask) -> anyhow::Result<()> {
+-        let mut conn = self
+-            .db
+-            .write()
+-            .lock()
+-            .inspect_err(|_| {
+-                tracing::error!(task_id = task.original_task_id, "database lock poisoned")
+-            })
+-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+-        let tx = conn
+-            .transaction()
+-            .inspect_err(|e| {
+-                tracing::error!(
+-                    task_id = task.original_task_id,
+-                    error = %e,
+-                    "failed to start dead-letter transaction"
+-                )
+-            })
+-            .context("failed to start dead-letter transaction")?;
+-        tx.execute(
+-            "INSERT INTO tasks_dead_letter (original_task_id, task_type, payload, retries, last_error, created_at, failed_at)
+-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+-            params![
+-                task.original_task_id,
+-                task.task_type,
+-                task.payload,
+-                task.retries,
+-                task.last_error,
+-                task.created_at.to_rfc3339(),
+-                task.failed_at.to_rfc3339(),
+-            ],
+-        )
+-        .inspect_err(|e| {
+-            tracing::error!(
+-                task_id = task.original_task_id,
+-                error = %e,
+-                "failed to insert task into dead letter"
+-            )
+-        })
+-        .context("failed to insert task into dead letter")?;
+-        tx.execute(
+-            "DELETE FROM tasks WHERE id = ?1",
+-            params![task.original_task_id],
+-        )
+-        .inspect_err(|e| {
+-            tracing::error!(
+-                task_id = task.original_task_id,
+-                error = %e,
+-                "failed to delete task after moving to dead letter"
+-            )
+-        })
+-        .context("failed to delete task after moving to dead letter")?;
+-        tx.commit()
+-            .inspect_err(|e| {
+-                tracing::error!(
+-                    task_id = task.original_task_id,
+-                    error = %e,
+-                    "failed to commit dead-letter transaction"
+-                )
+-            })
+-            .context("failed to commit dead-letter transaction")?;
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+     use crate::domain::task::TaskFailureOutcome;
+     use crate::infrastructure::shared::system_clock::FixedClock;

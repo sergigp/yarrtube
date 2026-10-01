@@ -24,11 +24,7 @@ impl SqliteEventPublisher {
 
 impl EventPublisher for SqliteEventPublisher {
     fn publish(&self, event: &DomainEvent) -> anyhow::Result<()> {
-        let conn = self
-            .db
-            .write()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+        let conn = self.db.write()?;
         insert_pending_row(&conn, event, self.clock.now())
     }
 }

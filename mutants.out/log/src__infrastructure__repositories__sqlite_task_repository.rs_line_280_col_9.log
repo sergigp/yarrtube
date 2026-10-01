@@ -1,0 +1,1377 @@
+
+*** src/infrastructure/repositories/sqlite_task_repository.rs:280:9: replace <impl TaskRepository for SqliteTaskRepository>::update -> anyhow::Result<()> with Ok(())
+
+*** mutation diff:
+--- src/infrastructure/repositories/sqlite_task_repository.rs
++++ replace <impl TaskRepository for SqliteTaskRepository>::update -> anyhow::Result<()> with Ok(())
+@@ -272,36 +272,17 @@
+         self.list_where("status = 'running'")
+     }
+ 
+     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+         self.list_where("status IN ('pending', 'running')")
+     }
+ 
+     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {
+-        let conn = self
+-            .db
+-            .write()
+-            .lock()
+-            .inspect_err(|_| tracing::error!(task_id = task.id, "database lock poisoned"))
+-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+-        conn.execute(
+-            "UPDATE tasks SET status = ?2, retries = ?3, run_at = ?4, updated_at = ?5, last_error = ?6 WHERE id = ?1",
+-            params![
+-                task.id,
+-                task.status.as_str(),
+-                task.retries,
+-                task.run_at.to_rfc3339(),
+-                task.updated_at.to_rfc3339(),
+-                task.last_error,
+-            ],
+-        )
+-        .inspect_err(|e| tracing::error!(task_id = task.id, error = %e, "failed to update task"))
+-        .context("failed to update task")?;
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn delete(&self, id: i64) -> anyhow::Result<()> {
+         let conn = self
+             .db
+             .write()
+             .lock()
+             .inspect_err(|_| tracing::error!(task_id = id, "database lock poisoned"))
+
+
+*** /Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo test --no-run --verbose --package=yarrtube@0.1.0
+       Fresh unicode-ident v1.0.24
+       Fresh cfg-if v1.0.4
+       Fresh smallvec v1.16.0
+       Fresh shlex v2.0.1
+       Fresh find-msvc-tools v0.1.12
+       Fresh once_cell v1.21.4
+       Fresh pin-project-lite v0.2.17
+       Fresh pkg-config v0.3.34
+       Fresh bytes v1.12.1
+       Fresh itoa v1.0.18
+       Fresh memchr v2.8.3
+       Fresh futures-core v0.3.34
+       Fresh libc v0.2.189
+       Fresh log v0.4.34
+       Fresh stable_deref_trait v1.2.1
+       Fresh scopeguard v1.2.0
+       Fresh core-foundation-sys v0.8.7
+       Fresh tracing-core v0.1.36
+       Fresh bitflags v2.13.1
+       Fresh fs_extra v1.3.0
+       Fresh dunce v1.0.5
+       Fresh foldhash v0.2.0
+       Fresh futures-sink v0.3.34
+       Fresh http v1.5.0
+       Fresh proc-macro2 v1.0.107
+       Fresh jobserver v0.1.35
+       Fresh lock_api v0.4.14
+       Fresh mio v1.2.3
+       Fresh socket2 v0.6.5
+       Fresh hashbrown v0.17.1
+       Fresh slab v0.4.12
+       Fresh http-body v1.1.0
+       Fresh typenum v1.20.1
+       Fresh percent-encoding v2.3.2
+       Fresh writeable v0.6.4
+       Fresh litemap v0.8.3
+       Fresh quote v1.0.47
+       Fresh cc v1.4.5
+       Fresh parking_lot_core v0.9.12
+       Fresh hybrid-array v0.4.15
+       Fresh futures-io v0.3.34
+       Fresh zeroize v1.9.0
+       Fresh tower-service v0.3.3
+       Fresh unicase v2.9.0
+       Fresh equivalent v1.0.2
+       Fresh utf8_iter v1.0.4
+       Fresh mime v0.3.17
+       Fresh syn v3.0.5
+       Fresh syn v2.0.119
+       Fresh parking_lot v0.12.5
+       Fresh cmake v0.1.58
+       Fresh serde_core v1.0.229
+       Fresh futures-task v0.3.34
+       Fresh indexmap v2.14.2
+       Fresh fnv v1.0.7
+       Fresh atomic-waker v1.1.2
+       Fresh synstructure v0.13.2
+       Fresh zerovec-derive v0.11.6
+       Fresh tracing-attributes v0.1.31
+       Fresh displaydoc v0.2.7
+       Fresh tokio-macros v2.7.2
+       Fresh serde_derive v1.0.229
+       Fresh futures-util v0.3.34
+       Fresh httpdate v1.0.3
+       Fresh try-lock v0.2.5
+       Fresh icu_normalizer_data v2.3.0
+       Fresh zerofrom-derive v0.1.7
+       Fresh yoke-derive v0.8.2
+       Fresh tokio v1.53.1
+       Fresh tracing v0.1.44
+       Fresh httparse v1.10.1
+       Fresh serde v1.0.229
+       Fresh want v0.3.1
+       Fresh icu_properties_data v2.3.0
+       Fresh system-configuration-sys v0.6.0
+       Fresh rustls-pki-types v1.15.1
+       Fresh crypto-common v0.2.2
+       Fresh block-buffer v0.12.1
+       Fresh form_urlencoded v1.2.2
+       Fresh zerofrom v0.1.8
+       Fresh tokio-util v0.7.19
+       Fresh aws-lc-sys v0.45.0
+       Fresh core-foundation v0.9.4
+       Fresh futures-channel v0.3.34
+       Fresh untrusted v0.9.0
+       Fresh const-oid v0.10.2
+       Fresh zmij v1.0.23
+       Fresh mime_guess v2.0.5
+       Fresh http-body-util v0.1.5
+       Fresh yoke v0.8.3
+       Fresh h2 v0.4.19
+       Fresh aws-lc-rs v1.18.1
+       Fresh digest v0.11.3
+       Fresh system-configuration v0.7.0
+       Fresh cpufeatures v0.3.1
+       Fresh aho-corasick v1.1.5
+       Fresh sync_wrapper v1.0.2
+       Fresh vcpkg v0.2.15
+       Fresh subtle v2.6.1
+       Fresh base64 v0.22.1
+       Fresh zerovec v0.11.8
+       Fresh zerotrie v0.2.5
+       Fresh rustls-webpki v0.103.15
+       Fresh hyper v1.11.1
+       Fresh regex-syntax v0.8.11
+       Fresh ipnet v2.12.2
+       Fresh tower-layer v0.3.3
+       Fresh same-file v1.0.6
+       Fresh serde_json v1.0.151
+       Fresh sha2 v0.11.0
+       Fresh getrandom v0.3.4
+       Fresh zerocopy v0.8.56
+       Fresh autocfg v1.5.1
+       Fresh utf8parse v0.2.2
+       Fresh tinystr v0.8.4
+       Fresh potential_utf v0.1.6
+       Fresh walkdir v2.5.0
+       Fresh hyper-util v0.1.20
+       Fresh rustls v0.23.43
+       Fresh regex-automata v0.4.18
+       Fresh ryu v1.0.23
+       Fresh anstyle-parse v1.0.0
+       Fresh tower v0.5.3
+       Fresh rand_core v0.9.5
+       Fresh ppv-lite86 v0.2.21
+       Fresh security-framework-sys v2.17.0
+       Fresh icu_locale_core v2.3.0
+       Fresh icu_collections v2.3.0
+       Fresh serde_urlencoded v0.7.1
+       Fresh core-foundation v0.10.1
+       Fresh is_terminal_polyfill v1.70.2
+       Fresh anstyle-query v1.1.5
+       Fresh anstyle v1.0.14
+       Fresh colorchoice v1.0.5
+       Fresh tokio-rustls v0.26.5
+       Fresh rand_chacha v0.9.0
+       Fresh libsqlite3-sys v0.38.2
+       Fresh icu_provider v2.3.1
+       Fresh getrandom v0.4.3
+       Fresh security-framework v3.7.0
+       Fresh anstream v1.0.0
+       Fresh hashlink v0.12.2
+       Fresh errno v0.3.14
+       Fresh lazy_static v1.5.0
+       Fresh fallible-iterator v0.3.0
+       Fresh fallible-streaming-iterator v0.1.9
+       Fresh heck v0.5.0
+       Fresh clap_lex v1.1.0
+       Fresh tinyvec_macros v0.1.1
+       Fresh icu_normalizer v2.3.0
+       Fresh icu_properties v2.3.0
+       Fresh http-range-header v0.4.2
+       Fresh strsim v0.11.1
+       Fresh clap_derive v4.6.4
+       Fresh rusqlite v0.40.2
+       Fresh rustls-platform-verifier v0.7.0
+       Fresh tinyvec v1.13.2
+       Fresh rustix v1.1.5
+       Fresh sharded-slab v0.1.7
+       Fresh rust-embed-impl v8.12.0
+       Fresh rand v0.9.5
+       Fresh idna_adapter v1.2.2
+       Fresh clap_builder v4.6.6
+       Fresh num-traits v0.2.19
+       Fresh hyper-rustls v0.27.9
+       Fresh matchers v0.2.0
+       Fresh regex v1.13.1
+       Fresh rust-embed-utils v8.12.0
+       Fresh axum-core v0.5.6
+       Fresh assert-json-diff v2.0.2
+       Fresh serde_path_to_error v0.1.20
+       Fresh axum-macros v0.5.1
+       Fresh tracing-log v0.2.0
+       Fresh iana-time-zone v0.1.65
+       Fresh thread_local v1.1.10
+       Fresh idna v1.1.0
+       Fresh encoding_rs v0.8.35
+       Fresh matchit v0.8.4
+       Fresh fastrand v2.5.0
+       Fresh nu-ansi-term v0.50.3
+       Fresh similar v2.7.0
+       Fresh colored v3.1.1
+       Fresh unicode-general-category v1.1.0
+       Fresh rust-embed v8.12.0
+       Fresh clap v4.6.6
+       Fresh chrono v0.4.45
+       Fresh anyhow v1.0.104
+       Fresh rusqlite_migration v2.6.0
+       Fresh unicode-normalization v0.1.25
+       Fresh uuid v1.26.1
+       Fresh url v2.5.8
+       Fresh tracing-subscriber v0.3.23
+       Fresh axum v0.8.9
+       Fresh tempfile v3.27.0
+       Fresh mockito v1.7.2
+       Fresh quick-xml v0.37.5
+       Fresh mutants v0.0.4
+       Fresh dotenvy v0.15.7
+       Fresh tower-http v0.6.11
+       Fresh reqwest v0.13.4
+       Dirty yarrtube v0.1.0 (/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp): the file `src/infrastructure/repositories/sqlite_task_repository.rs` has changed (1790863874.268576957s, 6s after last build at 1790863868.105387618s)
+   Compiling yarrtube v0.1.0 (/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp)
+     Running `/Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc --crate-name yarrtube --edition=2024 src/main.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=2 -C split-debuginfo=unpacked --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=523107c10a88ce59 -C extra-filename=-c3f4da2c26ea1791 --out-dir /private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps -C incremental=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/incremental -L dependency=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps --extern anyhow=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libanyhow-a3e722315030dbb7.rlib --extern axum=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libaxum-b62258a689183b23.rlib --extern chrono=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libchrono-e96d27e4f6ec9fe6.rlib --extern clap=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libclap-d49cb7b649572ffc.rlib --extern dotenvy=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libdotenvy-ae736684bd2dd62b.rlib --extern mockito=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libmockito-c5e84767c03a3dcf.rlib --extern mutants=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libmutants-ae0ad741ebfa087e.dylib --extern quick_xml=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libquick_xml-f9d465f163b5cf3b.rlib --extern reqwest=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libreqwest-8ea9b7d271aff702.rlib --extern rusqlite=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/librusqlite-1457e7ccdaf1c07b.rlib --extern rusqlite_migration=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/librusqlite_migration-82a1471469613bd5.rlib --extern rust_embed=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/librust_embed-bee599151744a674.rlib --extern serde=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libserde-51ae1362cb9a2430.rlib --extern serde_json=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libserde_json-6d36b07c909e5b31.rlib --extern tempfile=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libtempfile-0b3a1cfccaeb801f.rlib --extern tokio=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libtokio-ff3ce83c921f97e1.rlib --extern tower=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libtower-99e30d590c0e012f.rlib --extern tower_http=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libtower_http-ce0affde67d7b74e.rlib --extern tracing=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libtracing-b39e31eadac33040.rlib --extern tracing_subscriber=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libtracing_subscriber-75e521eb0c21eb12.rlib --extern unicode_general_category=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libunicode_general_category-daec6c8caa9702fe.rlib --extern unicode_normalization=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libunicode_normalization-49a3ff6f44fd15a5.rlib --extern uuid=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/libuuid-66382fa1bf2c7e67.rlib -L native=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/build/aws-lc-sys-5e23f58c0f00a8cd/out -L native=/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/build/libsqlite3-sys-fbc93dcdc1ea513a/out`
+warning: unused variable: `task`
+   --> src/infrastructure/repositories/sqlite_task_repository.rs:279:22
+    |
+279 |     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {
+    |                      ^^^^ help: if this is intentional, prefix it with an underscore: `_task`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `yarrtube` (bin "yarrtube" test) generated 1 warning (run `cargo fix --bin "yarrtube" -p yarrtube --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.68s
+  Executable `/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/yarrtube-c3f4da2c26ea1791`
+
+*** result: Success
+
+*** /Users/sergigp/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo test --verbose --package=yarrtube@0.1.0 --locked
+       Fresh unicode-ident v1.0.24
+       Fresh cfg-if v1.0.4
+       Fresh smallvec v1.16.0
+       Fresh shlex v2.0.1
+       Fresh find-msvc-tools v0.1.12
+       Fresh once_cell v1.21.4
+       Fresh pkg-config v0.3.34
+       Fresh pin-project-lite v0.2.17
+       Fresh memchr v2.8.3
+       Fresh bytes v1.12.1
+       Fresh itoa v1.0.18
+       Fresh log v0.4.34
+       Fresh libc v0.2.189
+       Fresh stable_deref_trait v1.2.1
+       Fresh futures-core v0.3.34
+       Fresh core-foundation-sys v0.8.7
+       Fresh scopeguard v1.2.0
+       Fresh tracing-core v0.1.36
+       Fresh bitflags v2.13.1
+       Fresh dunce v1.0.5
+       Fresh foldhash v0.2.0
+       Fresh futures-sink v0.3.34
+       Fresh fs_extra v1.3.0
+       Fresh http v1.5.0
+       Fresh proc-macro2 v1.0.107
+       Fresh jobserver v0.1.35
+       Fresh lock_api v0.4.14
+       Fresh socket2 v0.6.5
+       Fresh mio v1.2.3
+       Fresh hashbrown v0.17.1
+       Fresh slab v0.4.12
+       Fresh http-body v1.1.0
+       Fresh writeable v0.6.4
+       Fresh percent-encoding v2.3.2
+       Fresh typenum v1.20.1
+       Fresh litemap v0.8.3
+       Fresh quote v1.0.47
+       Fresh cc v1.4.5
+       Fresh parking_lot_core v0.9.12
+       Fresh hybrid-array v0.4.15
+       Fresh futures-task v0.3.34
+       Fresh utf8_iter v1.0.4
+       Fresh unicase v2.9.0
+       Fresh equivalent v1.0.2
+       Fresh mime v0.3.17
+       Fresh syn v3.0.5
+       Fresh syn v2.0.119
+       Fresh parking_lot v0.12.5
+       Fresh cmake v0.1.58
+       Fresh serde_core v1.0.229
+       Fresh futures-io v0.3.34
+       Fresh zeroize v1.9.0
+       Fresh tower-service v0.3.3
+       Fresh indexmap v2.14.2
+       Fresh synstructure v0.13.2
+       Fresh zerovec-derive v0.11.6
+       Fresh tracing-attributes v0.1.31
+       Fresh displaydoc v0.2.7
+       Fresh tokio-macros v2.7.2
+       Fresh futures-util v0.3.34
+       Fresh serde_derive v1.0.229
+       Fresh httpdate v1.0.3
+       Fresh fnv v1.0.7
+       Fresh atomic-waker v1.1.2
+       Fresh try-lock v0.2.5
+       Fresh rustls-pki-types v1.15.1
+       Fresh zerofrom-derive v0.1.7
+       Fresh yoke-derive v0.8.2
+       Fresh tokio v1.53.1
+       Fresh tracing v0.1.44
+       Fresh serde v1.0.229
+       Fresh want v0.3.1
+       Fresh system-configuration-sys v0.6.0
+       Fresh httparse v1.10.1
+       Fresh icu_properties_data v2.3.0
+       Fresh icu_normalizer_data v2.3.0
+       Fresh crypto-common v0.2.2
+       Fresh block-buffer v0.12.1
+       Fresh form_urlencoded v1.2.2
+       Fresh zerofrom v0.1.8
+       Fresh tokio-util v0.7.19
+       Fresh aws-lc-sys v0.45.0
+       Fresh core-foundation v0.9.4
+       Fresh futures-channel v0.3.34
+       Fresh const-oid v0.10.2
+       Fresh untrusted v0.9.0
+       Fresh zmij v1.0.23
+       Fresh mime_guess v2.0.5
+       Fresh http-body-util v0.1.5
+       Fresh yoke v0.8.3
+       Fresh h2 v0.4.19
+       Fresh aws-lc-rs v1.18.1
+       Fresh digest v0.11.3
+       Fresh system-configuration v0.7.0
+       Fresh sync_wrapper v1.0.2
+       Fresh cpufeatures v0.3.1
+       Fresh aho-corasick v1.1.5
+       Fresh regex-syntax v0.8.11
+       Fresh vcpkg v0.2.15
+       Fresh tower-layer v0.3.3
+       Fresh zerovec v0.11.8
+       Fresh zerotrie v0.2.5
+       Fresh hyper v1.11.1
+       Fresh rustls-webpki v0.103.15
+       Fresh ipnet v2.12.2
+       Fresh base64 v0.22.1
+       Fresh subtle v2.6.1
+       Fresh same-file v1.0.6
+       Fresh zerocopy v0.8.56
+       Fresh getrandom v0.3.4
+       Fresh serde_json v1.0.151
+       Fresh sha2 v0.11.0
+       Fresh regex-automata v0.4.18
+       Fresh autocfg v1.5.1
+       Fresh tinystr v0.8.4
+       Fresh potential_utf v0.1.6
+       Fresh rustls v0.23.43
+       Fresh hyper-util v0.1.20
+       Fresh walkdir v2.5.0
+       Fresh ryu v1.0.23
+       Fresh utf8parse v0.2.2
+       Fresh ppv-lite86 v0.2.21
+       Fresh rand_core v0.9.5
+       Fresh tower v0.5.3
+       Fresh core-foundation v0.10.1
+       Fresh security-framework-sys v2.17.0
+       Fresh icu_locale_core v2.3.0
+       Fresh icu_collections v2.3.0
+       Fresh serde_urlencoded v0.7.1
+       Fresh anstyle-parse v1.0.0
+       Fresh anstyle-query v1.1.5
+       Fresh anstyle v1.0.14
+       Fresh colorchoice v1.0.5
+       Fresh is_terminal_polyfill v1.70.2
+       Fresh rand_chacha v0.9.0
+       Fresh tokio-rustls v0.26.5
+       Fresh libsqlite3-sys v0.38.2
+       Fresh icu_provider v2.3.1
+       Fresh anstream v1.0.0
+       Fresh getrandom v0.4.3
+       Fresh security-framework v3.7.0
+       Fresh hashlink v0.12.2
+       Fresh errno v0.3.14
+       Fresh http-range-header v0.4.2
+       Fresh fallible-iterator v0.3.0
+       Fresh fallible-streaming-iterator v0.1.9
+       Fresh heck v0.5.0
+       Fresh strsim v0.11.1
+       Fresh lazy_static v1.5.0
+       Fresh icu_normalizer v2.3.0
+       Fresh icu_properties v2.3.0
+       Fresh clap_lex v1.1.0
+       Fresh tinyvec_macros v0.1.1
+       Fresh rusqlite v0.40.2
+       Fresh clap_derive v4.6.4
+       Fresh sharded-slab v0.1.7
+       Fresh rustls-platform-verifier v0.7.0
+       Fresh rustix v1.1.5
+       Fresh rand v0.9.5
+       Fresh rust-embed-impl v8.12.0
+       Fresh num-traits v0.2.19
+       Fresh idna_adapter v1.2.2
+       Fresh clap_builder v4.6.6
+       Fresh tinyvec v1.13.2
+       Fresh hyper-rustls v0.27.9
+       Fresh rust-embed-utils v8.12.0
+       Fresh matchers v0.2.0
+       Fresh regex v1.13.1
+       Fresh assert-json-diff v2.0.2
+       Fresh axum-core v0.5.6
+       Fresh axum-macros v0.5.1
+       Fresh serde_path_to_error v0.1.20
+       Fresh tracing-log v0.2.0
+       Fresh iana-time-zone v0.1.65
+       Fresh thread_local v1.1.10
+       Fresh idna v1.1.0
+       Fresh encoding_rs v0.8.35
+       Fresh fastrand v2.5.0
+       Fresh similar v2.7.0
+       Fresh nu-ansi-term v0.50.3
+       Fresh matchit v0.8.4
+       Fresh colored v3.1.1
+       Fresh unicode-normalization v0.1.25
+       Fresh chrono v0.4.45
+       Fresh unicode-general-category v1.1.0
+       Fresh rust-embed v8.12.0
+       Fresh clap v4.6.6
+       Fresh rusqlite_migration v2.6.0
+       Fresh anyhow v1.0.104
+       Fresh uuid v1.26.1
+       Fresh url v2.5.8
+       Fresh mockito v1.7.2
+       Fresh tempfile v3.27.0
+       Fresh tracing-subscriber v0.3.23
+       Fresh axum v0.8.9
+       Fresh quick-xml v0.37.5
+       Fresh dotenvy v0.15.7
+       Fresh mutants v0.0.4
+       Fresh tower-http v0.6.11
+       Fresh reqwest v0.13.4
+       Fresh yarrtube v0.1.0 (/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp)
+warning: unused variable: `task`
+   --> src/infrastructure/repositories/sqlite_task_repository.rs:279:22
+    |
+279 |     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {
+    |                      ^^^^ help: if this is intentional, prefix it with an underscore: `_task`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `yarrtube` (bin "yarrtube" test) generated 1 warning (run `cargo fix --bin "yarrtube" -p yarrtube --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+     Running `/private/var/folders/w4/_16cwkm94vz2l64zmlj9zfb40000gn/T/cargo-mutants-space-tasks-CrS6uw.tmp/target/debug/deps/yarrtube-c3f4da2c26ea1791`
+
+running 763 tests
+test application::http::channels::tests::it_should_fail_to_create_if_channel_missing ... ok
+test application::http::channels::tests::it_should_fail_to_create_if_invalid_channel_provided ... ok
+test application::http::channels::tests::it_should_fail_to_create_if_path_missing ... ok
+test application::http::channels::tests::it_should_fail_to_create_if_video_limit_missing ... ok
+test application::http::channels::tests::it_should_fail_to_create_if_quality_missing ... ok
+test application::http::channels::tests::it_should_fail_to_delete_if_invalid_handle_provided ... ok
+test application::http::channels::tests::it_should_create_a_channel ... ok
+test application::http::channels::tests::it_should_fail_to_mark_watched_if_invalid_handle_provided ... ok
+test application::http::channels::tests::it_should_fail_to_preview_if_channel_missing ... ok
+test application::http::channels::tests::it_should_fail_to_preview_if_channel_not_found_on_youtube ... ok
+test application::http::channels::tests::it_should_fail_to_preview_if_invalid_channel_provided ... ok
+test application::http::channels::tests::it_should_fail_to_preview_if_youtube_lookup_fails ... ok
+test application::http::channels::tests::it_should_fail_to_reconcile_if_invalid_handle_provided ... ok
+test application::http::channels::tests::it_should_fail_to_mark_watched_a_missing_channel ... ok
+test application::http::channels::tests::it_should_count_unwatched_downloaded_videos_when_listing_channels ... ok
+test application::http::channels::tests::it_should_fail_to_create_if_youtube_lookup_fails ... ok
+test application::http::channels::tests::it_should_fail_to_create_if_channel_not_found_on_youtube ... ok
+test application::http::channels::tests::it_should_delete_the_channel_avatar ... ok
+test application::http::channels::tests::it_should_create_the_channel_even_if_avatar_storage_fails ... ok
+test application::http::channels::tests::it_should_delete_only_the_deleted_channel_videos ... ok
+test application::http::channels::tests::it_should_preview_a_channel_from_a_youtube_url ... ok
+test application::http::channels::tests::it_should_delete_a_channel ... ok
+test application::http::channels::tests::it_should_preview_a_channel_without_an_avatar ... ok
+test application::http::channels::tests::it_should_create_a_channel_from_a_youtube_url ... ok
+test application::http::channels::tests::it_should_fail_to_delete_a_missing_channel ... ok
+test application::http::channels::tests::it_should_evict_videos_no_longer_listed_on_reconcile ... ok
+test application::http::channels::tests::it_should_add_new_videos_on_reconcile ... ok
+test application::http::channels::tests::it_should_be_idempotent_on_repeated_reconciles ... ok
+test application::http::directories::tests::it_should_fail_if_invalid_path_provided ... ok
+test application::http::directories::tests::it_should_fail_if_path_not_found ... ok
+test application::http::directories::tests::it_should_fail_if_repository_fails ... ok
+test application::http::directories::tests::it_should_list_nested_subdirectories ... ok
+test application::http::directories::tests::it_should_list_no_entries_for_a_leaf_directory ... ok
+test application::http::directories::tests::it_should_list_root_subdirectories_by_default ... ok
+test application::http::channels::tests::it_should_list_channels_sorted_by_name_ignoring_case ... ok
+test application::http::channels::tests::it_should_list_no_channels ... ok
+test application::http::channels::tests::it_should_list_all_channels ... ok
+test application::http::channels::tests::it_should_preview_a_channel ... ok
+test application::http::channels::tests::it_should_not_change_the_last_played_time_when_marking_a_channel_watched ... ok
+test application::http::channels::tests::it_should_skip_avatar_if_channel_has_none ... ok
+test application::http::channels::tests::it_should_skip_avatar_if_unavailable ... ok
+test application::http::channels::tests::it_should_return_the_existing_channel_if_already_created ... ok
+test application::http::playlists::tests::it_should_fail_to_create_if_invalid_playlist_provided ... ok
+test application::http::channels::tests::it_should_mark_every_downloaded_channel_video_watched ... ok
+test application::http::channels::tests::it_should_return_the_existing_channel_if_handle_differs_in_case ... ok
+test application::http::playlists::tests::it_should_fail_to_create_if_path_missing ... ok
+test application::http::channels::tests::it_should_publish_channel_created_only_once ... ok
+test application::http::playlists::tests::it_should_fail_to_create_if_quality_missing ... ok
+test application::http::playlists::tests::it_should_fail_to_delete_if_invalid_playlist_id_provided ... ok
+test application::http::playlists::tests::it_should_fail_to_preview_if_invalid_playlist_provided ... ok
+test application::http::playlists::tests::it_should_fail_to_preview_if_playlist_missing ... ok
+test application::http::playlists::tests::it_should_fail_to_preview_if_playlist_not_found_on_youtube ... ok
+test application::http::playlists::tests::it_should_fail_to_preview_if_youtube_lookup_fails ... ok
+test application::http::playlists::tests::it_should_fail_to_reconcile_if_invalid_playlist_id_provided ... ok
+test application::http::channels::tests::it_should_store_the_channel_avatar ... ok
+test application::http::channels::tests::it_should_ignore_reconcile_of_a_missing_channel ... ok
+test application::http::playlists::tests::it_should_create_a_playlist ... ok
+test application::http::playlists::tests::it_should_add_new_videos_on_reconcile ... ok
+test application::http::playlists::tests::it_should_create_a_playlist_from_a_youtube_url ... ok
+test application::http::playlists::tests::it_should_fail_to_create_if_youtube_lookup_fails ... ok
+test application::http::playlists::tests::it_should_create_a_playlist_with_a_title_unsafe_for_filesystems ... ok
+test application::http::playlists::tests::it_should_preview_a_playlist_from_a_youtube_url ... ok
+test application::http::playlists::tests::it_should_list_all_playlists ... ok
+test application::http::playlists::tests::it_should_delete_a_playlist ... ok
+test application::http::playlists::tests::it_should_list_no_playlists ... ok
+test application::http::playlists::tests::it_should_fail_to_create_if_playlist_not_found_on_youtube ... ok
+test application::http::playlists::tests::it_should_delete_only_the_deleted_playlist_videos ... ok
+test application::http::playlists::tests::it_should_fail_to_create_if_path_already_in_use ... ok
+test application::http::playlists::tests::it_should_fail_to_delete_a_missing_playlist ... ok
+test application::http::playlists::tests::it_should_ignore_reconcile_of_a_missing_playlist ... ok
+test application::http::playlists::tests::it_should_be_idempotent_on_repeated_reconciles ... ok
+test application::http::playlists::tests::it_should_list_playlists_sorted_by_name_ignoring_case ... ok
+test application::http::playlists::tests::it_should_preview_a_playlist ... ok
+test application::http::playlists::tests::it_should_publish_playlist_created_only_once ... ok
+test application::http::playlists::tests::it_should_name_the_playlist_after_its_id_if_youtube_title_blank ... ok
+test application::http::playlists::tests::it_should_return_the_existing_playlist_if_already_created ... ok
+test application::http::tasks::tests::it_should_include_filename_in_delete_video_file_tasks ... ok
+test application::http::tasks::tests::it_should_include_channel_name_in_reconcile_channel_tasks ... ok
+test application::http::playlists::tests::it_should_not_reschedule_an_already_pending_reconcile ... ok
+test application::http::tasks::tests::it_should_include_future_pending_tasks ... ok
+test application::http::tasks::tests::it_should_include_path_in_delete_channel_files_tasks ... ok
+test application::http::tasks::tests::it_should_include_playlist_name_in_reconcile_playlist_tasks ... ok
+test application::http::tasks::tests::it_should_include_running_tasks ... FAILED
+test application::http::tasks::tests::it_should_include_video_and_channel_in_download_tasks ... ok
+test application::http::playlists::tests::it_should_remove_videos_gone_from_youtube_on_reconcile ... ok
+test application::http::tasks::tests::it_should_list_no_tasks ... ok
+test application::http::tasks::tests::it_should_list_a_fetch_thumbnail_task_with_video_and_playlist_names ... ok
+test application::http::tasks::tests::it_should_include_video_and_playlist_in_download_tasks ... ok
+test application::http::videos::tests::it_should_fail_if_invalid_handle_provided ... ok
+test application::http::videos::tests::it_should_fail_if_invalid_playlist_id_provided ... ok
+test application::http::tasks::tests::it_should_omit_details_for_update_ytdlp_tasks ... ok
+test application::http::videos::tests::it_should_fail_to_record_progress_if_invalid_duration_provided ... ok
+test application::http::videos::tests::it_should_fail_to_record_progress_if_invalid_position_provided ... ok
+test application::http::videos::tests::it_should_fail_to_record_progress_if_position_missing ... ok
+test application::http::tasks::tests::it_should_include_path_in_delete_playlist_files_tasks ... ok
+test application::http::tasks::tests::it_should_omit_details_if_channel_is_gone ... ok
+test application::http::tasks::tests::it_should_omit_details_if_playlist_is_gone ... ok
+test application::http::tasks::tests::it_should_omit_details_if_video_is_untracked ... ok
+test application::http::tasks::tests::it_should_omit_details_if_video_has_no_filename ... ok
+test application::http::videos::tests::it_should_continue_only_videos_played_within_a_week_on_home ... ok
+test application::http::videos::tests::it_should_cap_latest_on_home_at_18 ... ok
+test application::http::videos::tests::it_should_continue_only_videos_started_past_30_seconds_on_home ... ok
+test application::http::videos::tests::it_should_fail_to_record_progress_of_an_unknown_video ... ok
+test application::http::videos::tests::it_should_exclude_not_downloaded_videos_from_home ... ok
+test application::http::videos::tests::it_should_exclude_excluded_videos_from_home ... ok
+test application::http::videos::tests::it_should_fail_if_channel_not_found ... ok
+test application::http::videos::tests::it_should_fail_if_playlist_not_found ... ok
+test application::http::videos::tests::it_should_include_download_details_of_downloaded_videos ... ok
+test application::http::videos::tests::it_should_include_the_channel_source_on_home ... ok
+test application::http::videos::tests::it_should_include_the_metadata_when_listing_playlist_videos ... ok
+test application::http::videos::tests::it_should_include_the_metadata_when_listing_channel_videos ... ok
+test application::http::videos::tests::it_should_include_the_playlist_source_on_home ... ok
+test application::http::videos::tests::it_should_include_the_sync_time_when_listing_videos ... ok
+test application::http::videos::tests::it_should_include_watch_state_when_listing_channel_videos ... ok
+test application::http::videos::tests::it_should_include_whether_a_video_was_watched_on_home ... ok
+test application::http::videos::tests::it_should_include_watch_state_when_listing_playlist_videos ... ok
+test application::http::videos::tests::it_should_keep_a_watched_video_watched_when_playing_on_past_90_percent ... ok
+test application::http::videos::tests::it_should_list_a_continue_watching_video_once_from_the_channel_on_home ... ok
+test application::http::videos::tests::it_should_list_a_downloaded_video_under_latest_on_home ... ok
+test application::http::videos::tests::it_should_list_a_latest_video_once_per_source_on_home ... ok
+test application::http::videos::tests::it_should_list_a_quick_watch_once_from_the_channel_on_home ... ok
+test application::http::videos::tests::it_should_list_a_short_video_under_quick_watches_only_on_home ... ok
+test application::http::videos::tests::it_should_list_channel_videos_by_recency ... ok
+test application::http::videos::tests::it_should_list_a_started_video_under_continue_watching_only_on_home ... ok
+test application::http::videos::tests::it_should_list_no_home_videos_if_nothing_downloaded ... ok
+test application::http::videos::tests::it_should_list_no_videos_for_an_empty_playlist ... ok
+test application::http::videos::tests::it_should_list_no_videos_for_an_empty_channel ... ok
+test application::http::videos::tests::it_should_list_only_videos_under_15_minutes_as_quick_watches_on_home ... ok
+test application::http::videos::tests::it_should_list_playlist_videos ... ok
+test application::http::videos::tests::it_should_list_playlist_videos_by_position ... ok
+test application::http::videos::tests::it_should_list_videos_from_playlists_and_channels_on_home ... ok
+test application::http::videos::tests::it_should_mark_the_video_watched_at_90_percent ... ok
+test application::http::videos::tests::it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch ... ok
+test application::http::videos::tests::it_should_not_list_videos_without_duration_as_quick_watches_on_home ... ok
+test application::http::videos::tests::it_should_not_continue_watched_or_never_played_videos_on_home ... ok
+test application::http::videos::tests::it_should_not_repeat_a_continue_watching_video_in_quick_watches_on_home ... ok
+test application::http::videos::tests::it_should_not_list_watched_videos_as_quick_watches_on_home ... ok
+test application::subscribers::delete_channel_files_on_channel_deleted::tests::it_should_skip_if_invalid_channel_id_provided ... ok
+test application::http::videos::tests::it_should_omit_excluded_videos_from_a_channel ... ok
+test application::subscribers::delete_playlist_files_on_playlist_deleted::tests::it_should_skip_if_invalid_playlist_id_provided ... ok
+test application::http::videos::tests::it_should_only_record_the_position_if_duration_is_unknown ... ok
+test application::subscribers::delete_plex_collection_on_channel_deleted::tests::it_should_delete_the_collection_if_a_channel_is_deleted ... ok
+test application::subscribers::delete_plex_collection_on_channel_deleted::tests::it_should_not_delete_a_same_named_collection_in_a_playlist_section ... ok
+test application::subscribers::delete_plex_collection_on_playlist_deleted::tests::it_should_delete_the_collection_if_a_playlist_is_deleted ... ok
+test application::subscribers::delete_plex_collection_on_playlist_deleted::tests::it_should_delete_the_collection_from_every_configured_section ... ok
+test application::subscribers::delete_plex_collection_on_playlist_deleted::tests::it_should_not_delete_a_same_named_collection_in_a_channel_section ... ok
+test application::subscribers::delete_plex_collection_on_playlist_deleted::tests::it_should_skip_if_no_collection_matches_the_playlist_name ... ok
+test application::http::videos::tests::it_should_omit_excluded_videos_from_a_playlist ... ok
+test application::subscribers::delete_video_file_on_video_removed_from_channel::tests::it_should_skip_if_invalid_channel_id_provided ... ok
+test application::http::videos::tests::it_should_order_quick_watches_newest_first_on_home ... ok
+test application::http::videos::tests::it_should_order_continue_watching_by_last_played_first_on_home ... ok
+test application::subscribers::delete_video_file_on_video_removed_from_playlist::tests::it_should_skip_if_invalid_playlist_id_provided ... ok
+test application::http::videos::tests::it_should_record_playback_progress ... ok
+test application::http::videos::tests::it_should_record_the_last_played_time_even_if_the_watch_state_is_unchanged ... ok
+test application::http::videos::tests::it_should_record_the_last_played_time_on_every_copy ... ok
+test application::http::videos::tests::it_should_respond_watched_when_progress_reaches_the_watched_threshold ... ok
+test application::subscribers::download_video_on_video_added_to_channel::tests::it_should_skip_if_invalid_channel_id_provided ... ok
+test application::http::videos::tests::it_should_report_absent_metadata_when_listing_a_video_without_it ... ok
+test application::subscribers::download_video_on_video_added_to_playlist::tests::it_should_skip_if_invalid_playlist_id_provided ... ok
+test application::subscribers::delete_channel_files_on_channel_deleted::tests::it_should_schedule_channel_files_deletion ... ok
+test application::subscribers::delete_playlist_files_on_playlist_deleted::tests::it_should_schedule_playlist_files_deletion ... ok
+test application::http::videos::tests::it_should_use_the_reported_duration_if_none_is_recorded ... ok
+test application::subscribers::delete_video_file_on_video_removed_from_channel::tests::it_should_schedule_file_deletion_if_downloaded ... ok
+test application::subscribers::delete_video_file_on_video_removed_from_channel::tests::it_should_skip_if_channel_is_gone ... ok
+test application::http::videos::tests::it_should_show_videos_left_out_of_a_full_section_further_down_on_home ... ok
+test application::subscribers::delete_video_file_on_video_removed_from_playlist::tests::it_should_schedule_file_deletion_if_downloaded ... ok
+test application::subscribers::delete_video_file_on_video_removed_from_channel::tests::it_should_skip_if_not_downloaded ... ok
+test application::subscribers::delete_video_file_on_video_removed_from_playlist::tests::it_should_skip_if_not_downloaded ... ok
+test application::subscribers::reconcile_on_channel_created::tests::it_should_skip_if_invalid_channel_id_provided ... ok
+test application::subscribers::reconcile_on_playlist_created::tests::it_should_skip_if_invalid_playlist_id_provided ... ok
+test application::tasks::delete_channel_files_task::tests::it_should_delete_the_channel_directory ... ok
+test application::tasks::delete_channel_files_task::tests::it_should_reject_a_malformed_payload ... ok
+test application::tasks::delete_channel_files_task::tests::it_should_skip_if_invalid_channel_id_provided ... ok
+test application::tasks::delete_playlist_files_task::tests::it_should_delete_the_playlist_directory ... ok
+test application::tasks::delete_playlist_files_task::tests::it_should_reject_a_malformed_payload ... ok
+test application::tasks::delete_playlist_files_task::tests::it_should_skip_if_invalid_playlist_id_provided ... ok
+test application::subscribers::delete_video_file_on_video_removed_from_playlist::tests::it_should_skip_if_playlist_is_gone ... ok
+test application::tasks::delete_video_file_task::tests::it_should_delete_the_video_and_thumbnail_files ... ok
+test application::tasks::delete_video_file_task::tests::it_should_delete_the_video_file ... ok
+test application::tasks::delete_video_file_task::tests::it_should_reject_a_malformed_payload ... ok
+test application::tasks::delete_video_file_task::tests::it_should_skip_if_video_file_not_found ... ok
+test application::tasks::delete_video_file_task::tests::it_should_skip_if_video_has_no_filename ... ok
+test application::tasks::delete_video_file_task::tests::it_should_skip_thumbnail_if_file_not_found ... ok
+test application::tasks::delete_video_file_task::tests::it_should_skip_thumbnail_if_none_recorded ... ok
+test application::subscribers::download_video_on_video_added_to_channel::tests::it_should_schedule_the_download ... ok
+test application::subscribers::download_video_on_video_added_to_playlist::tests::it_should_schedule_the_download ... ok
+test application::subscribers::download_video_on_video_added_to_channel::tests::it_should_skip_if_channel_is_gone ... ok
+test application::subscribers::fetch_thumbnail_on_video_added_to_channel::tests::it_should_schedule_a_thumbnail_fetch ... ok
+test application::subscribers::download_video_on_video_added_to_playlist::tests::it_should_skip_if_playlist_is_gone ... ok
+test application::subscribers::fetch_thumbnail_on_video_added_to_playlist::tests::it_should_schedule_a_thumbnail_fetch ... ok
+test application::subscribers::fetch_thumbnail_on_video_added_to_channel::tests::it_should_skip_if_channel_no_longer_exists ... ok
+test application::subscribers::fetch_thumbnail_on_video_added_to_playlist::tests::it_should_skip_if_playlist_no_longer_exists ... ok
+test application::tasks::download_video_task::tests::it_should_download_even_if_metadata_fetch_fails ... ok
+test application::tasks::download_video_task::tests::it_should_download_into_the_payload_output_dir ... ok
+test application::subscribers::reconcile_on_channel_created::tests::it_should_reconcile_the_channel ... ok
+test application::subscribers::reconcile_on_playlist_created::tests::it_should_skip_if_playlist_is_gone ... ok
+test application::subscribers::reconcile_on_channel_created::tests::it_should_skip_if_channel_is_gone ... ok
+test application::tasks::download_video_task::tests::it_should_download_the_video ... ok
+test application::tasks::download_video_task::tests::it_should_exclude_a_members_only_video ... ok
+test application::subscribers::reconcile_on_playlist_created::tests::it_should_reconcile_the_playlist ... ok
+test application::tasks::download_video_task::tests::it_should_reject_a_malformed_payload ... ok
+test application::tasks::download_video_task::tests::it_should_exclude_a_video_blocked_by_claimed_content ... ok
+test application::tasks::download_video_task::tests::it_should_exclude_a_permanently_unavailable_video_without_dead_lettering_on_the_last_attempt ... ok
+test application::tasks::download_video_task::tests::it_should_keep_the_metadata_creation_time_when_regenerated ... ok
+test application::tasks::download_video_task::tests::it_should_mark_errored_after_last_attempt ... ok
+test application::tasks::download_video_task::tests::it_should_skip_if_invalid_video_id_provided ... ok
+test application::tasks::download_video_task::tests::it_should_not_exclude_a_bare_video_unavailable ... ok
+test application::tasks::download_video_task::tests::it_should_record_no_duration_if_unknown ... ok
+test application::tasks::download_video_task::tests::it_should_record_the_download_error ... ok
+test application::tasks::download_video_task::tests::it_should_record_the_duration ... ok
+test application::tasks::download_video_task::tests::it_should_record_the_sync_time ... ok
+test application::tasks::download_video_task::tests::it_should_record_no_thumbnail_if_none_written ... ok
+test application::tasks::download_video_task::tests::it_should_record_the_thumbnail_filename ... ok
+test application::tasks::download_video_task::tests::it_should_record_when_metadata_was_generated ... ok
+test application::tasks::download_video_task::tests::it_should_remove_the_folder_if_video_deleted_during_download ... ok
+test application::tasks::download_video_task::tests::it_should_skip_if_video_is_gone ... ok
+test application::tasks::download_video_task::tests::it_should_save_youtube_metadata ... ok
+test application::tasks::download_video_task::tests::it_should_reuse_the_existing_video_folder ... ok
+test application::tasks::download_video_task::tests::it_should_retry_a_failed_download ... ok
+test application::tasks::download_video_task::tests::it_should_treat_a_failed_diagnostic_probe_as_undetermined ... ok
+test application::tasks::download_video_task::tests::it_should_use_the_sanitized_title_as_filename ... ok
+test application::tasks::fetch_thumbnail_task::tests::it_should_skip_if_video_already_has_a_thumbnail ... ok
+test application::tasks::fetch_thumbnail_task::tests::it_should_fetch_and_record_the_thumbnail ... ok
+test application::tasks::download_video_task::tests::it_should_use_no_existing_folder_without_thumbnail ... ok
+test application::tasks::fetch_thumbnail_task::tests::it_should_fetch_into_the_recorded_video_folder ... ok
+test application::tasks::download_video_task::tests::it_should_detect_a_real_thumbnail_file_written_by_yt_dlp_alongside_the_video ... ok
+test application::tasks::fetch_thumbnail_task::tests::it_should_skip_if_video_no_longer_exists ... ok
+test application::tasks::fetch_thumbnail_task::tests::it_should_succeed_without_recording_if_thumbnail_fetch_fails ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_delete_stray_thumbnails ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_generate_missing_metadata ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_always_schedule_the_next_reconcile ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_add_new_videos_within_the_limit ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_delete_orphaned_files ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_evict_videos_beyond_the_limit ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_keep_matching_thumbnails ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_keep_the_folder_of_a_download_in_progress ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_keep_the_folder_of_a_download_in_progress_if_video_renamed ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_keep_matching_files ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_keep_existing_metadata ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_keep_thumbnails_of_pending_videos ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_keep_the_folder_of_a_thumbnail_fetch_in_progress ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_reject_a_malformed_payload ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_keep_videos_if_listing_fails ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_keep_videos_stored_in_their_own_folder ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_skip_if_invalid_channel_id_provided ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_never_recover_an_excluded_video ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_not_fetch_thumbnails_when_adding_new_videos ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_not_retry_videos_errored_within_the_last_day ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_not_refetch_existing_thumbnails ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_not_schedule_a_thumbnail_fetch_for_a_video_added_in_the_same_pass ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_not_schedule_a_thumbnail_fetch_for_a_video_being_redownloaded ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_redownload_videos_with_non_mp4_file ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_not_schedule_a_thumbnail_fetch_for_a_video_being_downloaded ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_redownload_videos_with_missing_file ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_schedule_a_thumbnail_fetch_for_a_video_missing_one ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_refresh_existing_videos ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_retry_permanently_errored_videos ... ok
+test application::tasks::reconcile_channel_task::tests::it_should_skip_if_channel_is_gone ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_add_new_videos ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_always_schedule_the_next_reconcile ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_clear_the_sync_time_of_videos_redownloaded ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_delete_stray_thumbnails ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_delete_orphaned_files ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_keep_existing_metadata ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_flag_downloaded_state_on_video_removed_events ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_generate_missing_metadata ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_keep_matching_files ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_keep_the_folder_of_a_download_being_retried ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_keep_the_folder_of_a_download_in_progress ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_keep_the_folder_of_a_thumbnail_fetch_in_progress ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_keep_the_folder_of_a_download_in_progress_if_video_renamed ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_keep_matching_thumbnails ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_keep_the_suffixed_folder_of_a_download_in_progress ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_keep_thumbnails_of_pending_videos ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_reject_a_malformed_payload ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_never_recover_an_excluded_video ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_keep_videos_stored_in_their_own_folder ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_not_fetch_thumbnails_when_adding_new_videos ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_not_retry_videos_errored_within_the_last_day ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_not_schedule_a_second_thumbnail_fetch_if_one_is_queued ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_not_refetch_existing_thumbnails ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_not_schedule_a_thumbnail_fetch_for_a_video_added_in_the_same_pass ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_skip_if_invalid_playlist_id_provided ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_not_schedule_a_thumbnail_fetch_for_a_video_being_redownloaded ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_redownload_videos_with_missing_file ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_refresh_position_of_existing_videos ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_redownload_videos_with_non_mp4_file ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_not_schedule_a_thumbnail_fetch_for_a_video_being_downloaded ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_refresh_title_of_existing_videos ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_retry_a_video_that_failed_again ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_remove_videos_gone_from_youtube ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_retry_permanently_errored_videos ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_schedule_a_thumbnail_fetch_for_a_video_missing_one ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_skip_if_playlist_is_gone ... ok
+test application::tasks::reconcile_plex_collections_task::tests::it_should_continue_reconciling_remaining_collections_if_one_fails ... ok
+test application::tasks::reconcile_playlist_task::tests::it_should_still_delete_a_folder_no_video_accounts_for ... ok
+test application::tasks::reconcile_plex_collections_task::tests::it_should_create_a_collection_for_a_playlist_with_scanned_videos ... ok
+test application::tasks::reconcile_plex_collections_task::tests::it_should_add_newly_scanned_videos_to_an_existing_collection ... ok
+test application::tasks::reconcile_plex_collections_task::tests::it_should_ignore_videos_that_are_not_downloaded ... ok
+test domain::channel::channel_handle::tests::it_should_accept_a_bare_handle ... ok
+test domain::channel::channel_handle::tests::it_should_accept_a_bare_handle_via_from_url_or_handle ... ok
+test domain::channel::channel_handle::tests::it_should_parse_a_bare_youtube_channel_url ... ok
+test domain::channel::channel_handle::tests::it_should_parse_a_mobile_youtube_channel_url ... ok
+test domain::channel::channel_handle::tests::it_should_parse_a_www_youtube_channel_url ... ok
+test domain::channel::channel_handle::tests::it_should_parse_a_youtube_channel_url_with_a_query_string ... ok
+test domain::channel::channel_handle::tests::it_should_parse_a_youtube_channel_url_with_a_trailing_path_segment ... ok
+test domain::channel::channel_handle::tests::it_should_parse_an_http_youtube_channel_url ... ok
+test domain::channel::channel_handle::tests::it_should_reject_a_blank_handle ... ok
+test domain::channel::channel_handle::tests::it_should_reject_a_blank_value_via_from_url_or_handle ... ok
+test domain::channel::channel_handle::tests::it_should_reject_a_handle_missing_its_leading_at ... ok
+test domain::channel::channel_handle::tests::it_should_reject_a_handle_missing_its_leading_at_via_from_url_or_handle ... ok
+test domain::channel::channel_handle::tests::it_should_reject_a_legacy_channel_id_url ... ok
+test domain::channel::channel_handle::tests::it_should_reject_a_youtube_url_with_a_bare_at_sign ... ok
+test domain::channel::channel_handle::tests::it_should_reject_a_youtube_url_without_a_handle ... ok
+test domain::channel::channel_handle::tests::it_should_reject_an_empty_handle ... ok
+test domain::channel::channel_handle::tests::it_should_reject_an_empty_value_via_from_url_or_handle ... ok
+test domain::channel::channel_handle::tests::it_should_reject_an_unrecognized_url ... ok
+test domain::channel::channel_handle::tests::it_should_trim_surrounding_whitespace_from_a_handle ... ok
+test domain::channel::video_limit::tests::it_should_accept_a_limit_of_one ... ok
+test domain::channel::video_limit::tests::it_should_accept_a_positive_limit ... ok
+test domain::channel::video_limit::tests::it_should_accept_the_maximum_limit ... ok
+test domain::channel::video_limit::tests::it_should_reject_a_limit_above_the_maximum ... ok
+test domain::channel::video_limit::tests::it_should_reject_a_limit_that_would_wrap_to_a_valid_limit_in_32_bits ... ok
+test domain::channel::video_limit::tests::it_should_reject_a_limit_that_would_wrap_to_zero_in_32_bits ... ok
+test domain::channel::video_limit::tests::it_should_reject_a_negative_limit ... ok
+test domain::channel::video_limit::tests::it_should_reject_a_zero_limit ... ok
+test domain::directory::directory_path::tests::it_should_accept_a_multi_segment_path ... ok
+test domain::directory::directory_path::tests::it_should_accept_a_single_segment_path ... ok
+test domain::directory::directory_path::tests::it_should_be_root_on_a_blank_path ... ok
+test domain::directory::directory_path::tests::it_should_be_root_on_an_empty_path ... ok
+test domain::directory::directory_path::tests::it_should_reject_a_path_containing_a_parent_traversal_segment ... ok
+test domain::directory::directory_path::tests::it_should_reject_a_path_that_is_a_parent_traversal_segment ... ok
+test domain::directory::directory_path::tests::it_should_reject_a_path_with_a_trailing_slash ... ok
+test domain::directory::directory_path::tests::it_should_reject_a_path_with_an_empty_segment ... ok
+test domain::directory::directory_path::tests::it_should_reject_an_absolute_path ... ok
+test domain::directory::directory_path::tests::it_should_report_only_the_root_as_root ... ok
+test domain::event::domain_event::tests::it_should_map_channel_created_to_a_stable_type_and_payload ... ok
+test domain::event::domain_event::tests::it_should_map_channel_deleted_to_a_stable_type_and_payload ... ok
+test domain::event::domain_event::tests::it_should_map_playlist_created_to_a_stable_type_and_payload ... ok
+test domain::event::domain_event::tests::it_should_map_playlist_deleted_to_a_stable_type_and_payload ... ok
+test domain::event::domain_event::tests::it_should_map_video_added_to_channel_to_a_stable_type_and_payload ... ok
+test domain::event::domain_event::tests::it_should_map_video_added_to_playlist_to_a_stable_type_and_payload ... ok
+test domain::event::domain_event::tests::it_should_map_video_removed_from_channel_to_a_stable_type_and_payload ... ok
+test domain::event::domain_event::tests::it_should_map_video_removed_from_playlist_to_a_stable_type_and_payload ... ok
+test domain::event::domain_event::tests::it_should_map_video_removed_from_playlist_with_no_recorded_filename ... ok
+test domain::event::scheduled_event::tests::it_should_dead_letter_when_the_fifth_attempt_fails ... ok
+test domain::event::scheduled_event::tests::it_should_retry_with_incremented_retries_when_below_the_attempt_limit ... ok
+test domain::playlist::playlist_id::tests::it_should_accept_a_bare_id_via_from_url_or_id ... ok
+test domain::playlist::playlist_id::tests::it_should_accept_a_non_empty_id ... ok
+test domain::playlist::playlist_id::tests::it_should_parse_a_full_youtube_playlist_url ... ok
+test domain::playlist::playlist_id::tests::it_should_parse_a_youtube_playlist_url_with_extra_query_params ... ok
+test domain::playlist::playlist_id::tests::it_should_parse_a_youtube_watch_url_carrying_a_list_parameter ... ok
+test domain::playlist::playlist_id::tests::it_should_parse_an_http_youtube_playlist_url ... ok
+test domain::playlist::playlist_id::tests::it_should_parse_an_id_from_a_string ... ok
+test domain::playlist::playlist_id::tests::it_should_reject_a_blank_id ... ok
+test domain::playlist::playlist_id::tests::it_should_reject_a_blank_value_via_from_url_or_id ... ok
+test domain::playlist::playlist_id::tests::it_should_reject_a_youtube_url_missing_the_list_parameter ... ok
+test domain::playlist::playlist_id::tests::it_should_reject_a_youtube_url_with_an_empty_list_parameter ... ok
+test domain::playlist::playlist_id::tests::it_should_reject_an_empty_id ... ok
+test domain::playlist::playlist_id::tests::it_should_reject_an_empty_value_via_from_url_or_id ... ok
+test domain::playlist::playlist_id::tests::it_should_reject_an_unrecognized_url ... ok
+test domain::playlist::playlist_kind::tests::it_should_parse_youtube_linked ... ok
+test domain::playlist::playlist_kind::tests::it_should_reject_an_unknown_kind ... ok
+test domain::playlist::playlist_kind::tests::it_should_reject_the_removed_custom_kind ... ok
+test domain::playlist::playlist_name::tests::it_should_accept_a_name ... ok
+test domain::playlist::playlist_name::tests::it_should_accept_a_name_with_filesystem_unsafe_characters ... ok
+test domain::playlist::playlist_name::tests::it_should_name_after_the_id_if_youtube_title_blank ... ok
+test domain::playlist::playlist_name::tests::it_should_reject_a_blank_name ... ok
+test domain::playlist::playlist_name::tests::it_should_reject_an_empty_name ... ok
+test domain::playlist::playlist_path::tests::it_should_accept_a_multi_segment_path ... ok
+test application::tasks::reconcile_plex_collections_task::tests::it_should_create_collections_in_their_own_sections ... ok
+test domain::playlist::playlist_path::tests::it_should_accept_a_single_segment_path ... ok
+test domain::playlist::playlist_path::tests::it_should_reject_a_blank_path ... ok
+test domain::playlist::playlist_path::tests::it_should_reject_a_path_containing_a_parent_traversal_segment ... ok
+test domain::playlist::playlist_path::tests::it_should_reject_a_path_that_is_a_parent_traversal_segment ... ok
+test domain::playlist::playlist_path::tests::it_should_reject_a_path_with_a_backslash ... ok
+test domain::playlist::playlist_path::tests::it_should_reject_a_path_with_a_colon ... ok
+test domain::playlist::playlist_path::tests::it_should_reject_a_path_with_a_trailing_slash ... ok
+test domain::playlist::playlist_path::tests::it_should_reject_a_path_with_a_wildcard ... ok
+test domain::playlist::playlist_path::tests::it_should_reject_a_path_with_an_empty_segment ... ok
+test domain::playlist::playlist_path::tests::it_should_reject_an_absolute_path ... ok
+test domain::playlist::playlist_path::tests::it_should_reject_an_empty_path ... ok
+test domain::playlist_video::playlist_video::tests::it_should_build_a_playlist_video_with_a_known_position ... ok
+test domain::playlist_video::playlist_video::tests::it_should_build_a_playlist_video_with_no_position ... ok
+test domain::services::video_downloader::tests::it_should_classify_permanently_unavailable_reasons ... ok
+test domain::services::video_downloader::tests::it_should_classify_permanently_unavailable_reasons_case_insensitively ... ok
+test domain::services::video_downloader::tests::it_should_not_classify_generic_or_transient_reasons ... ok
+test domain::services::video_file_deleter::tests::it_should_delete_the_two_named_files_individually_for_a_legacy_flat_video ... ok
+test domain::services::video_file_deleter::tests::it_should_delete_the_whole_folder_once_per_recorded_path_for_a_new_style_video ... ok
+test domain::services::video_file_deleter::tests::it_should_no_op_when_no_filename_or_thumbnail_is_recorded ... ok
+test domain::shared::quality::tests::it_should_parse_high ... ok
+test domain::shared::quality::tests::it_should_parse_low ... ok
+test domain::shared::quality::tests::it_should_parse_mid ... ok
+test domain::shared::quality::tests::it_should_reject_a_quality_in_a_different_case ... ok
+test domain::shared::quality::tests::it_should_reject_an_empty_quality ... ok
+test domain::shared::quality::tests::it_should_reject_an_unknown_quality ... ok
+test domain::task::scheduled_task::tests::it_should_dead_letter_when_the_fifth_attempt_fails ... ok
+test domain::task::scheduled_task::tests::it_should_grow_the_retry_delay_with_each_successive_failure ... ok
+test domain::task::scheduled_task::tests::it_should_not_report_the_last_attempt_when_retries_are_left ... ok
+test domain::task::scheduled_task::tests::it_should_report_the_last_attempt_when_the_next_failure_would_dead_letter ... ok
+test domain::task::scheduled_task::tests::it_should_retry_with_incremented_retries_and_a_delayed_run_at_when_below_the_attempt_limit ... ok
+test domain::task::scheduled_task::tests::it_should_round_trip_status_through_its_string_representation ... ok
+test domain::task::scheduled_task::tests::it_should_transition_to_running_when_started ... ok
+test domain::task::scheduled_task::tests::it_should_use_the_base_delay_passed_in_when_retrying ... ok
+test domain::task::task::tests::it_should_decode_a_delete_channel_files_payload_back_into_its_channel_id_and_path ... ok
+test domain::task::task::tests::it_should_decode_a_delete_playlist_files_payload_back_into_its_playlist_id_and_path ... ok
+test domain::task::task::tests::it_should_decode_a_delete_video_file_payload_back_into_its_filename_and_output_dir ... ok
+test domain::task::task::tests::it_should_decode_a_download_video_payload_back_into_its_fields ... ok
+test domain::task::task::tests::it_should_decode_a_reconcile_channel_payload_back_into_its_channel_id ... ok
+test domain::task::task::tests::it_should_decode_a_reconcile_playlist_payload_back_into_its_playlist_id ... ok
+test domain::task::task::tests::it_should_key_video_tasks_by_video_id ... ok
+test domain::task::task::tests::it_should_map_delete_channel_files_to_a_stable_type_and_payload ... ok
+test domain::task::task::tests::it_should_map_delete_playlist_files_to_a_stable_type_and_payload ... ok
+test domain::task::task::tests::it_should_map_delete_video_file_to_a_stable_type_and_payload ... ok
+test domain::task::task::tests::it_should_map_download_video_to_a_stable_type_and_payload ... ok
+test domain::task::task::tests::it_should_map_reconcile_channel_to_a_stable_type_and_payload ... ok
+test domain::task::task::tests::it_should_map_reconcile_playlist_to_a_stable_type_and_payload ... ok
+test domain::task::task::tests::it_should_map_task_types_to_lanes ... ok
+test domain::task::task::tests::it_should_map_update_ytdlp_to_a_stable_type_and_payload ... ok
+test domain::task::task::tests::it_should_reject_a_malformed_delete_channel_files_payload ... ok
+test domain::task::task::tests::it_should_reject_a_malformed_delete_playlist_files_payload ... ok
+test domain::task::task::tests::it_should_reject_a_malformed_delete_video_file_payload ... ok
+test domain::task::task::tests::it_should_reject_a_malformed_download_video_payload ... ok
+test domain::task::task::tests::it_should_reject_a_malformed_reconcile_channel_payload ... ok
+test domain::task::task::tests::it_should_reject_a_malformed_reconcile_playlist_payload ... ok
+test domain::task::task::tests::it_should_reject_a_malformed_update_ytdlp_payload ... ok
+test application::tasks::reconcile_plex_collections_task::tests::it_should_create_a_collection_for_a_channel_with_scanned_videos ... ok
+test domain::task::task::tests::it_should_round_trip_an_update_ytdlp_payload ... ok
+test domain::video::playback_position::tests::it_should_accept_zero_and_positive_positions ... ok
+test domain::video::playback_position::tests::it_should_reject_a_negative_position ... ok
+test domain::video::thumbnail_filename::tests::it_should_append_jpg_when_the_video_filename_has_no_extension ... ok
+test domain::video::thumbnail_filename::tests::it_should_preserve_the_collision_suffix_in_the_stem ... ok
+test domain::video::thumbnail_filename::tests::it_should_swap_the_video_extension_for_jpg ... ok
+test domain::video::video::tests::it_should_be_due_for_recovery_if_errored_with_no_recorded_time ... ok
+test domain::video::video::tests::it_should_be_due_for_recovery_once_errored_for_the_whole_cooldown ... ok
+test domain::video::video::tests::it_should_be_due_for_recovery_when_errored_longer_than_the_cooldown ... ok
+test domain::video::video::tests::it_should_build_a_pending_video ... ok
+test domain::video::video::tests::it_should_generate_a_distinct_surrogate_id_per_video ... ok
+test domain::video::video::tests::it_should_keep_when_it_last_errored_when_reset_for_redownload ... ok
+test domain::video::video::tests::it_should_measure_the_recovery_cooldown_from_when_it_errored ... ok
+test domain::video::video::tests::it_should_never_be_due_for_recovery_if_excluded ... ok
+test domain::video::video::tests::it_should_not_be_due_for_recovery_if_errored_within_the_cooldown ... ok
+test domain::video::video::tests::it_should_not_be_due_for_recovery_if_not_permanently_errored ... ok
+test domain::video::video::tests::it_should_only_touch_thumbnail_filename_and_updated_at_when_recording_a_thumbnail ... ok
+test domain::video::video::tests::it_should_record_no_duration_when_marked_downloaded_without_one ... ok
+test domain::video::video::tests::it_should_record_no_thumbnail_filename_when_marked_downloaded_without_one ... ok
+test domain::video::video::tests::it_should_reset_a_downloaded_video_back_to_pending_for_redownload ... ok
+test domain::video::video::tests::it_should_transition_to_downloaded_when_marked_downloaded ... ok
+test domain::video::video::tests::it_should_transition_to_errored_retrying_when_marked_errored_retrying ... ok
+test domain::video::video::tests::it_should_transition_to_errored_when_marked_errored ... ok
+test domain::video::video::tests::it_should_transition_to_excluded_when_marked_excluded ... ok
+test domain::video::video::tests::it_should_transition_to_in_progress_when_a_download_starts ... ok
+test domain::video::video_duration::tests::it_should_accept_a_positive_duration ... ok
+test domain::video::video_duration::tests::it_should_reject_a_non_positive_duration ... ok
+test domain::video::video_filename::tests::it_should_collapse_repeated_and_surrounding_whitespace ... ok
+test domain::video::video_filename::tests::it_should_replace_filesystem_unsafe_characters_with_a_safe_separator ... ok
+test domain::video::video_filename::tests::it_should_sanitize_a_combination_of_rules_together ... ok
+test domain::video::video_filename::tests::it_should_preserve_accented_and_non_ascii_letters ... ok
+test domain::video::video_filename::tests::it_should_sanitize_a_title_with_a_math_symbol_slash_lookalike ... ok
+test domain::video::video_filename::tests::it_should_sanitize_a_title_with_fullwidth_lookalike_punctuation ... ok
+test domain::video::video_filename::tests::it_should_sanitize_a_messy_title_with_extra_whitespace_and_colon ... ok
+test domain::video::video_filename::tests::it_should_strip_emoji_and_decorative_symbols ... ok
+test domain::video::video_id::tests::it_should_accept_a_non_empty_id ... ok
+test domain::video::video_id::tests::it_should_build_the_youtube_video_url ... ok
+test domain::video::video_id::tests::it_should_reject_a_blank_id ... ok
+test domain::video::video_id::tests::it_should_reject_an_empty_id ... ok
+test domain::video::video_output_entry::tests::it_should_only_split_on_the_first_separator ... ok
+test domain::video::video_output_entry::tests::it_should_resolve_the_video_dir_as_the_output_dir_for_a_legacy_flat_path ... ok
+test domain::video::video_output_entry::tests::it_should_resolve_the_video_dir_as_the_owning_folder_for_a_new_style_path ... ok
+test domain::video::video_output_entry::tests::it_should_return_the_filename_unchanged_for_a_legacy_flat_path ... ok
+test domain::video::video_filename::tests::it_should_truncate_to_the_byte_limit_on_a_char_boundary ... ok
+test domain::video::video_output_entry::tests::it_should_return_the_folder_name_for_a_nested_path ... ok
+test domain::video::video_record_id::tests::it_should_accept_a_non_empty_id ... ok
+test domain::video::video_record_id::tests::it_should_generate_distinct_ids ... ok
+test domain::video::video_record_id::tests::it_should_reject_an_empty_id ... ok
+test domain::video::video_record_id::tests::it_should_reject_a_blank_id ... ok
+test domain::video::video_status::tests::it_should_reject_an_unknown_status ... ok
+test domain::video::video_status::tests::it_should_round_trip_downloaded_through_its_string_representation ... ok
+test domain::video::video_status::tests::it_should_round_trip_errored_retrying_through_its_string_representation ... ok
+test domain::video::video_status::tests::it_should_round_trip_errored_through_its_string_representation ... ok
+test domain::video::video_status::tests::it_should_round_trip_excluded_through_its_string_representation ... ok
+test domain::video::video_status::tests::it_should_round_trip_in_progress_through_its_string_representation ... ok
+test domain::video::video_status::tests::it_should_round_trip_pending_through_its_string_representation ... ok
+test domain::video_metadata::mapping::tests::it_should_assemble_video_metadata_without_a_thumbnail ... ok
+test domain::video_metadata::mapping::tests::it_should_assemble_video_metadata_with_a_thumbnail ... ok
+test domain::video_metadata::mapping::tests::it_should_leave_a_description_exactly_at_the_limit_unchanged ... ok
+test domain::video_metadata::mapping::tests::it_should_leave_a_description_within_the_limit_unchanged ... ok
+test domain::video_metadata::mapping::tests::it_should_resolve_sorttitle_from_a_playlist_position_when_present ... ok
+test domain::video_metadata::mapping::tests::it_should_resolve_sorttitle_from_the_publish_date_for_a_channel_video_ignoring_recency ... ok
+test domain::video_metadata::mapping::tests::it_should_resolve_sorttitle_from_the_publish_date_when_no_position_is_given ... ok
+test domain::video_metadata::mapping::tests::it_should_truncate_a_description_over_the_limit_at_a_word_boundary ... ok
+test domain::video_metadata::nfo::tests::it_should_omit_genre_when_unmapped ... ok
+test domain::video_metadata::nfo::tests::it_should_escape_xml_significant_characters_and_remain_well_formed ... ok
+test domain::video_metadata::nfo::tests::it_should_omit_tag_elements_when_there_are_no_tags ... ok
+test domain::video_metadata::nfo::tests::it_should_omit_thumb_when_absent ... ok
+test domain::video_metadata::video_metadata::tests::it_should_build_a_video_metadata_with_no_genre_no_tags_and_no_thumbnail ... ok
+test domain::video_metadata::video_metadata::tests::it_should_build_a_video_metadata_with_every_field ... ok
+test domain::video_metadata::nfo::tests::it_should_render_every_field_when_present ... ok
+test infrastructure::client::ytdlp_updater::tests::it_should_pick_the_linux_aarch64_asset_on_arm64 ... ok
+test infrastructure::client::ytdlp_updater::tests::it_should_pick_the_linux_x86_64_asset_by_default ... ok
+test infrastructure::client::ytdlp_updater::tests::it_should_pick_the_macos_asset_regardless_of_architecture ... ok
+test infrastructure::client::ytdlp_updater::tests::it_should_leave_the_original_binary_untouched_when_the_write_fails ... ok
+test application::tasks::reconcile_plex_collections_task::tests::it_should_do_nothing_if_already_in_sync ... ok
+test application::tasks::reconcile_plex_collections_task::tests::it_should_not_create_a_channel_collection_in_a_playlist_section ... ok
+test application::tasks::update_ytdlp_task::tests::it_should_not_seed_if_one_is_running ... FAILED
+test infrastructure::repositories::event_subscriber::tests::it_should_compile_against_a_fake_subscriber ... ok
+test infrastructure::repositories::filesystem_channel_avatar_repository::tests::it_should_delete_a_stored_avatar_file ... ok
+test application::tasks::reconcile_plex_collections_task::tests::it_should_remove_videos_no_longer_tracked_from_the_collection ... ok
+test application::tasks::update_ytdlp_task::tests::it_should_reschedule_after_success ... ok
+test application::tasks::update_ytdlp_task::tests::it_should_not_seed_if_one_is_pending ... ok
+test application::tasks::update_ytdlp_task::tests::it_should_reschedule_after_failure ... ok
+test infrastructure::repositories::filesystem_channel_avatar_repository::tests::it_should_succeed_when_deleting_a_missing_avatar_file ... ok
+test infrastructure::repositories::filesystem_directory_repository::tests::it_should_list_only_subdirectories_on_a_directory_containing_files_and_directories ... ok
+test infrastructure::repositories::filesystem_directory_repository::tests::it_should_list_the_target_on_a_symlink_resolving_inside_the_videos_root ... ok
+test infrastructure::repositories::filesystem_directory_repository::tests::it_should_omit_dot_prefixed_subdirectories ... ok
+test infrastructure::repositories::filesystem_directory_repository::tests::it_should_return_an_empty_listing_on_a_directory_with_no_subdirectories ... ok
+test infrastructure::repositories::filesystem_directory_repository::tests::it_should_return_entries_in_a_deterministic_order ... ok
+test infrastructure::repositories::filesystem_channel_avatar_repository::tests::it_should_return_none_when_the_host_is_unreachable ... ok
+test application::tasks::update_ytdlp_task::tests::it_should_seed_the_task_when_none_is_scheduled ... ok
+test infrastructure::repositories::filesystem_directory_repository::tests::it_should_return_none_on_a_missing_directory ... ok
+test infrastructure::repositories::filesystem_directory_repository::tests::it_should_return_none_on_a_path_that_is_a_regular_file ... ok
+test infrastructure::repositories::filesystem_channel_avatar_repository::tests::it_should_return_none_on_an_http_error_status ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_delete_a_file_matching_the_exact_filename ... ok
+test infrastructure::repositories::filesystem_channel_avatar_repository::tests::it_should_pick_the_extension_from_the_content_type ... ok
+test infrastructure::repositories::filesystem_channel_avatar_repository::tests::it_should_store_a_successfully_downloaded_avatar_and_return_its_filename ... ok
+test infrastructure::repositories::filesystem_directory_repository::tests::it_should_return_none_on_a_symlink_resolving_outside_the_videos_root ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_no_op_when_the_directory_to_delete_is_already_missing ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_no_op_when_no_file_matches ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_delete_a_whole_directory_when_the_named_entry_is_a_folder ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_no_op_when_the_output_directory_is_missing ... ok
+test infrastructure::repositories::filesystem_directory_repository::tests::it_should_return_the_subdirectories_of_a_nested_directory_only ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_list_the_files_present_in_the_output_directory ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_return_an_empty_listing_when_the_output_directory_is_missing ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_exclude_in_progress_temp_files_from_the_listing ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_return_false_when_the_file_is_missing ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_return_true_when_a_flat_legacy_file_exists ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_recursively_delete_a_directory_and_everything_in_it ... ok
+test infrastructure::repositories::filesystem_video_file_repository::tests::it_should_return_true_when_a_nested_file_exists ... ok
+test infrastructure::repositories::plex_collection_repository::tests::it_should_delete_a_collection ... ok
+test application::tasks::reconcile_plex_collections_task::tests::it_should_reschedule_the_next_reconcile_if_the_pass_fails ... ok
+test infrastructure::repositories::plex_collection_repository::tests::it_should_add_items_to_a_collection ... ok
+test application::tasks::update_ytdlp_task::tests::it_should_seed_if_only_other_task_types_are_scheduled ... ok
+test infrastructure::repositories::plex_collection_repository::tests::it_should_create_a_collection_with_alphabetical_sort ... ok
+test infrastructure::repositories::plex_collection_repository::tests::it_should_fail_if_the_server_replies_with_an_error ... ok
+test infrastructure::repositories::plex_collection_repository::tests::it_should_list_collections ... ok
+test infrastructure::repositories::plex_collection_repository::tests::it_should_list_collection_items ... ok
+test infrastructure::repositories::plex_collection_repository::tests::it_should_remove_an_item_from_a_collection ... ok
+test infrastructure::repositories::plex_collection_repository::tests::it_should_list_section_items_with_their_youtube_ids ... ok
+test infrastructure::repositories::domain_events_consumer::tests::it_should_invoke_every_registered_subscriber ... ok
+test application::tasks::reconcile_plex_collections_task::tests::it_should_skip_creating_a_collection_if_no_video_is_scanned_yet ... ok
+test infrastructure::repositories::domain_events_consumer::tests::it_should_invoke_the_single_registered_subscriber_and_delete_the_event ... ok
+test infrastructure::repositories::domain_events_consumer::tests::it_should_dead_letter_an_event_that_fails_on_the_fifth_attempt ... ok
+test infrastructure::repositories::domain_events_consumer::tests::it_should_mark_an_event_with_no_registered_subscribers_as_done ... ok
+test infrastructure::repositories::domain_events_consumer::tests::it_should_retry_the_whole_event_when_one_subscriber_fails ... ok
+test infrastructure::repositories::sqlite_channel_repository::tests::it_should_fail_when_inserting_a_duplicate_id ... ok
+test infrastructure::repositories::sqlite_channel_repository::tests::it_should_return_the_channel_after_inserting_it ... ok
+test infrastructure::repositories::sqlite_channel_repository::tests::it_should_return_an_empty_list_when_no_channels_are_saved ... ok
+test infrastructure::repositories::sqlite_channel_repository::tests::it_should_round_trip_a_channel_with_no_recorded_avatar_filename ... ok
+test infrastructure::repositories::sqlite_channel_repository::tests::it_should_return_all_saved_channels ... ok
+test infrastructure::repositories::sqlite_channel_repository::tests::it_should_remove_an_existing_channel ... ok
+test infrastructure::repositories::sqlite_channel_repository::tests::it_should_return_none_when_the_channel_does_not_exist ... ok
+test infrastructure::repositories::sqlite_channel_repository::tests::it_should_round_trip_a_channel_with_a_recorded_avatar_filename ... ok
+test infrastructure::repositories::sqlite_channel_repository::tests::it_should_round_trip_the_maximum_video_limit ... ok
+test infrastructure::repositories::sqlite_channel_repository::tests::it_should_round_trip_the_channels_path ... ok
+test infrastructure::repositories::sqlite_channel_video_repository::tests::it_should_delete_every_channel_video_for_the_channel_and_leave_others_untouched ... ok
+test infrastructure::repositories::sqlite_channel_video_repository::tests::it_should_delete_only_the_named_channel_video ... ok
+test infrastructure::repositories::sqlite_channel_repository::tests::it_should_succeed_when_deleting_a_missing_channel ... ok
+test infrastructure::repositories::sqlite_playlist_repository::tests::it_should_remove_an_existing_playlist ... ok
+test infrastructure::repositories::sqlite_channel_video_repository::tests::it_should_find_a_channel_video_by_its_video_record_id ... ok
+test infrastructure::repositories::sqlite_channel_video_repository::tests::it_should_list_channel_videos_ordered_by_recency_position ... ok
+test infrastructure::repositories::sqlite_channel_video_repository::tests::it_should_return_none_when_finding_by_video_for_an_untracked_video ... ok
+test infrastructure::repositories::sqlite_playlist_repository::tests::it_should_fail_when_inserting_a_duplicate_id ... ok
+test infrastructure::repositories::sqlite_channel_video_repository::tests::it_should_return_none_when_finding_a_missing_channel_video ... ok
+test infrastructure::repositories::sqlite_channel_video_repository::tests::it_should_return_the_channel_video_after_saving_it ... ok
+test infrastructure::repositories::sqlite_playlist_repository::tests::it_should_return_all_saved_playlists ... ok
+test infrastructure::repositories::sqlite_channel_video_repository::tests::it_should_list_every_channel_video ... ok
+test infrastructure::repositories::sqlite_playlist_repository::tests::it_should_return_none_when_the_playlist_does_not_exist ... ok
+test infrastructure::repositories::sqlite_playlist_repository::tests::it_should_return_an_empty_list_when_no_playlists_are_saved ... ok
+test infrastructure::repositories::sqlite_playlist_repository::tests::it_should_succeed_when_deleting_a_missing_playlist ... ok
+test infrastructure::repositories::sqlite_playlist_video_repository::tests::it_should_delete_every_playlist_video_for_the_playlist_and_leave_others_untouched ... ok
+test infrastructure::repositories::sqlite_playlist_repository::tests::it_should_return_the_playlist_after_inserting_it ... ok
+test infrastructure::repositories::sqlite_playlist_video_repository::tests::it_should_delete_only_the_named_playlist_video ... ok
+test infrastructure::repositories::sqlite_playlist_video_repository::tests::it_should_return_none_when_finding_by_video_for_an_untracked_video ... ok
+test infrastructure::repositories::sqlite_playlist_video_repository::tests::it_should_return_the_playlist_video_after_saving_it ... ok
+test infrastructure::repositories::sqlite_playlist_video_repository::tests::it_should_return_none_when_finding_a_missing_playlist_video ... ok
+test infrastructure::repositories::sqlite_playlist_video_repository::tests::it_should_find_a_playlist_video_by_its_video_record_id ... ok
+test infrastructure::repositories::sqlite_playlist_video_repository::tests::it_should_list_playlist_videos_ordered_by_position ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_drop_a_recovered_running_task_once_the_attempt_limit_is_exceeded ... FAILED
+test infrastructure::repositories::sqlite_playlist_video_repository::tests::it_should_sort_playlist_videos_with_no_position_last ... ok
+test infrastructure::repositories::sqlite_playlist_video_repository::tests::it_should_round_trip_a_playlist_video_with_no_position ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_claim_a_pending_task ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_drop_the_task_after_the_fifth_failed_attempt ... FAILED
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_create_a_queryable_empty_dead_letter_table ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_list_a_task_scheduled_for_now_as_eligible ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_list_a_future_pending_task_as_non_completed ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_list_eligible_tasks_by_run_time_regardless_of_scheduling_order ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_list_eligible_tasks_due_at_the_same_time_in_scheduling_order ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_no_longer_list_a_task_as_eligible_once_deleted ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_not_schedule_a_duplicate_thumbnail_fetch_for_the_same_video ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_not_list_a_dead_lettered_task_as_non_completed ... FAILED
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_not_schedule_a_duplicate_download_for_the_same_video ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_reschedule_the_task_after_the_growing_retry_delay_below_the_attempt_limit ... FAILED
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_not_claim_a_task_already_running ... FAILED
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_no_longer_list_a_running_task_as_eligible ... FAILED
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_not_list_a_task_scheduled_for_the_future_as_eligible ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_retry_a_recovered_running_task_when_under_the_attempt_limit ... FAILED
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_schedule_a_download_for_another_video ... ok
+test infrastructure::repositories::sqlite_task_repository::tests::it_should_schedule_duplicates_of_tasks_without_a_video ... ok
+test infrastructure::repositories::sqlite_video_metadata_repository::tests::it_should_leave_no_db_row_when_the_file_write_fails ... ok
+test infrastructure::repositories::sqlite_video_metadata_repository::tests::it_should_overwrite_an_existing_row_on_a_second_save ... ok
+test infrastructure::repositories::sqlite_video_metadata_repository::tests::it_should_return_none_when_finding_an_untracked_video ... ok
+test infrastructure::repositories::sqlite_video_metadata_repository::tests::it_should_round_trip_a_video_with_no_genre_no_tags_and_no_thumbnail ... ok
+test infrastructure::repositories::sqlite_video_metadata_repository::tests::it_should_return_none_when_no_row_exists_even_if_movie_nfo_is_present_on_disk ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_allow_two_videos_to_share_the_same_youtube_id ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_delete_only_the_named_video ... ok
+test infrastructure::repositories::sqlite_video_metadata_repository::tests::it_should_write_movie_nfo_and_record_a_row_on_save ... ok
+test infrastructure::repositories::sqlite_video_metadata_repository::tests::it_should_scope_metadata_lookup_by_youtube_id ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_find_many_of_no_ids ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_find_many_videos_in_the_order_given_skipping_missing_ones ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_find_every_copy_of_a_youtube_video ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_find_no_copies_of_an_unknown_youtube_video ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_return_none_when_finding_a_missing_video ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_overwrite_every_field_including_status_when_saving_an_existing_video ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_return_the_stored_video_with_its_updated_status_after_update ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_return_the_video_after_saving_it ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_round_trip_a_video_with_a_recorded_last_errored_time ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_round_trip_a_video_with_a_recorded_thumbnail_filename ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_round_trip_a_video_never_played ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_round_trip_a_video_with_no_recorded_duration ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_round_trip_a_video_with_a_recorded_duration ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_round_trip_a_video_with_a_last_played_time ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_round_trip_a_video_with_a_recorded_quality ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_round_trip_a_watched_video_with_a_playback_position ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_succeed_when_deleting_a_missing_video ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_update_only_the_thumbnail ... ok
+test infrastructure::repositories::sqlite_video_repository::tests::it_should_update_only_the_title ... ok
+test infrastructure::repositories::task_executor::tests::it_should_dead_letter_a_recovered_running_task_once_the_attempt_limit_is_exceeded ... FAILED
+test infrastructure::repositories::task_executor::tests::it_should_dead_letter_a_task_whose_handler_fails_on_the_fifth_attempt ... FAILED
+test infrastructure::repositories::task_executor::tests::it_should_dispatch_an_eligible_task_and_delete_it_on_success ... ok
+test infrastructure::repositories::task_executor::tests::it_should_not_block_light_tasks_behind_downloads ... ok
+test infrastructure::repositories::task_executor::tests::it_should_retry_a_task_recovered_as_running_from_a_previous_process ... FAILED
+test infrastructure::repositories::task_executor::tests::it_should_not_block_reconciles_behind_thumbnail_fetches ... ok
+test infrastructure::repositories::task_executor::tests::it_should_not_start_tasks_while_update_ytdlp_runs ... ok
+test infrastructure::repositories::task_handler::tests::it_should_compile_against_a_fake_handler ... ok
+test infrastructure::repositories::youtube_channel_repository::tests::it_should_fall_back_to_the_default_thumbnail_when_medium_is_absent ... ok
+test infrastructure::repositories::task_executor::tests::it_should_not_run_two_tasks_for_the_same_video_at_once ... ok
+test infrastructure::repositories::youtube_channel_repository::tests::it_should_prefer_the_medium_thumbnail_as_the_avatar_url ... ok
+test infrastructure::repositories::youtube_channel_repository::tests::it_should_return_no_avatar_url_when_the_response_has_no_thumbnails ... ok
+test infrastructure::repositories::youtube_channel_repository::tests::it_should_return_none_when_the_handle_does_not_resolve_to_a_channel ... ok
+test infrastructure::repositories::youtube_channel_repository::tests::it_should_return_none_when_youtube_omits_items ... ok
+test infrastructure::repositories::youtube_channel_repository::tests::it_should_return_the_resolved_channel_when_the_handle_exists ... ok
+test infrastructure::repositories::youtube_metadata_repository::tests::it_should_map_a_known_category_id_to_its_genre_name ... ok
+test infrastructure::repositories::youtube_metadata_repository::tests::it_should_default_tags_and_category_id_when_absent ... ok
+test infrastructure::repositories::task_executor::tests::it_should_retry_a_task_left_running_without_waiting_for_a_restart ... FAILED
+test infrastructure::repositories::youtube_metadata_repository::tests::it_should_return_none_for_a_missing_category_id ... ok
+test infrastructure::repositories::youtube_metadata_repository::tests::it_should_return_none_for_an_unmapped_category_id ... ok
+test infrastructure::repositories::youtube_metadata_repository::tests::it_should_return_an_error_when_the_api_request_fails ... ok
+test infrastructure::repositories::youtube_metadata_repository::tests::it_should_return_none_when_the_video_does_not_exist ... ok
+test infrastructure::repositories::youtube_metadata_repository::tests::it_should_return_the_metadata_when_the_video_exists ... ok
+test infrastructure::repositories::task_executor::tests::it_should_retry_a_task_whose_handler_fails ... FAILED
+test infrastructure::repositories::youtube_playlist_items_repository::tests::it_should_combine_multiple_pages_in_order ... ok
+test infrastructure::repositories::youtube_playlist_items_repository::tests::it_should_return_an_empty_list_when_the_playlist_has_no_videos ... ok
+test infrastructure::repositories::youtube_playlist_items_repository::tests::it_should_keep_unlisted_items ... ok
+test infrastructure::repositories::youtube_playlist_items_repository::tests::it_should_request_snippet_and_status_parts ... ok
+test infrastructure::repositories::youtube_playlist_items_repository::tests::it_should_skip_items_without_a_privacy_status ... ok
+test infrastructure::repositories::youtube_playlist_items_repository::tests::it_should_skip_items_with_an_unrecognised_privacy_status ... ok
+test infrastructure::repositories::youtube_playlist_repository::tests::it_should_resolve_nothing_if_the_playlist_does_not_exist ... ok
+test infrastructure::repositories::youtube_playlist_items_repository::tests::it_should_skip_private_items ... ok
+test infrastructure::repositories::youtube_playlist_repository::tests::it_should_resolve_the_playlist_title_and_item_count ... ok
+test infrastructure::repositories::task_executor::tests::it_should_retry_a_task_whose_handler_panics_and_free_its_slot ... FAILED
+test infrastructure::repositories::task_executor::tests::it_should_run_downloads_in_parallel_up_to_the_lane_concurrency ... ok
+test infrastructure::repositories::task_executor::tests::it_should_run_light_tasks_one_at_a_time ... ok
+test infrastructure::repositories::task_executor::tests::it_should_run_thumbnail_fetches_one_at_a_time ... ok
+test infrastructure::repositories::task_executor::tests::it_should_run_update_ytdlp_only_when_nothing_else_runs ... ok
+test infrastructure::repositories::youtube_video_downloader_repository::tests::it_should_map_a_failed_yt_dlp_process_to_a_failed_attempt_with_its_stderr ... ok
+test infrastructure::repositories::task_executor::tests::it_should_start_a_later_task_when_the_earlier_one_is_held_back ... ok
+test infrastructure::repositories::task_executor::tests::it_should_tell_the_handler_this_is_the_last_attempt_when_no_retries_remain ... FAILED
+test infrastructure::repositories::task_executor::tests::it_should_start_tasks_of_a_lane_in_run_at_order ... ok
+test infrastructure::shared::domain_events::event_repository::tests::it_should_create_a_queryable_empty_dead_letter_table ... ok
+test infrastructure::repositories::task_executor::tests::it_should_tell_the_handler_this_is_not_the_last_attempt_when_retries_remain ... ok
+test infrastructure::shared::domain_events::event_repository::tests::it_should_drop_the_event_after_the_fifth_failed_attempt ... ok
+test infrastructure::shared::domain_events::event_repository::tests::it_should_keep_a_failed_event_pending_and_increment_retries_below_the_limit ... ok
+test infrastructure::shared::domain_events::event_repository::tests::it_should_list_an_inserted_event_as_eligible ... ok
+test infrastructure::shared::domain_events::event_repository::tests::it_should_move_the_event_to_the_dead_letter_table_after_the_fifth_failed_attempt ... ok
+test infrastructure::shared::domain_events::event_repository::tests::it_should_stay_eligible_after_the_fourth_failed_attempt ... ok
+test infrastructure::shared::domain_events::event_repository::tests::it_should_no_longer_list_an_event_as_eligible_once_deleted ... ok
+test infrastructure::shared::sqlite_connection::tests::it_should_keep_wal_and_apply_normal_synchronous_on_open ... ok
+test infrastructure::repositories::task_executor::tests::it_should_start_the_next_task_as_soon_as_one_finishes ... ok
+test infrastructure::shared::sqlite_migrations::tests::it_should_backfill_the_last_played_time_of_part_watched_videos_when_migrating ... ok
+test infrastructure::shared::system_clock::tests::it_should_return_the_configured_value ... ok
+test infrastructure::shared::sqlite_connection::tests::it_should_claim_a_task_while_another_repository_writes ... ok
+test infrastructure::shared::sqlite_migrations::tests::it_should_backfill_the_metadata_update_time_from_its_creation_time_when_migrating ... ok
+test infrastructure::shared::ytdlp::tests::it_should_create_the_output_directory_when_it_does_not_exist ... ok
+test infrastructure::shared::sqlite_connection::tests::it_should_read_while_the_write_connection_is_held ... ok
+test infrastructure::shared::ytdlp::tests::it_should_error_when_no_binary_exists_at_the_configured_path ... ok
+test infrastructure::shared::ytdlp::tests::it_should_error_when_no_binary_exists_at_the_configured_path_for_a_diagnostic_probe ... ok
+test infrastructure::shared::ytdlp::tests::it_should_error_when_no_binary_exists_at_the_configured_path_for_channel_video_listing ... ok
+test infrastructure::shared::ytdlp::tests::it_should_error_when_no_binary_exists_at_the_configured_path_for_thumbnail_fetch ... ok
+test infrastructure::shared::sqlite_migrations::tests::it_should_backfill_the_publish_time_from_premiered_when_migrating ... ok
+test infrastructure::shared::ytdlp::tests::it_should_map_high_quality_to_an_uncapped_selector ... ok
+test infrastructure::shared::ytdlp::tests::it_should_map_low_quality_to_a_480p_capped_selector ... ok
+test infrastructure::shared::ytdlp::tests::it_should_map_mid_quality_to_a_720p_capped_selector ... ok
+test infrastructure::shared::sqlite_connection::tests::it_should_share_one_migrated_database_across_its_connections ... ok
+test infrastructure::shared::sqlite_migrations::tests::it_should_backfill_the_sync_time_of_downloaded_videos_when_migrating ... ok
+test infrastructure::shared::sqlite_connection::tests::it_should_not_fail_when_two_repositories_write_concurrently_on_the_shared_database ... ok
+test infrastructure::shared::sqlite_migrations::tests::it_should_be_a_no_op_when_applied_twice ... ok
+test infrastructure::shared::sqlite_migrations::tests::it_should_create_every_table_on_a_fresh_in_memory_database ... ok
+test infrastructure::shared::sqlite_migrations::tests::it_should_default_existing_videos_to_unwatched_when_migrating ... ok
+test infrastructure::shared::sqlite_migrations::tests::it_should_recognize_an_already_deployed_database_as_up_to_date_without_touching_its_data ... ok
+test infrastructure::repositories::youtube_video_downloader_repository::tests::it_should_map_a_successful_yt_dlp_process_to_the_printed_filename ... ok
+test infrastructure::repositories::youtube_video_downloader_repository::tests::it_should_map_a_successful_thumbnail_fetch_to_the_printed_filename ... ok
+test infrastructure::shared::ytdlp::tests::it_should_give_concurrent_same_title_videos_distinct_folders ... ok
+test infrastructure::shared::ytdlp::tests::it_should_append_the_video_id_to_the_output_template_on_collision ... ok
+test infrastructure::shared::ytdlp::tests::it_should_append_the_video_id_to_the_thumbnail_folder_on_collision ... ok
+test infrastructure::shared::ytdlp::tests::it_should_error_when_a_successful_exit_prints_no_filename ... ok
+test infrastructure::shared::ytdlp::tests::it_should_not_remove_a_reused_existing_folder_on_a_clean_failed_exit ... ok
+test infrastructure::shared::ytdlp::tests::it_should_not_remove_a_reused_existing_folder_on_a_failed_download ... ok
+test infrastructure::shared::ytdlp::tests::it_should_parse_a_title_containing_an_embedded_newline ... ok
+test infrastructure::shared::ytdlp::tests::it_should_parse_a_title_containing_a_pipe_character_without_corrupting_adjacent_videos ... ok
+test infrastructure::shared::ytdlp::tests::it_should_pass_the_limit_through_the_index_range_flag ... ok
+test infrastructure::shared::ytdlp::tests::it_should_pass_the_desired_filename_as_the_output_template_when_there_is_no_collision ... ok
+test infrastructure::shared::ytdlp::tests::it_should_parse_the_duration_line_into_whole_seconds ... ok
+test infrastructure::shared::ytdlp::tests::it_should_parse_one_json_line_per_discovered_video ... ok
+test infrastructure::shared::ytdlp::tests::it_should_pass_the_simulate_and_alternate_client_flags_to_the_diagnostic_probe ... ok
+test infrastructure::shared::ytdlp::tests::it_should_pass_thumbnail_embedding_and_conversion_flags_to_yt_dlp ... ok
+test infrastructure::shared::ytdlp::tests::it_should_pass_thumbnail_only_flags_to_yt_dlp ... ok
+test infrastructure::shared::ytdlp::tests::it_should_return_the_stderr_text_on_a_clean_failed_exit ... ok
+test infrastructure::shared::ytdlp::tests::it_should_remove_the_video_folder_after_a_clean_failed_exit ... ok
+test infrastructure::shared::ytdlp::tests::it_should_return_an_empty_list_on_a_clean_failed_exit ... ok
+test infrastructure::shared::ytdlp::tests::it_should_return_no_stderr_text_when_yt_dlp_writes_nothing_to_stderr ... ok
+test serve::tests::it_should_continue_starting_up_on_a_directory_creation_failure ... ok
+test serve::tests::it_should_create_the_default_storage_directories_on_an_empty_videos_root ... ok
+test serve::tests::it_should_default_download_concurrency_when_invalid ... ok
+test serve::tests::it_should_disable_plex_when_both_section_lists_are_empty ... ok
+test serve::tests::it_should_enable_plex_with_both_playlist_and_channel_sections ... ok
+test serve::tests::it_should_enable_plex_with_only_channel_sections ... ok
+test serve::tests::it_should_enable_plex_with_only_playlist_sections ... ok
+test serve::tests::it_should_leave_existing_default_storage_directories_and_their_contents_untouched ... ok
+test serve::tests::it_should_not_serve_a_file_outside_the_avatars_root_via_path_traversal ... ok
+test serve::tests::it_should_not_serve_a_file_outside_the_media_root_via_path_traversal ... ok
+test infrastructure::shared::ytdlp::tests::it_should_return_none_and_remove_the_folder_on_a_clean_failed_exit ... ok
+test serve::tests::it_should_register_a_handler_for_every_task_type ... ok
+test infrastructure::shared::ytdlp::tests::it_should_return_none_and_remove_the_folder_when_yt_dlp_prints_na ... ok
+test serve::tests::it_should_serve_a_byte_range_of_a_known_file ... ok
+test serve::tests::it_should_serve_a_known_embedded_asset_by_path ... ok
+test serve::tests::it_should_serve_a_channel_owned_videos_file_under_its_nested_storage_path ... ok
+test serve::tests::it_should_register_the_subscribers_of_every_event_type ... ok
+test serve::tests::it_should_serve_a_known_file_under_the_mounted_avatars_root ... ok
+test serve::tests::it_should_serve_index_html_for_an_unmatched_client_route ... ok
+test serve::tests::it_should_serve_the_embedded_index_html_at_root ... ok
+test serve::tests::it_should_serve_a_known_file_under_the_mounted_media_root ... ok
+test serve::tests::it_should_still_serve_the_spa_root_and_a_known_asset_with_media_mounted ... ok
+test infrastructure::shared::ytdlp::tests::it_should_return_none_when_a_diagnostic_probe_exits_cleanly ... ok
+test infrastructure::shared::ytdlp::tests::it_should_return_none_when_a_diagnostic_probe_finds_only_a_bare_video_unavailable ... ok
+test infrastructure::shared::ytdlp::tests::it_should_return_the_precise_reason_a_diagnostic_probe_prints ... ok
+test infrastructure::shared::ytdlp::tests::it_should_return_the_printed_filename_on_success ... ok
+test infrastructure::shared::ytdlp::tests::it_should_return_the_printed_thumbnail_filename_on_success ... ok
+test infrastructure::shared::ytdlp::tests::it_should_treat_a_missing_duration_line_as_none ... ok
+test infrastructure::shared::ytdlp::tests::it_should_truncate_a_fractional_duration_to_whole_seconds ... ok
+test infrastructure::shared::ytdlp::tests::it_should_use_the_existing_folder_verbatim_for_a_thumbnail_fetch ... ok
+test infrastructure::shared::ytdlp::tests::it_should_treat_an_na_duration_as_none_without_affecting_the_filename ... ok
+test infrastructure::shared::ytdlp::tests::it_should_use_the_existing_folder_verbatim_without_a_collision_check ... ok
+test infrastructure::shared::ytdlp::tests::it_should_reuse_the_same_folder_name_on_a_retry_after_a_failed_attempt ... ok
+
+failures:
+
+---- application::http::tasks::tests::it_should_include_running_tasks stdout ----
+
+thread 'application::http::tasks::tests::it_should_include_running_tasks' (43998672) panicked at src/application/http/tasks/mod.rs:133:9:
+assertion `left == right` failed
+  left: Ok([TaskResponse { id: 1, task_type: "update_ytdlp", status: "pending", retries: 0, run_at: 2023-11-14T22:13:20Z, created_at: 2023-11-14T22:13:20Z, last_error: None, payload: {} }])
+ right: Ok([TaskResponse { id: 1, task_type: "update_ytdlp", status: "running", retries: 0, run_at: 2023-11-14T22:13:20Z, created_at: 2023-11-14T22:13:20Z, last_error: None, payload: {} }])
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- application::tasks::update_ytdlp_task::tests::it_should_not_seed_if_one_is_running stdout ----
+
+thread 'application::tasks::update_ytdlp_task::tests::it_should_not_seed_if_one_is_running' (43999007) panicked at src/application/tasks/update_ytdlp_task.rs:201:9:
+assertion `left == right` failed
+  left: [ScheduledTask { id: 1, task_type: "update_ytdlp", payload: "{}", status: Pending, retries: 0, run_at: 2023-11-14T22:13:20Z, created_at: 2023-11-14T22:13:20Z, updated_at: 2023-11-14T22:13:20Z, last_error: None }]
+ right: [ScheduledTask { id: 1, task_type: "update_ytdlp", payload: "{}", status: Running, retries: 0, run_at: 2023-11-14T22:13:20Z, created_at: 2023-11-14T22:13:20Z, updated_at: 2023-11-14T22:13:20Z, last_error: None }]
+
+---- infrastructure::repositories::sqlite_task_repository::tests::it_should_drop_a_recovered_running_task_once_the_attempt_limit_is_exceeded stdout ----
+
+thread 'infrastructure::repositories::sqlite_task_repository::tests::it_should_drop_a_recovered_running_task_once_the_attempt_limit_is_exceeded' (43999313) panicked at src/infrastructure/repositories/sqlite_task_repository.rs:614:9:
+assertion `left == right` failed
+  left: 0
+ right: 1
+
+---- infrastructure::repositories::sqlite_task_repository::tests::it_should_drop_the_task_after_the_fifth_failed_attempt stdout ----
+
+thread 'infrastructure::repositories::sqlite_task_repository::tests::it_should_drop_the_task_after_the_fifth_failed_attempt' (43999314) panicked at src/infrastructure/repositories/sqlite_task_repository.rs:528:9:
+assertion failed: repo.list_eligible().unwrap().is_empty()
+
+---- infrastructure::repositories::sqlite_task_repository::tests::it_should_not_list_a_dead_lettered_task_as_non_completed stdout ----
+
+thread 'infrastructure::repositories::sqlite_task_repository::tests::it_should_not_list_a_dead_lettered_task_as_non_completed' (43999324) panicked at src/infrastructure/repositories/sqlite_task_repository.rs:661:9:
+assertion failed: repo.list_non_completed().unwrap().is_empty()
+
+---- infrastructure::repositories::sqlite_task_repository::tests::it_should_reschedule_the_task_after_the_growing_retry_delay_below_the_attempt_limit stdout ----
+
+thread 'infrastructure::repositories::sqlite_task_repository::tests::it_should_reschedule_the_task_after_the_growing_retry_delay_below_the_attempt_limit' (43999328) panicked at src/infrastructure/repositories/sqlite_task_repository.rs:561:9:
+assertion failed: repo.list_eligible().unwrap().is_empty()
+
+---- infrastructure::repositories::sqlite_task_repository::tests::it_should_not_claim_a_task_already_running stdout ----
+
+thread 'infrastructure::repositories::sqlite_task_repository::tests::it_should_not_claim_a_task_already_running' (43999323) panicked at src/infrastructure/repositories/sqlite_task_repository.rs:760:9:
+assertion `left == right` failed
+  left: Some(ScheduledTask { id: 1, task_type: "reconcile_playlist", payload: "{\"playlist_id\":\"PL1\"}", status: Running, retries: 0, run_at: 2023-11-14T22:13:20Z, created_at: 2023-11-14T22:13:20Z, updated_at: 2023-11-14T22:13:50Z, last_error: None })
+ right: None
+
+---- infrastructure::repositories::sqlite_task_repository::tests::it_should_no_longer_list_a_running_task_as_eligible stdout ----
+
+thread 'infrastructure::repositories::sqlite_task_repository::tests::it_should_no_longer_list_a_running_task_as_eligible' (43999321) panicked at src/infrastructure/repositories/sqlite_task_repository.rs:515:9:
+assertion failed: repo.list_eligible().unwrap().is_empty()
+
+---- infrastructure::repositories::sqlite_task_repository::tests::it_should_retry_a_recovered_running_task_when_under_the_attempt_limit stdout ----
+
+thread 'infrastructure::repositories::sqlite_task_repository::tests::it_should_retry_a_recovered_running_task_when_under_the_attempt_limit' (43999329) panicked at src/infrastructure/repositories/sqlite_task_repository.rs:585:9:
+assertion `left == right` failed
+  left: 0
+ right: 1
+
+---- infrastructure::repositories::task_executor::tests::it_should_dead_letter_a_recovered_running_task_once_the_attempt_limit_is_exceeded stdout ----
+
+thread 'infrastructure::repositories::task_executor::tests::it_should_dead_letter_a_recovered_running_task_once_the_attempt_limit_is_exceeded' (43999366) panicked at src/infrastructure/repositories/task_executor.rs:600:9:
+assertion `left == right` failed
+  left: [ScheduledTask { id: 1, task_type: "reconcile_playlist", payload: "{\"playlist_id\":\"PL1\"}", status: Pending, retries: 0, run_at: 2023-11-14T22:13:20Z, created_at: 2023-11-14T22:13:20Z, updated_at: 2023-11-14T22:13:20Z, last_error: None }]
+ right: []
+
+---- infrastructure::repositories::task_executor::tests::it_should_dead_letter_a_task_whose_handler_fails_on_the_fifth_attempt stdout ----
+
+thread 'infrastructure::repositories::task_executor::tests::it_should_dead_letter_a_task_whose_handler_fails_on_the_fifth_attempt' (43999367) panicked at src/infrastructure/repositories/task_executor.rs:453:9:
+assertion `left == right` failed
+  left: [false]
+ right: [true]
+
+---- infrastructure::repositories::task_executor::tests::it_should_retry_a_task_recovered_as_running_from_a_previous_process stdout ----
+
+thread 'infrastructure::repositories::task_executor::tests::it_should_retry_a_task_recovered_as_running_from_a_previous_process' (43999467) panicked at src/infrastructure/repositories/task_executor.rs:556:9:
+assertion `left == right` failed
+  left: [ScheduledTask { id: 1, task_type: "reconcile_playlist", payload: "{\"playlist_id\":\"PL1\"}", status: Pending, retries: 0, run_at: 2023-11-14T22:13:20Z, created_at: 2023-11-14T22:13:20Z, updated_at: 2023-11-14T22:13:20Z, last_error: None }]
+ right: [ScheduledTask { id: 1, task_type: "reconcile_playlist", payload: "{\"playlist_id\":\"PL1\"}", status: Pending, retries: 1, run_at: 2023-11-14T22:20:50Z, created_at: 2023-11-14T22:13:20Z, updated_at: 2023-11-14T22:13:20Z, last_error: Some("recovered as a failed attempt after an unclean shutdown") }]
+
+---- infrastructure::repositories::task_executor::tests::it_should_retry_a_task_left_running_without_waiting_for_a_restart stdout ----
+
+thread 'infrastructure::repositories::task_executor::tests::it_should_retry_a_task_left_running_without_waiting_for_a_restart' (43999457) panicked at src/infrastructure/repositories/task_executor.rs:1111:9:
+assertion `left == right` failed
+  left: [false]
+ right: []
+
+---- infrastructure::repositories::task_executor::tests::it_should_retry_a_task_whose_handler_fails stdout ----
+
+thread 'infrastructure::repositories::task_executor::tests::it_should_retry_a_task_whose_handler_fails' (43999473) panicked at src/infrastructure/repositories/task_executor.rs:417:9:
+assertion `left == right` failed
+  left: [ScheduledTask { id: 1, task_type: "reconcile_playlist", payload: "{\"playlist_id\":\"PL1\"}", status: Running, retries: 0, run_at: 2023-11-14T22:13:20Z, created_at: 2023-11-14T22:13:20Z, updated_at: 2023-11-14T22:13:20Z, last_error: None }]
+ right: [ScheduledTask { id: 1, task_type: "reconcile_playlist", payload: "{\"playlist_id\":\"PL1\"}", status: Pending, retries: 1, run_at: 2023-11-14T22:20:50Z, created_at: 2023-11-14T22:13:20Z, updated_at: 2023-11-14T22:13:20Z, last_error: Some("handler failed") }]
+
+---- infrastructure::repositories::task_executor::tests::it_should_retry_a_task_whose_handler_panics_and_free_its_slot stdout ----
+
+thread 'tokio-rt-worker' (43999693) panicked at src/infrastructure/repositories/task_executor.rs:1296:17:
+boom
+
+thread 'infrastructure::repositories::task_executor::tests::it_should_retry_a_task_whose_handler_panics_and_free_its_slot' (43999488) panicked at src/infrastructure/repositories/task_executor.rs:1048:9:
+assertion `left == right` failed
+  left: [ScheduledTask { id: 1, task_type: "reconcile_playlist", payload: "{\"playlist_id\":\"PL1\"}", status: Running, retries: 0, run_at: 2023-11-14T22:13:20Z, created_at: 2023-11-14T22:13:20Z, updated_at: 2023-11-14T22:13:20Z, last_error: None }]
+ right: [ScheduledTask { id: 1, task_type: "reconcile_playlist", payload: "{\"playlist_id\":\"PL1\"}", status: Pending, retries: 1, run_at: 2023-11-14T22:20:50Z, created_at: 2023-11-14T22:13:20Z, updated_at: 2023-11-14T22:13:20Z, last_error: Some("handler panicked: boom") }]
+
+---- infrastructure::repositories::task_executor::tests::it_should_tell_the_handler_this_is_the_last_attempt_when_no_retries_remain stdout ----
+
+thread 'infrastructure::repositories::task_executor::tests::it_should_tell_the_handler_this_is_the_last_attempt_when_no_retries_remain' (43999630) panicked at src/infrastructure/repositories/task_executor.rs:519:9:
+assertion `left == right` failed
+  left: [false]
+ right: [true]
+
+
+failures:
+    application::http::tasks::tests::it_should_include_running_tasks
+    application::tasks::update_ytdlp_task::tests::it_should_not_seed_if_one_is_running
+    infrastructure::repositories::sqlite_task_repository::tests::it_should_drop_a_recovered_running_task_once_the_attempt_limit_is_exceeded
+    infrastructure::repositories::sqlite_task_repository::tests::it_should_drop_the_task_after_the_fifth_failed_attempt
+    infrastructure::repositories::sqlite_task_repository::tests::it_should_no_longer_list_a_running_task_as_eligible
+    infrastructure::repositories::sqlite_task_repository::tests::it_should_not_claim_a_task_already_running
+    infrastructure::repositories::sqlite_task_repository::tests::it_should_not_list_a_dead_lettered_task_as_non_completed
+    infrastructure::repositories::sqlite_task_repository::tests::it_should_reschedule_the_task_after_the_growing_retry_delay_below_the_attempt_limit
+    infrastructure::repositories::sqlite_task_repository::tests::it_should_retry_a_recovered_running_task_when_under_the_attempt_limit
+    infrastructure::repositories::task_executor::tests::it_should_dead_letter_a_recovered_running_task_once_the_attempt_limit_is_exceeded
+    infrastructure::repositories::task_executor::tests::it_should_dead_letter_a_task_whose_handler_fails_on_the_fifth_attempt
+    infrastructure::repositories::task_executor::tests::it_should_retry_a_task_left_running_without_waiting_for_a_restart
+    infrastructure::repositories::task_executor::tests::it_should_retry_a_task_recovered_as_running_from_a_previous_process
+    infrastructure::repositories::task_executor::tests::it_should_retry_a_task_whose_handler_fails
+    infrastructure::repositories::task_executor::tests::it_should_retry_a_task_whose_handler_panics_and_free_its_slot
+    infrastructure::repositories::task_executor::tests::it_should_tell_the_handler_this_is_the_last_attempt_when_no_retries_remain
+
+test result: FAILED. 747 passed; 16 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.89s
+
+error: test failed, to rerun pass `-p yarrtube --bin yarrtube`
+
+*** result: Failure(101)

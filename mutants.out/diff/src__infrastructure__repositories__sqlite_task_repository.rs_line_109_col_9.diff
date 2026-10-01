@@ -1,0 +1,38 @@
+--- src/infrastructure/repositories/sqlite_task_repository.rs
++++ replace SqliteTaskRepository::list_where -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])
+@@ -101,34 +101,17 @@
+ }
+ 
+ impl SqliteTaskRepository {
+     pub fn new(db: Database, clock: Arc<dyn Clock>) -> Self {
+         Self { db, clock }
+     }
+ 
+     fn list_where(&self, predicate: &str) -> anyhow::Result<Vec<ScheduledTask>> {
+-        let conn = self
+-            .db
+-            .read()
+-            .lock()
+-            .inspect_err(|_| tracing::error!("database lock poisoned"))
+-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+-        let query = format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE {predicate} ORDER BY id ASC");
+-        let mut stmt = conn
+-            .prepare(&query)
+-            .inspect_err(|e| tracing::error!(error = %e, "failed to prepare tasks query"))
+-            .context("failed to prepare tasks query")?;
+-        let rows = stmt
+-            .query_map([], row_to_scheduled_task)
+-            .inspect_err(|e| tracing::error!(error = %e, "failed to list tasks"))
+-            .context("failed to list tasks")?;
+-        rows.collect::<Result<Vec<_>, _>>()
+-            .inspect_err(|e| tracing::error!(error = %e, "failed to read task row"))
+-            .context("failed to read task row")
++        Ok(vec![]) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     #[cfg(test)]
+     fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledTask>> {
+         let conn = self
+             .db
+             .read()
+             .lock()

@@ -1,0 +1,21 @@
+--- src/infrastructure/repositories/sqlite_task_repository.rs
++++ replace <impl TaskRepository for SqliteTaskRepository>::list_non_completed -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![Default::default()])
+@@ -268,17 +268,17 @@
+             .context("failed to read eligible task row")
+     }
+ 
+     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+         self.list_where("status = 'running'")
+     }
+ 
+     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+-        self.list_where("status IN ('pending', 'running')")
++        Ok(vec![Default::default()]) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {
+         let conn = self
+             .db
+             .write()
+             .lock()
+             .inspect_err(|_| tracing::error!(task_id = task.id, "database lock poisoned"))

@@ -1,0 +1,21 @@
+--- src/infrastructure/repositories/sqlite_task_repository.rs
++++ replace == with != in <impl TaskRepository for SqliteTaskRepository>::schedule
+@@ -201,17 +201,17 @@
+                     dedupe_predicate(task, &payload)
+                 ),
+                 params![task.task_type(), payload, run_at.to_rfc3339(), now],
+             )
+             .inspect_err(|e| {
+                 tracing::error!(task_type = task.task_type(), error = %e, "failed to schedule task")
+             })
+             .context("failed to schedule task")?;
+-        if inserted == 0 {
++        if inserted != /* ~ changed by cargo-mutants ~ */ 0 {
+             info!(
+                 task_type = task.task_type(),
+                 "task already pending or running for this video, not scheduling a duplicate"
+             );
+             return Ok(());
+         }
+         info!(
+             task_id = conn.last_insert_rowid(),

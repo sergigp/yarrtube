@@ -1,0 +1,11 @@
+src/infrastructure/repositories/sqlite_task_repository.rs:88:5: replace dedupe_predicate -> &'static str with ""
+src/infrastructure/repositories/sqlite_task_repository.rs:88:5: replace dedupe_predicate -> &'static str with "xyzzy"
+src/infrastructure/repositories/sqlite_task_repository.rs:109:9: replace SqliteTaskRepository::list_where -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])
+src/infrastructure/repositories/sqlite_task_repository.rs:185:9: replace <impl TaskRepository for SqliteTaskRepository>::schedule -> anyhow::Result<()> with Ok(())
+src/infrastructure/repositories/sqlite_task_repository.rs:226:9: replace <impl TaskRepository for SqliteTaskRepository>::claim -> anyhow::Result<Option<ScheduledTask>> with Ok(None)
+src/infrastructure/repositories/sqlite_task_repository.rs:245:9: replace <impl TaskRepository for SqliteTaskRepository>::list_eligible -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])
+src/infrastructure/repositories/sqlite_task_repository.rs:272:9: replace <impl TaskRepository for SqliteTaskRepository>::list_running -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])
+src/infrastructure/repositories/sqlite_task_repository.rs:276:9: replace <impl TaskRepository for SqliteTaskRepository>::list_non_completed -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])
+src/infrastructure/repositories/sqlite_task_repository.rs:280:9: replace <impl TaskRepository for SqliteTaskRepository>::update -> anyhow::Result<()> with Ok(())
+src/infrastructure/repositories/sqlite_task_repository.rs:303:9: replace <impl TaskRepository for SqliteTaskRepository>::delete -> anyhow::Result<()> with Ok(())
+src/infrastructure/repositories/sqlite_task_repository.rs:316:9: replace <impl TaskRepository for SqliteTaskRepository>::dead_letter -> anyhow::Result<()> with Ok(())

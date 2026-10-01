@@ -1,0 +1,44 @@
+--- src/infrastructure/repositories/sqlite_task_repository.rs
++++ replace <impl TaskRepository for SqliteTaskRepository>::list_eligible -> anyhow::Result<Vec<ScheduledTask>> with Ok(vec![])
+@@ -237,40 +237,17 @@
+             row_to_scheduled_task,
+         )
+         .optional()
+         .inspect_err(|e| tracing::error!(task_id = id, error = %e, "failed to claim task"))
+         .context("failed to claim task")
+     }
+ 
+     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+-        let conn = self
+-            .db
+-            .read()
+-            .lock()
+-            .inspect_err(|_| tracing::error!("database lock poisoned"))
+-            .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
+-        let mut stmt = conn
+-            .prepare(&format!(
+-                "SELECT {SELECT_COLUMNS} FROM tasks WHERE status = 'pending' AND run_at <= ?1 ORDER BY run_at ASC, id ASC"
+-            ))
+-            .inspect_err(|e| {
+-                tracing::error!(error = %e, "failed to prepare list-eligible-tasks query")
+-            })
+-            .context("failed to prepare list-eligible-tasks query")?;
+-        let rows = stmt
+-            .query_map(
+-                params![self.clock.now().to_rfc3339()],
+-                row_to_scheduled_task,
+-            )
+-            .inspect_err(|e| tracing::error!(error = %e, "failed to list eligible tasks"))
+-            .context("failed to list eligible tasks")?;
+-        rows.collect::<Result<Vec<_>, _>>()
+-            .inspect_err(|e| tracing::error!(error = %e, "failed to read eligible task row"))
+-            .context("failed to read eligible task row")
++        Ok(vec![]) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     fn list_running(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+         self.list_where("status = 'running'")
+     }
+ 
+     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>> {
+         self.list_where("status IN ('pending', 'running')")
