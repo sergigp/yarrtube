@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Radix sets data-orientation on the Tabs root/list/trigger; these let the
+   ui/tabs classes (data-horizontal: / group-data-horizontal/tabs: …) target it. */
+@custom-variant data-horizontal (&[data-orientation="horizontal"]);
+@custom-variant data-vertical (&[data-orientation="vertical"]);
+
 :root {
   --background: #ffffff;
   --foreground: #0f0f0f;
