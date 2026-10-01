@@ -29,4 +29,4 @@
 ## 4. Verification
 
 - [x] 4.1 Run `npm run check` (typecheck + lint + test) in `web/` and confirm it passes.
-- [ ] 4.2 Manually verify in the running app via `scripts/run-local.sh`: tabs, counts, default Active, search, per-row descriptions and last error all behave as specified.
+- [x] 4.2 Manually verify in the running app via `scripts/run-local.sh`: tabs, counts, default Active, search, per-row descriptions and last error all behave as specified.
