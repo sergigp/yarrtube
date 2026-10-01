@@ -111,4 +111,18 @@ describe('TasksView', () => {
     expect(screen.getByRole('tab', { name: /Cleanup/ })).toHaveTextContent('1')
     expect(screen.getByRole('tab', { name: /All/ })).toHaveTextContent('5')
   })
+
+  it('lists download and thumbnail tasks under Downloads, and no sync or cleanup tasks', async () => {
+    const user = userEvent.setup()
+    mockApi({ 'GET /api/tasks': aMixOfTasks() })
+
+    renderWithProviders(<TasksView />)
+
+    await user.click(await screen.findByRole('tab', { name: /Downloads/ }))
+
+    expect(screen.getByText('Downloading Intro in Chan')).toBeInTheDocument()
+    expect(screen.getByText('Fetching thumbnail of Intro in Chan')).toBeInTheDocument()
+    expect(screen.queryByText('Syncing channel Chan')).not.toBeInTheDocument()
+    expect(screen.queryByText('Removing file a.mp4')).not.toBeInTheDocument()
+  })
 })
