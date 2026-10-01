@@ -19,7 +19,7 @@
 - [x] 3.2 `describeTask` describes an `update_ytdlp` task in plain language — verify the test passes.
 - [x] 3.3 `describeTask` never returns a raw snake_case string for an unknown type (humanized fallback) — verify the test passes.
 - [x] 3.4 `taskFamily` maps each task type to its family — verify the test passes.
-- [ ] 3.5 `tasksForTab('active', …)` returns only running tasks of any type — verify the test passes.
+- [x] 3.5 `tasksForTab('active', …)` returns only running tasks of any type — verify the test passes.
 - [ ] 3.6 `tasksForTab` returns the right types for `downloads`, `syncs`, and `cleanup` — verify the test passes.
 - [ ] 3.7 `tasksForTab('all', …)` returns every task sorted by `byCategory` — verify the test passes.
 - [ ] 3.8 A `maintenance` task appears in `all` and (when running) `active`, but not in the other family tabs — verify the test passes.

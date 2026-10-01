@@ -135,4 +135,20 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskFamily(aTask({ task_type: 'delete_channel_files' }))).toBe('cleanup')
     expect(taskFamily(aTask({ task_type: 'update_ytdlp' }))).toBe('maintenance')
   })
+
+  it("returns only running tasks of any type for the 'active' tab", () => {
+    const runningSync = aTask({ id: 1, task_type: 'reconcile_channel', status: 'running' })
+    const runningDownload = aTask({ id: 2, task_type: 'download_video', status: 'running' })
+    const pendingDownload = aTask({
+      id: 3,
+      task_type: 'download_video',
+      status: 'pending',
+      run_at: '2999-01-01T00:00:00Z',
+    })
+
+    const active = tasksForTab([pendingDownload, runningSync, runningDownload], 'active')
+
+    expect(active.map((task) => task.id).sort()).toEqual([1, 2])
+    expect(active.every((task) => task.status === 'running')).toBe(true)
+  })
 })
