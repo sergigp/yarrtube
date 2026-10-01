@@ -99,3 +99,28 @@ sequenceDiagram
 
     Note over Reconciler,Executor: One interval later, ReconcileChannel<br/>re-syncs and schedules the next run.
 ```
+
+## Testing
+
+Several layers, from fast/isolated to slow/real:
+
+- **Rust unit tests** — inline `mod tests` in domain value objects and
+  entities (`src/domain/**`). Pure logic: parsing/validation, state
+  transitions, invariants. No I/O.
+- **Rust behavior tests** — inline `mod tests` in HTTP handlers,
+  subscribers, tasks and services. Exercise the real wiring (service +
+  real SQLite repos via `Connection::open_in_memory()`) with `Fake*`
+  doubles only at the external boundaries (YouTube API, yt-dlp,
+  filesystem). Assert the full outcome: response, persisted state, and
+  events/tasks produced.
+- **Rust repository tests** — inline `mod tests` in the SQLite repos,
+  run against in-memory SQLite with migrations applied. Verify queries,
+  mapping and persistence.
+- **Web tests** (`web/`, Vitest + jsdom + Testing Library) — unit tests
+  for pure logic in `src/lib/` and hooks, and component tests that render
+  through the real `QueryClient`/router with only `fetch` mocked. Assert
+  user-visible behavior.
+- **Smoke tests** (`smoke-tests/`, Playwright) — end-to-end against the
+  real Docker image, hitting the real YouTube API and downloading a real
+  video with `yt-dlp`. No doubles. Covers the full create → download →
+  playback flow; runs in CI on every PR.
