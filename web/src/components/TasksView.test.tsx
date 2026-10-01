@@ -197,4 +197,21 @@ describe('TasksView', () => {
     expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
     expect(screen.getByText('Nothing matches')).toBeInTheDocument()
   })
+
+  it('clears the search text when switching tabs', async () => {
+    const user = userEvent.setup()
+    const tasks = Array.from({ length: 16 }, (_, i) =>
+      aTask({ id: i + 1, task_type: 'download_video', status: 'running' }),
+    )
+    mockApi({ 'GET /api/tasks': tasks })
+
+    renderWithProviders(<TasksView />)
+
+    await user.type(await screen.findByRole('searchbox', { name: 'Search tasks' }), 'alpha')
+    expect(screen.getByRole('searchbox', { name: 'Search tasks' })).toHaveValue('alpha')
+
+    await user.click(screen.getByRole('tab', { name: /All/ }))
+
+    expect(screen.getByRole('searchbox', { name: 'Search tasks' })).toHaveValue('')
+  })
 })
