@@ -99,34 +99,21 @@ impl InfrastructureContainer {
         let db_path = settings.db_path.as_path();
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
+        // One shared connection for the whole process: all database access
+        // serializes through this mutex, so SQLite never sees two concurrent
+        // writers and can never return "database is locked" against itself.
+        let conn = open_shared(db_path)?;
+
         Ok(Self {
-            playlist_repository: Arc::new(SqlitePlaylistRepository::new(sqlite_connection::open(
-                db_path,
-            )?)),
-            channel_repository: Arc::new(SqliteChannelRepository::new(sqlite_connection::open(
-                db_path,
-            )?)),
-            video_repository: Arc::new(SqliteVideoRepository::new(sqlite_connection::open(
-                db_path,
-            )?)),
-            playlist_video_repository: Arc::new(SqlitePlaylistVideoRepository::new(
-                sqlite_connection::open(db_path)?,
-            )),
-            channel_video_repository: Arc::new(SqliteChannelVideoRepository::new(
-                sqlite_connection::open(db_path)?,
-            )),
-            video_metadata_repository: Arc::new(SqliteVideoMetadataRepository::new(
-                sqlite_connection::open(db_path)?,
-            )),
-            task_repository: Arc::new(SqliteTaskRepository::new(
-                open_shared(db_path)?,
-                clock.clone(),
-            )),
-            event_publisher: Arc::new(SqliteEventPublisher::new(
-                open_shared(db_path)?,
-                clock.clone(),
-            )),
-            event_repository: Arc::new(SqliteEventRepository::new(open_shared(db_path)?)),
+            playlist_repository: Arc::new(SqlitePlaylistRepository::new(conn.clone())),
+            channel_repository: Arc::new(SqliteChannelRepository::new(conn.clone())),
+            video_repository: Arc::new(SqliteVideoRepository::new(conn.clone())),
+            playlist_video_repository: Arc::new(SqlitePlaylistVideoRepository::new(conn.clone())),
+            channel_video_repository: Arc::new(SqliteChannelVideoRepository::new(conn.clone())),
+            video_metadata_repository: Arc::new(SqliteVideoMetadataRepository::new(conn.clone())),
+            task_repository: Arc::new(SqliteTaskRepository::new(conn.clone(), clock.clone())),
+            event_publisher: Arc::new(SqliteEventPublisher::new(conn.clone(), clock.clone())),
+            event_repository: Arc::new(SqliteEventRepository::new(conn.clone())),
             youtube_playlist_repository: Arc::new(YoutubeApiPlaylistRepository::new(
                 settings.youtube_api_key.clone(),
             )),

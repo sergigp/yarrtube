@@ -4,7 +4,7 @@ use crate::domain::video::{VideoId, VideoRecordId};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub trait PlaylistVideoRepository: Send + Sync {
     /// Insert-or-replace keyed by `(playlist_id, video_id)`.
@@ -25,14 +25,12 @@ pub trait PlaylistVideoRepository: Send + Sync {
 }
 
 pub struct SqlitePlaylistVideoRepository {
-    conn: Mutex<Connection>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl SqlitePlaylistVideoRepository {
-    pub fn new(conn: Connection) -> Self {
-        Self {
-            conn: Mutex::new(conn),
-        }
+    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
     }
 }
 
@@ -216,7 +214,7 @@ mod tests {
     fn repo() -> SqlitePlaylistVideoRepository {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        SqlitePlaylistVideoRepository::new(conn)
+        SqlitePlaylistVideoRepository::new(Arc::new(Mutex::new(conn)))
     }
 
     fn playlist_id() -> PlaylistId {

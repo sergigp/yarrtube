@@ -4,7 +4,7 @@ use crate::domain::shared::Quality;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub trait ChannelRepository: Send + Sync {
     fn find(&self, id: &ChannelHandle) -> anyhow::Result<Option<Channel>>;
@@ -14,14 +14,12 @@ pub trait ChannelRepository: Send + Sync {
 }
 
 pub struct SqliteChannelRepository {
-    conn: Mutex<Connection>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl SqliteChannelRepository {
-    pub fn new(conn: Connection) -> Self {
-        Self {
-            conn: Mutex::new(conn),
-        }
+    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
     }
 }
 
@@ -201,7 +199,7 @@ mod tests {
     fn repo() -> SqliteChannelRepository {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        SqliteChannelRepository::new(conn)
+        SqliteChannelRepository::new(Arc::new(Mutex::new(conn)))
     }
 
     fn channel(id: &str, name: &str) -> Channel {

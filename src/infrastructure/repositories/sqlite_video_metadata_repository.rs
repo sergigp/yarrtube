@@ -4,7 +4,7 @@ use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub const MOVIE_NFO_FILENAME: &str = "movie.nfo";
 
@@ -44,14 +44,12 @@ struct VideoMetadataRow {
 }
 
 pub struct SqliteVideoMetadataRepository {
-    conn: Mutex<Connection>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl SqliteVideoMetadataRepository {
-    pub fn new(conn: Connection) -> Self {
-        Self {
-            conn: Mutex::new(conn),
-        }
+    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
     }
 
     fn write_movie_nfo(metadata: &VideoMetadata, video_dir: &Path) -> anyhow::Result<()> {
@@ -205,7 +203,7 @@ mod tests {
     fn repo() -> SqliteVideoMetadataRepository {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        SqliteVideoMetadataRepository::new(conn)
+        SqliteVideoMetadataRepository::new(Arc::new(Mutex::new(conn)))
     }
 
     fn unique_temp_dir(name: &str) -> std::path::PathBuf {

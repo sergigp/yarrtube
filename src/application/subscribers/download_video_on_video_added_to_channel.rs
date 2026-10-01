@@ -78,12 +78,11 @@ mod tests {
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
-    use std::sync::Mutex;
 
     #[test]
     fn it_should_schedule_the_download() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -138,7 +137,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let subscriber = DownloadVideoOnVideoAddedToChannel::new(
-            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
@@ -160,7 +159,7 @@ mod tests {
         DownloadVideoOnVideoAddedToChannel::new(
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             Arc::new(SqliteTaskRepository::new(
-                Arc::new(Mutex::new(unused_connection())),
+                unused_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -168,8 +167,8 @@ mod tests {
         )
     }
 
-    fn unused_connection() -> Connection {
-        Connection::open_in_memory().unwrap()
+    fn unused_connection() -> std::sync::Arc<std::sync::Mutex<Connection>> {
+        std::sync::Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()))
     }
 
     fn channel(channel_handle: &str) -> Channel {

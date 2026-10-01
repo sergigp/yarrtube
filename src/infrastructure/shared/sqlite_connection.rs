@@ -2,12 +2,16 @@ use anyhow::Context;
 use rusqlite::Connection;
 use std::path::Path;
 
-/// Opens a connection to the shared database file. Each repository gets its
-/// own connection (see `build_application`), so WAL mode lets readers on one
-/// connection proceed while another holds the write lock, and `busy_timeout`
-/// makes SQLite retry internally for up to 5s instead of immediately
-/// returning `SQLITE_BUSY` ("database is locked") when two connections
-/// briefly contend for the write lock.
+/// Opens a connection to the database file. In production every repository
+/// shares one connection (see `InfrastructureContainer`), so writes serialize
+/// through a Rust mutex rather than contending for SQLite's single write lock
+/// and the process can never lock itself out. WAL mode and `busy_timeout`
+/// remain a backstop for the short-lived connections opened at startup
+/// (migrations, the connectivity check) and for any external tool that opens
+/// the file: they let SQLite retry internally for up to 5s instead of
+/// immediately returning `SQLITE_BUSY` ("database is locked"). `synchronous =
+/// NORMAL` is the recommended durability level under WAL and lowers the
+/// per-commit fsync cost.
 pub fn open(path: &Path) -> anyhow::Result<Connection> {
     let conn =
         Connection::open(path).with_context(|| format!("failed to open database at {path:?}"))?;
@@ -15,6 +19,8 @@ pub fn open(path: &Path) -> anyhow::Result<Connection> {
         .context("failed to enable WAL journal mode")?;
     conn.busy_timeout(std::time::Duration::from_secs(5))
         .context("failed to set busy timeout")?;
+    conn.pragma_update(None, "synchronous", "NORMAL")
+        .context("failed to set synchronous mode")?;
     Ok(conn)
 }
 

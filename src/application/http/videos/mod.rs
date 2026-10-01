@@ -129,10 +129,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_playlist_videos() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         save_playlist_video(
@@ -144,10 +144,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -162,10 +162,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_download_details_of_downloaded_videos() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
             .start_download(fixed_timestamp())
@@ -185,10 +185,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -211,10 +211,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_sync_time_when_listing_videos() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let synced_at = DateTime::<Utc>::from_timestamp(1_700_000_600, 0).unwrap();
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
@@ -229,10 +229,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -254,12 +254,12 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_metadata_when_listing_playlist_videos() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let video_metadata_repository =
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection()));
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection()));
         let video_dir = tempfile::tempdir().unwrap();
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
@@ -277,8 +277,8 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
             video_metadata_repository,
             Arc::new(FixedClock(fixed_timestamp())),
@@ -304,12 +304,12 @@ mod tests {
     #[tokio::test]
     async fn it_should_report_absent_metadata_when_listing_a_video_without_it() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let video_metadata_repository =
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection()));
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp());
         save_playlist_video(
@@ -321,8 +321,8 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
             video_metadata_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -345,10 +345,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_playlist_videos_by_position() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         for (youtube_id, title, position) in [
             ("vid_third", "Third", 2),
@@ -369,10 +369,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -391,10 +391,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_watch_state_when_listing_playlist_videos() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         for (video, position) in [
             (
@@ -431,10 +431,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -458,16 +458,16 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_no_videos_for_an_empty_playlist() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let video_searcher = VideoSearcher::new(
             playlist_repository,
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -479,10 +479,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_omit_excluded_videos_from_a_playlist() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let kept = Video::create(VideoId::new("vid_kept").unwrap(), "Kept", fixed_timestamp());
         let excluded = Video::create(
@@ -507,10 +507,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -525,15 +525,15 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_if_playlist_not_found() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
 
         let video_searcher = VideoSearcher::new(
-            Arc::new(SqlitePlaylistRepository::new(db.connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -560,9 +560,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_channel_videos_by_recency() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         channel_repository
             .insert(&channel("@somechannel", None))
             .unwrap();
@@ -579,12 +580,12 @@ mod tests {
             );
         }
         let video_searcher = VideoSearcher::new(
-            Arc::new(SqlitePlaylistRepository::new(db.connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
             channel_repository,
             channel_video_repository,
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -602,11 +603,12 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_metadata_when_listing_channel_videos() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         let video_metadata_repository =
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection()));
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection()));
         let video_dir = tempfile::tempdir().unwrap();
         channel_repository
             .insert(&channel("@somechannel", None))
@@ -625,8 +627,8 @@ mod tests {
             .save(&video.id, &video_metadata(), video_dir.path())
             .unwrap();
         let video_searcher = VideoSearcher::new(
-            Arc::new(SqlitePlaylistRepository::new(db.connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
             channel_repository,
             channel_video_repository,
             video_repository,
@@ -654,9 +656,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_watch_state_when_listing_channel_videos() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         channel_repository
             .insert(&channel("@somechannel", None))
             .unwrap();
@@ -687,12 +690,12 @@ mod tests {
             1,
         );
         let video_searcher = VideoSearcher::new(
-            Arc::new(SqlitePlaylistRepository::new(db.connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
             channel_repository,
             channel_video_repository,
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -716,18 +719,18 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_no_videos_for_an_empty_channel() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         channel_repository
             .insert(&channel("@somechannel", None))
             .unwrap();
         let video_searcher = VideoSearcher::new(
-            Arc::new(SqlitePlaylistRepository::new(db.connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
             channel_repository,
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -739,9 +742,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_omit_excluded_videos_from_a_channel() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         channel_repository
             .insert(&channel("@somechannel", None))
             .unwrap();
@@ -768,12 +772,12 @@ mod tests {
             1,
         );
         let video_searcher = VideoSearcher::new(
-            Arc::new(SqlitePlaylistRepository::new(db.connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
             channel_repository,
             channel_video_repository,
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -788,15 +792,15 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_if_channel_not_found() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
 
         let video_searcher = VideoSearcher::new(
-            Arc::new(SqlitePlaylistRepository::new(db.connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -823,10 +827,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_a_downloaded_video_under_latest_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -837,10 +841,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -861,10 +865,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_a_started_video_under_continue_watching_only_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -880,10 +884,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -904,10 +908,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_a_short_video_under_quick_watches_only_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -918,10 +922,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -942,10 +946,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_not_repeat_a_continue_watching_video_in_quick_watches_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -959,10 +963,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -984,10 +988,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_show_videos_left_out_of_a_full_section_further_down_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_numbered_started_playlist_videos(
             video_repository.as_ref(),
@@ -1010,10 +1014,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1035,10 +1039,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_cap_latest_on_home_at_18() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_numbered_playlist_videos(
             video_repository.as_ref(),
@@ -1048,10 +1052,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1069,15 +1073,15 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_no_home_videos_if_nothing_downloaded() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
 
         let video_searcher = VideoSearcher::new(
-            Arc::new(SqlitePlaylistRepository::new(db.connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1089,12 +1093,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_videos_from_playlists_and_channels_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         channel_repository
             .insert(&channel("@somechannel", None))
@@ -1123,7 +1128,7 @@ mod tests {
             channel_repository,
             channel_video_repository,
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1151,9 +1156,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_channel_source_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         channel_repository
             .insert(&channel("@somechannel", Some("@somechannel.jpg")))
             .unwrap();
@@ -1165,12 +1171,12 @@ mod tests {
             0,
         );
         let video_searcher = VideoSearcher::new(
-            Arc::new(SqlitePlaylistRepository::new(db.connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
             channel_repository,
             channel_video_repository,
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1198,10 +1204,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_the_playlist_source_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1212,10 +1218,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1243,10 +1249,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_include_whether_a_video_was_watched_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1257,10 +1263,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1281,12 +1287,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_a_latest_video_once_per_source_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         channel_repository
             .insert(&channel("@somechannel", None))
@@ -1311,7 +1318,7 @@ mod tests {
             channel_repository,
             channel_video_repository,
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1332,10 +1339,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_exclude_not_downloaded_videos_from_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1365,10 +1372,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1380,10 +1387,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_exclude_excluded_videos_from_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1400,10 +1407,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1415,10 +1422,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_order_continue_watching_by_last_played_first_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1445,10 +1452,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1475,10 +1482,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_continue_only_videos_played_within_a_week_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1505,10 +1512,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1537,10 +1544,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_continue_only_videos_started_past_30_seconds_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1557,10 +1564,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1585,10 +1592,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_not_continue_watched_or_never_played_videos_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1612,10 +1619,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1643,12 +1650,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_a_continue_watching_video_once_from_the_channel_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         channel_repository
             .insert(&channel("@somechannel", None))
@@ -1677,7 +1685,7 @@ mod tests {
             channel_repository,
             channel_video_repository,
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1698,10 +1706,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_order_quick_watches_newest_first_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1718,10 +1726,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1748,10 +1756,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_only_videos_under_15_minutes_as_quick_watches_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1768,10 +1776,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1796,10 +1804,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_not_list_videos_without_duration_as_quick_watches_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1810,10 +1818,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1835,10 +1843,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_not_list_watched_videos_as_quick_watches_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         save_playlist_video(
             video_repository.as_ref(),
@@ -1850,10 +1858,10 @@ mod tests {
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1875,12 +1883,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_a_quick_watch_once_from_the_channel_on_home() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         playlist_repository.insert(&playlist("PL1")).unwrap();
         channel_repository
             .insert(&channel("@somechannel", None))
@@ -1904,7 +1913,7 @@ mod tests {
             channel_repository,
             channel_video_repository,
             video_repository,
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
 
@@ -1925,13 +1934,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_record_playback_progress() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video = video_with_duration("vid1", Some(100));
         video_repository.save(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
         let request = progress_request(30);
@@ -1952,13 +1961,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_respond_watched_when_progress_reaches_the_watched_threshold() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video = video_with_duration("vid1", Some(100));
         video_repository.save(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
         let request = progress_request(95);
@@ -1979,7 +1988,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_mark_the_video_watched_at_90_percent() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video = Video {
             playback_position: PlaybackPosition::new(60).unwrap(),
             ..video_with_duration("vid1", Some(100))
@@ -1987,8 +1996,8 @@ mod tests {
         video_repository.save(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
         let request = progress_request(90);
@@ -2010,13 +2019,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_use_the_reported_duration_if_none_is_recorded() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video = video_with_duration("vid1", None);
         video_repository.save(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
         let request = RecordProgressRequest {
@@ -2040,13 +2049,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_only_record_the_position_if_duration_is_unknown() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video = video_with_duration("vid1", None);
         video_repository.save(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
         let request = progress_request(500);
@@ -2067,13 +2076,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_mark_a_watched_video_unwatched_past_10_percent_of_a_rewatch() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
         video_repository.save(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
         let request = progress_request(11);
@@ -2095,13 +2104,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_keep_a_watched_video_watched_when_playing_on_past_90_percent() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
         video_repository.save(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
         let request = progress_request(95);
@@ -2121,12 +2130,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_record_the_last_played_time_on_every_copy() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let playlist_repository = SqlitePlaylistRepository::new(db.connection());
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let playlist_repository = SqlitePlaylistRepository::new(db.shared_connection());
         playlist_repository.insert(&playlist("PL1")).unwrap();
         channel_repository
             .insert(&channel("@somechannel", None))
@@ -2177,13 +2187,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_record_the_last_played_time_even_if_the_watch_state_is_unchanged() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
         video_repository.save(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
         let request = progress_request(10);
@@ -2203,13 +2213,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_record_progress_of_an_unknown_video() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video = video_with_duration("vid1", Some(100));
         video_repository.save(&video).unwrap();
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
-            Arc::new(SqliteChannelRepository::new(db.connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             Arc::new(FixedClock(watched_timestamp())),
         );
         let request = progress_request(30);
@@ -2294,8 +2304,8 @@ mod tests {
         )
     }
 
-    fn unused_connection() -> Connection {
-        Connection::open_in_memory().unwrap()
+    fn unused_connection() -> std::sync::Arc<std::sync::Mutex<Connection>> {
+        std::sync::Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()))
     }
 
     fn save_playlist_video(

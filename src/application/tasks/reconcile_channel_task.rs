@@ -78,9 +78,10 @@ mod tests {
     #[test]
     fn it_should_skip_if_channel_is_gone() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -114,9 +115,10 @@ mod tests {
     #[test]
     fn it_should_add_new_videos_within_the_limit() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -181,9 +183,10 @@ mod tests {
     #[test]
     fn it_should_refresh_existing_videos() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -234,9 +237,10 @@ mod tests {
     #[test]
     fn it_should_evict_videos_beyond_the_limit() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -294,9 +298,10 @@ mod tests {
     #[test]
     fn it_should_keep_videos_if_listing_fails() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -340,9 +345,10 @@ mod tests {
     #[test]
     fn it_should_always_schedule_the_next_reconcile() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -388,9 +394,10 @@ mod tests {
     #[test]
     fn it_should_redownload_videos_with_missing_file() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -455,9 +462,10 @@ mod tests {
     #[test]
     fn it_should_redownload_videos_with_non_mp4_file() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -511,9 +519,10 @@ mod tests {
     #[test]
     fn it_should_delete_orphaned_files() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -544,9 +553,10 @@ mod tests {
     #[test]
     fn it_should_keep_the_folder_of_a_thumbnail_fetch_in_progress() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -583,9 +593,10 @@ mod tests {
     #[test]
     fn it_should_keep_the_folder_of_a_download_in_progress_if_video_renamed() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -628,9 +639,10 @@ mod tests {
     #[test]
     fn it_should_keep_the_folder_of_a_download_in_progress() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -667,9 +679,10 @@ mod tests {
     #[test]
     fn it_should_retry_permanently_errored_videos() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -723,9 +736,10 @@ mod tests {
     #[test]
     fn it_should_not_retry_videos_errored_within_the_last_day() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -766,9 +780,10 @@ mod tests {
     #[test]
     fn it_should_never_recover_an_excluded_video() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -807,9 +822,10 @@ mod tests {
     #[test]
     fn it_should_keep_matching_files() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -846,9 +862,10 @@ mod tests {
     #[test]
     fn it_should_keep_matching_thumbnails() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -886,9 +903,10 @@ mod tests {
     #[test]
     fn it_should_delete_stray_thumbnails() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -928,9 +946,10 @@ mod tests {
     #[test]
     fn it_should_keep_videos_stored_in_their_own_folder() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -973,9 +992,10 @@ mod tests {
     #[test]
     fn it_should_keep_thumbnails_of_pending_videos() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1012,11 +1032,12 @@ mod tests {
     #[test]
     fn it_should_generate_missing_metadata() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let video_metadata_repository =
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection()));
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1101,11 +1122,12 @@ mod tests {
     #[test]
     fn it_should_keep_existing_metadata() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let video_metadata_repository =
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection()));
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1178,9 +1200,10 @@ mod tests {
     #[test]
     fn it_should_not_fetch_thumbnails_when_adding_new_videos() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1200,7 +1223,7 @@ mod tests {
                 listed_video("yt2", "Two", 1),
             ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(SqliteEventPublisher::new(
                 db.shared_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -1264,9 +1287,10 @@ mod tests {
     #[test]
     fn it_should_schedule_a_thumbnail_fetch_for_a_video_missing_one() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1290,7 +1314,7 @@ mod tests {
                 listed_video("yt1", "My Video", 0),
             ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(SqliteEventPublisher::new(
                 db.shared_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -1325,9 +1349,10 @@ mod tests {
     #[test]
     fn it_should_not_schedule_a_thumbnail_fetch_for_a_video_added_in_the_same_pass() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1357,9 +1382,10 @@ mod tests {
     #[test]
     fn it_should_not_refetch_existing_thumbnails() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1380,7 +1406,7 @@ mod tests {
                 listed_video("yt1", "My Video", 0),
             ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(SqliteEventPublisher::new(
                 db.shared_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -1411,9 +1437,10 @@ mod tests {
     #[test]
     fn it_should_not_schedule_a_thumbnail_fetch_for_a_video_being_redownloaded() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1437,7 +1464,7 @@ mod tests {
                 listed_video("yt1", "My Video", 0),
             ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(SqliteEventPublisher::new(
                 db.shared_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -1486,9 +1513,10 @@ mod tests {
     #[test]
     fn it_should_not_schedule_a_thumbnail_fetch_for_a_video_being_downloaded() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1512,7 +1540,7 @@ mod tests {
                 listed_video("yt1", "My Video", 0),
             ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(SqliteEventPublisher::new(
                 db.shared_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -1569,7 +1597,7 @@ mod tests {
             channel_video_repository,
             channel_videos_repository,
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             Arc::new(SqliteEventPublisher::new(
                 db.shared_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -1590,7 +1618,7 @@ mod tests {
     fn any_task() -> ReconcileChannelTask {
         let video_repository = Arc::new(SqliteVideoRepository::new(unused_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            Arc::new(std::sync::Mutex::new(unused_connection())),
+            unused_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         ReconcileChannelTask::new(ChannelVideoReconciler::new(
@@ -1601,7 +1629,7 @@ mod tests {
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
             Arc::new(SqliteEventPublisher::new(
-                Arc::new(Mutex::new(unused_connection())),
+                unused_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             task_repository.clone(),
@@ -1618,8 +1646,8 @@ mod tests {
         ))
     }
 
-    fn unused_connection() -> Connection {
-        Connection::open_in_memory().unwrap()
+    fn unused_connection() -> std::sync::Arc<std::sync::Mutex<Connection>> {
+        std::sync::Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()))
     }
 
     /// Saves a video and its `@somechannel` membership at position 0,

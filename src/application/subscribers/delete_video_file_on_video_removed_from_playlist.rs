@@ -85,12 +85,11 @@ mod tests {
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
-    use std::sync::Mutex;
 
     #[test]
     fn it_should_schedule_file_deletion_if_downloaded() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -125,7 +124,7 @@ mod tests {
     #[test]
     fn it_should_skip_if_not_downloaded() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -160,7 +159,7 @@ mod tests {
     #[test]
     fn it_should_skip_if_playlist_is_gone() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -188,7 +187,7 @@ mod tests {
         DeleteVideoFileOnVideoRemovedFromPlaylist::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             Arc::new(SqliteTaskRepository::new(
-                Arc::new(Mutex::new(unused_connection())),
+                unused_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -196,8 +195,8 @@ mod tests {
         )
     }
 
-    fn unused_connection() -> Connection {
-        Connection::open_in_memory().unwrap()
+    fn unused_connection() -> std::sync::Arc<std::sync::Mutex<Connection>> {
+        std::sync::Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()))
     }
 
     fn playlist(id: &str) -> Playlist {

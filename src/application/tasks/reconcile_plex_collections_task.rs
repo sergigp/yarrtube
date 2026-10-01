@@ -121,10 +121,10 @@ mod tests {
     #[test]
     fn it_should_skip_creating_a_collection_if_no_video_is_scanned_yet() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -145,9 +145,9 @@ mod tests {
                 vec!["1".to_string()],
                 vec![],
                 playlist_repository.clone(),
-                Arc::new(SqliteChannelRepository::new(db.connection())),
+                Arc::new(SqliteChannelRepository::new(db.shared_connection())),
                 playlist_video_repository.clone(),
-                Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+                Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
                 video_repository.clone(),
                 plex_repository.clone(),
             ),
@@ -172,10 +172,10 @@ mod tests {
     #[test]
     fn it_should_ignore_videos_that_are_not_downloaded() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -209,9 +209,9 @@ mod tests {
                 vec!["1".to_string()],
                 vec![],
                 playlist_repository.clone(),
-                Arc::new(SqliteChannelRepository::new(db.connection())),
+                Arc::new(SqliteChannelRepository::new(db.shared_connection())),
                 playlist_video_repository.clone(),
-                Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+                Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
                 video_repository.clone(),
                 plex_repository.clone(),
             ),
@@ -236,10 +236,10 @@ mod tests {
     #[test]
     fn it_should_add_newly_scanned_videos_to_an_existing_collection() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -275,9 +275,9 @@ mod tests {
                 vec!["1".to_string()],
                 vec![],
                 playlist_repository.clone(),
-                Arc::new(SqliteChannelRepository::new(db.connection())),
+                Arc::new(SqliteChannelRepository::new(db.shared_connection())),
                 playlist_video_repository.clone(),
-                Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+                Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
                 video_repository.clone(),
                 plex_repository.clone(),
             ),
@@ -302,10 +302,10 @@ mod tests {
     #[test]
     fn it_should_remove_videos_no_longer_tracked_from_the_collection() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -334,9 +334,9 @@ mod tests {
                 vec!["1".to_string()],
                 vec![],
                 playlist_repository.clone(),
-                Arc::new(SqliteChannelRepository::new(db.connection())),
+                Arc::new(SqliteChannelRepository::new(db.shared_connection())),
                 playlist_video_repository.clone(),
-                Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+                Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
                 video_repository.clone(),
                 plex_repository.clone(),
             ),
@@ -361,10 +361,10 @@ mod tests {
     #[test]
     fn it_should_do_nothing_if_already_in_sync() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -400,9 +400,9 @@ mod tests {
                 vec!["1".to_string()],
                 vec![],
                 playlist_repository.clone(),
-                Arc::new(SqliteChannelRepository::new(db.connection())),
+                Arc::new(SqliteChannelRepository::new(db.shared_connection())),
                 playlist_video_repository.clone(),
-                Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+                Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
                 video_repository.clone(),
                 plex_repository.clone(),
             ),
@@ -428,10 +428,10 @@ mod tests {
     #[test]
     fn it_should_continue_reconciling_remaining_collections_if_one_fails() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -468,9 +468,9 @@ mod tests {
                 vec!["1".to_string()],
                 vec![],
                 playlist_repository.clone(),
-                Arc::new(SqliteChannelRepository::new(db.connection())),
+                Arc::new(SqliteChannelRepository::new(db.shared_connection())),
                 playlist_video_repository.clone(),
-                Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+                Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
                 video_repository.clone(),
                 plex_repository.clone(),
             ),
@@ -511,11 +511,11 @@ mod tests {
             PlexCollectionReconciler::new(
                 vec!["1".to_string()],
                 vec![],
-                Arc::new(SqlitePlaylistRepository::new(db.connection())),
-                Arc::new(SqliteChannelRepository::new(db.connection())),
-                Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
-                Arc::new(SqliteChannelVideoRepository::new(db.connection())),
-                Arc::new(SqliteVideoRepository::new(db.connection())),
+                Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+                Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
+                Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+                Arc::new(SqliteVideoRepository::new(db.shared_connection())),
                 plex_repository.clone(),
             ),
             task_repository.clone(),
@@ -538,12 +538,13 @@ mod tests {
     #[test]
     fn it_should_create_collections_in_their_own_sections() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -612,12 +613,13 @@ mod tests {
     #[test]
     fn it_should_not_create_a_channel_collection_in_a_playlist_section() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -685,9 +687,10 @@ mod tests {
     #[test]
     fn it_should_create_a_collection_for_a_channel_with_scanned_videos() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_video_repository =
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -717,9 +720,9 @@ mod tests {
             PlexCollectionReconciler::new(
                 vec![],
                 vec!["1".to_string()],
-                Arc::new(SqlitePlaylistRepository::new(db.connection())),
+                Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
                 channel_repository.clone(),
-                Arc::new(SqlitePlaylistVideoRepository::new(db.connection())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
                 channel_video_repository.clone(),
                 video_repository.clone(),
                 plex_repository.clone(),
@@ -752,10 +755,10 @@ mod tests {
     #[test]
     fn it_should_create_a_collection_for_a_playlist_with_scanned_videos() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -786,9 +789,9 @@ mod tests {
                 vec!["1".to_string()],
                 vec![],
                 playlist_repository.clone(),
-                Arc::new(SqliteChannelRepository::new(db.connection())),
+                Arc::new(SqliteChannelRepository::new(db.shared_connection())),
                 playlist_video_repository.clone(),
-                Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+                Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
                 video_repository.clone(),
                 plex_repository.clone(),
             ),

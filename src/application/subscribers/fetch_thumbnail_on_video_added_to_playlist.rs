@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn it_should_schedule_a_thumbnail_fetch() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -113,7 +113,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let subscriber = FetchThumbnailOnVideoAddedToPlaylist::new(
-            Arc::new(SqlitePlaylistRepository::new(db.connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",

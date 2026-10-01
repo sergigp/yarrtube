@@ -62,12 +62,12 @@ mod tests {
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     #[test]
     fn it_should_reconcile_the_channel() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.shared_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -113,7 +113,7 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.shared_connection());
         let subscriber = ReconcileOnChannelCreated::new(channel_video_reconciler(
             &db,
-            Arc::new(SqliteChannelRepository::new(db.connection())),
+            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
             task_repository.clone(),
         ));
 
@@ -132,7 +132,7 @@ mod tests {
         channel_repository: Arc<SqliteChannelRepository>,
         task_repository: Arc<SqliteTaskRepository>,
     ) -> ChannelVideoReconciler {
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::default()),
@@ -142,10 +142,10 @@ mod tests {
         ChannelVideoReconciler::new(
             channel_repository,
             video_repository,
-            Arc::new(SqliteChannelVideoRepository::new(db.connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
             Arc::new(FakeChannelVideosRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
             event_publisher(db),
             task_repository,
             Arc::new(FakeVideoFileRepository::default()),
@@ -163,7 +163,7 @@ mod tests {
     fn any_subscriber() -> ReconcileOnChannelCreated {
         let video_repository = Arc::new(SqliteVideoRepository::new(unused_connection()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            Arc::new(std::sync::Mutex::new(unused_connection())),
+            unused_connection(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         ReconcileOnChannelCreated::new(ChannelVideoReconciler::new(
@@ -174,7 +174,7 @@ mod tests {
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
             Arc::new(SqliteEventPublisher::new(
-                Arc::new(Mutex::new(unused_connection())),
+                unused_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             task_repository.clone(),
@@ -211,8 +211,8 @@ mod tests {
         ))
     }
 
-    fn unused_connection() -> Connection {
-        Connection::open_in_memory().unwrap()
+    fn unused_connection() -> std::sync::Arc<std::sync::Mutex<Connection>> {
+        std::sync::Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()))
     }
 
     fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {

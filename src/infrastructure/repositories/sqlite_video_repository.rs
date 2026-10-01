@@ -5,7 +5,7 @@ use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at";
 
@@ -63,14 +63,12 @@ pub trait VideoRepository: Send + Sync {
 }
 
 pub struct SqliteVideoRepository {
-    conn: Mutex<Connection>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl SqliteVideoRepository {
-    pub fn new(conn: Connection) -> Self {
-        Self {
-            conn: Mutex::new(conn),
-        }
+    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
     }
 
     /// Every stored video, for tests asserting the table's whole final state;
@@ -365,7 +363,7 @@ mod tests {
     fn repo() -> SqliteVideoRepository {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        SqliteVideoRepository::new(conn)
+        SqliteVideoRepository::new(Arc::new(Mutex::new(conn)))
     }
 
     fn video(title: &str, now: DateTime<Utc>) -> Video {

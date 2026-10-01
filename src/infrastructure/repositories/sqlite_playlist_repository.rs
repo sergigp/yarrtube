@@ -4,7 +4,7 @@ use crate::domain::shared::Quality;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub trait PlaylistRepository: Send + Sync {
     fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>>;
@@ -14,14 +14,12 @@ pub trait PlaylistRepository: Send + Sync {
 }
 
 pub struct SqlitePlaylistRepository {
-    conn: Mutex<Connection>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl SqlitePlaylistRepository {
-    pub fn new(conn: Connection) -> Self {
-        Self {
-            conn: Mutex::new(conn),
-        }
+    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
     }
 }
 
@@ -156,7 +154,7 @@ mod tests {
     fn repo() -> SqlitePlaylistRepository {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        SqlitePlaylistRepository::new(conn)
+        SqlitePlaylistRepository::new(Arc::new(Mutex::new(conn)))
     }
 
     fn playlist(id: &str, name: &str) -> Playlist {

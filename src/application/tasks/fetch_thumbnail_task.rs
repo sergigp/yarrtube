@@ -60,7 +60,7 @@ mod tests {
     #[test]
     fn it_should_fetch_and_record_the_thumbnail() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
                 FetchedThumbnail {
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn it_should_skip_if_video_already_has_a_thumbnail() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video_downloader_repository = Arc::new(FakeVideoDownloaderRepository::default());
         let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
         video_repository.save(&video).unwrap();
@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn it_should_skip_if_video_no_longer_exists() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video_downloader_repository = Arc::new(FakeVideoDownloaderRepository::default());
         let task = FetchThumbnailTask::new(
             video_repository.clone(),
@@ -158,7 +158,7 @@ mod tests {
     #[test]
     fn it_should_succeed_without_recording_if_thumbnail_fetch_fails() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video_downloader_repository =
             Arc::new(FakeVideoDownloaderRepository::default().with_thumbnail_error());
         let video = my_video();
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn it_should_fetch_into_the_recorded_video_folder() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
                 FetchedThumbnail {
