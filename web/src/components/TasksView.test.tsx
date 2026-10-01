@@ -150,4 +150,25 @@ describe('TasksView', () => {
     expect(screen.getByText('Syncing channel Chan')).toBeInTheDocument()
     expect(screen.queryByText('Nothing running right now')).not.toBeInTheDocument()
   })
+
+  it('hides the search field at 15 tasks and shows it above 15', async () => {
+    const fifteen = Array.from({ length: 15 }, (_, i) =>
+      aTask({ id: i + 1, task_type: 'download_video', status: 'running' }),
+    )
+    mockApi({ 'GET /api/tasks': fifteen })
+    const { unmount } = renderWithProviders(<TasksView />)
+
+    expect(await screen.findByRole('tab', { name: /Active/ })).toHaveTextContent('15')
+    expect(screen.queryByRole('searchbox', { name: 'Search tasks' })).not.toBeInTheDocument()
+
+    unmount()
+
+    const sixteen = Array.from({ length: 16 }, (_, i) =>
+      aTask({ id: i + 1, task_type: 'download_video', status: 'running' }),
+    )
+    mockApi({ 'GET /api/tasks': sixteen })
+    renderWithProviders(<TasksView />)
+
+    expect(await screen.findByRole('searchbox', { name: 'Search tasks' })).toBeInTheDocument()
+  })
 })

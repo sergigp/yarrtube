@@ -8,7 +8,7 @@
 - [x] 2.2 Each tab trigger shows its task count — verify the test passes.
 - [x] 2.3 Selecting Downloads lists download/thumbnail tasks and no sync/cleanup tasks — verify the test passes.
 - [x] 2.4 An empty Active tab shows "Nothing running right now" while other tabs still list tasks — verify the test passes.
-- [ ] 2.5 The search field is hidden at ≤15 tasks and shown above 15 — verify the test passes.
+- [x] 2.5 The search field is hidden at ≤15 tasks and shown above 15 — verify the test passes.
 - [ ] 2.6 Typing in search filters the current tab by description, and a non-matching term shows "Nothing matches" — verify the test passes.
 - [ ] 2.7 Switching tabs clears the search text — verify the test passes.
 - [ ] 2.8 A retried task's `last_error` is shown on its row and a task with no error shows none — verify the test passes.
