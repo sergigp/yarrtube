@@ -4,23 +4,9 @@ Yarrtube is a single process (`yarrtube serve`) backed by one SQLite database.
 Inside it, the HTTP API does only the synchronous part of each request: it
 validates the input, saves state and publishes a **domain event**. Everything
 slow or fallible (talking to YouTube, running `yt-dlp`, touching the
-filesystem) happens later in the background, driven by two SQLite-backed
-queues:
+filesystem) happens later in the background in an event driven fashion.
 
-- **Domain events** (`events` table): facts about something that already
-  happened, such as `channel_created` or `video_added_to_channel`. Each event
-  type can have any number of **subscribers**.
-- **Tasks** (`tasks` table): units of work to run at a given time, such as
-  `reconcile_channel` or `download_video`. Each task type has exactly one
-  **handler**.
-
-Two background loops poll these tables every 5 seconds: `DomainEventsConsumer`
-for events, one event at a time, and `TaskExecutor` for tasks, several at a
-time in **lanes** (see [Task lanes](#task-lanes)). When something keeps
-failing, it ends up in a **dead letter** table (`domain_events_dead_letter` /
-`tasks_dead_letter`) for inspection instead of being retried forever.
-
-## Overview
+## Architecture Overview
 
 ```mermaid
 flowchart TB
@@ -61,89 +47,24 @@ flowchart TB
     handlers -- "call service" --> services
 ```
 
-Subscribers and handlers are thin adapters: they decode a JSON payload and call
-a domain service. Domain services can publish new events and schedule new
-tasks, so one user action fans out into a chain of background work.
+For more information on the architectural decisions and conventions used in Yarrtube you can take a look to [Rust Architect Skills](../.claude/skills/rust-architect/SKILL.md).
 
-## Retries and dead letters
+## Example: track a channel and download its videos
 
-Both queues give an item 5 attempts. The difference is when the next attempt
-runs:
+To illustrate this domain driven flow we can take a look on what happens when a user adds a channel subscription and all the videos end up downloaded:
 
-| | Domain events | Tasks |
-|---|---|---|
-| Dispatch | Every subscriber registered for the type | The single handler for the type |
-| On failure | Retried on the next poll (no delay) | Retried after `base * 3^retries` seconds (base `YARRTUBE_RETRY_BASE_DELAY_SECONDS`, default 150) |
-| After 5 failed attempts | Moved to `domain_events_dead_letter` | Moved to `tasks_dead_letter` |
-| On success | Row deleted | Row deleted |
-
-An event is handled as a whole. If one of its subscribers fails, the whole
-event is retried, so subscribers must be idempotent.
-
-A task that was left `running` by a crash is recovered at startup and counted
-as a failed attempt. A task whose handler panics is counted as a failed
-attempt too.
-
-```mermaid
-stateDiagram-v2
-    direction LR
-    [*] --> Pending: published / scheduled
-    Pending --> Pending: poll, handler fails,<br/>attempts left (retry)
-    Pending --> Done: poll, handler succeeds
-    Pending --> DeadLetter: poll, 5th failure
-    Done --> [*]: row deleted
-    DeadLetter --> [*]: kept in *_dead_letter
-```
-
-## Task lanes
-
-The `TaskExecutor` runs tasks in parallel, grouped into lanes. Each lane has
-its own cap on how many of its tasks run at once, so slow work in one lane
-never holds up another.
-
-| Lane | Task types | Runs at once |
-|---|---|---|
-| Download | `download_video` | `YARRTUBE_DOWNLOAD_CONCURRENCY` (default 2) |
-| Thumbnail | `fetch_thumbnail` | 1 |
-| Light | reconciles and file deletions | 1 |
-| Exclusive | `update_ytdlp` | 1, and nothing else |
-
-On every poll, and right after any task finishes, the executor walks the
-eligible tasks in `run_at` order and starts each one whose lane has room.
-Within a lane, tasks start in `run_at` order. Lanes are not ordered against
-each other. A few more rules apply:
-
-- **Atomic claim.** A task is flipped from `pending` to `running` in a single
-  statement before it starts, so it is never dispatched twice.
-- **One task per video at a time.** A `download_video` and a
-  `fetch_thumbnail` for the same video never run together. A task held back
-  this way is skipped, and the tasks behind it in its lane still start.
-- **No duplicate video tasks.** Scheduling a `download_video` or
-  `fetch_thumbnail` for a video that already has one `pending` or `running`
-  adds nothing.
-- **Exclusive update.** When `update_ytdlp` is due, no new task starts until
-  everything running has finished. Then the update runs alone.
-
-Which lane a task type belongs to, and which video it locks, are facts of the
-domain (`Task::lane_for`, `Task::exclusivity_key`). The executor itself knows
-nothing about specific task types.
-
-## Example flow: track a channel and download its videos
-
-1. `POST /api/channels` saves the channel and publishes `ChannelCreated`.
-2. The `ReconcileOnChannelCreated` subscriber runs the first sync.
-   - The sync reads the channel's most recent uploads from YouTube.
+1. `POST /api/channels` saves the channel and publishes `ChannelCreated` domain event.
+2. The `ReconcileOnChannelCreated` subscriber runs asynchrnously polling the domain events table (that acts like a queue) and runs the first channel sync.
+   - The sync reads the channel's most recent uploads from YouTube using the YouTube API.
    - It saves each new video as `PENDING` and publishes one
-     `VideoAddedToChannel` per video. It does not run `yt-dlp` itself, so a
-     large channel or playlist is saved in seconds.
+     `VideoAddedToChannel` domain event per video.
    - It schedules the next `ReconcileChannel` task one reconcile interval
      later (`YARRTUBE_RECONCILE_INTERVAL_SECONDS`, default 1 hour).
-3. For each `VideoAddedToChannel`, two subscribers schedule a task each:
+3. For each `VideoAddedToChannel`, two asynchronous subscribers schedule a task each:
    - `FetchThumbnailOnVideoAddedToChannel` schedules a `FetchThumbnail`
-     task,
+     task.
    - `DownloadVideoOnVideoAddedToChannel` schedules a `DownloadVideo` task.
-4. The `TaskExecutor` runs them in their lanes: thumbnails one at a time,
-   downloads a few at a time. Both call `yt-dlp`. The thumbnail usually
+4. The `TaskExecutor` runs them. Both call `yt-dlp`. The thumbnail usually
    arrives first, so the UI can show it while the video is still downloading.
 5. Every hour, the `ReconcileChannel` task runs the sync again and schedules
    the next one. New uploads repeat steps 3–4. The sync also schedules a
@@ -203,8 +124,3 @@ sequenceDiagram
 
     Note over Executor,Reconciler: One interval later, the ReconcileChannel task<br/>runs the same sync and schedules the next one.
 ```
-
-Playlists follow the same shape with their own events (`PlaylistCreated`,
-`VideoAddedToPlaylist`, ...) and tasks (`ReconcilePlaylist`). Deletions work
-the same way: `ChannelDeleted` and `VideoRemovedFromChannel` schedule the
-tasks that delete files.

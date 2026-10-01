@@ -14,15 +14,21 @@
 docker run -d \
   --name yarrtube \
   -e YOUTUBE_API_KEY=your-api-key-here \
+  -e YARRTUBE_DB_PATH=/config/yarrtube.db \
   -e PUID=1000 \
   -e PGID=1000 \
   -p 8080:8080 \
+  -v /path/on/host/config:/config \
   -v /path/on/host/videos:/videos \
   ghcr.io/sergigp/yarrtube:latest
 ```
 
 - `-v /path/on/host/videos:/videos` is where downloaded videos will show up
   on your host — point it at your media library.
+- `-v /path/on/host/config:/config` holds yarrtube's SQLite database (your
+  tracked playlists and channels). See the [database persistence
+  note](#database-persistence) below — without it you lose everything you've
+  tracked when the container is recreated.
 - `PUID`/`PGID` are the numeric user/group ID that should own downloaded
   files — see the [Note](#docker-compose) below.
 
@@ -41,42 +47,48 @@ services:
       - 8080:8080
     environment:
       - YOUTUBE_API_KEY=your-youtube-data-api-v3-key
+      - YARRTUBE_DB_PATH=/config/yarrtube.db
       - PUID=1000
       - PGID=1000
       - TZ=Europe/Madrid
     volumes:
+      - /path/on/host/config:/config
       - /path/on/host/videos:/videos
 ```
 
-> [!NOTE]
-> Set `PUID`/`PGID` to the numeric user/group ID that should own
-> downloaded files on the host (run `id <user>` on the host to find them) —
-> the same convention used by `linuxserver.io`/`hotio` images.
+### Database persistence
+
+The container only mounts `/videos` by default, and the SQLite database lives
+inside the container (`yarrtube.sqlite3` under the working directory) unless
+you move it. That database holds every playlist and channel you track, so it
+**must** sit on a mounted volume — otherwise it is wiped whenever the container
+is recreated, including on every [update](#updating). The examples above set
+`YARRTUBE_DB_PATH=/config/yarrtube.db` and mount a `/config` volume for exactly
+this reason; point it at any persistent host directory you like.
 
 Then you can open `http://<YOUR_NAS_IP>:8080/` or `http://localhost:8080/`.
 
 ## Configuration
 
-Environment variables read by the `serve` daemon (the container's default
-command):
+Environment variables read by Yarrtube are listed below. The defaults are set in the container image, so you only need to set the ones you want to override:
 
-| Variable                              | Default            | Description                                                                              |
-| ------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------- |
-| `YOUTUBE_API_KEY`                     | —                  | YouTube Data API v3 key (required)                                                       |
-| `PUID`                                | `0` (root)         | Numeric user ID the daemon runs as and that owns downloaded files                        |
-| `PGID`                                | `0` (root)         | Numeric group ID the daemon runs as and that owns downloaded files                       |
-| `YARRTUBE_PORT`                       | `8080`             | HTTP port to listen on                                                                   |
-| `YARRTUBE_RECONCILE_INTERVAL_SECONDS` | `3600`             | How often each tracked playlist or channel is reconciled                                 |
-| `YARRTUBE_DB_PATH`                    | `yarrtube.sqlite3` | Path to the internal SQLite file (inside the container)                                  |
-| `YARRTUBE_VIDEOS_PATH`                | `/videos`          | Root directory downloaded videos are saved under (inside the container)                  |
-| `YARRTUBE_DOWNLOAD_CONCURRENCY`       | `2`                | How many videos download at the same time. Higher values download faster but make YouTube more likely to throttle or bot-check you |
-| `YTDLP_PATH`                          | `/app/bin/yt-dlp`  | Path to the managed `yt-dlp` binary (also the path bundled into the image at build time) |
-| `RUST_LOG`                            | `info`             | Log verbosity (e.g. `RUST_LOG=debug`)                                                    |
-| `YARRTUBE_PLEX_URL`                   | —                  | Base URL of your Plex server (e.g. `http://192.168.1.10:32400`). Enables the [Plex collections integration](#plex-collections) |
-| `YARRTUBE_PLEX_TOKEN`                 | —                  | Plex authentication token (`X-Plex-Token`)                                               |
-| `YARRTUBE_PLEX_PLAYLIST_SECTION_ID`   | —                  | ID(s) of the Plex library section(s) holding yarrtube's **playlist** videos, comma-separated when spread across several libraries (e.g. `2,5`) |
-| `YARRTUBE_PLEX_CHANNEL_SECTION_ID`    | —                  | ID(s) of the Plex library section(s) holding yarrtube's **channel** videos, comma-separated when spread across several libraries (e.g. `3,6`) |
-| `YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS` | `900`         | How often Plex collections are synced toward yarrtube's state                            |
+| Variable                                   | Default            | Description                                                                                                                                                                                               |
+| ------------------------------------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `YOUTUBE_API_KEY`                          | —                  | YouTube Data API v3 key (required)                                                                                                                                                                        |
+| `PUID`                                     | `0` (root)         | Numeric user ID the daemon runs as and that owns downloaded files                                                                                                                                         |
+| `PGID`                                     | `0` (root)         | Numeric group ID the daemon runs as and that owns downloaded files                                                                                                                                        |
+| `YARRTUBE_PORT`                            | `8080`             | HTTP port to listen on                                                                                                                                                                                    |
+| `YARRTUBE_RECONCILE_INTERVAL_SECONDS`      | `3600`             | How often each tracked playlist or channel is reconciled                                                                                                                                                  |
+| `YARRTUBE_DB_PATH`                         | `yarrtube.sqlite3` | Path to the internal SQLite file (inside the container). Point it at a mounted volume so your tracked playlists/channels survive container recreation — see [Database persistence](#database-persistence) |
+| `YARRTUBE_VIDEOS_PATH`                     | `/videos`          | Root directory downloaded videos are saved under (inside the container)                                                                                                                                   |
+| `YARRTUBE_DOWNLOAD_CONCURRENCY`            | `2`                | How many videos download at the same time. Higher values download faster but make YouTube more likely to throttle or bot-check you                                                                        |
+| `YTDLP_PATH`                               | `/app/bin/yt-dlp`  | Path to the managed `yt-dlp` binary (also the path bundled into the image at build time)                                                                                                                  |
+| `RUST_LOG`                                 | `info`             | Log verbosity (e.g. `RUST_LOG=debug`)                                                                                                                                                                     |
+| `YARRTUBE_PLEX_URL`                        | —                  | Base URL of your Plex server (e.g. `http://192.168.1.10:32400`). Enables the [Plex collections integration](#plex-collections)                                                                            |
+| `YARRTUBE_PLEX_TOKEN`                      | —                  | Plex authentication token (`X-Plex-Token`)                                                                                                                                                                |
+| `YARRTUBE_PLEX_PLAYLIST_SECTION_ID`        | —                  | ID(s) of the Plex library section(s) holding yarrtube's **playlist** videos, comma-separated when spread across several libraries (e.g. `2,5`)                                                            |
+| `YARRTUBE_PLEX_CHANNEL_SECTION_ID`         | —                  | ID(s) of the Plex library section(s) holding yarrtube's **channel** videos, comma-separated when spread across several libraries (e.g. `3,6`)                                                             |
+| `YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS` | `900`              | How often Plex collections are synced toward yarrtube's state                                                                                                                                             |
 
 ## Plex collections
 

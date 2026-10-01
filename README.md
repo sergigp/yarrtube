@@ -11,8 +11,6 @@
     ·
     <a href="doc/INSTALLATION.md">Installation</a>
     ·
-    <a href="doc/DEVELOPMENT.md">Developing</a>
-    ·
     <a href="doc/ARCHITECTURE.md">Architecture</a>
     ·
     <a href="LICENSE">License</a>
