@@ -122,3 +122,17 @@ describe('taskCategory and byCategory', () => {
     expect(sorted).toEqual([running, queued, pendingSoon, pendingLater])
   })
 })
+
+describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
+  it('maps each task type to its family', () => {
+    expect(taskFamily(aTask({ task_type: 'download_video' }))).toBe('downloads')
+    expect(taskFamily(aTask({ task_type: 'fetch_thumbnail' }))).toBe('downloads')
+    expect(taskFamily(aTask({ task_type: 'reconcile_playlist' }))).toBe('syncs')
+    expect(taskFamily(aTask({ task_type: 'reconcile_channel' }))).toBe('syncs')
+    expect(taskFamily(aTask({ task_type: 'reconcile_plex_collections' }))).toBe('syncs')
+    expect(taskFamily(aTask({ task_type: 'delete_video_file' }))).toBe('cleanup')
+    expect(taskFamily(aTask({ task_type: 'delete_playlist_files' }))).toBe('cleanup')
+    expect(taskFamily(aTask({ task_type: 'delete_channel_files' }))).toBe('cleanup')
+    expect(taskFamily(aTask({ task_type: 'update_ytdlp' }))).toBe('maintenance')
+  })
+})
