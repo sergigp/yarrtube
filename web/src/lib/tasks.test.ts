@@ -194,4 +194,21 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(tasksForTab(tasks, 'syncs')).toEqual([])
     expect(tasksForTab(tasks, 'cleanup')).toEqual([])
   })
+
+  it("returns counts equal to each tab's listed length", () => {
+    const tasks = [
+      aTask({ id: 1, task_type: 'download_video', status: 'running' }),
+      aTask({ id: 2, task_type: 'fetch_thumbnail', status: 'pending' }),
+      aTask({ id: 3, task_type: 'reconcile_channel', status: 'pending' }),
+      aTask({ id: 4, task_type: 'delete_video_file', status: 'pending' }),
+      aTask({ id: 5, task_type: 'update_ytdlp', status: 'pending' }),
+    ]
+
+    const counts = tabCounts(tasks)
+
+    for (const tab of ['active', 'downloads', 'syncs', 'cleanup', 'all'] as const) {
+      expect(counts[tab]).toBe(tasksForTab(tasks, tab).length)
+    }
+    expect(counts).toEqual({ active: 1, downloads: 2, syncs: 1, cleanup: 1, all: 5 })
+  })
 })
