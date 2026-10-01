@@ -171,4 +171,30 @@ describe('TasksView', () => {
 
     expect(await screen.findByRole('searchbox', { name: 'Search tasks' })).toBeInTheDocument()
   })
+
+  it('filters the current tab by description and says when nothing matches', async () => {
+    const user = userEvent.setup()
+    const tasks = Array.from({ length: 16 }, (_, i) =>
+      aTask({
+        id: i + 1,
+        task_type: 'download_video',
+        status: 'running',
+        payload: { video_title: i === 0 ? 'Zeta' : 'Alpha' },
+      }),
+    )
+    mockApi({ 'GET /api/tasks': tasks })
+
+    renderWithProviders(<TasksView />)
+
+    const search = await screen.findByRole('searchbox', { name: 'Search tasks' })
+
+    await user.type(search, 'zeta')
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.getByText('Downloading Zeta in an unknown playlist or channel')).toBeInTheDocument()
+
+    await user.clear(search)
+    await user.type(search, 'nomatch')
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
+    expect(screen.getByText('Nothing matches')).toBeInTheDocument()
+  })
 })
