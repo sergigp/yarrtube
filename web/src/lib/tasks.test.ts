@@ -211,4 +211,12 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     }
     expect(counts).toEqual({ active: 1, downloads: 2, syncs: 1, cleanup: 1, all: 5 })
   })
+
+  it('matches on the description, ignoring case', () => {
+    const task = aTask({ task_type: 'reconcile_channel', payload: { channel_name: 'Rustaceans' } })
+
+    expect(matchesTask(task, 'rustaceans')).toBe(true)
+    expect(matchesTask(task, 'SYNCING')).toBe(true)
+    expect(matchesTask(task, 'nope')).toBe(false)
+  })
 })
