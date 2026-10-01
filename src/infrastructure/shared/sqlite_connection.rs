@@ -61,6 +61,13 @@ impl TestDatabase {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::task::Task;
+    use crate::infrastructure::repositories::sqlite_task_repository::{
+        SqliteTaskRepository, TaskRepository,
+    };
+    use crate::infrastructure::shared::system_clock::{Clock, FixedClock};
+    use chrono::{DateTime, Utc};
+    use std::sync::Arc;
 
     #[test]
     fn it_should_share_one_migrated_database_across_its_connections() {
@@ -80,5 +87,84 @@ mod tests {
             .query_row("SELECT name FROM channels", [], |row| row.get(0))
             .unwrap();
         assert_eq!(name, "Some Channel");
+    }
+
+    #[test]
+    fn it_should_keep_wal_and_apply_normal_synchronous_on_open() {
+        let database = TestDatabase::new();
+        let conn = database.connection();
+
+        let journal_mode: String = conn
+            .pragma_query_value(None, "journal_mode", |row| row.get(0))
+            .unwrap();
+        let synchronous: i32 = conn
+            .pragma_query_value(None, "synchronous", |row| row.get(0))
+            .unwrap();
+
+        assert_eq!(journal_mode, "wal");
+        assert_eq!(synchronous, 1); // 1 == NORMAL
+    }
+
+    #[test]
+    fn it_should_not_fail_when_two_repositories_write_concurrently_on_the_shared_connection() {
+        let database = TestDatabase::new();
+        let conn = database.shared_connection();
+        let clock: Arc<dyn Clock> = Arc::new(FixedClock(fixed_now()));
+        let repository_a = Arc::new(SqliteTaskRepository::new(conn.clone(), clock.clone()));
+        let repository_b = Arc::new(SqliteTaskRepository::new(conn.clone(), clock.clone()));
+
+        let writes_a = spawn_writes(repository_a.clone(), "A");
+        let writes_b = spawn_writes(repository_b.clone(), "B");
+        let results: Vec<_> = writes_a
+            .join()
+            .unwrap()
+            .into_iter()
+            .chain(writes_b.join().unwrap())
+            .collect();
+
+        assert!(results.iter().all(Result::is_ok));
+        assert_eq!(repository_a.list_non_completed().unwrap().len(), 100);
+    }
+
+    #[test]
+    fn it_should_claim_a_task_while_another_repository_writes() {
+        let database = TestDatabase::new();
+        let conn = database.shared_connection();
+        let clock: Arc<dyn Clock> = Arc::new(FixedClock(fixed_now()));
+        let writer = Arc::new(SqliteTaskRepository::new(conn.clone(), clock.clone()));
+        let claimer = SqliteTaskRepository::new(conn.clone(), clock.clone());
+        claimer.schedule(&reconcile("target"), fixed_now()).unwrap();
+        let id = claimer.list_eligible().unwrap().first().unwrap().id;
+
+        let writes = spawn_writes(writer.clone(), "W");
+        let claimed = claimer.claim(id, fixed_now());
+        let write_results = writes.join().unwrap();
+
+        assert!(claimed.unwrap().is_some());
+        assert!(write_results.iter().all(Result::is_ok));
+    }
+
+    /// Schedules 50 distinct tasks from its own thread, returning each write's
+    /// result so the caller can assert none hit a database-locked error.
+    fn spawn_writes(
+        repository: Arc<SqliteTaskRepository>,
+        prefix: &str,
+    ) -> std::thread::JoinHandle<Vec<anyhow::Result<()>>> {
+        let prefix = prefix.to_string();
+        std::thread::spawn(move || {
+            (0..50)
+                .map(|i| repository.schedule(&reconcile(&format!("{prefix}{i}")), fixed_now()))
+                .collect()
+        })
+    }
+
+    fn reconcile(playlist_id: &str) -> Task {
+        Task::ReconcilePlaylist {
+            playlist_id: playlist_id.to_string(),
+        }
+    }
+
+    fn fixed_now() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 }
