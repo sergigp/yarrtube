@@ -73,12 +73,18 @@ describe('describeTask', () => {
     expect(describeTask(aTask({ task_type: 'update_ytdlp', payload: {} }))).toBe('Updating yt-dlp')
   })
 
+  it('humanizes an unknown type instead of showing the raw snake_case string', () => {
+    const description = describeTask(aTask({ task_type: 'mystery_task', payload: {} }))
+    expect(description).not.toContain('_')
+    expect(description).toBe('Mystery task')
+  })
+
   it('describes path deletions and yt-dlp updates for other task types', () => {
     expect(describeTask(aTask({ task_type: 'delete_files', payload: { path: 'playlists/x' } }))).toBe(
       'Deleting files at playlists/x',
     )
     expect(describeTask(aTask({ task_type: 'update_ytdlp', payload: {} }))).toBe('Updating yt-dlp')
-    expect(describeTask(aTask({ task_type: 'mystery_task', payload: {} }))).toBe('mystery_task')
+    expect(describeTask(aTask({ task_type: 'mystery_task', payload: {} }))).toBe('Mystery task')
   })
 })
 

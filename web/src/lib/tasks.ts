@@ -32,8 +32,14 @@ export function describeTask(task: Task): string {
       if (task.task_type === 'update_ytdlp') {
         return 'Updating yt-dlp'
       }
-      return task.task_type
+      return humanizeType(task.task_type)
   }
+}
+
+/** Turns an unknown raw task type into a readable sentence, never snake_case. */
+function humanizeType(type: string): string {
+  const words = type.replace(/_/g, ' ').trim()
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Task'
 }
 
 export type TaskFamily = 'downloads' | 'syncs' | 'cleanup' | 'maintenance'
