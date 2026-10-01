@@ -69,6 +69,10 @@ describe('describeTask', () => {
     )
   })
 
+  it('describes a yt-dlp self-update in plain language', () => {
+    expect(describeTask(aTask({ task_type: 'update_ytdlp', payload: {} }))).toBe('Updating yt-dlp')
+  })
+
   it('describes path deletions and yt-dlp updates for other task types', () => {
     expect(describeTask(aTask({ task_type: 'delete_files', payload: { path: 'playlists/x' } }))).toBe(
       'Deleting files at playlists/x',
