@@ -183,4 +183,15 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
 
     expect(all.map((task) => task.id)).toEqual([2, 3, 1])
   })
+
+  it("places a running maintenance task in 'all' and 'active' but no family tab", () => {
+    const maintenance = aTask({ id: 1, task_type: 'update_ytdlp', status: 'running' })
+    const tasks = [maintenance]
+
+    expect(tasksForTab(tasks, 'all').map((task) => task.id)).toEqual([1])
+    expect(tasksForTab(tasks, 'active').map((task) => task.id)).toEqual([1])
+    expect(tasksForTab(tasks, 'downloads')).toEqual([])
+    expect(tasksForTab(tasks, 'syncs')).toEqual([])
+    expect(tasksForTab(tasks, 'cleanup')).toEqual([])
+  })
 })

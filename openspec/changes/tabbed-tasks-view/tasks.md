@@ -22,7 +22,7 @@
 - [x] 3.5 `tasksForTab('active', …)` returns only running tasks of any type — verify the test passes.
 - [x] 3.6 `tasksForTab` returns the right types for `downloads`, `syncs`, and `cleanup` — verify the test passes.
 - [x] 3.7 `tasksForTab('all', …)` returns every task sorted by `byCategory` — verify the test passes.
-- [ ] 3.8 A `maintenance` task appears in `all` and (when running) `active`, but not in the other family tabs — verify the test passes.
+- [x] 3.8 A `maintenance` task appears in `all` and (when running) `active`, but not in the other family tabs — verify the test passes.
 - [ ] 3.9 `tabCounts` returns counts equal to each tab's listed length — verify the test passes.
 - [ ] 3.10 `matchesTask` matches on the description case-insensitively — verify the test passes.
 
