@@ -125,4 +125,29 @@ describe('TasksView', () => {
     expect(screen.queryByText('Syncing channel Chan')).not.toBeInTheDocument()
     expect(screen.queryByText('Removing file a.mp4')).not.toBeInTheDocument()
   })
+
+  it('tells the user nothing is running on an empty Active tab while other tabs still list tasks', async () => {
+    const user = userEvent.setup()
+    mockApi({
+      'GET /api/tasks': [
+        aTask({
+          id: 1,
+          task_type: 'reconcile_channel',
+          status: 'pending',
+          run_at: '2999-01-01T00:00:00Z',
+          payload: { channel_name: 'Chan' },
+        }),
+      ],
+    })
+
+    renderWithProviders(<TasksView />)
+
+    expect(await screen.findByText('Nothing running right now')).toBeInTheDocument()
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /Syncs/ }))
+
+    expect(screen.getByText('Syncing channel Chan')).toBeInTheDocument()
+    expect(screen.queryByText('Nothing running right now')).not.toBeInTheDocument()
+  })
 })
