@@ -69,8 +69,9 @@ pub struct InfrastructureSettings {
 }
 
 /// One production instance of every port implementation, shared by every
-/// domain service built from it. Each SQLite-backed repository opens its own
-/// connection, so the schema must already be migrated.
+/// domain service built from it. Every SQLite-backed repository shares one
+/// `Database` (a single write connection plus a read connection), so the
+/// schema must already be migrated.
 pub struct InfrastructureContainer {
     pub clock: Arc<dyn Clock>,
     pub playlist_repository: Arc<dyn PlaylistRepository>,

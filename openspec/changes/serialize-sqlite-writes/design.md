@@ -22,6 +22,8 @@ impl Database {
     pub fn open(path: &Path) -> anyhow::Result<Self>;                    // opens one read + one write connection via open()
     pub fn read(&self) -> anyhow::Result<MutexGuard<'_, Connection>>;   // pure SELECTs
     pub fn write(&self) -> anyhow::Result<MutexGuard<'_, Connection>>;  // INSERT/UPDATE, claim, transactions
+    #[cfg(test)]
+    pub fn single(conn: Connection) -> Self;                             // one connection as both read+write, for in-memory tests
 }
 
 // every repository
