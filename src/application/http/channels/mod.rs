@@ -172,8 +172,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_create_a_channel() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
@@ -198,8 +198,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_create_a_channel_from_a_youtube_url() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
@@ -228,9 +228,9 @@ mod tests {
     #[tokio::test]
     async fn it_should_store_the_channel_avatar() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let event_repository = SqliteEventRepository::new(db.database());
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel_with_avatar())),
@@ -271,7 +271,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_skip_avatar_if_channel_has_none() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
@@ -294,7 +294,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_skip_avatar_if_unavailable() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::unavailable());
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
@@ -317,9 +317,9 @@ mod tests {
     #[tokio::test]
     async fn it_should_create_the_channel_even_if_avatar_storage_fails() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::failing());
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let event_repository = SqliteEventRepository::new(db.database());
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel_with_avatar())),
@@ -345,8 +345,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_return_the_existing_channel_if_already_created() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
@@ -375,8 +375,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_return_the_existing_channel_if_handle_differs_in_case() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
@@ -399,8 +399,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_publish_channel_created_only_once() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(Some(resolved_channel())),
@@ -510,8 +510,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_create_if_channel_not_found_on_youtube() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             resolving(None),
@@ -535,8 +535,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_create_if_youtube_lookup_fails() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let channel_creator = ChannelCreator::new(
             channel_repository.clone(),
             Arc::new(FailingYoutubeChannelRepository),
@@ -561,12 +561,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_preview_a_channel() {
         let db = TestDatabase::new();
-        let channel_repository = SqliteChannelRepository::new(db.shared_connection());
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
-        let task_repository = SqliteTaskRepository::new(
-            db.shared_connection(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
+        let channel_repository = SqliteChannelRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        let task_repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let channel_previewer =
             ChannelPreviewer::new(resolving(Some(resolved_channel_with_avatar())));
 
@@ -666,14 +664,14 @@ mod tests {
     #[tokio::test]
     async fn it_should_delete_a_channel() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let event_repository = SqliteEventRepository::new(db.database());
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
             avatar_repository.clone(),
             event_publisher(&db),
         );
@@ -692,10 +690,9 @@ mod tests {
     #[tokio::test]
     async fn it_should_delete_only_the_deleted_channel_videos() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let channel_video_repository =
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         channel_repository
             .insert(&channel("@otherchannel"))
@@ -754,7 +751,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_delete_the_channel_avatar() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let avatar_repository = Arc::new(FakeChannelAvatarRepository::with_avatars(&[
             ("@somechannel.jpg", AVATAR_URL),
             ("@otherchannel.jpg", OTHER_AVATAR_URL),
@@ -767,8 +764,8 @@ mod tests {
             .unwrap();
         let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
             avatar_repository.clone(),
             event_publisher(&db),
         );
@@ -789,13 +786,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_delete_a_missing_channel() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
         );
@@ -829,9 +826,9 @@ mod tests {
     async fn it_should_list_no_channels() {
         let db = TestDatabase::new();
         let channel_view_searcher = ChannelViewSearcher::new(
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -842,12 +839,12 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_all_channels() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let channel_view_searcher = ChannelViewSearcher::new(
             channel_repository,
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -858,7 +855,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_channels_sorted_by_name_ignoring_case() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         for (channel_handle, name) in [
             ("@veritasium", "veritasium"),
             ("@kurzgesagt", "Kurzgesagt"),
@@ -873,8 +870,8 @@ mod tests {
         }
         let channel_view_searcher = ChannelViewSearcher::new(
             channel_repository,
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
         );
 
         let response = list(channel_view_searcher).await;
@@ -904,10 +901,9 @@ mod tests {
     #[tokio::test]
     async fn it_should_count_unwatched_downloaded_videos_when_listing_channels() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let channel_video_repository =
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         for (youtube_id, position) in [("vid_unwatched_1", 0), ("vid_unwatched_2", 1)] {
             save_downloaded_channel_video(
@@ -955,15 +951,14 @@ mod tests {
     #[tokio::test]
     async fn it_should_add_new_videos_on_reconcile() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let channel_video_repository =
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let event_repository = SqliteEventRepository::new(db.database());
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let reconciler = channel_video_reconciler(
             &db,
@@ -1016,11 +1011,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_evict_videos_no_longer_listed_on_reconcile() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let channel_video_repository =
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let (evicted, _) = save_channel_video(
             video_repository.as_ref(),
@@ -1036,7 +1030,7 @@ mod tests {
             channel_video_repository.clone(),
             Vec::new(),
             Arc::new(SqliteTaskRepository::new(
-                db.shared_connection(),
+                db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
         );
@@ -1070,11 +1064,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_be_idempotent_on_repeated_reconciles() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let channel_video_repository =
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let reconciler = channel_video_reconciler(
             &db,
@@ -1083,7 +1076,7 @@ mod tests {
             channel_video_repository.clone(),
             vec![listed_video("yt1", "One", 0)],
             Arc::new(SqliteTaskRepository::new(
-                db.shared_connection(),
+                db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
         );
@@ -1116,17 +1109,16 @@ mod tests {
     #[tokio::test]
     async fn it_should_ignore_reconcile_of_a_missing_channel() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let channel_video_repository =
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let event_repository = SqliteEventRepository::new(db.database());
         let reconciler = channel_video_reconciler(
             &db,
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
             video_repository.clone(),
             channel_video_repository.clone(),
             vec![listed_video("yt1", "One", 0)],
@@ -1165,11 +1157,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_mark_every_downloaded_channel_video_watched() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let channel_video_repository =
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
-        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.shared_connection());
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let downloaded = save_downloaded_channel_video(
             video_repository.as_ref(),
@@ -1225,10 +1216,9 @@ mod tests {
     #[tokio::test]
     async fn it_should_not_change_the_last_played_time_when_marking_a_channel_watched() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let channel_video_repository =
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let played_at = DateTime::<Utc>::from_timestamp(1_750_000_000, 0).unwrap();
         let video = Video {
@@ -1269,9 +1259,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_mark_watched_a_missing_channel() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let channel_video_repository =
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
         let video = save_downloaded_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -1281,7 +1270,7 @@ mod tests {
         );
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
             channel_video_repository,
             Arc::new(FixedClock(watched_timestamp())),
         );
@@ -1358,7 +1347,7 @@ mod tests {
             channel_video_repository,
             Arc::new(FakeChannelVideosRepository::with_videos(listed_videos)),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             event_publisher(db),
             task_repository,
             Arc::new(FakeVideoFileRepository::default()),
@@ -1414,8 +1403,10 @@ mod tests {
         )
     }
 
-    fn unused_connection() -> std::sync::Arc<std::sync::Mutex<Connection>> {
-        std::sync::Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()))
+    fn unused_connection() -> crate::infrastructure::shared::sqlite_connection::Database {
+        crate::infrastructure::shared::sqlite_connection::Database::single(
+            Connection::open_in_memory().unwrap(),
+        )
     }
 
     fn unused_event_publisher() -> Arc<SqliteEventPublisher> {
@@ -1427,7 +1418,7 @@ mod tests {
 
     fn event_publisher(db: &TestDatabase) -> Arc<SqliteEventPublisher> {
         Arc::new(SqliteEventPublisher::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ))
     }

@@ -1,10 +1,12 @@
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
 use crate::domain::shared::Quality;
+use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, OptionalExtension, params};
-use std::sync::{Arc, Mutex};
+#[cfg(test)]
+use rusqlite::Connection;
+use rusqlite::{OptionalExtension, params};
 
 pub trait PlaylistRepository: Send + Sync {
     fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>>;
@@ -14,19 +16,20 @@ pub trait PlaylistRepository: Send + Sync {
 }
 
 pub struct SqlitePlaylistRepository {
-    conn: Arc<Mutex<Connection>>,
+    db: Database,
 }
 
 impl SqlitePlaylistRepository {
-    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
-        Self { conn }
+    pub fn new(db: Database) -> Self {
+        Self { db }
     }
 }
 
 impl PlaylistRepository for SqlitePlaylistRepository {
     fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
         let conn = self
-            .conn
+            .db
+            .read()
             .lock()
             .inspect_err(|_| tracing::error!(playlist_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -55,7 +58,8 @@ impl PlaylistRepository for SqlitePlaylistRepository {
 
     fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .inspect_err(|_| tracing::error!(playlist_id = %playlist.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -77,7 +81,8 @@ impl PlaylistRepository for SqlitePlaylistRepository {
 
     fn delete(&self, id: &PlaylistId) -> anyhow::Result<()> {
         let conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .inspect_err(|_| tracing::error!(playlist_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -91,7 +96,8 @@ impl PlaylistRepository for SqlitePlaylistRepository {
 
     fn list(&self) -> anyhow::Result<Vec<Playlist>> {
         let conn = self
-            .conn
+            .db
+            .read()
             .lock()
             .inspect_err(|_| tracing::error!("database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -154,7 +160,7 @@ mod tests {
     fn repo() -> SqlitePlaylistRepository {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        SqlitePlaylistRepository::new(Arc::new(Mutex::new(conn)))
+        SqlitePlaylistRepository::new(Database::single(conn))
     }
 
     fn playlist(id: &str, name: &str) -> Playlist {

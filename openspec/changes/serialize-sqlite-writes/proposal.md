@@ -4,8 +4,9 @@ Adding a large playlist produces a burst of concurrent database writes that fail
 
 ## What Changes
 
-- Route every repository through a single shared database connection so all in-process database access serializes through a Rust mutex instead of contending for SQLite's write lock. With one writer, the process can no longer lock itself out.
-- Set `PRAGMA synchronous = NORMAL` (safe and recommended under WAL) to lower per-write fsync cost now that writes are serialized.
+- Give the process two connections — one **write** connection and one **read** connection — wrapped in a small `Database` handle injected into every repository. Writes (and read-modify-write operations such as task claim, plus transactions) go through the write connection, serialized by a mutex so the process keeps exactly one writer and can never lock itself out. Pure reads go through the read connection.
+- Because the two connections are distinct, WAL lets a read proceed concurrently with an in-progress write, so a write burst (e.g. ingesting a large playlist) does not stall the web UI's reads.
+- Set `PRAGMA synchronous = NORMAL` (safe and recommended under WAL) to lower per-write fsync cost.
 - Keep the existing `busy_timeout` as a backstop for the brief startup migration/connectivity connections and for any external tooling that opens the file.
 - No change to the HTTP API, task semantics, or on-disk schema.
 
@@ -15,11 +16,11 @@ Adding a large playlist produces a burst of concurrent database writes that fail
 <!-- None -->
 
 ### Modified Capabilities
-- `daemon`: Adds a requirement that the daemon serializes its database access so that concurrent writes under load complete rather than failing with database-locked errors.
+- `daemon`: Adds a requirement that the daemon serializes its writes through a single writer so concurrent operations complete rather than failing with database-locked errors, and that reads run on a separate connection so a write burst does not block them.
 
 ## Impact
 
-- `src/infrastructure/infrastructure_container.rs`: wire all repositories to one shared `Arc<Mutex<Connection>>` instead of opening a connection each.
-- Repository constructors that currently take an owned `Connection` (`SqlitePlaylistRepository`, `SqliteChannelRepository`, `SqliteVideoRepository`, `SqlitePlaylistVideoRepository`, `SqliteChannelVideoRepository`, `SqliteVideoMetadataRepository`): change to accept the shared `Arc<Mutex<Connection>>`, matching the task/event repositories that already do.
-- `src/infrastructure/shared/sqlite_connection.rs`: add `PRAGMA synchronous = NORMAL`; `busy_timeout` and WAL stay.
+- `src/infrastructure/shared/sqlite_connection.rs`: add a `Database` handle holding one read and one write `Arc<Mutex<Connection>>`, with `read()` / `write()` guard accessors and an `open`; `open` keeps WAL + `busy_timeout` and adds `PRAGMA synchronous = NORMAL`.
+- `src/infrastructure/infrastructure_container.rs`: open one `Database` and inject a clone into every repository instead of opening a connection each.
+- All nine repository constructors: hold a `Database` instead of an owned `Connection` / `Arc<Mutex<Connection>>`; route pure reads to `db.read()` and writes/claim/transactions to `db.write()`.
 - No new dependencies. A connection pool (sqlx / r2d2 / deadpool) was considered and rejected — see design.md.

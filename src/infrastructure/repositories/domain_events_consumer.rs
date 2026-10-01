@@ -118,9 +118,8 @@ mod tests {
     #[test]
     fn it_should_invoke_the_single_registered_subscriber_and_delete_the_event() {
         let db = TestDatabase::new();
-        let event_publisher =
-            SqliteEventPublisher::new(db.shared_connection(), Arc::new(FixedClock(now())));
-        let event_repository = Arc::new(SqliteEventRepository::new(db.shared_connection()));
+        let event_publisher = SqliteEventPublisher::new(db.database(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.database()));
         let calls = Arc::new(Mutex::new(Vec::new()));
         let subscriber = Arc::new(FakeSubscriber::succeeding("sub1", calls.clone()));
         event_publisher.publish(&event()).unwrap();
@@ -149,9 +148,8 @@ mod tests {
     #[test]
     fn it_should_invoke_every_registered_subscriber() {
         let db = TestDatabase::new();
-        let event_publisher =
-            SqliteEventPublisher::new(db.shared_connection(), Arc::new(FixedClock(now())));
-        let event_repository = Arc::new(SqliteEventRepository::new(db.shared_connection()));
+        let event_publisher = SqliteEventPublisher::new(db.database(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.database()));
         let calls = Arc::new(Mutex::new(Vec::new()));
         let sub1 = Arc::new(FakeSubscriber::succeeding("sub1", calls.clone()));
         let sub2 = Arc::new(FakeSubscriber::succeeding("sub2", calls.clone()));
@@ -177,9 +175,8 @@ mod tests {
     #[test]
     fn it_should_retry_the_whole_event_when_one_subscriber_fails() {
         let db = TestDatabase::new();
-        let event_publisher =
-            SqliteEventPublisher::new(db.shared_connection(), Arc::new(FixedClock(now())));
-        let event_repository = Arc::new(SqliteEventRepository::new(db.shared_connection()));
+        let event_publisher = SqliteEventPublisher::new(db.database(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.database()));
         let calls = Arc::new(Mutex::new(Vec::new()));
         let failing = Arc::new(FakeSubscriber::failing("failing", calls.clone()));
         let succeeding = Arc::new(FakeSubscriber::succeeding("succeeding", calls.clone()));
@@ -213,9 +210,8 @@ mod tests {
     #[test]
     fn it_should_dead_letter_an_event_that_fails_on_the_fifth_attempt() {
         let db = TestDatabase::new();
-        let event_publisher =
-            SqliteEventPublisher::new(db.shared_connection(), Arc::new(FixedClock(now())));
-        let event_repository = Arc::new(SqliteEventRepository::new(db.shared_connection()));
+        let event_publisher = SqliteEventPublisher::new(db.database(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.database()));
         let calls = Arc::new(Mutex::new(Vec::new()));
         let failing = Arc::new(FakeSubscriber::failing("failing", calls.clone()));
         event_publisher.publish(&event()).unwrap();
@@ -253,9 +249,8 @@ mod tests {
     #[test]
     fn it_should_mark_an_event_with_no_registered_subscribers_as_done() {
         let db = TestDatabase::new();
-        let event_publisher =
-            SqliteEventPublisher::new(db.shared_connection(), Arc::new(FixedClock(now())));
-        let event_repository = Arc::new(SqliteEventRepository::new(db.shared_connection()));
+        let event_publisher = SqliteEventPublisher::new(db.database(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.database()));
         event_publisher.publish(&event()).unwrap();
         let consumer = DomainEventsConsumer::new(
             event_repository.clone(),

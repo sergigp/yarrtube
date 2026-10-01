@@ -98,7 +98,7 @@ mod tests {
     fn it_should_reschedule_after_success() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let task = UpdateYtdlpTask::new(
@@ -125,7 +125,7 @@ mod tests {
     fn it_should_reschedule_after_failure() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let task = UpdateYtdlpTask::new(
@@ -151,10 +151,8 @@ mod tests {
     #[test]
     fn it_should_seed_the_task_when_none_is_scheduled() {
         let db = TestDatabase::new();
-        let task_repository = SqliteTaskRepository::new(
-            db.shared_connection(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
+        let task_repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
 
         let result = schedule_update_ytdlp_if_absent(&task_repository, seed_run_at());
 
@@ -168,10 +166,8 @@ mod tests {
     #[test]
     fn it_should_not_seed_if_one_is_pending() {
         let db = TestDatabase::new();
-        let task_repository = SqliteTaskRepository::new(
-            db.shared_connection(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
+        let task_repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         task_repository
             .schedule(&Task::UpdateYtdlp, fixed_timestamp())
             .unwrap();
@@ -188,10 +184,8 @@ mod tests {
     #[test]
     fn it_should_not_seed_if_one_is_running() {
         let db = TestDatabase::new();
-        let task_repository = SqliteTaskRepository::new(
-            db.shared_connection(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
+        let task_repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         task_repository
             .schedule(&Task::UpdateYtdlp, fixed_timestamp())
             .unwrap();
@@ -216,10 +210,8 @@ mod tests {
     #[test]
     fn it_should_seed_if_only_other_task_types_are_scheduled() {
         let db = TestDatabase::new();
-        let task_repository = SqliteTaskRepository::new(
-            db.shared_connection(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
+        let task_repository =
+            SqliteTaskRepository::new(db.database(), Arc::new(FixedClock(fixed_timestamp())));
         let reconcile_playlist = Task::ReconcilePlaylist {
             playlist_id: "PL1".to_string(),
         };

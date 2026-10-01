@@ -82,9 +82,9 @@ mod tests {
     #[test]
     fn it_should_schedule_the_download() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         channel_repository
@@ -133,11 +133,11 @@ mod tests {
     fn it_should_skip_if_channel_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let subscriber = DownloadVideoOnVideoAddedToChannel::new(
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
@@ -167,8 +167,10 @@ mod tests {
         )
     }
 
-    fn unused_connection() -> std::sync::Arc<std::sync::Mutex<Connection>> {
-        std::sync::Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()))
+    fn unused_connection() -> crate::infrastructure::shared::sqlite_connection::Database {
+        crate::infrastructure::shared::sqlite_connection::Database::single(
+            Connection::open_in_memory().unwrap(),
+        )
     }
 
     fn channel(channel_handle: &str) -> Channel {

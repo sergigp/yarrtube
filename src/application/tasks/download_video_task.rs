@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn it_should_download_the_video() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -75,7 +75,7 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::new(true)),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -96,7 +96,7 @@ mod tests {
     #[test]
     fn it_should_record_the_sync_time() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -105,7 +105,7 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::new(true)),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn it_should_retry_a_failed_download() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -135,7 +135,7 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::new(false)),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn it_should_record_the_download_error() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -168,7 +168,7 @@ mod tests {
             )),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn it_should_mark_errored_after_last_attempt() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -196,7 +196,7 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::new(false)),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), true);
@@ -219,7 +219,7 @@ mod tests {
     fn it_should_exclude_a_permanently_unavailable_video_without_dead_lettering_on_the_last_attempt()
      {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -233,7 +233,7 @@ mod tests {
             ),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), true);
@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn it_should_exclude_a_video_blocked_by_claimed_content() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -266,7 +266,7 @@ mod tests {
             ),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -285,7 +285,7 @@ mod tests {
     #[test]
     fn it_should_exclude_a_members_only_video() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -296,7 +296,7 @@ mod tests {
             )),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -315,7 +315,7 @@ mod tests {
     #[test]
     fn it_should_not_exclude_a_bare_video_unavailable() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -326,7 +326,7 @@ mod tests {
             )),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn it_should_treat_a_failed_diagnostic_probe_as_undetermined() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -354,7 +354,7 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::new(false).with_diagnose_error()),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn it_should_skip_if_video_is_gone() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
         let task = DownloadVideoTask::new(video_downloader(
             &db,
@@ -384,7 +384,7 @@ mod tests {
             downloader.clone(),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(my_video().id.as_str()), false);
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn it_should_remove_the_folder_if_video_deleted_during_download() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video = my_video();
         video_repository.save(&video).unwrap();
@@ -413,7 +413,7 @@ mod tests {
             ),
             video_file_repository.clone(),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -432,7 +432,7 @@ mod tests {
     #[test]
     fn it_should_use_the_sanitized_title_as_filename() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = Video::create(
             VideoId::new("yt1").unwrap(),
             "My: Messy / Title?",
@@ -446,7 +446,7 @@ mod tests {
             downloader.clone(),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -465,7 +465,7 @@ mod tests {
     #[test]
     fn it_should_download_into_the_payload_output_dir() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
@@ -475,7 +475,7 @@ mod tests {
             downloader.clone(),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(
@@ -500,7 +500,7 @@ mod tests {
     #[test]
     fn it_should_reuse_the_existing_video_folder() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
@@ -510,7 +510,7 @@ mod tests {
             downloader.clone(),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -529,7 +529,7 @@ mod tests {
     #[test]
     fn it_should_use_no_existing_folder_without_thumbnail() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
@@ -539,7 +539,7 @@ mod tests {
             downloader.clone(),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -571,7 +571,7 @@ mod tests {
     #[test]
     fn it_should_record_the_thumbnail_filename() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -582,7 +582,7 @@ mod tests {
                 "fake-output.jpg".to_string(),
             ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -603,7 +603,7 @@ mod tests {
     #[test]
     fn it_should_record_no_thumbnail_if_none_written() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -612,7 +612,7 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::new(true)),
             Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -633,7 +633,7 @@ mod tests {
     #[test]
     fn it_should_record_the_duration() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -642,7 +642,7 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::with_duration(223)),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -663,7 +663,7 @@ mod tests {
     #[test]
     fn it_should_record_no_duration_if_unknown() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -672,7 +672,7 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::new(true)),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
         let result = run(&task, &payload_for(video.id.as_str()), false);
@@ -693,9 +693,8 @@ mod tests {
     #[test]
     fn it_should_record_when_metadata_was_generated() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let video_metadata_repository =
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         let output_dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(output_dir.path().join("fake-output")).unwrap();
         let video = my_video();
@@ -742,9 +741,8 @@ mod tests {
     #[test]
     fn it_should_keep_the_metadata_creation_time_when_regenerated() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let video_metadata_repository =
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         let output_dir = tempfile::tempdir().unwrap();
         let video_dir = output_dir.path().join("fake-output");
         std::fs::create_dir_all(&video_dir).unwrap();
@@ -815,9 +813,8 @@ mod tests {
     #[test]
     fn it_should_save_youtube_metadata() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let video_metadata_repository =
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         let output_dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(output_dir.path().join("fake-output")).unwrap();
         let video = my_video();
@@ -879,9 +876,8 @@ mod tests {
     #[test]
     fn it_should_download_even_if_metadata_fetch_fails() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let video_metadata_repository =
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -918,7 +914,7 @@ mod tests {
     #[cfg(unix)]
     fn it_should_detect_a_real_thumbnail_file_written_by_yt_dlp_alongside_the_video() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let output_dir = unique_temp_dir("download-video-task-thumbnail-e2e");
         let fake_yt_dlp =
             FakeYtDlp::with_downloaded_files("My Video.mp4", &["My Video.mp4", "My Video.jpg"]);
@@ -932,7 +928,7 @@ mod tests {
             )),
             Arc::new(FilesystemVideoFileRepository),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
         let payload = Task::DownloadVideo {
             video_id: video.id.as_str().to_string(),
@@ -973,7 +969,7 @@ mod tests {
             video_repository,
             video_downloader_repository,
             video_file_repository,
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             youtube_metadata_repository,
             video_metadata_repository,
             Arc::new(FixedClock(fixed_timestamp())),
@@ -996,8 +992,10 @@ mod tests {
         ))
     }
 
-    fn unused_connection() -> std::sync::Arc<std::sync::Mutex<Connection>> {
-        std::sync::Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()))
+    fn unused_connection() -> crate::infrastructure::shared::sqlite_connection::Database {
+        crate::infrastructure::shared::sqlite_connection::Database::single(
+            Connection::open_in_memory().unwrap(),
+        )
     }
 
     fn my_video() -> Video {

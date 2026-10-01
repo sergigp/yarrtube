@@ -77,9 +77,9 @@ mod tests {
     #[test]
     fn it_should_schedule_a_thumbnail_fetch() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         playlist_repository.insert(&playlist("PL1")).unwrap();
@@ -109,11 +109,11 @@ mod tests {
     fn it_should_skip_if_playlist_no_longer_exists() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let subscriber = FetchThumbnailOnVideoAddedToPlaylist::new(
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",

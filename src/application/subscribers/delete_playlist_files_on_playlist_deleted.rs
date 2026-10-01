@@ -56,13 +56,12 @@ mod tests {
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
-    use std::sync::Mutex;
 
     #[test]
     fn it_should_schedule_playlist_files_deletion() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let subscriber = DeletePlaylistFilesOnPlaylistDeleted::new(
@@ -105,7 +104,9 @@ mod tests {
     fn any_subscriber() -> DeletePlaylistFilesOnPlaylistDeleted {
         DeletePlaylistFilesOnPlaylistDeleted::new(
             Arc::new(SqliteTaskRepository::new(
-                Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+                crate::infrastructure::shared::sqlite_connection::Database::single(
+                    Connection::open_in_memory().unwrap(),
+                ),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),

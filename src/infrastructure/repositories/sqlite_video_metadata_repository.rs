@@ -1,10 +1,12 @@
 use crate::domain::video::VideoRecordId;
 use crate::domain::video_metadata::{VideoMetadata, render_movie_nfo};
+use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, OptionalExtension, Row, params};
+#[cfg(test)]
+use rusqlite::Connection;
+use rusqlite::{OptionalExtension, Row, params};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
 pub const MOVIE_NFO_FILENAME: &str = "movie.nfo";
 
@@ -44,12 +46,12 @@ struct VideoMetadataRow {
 }
 
 pub struct SqliteVideoMetadataRepository {
-    conn: Arc<Mutex<Connection>>,
+    db: Database,
 }
 
 impl SqliteVideoMetadataRepository {
-    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
-        Self { conn }
+    pub fn new(db: Database) -> Self {
+        Self { db }
     }
 
     fn write_movie_nfo(metadata: &VideoMetadata, video_dir: &Path) -> anyhow::Result<()> {
@@ -70,7 +72,8 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
         Self::write_movie_nfo(metadata, video_dir)?;
 
         let conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .inspect_err(|_| tracing::error!(video_id = %video_id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -116,7 +119,8 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
 
     fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoMetadata>> {
         let conn = self
-            .conn
+            .db
+            .read()
             .lock()
             .inspect_err(|_| tracing::error!(video_id = %video_id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -203,7 +207,7 @@ mod tests {
     fn repo() -> SqliteVideoMetadataRepository {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        SqliteVideoMetadataRepository::new(Arc::new(Mutex::new(conn)))
+        SqliteVideoMetadataRepository::new(Database::single(conn))
     }
 
     fn unique_temp_dir(name: &str) -> std::path::PathBuf {

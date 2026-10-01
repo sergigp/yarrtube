@@ -360,7 +360,7 @@ mod tests {
     async fn it_should_dispatch_an_eligible_task_and_delete_it_on_success() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(FakeHandler::succeeding());
@@ -394,7 +394,7 @@ mod tests {
     async fn it_should_retry_a_task_whose_handler_fails() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(FakeHandler::failing());
@@ -433,7 +433,7 @@ mod tests {
     async fn it_should_dead_letter_a_task_whose_handler_fails_on_the_fifth_attempt() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(FakeHandler::failing());
@@ -468,7 +468,7 @@ mod tests {
     async fn it_should_tell_the_handler_this_is_not_the_last_attempt_when_retries_remain() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(FakeHandler::succeeding());
@@ -499,7 +499,7 @@ mod tests {
     async fn it_should_tell_the_handler_this_is_the_last_attempt_when_no_retries_remain() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(FakeHandler::succeeding());
@@ -530,7 +530,7 @@ mod tests {
     fn it_should_retry_a_task_recovered_as_running_from_a_previous_process() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(FakeHandler::succeeding());
@@ -574,7 +574,7 @@ mod tests {
     fn it_should_dead_letter_a_recovered_running_task_once_the_attempt_limit_is_exceeded() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(FakeHandler::succeeding());
@@ -613,7 +613,7 @@ mod tests {
     async fn it_should_run_downloads_in_parallel_up_to_the_lane_concurrency() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(BlockingHandler::default());
@@ -657,7 +657,7 @@ mod tests {
     async fn it_should_not_block_light_tasks_behind_downloads() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(BlockingHandler::default());
@@ -687,7 +687,7 @@ mod tests {
     async fn it_should_run_light_tasks_one_at_a_time() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(BlockingHandler::default());
@@ -725,7 +725,7 @@ mod tests {
     async fn it_should_not_block_reconciles_behind_thumbnail_fetches() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(BlockingHandler::default());
@@ -764,7 +764,7 @@ mod tests {
     async fn it_should_run_thumbnail_fetches_one_at_a_time() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(BlockingHandler::default());
@@ -809,7 +809,7 @@ mod tests {
     async fn it_should_not_run_two_tasks_for_the_same_video_at_once() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(BlockingHandler::default());
@@ -852,7 +852,7 @@ mod tests {
     async fn it_should_start_a_later_task_when_the_earlier_one_is_held_back() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(BlockingHandler::default());
@@ -891,7 +891,7 @@ mod tests {
     async fn it_should_run_update_ytdlp_only_when_nothing_else_runs() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(BlockingHandler::default());
@@ -938,7 +938,7 @@ mod tests {
     async fn it_should_not_start_tasks_while_update_ytdlp_runs() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(BlockingHandler::default());
@@ -980,7 +980,7 @@ mod tests {
     async fn it_should_start_tasks_of_a_lane_in_run_at_order() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(BlockingHandler::default());
@@ -1019,7 +1019,7 @@ mod tests {
     async fn it_should_retry_a_task_whose_handler_panics_and_free_its_slot() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         task_repository.schedule(&reconcile("PL1"), now()).unwrap();
@@ -1060,7 +1060,7 @@ mod tests {
     async fn it_should_start_the_next_task_as_soon_as_one_finishes() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(FakeHandler::succeeding());
@@ -1089,7 +1089,7 @@ mod tests {
     async fn it_should_retry_a_task_left_running_without_waiting_for_a_restart() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(now())),
         ));
         let handler = Arc::new(FakeHandler::succeeding());

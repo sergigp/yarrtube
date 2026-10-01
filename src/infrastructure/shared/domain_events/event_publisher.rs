@@ -1,9 +1,10 @@
 use crate::domain::event::DomainEvent;
+use crate::infrastructure::shared::sqlite_connection::Database;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tracing::info;
 
 pub trait EventPublisher: Send + Sync {
@@ -11,20 +12,21 @@ pub trait EventPublisher: Send + Sync {
 }
 
 pub struct SqliteEventPublisher {
-    conn: Arc<Mutex<Connection>>,
+    db: Database,
     clock: Arc<dyn Clock>,
 }
 
 impl SqliteEventPublisher {
-    pub fn new(conn: Arc<Mutex<Connection>>, clock: Arc<dyn Clock>) -> Self {
-        Self { conn, clock }
+    pub fn new(db: Database, clock: Arc<dyn Clock>) -> Self {
+        Self { db, clock }
     }
 }
 
 impl EventPublisher for SqliteEventPublisher {
     fn publish(&self, event: &DomainEvent) -> anyhow::Result<()> {
         let conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         insert_pending_row(&conn, event, self.clock.now())

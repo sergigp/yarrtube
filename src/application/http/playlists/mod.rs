@@ -143,8 +143,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_create_a_playlist() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -173,8 +173,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_create_a_playlist_from_a_youtube_url() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -207,8 +207,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_name_the_playlist_after_its_id_if_youtube_title_blank() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -249,8 +249,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_create_a_playlist_with_a_title_unsafe_for_filesystems() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -291,8 +291,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_return_the_existing_playlist_if_already_created() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -326,8 +326,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_publish_playlist_created_only_once() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -401,8 +401,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_create_if_path_already_in_use() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         playlist_repository
             .insert(&playlist("PL1", "shared/path"))
             .unwrap();
@@ -437,8 +437,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_create_if_playlist_not_found_on_youtube() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository { resolved: None }),
@@ -461,8 +461,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_create_if_youtube_lookup_fails() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FailingYoutubePlaylistRepository),
@@ -486,8 +486,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_preview_a_playlist() {
         let db = TestDatabase::new();
-        let playlist_repository = SqlitePlaylistRepository::new(db.shared_connection());
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = SqlitePlaylistRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
         let task_repository = task_repository(&db);
         let playlist_previewer = PlaylistPreviewer::new(Arc::new(FakeYoutubePlaylistRepository {
             resolved: Some(resolved_playlist()),
@@ -580,15 +580,15 @@ mod tests {
     #[tokio::test]
     async fn it_should_delete_a_playlist() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
         let playlist_deleter = PlaylistDeleter::new(
             playlist_repository.clone(),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
         );
 
@@ -612,10 +612,9 @@ mod tests {
     #[tokio::test]
     async fn it_should_delete_only_the_deleted_playlist_videos() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -675,15 +674,15 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_delete_a_missing_playlist() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
         let playlist_deleter = PlaylistDeleter::new(
             playlist_repository.clone(),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
         );
 
@@ -715,9 +714,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_no_playlists() {
         let db = TestDatabase::new();
-        let playlist_searcher = PlaylistSearcher::new(Arc::new(SqlitePlaylistRepository::new(
-            db.shared_connection(),
-        )));
+        let playlist_searcher =
+            PlaylistSearcher::new(Arc::new(SqlitePlaylistRepository::new(db.database())));
 
         let response = list(playlist_searcher).await;
 
@@ -727,7 +725,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_all_playlists() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         playlist_repository
             .insert(&playlist("PL1", "music/first"))
             .unwrap();
@@ -750,7 +748,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_playlists_sorted_by_name_ignoring_case() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         for (id, name) in [
             ("PL1", "watch later"),
             ("PL2", "Courses"),
@@ -789,12 +787,11 @@ mod tests {
     #[tokio::test]
     async fn it_should_add_new_videos_on_reconcile() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let event_repository = SqliteEventRepository::new(db.database());
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -849,11 +846,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_remove_videos_gone_from_youtube_on_reconcile() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -902,12 +898,11 @@ mod tests {
     #[tokio::test]
     async fn it_should_be_idempotent_on_repeated_reconciles() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let event_repository = SqliteEventRepository::new(db.database());
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
@@ -961,7 +956,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_not_reschedule_an_already_pending_reconcile() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let task_repository = task_repository(&db);
         let existing_task = Task::ReconcilePlaylist {
             playlist_id: "PL1".to_string(),
@@ -976,8 +971,8 @@ mod tests {
         let playlist_video_reconciler = playlist_video_reconciler(
             &db,
             playlist_repository,
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Vec::new(),
             task_repository.clone(),
         );
@@ -994,14 +989,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_ignore_reconcile_of_a_missing_playlist() {
         let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         let task_repository = task_repository(&db);
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let event_repository = SqliteEventRepository::new(db.database());
         let playlist_video_reconciler = playlist_video_reconciler(
             &db,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
             video_repository.clone(),
             playlist_video_repository.clone(),
             vec![playlist_item("vid1", "One", 0)],
@@ -1091,7 +1085,7 @@ mod tests {
                 videos: Mutex::new(playlist_items),
             }),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             event_publisher(db),
             task_repository,
             Arc::new(FakeVideoFileRepository::default()),
@@ -1142,8 +1136,10 @@ mod tests {
         }
     }
 
-    fn unused_connection() -> std::sync::Arc<std::sync::Mutex<Connection>> {
-        std::sync::Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()))
+    fn unused_connection() -> crate::infrastructure::shared::sqlite_connection::Database {
+        crate::infrastructure::shared::sqlite_connection::Database::single(
+            Connection::open_in_memory().unwrap(),
+        )
     }
 
     fn unused_event_publisher() -> Arc<SqliteEventPublisher> {
@@ -1155,14 +1151,14 @@ mod tests {
 
     fn event_publisher(db: &TestDatabase) -> Arc<SqliteEventPublisher> {
         Arc::new(SqliteEventPublisher::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ))
     }
 
     fn task_repository(db: &TestDatabase) -> Arc<SqliteTaskRepository> {
         Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ))
     }

@@ -66,12 +66,12 @@ mod tests {
     #[test]
     fn it_should_reconcile_the_playlist() {
         let db = TestDatabase::new();
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let event_repository = SqliteEventRepository::new(db.database());
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let subscriber = ReconcileOnPlaylistCreated::new(playlist_video_reconciler(
             &db,
@@ -106,13 +106,13 @@ mod tests {
     fn it_should_skip_if_playlist_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let event_repository = SqliteEventRepository::new(db.shared_connection());
+        let event_repository = SqliteEventRepository::new(db.database());
         let subscriber = ReconcileOnPlaylistCreated::new(playlist_video_reconciler(
             &db,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
         ));
 
@@ -131,7 +131,7 @@ mod tests {
         playlist_repository: Arc<SqlitePlaylistRepository>,
         task_repository: Arc<SqliteTaskRepository>,
     ) -> PlaylistVideoReconciler {
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::default()),
@@ -141,12 +141,12 @@ mod tests {
         PlaylistVideoReconciler::new(
             playlist_repository,
             video_repository,
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(FakeYoutubePlaylistItemsRepository {
                 videos: Mutex::new(Vec::new()),
             }),
             Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             event_publisher(db),
             task_repository,
             Arc::new(FakeVideoFileRepository::default()),
@@ -207,13 +207,15 @@ mod tests {
 
     fn event_publisher(db: &TestDatabase) -> Arc<SqliteEventPublisher> {
         Arc::new(SqliteEventPublisher::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ))
     }
 
-    fn unused_connection() -> std::sync::Arc<std::sync::Mutex<Connection>> {
-        std::sync::Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()))
+    fn unused_connection() -> crate::infrastructure::shared::sqlite_connection::Database {
+        crate::infrastructure::shared::sqlite_connection::Database::single(
+            Connection::open_in_memory().unwrap(),
+        )
     }
 
     fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {

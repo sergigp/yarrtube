@@ -1,12 +1,16 @@
 #[cfg(test)]
 use crate::domain::event::DomainEvent;
 use crate::domain::event::{DeadLetteredEvent, ScheduledEvent};
+use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 #[cfg(test)]
+use rusqlite::Connection;
+#[cfg(test)]
 use rusqlite::OptionalExtension;
-use rusqlite::{Connection, Row, params};
-use std::sync::{Arc, Mutex};
+use rusqlite::{Row, params};
+#[cfg(test)]
+use std::sync::Arc;
 
 pub trait EventRepository: Send + Sync {
     /// Pending events ready to dispatch.
@@ -51,12 +55,12 @@ fn row_to_scheduled_event(row: &Row) -> rusqlite::Result<ScheduledEvent> {
 }
 
 pub struct SqliteEventRepository {
-    conn: Arc<Mutex<Connection>>,
+    db: Database,
 }
 
 impl SqliteEventRepository {
-    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
-        Self { conn }
+    pub fn new(db: Database) -> Self {
+        Self { db }
     }
 }
 
@@ -64,7 +68,8 @@ impl SqliteEventRepository {
     #[cfg(test)]
     fn find(&self, id: i64) -> anyhow::Result<Option<ScheduledEvent>> {
         let conn = self
-            .conn
+            .db
+            .read()
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.query_row(
@@ -80,7 +85,8 @@ impl SqliteEventRepository {
     #[cfg(test)]
     pub fn list_dead_lettered(&self) -> anyhow::Result<Vec<DeadLetteredEvent>> {
         let conn = self
-            .conn
+            .db
+            .read()
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
@@ -116,7 +122,8 @@ impl SqliteEventRepository {
 impl EventRepository for SqliteEventRepository {
     fn list_eligible(&self) -> anyhow::Result<Vec<ScheduledEvent>> {
         let conn = self
-            .conn
+            .db
+            .read()
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let mut stmt = conn
@@ -133,7 +140,8 @@ impl EventRepository for SqliteEventRepository {
 
     fn update(&self, event: &ScheduledEvent) -> anyhow::Result<()> {
         let conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute(
@@ -151,7 +159,8 @@ impl EventRepository for SqliteEventRepository {
 
     fn delete(&self, id: i64) -> anyhow::Result<()> {
         let conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         conn.execute("DELETE FROM events WHERE id = ?1", params![id])
@@ -161,7 +170,8 @@ impl EventRepository for SqliteEventRepository {
 
     fn dead_letter(&self, event: &DeadLetteredEvent) -> anyhow::Result<()> {
         let mut conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
         let tx = conn
@@ -210,7 +220,7 @@ mod tests {
     fn repo_with_one_pending_event() -> (SqliteEventRepository, i64) {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        let conn = Arc::new(Mutex::new(conn));
+        let conn = Database::single(conn);
         let publisher = SqliteEventPublisher::new(conn.clone(), Arc::new(FixedClock(now())));
         let repo = SqliteEventRepository::new(conn);
         publisher.publish(&event()).unwrap();
@@ -221,7 +231,7 @@ mod tests {
     fn repo() -> SqliteEventRepository {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        SqliteEventRepository::new(Arc::new(Mutex::new(conn)))
+        SqliteEventRepository::new(Database::single(conn))
     }
 
     fn event() -> DomainEvent {
@@ -245,7 +255,7 @@ mod tests {
     fn it_should_create_a_queryable_empty_dead_letter_table() {
         let repo = repo();
 
-        let conn = repo.conn.lock().unwrap();
+        let conn = repo.db.read().lock().unwrap();
         let mut stmt = conn
             .prepare("SELECT * FROM domain_events_dead_letter")
             .unwrap();
@@ -307,7 +317,7 @@ mod tests {
         assert!(repo.list_eligible().unwrap().is_empty());
         assert!(repo.find(id).unwrap().is_none());
 
-        let conn = repo.conn.lock().unwrap();
+        let conn = repo.db.read().lock().unwrap();
         let (original_event_id, event_type, payload, retries, last_error): (
             i64,
             String,

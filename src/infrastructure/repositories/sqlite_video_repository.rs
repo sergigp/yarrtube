@@ -1,11 +1,13 @@
 use crate::domain::shared::Quality;
 use crate::domain::video::{PlaybackPosition, Video, VideoStatus};
 use crate::domain::video::{VideoId, VideoRecordId};
+use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
+#[cfg(test)]
+use rusqlite::Connection;
+use rusqlite::{OptionalExtension, Row, params, params_from_iter};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at";
 
@@ -63,12 +65,12 @@ pub trait VideoRepository: Send + Sync {
 }
 
 pub struct SqliteVideoRepository {
-    conn: Arc<Mutex<Connection>>,
+    db: Database,
 }
 
 impl SqliteVideoRepository {
-    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
-        Self { conn }
+    pub fn new(db: Database) -> Self {
+        Self { db }
     }
 
     /// Every stored video, for tests asserting the table's whole final state;
@@ -76,7 +78,7 @@ impl SqliteVideoRepository {
     #[cfg(test)]
     pub fn list(&self) -> anyhow::Result<Vec<Video>> {
         let ids: Vec<String> = {
-            let conn = self.conn.lock().unwrap();
+            let conn = self.db.read().lock().unwrap();
             let mut stmt = conn.prepare("SELECT id FROM videos ORDER BY rowid ASC")?;
             stmt.query_map([], |row| row.get(0))?
                 .collect::<Result<_, _>>()?
@@ -90,7 +92,8 @@ impl SqliteVideoRepository {
 impl VideoRepository for SqliteVideoRepository {
     fn save(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -139,7 +142,8 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn find(&self, id: &VideoRecordId) -> anyhow::Result<Option<Video>> {
         let conn = self
-            .conn
+            .db
+            .read()
             .lock()
             .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -157,7 +161,8 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn find_many(&self, ids: &[VideoRecordId]) -> anyhow::Result<Vec<Video>> {
         let conn = self
-            .conn
+            .db
+            .read()
             .lock()
             .inspect_err(|_| tracing::error!("database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -186,7 +191,8 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn update(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .inspect_err(|_| tracing::error!(video_id = %video.id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -224,7 +230,8 @@ impl VideoRepository for SqliteVideoRepository {
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         let conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -246,7 +253,8 @@ impl VideoRepository for SqliteVideoRepository {
         now: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         let conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -263,7 +271,8 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()> {
         let conn = self
-            .conn
+            .db
+            .write()
             .lock()
             .inspect_err(|_| tracing::error!(video_id = %id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -275,7 +284,8 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>> {
         let conn = self
-            .conn
+            .db
+            .read()
             .lock()
             .inspect_err(|_| tracing::error!(youtube_id = %youtube_id, "database lock poisoned"))
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?;
@@ -363,7 +373,7 @@ mod tests {
     fn repo() -> SqliteVideoRepository {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
-        SqliteVideoRepository::new(Arc::new(Mutex::new(conn)))
+        SqliteVideoRepository::new(Database::single(conn))
     }
 
     fn video(title: &str, now: DateTime<Utc>) -> Video {

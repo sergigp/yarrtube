@@ -78,9 +78,9 @@ mod tests {
     #[test]
     fn it_should_schedule_a_thumbnail_fetch() {
         let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         channel_repository.insert(&channel("@somechannel")).unwrap();
@@ -113,11 +113,11 @@ mod tests {
     fn it_should_skip_if_channel_no_longer_exists() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let subscriber = FetchThumbnailOnVideoAddedToChannel::new(
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",

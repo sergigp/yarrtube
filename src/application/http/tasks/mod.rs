@@ -57,16 +57,16 @@ mod tests {
     async fn it_should_list_no_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -79,7 +79,7 @@ mod tests {
         let db = TestDatabase::new();
         let future = fixed_timestamp() + chrono::Duration::seconds(60);
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         task_repository
@@ -87,11 +87,11 @@ mod tests {
             .unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -109,7 +109,7 @@ mod tests {
     async fn it_should_include_running_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         task_repository
@@ -121,11 +121,11 @@ mod tests {
         task_repository.update(&running).unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -143,10 +143,10 @@ mod tests {
     async fn it_should_include_playlist_name_in_reconcile_playlist_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         task_repository
             .schedule(
                 &Task::ReconcilePlaylist {
@@ -161,10 +161,10 @@ mod tests {
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
             playlist_repository,
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -182,7 +182,7 @@ mod tests {
     async fn it_should_omit_details_if_playlist_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         task_repository
@@ -195,11 +195,11 @@ mod tests {
             .unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -211,10 +211,10 @@ mod tests {
     async fn it_should_include_channel_name_in_reconcile_channel_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         task_repository
             .schedule(
                 &Task::ReconcileChannel {
@@ -228,11 +228,11 @@ mod tests {
             .unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
             channel_repository,
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -250,7 +250,7 @@ mod tests {
     async fn it_should_omit_details_if_channel_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         task_repository
@@ -263,11 +263,11 @@ mod tests {
             .unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -279,13 +279,12 @@ mod tests {
     async fn it_should_include_video_and_playlist_in_download_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         task_repository
             .schedule(&download_video_task("rec1"), fixed_timestamp())
             .unwrap();
@@ -303,10 +302,10 @@ mod tests {
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
             playlist_repository,
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
             video_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -327,13 +326,12 @@ mod tests {
     async fn it_should_list_a_fetch_thumbnail_task_with_video_and_playlist_names() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.shared_connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let playlist_video_repository =
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
         task_repository
             .schedule(
                 &Task::FetchThumbnail {
@@ -357,10 +355,10 @@ mod tests {
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
             playlist_repository,
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
             video_repository,
             playlist_video_repository,
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -381,13 +379,12 @@ mod tests {
     async fn it_should_include_video_and_channel_in_download_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.shared_connection()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.shared_connection()));
-        let channel_video_repository =
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
         task_repository
             .schedule(&download_video_task("rec1"), fixed_timestamp())
             .unwrap();
@@ -405,10 +402,10 @@ mod tests {
             .unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
             channel_repository,
             video_repository,
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             channel_video_repository,
         );
 
@@ -430,7 +427,7 @@ mod tests {
     async fn it_should_omit_details_if_video_is_untracked() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         task_repository
@@ -438,11 +435,11 @@ mod tests {
             .unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -454,7 +451,7 @@ mod tests {
     async fn it_should_include_filename_in_delete_video_file_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         task_repository
@@ -469,11 +466,11 @@ mod tests {
             .unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -491,7 +488,7 @@ mod tests {
     async fn it_should_omit_details_if_video_has_no_filename() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         task_repository
@@ -506,11 +503,11 @@ mod tests {
             .unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -522,7 +519,7 @@ mod tests {
     async fn it_should_include_path_in_delete_playlist_files_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         task_repository
@@ -536,11 +533,11 @@ mod tests {
             .unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -558,7 +555,7 @@ mod tests {
     async fn it_should_include_path_in_delete_channel_files_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         task_repository
@@ -572,11 +569,11 @@ mod tests {
             .unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
@@ -594,7 +591,7 @@ mod tests {
     async fn it_should_omit_details_for_update_ytdlp_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.shared_connection(),
+            db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         task_repository
@@ -602,11 +599,11 @@ mod tests {
             .unwrap();
         let task_view_searcher = TaskViewSearcher::new(
             task_repository,
-            Arc::new(SqlitePlaylistRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelRepository::new(db.shared_connection())),
-            Arc::new(SqliteVideoRepository::new(db.shared_connection())),
-            Arc::new(SqlitePlaylistVideoRepository::new(db.shared_connection())),
-            Arc::new(SqliteChannelVideoRepository::new(db.shared_connection())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
         );
 
         let response = list(task_view_searcher).await;
