@@ -163,4 +163,24 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(tasksForTab(all, 'syncs').map((task) => task.id)).toEqual([3])
     expect(tasksForTab(all, 'cleanup').map((task) => task.id)).toEqual([4])
   })
+
+  it("returns every task sorted by category for the 'all' tab", () => {
+    const pendingLater = aTask({
+      id: 1,
+      task_type: 'download_video',
+      status: 'pending',
+      run_at: '2999-01-01T00:00:00Z',
+    })
+    const running = aTask({ id: 2, task_type: 'reconcile_channel', status: 'running' })
+    const pendingSoon = aTask({
+      id: 3,
+      task_type: 'delete_video_file',
+      status: 'pending',
+      run_at: '2100-01-01T00:00:00Z',
+    })
+
+    const all = tasksForTab([pendingLater, running, pendingSoon], 'all')
+
+    expect(all.map((task) => task.id)).toEqual([2, 3, 1])
+  })
 })
