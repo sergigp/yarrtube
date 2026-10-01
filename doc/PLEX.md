@@ -1,10 +1,8 @@
-# Plex integration notes
-
-> Draft notes on everything you need to do **manually in Plex** to get the
-> collections integration working. Assumes yarrtube itself is already
-> installed and downloading videos ([Installation](INSTALLATION.md)).
+# Plex Collections integration
 
 ## What you get
+
+While writing this (Plex Version 1.43.4.10903), collection support via nfo files it's still very limited. You can, though, create collections via Plex API and this is the mechanism Yarrtube uses, but it comes with some required setup.
 
 Without the integration, a Plex library over yarrtube's videos is a flat
 grid of every downloaded video. With it, yarrtube keeps **one Plex
@@ -13,96 +11,43 @@ per playlist/channel, videos inside keep their playlist order (publish
 order for channels), and autoplay carries you from one video to the next.
 
 Everything below is a one-time setup. Once configured, yarrtube converges
-the collections automatically in the background (every 15 minutes by
-default): new downloads are added once Plex has scanned them, videos that
-leave yarrtube's state are removed, and deleting a playlist/channel in
-yarrtube deletes its collection in Plex.
+the collections automatically in the background: new downloads are added once Plex has scanned them, videos that leave yarrtube's state are removed, and deleting a playlist/channel in yarrtube deletes its collection in Plex.
 
-## 1. Give Plex access to yarrtube's videos
+## Requirements
 
-Plex and yarrtube must both see the downloaded files:
+In order to let Yarrtube create and manage collections in Plex, you need:
 
-- Mount the same host folder into both containers — e.g. the folder mounted
-  at `/videos` in yarrtube also mounted (read-only is fine) into Plex.
-- The mount paths **don't** have to match: yarrtube matches its videos to
-  Plex items by YouTube video ID, never by file path.
+- Setting up Plex to read yarrtube's metadata files (NFOs) so it can match videos by YouTube ID.
+- A Plex token (`X-Plex-Token`) to authenticate yarrtube's API requests
+- The section ID(s) of the Plex library or libraries holding your yarrtube content. This is like library ids for Plex.
+- Set up Yarrtube env variables.
 
-Create a **Movies**-type library in Plex pointing at that folder (a
-dedicated library just for yarrtube content works best — you probably don't
-want YouTube videos mixed into your movie library, and the recommended
-settings below are per-library).
+## 1. Setup Plex library
 
-## 2. Make Plex read yarrtube's metadata files
+Next to every video, yarrtube writes a `movie.nfo` with meta information Plex can read.
+To tell Plex to read them, you need a **Movies** library with the Plex NFO Agent. You can also disable cinema trailers, credits detection and other stuff and make sure **Use local assets is enabled**.
 
-Next to every video, yarrtube writes a `movie.nfo` file carrying the video's
-title, a position-prefixed sort title, and the YouTube video ID
-(`<uniqueid type="youtube">...</uniqueid>`). Plex must ingest these NFO
-files — they are what gives every item:
+<p align="center">
+  <img src="plex_setup/plex_library1.png" alt="Plex Library Setup" width="450"/>
+</p>
 
-- a `youtube://<video-id>` GUID, which is **how the sync recognizes a
-  video** (no NFO ingestion → no GUID → the video never joins a collection);
-- the sort title that keeps collections in playlist order.
-
-In the library's settings (Manage Library → Edit → Advanced), configure the
-agent/scanner to use local metadata: enable **"Use local assets"** and
-prefer local metadata over online agents so the NFO wins.
-<!-- TODO(sergi): confirm the exact agent/setting names of your working
-     setup here — this is the part that varies most between Plex versions. -->
-
-**Verify it worked** before going further: in the Plex web app open any
-yarrtube-downloaded video → `⋯` → *Get Info* → *View XML*. You should see
-a line like:
-
-```xml
-<Guid id="youtube://dQw4w9WgXcQ" />
-```
-
-If there is no `youtube://` GUID, fix the library's metadata settings first
-(and "Refresh Metadata" on the library) — the sync cannot match anything
-without it.
-
-## 3. Get your Plex token (`YARRTUBE_PLEX_TOKEN`)
+## 2. Get your Plex token (`YARRTUBE_PLEX_TOKEN`)
 
 Follow Plex's official guide:
 [Finding an authentication token / X-Plex-Token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
 
 Short version: in the Plex web app, open any library item → `⋯` →
-*Get Info* → *View XML*, and copy the `X-Plex-Token=...` value from the
+_Get Info_ → _View XML_, and copy the `X-Plex-Token=...` value from the
 opened page's URL.
 
-## 4. Find the library section ID(s)
+## 3. Find the library section ID(s)
 
-yarrtube reconciles collections **per kind**: playlist libraries are synced
-against your tracked playlists and channel libraries against your tracked
-channels, configured with two separate variables:
-
-- `YARRTUBE_PLEX_PLAYLIST_SECTION_ID` — the section id(s) of the Plex
-  library or libraries holding your **playlist** downloads
-  (`/videos/playlists`).
-- `YARRTUBE_PLEX_CHANNEL_SECTION_ID` — the section id(s) of the Plex
-  library or libraries holding your **channel** downloads
-  (`/videos/channels`).
-
-Each Plex library must hold **one kind only**. yarrtube matches videos to
-Plex items by YouTube ID, not by file path, so a single library mixing
-playlists and channels can't be told apart: a video that is in both a
-playlist and a subscribed channel would leak a stray channel collection into
-your playlist library (and vice versa). Point each variable at its own
-dedicated library. (Listing the same section id under both variables is
-allowed but reintroduces that leak for that library — don't, unless you know
-it holds only one kind.)
-
-Find a library's section id in either of two ways:
+Section ids are like identifiers for each Plex library. You have two ways to get the ids of the libraries you want to use for yarrtube's to crate collections:
 
 - **Browser URL**: open the library in the Plex web app and look at the
-  address bar — the number after `source=` is the section ID.
+  address bar. The number after `source=` is the section ID.
 - **API**: list all libraries and pick the `key` of the one(s) holding
   yarrtube content:
-
-  ```bash
-  curl -H "Accept: application/json" \
-    "http://<YOUR_PLEX_IP>:32400/library/sections?X-Plex-Token=<YOUR_TOKEN>"
-  ```
 
   The section ID is each library's `key`. To print just a `title → key`
   table instead of reading the raw JSON, pipe it through `jq`:
@@ -114,27 +59,11 @@ Find a library's section id in either of two ways:
              | "\(.key)\t\(.title)\t\(.Location[].path)"'
   ```
 
-  If your yarrtube videos live under a known path, filter to just those
-  libraries and print the comma-separated list ready for the env var:
+  <p align="center">
+    <img src="plex_setup/section_ids.png" alt="Section ids via curl" width="450"/>
+  </p>
 
-  ```bash
-  curl -sH "Accept: application/json" \
-    "http://<YOUR_PLEX_IP>:32400/library/sections?X-Plex-Token=<YOUR_TOKEN>" \
-    | jq -r '[.MediaContainer.Directory[]
-              | select(any(.Location[]; .path | contains("/yarrtube/")))
-              | .key] | join(",")'
-  # e.g. prints: 14,19
-  ```
-
-Assign each library's section id to the variable for its kind. If content of
-one kind is spread across **several Plex libraries** (e.g. one library per
-family member), collect every one of them — each variable takes a
-comma-separated list, and yarrtube keeps each library's collections in sync
-independently: a playlist's/channel's collection is created in whichever
-listed library of the matching kind its videos were scanned into. Libraries
-*not* listed are never touched.
-
-## 5. Configure yarrtube
+## 4. Configure yarrtube
 
 Set the environment variables on the yarrtube container and restart it:
 
@@ -154,24 +83,6 @@ environment:
 The integration is **off unless `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN`
 and at least one of the two section variables are set** — without them
 yarrtube behaves exactly as before and never contacts Plex.
-
-On startup the log should show
-`scheduled recurring Plex collections reconcile task`; after each pass you
-will see `Plex collections reconcile pass succeeded` (or a logged error if
-Plex was unreachable — the pass is simply retried on the next interval).
-
-## 6. Recommended library settings in Plex
-
-- **Hide items which are in collections** (the library's Advanced
-  settings): this is what turns the library into one tile per
-  playlist/channel — videos only appear inside their collection, not
-  loose in the grid. Strongly recommended; the integration is built around
-  this browsing experience.
-- **Don't change a collection's sorting**: yarrtube creates every
-  collection with **alphabetical** sorting on purpose — combined with the
-  position-prefixed sort titles from the NFO files, that is what keeps
-  videos in playlist order. Switching a collection to "Release date" or
-  "Custom" breaks the ordering.
 
 ## How the sync behaves (what to expect)
 
@@ -197,9 +108,3 @@ Plex was unreachable — the pass is simply retried on the next interval).
   enabled?) and for `Plex collections reconcile pass failed` errors (wrong
   URL/token/section id?). Test your values by hand:
   `curl "http://<PLEX>:32400/library/sections/<ID>/all?X-Plex-Token=<TOKEN>"`.
-- **A collection is missing videos**: the video isn't downloaded yet, Plex
-  hasn't scanned it yet, or its Plex item has no `youtube://` GUID (see the
-  verification in step 2).
-- **Videos are in the wrong order inside a collection**: the collection's
-  sorting was changed away from alphabetical (see step 6), or the items'
-  sort titles weren't read from the NFO files.
