@@ -34,6 +34,30 @@ export function describeTask(task: Task): string {
   }
 }
 
+export type TaskFamily = 'downloads' | 'syncs' | 'cleanup' | 'maintenance'
+export type TaskTab = 'active' | 'downloads' | 'syncs' | 'cleanup' | 'all'
+
+export const TASK_TABS: readonly TaskTab[] = ['active', 'downloads', 'syncs', 'cleanup', 'all']
+
+/** Above this many tasks in a tab, the search field is worth showing. */
+export const TASK_SEARCH_THRESHOLD = 15
+
+export function taskFamily(_task: Task): TaskFamily {
+  return 'maintenance'
+}
+
+export function tasksForTab(tasks: Task[], _tab: TaskTab): Task[] {
+  return [...tasks].sort(byCategory)
+}
+
+export function tabCounts(_tasks: Task[]): Record<TaskTab, number> {
+  return { active: 0, downloads: 0, syncs: 0, cleanup: 0, all: 0 }
+}
+
+export function matchesTask(_task: Task, _text: string): boolean {
+  return true
+}
+
 export type TaskCategory = 'running' | 'queued' | 'pending' | string
 
 // Running tasks are worth noticing first, then tasks already due to run
