@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TasksView } from './TasksView'
 import { aTask, mockApi, pendingForever, renderWithProviders } from '@/test/helpers'
@@ -213,5 +213,39 @@ describe('TasksView', () => {
     await user.click(screen.getByRole('tab', { name: /All/ }))
 
     expect(screen.getByRole('searchbox', { name: 'Search tasks' })).toHaveValue('')
+  })
+
+  it("shows a task's last error on its row, and none when there is no error", async () => {
+    mockApi({
+      'GET /api/tasks': [
+        aTask({
+          id: 1,
+          task_type: 'download_video',
+          status: 'running',
+          retries: 3,
+          last_error: 'network timeout',
+          payload: { video_title: 'Flaky' },
+        }),
+        aTask({
+          id: 2,
+          task_type: 'download_video',
+          status: 'running',
+          last_error: null,
+          payload: { video_title: 'Healthy' },
+        }),
+      ],
+    })
+
+    renderWithProviders(<TasksView />)
+
+    const failing = (
+      await screen.findByText('Downloading Flaky in an unknown playlist or channel')
+    ).closest('li')!
+    expect(within(failing).getByText('network timeout')).toBeInTheDocument()
+
+    const healthy = screen
+      .getByText('Downloading Healthy in an unknown playlist or channel')
+      .closest('li')!
+    expect(within(healthy).queryByText('network timeout')).not.toBeInTheDocument()
   })
 })
