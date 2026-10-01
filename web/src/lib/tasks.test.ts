@@ -151,4 +151,16 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(active.map((task) => task.id).sort()).toEqual([1, 2])
     expect(active.every((task) => task.status === 'running')).toBe(true)
   })
+
+  it('returns the right types for the downloads, syncs and cleanup tabs', () => {
+    const download = aTask({ id: 1, task_type: 'download_video', status: 'pending' })
+    const thumbnail = aTask({ id: 2, task_type: 'fetch_thumbnail', status: 'pending' })
+    const sync = aTask({ id: 3, task_type: 'reconcile_plex_collections', status: 'pending' })
+    const cleanup = aTask({ id: 4, task_type: 'delete_channel_files', status: 'pending' })
+    const all = [download, thumbnail, sync, cleanup]
+
+    expect(tasksForTab(all, 'downloads').map((task) => task.id).sort()).toEqual([1, 2])
+    expect(tasksForTab(all, 'syncs').map((task) => task.id)).toEqual([3])
+    expect(tasksForTab(all, 'cleanup').map((task) => task.id)).toEqual([4])
+  })
 })
