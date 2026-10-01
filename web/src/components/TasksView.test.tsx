@@ -28,23 +28,23 @@ describe('TasksView', () => {
     expect(await screen.findByText('No pending or in-progress tasks.')).toBeInTheDocument()
   })
 
-  it('lists tasks with running ones first and badges per category', async () => {
+  it('opens on the Active tab, listing only running tasks', async () => {
     mockApi({
       'GET /api/tasks': [
         aTask({
           id: 1,
+          task_type: 'reconcile_channel',
+          status: 'running',
+          retries: 2,
+          payload: { channel_name: 'Chan' },
+        }),
+        aTask({
+          id: 2,
           task_type: 'download_video',
           status: 'pending',
           // Far in the future, so it categorizes as pending whenever this runs.
           run_at: '2999-01-01T00:00:00Z',
           payload: { video_title: 'Intro', channel_name: 'Chan' },
-        }),
-        aTask({
-          id: 2,
-          task_type: 'reconcile_channel',
-          status: 'running',
-          retries: 2,
-          payload: { channel_name: 'Chan' },
         }),
       ],
     })
@@ -52,11 +52,10 @@ describe('TasksView', () => {
     renderWithProviders(<TasksView />)
 
     const items = await screen.findAllByRole('listitem')
-    expect(items).toHaveLength(2)
+    expect(items).toHaveLength(1)
     expect(items[0]).toHaveTextContent('Syncing channel Chan')
     expect(items[0]).toHaveTextContent('running')
     expect(items[0]).toHaveTextContent('2 retries')
-    expect(items[1]).toHaveTextContent('Downloading Intro in Chan')
-    expect(items[1]).toHaveTextContent('pending')
+    expect(screen.queryByText('Downloading Intro in Chan')).not.toBeInTheDocument()
   })
 })

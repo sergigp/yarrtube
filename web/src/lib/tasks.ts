@@ -42,20 +42,43 @@ export const TASK_TABS: readonly TaskTab[] = ['active', 'downloads', 'syncs', 'c
 /** Above this many tasks in a tab, the search field is worth showing. */
 export const TASK_SEARCH_THRESHOLD = 15
 
-export function taskFamily(_task: Task): TaskFamily {
-  return 'maintenance'
+const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
+  download_video: 'downloads',
+  fetch_thumbnail: 'downloads',
+  reconcile_playlist: 'syncs',
+  reconcile_channel: 'syncs',
+  reconcile_plex_collections: 'syncs',
+  delete_video_file: 'cleanup',
+  delete_playlist_files: 'cleanup',
+  delete_channel_files: 'cleanup',
 }
 
-export function tasksForTab(tasks: Task[], _tab: TaskTab): Task[] {
-  return [...tasks].sort(byCategory)
+export function taskFamily(task: Task): TaskFamily {
+  return FAMILY_BY_TYPE[task.task_type] ?? 'maintenance'
 }
 
-export function tabCounts(_tasks: Task[]): Record<TaskTab, number> {
-  return { active: 0, downloads: 0, syncs: 0, cleanup: 0, all: 0 }
+export function tasksForTab(tasks: Task[], tab: TaskTab): Task[] {
+  const inTab =
+    tab === 'all'
+      ? tasks
+      : tab === 'active'
+        ? tasks.filter((task) => task.status === 'running')
+        : tasks.filter((task) => taskFamily(task) === tab)
+  return [...inTab].sort(byCategory)
 }
 
-export function matchesTask(_task: Task, _text: string): boolean {
-  return true
+export function tabCounts(tasks: Task[]): Record<TaskTab, number> {
+  return TASK_TABS.reduce(
+    (counts, tab) => {
+      counts[tab] = tasksForTab(tasks, tab).length
+      return counts
+    },
+    {} as Record<TaskTab, number>,
+  )
+}
+
+export function matchesTask(task: Task, text: string): boolean {
+  return describeTask(task).toLowerCase().includes(text.toLowerCase())
 }
 
 export type TaskCategory = 'running' | 'queued' | 'pending' | string
