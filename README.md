@@ -23,17 +23,17 @@
 
 # About
 
-Yarrtube is a self-hosted service that watches tracked Youtube playlists and channels and automatically downloads the new videos published.
+Yarrtube is a self-hosted service that watches tracked YouTube playlists and channels and automatically downloads the new videos published.
 
 Yarrtube is mainly thought to be installed on your NAS via Docker with the rest of your media stack (Plex, Jellyfin, etc.) but it can also be installed on any laptop.
 
 # Main Features
 
-- Track Youtube public playlists.
+- Track YouTube public playlists.
 - Track entire channels and download new videos when they are published!
 - Minimalistic webapp to see the videos from the browser in both desktop and mobile.
 - Basic support for Plex, Kodi and Jellyfin.
-- Support for Plex collections: one collection per tracked playlist/channel, kept in sync automatically. Take a look to the [Plex Collections integration guide](doc/PLEX.md) for more details.
+- Support for Plex collections: one collection per tracked playlist/channel, kept in sync automatically. Take a look at the [Plex Collections integration guide](doc/PLEX.md) for more details.
 
 <p align="center">
   <img src="doc/screenshot_mobile.png" alt="Yarrtube mobile UI screenshot" width="150"/>
@@ -42,7 +42,7 @@ Yarrtube is mainly thought to be installed on your NAS via Docker with the rest 
 
 # Motivation
 
-This is a personal project. I'm an experienced software engineer coming back from a ~10-month sabbatical, and I wanted a real project to get my hands dirty again, both with writing code and with AI-assisted coding. I wanted to build something that I would actually use, and that would be useful to others too. Yarrtube is the result. If you are a recruiter/dev you can take a look to [architecture](doc/ARCHITECTURE.md).
+This is a personal project. I'm an experienced software engineer coming back from a ~10-month sabbatical, and I wanted a real project to get my hands dirty again, both with writing code and with AI-assisted coding. I wanted to build something that I would actually use, and that would be useful to others too. Yarrtube is the result. If you are a recruiter/dev you can take a look at the [architecture](doc/ARCHITECTURE.md).
 
 It also solves an actual problem at home: I wanted a reliable, ad-free and no-algorithm way to watch specific channels and playlists in Plex, especially for my kids. Yarrtube keeps the playlists and channels I care about mirrored to disk, so they just show up in Plex. **No ads and no algorithm**.
 

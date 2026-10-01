@@ -2,7 +2,7 @@
 
 ## What you get
 
-While writing this (Plex Version 1.43.4.10903), collection support via nfo files it's still very limited. You can, though, create collections via Plex API and this is the mechanism Yarrtube uses, but it comes with some required setup.
+While writing this (Plex Version 1.43.4.10903), collection support via NFO files is still very limited. You can, though, create collections via Plex API and this is the mechanism yarrtube uses, but it comes with some required setup.
 
 Without the integration, a Plex library over yarrtube's videos is a flat
 grid of every downloaded video. With it, yarrtube keeps **one Plex
@@ -15,17 +15,17 @@ the collections automatically in the background: new downloads are added once Pl
 
 ## Requirements
 
-In order to let Yarrtube create and manage collections in Plex, you need:
+In order to let yarrtube create and manage collections in Plex, you need:
 
-- Setting up Plex to read yarrtube's metadata files (NFOs) so it can match videos by YouTube ID.
-- A Plex token (`X-Plex-Token`) to authenticate yarrtube's API requests
-- The section ID(s) of the Plex library or libraries holding your yarrtube content. This is like library ids for Plex.
-- Set up Yarrtube env variables.
+- Plex set up to read yarrtube's metadata files (NFOs) so it can match videos by YouTube ID.
+- A Plex token (`X-Plex-Token`) to authenticate yarrtube's API requests.
+- The section ID(s) of the Plex library or libraries holding your yarrtube content (like library IDs for Plex).
+- The yarrtube env variables set.
 
 ## 1. Setup Plex library
 
 Next to every video, yarrtube writes a `movie.nfo` with meta information Plex can read.
-To tell Plex to read them, you need a **Movies** library with the Plex NFO Agent. You can also disable cinema trailers, credits detection and other stuff and make sure **Use local assets is enabled**.
+To tell Plex to read them, you need a **Movies** library with the Plex NFO Agent. You can also disable cinema trailers, credits detection and other stuff, and make sure **Use local assets** is enabled.
 
 <p align="center">
   <img src="plex_setup/plex_library1.png" alt="Plex Library Setup" width="450"/>
@@ -42,7 +42,7 @@ opened page's URL.
 
 ## 3. Find the library section ID(s)
 
-Section ids are like identifiers for each Plex library. You have two ways to get the ids of the libraries you want to use for yarrtube's to crate collections:
+Section IDs are like identifiers for each Plex library. You have two ways to get the IDs of the libraries you want yarrtube to create collections in:
 
 - **Browser URL**: open the library in the Plex web app and look at the
   address bar. The number after `source=` is the section ID.
@@ -50,7 +50,7 @@ Section ids are like identifiers for each Plex library. You have two ways to get
   yarrtube content:
 
   The section ID is each library's `key`. To print just a `title → key`
-  table instead of reading the raw JSON, pipe it through `jq`:
+  table instead of the raw JSON response, pipe it through `jq`:
 
   ```bash
   curl -sH "Accept: application/json" \
