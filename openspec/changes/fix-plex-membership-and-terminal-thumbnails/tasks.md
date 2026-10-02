@@ -22,7 +22,7 @@
 
 `channel_video_reconciler.rs`:
 
-- [ ] 3.6 `reconcile_channel_task::it_should_keep_videos_if_listing_fails` (revised): with a failing channel listing, the task returns `Ok(())`, the stored rows are unchanged, no events are published, and the next reconcile is scheduled. `sync_channel_membership` catches the listing error, logs `warn!(channel_id, error, "failed to list channel videos")`, and returns empty `MembershipChanges`, so the rest of the pass and `schedule_next_reconcile` run. Verify with `cargo test it_should_keep_videos_if_listing_fails`.
+- [x] 3.6 `reconcile_channel_task::it_should_keep_videos_if_listing_fails` (revised): with a failing channel listing, the task returns `Ok(())`, the stored rows are unchanged, no events are published, and the rest of the pass still runs (the stored video's thumbnail recovery and the next reconcile are scheduled). `sync_channel_membership` catches the listing error, logs `warn!(channel_id, error, "failed to list channel videos")`, and returns empty `MembershipChanges`, so the rest of the pass and `schedule_next_reconcile` run. Verify with `cargo test it_should_keep_videos_if_listing_fails`.
 
 `plex_collection_repository.rs`:
 

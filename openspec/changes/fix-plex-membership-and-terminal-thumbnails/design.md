@@ -77,7 +77,7 @@ Plex membership: unchanged call stack. `PlexCollectionReconciler::converge_membe
    5. `reconcile_channel_task::it_should_not_schedule_a_thumbnail_fetch_for_an_excluded_video`: channel counterpart of 1.3.
    6. `reconcile_channel_task::it_should_not_schedule_a_thumbnail_fetch_for_an_errored_video_not_due_for_recovery`: channel counterpart of 1.4.
    7. The existing `it_should_schedule_a_thumbnail_fetch_for_a_video_missing_one` tests (Pending/Downloaded) stay green.
-   8. `reconcile_channel_task::it_should_keep_videos_if_listing_fails` (revised): the fake channel listing fails. The task returns `Ok(())`, the stored video and channel-video rows are unchanged, no events are published, and the next reconcile is scheduled (`vec![next_reconcile(1)]`). Today the test asserts `Err` and nothing scheduled.
+   8. `reconcile_channel_task::it_should_keep_videos_if_listing_fails` (revised): the fake channel listing fails. The task returns `Ok(())`, the stored video and channel-video rows are unchanged, no events are published, and the rest of the pass still runs: the stored video's missing-thumbnail fetch and the next reconcile are scheduled (`vec![fetch_thumbnail_task(1, ..), next_reconcile(2)]`). Before this change the test asserted `Err` and nothing scheduled.
 2. Infrastructure tests:
    - `ytdlp.rs` (fake yt-dlp script):
      1. `it_should_return_unavailable_with_the_reason_on_a_clean_failed_thumbnail_fetch`: the script writes `ERROR: [youtube] x: Video unavailable` to stderr and exits 1. Returns `Unavailable { reason: Some("ERROR: [youtube] x: Video unavailable") }` and the folder is removed (folds into the existing `..._on_a_clean_failed_exit` test).

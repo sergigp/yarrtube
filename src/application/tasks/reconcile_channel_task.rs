@@ -322,18 +322,18 @@ mod tests {
 
         let result = run(&task, &payload_for("@somechannel"));
 
-        assert_eq!(
-            result,
-            Err("yt-dlp failed to list channel videos".to_string())
-        );
-        assert_eq!(video_repository.list().unwrap(), vec![existing]);
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![existing.clone()]);
         assert_eq!(
             channel_video_repository
                 .list_for_channel(&handle("@somechannel"))
                 .unwrap(),
             vec![existing_channel_video]
         );
-        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![fetch_thumbnail_task(1, &existing.id), next_reconcile(2)]
+        );
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 

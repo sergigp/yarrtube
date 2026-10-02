@@ -14,9 +14,12 @@ use crate::infrastructure::repositories::sqlite_channel_video_repository::Channe
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::youtube_channel_videos_repository::ChannelVideosRepository;
+use crate::infrastructure::repositories::youtube_channel_videos_repository::{
+    ChannelVideoListing, ChannelVideosRepository,
+};
 use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadataRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
+use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -25,6 +28,7 @@ use tracing::{info, warn};
 
 /// What a membership sync changed that the filesystem pass of the same
 /// reconcile must know about.
+#[derive(Default)]
 struct MembershipChanges {
     /// Videos added by the sync: their thumbnail fetch comes from their own
     /// video-added event, not from the missing-thumbnail recovery.
@@ -182,9 +186,9 @@ impl ChannelVideoReconciler {
 
     /// Diffs membership against YouTube, then reconciles the filesystem
     /// against recorded downloads. Shared by `reconcile` and
-    /// `force_reconcile`. A `yt-dlp` failure during the membership diff
-    /// propagates before filesystem reconciliation runs, leaving every
-    /// stored row (and every file on disk) untouched.
+    /// `force_reconcile`. A failed channel listing is not fatal: the
+    /// membership diff is skipped for this pass, leaving every stored row
+    /// untouched, and filesystem reconciliation still runs from them.
     fn run_reconcile_pass(&self, channel: &Channel) -> anyhow::Result<()> {
         info!(channel_id = %channel.id, "reconciling channel");
 
@@ -193,15 +197,32 @@ impl ChannelVideoReconciler {
         self.reconcile_filesystem(channel, &changes)
     }
 
+    /// The channel's current most recent uploads, or `None` (logged) when
+    /// they can't be listed, so the caller skips membership changes instead
+    /// of failing the pass — see `channel-video-sync`'s "yt-dlp fails to
+    /// list a channel's videos".
+    fn list_current_videos(&self, channel: &Channel) -> Option<Vec<ChannelVideoListing>> {
+        self.channel_videos_repository
+            .list_current_videos(&channel.id, channel.video_limit.value())
+            .inspect_err(|e| {
+                warn!(
+                    channel_id = %channel.id,
+                    error = %error_report::cause_chain(e),
+                    "failed to list channel videos"
+                );
+            })
+            .ok()
+    }
+
     /// Diffs the channel's current `video_limit` most recent uploads against
     /// its stored `ChannelVideo` rows: adds newly-seen videos as `PENDING`
     /// at their recency position, evicts stored videos no longer among the
     /// current top-N (whether removed on YouTube or aged past the limit).
     fn sync_channel_membership(&self, channel: &Channel) -> anyhow::Result<MembershipChanges> {
         let id = &channel.id;
-        let current_videos = self
-            .channel_videos_repository
-            .list_current_videos(id, channel.video_limit.value())?;
+        let Some(current_videos) = self.list_current_videos(channel) else {
+            return Ok(MembershipChanges::default());
+        };
         let stored_videos = self.channel_video_repository.list_for_channel(id)?;
 
         let now = self.clock.now();
