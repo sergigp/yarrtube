@@ -8,8 +8,8 @@
 - [x] 2.2 `fetch_thumbnail_task::it_should_not_fetch_a_thumbnail_for_an_errored_video`: an Errored video gets no yt-dlp call and is left unchanged. Verify with `cargo test it_should_not_fetch_a_thumbnail_for_an_errored_video`.
 - [x] 2.3 `reconcile_playlist_task::it_should_not_schedule_a_thumbnail_fetch_for_an_excluded_video`: the playlist recovery pass schedules no `FetchThumbnail` for an Excluded video (filter in `schedule_missing`). Verify with `cargo test` on that name.
 - [x] 2.4 `reconcile_playlist_task::it_should_not_schedule_a_thumbnail_fetch_for_an_errored_video_not_due_for_recovery`: an Errored video still inside the recovery cooldown gets no `FetchThumbnail`. Verify with `cargo test` on that name.
-- [ ] 2.5 `reconcile_channel_task::it_should_not_schedule_a_thumbnail_fetch_for_an_excluded_video`: channel counterpart of 2.3. Verify with `cargo test` on that name.
-- [ ] 2.6 `reconcile_channel_task::it_should_not_schedule_a_thumbnail_fetch_for_an_errored_video_not_due_for_recovery`: channel counterpart of 2.4. Verify with `cargo test` on that name.
+- [x] 2.5 `reconcile_channel_task::it_should_not_schedule_a_thumbnail_fetch_for_an_excluded_video`: channel counterpart of 2.3. Verify with `cargo test` on that name.
+- [x] 2.6 `reconcile_channel_task::it_should_not_schedule_a_thumbnail_fetch_for_an_errored_video_not_due_for_recovery`: channel counterpart of 2.4. Verify with `cargo test` on that name.
 - [ ] 2.7 Make the "no thumbnail available" warn in `ThumbnailFetcher::fetch` attach `reason` as a field when `Unavailable { reason: Some(..) }`. Verify by code review against design.md's call stack; logs are not asserted in tests (logging spec).
 
 ## 3. Infrastructure adapters (TDD)
