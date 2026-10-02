@@ -1,6 +1,6 @@
 ## 1. Walking skeleton
 
-- [ ] 1.1 Add `ThumbnailFetch` (`Fetched` / `Unavailable { reason }`) and switch `VideoDownloaderRepository::fetch_thumbnail`, `YtDlpVideoDownloaderRepository`, `ytdlp::fetch_thumbnail` and the fake to return it. The existing behaviour maps to `Ok(None)` → `Unavailable { reason: None }`, and the fake's `with_thumbnail_result(Option<FetchedThumbnail>)` keeps its signature. Add `Video::is_thumbnail_fetchable` returning `true`. Update `ThumbnailFetcher::fetch` to match on the enum, keeping the same log line. Done when `cargo build` succeeds and `cargo test --locked` stays green, with no new behaviour.
+- [x] 1.1 Add `ThumbnailFetch` (`Fetched` / `Unavailable { reason }`) and switch `VideoDownloaderRepository::fetch_thumbnail`, `YtDlpVideoDownloaderRepository`, `ytdlp::fetch_thumbnail` and the fake to return it. The existing behaviour maps to `Ok(None)` → `Unavailable { reason: None }`, and the fake's `with_thumbnail_result(Option<FetchedThumbnail>)` keeps its signature. Add `Video::is_thumbnail_fetchable` returning `true`. Update `ThumbnailFetcher::fetch` to match on the enum, keeping the same log line. Done when `cargo build` succeeds and `cargo test --locked` stays green, with no new behaviour.
 
 ## 2. Behaviour (TDD)
 

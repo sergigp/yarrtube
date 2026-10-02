@@ -243,6 +243,11 @@ impl Video {
                 .is_none_or(|errored_at| now - errored_at >= ERRORED_RECOVERY_COOLDOWN)
     }
 
+    /// Whether a thumbnail fetch can still be worth attempting for this video.
+    pub fn is_thumbnail_fetchable(&self) -> bool {
+        true
+    }
+
     /// The folders a download or thumbnail fetch of this video may be writing
     /// into right now. Until the video is downloaded its folder isn't
     /// recorded (a thumbnail fetch records it only once it finishes), so it

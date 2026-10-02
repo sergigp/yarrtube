@@ -237,6 +237,17 @@ pub struct FetchedThumbnail {
     pub filename: String,
 }
 
+/// A thumbnail-only fetch's outcome: the thumbnail was written, or none could
+/// be obtained, carrying `yt-dlp`'s reported error text when it reported one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ThumbnailFetch {
+    Fetched(FetchedThumbnail),
+    /// Clean yt-dlp failure, or success that printed no thumbnail.
+    Unavailable {
+        reason: Option<String>,
+    },
+}
+
 /// Runs `yt-dlp --skip-download --write-thumbnail --convert-thumbnails jpg`
 /// for `video_url` inside the video's own dedicated folder under
 /// `output_path` — sibling to `download_video`, reusing the same
@@ -253,8 +264,8 @@ pub struct FetchedThumbnail {
 /// when the extractor has no thumbnail to write, cleanly distinguishing
 /// "no thumbnail for this video" from a systemic failure.
 ///
-/// Returns `Ok(Some(FetchedThumbnail))` when a thumbnail was written,
-/// `Ok(None)` for a clean `yt-dlp` exit with no thumbnail available (either
+/// Returns `Ok(ThumbnailFetch::Fetched(..))` when a thumbnail was written,
+/// `Ok(ThumbnailFetch::Unavailable { .. })` for a clean `yt-dlp` exit with no thumbnail available (either
 /// a non-zero exit, or a successful exit that printed no usable filename) —
 /// this is expected and routine, not an error, since a thumbnail is
 /// optional even on a clean run. Returns `Err` only for a systemic problem:
@@ -272,7 +283,7 @@ pub fn fetch_thumbnail(
     video_id: &str,
     output_path: &Path,
     existing_folder: Option<&str>,
-) -> Result<Option<FetchedThumbnail>> {
+) -> Result<ThumbnailFetch> {
     let VideoDir {
         folder,
         path: video_dir,
@@ -309,7 +320,9 @@ pub fn fetch_thumbnail(
         |e| format!("Failed to run yt-dlp thumbnail fetch for {video_url}: {e}"),
     )? {
         RunOutcome::Success(output) => output,
-        RunOutcome::CleanFailure { .. } => return Ok(None),
+        RunOutcome::CleanFailure { .. } => {
+            return Ok(ThumbnailFetch::Unavailable { reason: None });
+        }
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -325,10 +338,13 @@ pub fn fetch_thumbnail(
     };
 
     match filename {
-        Some(filename) => Ok(Some(FetchedThumbnail { folder, filename })),
+        Some(filename) => Ok(ThumbnailFetch::Fetched(FetchedThumbnail {
+            folder,
+            filename,
+        })),
         None => {
             remove_video_dir_unless_reused(&video_dir, existing_folder);
-            Ok(None)
+            Ok(ThumbnailFetch::Unavailable { reason: None })
         }
     }
 }
@@ -1566,7 +1582,7 @@ mod tests {
 
         assert_eq!(
             result,
-            Some(FetchedThumbnail {
+            ThumbnailFetch::Fetched(FetchedThumbnail {
                 folder: "My Video".to_string(),
                 filename: "My Video.jpg".to_string(),
             })
@@ -1628,7 +1644,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, None);
+        assert_eq!(result, ThumbnailFetch::Unavailable { reason: None });
         assert!(!output_dir.join("My Video").exists());
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
@@ -1651,7 +1667,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, None);
+        assert_eq!(result, ThumbnailFetch::Unavailable { reason: None });
         assert!(!output_dir.join("My Video").exists());
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
@@ -1676,7 +1692,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, None);
+        assert_eq!(result, ThumbnailFetch::Unavailable { reason: None });
         assert!(output_dir.join("My Video").join("My Video.mp4").exists());
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
@@ -1761,10 +1777,15 @@ mod tests {
             &output_dir,
             None,
         )
-        .unwrap()
         .unwrap();
 
-        assert_eq!(result.folder, "My Video [vid1]");
+        assert_eq!(
+            result,
+            ThumbnailFetch::Fetched(FetchedThumbnail {
+                folder: "My Video [vid1]".to_string(),
+                filename: "My Video [vid1].jpg".to_string(),
+            })
+        );
         assert!(
             fake.captured_args()
                 .contains(&"My Video [vid1].%(ext)s".to_string())
@@ -1792,10 +1813,15 @@ mod tests {
             &output_dir,
             Some("My Video"),
         )
-        .unwrap()
         .unwrap();
 
-        assert_eq!(result.folder, "My Video");
+        assert_eq!(
+            result,
+            ThumbnailFetch::Fetched(FetchedThumbnail {
+                folder: "My Video".to_string(),
+                filename: "My Video.jpg".to_string(),
+            })
+        );
         assert!(
             fake.captured_args()
                 .contains(&"My Video.%(ext)s".to_string())

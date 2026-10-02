@@ -7,7 +7,7 @@ use crate::domain::video::video_filename::VideoFilename;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-    FetchedThumbnail, VideoDownloaderRepository,
+    FetchedThumbnail, ThumbnailFetch, VideoDownloaderRepository,
 };
 use crate::infrastructure::shared::system_clock::Clock;
 use std::collections::HashSet;
@@ -76,8 +76,10 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
         }
 
         match self.fetch_thumbnail(video, output_dir) {
-            Ok(Some(fetched)) => self.record_thumbnail(video, fetched),
-            Ok(None) => warn!(video_id = %video.id, "no thumbnail available for video"),
+            Ok(ThumbnailFetch::Fetched(fetched)) => self.record_thumbnail(video, fetched),
+            Ok(ThumbnailFetch::Unavailable { .. }) => {
+                warn!(video_id = %video.id, "no thumbnail available for video")
+            }
             Err(e) => {
                 warn!(video_id = %video.id, error = %e, "failed to fetch video thumbnail");
             }
@@ -103,11 +105,7 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
 
 impl ThumbnailFetcher {
     /// Reuses `video`'s already-recorded folder, if any.
-    fn fetch_thumbnail(
-        &self,
-        video: &Video,
-        output_dir: &Path,
-    ) -> anyhow::Result<Option<FetchedThumbnail>> {
+    fn fetch_thumbnail(&self, video: &Video, output_dir: &Path) -> anyhow::Result<ThumbnailFetch> {
         let existing_folder = video.filename.as_deref().map(top_level_entry);
         let filename = VideoFilename::from_title(&video.title);
         self.video_downloader_repository.fetch_thumbnail(

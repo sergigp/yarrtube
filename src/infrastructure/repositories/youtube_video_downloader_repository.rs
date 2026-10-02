@@ -1,7 +1,7 @@
 use crate::domain::shared::Quality;
 use crate::infrastructure::shared::ytdlp;
 pub use crate::infrastructure::shared::ytdlp::{
-    DownloadAttempt, DownloadedVideo, FetchedThumbnail,
+    DownloadAttempt, DownloadedVideo, FetchedThumbnail, ThumbnailFetch,
 };
 use std::path::{Path, PathBuf};
 
@@ -29,9 +29,10 @@ pub trait VideoDownloaderRepository: Send + Sync {
         existing_folder: Option<&str>,
     ) -> anyhow::Result<DownloadAttempt>;
 
-    /// Returns `Ok(Some(FetchedThumbnail))` when a thumbnail was fetched,
-    /// `Ok(None)` when the video has none to fetch (not an error — see
-    /// `video-thumbnails`). Returns `Err` only for a systemic problem.
+    /// Returns `Ok(ThumbnailFetch::Fetched(..))` when a thumbnail was
+    /// fetched, `Ok(ThumbnailFetch::Unavailable { reason })` when none could
+    /// be obtained, carrying `yt-dlp`'s reported error text when it reported
+    /// one (not an error — see `video-thumbnails`). Returns `Err` only for a systemic problem.
     /// `existing_folder` is reused the same way as `download`'s — e.g. a
     /// `Downloaded` video's already-recorded folder, for a missing-thumbnail
     /// recovery pass.
@@ -42,7 +43,7 @@ pub trait VideoDownloaderRepository: Send + Sync {
         video_id: &str,
         output_dir: &Path,
         existing_folder: Option<&str>,
-    ) -> anyhow::Result<Option<FetchedThumbnail>>;
+    ) -> anyhow::Result<ThumbnailFetch>;
 
     /// Runs a simulate-only probe (forcing the alternate player clients) to
     /// reveal the *precise* reason a download failed, since `yt-dlp`'s default
@@ -95,7 +96,7 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
         video_id: &str,
         output_dir: &Path,
         existing_folder: Option<&str>,
-    ) -> anyhow::Result<Option<FetchedThumbnail>> {
+    ) -> anyhow::Result<ThumbnailFetch> {
         ytdlp::ensure_output_dir(output_dir)?;
         ytdlp::fetch_thumbnail(
             &self.ytdlp_path,
@@ -138,7 +139,7 @@ pub struct FakeVideoDownloaderRepository {
         )>,
     >,
     #[allow(clippy::type_complexity)]
-    pub(crate) thumbnail_result: std::sync::Mutex<Option<anyhow::Result<Option<FetchedThumbnail>>>>,
+    pub(crate) thumbnail_result: std::sync::Mutex<Option<anyhow::Result<ThumbnailFetch>>>,
     #[allow(clippy::type_complexity)]
     pub(crate) thumbnail_calls:
         std::sync::Mutex<Vec<(String, String, String, std::path::PathBuf, Option<String>)>>,
@@ -220,7 +221,10 @@ impl FakeVideoDownloaderRepository {
     /// default) mirrors a clean "no thumbnail available" outcome.
     pub fn with_thumbnail_result(self, result: Option<FetchedThumbnail>) -> Self {
         Self {
-            thumbnail_result: std::sync::Mutex::new(Some(Ok(result))),
+            thumbnail_result: std::sync::Mutex::new(Some(Ok(match result {
+                Some(fetched) => ThumbnailFetch::Fetched(fetched),
+                None => ThumbnailFetch::Unavailable { reason: None },
+            }))),
             ..self
         }
     }
@@ -307,7 +311,7 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
         video_id: &str,
         output_dir: &Path,
         existing_folder: Option<&str>,
-    ) -> anyhow::Result<Option<FetchedThumbnail>> {
+    ) -> anyhow::Result<ThumbnailFetch> {
         self.thumbnail_calls.lock().unwrap().push((
             video_url.to_string(),
             desired_filename.to_string(),
@@ -317,7 +321,7 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
         ));
         match self.thumbnail_result.lock().unwrap().take() {
             Some(result) => result,
-            None => Ok(None),
+            None => Ok(ThumbnailFetch::Unavailable { reason: None }),
         }
     }
 
@@ -418,7 +422,7 @@ mod tests {
 
         assert_eq!(
             result,
-            Some(FetchedThumbnail {
+            ThumbnailFetch::Fetched(FetchedThumbnail {
                 folder: "My Video".to_string(),
                 filename: "My Video.jpg".to_string(),
             })
