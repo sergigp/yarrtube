@@ -44,7 +44,8 @@ impl ThumbnailFetcher {
 }
 
 pub trait ThumbnailFetcherApi: Send + Sync {
-    /// No-ops if `video` already has a recorded thumbnail. Otherwise fetches
+    /// No-ops if `video` already has a recorded thumbnail or is no longer
+    /// thumbnail-fetchable (`Video::is_thumbnail_fetchable`). Otherwise fetches
     /// one into `output_dir` and persists it via `Video::with_thumbnail` on
     /// success; any failure (a clean "no thumbnail available" outcome, or a
     /// systemic error) is logged and swallowed, leaving `video` untouched.
@@ -71,7 +72,7 @@ pub trait ThumbnailFetcherApi: Send + Sync {
 
 impl ThumbnailFetcherApi for ThumbnailFetcher {
     fn fetch(&self, video: &Video, output_dir: &Path) {
-        if video.thumbnail_filename.is_some() {
+        if video.thumbnail_filename.is_some() || !video.is_thumbnail_fetchable() {
             return;
         }
 

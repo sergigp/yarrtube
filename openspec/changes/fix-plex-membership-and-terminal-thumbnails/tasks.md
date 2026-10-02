@@ -4,7 +4,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `fetch_thumbnail_task::it_should_not_fetch_a_thumbnail_for_an_excluded_video`: an Excluded video gets no yt-dlp call and is left unchanged (implement `is_thumbnail_fetchable` for Excluded, and the guard in `ThumbnailFetcher::fetch`). Verify with `cargo test it_should_not_fetch_a_thumbnail_for_an_excluded_video`.
+- [x] 2.1 `fetch_thumbnail_task::it_should_not_fetch_a_thumbnail_for_an_excluded_video`: an Excluded video gets no yt-dlp call and is left unchanged (implement `is_thumbnail_fetchable` for Excluded, and the guard in `ThumbnailFetcher::fetch`). Verify with `cargo test it_should_not_fetch_a_thumbnail_for_an_excluded_video`.
 - [ ] 2.2 `fetch_thumbnail_task::it_should_not_fetch_a_thumbnail_for_an_errored_video`: an Errored video gets no yt-dlp call and is left unchanged. Verify with `cargo test it_should_not_fetch_a_thumbnail_for_an_errored_video`.
 - [ ] 2.3 `reconcile_playlist_task::it_should_not_schedule_a_thumbnail_fetch_for_an_excluded_video`: the playlist recovery pass schedules no `FetchThumbnail` for an Excluded video (filter in `schedule_missing`). Verify with `cargo test` on that name.
 - [ ] 2.4 `reconcile_playlist_task::it_should_not_schedule_a_thumbnail_fetch_for_an_errored_video_not_due_for_recovery`: an Errored video still inside the recovery cooldown gets no `FetchThumbnail`. Verify with `cargo test` on that name.
