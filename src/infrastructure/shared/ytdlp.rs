@@ -1661,7 +1661,7 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_return_none_and_remove_the_folder_when_yt_dlp_prints_na() {
+    fn it_should_return_unavailable_without_a_reason_when_yt_dlp_prints_na() {
         use test_support::{FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-thumbnail-na");
