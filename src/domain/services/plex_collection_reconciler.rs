@@ -7,6 +7,7 @@ use crate::infrastructure::repositories::sqlite_channel_video_repository::Channe
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::shared::error_report;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, info};
@@ -69,13 +70,13 @@ impl PlexCollectionReconcilerApi for PlexCollectionReconciler {
         let mut first_error = None;
         for section_id in &self.playlist_section_ids {
             if let Err(e) = self.reconcile_playlist_section(section_id) {
-                error!(section = section_id, error = %e, "failed to reconcile Plex playlist section, skipping");
+                error!(section = section_id, error = %error_report::cause_chain(&e), "failed to reconcile Plex playlist section, skipping");
                 first_error.get_or_insert(e);
             }
         }
         for section_id in &self.channel_section_ids {
             if let Err(e) = self.reconcile_channel_section(section_id) {
-                error!(section = section_id, error = %e, "failed to reconcile Plex channel section, skipping");
+                error!(section = section_id, error = %error_report::cause_chain(&e), "failed to reconcile Plex channel section, skipping");
                 first_error.get_or_insert(e);
             }
         }
@@ -86,7 +87,7 @@ impl PlexCollectionReconcilerApi for PlexCollectionReconciler {
 /// One collection's failure never aborts the pass; the next pass retries it.
 fn log_and_skip_failure(name: &str, result: anyhow::Result<()>) {
     if let Err(e) = result {
-        error!(collection = name, error = %e, "failed to reconcile Plex collection, skipping");
+        error!(collection = name, error = %error_report::cause_chain(&e), "failed to reconcile Plex collection, skipping");
     }
 }
 

@@ -2,6 +2,7 @@ use crate::domain::services::{PlexCollectionReconciler, PlexCollectionReconciler
 use crate::domain::task::Task;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -42,7 +43,10 @@ impl TaskHandler for ReconcilePlexCollectionsTask {
         Task::decode_reconcile_plex_collections_payload(payload)?;
         match self.reconciler.reconcile_all() {
             Ok(()) => info!("Plex collections reconcile pass succeeded"),
-            Err(e) => error!(error = %e, "Plex collections reconcile pass failed"),
+            Err(e) => error!(
+                error = %error_report::cause_chain(&e),
+                "Plex collections reconcile pass failed, retrying on the next scheduled pass"
+            ),
         }
 
         let next_run_at = self.clock.now() + chrono::Duration::seconds(self.interval_seconds);

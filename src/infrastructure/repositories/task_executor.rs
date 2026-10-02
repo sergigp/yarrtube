@@ -1,6 +1,7 @@
 use crate::domain::task::{ScheduledTask, Task, TaskFailureOutcome, TaskLane};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
+use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
@@ -295,7 +296,10 @@ impl TaskExecutor {
 
     fn record_failure(&self, running: ScheduledTask, error: anyhow::Error) -> anyhow::Result<()> {
         let id = running.id;
-        let error = error.to_string();
+        // Render the full source chain (`why`), not just the outermost
+        // context, so the retry/dead-letter line — and the stored
+        // `last_error` the tasks UI shows — names the real cause.
+        let error = error_report::cause_chain(&error);
         match running.fail(
             error.clone(),
             self.clock.now(),
@@ -420,6 +424,45 @@ mod tests {
                 retries: 1,
                 run_at: now() + chrono::Duration::seconds(450),
                 last_error: Some("handler failed".to_string()),
+                ..pending_task(0)
+            }]
+        );
+        assert_eq!(
+            task_repository.list_dead_lettered().unwrap(),
+            Vec::<DeadLetteredTask>::new()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn it_should_record_the_full_cause_chain_as_the_last_error() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ));
+        let handler = Arc::new(FakeHandler::failing_with_cause_chain());
+        task_repository.schedule(&task(), now()).unwrap();
+        let executor = Arc::new(TaskExecutor::new(
+            task_repository.clone(),
+            registry(handler.clone()),
+            Arc::new(FixedClock(now())),
+            TEST_BASE_RETRY_DELAY_SECONDS,
+            TEST_DOWNLOAD_CONCURRENCY,
+        ));
+
+        let result = run_pass(&executor).await;
+
+        assert!(result.is_ok());
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![ScheduledTask {
+                retries: 1,
+                run_at: now() + chrono::Duration::seconds(450),
+                last_error: Some(
+                    "YouTube API request failed: error sending request for url \
+                     (https://youtube/api): Connection refused (os error 111)"
+                        .to_string()
+                ),
                 ..pending_task(0)
             }]
         );
@@ -1301,6 +1344,7 @@ mod tests {
 
     struct FakeHandler {
         fails: bool,
+        fails_with_cause_chain: bool,
         received_is_last_attempt: Mutex<Vec<bool>>,
     }
 
@@ -1308,6 +1352,7 @@ mod tests {
         fn succeeding() -> Self {
             Self {
                 fails: false,
+                fails_with_cause_chain: false,
                 received_is_last_attempt: Mutex::new(Vec::new()),
             }
         }
@@ -1315,6 +1360,15 @@ mod tests {
         fn failing() -> Self {
             Self {
                 fails: true,
+                fails_with_cause_chain: false,
+                received_is_last_attempt: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn failing_with_cause_chain() -> Self {
+            Self {
+                fails: true,
+                fails_with_cause_chain: true,
                 received_is_last_attempt: Mutex::new(Vec::new()),
             }
         }
@@ -1326,6 +1380,11 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push(is_last_attempt);
+            if self.fails_with_cause_chain {
+                return Err(anyhow::anyhow!("Connection refused (os error 111)")
+                    .context("error sending request for url (https://youtube/api)")
+                    .context("YouTube API request failed"));
+            }
             if self.fails {
                 anyhow::bail!("handler failed");
             }

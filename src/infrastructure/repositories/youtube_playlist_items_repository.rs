@@ -1,4 +1,5 @@
 use crate::domain::playlist::PlaylistId;
+use crate::infrastructure::shared::error_report;
 use anyhow::{Context, anyhow};
 use serde::Deserialize;
 
@@ -104,23 +105,28 @@ impl YoutubeApiPlaylistItemsRepository {
             .get(&self.base_url)
             .query(&query)
             .send()
-            .inspect_err(|_| {
-                tracing::error!(playlist_id, page_token = ?page_token, "YouTube API request failed")
-            })
-            .context("YouTube API request failed")?;
+            .map_err(|e| anyhow::Error::new(e).context("YouTube API request failed"))
+            .inspect_err(|e| {
+                tracing::error!(
+                    playlist_id,
+                    page_token = ?page_token,
+                    error = %error_report::cause_chain(e),
+                    "YouTube API request failed"
+                )
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().unwrap_or_default();
+            let error = anyhow!("YouTube API request failed with status {status}: {body}");
             tracing::error!(
                 playlist_id,
                 page_token = ?page_token,
                 status = %status,
+                error = %error_report::cause_chain(&error),
                 "YouTube API request failed"
             );
-            return Err(anyhow!(
-                "YouTube API request failed with status {status}: {body}"
-            ));
+            return Err(error);
         }
 
         let parsed: PlaylistItemsResponse = response
