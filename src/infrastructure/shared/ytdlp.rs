@@ -460,11 +460,12 @@ struct FlatPlaylistEntry {
 
 /// Lists a channel's `limit` most recent uploads via
 /// `yt-dlp --flat-playlist --print-json -I 1:<limit>` against `channel_url`,
-/// parsing one JSON object per stdout line. A clean non-zero exit or empty
-/// output means "no videos" (`Ok(vec![])`), not an error — mirroring
-/// `download_video`'s error posture. Returns `Err` only for a systemic
-/// problem: no binary at `ytdlp_path`, or output that doesn't parse as one
-/// JSON object per line.
+/// parsing one JSON object per stdout line. Empty output means "no videos"
+/// (`Ok(vec![])`). Returns `Err` when `yt-dlp` exits non-zero (carrying its
+/// warning-free stderr as the reason, so a failed listing is never mistaken
+/// for an empty channel), when there's no binary at `ytdlp_path`, or for
+/// output that doesn't parse as one JSON object per line. stderr is
+/// captured, never inherited, so none of it reaches the daemon's own output.
 pub fn list_channel_videos(
     ytdlp_path: &Path,
     channel_url: &str,
@@ -481,7 +482,7 @@ pub fn list_channel_videos(
     ])
     .arg(channel_url)
     .stdout(Stdio::piped())
-    .stderr(Stdio::inherit());
+    .stderr(Stdio::piped());
     let output = match output_retrying_busy(&mut cmd) {
         Ok(output) => output,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
@@ -494,7 +495,11 @@ pub fn list_channel_videos(
     };
 
     if !output.status.success() {
-        return Ok(Vec::new());
+        let reason = reason_excluding_warnings(&String::from_utf8_lossy(&output.stderr))
+            .unwrap_or_else(|| "no error reported".to_string());
+        return Err(anyhow!(
+            "yt-dlp failed to list channel videos for {channel_url}: {reason}"
+        ));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1973,17 +1978,22 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_return_an_empty_list_on_a_clean_failed_exit() {
-        let fake = test_support::FakeYtDlp::with_exit_code(1);
+    fn it_should_error_with_the_reason_when_listing_channel_videos_fails() {
+        let fake = test_support::FakeYtDlp::failing_with_stderr(
+            "ERROR: [youtube:tab] @somechannel: This channel does not exist\n",
+        );
 
-        let videos = list_channel_videos(
+        let result = list_channel_videos(
             &fake.path,
             "https://www.youtube.com/@somechannel/videos",
             10,
         )
-        .unwrap();
+        .map_err(|e| e.to_string());
 
-        assert!(videos.is_empty());
+        assert_eq!(
+            result,
+            Err("yt-dlp failed to list channel videos for https://www.youtube.com/@somechannel/videos: ERROR: [youtube:tab] @somechannel: This channel does not exist".to_string())
+        );
     }
 
     #[test]

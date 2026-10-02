@@ -18,7 +18,7 @@
 
 - [x] 3.1 `it_should_return_unavailable_with_the_reason_on_a_clean_failed_thumbnail_fetch`: the fake script writes `ERROR: [youtube] x: Video unavailable` to stderr and exits 1. `fetch_thumbnail` pipes stderr instead of inheriting it, returns `Unavailable { reason: Some(..) }` with warning lines removed, and the folder is removed. This replaces `it_should_return_none_and_remove_the_folder_on_a_clean_failed_exit`. Verify with `cargo test` on that name.
 - [x] 3.2 `it_should_return_unavailable_without_a_reason_when_yt_dlp_prints_na`: adapt the existing NA test to the new type. Verify with `cargo test` on that name.
-- [ ] 3.3 `it_should_error_with_the_reason_when_listing_channel_videos_fails`: the fake script writes an error to stderr and exits 1. `list_channel_videos` pipes stderr and returns `Err` whose message contains the reason. This replaces `it_should_return_an_empty_list_on_a_clean_failed_exit`. Verify with `cargo test` on that name. The existing `reconcile_channel_task::it_should_keep_videos_if_listing_fails` keeps covering the reconciler side.
+- [x] 3.3 `it_should_error_with_the_reason_when_listing_channel_videos_fails`: the fake script writes an error to stderr and exits 1. `list_channel_videos` pipes stderr and returns `Err` whose message contains the reason. This replaces `it_should_return_an_empty_list_on_a_clean_failed_exit`. Verify with `cargo test` on that name. The existing `reconcile_channel_task::it_should_keep_videos_if_listing_fails` keeps covering the reconciler side.
 
 `plex_collection_repository.rs`:
 
