@@ -265,8 +265,11 @@ pub enum ThumbnailFetch {
 /// "no thumbnail for this video" from a systemic failure.
 ///
 /// Returns `Ok(ThumbnailFetch::Fetched(..))` when a thumbnail was written,
-/// `Ok(ThumbnailFetch::Unavailable { .. })` for a clean `yt-dlp` exit with no thumbnail available (either
-/// a non-zero exit, or a successful exit that printed no usable filename) —
+/// `Ok(ThumbnailFetch::Unavailable { .. })` for a clean `yt-dlp` exit with
+/// no thumbnail available (either a non-zero exit, carrying its
+/// warning-free stderr as `reason`, or a successful exit that printed no
+/// usable filename) — stderr is captured, never inherited, so none of it
+/// reaches the daemon's own output —
 /// this is expected and routine, not an error, since a thumbnail is
 /// optional even on a clean run. Returns `Err` only for a systemic problem:
 /// no binary at `ytdlp_path`, or a failure creating the video's folder.
@@ -306,7 +309,7 @@ pub fn fetch_thumbnail(
     .arg(&output_template)
     .current_dir(&video_dir)
     .stdout(Stdio::piped())
-    .stderr(Stdio::inherit());
+    .stderr(Stdio::piped());
     let output = match run_and_cleanup_on_failure(
         &mut cmd,
         &video_dir,
@@ -320,8 +323,10 @@ pub fn fetch_thumbnail(
         |e| format!("Failed to run yt-dlp thumbnail fetch for {video_url}: {e}"),
     )? {
         RunOutcome::Success(output) => output,
-        RunOutcome::CleanFailure { .. } => {
-            return Ok(ThumbnailFetch::Unavailable { reason: None });
+        RunOutcome::CleanFailure { stderr_raw } => {
+            return Ok(ThumbnailFetch::Unavailable {
+                reason: reason_excluding_warnings(&stderr_raw),
+            });
         }
     };
 
@@ -759,6 +764,34 @@ pub(crate) mod test_support {
                 format!(
                     "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\n{touch_stmts}printf '%s\\n' '{printed_filename}'\nexit 0\n",
                     captured_args_path.display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
+
+            Self {
+                _bin_dir: bin_dir,
+                path: script_path,
+                captured_args_path,
+            }
+        }
+
+        /// A fake `yt-dlp` that writes `stderr` verbatim to stderr and exits
+        /// 1, `cat`-ing it from a file like `with_stdout` does.
+        pub(crate) fn failing_with_stderr(stderr: &str) -> Self {
+            use std::os::unix::fs::PermissionsExt;
+
+            let bin_dir = unique_temp_dir("fake-ytdlp-bin");
+            let script_path = bin_dir.join("yt-dlp");
+            let captured_args_path = bin_dir.join("captured-args");
+            let stderr_path = bin_dir.join("stderr-content");
+            fs::write(&stderr_path, stderr).unwrap();
+            fs::write(
+                &script_path,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\ncat \"{}\" >&2\nexit 1\n",
+                    captured_args_path.display(),
+                    stderr_path.display()
                 ),
             )
             .unwrap();
@@ -1651,11 +1684,13 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn it_should_return_none_and_remove_the_folder_on_a_clean_failed_exit() {
+    fn it_should_return_unavailable_with_the_reason_on_a_clean_failed_thumbnail_fetch() {
         use test_support::{FakeYtDlp, unique_temp_dir};
 
         let output_dir = unique_temp_dir("ytdlp-thumbnail-failed-exit");
-        let fake = FakeYtDlp::with_exit_code(1);
+        let fake = FakeYtDlp::failing_with_stderr(
+            "WARNING: [youtube] x: some warning\nERROR: [youtube] x: Video unavailable\n",
+        );
 
         let result = fetch_thumbnail(
             &fake.path,
@@ -1667,7 +1702,12 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, ThumbnailFetch::Unavailable { reason: None });
+        assert_eq!(
+            result,
+            ThumbnailFetch::Unavailable {
+                reason: Some("ERROR: [youtube] x: Video unavailable".to_string()),
+            }
+        );
         assert!(!output_dir.join("My Video").exists());
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
