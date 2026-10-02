@@ -13,6 +13,11 @@ test('tasks view lists the recurring yt-dlp self-update task', async ({ page }) 
   // later, so it is always there, still pending, however the other tests ran.
   await header.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('menuitem', { name: 'Tasks', exact: true }).click()
+
+  // The view opens on the Active tab (running tasks only); the recurring
+  // self-update is a pending maintenance task, surfaced only under "All".
+  await page.getByRole('tab', { name: /All/ }).click()
+
   const updateYtdlpRow = page.locator('main li', { hasText: 'Updating yt-dlp' })
   await expect(updateYtdlpRow).toBeVisible()
   await expect(updateYtdlpRow.getByText('pending', { exact: true })).toBeVisible()
