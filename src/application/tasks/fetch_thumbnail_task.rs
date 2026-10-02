@@ -165,6 +165,43 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_fetch_a_thumbnail_for_an_errored_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
+                FetchedThumbnail {
+                    folder: "My Video".to_string(),
+                    filename: "My Video.jpg".to_string(),
+                },
+            )),
+        );
+        let video = my_video().mark_errored(fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let task = FetchThumbnailTask::new(
+            video_repository.clone(),
+            Arc::new(ThumbnailFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(later())),
+                )),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &payload_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
+            vec![]
+        );
+    }
+
+    #[test]
     fn it_should_skip_if_video_no_longer_exists() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

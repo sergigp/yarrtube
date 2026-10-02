@@ -244,9 +244,10 @@ impl Video {
     }
 
     /// Whether a thumbnail fetch can still be worth attempting for this
-    /// video: never for an `Excluded` one, which is permanently unavailable.
+    /// video: never for an `Excluded` one, which is permanently unavailable,
+    /// nor an `Errored` one, whose recovery redownload writes its own.
     pub fn is_thumbnail_fetchable(&self) -> bool {
-        self.status != VideoStatus::Excluded
+        !matches!(self.status, VideoStatus::Excluded | VideoStatus::Errored)
     }
 
     /// The folders a download or thumbnail fetch of this video may be writing
