@@ -79,9 +79,11 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
 
         match self.fetch_thumbnail(video, output_dir) {
             Ok(ThumbnailFetch::Fetched(fetched)) => self.record_thumbnail(video, fetched),
-            Ok(ThumbnailFetch::Unavailable { .. }) => {
-                warn!(video_id = %video.id, "no thumbnail available for video")
-            }
+            Ok(ThumbnailFetch::Unavailable { reason }) => warn!(
+                video_id = %video.id,
+                reason = reason.as_deref(),
+                "no thumbnail available for video"
+            ),
             Err(e) => {
                 warn!(video_id = %video.id, error = %e, "failed to fetch video thumbnail");
             }
