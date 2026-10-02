@@ -562,14 +562,30 @@ enum RunOutcome {
     CleanFailure { stderr_raw: String },
 }
 
-/// The recorded failure reason for a clean `yt-dlp` failure: `stderr` with any
-/// `WARNING:` lines removed (so warnings `yt-dlp` now prints — the download
-/// invocation no longer passes `--no-warnings` — never pollute the reason),
-/// trimmed, and `None` when nothing meaningful remains.
+/// The recorded failure reason for a clean `yt-dlp` failure: `stderr` with
+/// every `WARNING:` block removed — the `WARNING:` line itself and any
+/// indented continuation lines `yt-dlp` wraps it onto — so warnings it now
+/// prints (the download invocation no longer passes `--no-warnings`) never
+/// pollute the reason or the permanent-unavailability classification that
+/// reads it. Non-warning text, including an unprefixed error line, is kept.
+/// Trimmed, and `None` when nothing meaningful remains.
 fn reason_excluding_warnings(stderr: &str) -> Option<String> {
+    let mut in_warning_block = false;
     let text = stderr
         .lines()
-        .filter(|line| !line.trim_start().starts_with("WARNING:"))
+        .filter(|line| {
+            if line.trim_start().starts_with("WARNING:") {
+                in_warning_block = true;
+                return false;
+            }
+            // An indented line right after a warning is that warning wrapped
+            // onto another line; drop it too. Any other line ends the block.
+            if in_warning_block && line.starts_with([' ', '\t']) {
+                return false;
+            }
+            in_warning_block = false;
+            true
+        })
         .collect::<Vec<_>>()
         .join("\n")
         .trim()
@@ -1377,6 +1393,16 @@ mod tests {
         assert_eq!(
             reason_excluding_warnings(&format!("{SABR_WARNING}\n")),
             None
+        );
+    }
+
+    #[test]
+    fn it_should_exclude_an_indented_warning_continuation_line_from_the_recorded_reason() {
+        let stderr = "WARNING: [youtube] abc123: this video may be blocked\n    because it is not available in your country\nERROR: [youtube] abc123: This video is not available\n";
+
+        assert_eq!(
+            reason_excluding_warnings(stderr),
+            Some("ERROR: [youtube] abc123: This video is not available".to_string())
         );
     }
 

@@ -248,6 +248,89 @@ mod tests {
     }
 
     #[test]
+    fn it_should_log_a_sabr_event_on_a_degraded_successful_download() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with_sabr(
+                "SABR-only streaming experiment",
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let logs = captured_log_messages(|| {
+            let _ = run(&task, &payload_for(video.id.as_str()), false);
+        });
+
+        assert!(
+            logs.iter().any(
+                |message| message.contains("SABR-only streaming experiment reported by yt-dlp")
+            )
+        );
+    }
+
+    #[test]
+    fn it_should_log_a_sabr_event_on_a_sabr_download_failure() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::with_failed_stderr_and_sabr(
+                "HTTP Error 403: Forbidden",
+                "SABR-only streaming experiment",
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let logs = captured_log_messages(|| {
+            let _ = run(&task, &payload_for(video.id.as_str()), false);
+        });
+
+        assert!(
+            logs.iter().any(
+                |message| message.contains("SABR-only streaming experiment reported by yt-dlp")
+            )
+        );
+    }
+
+    #[test]
+    fn it_should_not_log_a_sabr_event_on_a_clean_download() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let logs = captured_log_messages(|| {
+            let _ = run(&task, &payload_for(video.id.as_str()), false);
+        });
+
+        assert!(
+            !logs
+                .iter()
+                .any(|message| message.contains("SABR-only streaming experiment reported"))
+        );
+    }
+
+    #[test]
     fn it_should_mark_errored_after_last_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1110,5 +1193,48 @@ mod tests {
     fn run(task: &DownloadVideoTask, payload: &str, is_last_attempt: bool) -> Result<(), String> {
         task.handle(payload, is_last_attempt)
             .map_err(|e| e.to_string())
+    }
+
+    /// Runs `body` with a scoped tracing subscriber that captures each event's
+    /// `message` field in memory (printing nothing, so the no-log-output test
+    /// rule still holds) and returns the captured messages — the only way to
+    /// assert the SABR warn event, a pure logging side effect, actually fires.
+    fn captured_log_messages(body: impl FnOnce()) -> Vec<String> {
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let messages: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
+        let subscriber = tracing_subscriber::registry().with(CaptureLayer(Arc::clone(&messages)));
+        tracing::subscriber::with_default(subscriber, body);
+        messages.lock().unwrap().clone()
+    }
+
+    /// Captures the `message` field of every tracing event into a shared
+    /// buffer; see `captured_log_messages`.
+    struct CaptureLayer(Arc<std::sync::Mutex<Vec<String>>>);
+
+    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for CaptureLayer {
+        fn on_event(
+            &self,
+            event: &tracing::Event<'_>,
+            _ctx: tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            struct MessageVisitor<'a>(&'a mut String);
+            impl tracing::field::Visit for MessageVisitor<'_> {
+                fn record_debug(
+                    &mut self,
+                    field: &tracing::field::Field,
+                    value: &dyn std::fmt::Debug,
+                ) {
+                    if field.name() == "message" {
+                        use std::fmt::Write;
+                        let _ = write!(self.0, "{value:?}");
+                    }
+                }
+            }
+
+            let mut message = String::new();
+            event.record(&mut MessageVisitor(&mut message));
+            self.0.lock().unwrap().push(message);
+        }
     }
 }
