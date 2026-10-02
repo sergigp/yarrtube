@@ -158,7 +158,7 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
     fn add_items(&self, collection_rating_key: &str, rating_keys: &[String]) -> anyhow::Result<()> {
         let uri = self.members_uri(rating_keys)?;
 
-        let path = format!("/library/metadata/{collection_rating_key}/items");
+        let path = format!("/library/collections/{collection_rating_key}/items");
         let response = self
             .client
             .put(format!("{}{path}", self.config.base_url))
@@ -171,7 +171,7 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
 
     fn remove_item(&self, collection_rating_key: &str, rating_key: &str) -> anyhow::Result<()> {
         self.delete(&format!(
-            "/library/metadata/{collection_rating_key}/items/{rating_key}"
+            "/library/collections/{collection_rating_key}/items/{rating_key}"
         ))
     }
 
@@ -697,7 +697,7 @@ mod tests {
             .with_body(r#"{"MediaContainer": {"machineIdentifier": "machine-1"}}"#)
             .create();
         let add_mock = server
-            .mock("PUT", "/library/metadata/c1/items")
+            .mock("PUT", "/library/collections/c1/items")
             .match_query(mockito::Matcher::UrlEncoded(
                 "uri".into(),
                 "server://machine-1/com.plexapp.plugins.library/library/metadata/103,104".into(),
@@ -717,7 +717,7 @@ mod tests {
     fn it_should_remove_an_item_from_a_collection() {
         let mut server = mockito::Server::new();
         let remove_mock = server
-            .mock("DELETE", "/library/metadata/c1/items/101")
+            .mock("DELETE", "/library/collections/c1/items/101")
             .match_header("x-plex-token", "secret-token")
             .with_status(200)
             .create();
