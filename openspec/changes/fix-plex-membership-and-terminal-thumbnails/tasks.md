@@ -27,7 +27,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
 - [ ] 4.2 After deploying, `yarrlogs --since 1h` shows:
   - no Plex `404` on `/library/collections/.../items`, and `added items to Plex collection` for the lagging collections;
   - no raw `ERROR: [youtube] …` lines;
