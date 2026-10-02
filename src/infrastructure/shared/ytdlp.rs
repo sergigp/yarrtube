@@ -781,34 +781,6 @@ pub(crate) mod test_support {
             }
         }
 
-        /// A fake `yt-dlp` that writes `stderr` verbatim to stderr and exits
-        /// 1, `cat`-ing it from a file like `with_stdout` does.
-        pub(crate) fn failing_with_stderr(stderr: &str) -> Self {
-            use std::os::unix::fs::PermissionsExt;
-
-            let bin_dir = unique_temp_dir("fake-ytdlp-bin");
-            let script_path = bin_dir.join("yt-dlp");
-            let captured_args_path = bin_dir.join("captured-args");
-            let stderr_path = bin_dir.join("stderr-content");
-            fs::write(&stderr_path, stderr).unwrap();
-            fs::write(
-                &script_path,
-                format!(
-                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\ncat \"{}\" >&2\nexit 1\n",
-                    captured_args_path.display(),
-                    stderr_path.display()
-                ),
-            )
-            .unwrap();
-            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
-
-            Self {
-                _bin_dir: bin_dir,
-                path: script_path,
-                captured_args_path,
-            }
-        }
-
         /// A fake `yt-dlp` that exits 0 and prints `stdout` verbatim,
         /// written to a file and `cat`-ed rather than embedded in the
         /// script, so it's immune to shell quoting of its content (e.g. a
@@ -1690,15 +1662,17 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_return_unavailable_with_the_reason_on_a_clean_failed_thumbnail_fetch() {
-        use test_support::{FakeYtDlp, unique_temp_dir};
+        use test_support::unique_temp_dir;
 
         let output_dir = unique_temp_dir("ytdlp-thumbnail-failed-exit");
-        let fake = FakeYtDlp::failing_with_stderr(
+        let script_path = fake_ytdlp_writing_stderr(
+            "ytdlp-thumbnail-failed-exit-bin",
             "WARNING: [youtube] x: some warning\nERROR: [youtube] x: Video unavailable\n",
+            1,
         );
 
         let result = fetch_thumbnail(
-            &fake.path,
+            &script_path,
             "https://example.com/video",
             "My Video",
             "vid1",
@@ -1979,12 +1953,14 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_error_with_the_reason_when_listing_channel_videos_fails() {
-        let fake = test_support::FakeYtDlp::failing_with_stderr(
+        let script_path = fake_ytdlp_writing_stderr(
+            "ytdlp-channel-videos-failed-exit",
             "ERROR: [youtube:tab] @somechannel: This channel does not exist\n",
+            1,
         );
 
         let result = list_channel_videos(
-            &fake.path,
+            &script_path,
             "https://www.youtube.com/@somechannel/videos",
             10,
         )
