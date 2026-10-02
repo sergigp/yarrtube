@@ -185,6 +185,69 @@ mod tests {
     }
 
     #[test]
+    fn it_should_still_record_a_degraded_sabr_download_as_downloaded() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with_sabr(
+                "SABR-only streaming experiment",
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.start_download(fixed_timestamp()).mark_downloaded(
+                Quality::High,
+                "fake-output/fake-output.mp4",
+                None,
+                None,
+                fixed_timestamp(),
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_fail_and_retry_a_sabr_failure_exactly_as_a_normal_failure() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::with_failed_stderr_and_sabr(
+                "HTTP Error 403: Forbidden",
+                "SABR-only streaming experiment",
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Err("HTTP Error 403: Forbidden".to_string()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .start_download(fixed_timestamp())
+                    .mark_errored_retrying(fixed_timestamp())
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_mark_errored_after_last_attempt() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

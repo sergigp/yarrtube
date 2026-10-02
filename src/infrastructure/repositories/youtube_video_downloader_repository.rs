@@ -151,7 +151,10 @@ pub struct FakeVideoDownloaderRepository {
 #[cfg(test)]
 impl Default for FakeVideoDownloaderRepository {
     fn default() -> Self {
-        Self::with_result(DownloadAttempt::Failed { stderr: None })
+        Self::with_result(DownloadAttempt::Failed {
+            stderr: None,
+            sabr_notice: None,
+        })
     }
 }
 
@@ -163,9 +166,13 @@ impl FakeVideoDownloaderRepository {
                 folder: "fake-output".to_string(),
                 filename: "fake-output.mp4".to_string(),
                 duration_seconds: None,
+                sabr_notice: None,
             }))
         } else {
-            Self::with_result(DownloadAttempt::Failed { stderr: None })
+            Self::with_result(DownloadAttempt::Failed {
+                stderr: None,
+                sabr_notice: None,
+            })
         }
     }
 
@@ -175,6 +182,7 @@ impl FakeVideoDownloaderRepository {
             folder: "fake-output".to_string(),
             filename: "fake-output.mp4".to_string(),
             duration_seconds: Some(duration_seconds),
+            sabr_notice: None,
         }))
     }
 
@@ -183,6 +191,28 @@ impl FakeVideoDownloaderRepository {
     pub fn with_failed_stderr(stderr: &str) -> Self {
         Self::with_result(DownloadAttempt::Failed {
             stderr: Some(stderr.to_string()),
+            sabr_notice: None,
+        })
+    }
+
+    /// Succeeds but reports the SABR-only streaming experiment (a degraded,
+    /// lower-quality fallback), so tests can drive the download path's
+    /// SABR-on-success behavior.
+    pub fn succeeding_with_sabr(reason: &str) -> Self {
+        Self::with_result(DownloadAttempt::Succeeded(DownloadedVideo {
+            folder: "fake-output".to_string(),
+            filename: "fake-output.mp4".to_string(),
+            duration_seconds: None,
+            sabr_notice: Some(reason.to_string()),
+        }))
+    }
+
+    /// Fails the download, carrying both `stderr` and a SABR-only notice, so
+    /// tests can drive the download path's SABR-on-failure behavior.
+    pub fn with_failed_stderr_and_sabr(stderr: &str, reason: &str) -> Self {
+        Self::with_result(DownloadAttempt::Failed {
+            stderr: Some(stderr.to_string()),
+            sabr_notice: Some(reason.to_string()),
         })
     }
 
@@ -327,6 +357,7 @@ mod tests {
                 folder: "My Video".to_string(),
                 filename: test_support::DEFAULT_PRINTED_FILENAME.to_string(),
                 duration_seconds: None,
+                sabr_notice: None,
             })
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -361,7 +392,8 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Failed {
-                stderr: Some("HTTP Error 403: Forbidden".to_string())
+                stderr: Some("HTTP Error 403: Forbidden".to_string()),
+                sabr_notice: None,
             }
         );
         std::fs::remove_dir_all(&output_dir).unwrap();

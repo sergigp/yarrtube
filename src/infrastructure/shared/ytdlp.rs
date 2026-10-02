@@ -72,6 +72,12 @@ pub struct DownloadedVideo {
     pub folder: String,
     pub filename: String,
     pub duration_seconds: Option<i64>,
+    /// `Some(reason)` when `yt-dlp` reported YouTube's SABR-only streaming
+    /// experiment during this download — the better formats were skipped as
+    /// missing a URL, so this success may be a lower-quality fallback. `None`
+    /// when no SABR signal was reported. Carries the reason text for logging;
+    /// it never affects the recorded status.
+    pub sabr_notice: Option<String>,
 }
 
 /// The outcome of a `download_video` attempt: either a `DownloadedVideo`, or
@@ -80,7 +86,12 @@ pub struct DownloadedVideo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DownloadAttempt {
     Succeeded(DownloadedVideo),
-    Failed { stderr: Option<String> },
+    Failed {
+        stderr: Option<String>,
+        /// `Some(reason)` when `yt-dlp` reported the SABR-only streaming
+        /// experiment while failing; see `DownloadedVideo::sabr_notice`.
+        sabr_notice: Option<String>,
+    },
 }
 
 /// Parses `yt-dlp`'s `--print %(duration)s` line into whole seconds.
@@ -144,8 +155,12 @@ pub fn download_video(
         "--write-thumbnail".to_string(),
         "--convert-thumbnails".to_string(),
         "jpg".to_string(),
+        // Note: unlike the thumbnail/diagnose/listing invocations, this one
+        // deliberately keeps warnings on (no `--no-warnings`) so `yt-dlp`'s
+        // SABR-only streaming warning reaches our captured stderr, where
+        // `sabr_reason` can detect it. `--quiet` still gives us the clean
+        // `--print` stdout. See the `log-sabr-detection` change.
         "--quiet".to_string(),
-        "--no-warnings".to_string(),
         "--print".to_string(),
         "%(duration)s".to_string(),
         "--print".to_string(),
@@ -178,9 +193,15 @@ pub fn download_video(
         |e| format!("Failed to run yt-dlp for {video_url}: {e}"),
     )? {
         RunOutcome::Success(output) => output,
-        RunOutcome::CleanFailure { stderr } => return Ok(DownloadAttempt::Failed { stderr }),
+        RunOutcome::CleanFailure { stderr_raw } => {
+            return Ok(DownloadAttempt::Failed {
+                stderr: reason_excluding_warnings(&stderr_raw),
+                sabr_notice: sabr_reason(&stderr_raw),
+            });
+        }
     };
 
+    let sabr_notice = sabr_reason(&String::from_utf8_lossy(&output.stderr));
     let stdout = String::from_utf8_lossy(&output.stdout);
     let lines: Vec<&str> = stdout.lines().collect();
     let filename = match lines.last().map(|s| s.trim()) {
@@ -203,6 +224,7 @@ pub fn download_video(
         folder,
         filename,
         duration_seconds,
+        sabr_notice,
     }))
 }
 
@@ -531,16 +553,43 @@ fn remove_video_dir_unless_reused(video_dir: &Path, existing_folder: Option<&str
 
 /// The outcome of running a fully-configured `yt-dlp` invocation:
 /// `Success` carries the process's output for the caller to parse,
-/// `CleanFailure` a non-zero exit with whatever text `yt-dlp` wrote to its
-/// (possibly piped, possibly inherited) stderr, trimmed and `None` if empty.
+/// `CleanFailure` a non-zero exit carrying `yt-dlp`'s full (lossy, untrimmed)
+/// stderr for the caller to interpret — the download caller both derives its
+/// recorded failure reason from it (warnings filtered out) and scans it for
+/// the SABR signal.
 enum RunOutcome {
     Success(std::process::Output),
-    CleanFailure { stderr: Option<String> },
+    CleanFailure { stderr_raw: String },
 }
 
-/// Trims `stderr`, treating an all-whitespace/empty result as "no message".
-fn trimmed_stderr(stderr: &[u8]) -> Option<String> {
-    let text = String::from_utf8_lossy(stderr).trim().to_string();
+/// The recorded failure reason for a clean `yt-dlp` failure: `stderr` with any
+/// `WARNING:` lines removed (so warnings `yt-dlp` now prints — the download
+/// invocation no longer passes `--no-warnings` — never pollute the reason),
+/// trimmed, and `None` when nothing meaningful remains.
+fn reason_excluding_warnings(stderr: &str) -> Option<String> {
+    let text = stderr
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("WARNING:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string();
+    (!text.is_empty()).then_some(text)
+}
+
+/// Detects YouTube's SABR-only streaming experiment in a `yt-dlp` run's
+/// stderr. `yt-dlp` announces it on a `WARNING:` line mentioning SABR (the
+/// better formats skipped as "missing a URL"); keying on the case-insensitive
+/// token `sabr` is specific enough not to false-positive and robust to minor
+/// wording changes. Returns the trimmed matching line(s) joined, or `None`
+/// when no such line is present.
+fn sabr_reason(stderr: &str) -> Option<String> {
+    let text = stderr
+        .lines()
+        .filter(|line| line.to_lowercase().contains("sabr"))
+        .map(str::trim)
+        .collect::<Vec<_>>()
+        .join("\n");
     (!text.is_empty()).then_some(text)
 }
 
@@ -571,7 +620,7 @@ fn run_and_cleanup_on_failure(
     if !output.status.success() {
         remove_video_dir_unless_reused(video_dir, existing_folder);
         return Ok(RunOutcome::CleanFailure {
-            stderr: trimmed_stderr(&output.stderr),
+            stderr_raw: String::from_utf8_lossy(&output.stderr).into_owned(),
         });
     }
 
@@ -738,7 +787,7 @@ mod tests {
     fn unwrap_succeeded(attempt: DownloadAttempt) -> DownloadedVideo {
         match attempt {
             DownloadAttempt::Succeeded(video) => video,
-            DownloadAttempt::Failed { stderr } => {
+            DownloadAttempt::Failed { stderr, .. } => {
                 panic!(
                     "expected a successful download attempt, got Failed {{ stderr: {stderr:?} }}"
                 )
@@ -771,6 +820,7 @@ mod tests {
                 folder: "My Video".to_string(),
                 filename: DEFAULT_PRINTED_FILENAME.to_string(),
                 duration_seconds: None,
+                sabr_notice: None,
             })
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -806,7 +856,8 @@ mod tests {
         assert_eq!(
             result,
             DownloadAttempt::Failed {
-                stderr: Some("HTTP Error 403: Forbidden".to_string())
+                stderr: Some("HTTP Error 403: Forbidden".to_string()),
+                sabr_notice: None,
             }
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -832,7 +883,13 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, DownloadAttempt::Failed { stderr: None });
+        assert_eq!(
+            result,
+            DownloadAttempt::Failed {
+                stderr: None,
+                sabr_notice: None,
+            }
+        );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
@@ -925,7 +982,6 @@ mod tests {
             "--convert-thumbnails".to_string(),
             "jpg".to_string(),
             "--quiet".to_string(),
-            "--no-warnings".to_string(),
             "--print".to_string(),
             "%(duration)s".to_string(),
             "--print".to_string(),
@@ -998,7 +1054,6 @@ mod tests {
             "--convert-thumbnails".to_string(),
             "jpg".to_string(),
             "--quiet".to_string(),
-            "--no-warnings".to_string(),
             "--print".to_string(),
             "%(duration)s".to_string(),
             "--print".to_string(),
@@ -1060,6 +1115,7 @@ mod tests {
                 folder: "My Video".to_string(),
                 filename: "My Video.mp4".to_string(),
                 duration_seconds: Some(223),
+                sabr_notice: None,
             }
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -1215,7 +1271,13 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result, DownloadAttempt::Failed { stderr: None });
+        assert_eq!(
+            result,
+            DownloadAttempt::Failed {
+                stderr: None,
+                sabr_notice: None,
+            }
+        );
         assert!(output_dir.join("My Video").join("My Video.jpg").exists());
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
@@ -1242,6 +1304,144 @@ mod tests {
         .unwrap();
         std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
         script_path
+    }
+
+    /// A fake `yt-dlp` that prints `stdout` to stdout and `stderr` to stderr
+    /// (each from a file, so content is immune to shell quoting) and exits 0 —
+    /// for driving a successful download whose stderr still carries a warning.
+    #[cfg(unix)]
+    fn fake_ytdlp_writing_stdout_and_stderr(
+        dir_name: &str,
+        stdout: &str,
+        stderr: &str,
+    ) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let bin_dir = test_support::unique_temp_dir(dir_name);
+        let script_path = bin_dir.join("yt-dlp");
+        let stdout_path = bin_dir.join("stdout-content");
+        let stderr_path = bin_dir.join("stderr-content");
+        std::fs::write(&stdout_path, stdout).unwrap();
+        std::fs::write(&stderr_path, stderr).unwrap();
+        std::fs::write(
+            &script_path,
+            format!(
+                "#!/bin/sh\ncat \"{}\"\ncat \"{}\" >&2\nexit 0\n",
+                stdout_path.display(),
+                stderr_path.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        script_path
+    }
+
+    const SABR_WARNING: &str = "WARNING: [youtube] abc123: Some ios client https formats have been skipped as they are missing a URL. YouTube may have enabled the SABR-only streaming experiment for the current session. See https://github.com/yt-dlp/yt-dlp/issues/12482 for more details";
+
+    #[test]
+    fn it_should_detect_the_sabr_only_streaming_warning_in_stderr() {
+        let stderr = format!("{SABR_WARNING}\n[info] abc123: Downloading 1 format(s): 18\n");
+
+        assert_eq!(sabr_reason(&stderr), Some(SABR_WARNING.to_string()));
+    }
+
+    #[test]
+    fn it_should_not_detect_sabr_in_a_clean_run() {
+        assert_eq!(
+            sabr_reason("[info] abc123: Downloading 1 format(s): 399+251\n"),
+            None
+        );
+    }
+
+    #[test]
+    fn it_should_not_detect_sabr_in_an_unrelated_warning() {
+        assert_eq!(
+            sabr_reason("WARNING: [youtube] abc123: Falling back to generic n-function search\n"),
+            None
+        );
+    }
+
+    #[test]
+    fn it_should_exclude_warning_lines_from_the_recorded_failure_reason() {
+        let stderr =
+            format!("{SABR_WARNING}\nERROR: [youtube] abc123: This video is not available\n");
+
+        assert_eq!(
+            reason_excluding_warnings(&stderr),
+            Some("ERROR: [youtube] abc123: This video is not available".to_string())
+        );
+    }
+
+    #[test]
+    fn it_should_report_no_recorded_reason_when_only_warnings_remain() {
+        assert_eq!(
+            reason_excluding_warnings(&format!("{SABR_WARNING}\n")),
+            None
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_report_a_sabr_notice_on_a_successful_but_degraded_download() {
+        let script_path = fake_ytdlp_writing_stdout_and_stderr(
+            "ytdlp-download-sabr-success",
+            "My Video.mp4\n",
+            &format!("{SABR_WARNING}\n"),
+        );
+        let output_dir = test_support::unique_temp_dir("ytdlp-download-sabr-success-out");
+
+        let result = download_video(
+            &script_path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            result,
+            DownloadAttempt::Succeeded(DownloadedVideo {
+                folder: "My Video".to_string(),
+                filename: "My Video.mp4".to_string(),
+                duration_seconds: None,
+                sabr_notice: Some(SABR_WARNING.to_string()),
+            })
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_report_a_sabr_notice_and_a_warning_free_reason_on_a_failed_download() {
+        let script_path = fake_ytdlp_writing_stderr(
+            "ytdlp-download-sabr-failure",
+            &format!("{SABR_WARNING}\nERROR: [youtube] abc123: This video is not available\n"),
+            1,
+        );
+        let output_dir = test_support::unique_temp_dir("ytdlp-download-sabr-failure-out");
+
+        let result = download_video(
+            &script_path,
+            "https://example.com/video",
+            "My Video",
+            "vid1",
+            Quality::High,
+            &output_dir,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            result,
+            DownloadAttempt::Failed {
+                stderr: Some("ERROR: [youtube] abc123: This video is not available".to_string()),
+                sabr_notice: Some(SABR_WARNING.to_string()),
+            }
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
     #[test]

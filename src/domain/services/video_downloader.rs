@@ -56,6 +56,21 @@ fn combined_reason(diagnosed: Option<&str>, stderr: Option<&str>) -> String {
         .join(" | ")
 }
 
+/// Emits the dedicated, greppable SABR event when `yt-dlp` reported YouTube's
+/// SABR-only streaming experiment for this download (see the `video-download`
+/// capability's "SABR-Only Streaming Is Surfaced" requirement). It is purely
+/// observational: it fires on both a failed and a degraded-successful download
+/// and never changes the video's status, recorded reason, or retry flow.
+fn log_sabr(video: &Video, sabr_notice: Option<&str>) {
+    if let Some(reason) = sabr_notice {
+        warn!(
+            video_id = %video.id,
+            reason = %reason,
+            "SABR-only streaming experiment reported by yt-dlp; higher-quality formats were skipped"
+        );
+    }
+}
+
 /// Downloads one video via `yt-dlp`, transitioning it through in-progress to
 /// downloaded/errored. Container-agnostic: the caller (a task handler)
 /// already resolved the video's owning container's quality and output
@@ -126,9 +141,14 @@ impl VideoDownloaderApi for VideoDownloader {
         self.video_repository.update(&started)?;
         match self.run_download(&started, quality, output_dir) {
             Ok(DownloadAttempt::Succeeded(downloaded)) => {
+                log_sabr(&started, downloaded.sabr_notice.as_deref());
                 self.record_unless_deleted(started, downloaded, quality, output_dir)
             }
-            Ok(DownloadAttempt::Failed { stderr }) => {
+            Ok(DownloadAttempt::Failed {
+                stderr,
+                sabr_notice,
+            }) => {
+                log_sabr(&started, sabr_notice.as_deref());
                 self.record_failed(started, stderr, is_last_attempt)
             }
             Err(e) => self.record_errored(started, e, is_last_attempt),
