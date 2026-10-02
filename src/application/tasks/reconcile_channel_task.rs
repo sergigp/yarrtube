@@ -759,7 +759,7 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![fetch_thumbnail_task(1, &video.id), next_reconcile(2)]
+            vec![next_reconcile(1)]
         );
     }
 
@@ -800,7 +800,7 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![fetch_thumbnail_task(1, &video.id), next_reconcile(2)]
+            vec![next_reconcile(1)]
         );
     }
 

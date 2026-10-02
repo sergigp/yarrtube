@@ -1015,7 +1015,7 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![fetch_thumbnail_task(1, &video.id), next_reconcile(2)]
+            vec![next_reconcile(1)]
         );
     }
 
@@ -1055,7 +1055,7 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![fetch_thumbnail_task(1, &video.id), next_reconcile(2)]
+            vec![next_reconcile(1)]
         );
     }
 
@@ -1711,6 +1711,44 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
             "/videos",
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![next_reconcile(1)]
+        );
+    }
+
+    #[test]
+    fn it_should_not_schedule_a_thumbnail_fetch_for_an_excluded_video() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = my_video().mark_excluded(a_day_ago());
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &video,
+            0,
+        );
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository,
+            vec![member_playlist_item()],
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
         ));
 
         let result = run(&task, &payload_for("PL1"));

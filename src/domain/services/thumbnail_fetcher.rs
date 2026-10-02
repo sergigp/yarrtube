@@ -59,7 +59,8 @@ pub trait ThumbnailFetcherApi: Send + Sync {
     /// reconcilers' `reconcile_filesystem`: schedules a `FetchThumbnail` for
     /// each video with no thumbnail, except one in `skip_ids` (just reset for
     /// redownload this same pass, so its download writes its own thumbnail)
-    /// or one whose download is `InProgress` (it records its own thumbnail).
+    /// or one whose download is `InProgress` (it records its own thumbnail),
+    /// or one that isn't thumbnail-fetchable (`Video::is_thumbnail_fetchable`).
     /// A video that already has a fetch pending or running gets no second
     /// one: `TaskRepository::schedule` dedupes it.
     fn schedule_missing(
@@ -99,6 +100,7 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
                 v.thumbnail_filename.is_none()
                     && !skip_ids.contains(&v.id)
                     && v.status != VideoStatus::InProgress
+                    && v.is_thumbnail_fetchable()
             })
             .try_for_each(|video| self.schedule_fetch(video, output_dir))
     }
