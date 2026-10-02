@@ -214,12 +214,13 @@ without re-downloading the video's file.
 ### Requirement: Missing Thumbnail Recovery (Channels)
 The system SHALL, for every channel, schedule a thumbnail fetch task during
 a reconcile pass for each video that has no recorded thumbnail filename,
-regardless of its download status, without affecting that video's download
+regardless of its download status except as listed below, without affecting that video's download
 status or triggering a redownload. The pass SHALL NOT fetch the thumbnail
 itself, and SHALL NOT schedule one for:
 - a video that already has a thumbnail fetch pending or running,
 - a video the same pass resets for redownload,
 - a video whose download is In Progress,
+- a video whose download status is Excluded (permanently unavailable, so a fetch can never succeed) or Errored (recovery later resets it for redownload, and that download writes its own thumbnail),
 - a video the same pass newly added: its thumbnail fetch is scheduled in reaction to its `VideoAddedToChannel` event (see `video-thumbnails`), so recovery only covers videos already stored before the pass.
 
 #### Scenario: Video has no recorded thumbnail
@@ -240,7 +241,15 @@ itself, and SHALL NOT schedule one for:
 
 #### Scenario: Retried thumbnail fetch fails again
 - **WHEN** a scheduled thumbnail fetch for a video fails
-- **THEN** the video's status and any other recorded field are left unchanged, and the next reconcile pass schedules another fetch
+- **THEN** the video's status and any other recorded field are left unchanged, and the next reconcile pass schedules another fetch, unless the video's download status has meanwhile become Excluded or Errored
+
+#### Scenario: Excluded video has no recorded thumbnail
+- **WHEN** a reconcile pass finds a video belonging to the channel with no recorded thumbnail filename whose download status is Excluded
+- **THEN** the system does not schedule a thumbnail fetch for it, on this or any later pass while it stays Excluded
+
+#### Scenario: Errored video has no recorded thumbnail
+- **WHEN** a reconcile pass finds a video belonging to the channel with no recorded thumbnail filename whose download status is Errored and that the same pass does not reset for redownload
+- **THEN** the system does not schedule a thumbnail fetch for it
 
 ### Requirement: Reconcile Preserves Concurrent Download Progress (Channels)
 A channel reconcile pass refreshing a stored video's title or position

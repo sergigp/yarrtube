@@ -30,7 +30,7 @@ The system SHALL fetch a video's thumbnail image independently of its full video
 - a failure SHALL NOT change the video's status,
 - a failure SHALL NOT prevent the video's full download from being scheduled or run.
 
-A thumbnail fetch that runs after the video already has a recorded thumbnail filename SHALL make no changes.
+A thumbnail fetch that runs after the video already has a recorded thumbnail filename SHALL make no changes. A thumbnail fetch that runs while the video's download status is Excluded or Errored SHALL make no changes and SHALL NOT attempt to obtain the thumbnail; this covers a fetch scheduled before the video reached that status.
 
 #### Scenario: Video created and a thumbnail is available
 - **WHEN** a video is newly added to a tracked playlist or channel and its thumbnail can be obtained
@@ -47,6 +47,14 @@ A thumbnail fetch that runs after the video already has a recorded thumbnail fil
 #### Scenario: Download already recorded a thumbnail
 - **WHEN** a video's thumbnail fetch runs after that video's download already recorded a thumbnail filename
 - **THEN** the fetch makes no changes to the video or to disk
+
+#### Scenario: Fetch runs for an excluded video
+- **WHEN** a thumbnail fetch was scheduled for a video (e.g. on its addition) and, by the time it runs, the video's download status is Excluded
+- **THEN** the fetch does not try to obtain a thumbnail and makes no changes to the video or to disk
+
+#### Scenario: Fetch runs for an errored video
+- **WHEN** a thumbnail fetch runs for a video whose download status is Errored
+- **THEN** the fetch does not try to obtain a thumbnail and makes no changes to the video or to disk
 
 ### Requirement: Thumbnail Recording Preserves Download Progress
 Recording a fetched thumbnail's filename on a video SHALL change only that video's recorded thumbnail filename (and its last-updated time), never its download status or any field set by its download.
