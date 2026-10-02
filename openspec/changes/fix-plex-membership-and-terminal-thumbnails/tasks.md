@@ -18,7 +18,11 @@
 
 - [x] 3.1 `it_should_return_unavailable_with_the_reason_on_a_clean_failed_thumbnail_fetch`: the fake script writes `ERROR: [youtube] x: Video unavailable` to stderr and exits 1. `fetch_thumbnail` pipes stderr instead of inheriting it, returns `Unavailable { reason: Some(..) }` with warning lines removed, and the folder is removed. This replaces `it_should_return_none_and_remove_the_folder_on_a_clean_failed_exit`. Verify with `cargo test` on that name.
 - [x] 3.2 `it_should_return_unavailable_without_a_reason_when_yt_dlp_prints_na`: adapt the existing NA test to the new type. Verify with `cargo test` on that name.
-- [x] 3.3 `it_should_error_with_the_reason_when_listing_channel_videos_fails`: the fake script writes an error to stderr and exits 1. `list_channel_videos` pipes stderr and returns `Err` whose message contains the reason. This replaces `it_should_return_an_empty_list_on_a_clean_failed_exit`. Verify with `cargo test` on that name. The existing `reconcile_channel_task::it_should_keep_videos_if_listing_fails` keeps covering the reconciler side.
+- [x] 3.3 `it_should_error_with_the_reason_when_listing_channel_videos_fails`: the fake script writes an error to stderr and exits 1. `list_channel_videos` pipes stderr and returns `Err` whose message contains the reason. This replaces `it_should_return_an_empty_list_on_a_clean_failed_exit`. Verify with `cargo test` on that name. The reconciler side is revised in 3.6.
+
+`channel_video_reconciler.rs`:
+
+- [ ] 3.6 `reconcile_channel_task::it_should_keep_videos_if_listing_fails` (revised): with a failing channel listing, the task returns `Ok(())`, the stored rows are unchanged, no events are published, and the next reconcile is scheduled. `sync_channel_membership` catches the listing error, logs `warn!(channel_id, error, "failed to list channel videos")`, and returns empty `MembershipChanges`, so the rest of the pass and `schedule_next_reconcile` run. Verify with `cargo test it_should_keep_videos_if_listing_fails`.
 
 `plex_collection_repository.rs`:
 

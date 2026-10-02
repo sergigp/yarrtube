@@ -33,10 +33,14 @@ daemon's output, with no timestamp, level, or video id.
   stderr instead of inheriting it. The relevant failure reason is reported
   through the structured logger, attached to the existing warn message, so
   no raw subprocess output reaches the daemon's log stream.
-- A failed channel listing (`yt-dlp` non-zero exit) is now reported as an
-  error carrying the tool's reason, instead of an empty listing. Today the
+- A failed channel listing (`yt-dlp` non-zero exit) is now an error
+  carrying the tool's reason, instead of an empty listing. Today the
   empty listing makes the reconciler evict every stored video of that
-  channel, deleting the files. That violates the existing
+  channel, deleting the files. The reconciler treats that error as
+  non-fatal: it logs it with the channel and reason, skips membership
+  changes for that pass, and still runs the rest of the pass and schedules
+  the next reconcile. It doesn't fail the task, which would dead-letter the
+  channel's recurring reconcile for good. That matches the existing
   `channel-video-sync` scenario "yt-dlp fails to list a channel's videos",
   so there is no requirement change.
 
@@ -66,6 +70,8 @@ _None._
   and the `fetch` guard.
 - `src/application/tasks/fetch_thumbnail_task.rs`: covered by the `fetch`
   guard, with tests.
+- `src/domain/services/channel_video_reconciler.rs`: a failed listing is
+  logged and skipped for the pass instead of propagated.
 - `src/infrastructure/shared/ytdlp.rs`: `fetch_thumbnail` and
   `list_channel_videos` switch from `Stdio::inherit()` to captured stderr.
   The callers log the reason.

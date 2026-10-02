@@ -10,7 +10,9 @@
 - `src/infrastructure/shared/ytdlp.rs`:
   - `fetch_thumbnail` captures stderr (`Stdio::piped()`) and returns the warning-free reason.
   - `list_channel_videos` captures stderr and returns `Err` carrying the reason on a non-zero exit. Today it returns `Ok(vec![])`, which the reconciler reads as "channel has no videos" and evicts every stored video. That contradicts `channel-video-sync`'s "yt-dlp fails to list a channel's videos" scenario.
-- `src/application/tasks/fetch_thumbnail_task.rs`, `reconcile_playlist_task.rs`, `reconcile_channel_task.rs`: behaviour tests only.
+- `src/domain/services/channel_video_reconciler.rs`: `sync_channel_membership` treats a failed listing as non-fatal. It logs the failure with the channel and reason, makes no membership changes for that pass, and lets the rest of the pass and the next-reconcile scheduling run. Propagating it instead would dead-letter the `ReconcileChannel` task after its retries, and nothing re-seeds it, so the channel would never sync again.
+- `src/application/tasks/fetch_thumbnail_task.rs`, `reconcile_playlist_task.rs`: behaviour tests only.
+- `src/application/tasks/reconcile_channel_task.rs`: behaviour tests, including the revised listing-failure test.
 
 ## Types & Signatures
 
@@ -61,7 +63,7 @@ Thumbnail fetch:
 - `Unavailable { reason }` → `warn!(video_id, reason, "no thumbnail available for video")`
 
 Channel listing:
-`ChannelVideoReconciler::sync_channel_membership` → `YtDlpChannelVideosRepository::list_current_videos(id, limit)` → `ytdlp::list_channel_videos(path, url, limit)` (stderr piped) → non-zero exit → `Err(reason)` → `?` propagates before any membership change, and the task executor logs it with `task_id` and the error cause chain. This is existing behaviour, already covered by `it_should_keep_videos_if_listing_fails` via the fake.
+`ChannelVideoReconciler::reconcile` → `run_reconcile_pass` → `sync_channel_membership` → `YtDlpChannelVideosRepository::list_current_videos(id, limit)` → `ytdlp::list_channel_videos(path, url, limit)` (stderr piped) → non-zero exit → `Err(reason)` → caught in `sync_channel_membership` → `warn!(channel_id, error, "failed to list channel videos")` → returns empty `MembershipChanges` (no adds, no evictions, stored rows untouched) → `reconcile_filesystem` runs as usual from stored rows (missing-file healing, errored recovery, thumbnail recovery) → `schedule_next_reconcile` → `Ok(())`. `force_reconcile` takes the same path minus the scheduling.
 
 Plex membership: unchanged call stack. `PlexCollectionReconciler::converge_members` → `add_items` / `remove_item` with the new paths.
 
@@ -75,6 +77,7 @@ Plex membership: unchanged call stack. `PlexCollectionReconciler::converge_membe
    5. `reconcile_channel_task::it_should_not_schedule_a_thumbnail_fetch_for_an_excluded_video`: channel counterpart of 1.3.
    6. `reconcile_channel_task::it_should_not_schedule_a_thumbnail_fetch_for_an_errored_video_not_due_for_recovery`: channel counterpart of 1.4.
    7. The existing `it_should_schedule_a_thumbnail_fetch_for_a_video_missing_one` tests (Pending/Downloaded) stay green.
+   8. `reconcile_channel_task::it_should_keep_videos_if_listing_fails` (revised): the fake channel listing fails. The task returns `Ok(())`, the stored video and channel-video rows are unchanged, no events are published, and the next reconcile is scheduled (`vec![next_reconcile(1)]`). Today the test asserts `Err` and nothing scheduled.
 2. Infrastructure tests:
    - `ytdlp.rs` (fake yt-dlp script):
      1. `it_should_return_unavailable_with_the_reason_on_a_clean_failed_thumbnail_fetch`: the script writes `ERROR: [youtube] x: Video unavailable` to stderr and exits 1. Returns `Unavailable { reason: Some("ERROR: [youtube] x: Video unavailable") }` and the folder is removed (folds into the existing `..._on_a_clean_failed_exit` test).
