@@ -371,12 +371,13 @@ impl PlaylistVideoReconciler {
                 .iter()
                 .map(|pv| (&pv.video_id, pv.position))
                 .collect();
-        // Videos the missing-thumbnail recovery below must skip. A video
-        // added by this same pass gets its fetch from its own video-added
-        // event, so recovery only covers videos stored before the pass. A
-        // video reset for redownload below gets its thumbnail with its own
-        // fresh download (see design.md's Non-Goals).
-        let mut skip_thumbnail_ids: HashSet<&VideoRecordId> = changes.added_ids.iter().collect();
+        // Videos whose download and thumbnail this pass already takes care
+        // of, so the stranded-video and missing-thumbnail recoveries below
+        // skip them. A video added by this same pass gets both from its own
+        // video-added event, so recovery only covers videos stored before
+        // the pass. A video reset for redownload below gets its download
+        // scheduled here and its thumbnail with that fresh download.
+        let mut handled_this_pass: HashSet<&VideoRecordId> = changes.added_ids.iter().collect();
 
         for video in &downloaded {
             let healthy = video.filename.as_deref().is_some_and(|filename| {
@@ -396,7 +397,7 @@ impl PlaylistVideoReconciler {
                 );
                 let reset = (*video).clone().reset_for_redownload(now);
                 self.video_repository.update(&reset)?;
-                skip_thumbnail_ids.insert(&video.id);
+                handled_this_pass.insert(&video.id);
                 self.task_repository.schedule(
                     &Task::DownloadVideo {
                         video_id: video.id.as_str().to_string(),
@@ -427,7 +428,7 @@ impl PlaylistVideoReconciler {
             );
             let reset = video.clone().reset_for_redownload(now);
             self.video_repository.update(&reset)?;
-            skip_thumbnail_ids.insert(&video.id);
+            handled_this_pass.insert(&video.id);
             self.task_repository.schedule(
                 &Task::DownloadVideo {
                     video_id: video.id.as_str().to_string(),
@@ -439,7 +440,11 @@ impl PlaylistVideoReconciler {
         }
 
         for video in stored_videos.iter().filter(|v| {
-            v.status == VideoStatus::ErroredRetrying && !downloads_in_flight.contains(v.id.as_str())
+            matches!(
+                v.status,
+                VideoStatus::Pending | VideoStatus::ErroredRetrying
+            ) && !downloads_in_flight.contains(v.id.as_str())
+                && !handled_this_pass.contains(&v.id)
         }) {
             warn!(
                 playlist_id = %playlist.id,
@@ -457,11 +462,8 @@ impl PlaylistVideoReconciler {
             )?;
         }
 
-        self.thumbnail_fetcher.schedule_missing(
-            &stored_videos,
-            &skip_thumbnail_ids,
-            &output_dir,
-        )?;
+        self.thumbnail_fetcher
+            .schedule_missing(&stored_videos, &handled_this_pass, &output_dir)?;
 
         for file in &files {
             if protected_top_level.contains(file.as_str()) {
