@@ -246,15 +246,17 @@ impl PlexCollectionReconciler {
                 Ok(())
             }
             Some(collection_rating_key) => {
-                self.converge_members(name, collection_rating_key, &desired)
+                self.converge_members(section_id, name, collection_rating_key, &desired)
             }
         }
     }
 
     /// Adds the desired members an existing collection is missing and
-    /// removes the members no longer desired.
+    /// removes the members no longer desired. An empty collection is
+    /// recreated instead, since Plex may stop accepting additions to it.
     fn converge_members(
         &self,
+        section_id: &str,
         name: &str,
         collection_rating_key: &str,
         desired: &[String],
@@ -265,6 +267,9 @@ impl PlexCollectionReconciler {
             .into_iter()
             .map(|item| item.rating_key)
             .collect();
+        if members.is_empty() {
+            return self.recreate_collection(section_id, name, collection_rating_key, desired);
+        }
 
         let missing: Vec<String> = desired
             .iter()
@@ -290,6 +295,29 @@ impl PlexCollectionReconciler {
                 "removed item from Plex collection"
             );
         }
+        Ok(())
+    }
+
+    /// Deletes an empty collection and creates it again with `desired`,
+    /// recovering a collection Plex no longer accepts additions to. It holds
+    /// nothing, so nothing is lost.
+    fn recreate_collection(
+        &self,
+        section_id: &str,
+        name: &str,
+        collection_rating_key: &str,
+        desired: &[String],
+    ) -> anyhow::Result<()> {
+        self.plex_collection_repository
+            .delete_collection(collection_rating_key)?;
+        self.plex_collection_repository
+            .create_collection(section_id, name, desired)?;
+        info!(
+            section = section_id,
+            collection = name,
+            members = desired.len(),
+            "recreated empty Plex collection"
+        );
         Ok(())
     }
 }
