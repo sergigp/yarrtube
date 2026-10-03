@@ -11,5 +11,5 @@
 
 ## 3. Verification
 
-- [ ] 3.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
+- [x] 3.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
 - [ ] 3.2 After deploying, logs show `recreated empty Plex collection` for any collection still empty (PBS Space Time / Control de Misión if not already deleted by hand) and no `failed to reconcile Plex collection` 400s on the next pass.
