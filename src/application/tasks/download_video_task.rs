@@ -35,6 +35,7 @@ impl TaskHandler for DownloadVideoTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::tasks::log_capture::captured_log_messages;
     use crate::domain::video::Video;
     use crate::domain::video::{VideoId, VideoStatus};
     use crate::domain::video_metadata::VideoMetadata;
@@ -1268,48 +1269,5 @@ mod tests {
     fn run(task: &DownloadVideoTask, payload: &str, is_last_attempt: bool) -> Result<(), String> {
         task.handle(payload, is_last_attempt)
             .map_err(|e| e.to_string())
-    }
-
-    /// Runs `body` with a scoped tracing subscriber that captures each event's
-    /// `message` field in memory (printing nothing, so the no-log-output test
-    /// rule still holds) and returns the captured messages — the only way to
-    /// assert the SABR warn event, a pure logging side effect, actually fires.
-    fn captured_log_messages(body: impl FnOnce()) -> Vec<String> {
-        use tracing_subscriber::layer::SubscriberExt;
-
-        let messages: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
-        let subscriber = tracing_subscriber::registry().with(CaptureLayer(Arc::clone(&messages)));
-        tracing::subscriber::with_default(subscriber, body);
-        messages.lock().unwrap().clone()
-    }
-
-    /// Captures the `message` field of every tracing event into a shared
-    /// buffer; see `captured_log_messages`.
-    struct CaptureLayer(Arc<std::sync::Mutex<Vec<String>>>);
-
-    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for CaptureLayer {
-        fn on_event(
-            &self,
-            event: &tracing::Event<'_>,
-            _ctx: tracing_subscriber::layer::Context<'_, S>,
-        ) {
-            struct MessageVisitor<'a>(&'a mut String);
-            impl tracing::field::Visit for MessageVisitor<'_> {
-                fn record_debug(
-                    &mut self,
-                    field: &tracing::field::Field,
-                    value: &dyn std::fmt::Debug,
-                ) {
-                    if field.name() == "message" {
-                        use std::fmt::Write;
-                        let _ = write!(self.0, "{value:?}");
-                    }
-                }
-            }
-
-            let mut message = String::new();
-            event.record(&mut MessageVisitor(&mut message));
-            self.0.lock().unwrap().push(message);
-        }
     }
 }

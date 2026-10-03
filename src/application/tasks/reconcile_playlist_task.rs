@@ -30,6 +30,7 @@ impl TaskHandler for ReconcilePlaylistTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::tasks::log_capture::captured_log_messages;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
@@ -1143,6 +1144,67 @@ mod tests {
                 fetch_thumbnail_task(2, &video.id),
                 next_reconcile(3),
             ]
+        );
+    }
+
+    #[test]
+    fn it_should_not_reschedule_a_non_terminal_video_whose_download_is_queued() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(Vec::new()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = my_video()
+            .start_download(a_day_ago())
+            .mark_errored_retrying(a_day_ago());
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &video,
+            0,
+        );
+        task_repository
+            .schedule(
+                &Task::DownloadVideo {
+                    video_id: video.id.as_str().to_string(),
+                    quality: "high".to_string(),
+                    output_dir: "/videos/my-playlist".to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            vec![member_playlist_item()],
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let mut result = Err(String::new());
+        let logs = captured_log_messages(|| result = run(&task, &payload_for("PL1")));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                download_video_task(1, &video.id),
+                fetch_thumbnail_task(2, &video.id),
+                next_reconcile(3),
+            ]
+        );
+        assert!(
+            !logs
+                .iter()
+                .any(|message| message.contains("stranded video found during reconcile"))
         );
     }
 

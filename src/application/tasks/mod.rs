@@ -3,6 +3,8 @@ pub mod delete_playlist_files_task;
 pub mod delete_video_file_task;
 pub mod download_video_task;
 pub mod fetch_thumbnail_task;
+#[cfg(test)]
+pub(crate) mod log_capture;
 pub mod reconcile_channel_task;
 pub mod reconcile_playlist_task;
 pub mod reconcile_plex_collections_task;

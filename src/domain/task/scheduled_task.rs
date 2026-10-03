@@ -1,3 +1,4 @@
+use super::Task;
 use chrono::{DateTime, Duration, Utc};
 
 const MAX_ATTEMPTS: i64 = 5;
@@ -95,7 +96,10 @@ impl ScheduledTask {
     /// The video a `download_video` task targets; `None` for any other
     /// task type.
     pub fn download_video_id(&self) -> Option<String> {
-        None
+        (self.task_type == "download_video")
+            .then(|| Task::decode_download_video_payload(&self.payload).ok())
+            .flatten()
+            .map(|(video_id, _, _)| video_id)
     }
 
     pub fn fail(
