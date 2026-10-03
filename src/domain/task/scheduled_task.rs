@@ -92,6 +92,12 @@ impl ScheduledTask {
         self.retries + 1 >= MAX_ATTEMPTS
     }
 
+    /// The video a `download_video` task targets; `None` for any other
+    /// task type.
+    pub fn download_video_id(&self) -> Option<String> {
+        None
+    }
+
     pub fn fail(
         self,
         error: impl Into<String>,

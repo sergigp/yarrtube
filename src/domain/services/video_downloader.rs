@@ -136,6 +136,10 @@ impl VideoDownloaderApi for VideoDownloader {
             debug!(video_id = %video_id, "video no longer exists, skipping download");
             return Ok(());
         };
+        if video.is_download_settled() {
+            debug!(video_id = %video_id, status = video.status.as_str(), "video already settled, skipping download");
+            return Ok(());
+        }
 
         let started = video.start_download(self.clock.now());
         self.video_repository.update(&started)?;

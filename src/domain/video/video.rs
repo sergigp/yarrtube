@@ -243,6 +243,13 @@ impl Video {
                 .is_none_or(|errored_at| now - errored_at >= ERRORED_RECOVERY_COOLDOWN)
     }
 
+    /// Whether the video's download has settled (Downloaded, Excluded or
+    /// Errored), so a queued download has nothing left to do for it and a
+    /// video in any other status with no download queued is stranded.
+    pub fn is_download_settled(&self) -> bool {
+        false
+    }
+
     /// Whether a thumbnail fetch can still be worth attempting for this
     /// video: never for an `Excluded` one, which is permanently unavailable,
     /// nor an `Errored` one, whose recovery redownload writes its own.

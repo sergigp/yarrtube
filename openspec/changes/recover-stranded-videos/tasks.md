@@ -1,6 +1,6 @@
 ## 1. Walking skeleton
 
-- [ ] 1.1 Add the following stubs from design.md's Types & Signatures, with no behaviour change. Verify that `cargo build` and `cargo test --locked` pass.
+- [x] 1.1 Add the following stubs from design.md's Types & Signatures, with no behaviour change. Verify that `cargo build` and `cargo test --locked` pass.
   - `Video::is_download_settled` (returns `false`)
   - `ScheduledTask::download_video_id` (returns `None`)
   - private `video_ids_with_download_in_flight` in both reconcilers (returns an empty `HashSet`)

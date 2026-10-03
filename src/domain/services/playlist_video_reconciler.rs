@@ -3,7 +3,7 @@ use crate::domain::playlist::Playlist;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
-use crate::domain::task::Task;
+use crate::domain::task::{ScheduledTask, Task};
 use crate::domain::video::{
     Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
 };
@@ -312,11 +312,22 @@ impl PlaylistVideoReconciler {
     /// doesn't belong to any currently-`Downloaded` video (an orphan) — this
     /// is what clears out a stale non-mp4 file once its video has been
     /// redownloaded under a fresh filename.
+    /// Ids of every video with a download task pending or running.
+    fn video_ids_with_download_in_flight(&self) -> anyhow::Result<HashSet<String>> {
+        Ok(self
+            .task_repository
+            .list_non_completed()?
+            .iter()
+            .filter_map(ScheduledTask::download_video_id)
+            .collect())
+    }
+
     fn reconcile_filesystem(
         &self,
         playlist: &Playlist,
         changes: &MembershipChanges,
     ) -> anyhow::Result<()> {
+        let _downloads_in_flight = self.video_ids_with_download_in_flight()?;
         let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
         let stored_playlist_videos = self
