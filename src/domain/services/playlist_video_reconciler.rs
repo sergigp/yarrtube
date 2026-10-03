@@ -327,7 +327,7 @@ impl PlaylistVideoReconciler {
         playlist: &Playlist,
         changes: &MembershipChanges,
     ) -> anyhow::Result<()> {
-        let _downloads_in_flight = self.video_ids_with_download_in_flight()?;
+        let downloads_in_flight = self.video_ids_with_download_in_flight()?;
         let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
         let stored_playlist_videos = self
@@ -435,6 +435,25 @@ impl PlaylistVideoReconciler {
                     output_dir: output_dir.to_string_lossy().to_string(),
                 },
                 now,
+            )?;
+        }
+
+        for video in stored_videos.iter().filter(|v| {
+            v.status == VideoStatus::ErroredRetrying && !downloads_in_flight.contains(v.id.as_str())
+        }) {
+            warn!(
+                playlist_id = %playlist.id,
+                video_id = %video.youtube_id,
+                status = video.status.as_str(),
+                "stranded video found during reconcile, rescheduling its download"
+            );
+            self.task_repository.schedule(
+                &Task::DownloadVideo {
+                    video_id: video.id.as_str().to_string(),
+                    quality: playlist.quality.as_str().to_string(),
+                    output_dir: output_dir.to_string_lossy().to_string(),
+                },
+                self.clock.now(),
             )?;
         }
 
