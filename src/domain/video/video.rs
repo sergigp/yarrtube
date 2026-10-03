@@ -247,7 +247,10 @@ impl Video {
     /// Errored), so a queued download has nothing left to do for it and a
     /// video in any other status with no download queued is stranded.
     pub fn is_download_settled(&self) -> bool {
-        matches!(self.status, VideoStatus::Downloaded | VideoStatus::Excluded)
+        matches!(
+            self.status,
+            VideoStatus::Downloaded | VideoStatus::Excluded | VideoStatus::Errored
+        )
     }
 
     /// Whether a thumbnail fetch can still be worth attempting for this
