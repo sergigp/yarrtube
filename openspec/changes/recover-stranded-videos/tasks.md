@@ -24,7 +24,7 @@ _None: no adapter changes._
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
 - [ ] 4.2 After deploying, check the logs:
   - `stranded video found during reconcile` appears for the 6 prod videos.
   - `1rYxtU1PayE` and `8dDFhl_UNTQ` log `excluding permanently-unavailable video`.

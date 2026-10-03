@@ -6,6 +6,7 @@
 - `src/domain/services/channel_video_reconciler.rs` adds the same pass for channels.
 - `src/domain/services/video_downloader.rs` makes `download` skip a video that is already settled.
 - `src/application/tasks/reconcile_playlist_task.rs`, `reconcile_channel_task.rs` and `download_video_task.rs` hold the behaviour tests.
+- `src/application/tasks/log_capture.rs` (test-only) holds the tracing capture helper, moved out of `download_video_task.rs` so the reconcile tests can assert that no false "stranded" WARN is logged.
 
 ## Types & Signatures
 
@@ -37,9 +38,9 @@ PlaylistVideoReconciler::reconcile_filesystem(playlist, changes)
 ├─ in_flight = video_ids_with_download_in_flight()        // read BEFORE stored videos (see note)
 │  └─ task_repository.list_non_completed() → filter_map(ScheduledTask::download_video_id)
 ├─ stored_videos = playlist_video_repository.list_for_playlist + video_repository.find
-├─ … existing downloaded-file checks, Errored recovery (fills skip_thumbnail_ids)
+├─ … existing downloaded-file checks, Errored recovery (fills handled_this_pass)
 ├─ for v in stored_videos where !v.is_download_settled()
-│        && !in_flight.contains(v.id) && !skip_thumbnail_ids.contains(&v.id):
+│        && !in_flight.contains(v.id) && !handled_this_pass.contains(&v.id):
 │     warn!(playlist_id, video_id, status, "stranded video found during reconcile, rescheduling its download")
 │     task_repository.schedule(Task::DownloadVideo { video_id, quality, output_dir }, now)   // dedupe still guards
 └─ thumbnail_fetcher.schedule_missing(...)                  // unchanged
@@ -57,7 +58,7 @@ DownloadVideoTask::handle(payload, is_last_attempt)
 
 Read order: the in-flight task set is read before the videos. A task that is pending or running when the set is read keeps its video out of the stranded set. A task created after the read is either finished by the time the videos are read (the video is then settled) or rejected by schedule-time dedupe. The one remaining race, where a task is created and finishes between the video read and `schedule`, is handled by the settled guard in the downloader.
 
-`skip_thumbnail_ids` already holds the ids this pass added or reset for redownload, which are exactly the ids the stranded check must skip, so the pass reuses that set.
+The set the thumbnail recovery already skipped (formerly `skip_thumbnail_ids`, renamed `handled_this_pass`) holds the ids this pass added or reset for redownload, which are exactly the ids the stranded check must skip, so both recoveries share it.
 
 ## Test Plan
 
