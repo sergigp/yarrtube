@@ -440,10 +440,8 @@ impl PlaylistVideoReconciler {
         }
 
         for video in stored_videos.iter().filter(|v| {
-            matches!(
-                v.status,
-                VideoStatus::Pending | VideoStatus::ErroredRetrying
-            ) && !downloads_in_flight.contains(v.id.as_str())
+            !v.is_download_settled()
+                && !downloads_in_flight.contains(v.id.as_str())
                 && !handled_this_pass.contains(&v.id)
         }) {
             warn!(
