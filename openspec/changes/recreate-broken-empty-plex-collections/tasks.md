@@ -7,7 +7,7 @@
 
 `plex_collection_repository.rs`:
 
-- [ ] 2.1 `it_should_fail_with_the_plex_response_body_if_the_server_replies_with_an_error`: `ensure_success` takes the response by value, reads the trimmed body into the error (`…: <body>`, suffix omitted when empty), and returns the response on success; update every caller. Existing `it_should_fail_if_the_server_replies_with_an_error` stays green unchanged. Verify with `cargo test plex`.
+- [x] 2.1 `it_should_fail_with_the_plex_response_body_if_the_server_replies_with_an_error`: `ensure_success` takes the response by value, reads the trimmed body into the error (`…: <body>`, suffix omitted when empty), and returns the response on success; update every caller. Existing `it_should_fail_if_the_server_replies_with_an_error` stays green unchanged. Verify with `cargo test plex`.
 
 ## 3. Verification
 

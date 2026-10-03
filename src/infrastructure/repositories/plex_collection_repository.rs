@@ -142,8 +142,7 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
             .header("Accept", "application/json")
             .header("X-Plex-Token", &self.config.token)
             .send()?;
-        Self::ensure_success(path, &response)?;
-        let created: MediaContainerResponse = response.json()?;
+        let created: MediaContainerResponse = Self::ensure_success(path, response)?.json()?;
 
         let collection_rating_key = created
             .media_container
@@ -166,7 +165,7 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
             .header("Accept", "application/json")
             .header("X-Plex-Token", &self.config.token)
             .send()?;
-        Self::ensure_success(&path, &response)
+        Self::ensure_success(&path, response).map(drop)
     }
 
     fn remove_item(&self, collection_rating_key: &str, rating_key: &str) -> anyhow::Result<()> {
@@ -205,7 +204,7 @@ impl HttpPlexCollectionRepository {
             .header("Accept", "application/json")
             .header("X-Plex-Token", &self.config.token)
             .send()?;
-        Self::ensure_success(path, &response)
+        Self::ensure_success(path, response).map(drop)
     }
 
     /// The `uri` value Plex's collection endpoints take to identify a set
@@ -230,7 +229,7 @@ impl HttpPlexCollectionRepository {
             .header("Accept", "application/json")
             .header("X-Plex-Token", &self.config.token)
             .send()?;
-        Self::ensure_success(&path, &response)
+        Self::ensure_success(&path, response).map(drop)
     }
 
     /// Fetches a metadata listing and keeps the items with a `youtube://`
@@ -264,16 +263,24 @@ impl HttpPlexCollectionRepository {
             .header("Accept", "application/json")
             .header("X-Plex-Token", &self.config.token)
             .send()?;
-        Self::ensure_success(path, &response)?;
-        Ok(response.json()?)
+        Ok(Self::ensure_success(path, response)?.json()?)
     }
 
-    fn ensure_success(path: &str, response: &reqwest::blocking::Response) -> anyhow::Result<()> {
+    /// Passes a successful response through; otherwise fails with the
+    /// status and Plex's (trimmed) response body, if it sent one.
+    fn ensure_success(
+        path: &str,
+        response: reqwest::blocking::Response,
+    ) -> anyhow::Result<reqwest::blocking::Response> {
         let status = response.status();
-        if !status.is_success() {
-            anyhow::bail!("Plex request to {path} failed with status {status}");
+        if status.is_success() {
+            return Ok(response);
         }
-        Ok(())
+        let body = response.text().unwrap_or_default();
+        match body.trim() {
+            "" => anyhow::bail!("Plex request to {path} failed with status {status}"),
+            body => anyhow::bail!("Plex request to {path} failed with status {status}: {body}"),
+        }
     }
 }
 
@@ -761,6 +768,33 @@ mod tests {
             result.map_err(|e| e.to_string()),
             Err(
                 "Plex request to /library/sections/1/all failed with status 500 Internal Server Error"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn it_should_fail_with_the_plex_response_body_if_the_server_replies_with_an_error() {
+        let mut server = mockito::Server::new();
+        let _identity_mock = server
+            .mock("GET", "/identity")
+            .with_status(200)
+            .with_body(r#"{"MediaContainer": {"machineIdentifier": "machine-1"}}"#)
+            .create();
+        let _add_mock = server
+            .mock("PUT", "/library/collections/c1/items")
+            .match_query(mockito::Matcher::Any)
+            .with_status(400)
+            .with_body("bad uri\n")
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.add_items("c1", &["103".to_string()]);
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(
+                "Plex request to /library/collections/c1/items failed with status 400 Bad Request: bad uri"
                     .to_string()
             )
         );
