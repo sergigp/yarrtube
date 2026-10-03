@@ -253,7 +253,8 @@ impl PlexCollectionReconciler {
 
     /// Adds the desired members an existing collection is missing and
     /// removes the members no longer desired. An empty collection is
-    /// recreated instead, since Plex may stop accepting additions to it.
+    /// recreated with the desired members instead, since Plex may stop
+    /// accepting additions to it.
     fn converge_members(
         &self,
         section_id: &str,
@@ -267,7 +268,7 @@ impl PlexCollectionReconciler {
             .into_iter()
             .map(|item| item.rating_key)
             .collect();
-        if members.is_empty() {
+        if members.is_empty() && !desired.is_empty() {
             return self.recreate_collection(section_id, name, collection_rating_key, desired);
         }
 

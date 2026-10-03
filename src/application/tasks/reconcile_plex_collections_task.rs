@@ -370,6 +370,65 @@ mod tests {
     }
 
     #[test]
+    fn it_should_leave_an_empty_collection_alone_if_no_video_is_scanned() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items_and_collections(
+            "1",
+            vec![],
+            vec![FakePlexCollection {
+                rating_key: "c1".to_string(),
+                title: "Lofi beats".to_string(),
+                member_rating_keys: vec![],
+            }],
+        ));
+        playlist_repository
+            .insert(&playlist("PL1", "Lofi beats"))
+            .unwrap();
+        seed_downloaded_playlist_video(
+            &playlist_video_repository,
+            &video_repository,
+            "PL1",
+            "yt1",
+            0,
+        );
+        let task = ReconcilePlexCollectionsTask::new(
+            PlexCollectionReconciler::new(
+                vec!["1".to_string()],
+                vec![],
+                playlist_repository.clone(),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                playlist_video_repository.clone(),
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                video_repository.clone(),
+                plex_repository.clone(),
+            ),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            INTERVAL_SECONDS,
+        );
+
+        let result = run(&task, "{}");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex_repository.mutations(), Vec::<String>::new());
+        assert_eq!(
+            plex_repository.collections(),
+            vec![FakePlexCollection {
+                rating_key: "c1".to_string(),
+                title: "Lofi beats".to_string(),
+                member_rating_keys: vec![],
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_remove_videos_no_longer_tracked_from_the_collection() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
