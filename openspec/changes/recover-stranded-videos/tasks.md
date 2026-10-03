@@ -15,7 +15,7 @@
 - [x] 2.6 `reconcile_playlist_task::it_should_reschedule_the_download_of_an_in_progress_video_with_no_download_task`: verify with `cargo test it_should_reschedule_the_download_of_an_in_progress_video_with_no_download_task`.
 - [x] 2.7 `reconcile_playlist_task::it_should_not_reschedule_a_non_terminal_video_whose_download_is_queued` (asserts no "stranded" log too, since dedupe alone already prevents the duplicate task; log capture helper moved to `application/tasks/log_capture.rs`): verify with `cargo test it_should_not_reschedule_a_non_terminal_video_whose_download_is_queued`.
 - [x] 2.8 `reconcile_playlist_task::it_should_not_reschedule_a_downloaded_video`: verify with `cargo test it_should_not_reschedule_a_downloaded_video`.
-- [ ] 2.9 `reconcile_channel_task::it_should_reschedule_the_download_of_an_errored_retrying_video_with_no_download_task`: add the same stranded loop to `ChannelVideoReconciler`. Verify with `cargo test reconcile_channel_task`.
+- [x] 2.9 `reconcile_channel_task::it_should_reschedule_the_download_of_an_errored_retrying_video_with_no_download_task`: add the same stranded loop to `ChannelVideoReconciler`. Verify with `cargo test reconcile_channel_task`.
 - [x] 2.10 `reconcile_channel_task::it_should_not_reschedule_a_non_terminal_video_whose_download_is_queued`: verify with `cargo test reconcile_channel_task`.
 
 ## 3. Infrastructure adapters (TDD)
