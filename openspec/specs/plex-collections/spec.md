@@ -111,6 +111,12 @@ downloaded video of that playlist/channel are removed. Videos not yet
 downloaded, or downloaded but not yet scanned by Plex, SHALL be picked up by
 a later pass rather than treated as errors.
 
+When an existing collection has no members and the playlist/channel has
+scanned videos to put in it, the pass SHALL delete that collection and create
+it again with those videos (with alphabetical sorting configured) instead of
+adding to it, so a collection Plex no longer accepts additions to recovers on
+its own.
+
 #### Scenario: Newly scanned video added on a later pass
 
 - **WHEN** a video was downloaded after the previous sync pass and Plex has
@@ -128,6 +134,21 @@ a later pass rather than treated as errors.
 
 - **WHEN** a sync pass runs twice in a row with no state changes in between
 - **THEN** the second pass performs no collection mutations
+
+#### Scenario: Empty collection is recreated with its videos
+
+- **WHEN** a sync pass runs and a playlist's/channel's collection exists in
+  the section with no members, and the playlist/channel has downloaded videos
+  Plex has scanned there
+- **THEN** the pass deletes that collection and creates a collection with the
+  same name in that section containing those videos, with alphabetical
+  sorting configured
+
+#### Scenario: Empty collection left alone when there is nothing to add
+
+- **WHEN** a sync pass runs and a playlist's/channel's collection exists with
+  no members, and none of its downloaded videos are scanned in that section
+- **THEN** the pass performs no mutation on that collection
 
 ### Requirement: Sync is decoupled from reconciliation
 
