@@ -7,7 +7,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `download_video_task::it_should_skip_the_download_of_an_already_downloaded_video`: implement `is_download_settled` and add the guard plus its `debug!` in `VideoDownloader::download`. If an existing download test starts from a settled video, fix its arrange. Verify with `cargo test download_video_task`.
+- [x] 2.1 `download_video_task::it_should_skip_the_download_of_an_already_downloaded_video`: implement `is_download_settled` and add the guard plus its `debug!` in `VideoDownloader::download`. If an existing download test starts from a settled video, fix its arrange. Verify with `cargo test download_video_task`.
 - [ ] 2.2 `download_video_task::it_should_skip_the_download_of_an_excluded_video`: verify with `cargo test it_should_skip_the_download_of_an_excluded_video`.
 - [ ] 2.3 `download_video_task::it_should_skip_the_download_of_an_errored_video`: verify with `cargo test it_should_skip_the_download_of_an_errored_video`.
 - [ ] 2.4 `reconcile_playlist_task::it_should_reschedule_the_download_of_an_errored_retrying_video_with_no_download_task`: implement `download_video_id` and `video_ids_with_download_in_flight` (read before the stored videos), then add the stranded loop after the Errored recovery with the `warn!`. Verify with `cargo test reconcile_playlist_task`.
@@ -16,7 +16,7 @@
 - [ ] 2.7 `reconcile_playlist_task::it_should_not_reschedule_a_non_terminal_video_whose_download_is_queued`: verify with `cargo test it_should_not_reschedule_a_non_terminal_video_whose_download_is_queued`.
 - [ ] 2.8 `reconcile_playlist_task::it_should_not_reschedule_a_downloaded_video`: verify with `cargo test it_should_not_reschedule_a_downloaded_video`.
 - [ ] 2.9 `reconcile_channel_task::it_should_reschedule_the_download_of_an_errored_retrying_video_with_no_download_task`: add the same stranded loop to `ChannelVideoReconciler`. Verify with `cargo test reconcile_channel_task`.
-- [ ] 2.10 `reconcile_channel_task::it_should_not_reschedule_a_non_terminal_video_whose_download_is_queued`: verify with `cargo test reconcile_channel_task`.
+- [x] 2.10 `reconcile_channel_task::it_should_not_reschedule_a_non_terminal_video_whose_download_is_queued`: verify with `cargo test reconcile_channel_task`.
 
 ## 3. Infrastructure adapters (TDD)
 

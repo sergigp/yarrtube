@@ -541,6 +541,35 @@ mod tests {
     }
 
     #[test]
+    fn it_should_skip_the_download_of_an_already_downloaded_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = my_video().mark_downloaded(
+            Quality::High,
+            "My Video/My Video.mp4",
+            None,
+            None,
+            fixed_timestamp(),
+        );
+        video_repository.save(&video).unwrap();
+        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            downloader.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(*downloader.calls.lock().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_remove_the_folder_if_video_deleted_during_download() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
