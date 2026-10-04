@@ -21,6 +21,7 @@ use crate::infrastructure::repositories::youtube_playlist_items_repository::{
     YoutubePlaylistItem, YoutubePlaylistItemsRepository,
 };
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
+use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
@@ -156,14 +157,16 @@ impl PlaylistVideoReconciler {
 
     /// Brings the stored membership in line with YouTube's playlist items:
     /// adds newly seen videos, refreshes the title and position of known
-    /// ones, and removes stored videos no longer in the playlist.
+    /// ones, and removes stored videos no longer in the playlist. A failed
+    /// listing is not fatal: membership is left untouched for this pass and
+    /// the filesystem steps still run from the stored rows.
     fn sync_membership_with_youtube(
         &self,
         playlist: &Playlist,
     ) -> anyhow::Result<MembershipChanges> {
-        let current_videos = self
-            .youtube_playlist_items_repository
-            .list_current_videos(&playlist.id)?;
+        let Some(current_videos) = self.list_current_videos(playlist) else {
+            return Ok(MembershipChanges::default());
+        };
         let stored_videos = self
             .playlist_video_repository
             .list_for_playlist(&playlist.id)?;
@@ -197,6 +200,22 @@ impl PlaylistVideoReconciler {
         self.remove_videos_not_in(playlist, &stored_videos, &current_youtube_ids)?;
 
         Ok(changes)
+    }
+
+    /// The playlist's current items, or `None` (logged) when they can't be
+    /// listed, e.g. the playlist was deleted or made private on YouTube, or
+    /// the YouTube Data API errors.
+    fn list_current_videos(&self, playlist: &Playlist) -> Option<Vec<YoutubePlaylistItem>> {
+        self.youtube_playlist_items_repository
+            .list_current_videos(&playlist.id)
+            .inspect_err(|e| {
+                warn!(
+                    playlist_id = %playlist.id,
+                    error = %error_report::cause_chain(e),
+                    "failed to list playlist items"
+                );
+            })
+            .ok()
     }
 
     /// Stores a newly seen video as `PENDING` at its playlist position and

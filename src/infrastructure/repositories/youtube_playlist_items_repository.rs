@@ -193,6 +193,13 @@ impl FakeYoutubePlaylistItemsRepository {
             fails: false,
         }
     }
+
+    pub fn failing() -> Self {
+        Self {
+            videos: std::sync::Mutex::new(Vec::new()),
+            fails: true,
+        }
+    }
 }
 
 #[cfg(test)]

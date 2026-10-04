@@ -435,6 +435,71 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_videos_if_listing_fails() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.database());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let existing = my_video();
+        let existing_playlist_video = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &existing,
+            0,
+        );
+        let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::default()),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let task = ReconcilePlaylistTask::new(PlaylistVideoReconciler::new(
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            Arc::new(FakeYoutubePlaylistItemsRepository::failing()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
+            thumbnail_fetcher,
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![existing.clone()]);
+        assert_eq!(
+            playlist_video_repository
+                .list_for_playlist(&playlist_id())
+                .unwrap(),
+            vec![existing_playlist_video]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                download_video_task(1, &existing.id),
+                fetch_thumbnail_task(2, &existing.id),
+                next_reconcile(3),
+            ]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_redownload_videos_with_missing_file() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
