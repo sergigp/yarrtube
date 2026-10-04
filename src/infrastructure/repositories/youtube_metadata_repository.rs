@@ -115,6 +115,35 @@ impl YoutubeMetadataRepository for FakeYoutubeMetadataRepository {
     }
 }
 
+/// Fails its first fetch, then returns `metadata`, so tests can drive a
+/// fetch that fails before a download but succeeds after it.
+#[cfg(test)]
+pub struct FailingOnceYoutubeMetadataRepository {
+    pub(crate) metadata: YoutubeMetadata,
+    pub(crate) failed: std::sync::atomic::AtomicBool,
+}
+
+#[cfg(test)]
+impl FailingOnceYoutubeMetadataRepository {
+    pub fn new(metadata: YoutubeMetadata) -> Self {
+        Self {
+            metadata,
+            failed: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+}
+
+#[cfg(test)]
+impl YoutubeMetadataRepository for FailingOnceYoutubeMetadataRepository {
+    fn find(&self, _id: &VideoId) -> anyhow::Result<Option<YoutubeMetadata>> {
+        if self.failed.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            Ok(Some(self.metadata.clone()))
+        } else {
+            Err(anyhow::anyhow!("fake YouTube metadata fetch failure"))
+        }
+    }
+}
+
 /// A hardcoded YouTube `categoryId` → genre-name mapping — see design.md's
 /// "Genre mapping: hardcoded table" decision. An unmapped or missing
 /// category ID yields `None` rather than failing metadata generation.

@@ -38,19 +38,20 @@ mod tests {
     use crate::application::tasks::log_capture::captured_log_messages;
     use crate::domain::video::Video;
     use crate::domain::video::{VideoId, VideoStatus};
-    use crate::domain::video_metadata::VideoMetadata;
+    use crate::domain::video_metadata::{VideoMetadata, render_movie_nfo};
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
         FakeVideoFileRepository, FilesystemVideoFileRepository, VideoFileRepository,
     };
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
-        SqliteVideoMetadataRepository, VideoMetadataRepository,
+        MOVIE_NFO_FILENAME, SqliteVideoMetadataRepository, VideoMetadataRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
     use crate::infrastructure::repositories::youtube_metadata_repository::{
-        FakeYoutubeMetadataRepository, YoutubeMetadata,
+        FailingOnceYoutubeMetadataRepository, FakeYoutubeMetadataRepository, YoutubeMetadata,
+        YoutubeMetadataRepository,
     };
     use crate::infrastructure::repositories::youtube_video_downloader_repository::{
         FAKE_FRESH_FOLDER, FakeVideoDownloaderRepository, VideoDownloaderRepository,
@@ -1165,6 +1166,8 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(output_dir.path().join(FAKE_FRESH_FOLDER)).unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -1176,7 +1179,7 @@ mod tests {
             video_metadata_repository.clone(),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -1195,6 +1198,141 @@ mod tests {
             ]
         );
         assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
+        assert_eq!(
+            folder_entries(&output_dir.path().join(FAKE_FRESH_FOLDER)),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn it_should_write_movie_nfo_before_the_video_lands() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video_dir = output_dir.path().join(FAKE_FRESH_FOLDER);
+        std::fs::create_dir_all(&video_dir).unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let nfo_while_downloading = Arc::new(std::sync::Mutex::new(None));
+        let observed = nfo_while_downloading.clone();
+        let observed_dir = video_dir.clone();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(
+                FakeVideoDownloaderRepository::new(true).with_on_download(move || {
+                    *observed.lock().unwrap() =
+                        std::fs::read_to_string(observed_dir.join(MOVIE_NFO_FILENAME)).ok();
+                }),
+            ),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *nfo_while_downloading.lock().unwrap(),
+            Some(render_movie_nfo(&generated_metadata(Some(
+                "fake-output.jpg"
+            ))))
+        );
+    }
+
+    #[test]
+    fn it_should_drop_the_thumbnail_from_movie_nfo_if_none_downloaded() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video_dir = output_dir.path().join(FAKE_FRESH_FOLDER);
+        std::fs::create_dir_all(&video_dir).unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            std::fs::read_to_string(video_dir.join(MOVIE_NFO_FILENAME)).unwrap(),
+            render_movie_nfo(&generated_metadata(None))
+        );
+    }
+
+    #[test]
+    fn it_should_generate_metadata_if_fetch_fails_only_before_the_download() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video_dir = output_dir.path().join(FAKE_FRESH_FOLDER);
+        std::fs::create_dir_all(&video_dir).unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FailingOnceYoutubeMetadataRepository::new(youtube_metadata())),
+            video_metadata_repository.clone(),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_metadata_repository.find(&video.id).unwrap(),
+            Some(generated_metadata(None))
+        );
+        assert_eq!(
+            std::fs::read_to_string(video_dir.join(MOVIE_NFO_FILENAME)).unwrap(),
+            render_movie_nfo(&generated_metadata(None))
+        );
+    }
+
+    #[test]
+    fn it_should_remove_movie_nfo_if_download_fails() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video_dir = output_dir.path().join("My Video");
+        std::fs::create_dir_all(&video_dir).unwrap();
+        let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(false)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            video_metadata_repository.clone(),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(
+            result,
+            Err(format!("yt-dlp failed to download video {}", video.id))
+        );
+        assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
+        assert_eq!(folder_entries(&video_dir), Vec::<String>::new());
     }
 
     #[test]
@@ -1249,7 +1387,7 @@ mod tests {
         video_repository: Arc<SqliteVideoRepository>,
         video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
-        youtube_metadata_repository: Arc<FakeYoutubeMetadataRepository>,
+        youtube_metadata_repository: Arc<dyn YoutubeMetadataRepository>,
         video_metadata_repository: Arc<SqliteVideoMetadataRepository>,
     ) -> VideoDownloader {
         VideoDownloader::new(
@@ -1315,6 +1453,41 @@ mod tests {
             PathBuf::from(output_dir),
             existing_folder.map(str::to_string),
         )
+    }
+
+    /// The metadata a download of `my_video()` generates from
+    /// `youtube_metadata()`, referencing `thumb` when given.
+    fn generated_metadata(thumb: Option<&str>) -> VideoMetadata {
+        VideoMetadata::new(
+            "My Video",
+            "A description",
+            "My Channel",
+            "My Channel",
+            fixed_timestamp(),
+            None,
+            Vec::new(),
+            "yt1",
+            thumb.map(str::to_string),
+            "20231114 My Video",
+            fixed_timestamp(),
+        )
+    }
+
+    fn output_dir_payload(video: &Video, output_dir: &std::path::Path) -> String {
+        Task::DownloadVideo {
+            video_id: video.id.as_str().to_string(),
+            quality: "high".to_string(),
+            output_dir: output_dir.to_string_lossy().to_string(),
+        }
+        .payload()
+        .to_string()
+    }
+
+    fn folder_entries(dir: &std::path::Path) -> Vec<String> {
+        std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect()
     }
 
     fn payload_for(video_id: &str) -> String {

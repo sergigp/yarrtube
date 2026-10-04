@@ -52,6 +52,10 @@ impl VideoMetadata {
         }
     }
 
+    pub fn with_thumb(self, thumb: Option<String>) -> Self {
+        Self { thumb, ..self }
+    }
+
     /// The `movie.nfo` `premiered` value: the publish date as `YYYY-MM-DD`.
     pub fn premiered(&self) -> String {
         self.published_at.format("%Y-%m-%d").to_string()
