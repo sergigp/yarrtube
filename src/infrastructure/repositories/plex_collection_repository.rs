@@ -4,8 +4,10 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 /// The task sharing the serial Light lane must not hold the slot on a hung
-/// Plex server, so every request gets an explicit short timeout.
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+/// Plex server, so every request gets an explicit timeout. It leaves room
+/// for a large section listing (normally ~1 s) while Plex is busy with its
+/// nightly maintenance, which pushed it past the previous 10 s.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Port to the Plex server's collections HTTP API, authenticated via
 /// `X-Plex-Token`. Reads and creates are scoped to a library section per
