@@ -154,7 +154,7 @@ impl PlexCollectionReconciler {
             .plex_collection_repository
             .list_items(section_id)?
             .into_iter()
-            .map(|item| (item.youtube_video_id, item.rating_key))
+            .filter_map(|item| Some((item.youtube_video_id?, item.rating_key)))
             .collect())
     }
 

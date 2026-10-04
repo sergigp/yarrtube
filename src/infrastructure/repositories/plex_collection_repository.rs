@@ -126,7 +126,7 @@ impl HttpPlexCollectionRepository {
 
 impl PlexCollectionRepository for HttpPlexCollectionRepository {
     fn list_items(&self, section_id: &str) -> anyhow::Result<Vec<PlexItem>> {
-        self.get_youtube_items(&format!("/library/sections/{section_id}/all"))
+        self.get_items(&format!("/library/sections/{section_id}/all"))
     }
 
     fn list_collections(&self, section_id: &str) -> anyhow::Result<Vec<PlexCollection>> {
@@ -144,9 +144,13 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
     }
 
     fn list_collection_items(&self, collection_rating_key: &str) -> anyhow::Result<Vec<PlexItem>> {
-        self.get_youtube_items(&format!(
-            "/library/collections/{collection_rating_key}/children"
-        ))
+        Ok(self
+            .get_items(&format!(
+                "/library/collections/{collection_rating_key}/children"
+            ))?
+            .into_iter()
+            .filter(|item| item.youtube_video_id.is_some())
+            .collect())
     }
 
     fn create_collection(
@@ -290,21 +294,17 @@ impl HttpPlexCollectionRepository {
         Self::ensure_success(&path, response).map(drop)
     }
 
-    /// Fetches a metadata listing and keeps the items with a `youtube://`
-    /// guid, requesting guids explicitly (`includeGuids=1`).
-    fn get_youtube_items(&self, path: &str) -> anyhow::Result<Vec<PlexItem>> {
+    /// Fetches a metadata listing with each item's YouTube ID, if its
+    /// guids carry one, requesting guids explicitly (`includeGuids=1`).
+    fn get_items(&self, path: &str) -> anyhow::Result<Vec<PlexItem>> {
         let response: MediaContainerResponse = self.get_json(path, &[("includeGuids", "1")])?;
         Ok(response
             .media_container
             .metadata
             .into_iter()
-            .filter_map(|metadata| {
-                metadata
-                    .youtube_video_id()
-                    .map(|youtube_video_id| PlexItem {
-                        rating_key: metadata.rating_key,
-                        youtube_video_id,
-                    })
+            .map(|metadata| PlexItem {
+                youtube_video_id: metadata.youtube_video_id(),
+                rating_key: metadata.rating_key,
             })
             .collect())
     }
@@ -506,8 +506,7 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
                 youtube_video_id: all_items
                     .iter()
                     .find(|item| item.rating_key == member)
-                    .map(|item| item.youtube_video_id.clone())
-                    .unwrap_or_default(),
+                    .and_then(|item| item.youtube_video_id.clone()),
                 rating_key: member,
             })
             .collect())
@@ -629,7 +628,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_should_list_section_items_with_their_youtube_ids() {
+    fn it_should_list_every_section_item_with_its_youtube_id_if_any() {
         let mut server = mockito::Server::new();
         let _mock = server
             .mock("GET", "/library/sections/1/all")
@@ -656,10 +655,20 @@ mod tests {
 
         assert_eq!(
             items,
-            vec![PlexItem {
-                rating_key: "101".to_string(),
-                youtube_video_id: "yt1".to_string(),
-            }]
+            vec![
+                PlexItem {
+                    rating_key: "101".to_string(),
+                    youtube_video_id: Some("yt1".to_string()),
+                },
+                PlexItem {
+                    rating_key: "102".to_string(),
+                    youtube_video_id: None,
+                },
+                PlexItem {
+                    rating_key: "103".to_string(),
+                    youtube_video_id: None,
+                },
+            ]
         );
     }
 
@@ -727,11 +736,11 @@ mod tests {
             vec![
                 PlexItem {
                     rating_key: "101".to_string(),
-                    youtube_video_id: "yt1".to_string(),
+                    youtube_video_id: Some("yt1".to_string()),
                 },
                 PlexItem {
                     rating_key: "102".to_string(),
-                    youtube_video_id: "yt2".to_string(),
+                    youtube_video_id: Some("yt2".to_string()),
                 },
             ]
         );

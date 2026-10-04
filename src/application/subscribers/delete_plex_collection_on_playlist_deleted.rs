@@ -42,7 +42,7 @@ mod tests {
             "1",
             vec![PlexItem {
                 rating_key: "101".to_string(),
-                youtube_video_id: "yt1".to_string(),
+                youtube_video_id: Some("yt1".to_string()),
             }],
             vec![
                 FakePlexCollection {

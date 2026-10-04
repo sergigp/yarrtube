@@ -943,7 +943,7 @@ mod tests {
     fn plex_item(rating_key: &str, youtube_video_id: &str) -> PlexItem {
         PlexItem {
             rating_key: rating_key.to_string(),
-            youtube_video_id: youtube_video_id.to_string(),
+            youtube_video_id: Some(youtube_video_id.to_string()),
         }
     }
 
