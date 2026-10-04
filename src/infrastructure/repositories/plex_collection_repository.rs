@@ -1,4 +1,4 @@
-use crate::domain::plex::{PlexCollection, PlexItem, PlexSection};
+use crate::domain::plex::{PlexCollection, PlexItem, PlexMatchCandidate, PlexSection};
 use serde::Deserialize;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -32,6 +32,11 @@ pub trait PlexCollectionRepository: Send + Sync {
     /// Asks Plex to scan only `path` (a server-side folder) in the section,
     /// so a new video is imported without waiting for a library scan.
     fn scan_path(&self, section_id: &str, path: &str) -> anyhow::Result<()>;
+    /// The metadata matches Plex offers for the item (its "Fix Match" list).
+    fn list_match_candidates(&self, rating_key: &str) -> anyhow::Result<Vec<PlexMatchCandidate>>;
+    /// Matches the item to `candidate`, so Plex rebinds its metadata and
+    /// guids from it.
+    fn match_item(&self, rating_key: &str, candidate: &PlexMatchCandidate) -> anyhow::Result<()>;
 }
 
 pub struct PlexConfig {
@@ -90,6 +95,25 @@ struct Directory {
 #[derive(Debug, Deserialize)]
 struct Location {
     path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct MatchesResponse {
+    #[serde(rename = "MediaContainer")]
+    media_container: MatchesContainer,
+}
+
+#[derive(Debug, Deserialize)]
+struct MatchesContainer {
+    #[serde(rename = "SearchResult", default)]
+    search_results: Vec<SearchResult>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchResult {
+    guid: String,
+    #[serde(default)]
+    name: String,
 }
 
 impl Metadata {
@@ -239,6 +263,35 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
             .send()?;
         Self::ensure_success(&endpoint, response).map(drop)
     }
+
+    fn list_match_candidates(&self, rating_key: &str) -> anyhow::Result<Vec<PlexMatchCandidate>> {
+        let response: MatchesResponse =
+            self.get_json(&format!("/library/metadata/{rating_key}/matches"), &[])?;
+        Ok(response
+            .media_container
+            .search_results
+            .into_iter()
+            .map(|result| PlexMatchCandidate {
+                guid: result.guid,
+                name: result.name,
+            })
+            .collect())
+    }
+
+    fn match_item(&self, rating_key: &str, candidate: &PlexMatchCandidate) -> anyhow::Result<()> {
+        let path = format!("/library/metadata/{rating_key}/match");
+        let response = self
+            .client
+            .put(format!("{}{path}", self.config.base_url))
+            .query(&[
+                ("guid", candidate.guid.as_str()),
+                ("name", candidate.name.as_str()),
+            ])
+            .header("Accept", "application/json")
+            .header("X-Plex-Token", &self.config.token)
+            .send()?;
+        Self::ensure_success(&path, response).map(drop)
+    }
 }
 
 impl HttpPlexCollectionRepository {
@@ -371,6 +424,8 @@ pub struct FakePlexCollectionRepository {
     mutations: Mutex<Vec<String>>,
     failing_create_titles: Vec<String>,
     unreachable: bool,
+    /// The match candidates Plex offers per item rating key.
+    match_candidates: std::collections::BTreeMap<String, Vec<PlexMatchCandidate>>,
 }
 
 #[cfg(test)]
@@ -420,6 +475,27 @@ impl FakePlexCollectionRepository {
             .locations
             .push(location.to_string());
         self
+    }
+
+    /// The same fake offering `candidates` as `rating_key`'s matches.
+    pub fn with_match_candidates(
+        mut self,
+        rating_key: &str,
+        candidates: Vec<PlexMatchCandidate>,
+    ) -> Self {
+        self.match_candidates
+            .insert(rating_key.to_string(), candidates);
+        self
+    }
+
+    /// Every section's scanned items, ordered by section id.
+    pub fn items(&self) -> Vec<PlexItem> {
+        self.sections
+            .lock()
+            .unwrap()
+            .values()
+            .flat_map(|section| section.items.clone())
+            .collect()
     }
 
     /// A Plex server that is down: the pass's first call fails.
@@ -619,6 +695,35 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
             .lock()
             .unwrap()
             .push(format!("scan:{section_id}:{path}"));
+        Ok(())
+    }
+
+    fn list_match_candidates(&self, rating_key: &str) -> anyhow::Result<Vec<PlexMatchCandidate>> {
+        Ok(self
+            .match_candidates
+            .get(rating_key)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    /// Like Plex re-reading the item's `movie.nfo`: matching to a
+    /// `…youtube_<id>` candidate gives the item that YouTube ID.
+    fn match_item(&self, rating_key: &str, candidate: &PlexMatchCandidate) -> anyhow::Result<()> {
+        self.mutations
+            .lock()
+            .unwrap()
+            .push(format!("match:{rating_key}:{}", candidate.guid));
+        let youtube_video_id = candidate
+            .guid
+            .split_once("youtube_")
+            .map(|(_, id)| id.to_string());
+        self.sections
+            .lock()
+            .unwrap()
+            .values_mut()
+            .flat_map(|section| section.items.iter_mut())
+            .filter(|item| item.rating_key == rating_key)
+            .for_each(|item| item.youtube_video_id = youtube_video_id.clone());
         Ok(())
     }
 }
@@ -999,6 +1104,80 @@ mod tests {
                     .to_string()
             )
         );
+    }
+
+    #[test]
+    fn it_should_list_match_candidates() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/metadata/9804/matches")
+            .match_header("accept", "application/json")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "identifier": "com.plexapp.plugins.library",
+                    "SearchResult": [
+                        {"type": "movie",
+                         "guid": "tv.plex.agents.nfo.movie://movie/youtube_h_BOrYxxenc",
+                         "name": "Les set cabretes i el llop", "year": 2023}
+                    ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let candidates = repository.list_match_candidates("9804").unwrap();
+
+        assert_eq!(
+            candidates,
+            vec![PlexMatchCandidate {
+                guid: "tv.plex.agents.nfo.movie://movie/youtube_h_BOrYxxenc".to_string(),
+                name: "Les set cabretes i el llop".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_list_no_match_candidates_if_plex_offers_none() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/metadata/9804/matches")
+            .with_status(200)
+            .with_body(r#"{"MediaContainer": {"size": 0}}"#)
+            .create();
+        let repository = repository(&server);
+
+        let candidates = repository.list_match_candidates("9804").unwrap();
+
+        assert_eq!(candidates, vec![]);
+    }
+
+    #[test]
+    fn it_should_match_an_item_to_a_candidate() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("PUT", "/library/metadata/9804/match")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded(
+                    "guid".into(),
+                    "tv.plex.agents.nfo.movie://movie/youtube_h_BOrYxxenc".into(),
+                ),
+                mockito::Matcher::UrlEncoded("name".into(), "Les set cabretes i el llop".into()),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.match_item(
+            "9804",
+            &PlexMatchCandidate {
+                guid: "tv.plex.agents.nfo.movie://movie/youtube_h_BOrYxxenc".to_string(),
+                name: "Les set cabretes i el llop".to_string(),
+            },
+        );
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
     }
 
     fn repository(server: &mockito::Server) -> HttpPlexCollectionRepository {
