@@ -138,7 +138,7 @@ mod tests {
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     const DEFAULT_PATH: &str = "music/chill";
 
@@ -1094,9 +1094,9 @@ mod tests {
             playlist_repository,
             video_repository,
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(playlist_items),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(
+                playlist_items,
+            )),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             event_publisher(db),
@@ -1121,9 +1121,7 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             video_repository.clone(),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(Vec::new()),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(Vec::new())),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
             unused_event_publisher(),

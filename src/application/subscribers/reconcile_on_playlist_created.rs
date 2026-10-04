@@ -61,7 +61,7 @@ mod tests {
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     #[test]
     fn it_should_reconcile_the_playlist() {
@@ -142,9 +142,7 @@ mod tests {
             playlist_repository,
             video_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(Vec::new()),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(Vec::new())),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             event_publisher(db),
@@ -171,9 +169,7 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             video_repository.clone(),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(Vec::new()),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(Vec::new())),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
             Arc::new(SqliteEventPublisher::new(

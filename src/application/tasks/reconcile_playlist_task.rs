@@ -1513,9 +1513,9 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(vec![playlist_item("vid1", "My Video", 3)]),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(vec![
+                playlist_item("vid1", "My Video", 3),
+            ])),
             Arc::new(FakeYoutubeMetadataRepository {
                 metadata: Some(youtube_metadata("My Video")),
             }),
@@ -1621,9 +1621,9 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(vec![playlist_item("vid1", "My Video", 3)]),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(vec![
+                playlist_item("vid1", "My Video", 3),
+            ])),
             Arc::new(FakeYoutubeMetadataRepository {
                 metadata: Some(youtube_metadata("Fresh Title")),
             }),
@@ -1674,12 +1674,10 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(vec![
-                    playlist_item("vid1", "One", 0),
-                    playlist_item("vid2", "Two", 1),
-                ]),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(vec![
+                playlist_item("vid1", "One", 0),
+                playlist_item("vid2", "Two", 1),
+            ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
@@ -1768,9 +1766,9 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(vec![member_playlist_item()]),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(vec![
+                member_playlist_item(),
+            ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
@@ -1870,9 +1868,9 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(vec![member_playlist_item()]),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(vec![
+                member_playlist_item(),
+            ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
@@ -1938,9 +1936,9 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(vec![member_playlist_item()]),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(vec![
+                member_playlist_item(),
+            ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
@@ -2072,9 +2070,9 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(vec![member_playlist_item()]),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(vec![
+                member_playlist_item(),
+            ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
@@ -2130,9 +2128,9 @@ mod tests {
             playlist_repository,
             video_repository.clone(),
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(vec![member_playlist_item()]),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(vec![
+                member_playlist_item(),
+            ])),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
@@ -2203,9 +2201,9 @@ mod tests {
             playlist_repository,
             video_repository,
             playlist_video_repository,
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(playlist_items),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(
+                playlist_items,
+            )),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
@@ -2235,9 +2233,7 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             video_repository.clone(),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
-            Arc::new(FakeYoutubePlaylistItemsRepository {
-                videos: Mutex::new(Vec::new()),
-            }),
+            Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(Vec::new())),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
             Arc::new(SqliteEventPublisher::new(

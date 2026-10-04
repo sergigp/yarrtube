@@ -182,6 +182,17 @@ impl YoutubePlaylistItemsRepository for YoutubeApiPlaylistItemsRepository {
 #[derive(Default)]
 pub struct FakeYoutubePlaylistItemsRepository {
     pub(crate) videos: std::sync::Mutex<Vec<YoutubePlaylistItem>>,
+    fails: bool,
+}
+
+#[cfg(test)]
+impl FakeYoutubePlaylistItemsRepository {
+    pub fn with_videos(videos: Vec<YoutubePlaylistItem>) -> Self {
+        Self {
+            videos: std::sync::Mutex::new(videos),
+            fails: false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -190,6 +201,9 @@ impl YoutubePlaylistItemsRepository for FakeYoutubePlaylistItemsRepository {
         &self,
         _playlist_id: &PlaylistId,
     ) -> anyhow::Result<Vec<YoutubePlaylistItem>> {
+        if self.fails {
+            anyhow::bail!("YouTube API failed to list playlist items");
+        }
         Ok(self.videos.lock().unwrap().clone())
     }
 }
