@@ -89,6 +89,7 @@ Environment variables read by Yarrtube are listed below. The defaults are set in
 | `YARRTUBE_PLEX_PLAYLIST_SECTION_ID`        | —                  | ID(s) of the Plex library section(s) holding yarrtube's **playlist** videos, comma-separated when spread across several libraries (e.g. `2,5`)                                                            |
 | `YARRTUBE_PLEX_CHANNEL_SECTION_ID`         | —                  | ID(s) of the Plex library section(s) holding yarrtube's **channel** videos, comma-separated when spread across several libraries (e.g. `3,6`)                                                             |
 | `YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS` | `900`              | How often Plex collections are synced toward yarrtube's state                                                                                                                                             |
+| `YARRTUBE_PLEX_VIDEOS_PATH`                | —                  | Where the Plex server sees yarrtube's videos root (`YARRTUBE_VIDEOS_PATH`), e.g. the host path `/volume1/data/media/yarrtube` mounted at `/videos`. When set, each downloaded video's folder is scanned into Plex right away |
 
 ## Plex collections
 

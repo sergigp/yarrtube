@@ -78,7 +78,15 @@ environment:
   - YARRTUBE_PLEX_CHANNEL_SECTION_ID=<YOUR_CHANNEL_SECTION_ID>
   # optional, defaults to 900 (15 minutes):
   # - YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS=900
+  # recommended: the path at which Plex sees yarrtube's videos root, i.e.
+  # the host side of the /videos volume (e.g. /volume1/data/media/yarrtube):
+  - YARRTUBE_PLEX_VIDEOS_PATH=<HOST_PATH_MOUNTED_AT_/videos>
 ```
+
+`YARRTUBE_PLEX_VIDEOS_PATH` is optional. With it, yarrtube asks Plex to
+scan each video's folder as soon as the download finishes, in the
+configured sections whose library folders contain it. Without it, new
+videos reach Plex only through Plex's own scanning.
 
 The integration is **off unless `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN`
 and at least one of the two section variables are set** — without them
@@ -87,9 +95,14 @@ yarrtube behaves exactly as before and never contacts Plex.
 ## How the sync behaves (what to expect)
 
 - A new video shows up in its collection only after **both** yarrtube has
-  downloaded it **and** Plex has scanned it. If it's missing, wait for the
-  next scan + sync pass; nothing needs fixing manually. Consider enabling
-  Plex's "Scan my library automatically" so new files are picked up quickly.
+  downloaded it **and** Plex has scanned it. With `YARRTUBE_PLEX_VIDEOS_PATH`
+  set, yarrtube triggers that scan itself; otherwise enable Plex's "Scan my
+  library automatically" so new files are picked up quickly. If it's
+  missing, wait for the next sync pass; nothing needs fixing manually.
+- yarrtube writes each video's `movie.nfo` before the video file, so Plex
+  identifies it on import. A video Plex imported without its YouTube ID
+  (e.g. before its `movie.nfo` existed) is re-matched to its `movie.nfo` by
+  the next sync pass and joins its collection on the pass after.
 - A collection is only created once at least one of its videos is scanned —
   you'll never see empty collections.
 - Deleting a playlist/channel in yarrtube deletes its Plex collection.
