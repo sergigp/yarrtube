@@ -1000,6 +1000,81 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_videos_on_reconcile_if_listing_fails() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = task_repository(&db);
+        let event_repository = SqliteEventRepository::new(db.database());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let (existing, existing_playlist_video) = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid_kept",
+            0,
+        );
+        let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::default()),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let playlist_video_reconciler = PlaylistVideoReconciler::new(
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            Arc::new(FakeYoutubePlaylistItemsRepository::failing()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            event_publisher(&db),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            thumbnail_fetcher,
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+            "/videos",
+        );
+
+        let response = reconcile(playlist_video_reconciler, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![existing.clone()]);
+        assert_eq!(
+            playlist_video_repository
+                .list_for_playlist(&playlist_id("PL1"))
+                .unwrap(),
+            vec![existing_playlist_video]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(
+                    1,
+                    &Task::DownloadVideo {
+                        video_id: existing.id.as_str().to_string(),
+                        quality: Quality::High.as_str().to_string(),
+                        output_dir: "/videos/music/chill".to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+                pending_task(
+                    2,
+                    &Task::FetchThumbnail {
+                        video_id: existing.id.as_str().to_string(),
+                        output_dir: "/videos/music/chill".to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+            ]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_ignore_reconcile_of_a_missing_playlist() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
