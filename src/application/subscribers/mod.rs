@@ -10,6 +10,7 @@ pub mod fetch_thumbnail_on_video_added_to_channel;
 pub mod fetch_thumbnail_on_video_added_to_playlist;
 pub mod reconcile_on_channel_created;
 pub mod reconcile_on_playlist_created;
+pub mod scan_plex_folder_on_video_downloaded;
 
 use crate::domain::services::{
     ChannelVideoReconciler, PlaylistVideoReconciler, PlexCollectionDeleter,
