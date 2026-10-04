@@ -37,6 +37,7 @@ mod tests {
     use super::*;
     use crate::application::tasks::log_capture::captured_log_messages;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::services::MetadataGenerator;
     use crate::domain::video::Video;
     use crate::domain::video::VideoDownloaded;
     use crate::domain::video::{VideoId, VideoStatus};
@@ -1437,7 +1438,10 @@ mod tests {
             video_downloader_repository,
             video_file_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-            youtube_metadata_repository,
+            Arc::new(MetadataGenerator::new(
+                youtube_metadata_repository,
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             video_metadata_repository,
             Arc::new(SqliteEventPublisher::new(
                 db.database(),
@@ -1457,7 +1461,10 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::new(true)),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
             Arc::new(SqliteEventPublisher::new(
                 unused_connection(),

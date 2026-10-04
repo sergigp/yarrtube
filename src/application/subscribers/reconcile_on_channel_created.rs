@@ -39,6 +39,7 @@ mod tests {
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::services::InternalVideoReconciler;
+    use crate::domain::services::MetadataGenerator;
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
@@ -149,7 +150,10 @@ mod tests {
             task_repository.clone(),
             Arc::new(InternalVideoReconciler::new(
                 video_repository,
-                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(MetadataGenerator::new(
+                    Arc::new(FakeYoutubeMetadataRepository::default()),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 task_repository,
                 Arc::new(FakeVideoFileRepository::default()),
@@ -184,7 +188,10 @@ mod tests {
             task_repository.clone(),
             Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
-                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(MetadataGenerator::new(
+                    Arc::new(FakeYoutubeMetadataRepository::default()),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
                 Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
                 task_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),

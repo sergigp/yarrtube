@@ -2,10 +2,10 @@ use crate::application::http::{self, ApiServices, VideosRoot};
 use crate::application::{subscribers, tasks};
 use crate::domain::services::{
     ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelVideoReconciler, ChannelViewSearcher,
-    DirectorySearcher, InternalVideoReconciler, PlaylistCreator, PlaylistDeleter,
-    PlaylistPreviewer, PlaylistSearcher, PlaylistVideoReconciler, PlexCollectionDeleter,
-    PlexCollectionReconciler, PlexFolderScanner, TaskViewSearcher, ThumbnailFetcher,
-    VideoDownloader, VideoFileDeleter, VideoSearcher, VideoWatchStateUpdater,
+    DirectorySearcher, InternalVideoReconciler, MetadataGenerator, PlaylistCreator,
+    PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher, PlaylistVideoReconciler,
+    PlexCollectionDeleter, PlexCollectionReconciler, PlexFolderScanner, TaskViewSearcher,
+    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::infrastructure_container::{
@@ -495,11 +495,18 @@ fn video_downloader(infrastructure: &InfrastructureContainer) -> VideoDownloader
         infrastructure.video_downloader_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.playlist_video_repository.clone(),
-        infrastructure.youtube_metadata_repository.clone(),
+        metadata_generator(infrastructure),
         infrastructure.video_metadata_repository.clone(),
         infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
     )
+}
+
+fn metadata_generator(infrastructure: &InfrastructureContainer) -> Arc<MetadataGenerator> {
+    Arc::new(MetadataGenerator::new(
+        infrastructure.youtube_metadata_repository.clone(),
+        infrastructure.clock.clone(),
+    ))
 }
 
 fn internal_video_reconciler(
@@ -507,7 +514,7 @@ fn internal_video_reconciler(
 ) -> Arc<InternalVideoReconciler> {
     Arc::new(InternalVideoReconciler::new(
         infrastructure.video_repository.clone(),
-        infrastructure.youtube_metadata_repository.clone(),
+        metadata_generator(infrastructure),
         infrastructure.video_metadata_repository.clone(),
         infrastructure.task_repository.clone(),
         infrastructure.video_file_repository.clone(),

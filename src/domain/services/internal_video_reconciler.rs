@@ -1,17 +1,17 @@
 use crate::domain::playlist::PlaylistPath;
-use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
+use crate::domain::services::{
+    MetadataGenerator, MetadataGeneratorApi, ThumbnailFetcher, ThumbnailFetcherApi,
+};
 use crate::domain::shared::Quality;
 use crate::domain::task::{ScheduledTask, Task};
 use crate::domain::video::VideoRecordId;
 use crate::domain::video::{
     Video, VideoStatus, resolve_output_dir, top_level_entry, video_dir_for_filename,
 };
-use crate::domain::video_metadata::{build_video_metadata, resolve_sorttitle};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
-use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadataRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
@@ -50,7 +50,7 @@ pub struct MembershipDelta {
 #[derive(Clone)]
 pub struct InternalVideoReconciler {
     video_repository: Arc<dyn VideoRepository>,
-    youtube_metadata_repository: Arc<dyn YoutubeMetadataRepository>,
+    metadata_generator: Arc<MetadataGenerator>,
     video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     task_repository: Arc<dyn TaskRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
@@ -63,7 +63,7 @@ impl InternalVideoReconciler {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
-        youtube_metadata_repository: Arc<dyn YoutubeMetadataRepository>,
+        metadata_generator: Arc<MetadataGenerator>,
         video_metadata_repository: Arc<dyn VideoMetadataRepository>,
         task_repository: Arc<dyn TaskRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
@@ -73,7 +73,7 @@ impl InternalVideoReconciler {
     ) -> Self {
         Self {
             video_repository,
-            youtube_metadata_repository,
+            metadata_generator,
             video_metadata_repository,
             task_repository,
             video_file_repository,
@@ -219,43 +219,27 @@ impl InternalVideoReconciler {
         Ok(())
     }
 
-    /// Regenerates `video`'s metadata (fetch `YoutubeMetadata`, resolve
-    /// `sorttitle`, build `VideoMetadata`, save) the same way
-    /// `VideoDownloader::download` does at download time. Any failure is
-    /// logged and swallowed — a `Downloaded` video's status and file are
+    /// Regenerates `video`'s metadata the same way `VideoDownloader` does at
+    /// download time, referencing the thumbnail already on disk. Any failure
+    /// is logged and swallowed — a `Downloaded` video's status and file are
     /// never touched by this, and a repeated failure simply tries again on
-    /// the next reconcile pass. `sort_position` is `None` for a channel
-    /// video, resolving `sorttitle` via publish date instead.
+    /// the next reconcile pass.
     fn generate_metadata(&self, video: &Video, output_dir: &Path, sort_position: Option<i64>) {
         let Some(filename) = video.filename.as_deref() else {
             return;
         };
-        let metadata = match self.youtube_metadata_repository.find(&video.youtube_id) {
-            Ok(Some(metadata)) => metadata,
-            Ok(None) => {
-                warn!(video_id = %video.id, "no YouTube metadata found for video, skipping metadata repair");
-                return;
-            }
-            Err(e) => {
-                warn!(video_id = %video.id, error = %e, "failed to fetch YouTube metadata during reconcile, skipping metadata repair");
-                return;
-            }
-        };
-
         let thumbnail_filename = video
             .thumbnail_filename
             .as_deref()
             .and_then(|f| Path::new(f).file_name())
             .and_then(|f| f.to_str())
             .map(str::to_string);
-        let sorttitle = resolve_sorttitle(&metadata.title, metadata.published_at, sort_position);
-        let video_metadata = build_video_metadata(
-            &video.youtube_id,
-            &metadata,
-            sorttitle,
-            thumbnail_filename,
-            self.clock.now(),
-        );
+        let Some(video_metadata) =
+            self.metadata_generator
+                .generate(video, sort_position, thumbnail_filename)
+        else {
+            return;
+        };
         let video_dir = video_dir_for_filename(output_dir, filename);
 
         if let Err(e) = self
