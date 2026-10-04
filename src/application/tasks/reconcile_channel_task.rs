@@ -36,6 +36,7 @@ mod tests {
     use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::PlaylistPath;
+    use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
@@ -1150,25 +1151,30 @@ mod tests {
             Arc::new(FakeChannelVideosRepository::with_videos(vec![
                 listed_video("yt1", "My Video", 0),
             ])),
-            Arc::new(FakeYoutubeMetadataRepository {
-                metadata: Some(youtube_metadata("My Video")),
-            }),
-            video_metadata_repository.clone(),
             Arc::new(SqliteEventPublisher::new(
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::with_file_exists(true)),
-            Arc::new(ThumbnailFetcher::new(
+            Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
-                Arc::new(FakeVideoDownloaderRepository::default()),
+                Arc::new(FakeYoutubeMetadataRepository {
+                    metadata: Some(youtube_metadata("My Video")),
+                }),
+                video_metadata_repository.clone(),
                 task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::with_file_exists(true)),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    Arc::new(FakeVideoDownloaderRepository::default()),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
                 Arc::new(FixedClock(fixed_timestamp())),
+                videos_root.path().to_string_lossy(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
-            videos_root.path().to_string_lossy(),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1257,25 +1263,30 @@ mod tests {
             Arc::new(FakeChannelVideosRepository::with_videos(vec![
                 listed_video("yt1", "My Video", 0),
             ])),
-            Arc::new(FakeYoutubeMetadataRepository {
-                metadata: Some(youtube_metadata("Fresh Title")),
-            }),
-            video_metadata_repository.clone(),
             Arc::new(SqliteEventPublisher::new(
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::with_file_exists(true)),
-            Arc::new(ThumbnailFetcher::new(
+            Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
-                Arc::new(FakeVideoDownloaderRepository::default()),
+                Arc::new(FakeYoutubeMetadataRepository {
+                    metadata: Some(youtube_metadata("Fresh Title")),
+                }),
+                video_metadata_repository.clone(),
                 task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::with_file_exists(true)),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    Arc::new(FakeVideoDownloaderRepository::default()),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
                 Arc::new(FixedClock(fixed_timestamp())),
+                videos_root.path().to_string_lossy(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
-            videos_root.path().to_string_lossy(),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1311,23 +1322,28 @@ mod tests {
                 listed_video("yt1", "One", 0),
                 listed_video("yt2", "Two", 1),
             ])),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(ThumbnailFetcher::new(
+            Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    video_downloader_repository.clone(),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
                 Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
-            "/videos",
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1401,23 +1417,28 @@ mod tests {
             Arc::new(FakeChannelVideosRepository::with_videos(vec![
                 listed_video("yt1", "My Video", 0),
             ])),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(ThumbnailFetcher::new(
+            Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    video_downloader_repository.clone(),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
                 Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
-            "/videos",
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1576,23 +1597,28 @@ mod tests {
             Arc::new(FakeChannelVideosRepository::with_videos(vec![
                 listed_video("yt1", "My Video", 0),
             ])),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::with_file_exists(true)),
-            Arc::new(ThumbnailFetcher::new(
+            Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::with_file_exists(true)),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    video_downloader_repository.clone(),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
                 Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
-            "/videos",
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1633,23 +1659,28 @@ mod tests {
             Arc::new(FakeChannelVideosRepository::with_videos(vec![
                 listed_video("yt1", "My Video", 0),
             ])),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
-            Arc::new(ThumbnailFetcher::new(
+            Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    video_downloader_repository.clone(),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
                 Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
-            "/videos",
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1718,23 +1749,28 @@ mod tests {
             Arc::new(FakeChannelVideosRepository::with_videos(vec![
                 listed_video("yt1", "My Video", 0),
             ])),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(ThumbnailFetcher::new(
+            Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
-                video_downloader_repository.clone(),
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    video_downloader_repository.clone(),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
                 Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
-            "/videos",
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1772,21 +1808,26 @@ mod tests {
         ));
         ChannelVideoReconciler::new(
             channel_repository,
-            video_repository,
+            video_repository.clone(),
             channel_video_repository,
             channel_videos_repository,
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(SqliteEventPublisher::new(
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             task_repository.clone(),
-            video_file_repository,
-            thumbnail_fetcher,
+            Arc::new(InternalVideoReconciler::new(
+                video_repository,
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                task_repository.clone(),
+                video_file_repository,
+                thumbnail_fetcher,
+                Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
-            "/videos",
         )
     }
 
@@ -1805,23 +1846,28 @@ mod tests {
             video_repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
             Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
             Arc::new(SqliteEventPublisher::new(
                 unused_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(ThumbnailFetcher::new(
-                video_repository,
-                Arc::new(FakeVideoDownloaderRepository::default()),
+            Arc::new(InternalVideoReconciler::new(
+                video_repository.clone(),
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
                 task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository,
+                    Arc::new(FakeVideoDownloaderRepository::default()),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
                 Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
-            "/videos",
         ))
     }
 

@@ -55,8 +55,8 @@ pub trait ThumbnailFetcherApi: Send + Sync {
     /// verbatim instead of resolving a fresh, collision-suffixed one.
     fn fetch(&self, video: &Video, output_dir: &Path);
 
-    /// Missing-thumbnail recovery pass over `videos`, shared by both
-    /// reconcilers' `reconcile_filesystem`: schedules a `FetchThumbnail` for
+    /// Missing-thumbnail recovery pass over `videos`, run by
+    /// `InternalVideoReconciler`: schedules a `FetchThumbnail` for
     /// each video with no thumbnail, except one in `skip_ids` (just reset for
     /// redownload this same pass, so its download writes its own thumbnail)
     /// or one whose download is `InProgress` (it records its own thumbnail),

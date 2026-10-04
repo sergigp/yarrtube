@@ -481,15 +481,11 @@ fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> Channel
         infrastructure.video_repository.clone(),
         infrastructure.channel_video_repository.clone(),
         infrastructure.channel_videos_repository.clone(),
-        infrastructure.youtube_metadata_repository.clone(),
-        infrastructure.video_metadata_repository.clone(),
         infrastructure.event_publisher.clone(),
         infrastructure.task_repository.clone(),
-        infrastructure.video_file_repository.clone(),
-        thumbnail_fetcher(infrastructure),
+        internal_video_reconciler(infrastructure),
         infrastructure.clock.clone(),
         reconcile_interval_seconds(),
-        videos_path(),
     )
 }
 
