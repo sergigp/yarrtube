@@ -17,24 +17,16 @@ use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMetadataRepository;
-use crate::infrastructure::repositories::youtube_playlist_items_repository::YoutubePlaylistItemsRepository;
+use crate::infrastructure::repositories::youtube_playlist_items_repository::{
+    YoutubePlaylistItem, YoutubePlaylistItemsRepository,
+};
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
+use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
-
-/// What a membership sync changed that the filesystem pass of the same
-/// reconcile must know about.
-struct MembershipChanges {
-    /// Videos added by the sync: their thumbnail fetch comes from their own
-    /// video-added event, not from the missing-thumbnail recovery.
-    added_ids: Vec<VideoRecordId>,
-    /// The title each renamed video had before the sync: a download started
-    /// before the rename is still writing into the folder named after it.
-    previous_titles: HashMap<VideoRecordId, String>,
-}
 
 /// Reconciles a playlist's stored videos against YouTube membership and its
 /// output directory against recorded downloads.
@@ -108,36 +100,308 @@ pub trait PlaylistVideoReconcilerApi: Send + Sync {
 
 impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
     fn reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
-        let Some(playlist) = self.playlist_repository.find(&id)? else {
-            debug!(playlist_id = %id, "playlist no longer exists, skipping reconcile");
+        let Some(playlist) = self.find_playlist(&id)? else {
             return Ok(());
         };
 
-        self.run_reconcile_pass(&playlist)?;
+        self.reconcile_playlist(&playlist)?;
         self.schedule_next_reconcile(&id)
     }
 
     fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
-        let Some(playlist) = self.playlist_repository.find(&id)? else {
-            debug!(playlist_id = %id, "playlist no longer exists, skipping reconcile");
+        let Some(playlist) = self.find_playlist(&id)? else {
             return Ok(());
         };
 
-        self.run_reconcile_pass(&playlist)
+        self.reconcile_playlist(&playlist)
     }
 }
 
 impl PlaylistVideoReconciler {
-    fn schedule_next_reconcile(&self, id: &PlaylistId) -> anyhow::Result<()> {
+    fn find_playlist(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
+        let playlist = self.playlist_repository.find(id)?;
+        if playlist.is_none() {
+            debug!(playlist_id = %id, "playlist no longer exists, skipping reconcile");
+        }
+        Ok(playlist)
+    }
+
+    /// One reconcile pass: brings the stored membership in line with YouTube,
+    /// then brings the output directory in line with the stored videos.
+    fn reconcile_playlist(&self, playlist: &Playlist) -> anyhow::Result<()> {
+        info!(playlist_id = %playlist.id, kind = %playlist.kind, "reconciling playlist");
+
+        let membership = self.sync_membership_with_youtube(playlist)?;
+        let local = self.take_local_snapshot(playlist, &membership)?;
+
+        let redownloaded = self.redownload_broken_files(playlist, &local)?;
+        self.generate_missing_metadata(&local)?;
+        let recovered = self.recover_errored_videos(playlist, &local)?;
+
+        // Added videos get their download and thumbnail from their own
+        // video-added event, reset ones with their fresh download, so the
+        // safety nets below skip them.
+        let handled: HashSet<&VideoRecordId> = membership
+            .added_ids
+            .iter()
+            .chain(redownloaded)
+            .chain(recovered)
+            .collect();
+        self.reschedule_stranded_downloads(playlist, &local, &handled)?;
+        self.thumbnail_fetcher
+            .schedule_missing(&local.videos, &handled, &local.output_dir)?;
+
+        self.delete_orphaned_files(playlist, &local)
+    }
+
+    /// Brings the stored membership in line with YouTube's playlist items:
+    /// adds newly seen videos, refreshes the title and position of known
+    /// ones, and removes stored videos no longer in the playlist.
+    fn sync_membership_with_youtube(
+        &self,
+        playlist: &Playlist,
+    ) -> anyhow::Result<MembershipChanges> {
+        let current_videos = self
+            .youtube_playlist_items_repository
+            .list_current_videos(&playlist.id)?;
+        let stored_videos = self
+            .playlist_video_repository
+            .list_for_playlist(&playlist.id)?;
         let now = self.clock.now();
-        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
-        self.task_repository.schedule(
-            &Task::ReconcilePlaylist {
-                playlist_id: id.as_str().to_string(),
-            },
-            next_run_at,
-        )?;
-        info!(playlist_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of playlist");
+
+        let mut changes = MembershipChanges::default();
+        for current in &current_videos {
+            let youtube_id = VideoId::new(&current.video_id)?;
+            match self
+                .playlist_video_repository
+                .find_by_youtube_video(&playlist.id, &youtube_id)?
+            {
+                None => {
+                    let added_id = self.add_video(playlist, youtube_id, current, now)?;
+                    changes.added_ids.push(added_id);
+                }
+                Some(existing) => {
+                    if let Some((video_id, previous_title)) =
+                        self.refresh_known_video(existing, current, now)?
+                    {
+                        changes.previous_titles.insert(video_id, previous_title);
+                    }
+                }
+            }
+        }
+
+        let current_youtube_ids: HashSet<&str> = current_videos
+            .iter()
+            .map(|current| current.video_id.as_str())
+            .collect();
+        self.remove_videos_not_in(playlist, &stored_videos, &current_youtube_ids)?;
+
+        Ok(changes)
+    }
+
+    /// Stores a newly seen video as `PENDING` at its playlist position and
+    /// announces it, which is what triggers its download and thumbnail.
+    fn add_video(
+        &self,
+        playlist: &Playlist,
+        youtube_id: VideoId,
+        current: &YoutubePlaylistItem,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<VideoRecordId> {
+        let video = Video::create(youtube_id, current.title.clone(), now);
+        self.video_repository.save(&video)?;
+        let playlist_video = PlaylistVideo::create_with_position(
+            playlist.id.clone(),
+            video.id.clone(),
+            current.position,
+            now,
+        );
+        self.playlist_video_repository.save(&playlist_video)?;
+        info!(
+            playlist_id = %playlist.id,
+            video_id = %video.youtube_id,
+            title = %current.title,
+            "added video to playlist"
+        );
+        self.event_publisher
+            .publish(&DomainEvent::VideoAddedToPlaylist(VideoAddedToPlaylist {
+                playlist_id: playlist.id.as_str().to_string(),
+                video_id: video.id.as_str().to_string(),
+            }))?;
+
+        Ok(video.id)
+    }
+
+    /// Follows a known video's title and playlist position on YouTube.
+    /// Returns the video's previous title when it was renamed.
+    fn refresh_known_video(
+        &self,
+        existing: PlaylistVideo,
+        current: &YoutubePlaylistItem,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<Option<(VideoRecordId, String)>> {
+        let mut renamed = None;
+        if let Some(video) = self.video_repository.find(&existing.video_id)?
+            && video.title != current.title
+        {
+            self.video_repository
+                .update_title(&video.id, &current.title, now)?;
+            renamed = Some((video.id, video.title));
+        }
+        if existing.position != Some(current.position) {
+            self.playlist_video_repository.save(&PlaylistVideo {
+                position: Some(current.position),
+                created_at: now,
+                ..existing
+            })?;
+        }
+
+        Ok(renamed)
+    }
+
+    /// Deletes every stored video whose YouTube id is not in
+    /// `current_youtube_ids` and announces its removal, which is what
+    /// cleans up its files.
+    fn remove_videos_not_in(
+        &self,
+        playlist: &Playlist,
+        stored_videos: &[PlaylistVideo],
+        current_youtube_ids: &HashSet<&str>,
+    ) -> anyhow::Result<()> {
+        for stored in stored_videos {
+            let Some(video) = self.video_repository.find(&stored.video_id)? else {
+                continue;
+            };
+            if current_youtube_ids.contains(video.youtube_id.as_str()) {
+                continue;
+            }
+
+            info!(
+                playlist_id = %playlist.id,
+                video_id = %video.youtube_id,
+                "removing video from playlist (no longer on YouTube)"
+            );
+            self.playlist_video_repository
+                .delete(&playlist.id, &video.youtube_id)?;
+            self.video_repository.delete(&video.id)?;
+            self.event_publisher
+                .publish(&DomainEvent::VideoRemovedFromPlaylist(
+                    VideoRemovedFromPlaylist {
+                        playlist_id: playlist.id.as_str().to_string(),
+                        video_id: video.id.as_str().to_string(),
+                        title: video.title.clone(),
+                        filename: video.filename.clone(),
+                        thumbnail_filename: video.thumbnail_filename.clone(),
+                        was_downloaded: video.status == VideoStatus::Downloaded,
+                    },
+                ))?;
+        }
+
+        Ok(())
+    }
+
+    /// Snapshots the playlist's stored videos and output directory once, so
+    /// every filesystem step works from the same picture taken before any of
+    /// them changes something.
+    fn take_local_snapshot(
+        &self,
+        playlist: &Playlist,
+        membership: &MembershipChanges,
+    ) -> anyhow::Result<LocalSnapshot> {
+        let downloads_in_flight = self.video_ids_with_download_in_flight()?;
+        let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
+        let files = self.video_file_repository.list(&output_dir)?;
+        let playlist_videos = self
+            .playlist_video_repository
+            .list_for_playlist(&playlist.id)?;
+        let videos = self.find_videos(&playlist_videos)?;
+        let positions = playlist_videos
+            .iter()
+            .filter_map(|pv| Some((pv.video_id.clone(), pv.position?)))
+            .collect();
+        let broken_download_ids = videos
+            .iter()
+            .filter(|v| {
+                v.status == VideoStatus::Downloaded && !self.has_healthy_file(v, &output_dir)
+            })
+            .map(|v| v.id.clone())
+            .collect();
+        let protected_entries = protected_entries(&videos, &membership.previous_titles);
+
+        Ok(LocalSnapshot {
+            output_dir,
+            videos,
+            files,
+            downloads_in_flight,
+            broken_download_ids,
+            protected_entries,
+            positions,
+        })
+    }
+
+    fn video_ids_with_download_in_flight(&self) -> anyhow::Result<HashSet<String>> {
+        Ok(self
+            .task_repository
+            .list_non_completed()?
+            .iter()
+            .filter_map(ScheduledTask::download_video_id)
+            .collect())
+    }
+
+    fn find_videos(&self, playlist_videos: &[PlaylistVideo]) -> anyhow::Result<Vec<Video>> {
+        playlist_videos
+            .iter()
+            .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
+            .collect()
+    }
+
+    /// A video's file is healthy when it exists and is an mp4.
+    fn has_healthy_file(&self, video: &Video, output_dir: &Path) -> bool {
+        video.filename.as_deref().is_some_and(|filename| {
+            self.video_file_repository.file_exists(output_dir, filename)
+                && Path::new(filename)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("mp4"))
+        })
+    }
+
+    /// Resets every `Downloaded` video whose file is missing or not mp4 (a
+    /// stale container downloaded before yt-dlp always remuxed to mp4, see
+    /// `args_for_quality`) and schedules a fresh download for it; orphan
+    /// cleanup removes the stale file once it is redownloaded under a fresh
+    /// filename. Returns the ids it reset.
+    fn redownload_broken_files<'a>(
+        &self,
+        playlist: &Playlist,
+        local: &'a LocalSnapshot,
+    ) -> anyhow::Result<Vec<&'a VideoRecordId>> {
+        local
+            .broken_downloads()
+            .map(|video| {
+                warn!(
+                    playlist_id = %playlist.id,
+                    video_id = %video.youtube_id,
+                    filename = video.filename.as_deref().unwrap_or(""),
+                    "downloaded video's file is missing or not mp4, resetting for redownload"
+                );
+                self.reset_for_redownload(playlist, &local.output_dir, video)?;
+                Ok(&video.id)
+            })
+            .collect()
+    }
+
+    /// Repairs the metadata of every healthy `Downloaded` video that has
+    /// none.
+    fn generate_missing_metadata(&self, local: &LocalSnapshot) -> anyhow::Result<()> {
+        for video in local.healthy_downloads() {
+            if self.video_metadata_repository.find(&video.id)?.is_none() {
+                self.generate_metadata(
+                    video,
+                    &local.output_dir,
+                    local.positions.get(&video.id).copied(),
+                );
+            }
+        }
 
         Ok(())
     }
@@ -190,291 +454,188 @@ impl PlaylistVideoReconciler {
         }
     }
 
-    /// Diffs membership against YouTube, then reconciles the filesystem
-    /// against recorded downloads. Shared by `reconcile` and
-    /// `force_reconcile`.
-    fn run_reconcile_pass(&self, playlist: &Playlist) -> anyhow::Result<()> {
-        info!(playlist_id = %playlist.id, kind = %playlist.kind, "reconciling playlist");
-
-        let changes = self.sync_playlist_membership(playlist)?;
-
-        self.reconcile_filesystem(playlist, &changes)
-    }
-
-    /// Diffs a YouTube-linked playlist's stored videos against YouTube's
-    /// playlist-items API: adds newly-seen videos as `PENDING`, deletes
-    /// stored videos no longer present on YouTube.
-    fn sync_playlist_membership(&self, playlist: &Playlist) -> anyhow::Result<MembershipChanges> {
-        let id = &playlist.id;
-        let current_videos = self
-            .youtube_playlist_items_repository
-            .list_current_videos(id)?;
-        let stored_videos = self.playlist_video_repository.list_for_playlist(id)?;
-
-        let now = self.clock.now();
-        let mut current_youtube_ids = Vec::with_capacity(current_videos.len());
-        let mut added_ids = Vec::new();
-        let mut previous_titles = HashMap::new();
-        for current in &current_videos {
-            let youtube_id = VideoId::new(&current.video_id)?;
-            let existing = self
-                .playlist_video_repository
-                .find_by_youtube_video(id, &youtube_id)?;
-
-            match existing {
-                None => {
-                    let video = Video::create(youtube_id.clone(), current.title.clone(), now);
-                    self.video_repository.save(&video)?;
-                    let playlist_video = PlaylistVideo::create_with_position(
-                        id.clone(),
-                        video.id.clone(),
-                        current.position,
-                        now,
-                    );
-                    self.playlist_video_repository.save(&playlist_video)?;
-                    info!(
-                        playlist_id = %id,
-                        video_id = %youtube_id,
-                        title = %current.title,
-                        "added video to playlist"
-                    );
-                    self.event_publisher
-                        .publish(&DomainEvent::VideoAddedToPlaylist(VideoAddedToPlaylist {
-                            playlist_id: id.as_str().to_string(),
-                            video_id: video.id.as_str().to_string(),
-                        }))?;
-                    added_ids.push(video.id);
-                }
-                Some(existing) => {
-                    if let Some(video) = self.video_repository.find(&existing.video_id)?
-                        && video.title != current.title
-                    {
-                        self.video_repository
-                            .update_title(&video.id, &current.title, now)?;
-                        previous_titles.insert(video.id, video.title);
-                    }
-                    if existing.position != Some(current.position) {
-                        self.playlist_video_repository.save(&PlaylistVideo {
-                            position: Some(current.position),
-                            created_at: now,
-                            ..existing
-                        })?;
-                    }
-                }
-            }
-
-            current_youtube_ids.push(youtube_id);
-        }
-
-        let current_id_strs: HashSet<&str> =
-            current_youtube_ids.iter().map(|v| v.as_str()).collect();
-        for stored in &stored_videos {
-            let Some(video) = self.video_repository.find(&stored.video_id)? else {
-                continue;
-            };
-            if current_id_strs.contains(video.youtube_id.as_str()) {
-                continue;
-            }
-
-            info!(
-                playlist_id = %id,
-                video_id = %video.youtube_id,
-                "removing video from playlist (no longer on YouTube)"
-            );
-            self.playlist_video_repository
-                .delete(id, &video.youtube_id)?;
-            self.video_repository.delete(&video.id)?;
-            self.event_publisher
-                .publish(&DomainEvent::VideoRemovedFromPlaylist(
-                    VideoRemovedFromPlaylist {
-                        playlist_id: id.as_str().to_string(),
-                        video_id: video.id.as_str().to_string(),
-                        title: video.title.clone(),
-                        filename: video.filename.clone(),
-                        thumbnail_filename: video.thumbnail_filename.clone(),
-                        was_downloaded: video.status == VideoStatus::Downloaded,
-                    },
-                ))?;
-        }
-
-        Ok(MembershipChanges {
-            added_ids,
-            previous_titles,
-        })
-    }
-
-    /// Reconciles `playlist`'s output directory against its recorded
-    /// downloads: heals a `Downloaded` video whose file is missing, or whose
-    /// file is present but not mp4 (a stale non-mp4 container downloaded
-    /// before yt-dlp was made to always remux to mp4 — see
-    /// `args_for_quality`), by resetting it and scheduling a fresh download.
-    /// Also resets any `Errored` video (one that permanently exhausted its
-    /// download retries) the same way once it has been errored for the
-    /// recovery cooldown (`Video::is_due_for_recovery`), with no limit on
-    /// how many times a given video may be recovered this way. Also deletes a file that
-    /// doesn't belong to any currently-`Downloaded` video (an orphan) — this
-    /// is what clears out a stale non-mp4 file once its video has been
-    /// redownloaded under a fresh filename.
-    /// Ids of every video with a download task pending or running.
-    fn video_ids_with_download_in_flight(&self) -> anyhow::Result<HashSet<String>> {
-        Ok(self
-            .task_repository
-            .list_non_completed()?
-            .iter()
-            .filter_map(ScheduledTask::download_video_id)
-            .collect())
-    }
-
-    fn reconcile_filesystem(
+    /// Gives every `Errored` video (one that exhausted its download retries)
+    /// another chance once its recovery cooldown is over
+    /// (`Video::is_due_for_recovery`), with no limit on how many times a
+    /// video may be recovered. Returns the ids it reset.
+    fn recover_errored_videos<'a>(
         &self,
         playlist: &Playlist,
-        changes: &MembershipChanges,
-    ) -> anyhow::Result<()> {
-        let downloads_in_flight = self.video_ids_with_download_in_flight()?;
-        let output_dir = resolve_output_dir(&self.videos_path, playlist.path.as_str());
-        let files = self.video_file_repository.list(&output_dir)?;
-        let stored_playlist_videos = self
-            .playlist_video_repository
-            .list_for_playlist(&playlist.id)?;
-        let stored_videos: Vec<Video> = stored_playlist_videos
+        local: &'a LocalSnapshot,
+    ) -> anyhow::Result<Vec<&'a VideoRecordId>> {
+        let now = self.clock.now();
+        local
+            .videos
             .iter()
-            .filter_map(|pv| self.video_repository.find(&pv.video_id).transpose())
-            .collect::<anyhow::Result<Vec<Video>>>()?;
-        let downloaded: Vec<&Video> = stored_videos
-            .iter()
-            .filter(|v| v.status == VideoStatus::Downloaded)
-            .collect();
-        // The folder a download or thumbnail fetch still in flight is writing
-        // into isn't recorded yet, so it is protected by its predicted name.
-        let unrecorded_folders: Vec<String> = stored_videos
-            .iter()
-            .flat_map(|video| {
-                video.unrecorded_folder_candidates(
-                    changes.previous_titles.get(&video.id).map(String::as_str),
-                )
-            })
-            .collect();
-        // Every stored video's thumbnail folder is protected regardless of
-        // status: a `Pending`/`InProgress` video may already have a
-        // pre-fetched thumbnail on disk, ahead of its own download — see
-        // the `video-thumbnails` capability.
-        let protected_top_level: HashSet<&str> = downloaded
-            .iter()
-            .filter_map(|v| v.filename.as_deref())
-            .chain(
-                stored_videos
-                    .iter()
-                    .filter_map(|v| v.thumbnail_filename.as_deref()),
-            )
-            .chain(unrecorded_folders.iter().map(String::as_str))
-            .map(top_level_entry)
-            .collect();
-        let playlist_position_by_video: HashMap<&VideoRecordId, Option<i64>> =
-            stored_playlist_videos
-                .iter()
-                .map(|pv| (&pv.video_id, pv.position))
-                .collect();
-        // Videos whose download and thumbnail this pass already takes care
-        // of, so the stranded-video and missing-thumbnail recoveries below
-        // skip them. A video added by this same pass gets both from its own
-        // video-added event, so recovery only covers videos stored before
-        // the pass. A video reset for redownload below gets its download
-        // scheduled here and its thumbnail with that fresh download.
-        let mut handled_this_pass: HashSet<&VideoRecordId> = changes.added_ids.iter().collect();
-
-        for video in &downloaded {
-            let healthy = video.filename.as_deref().is_some_and(|filename| {
-                self.video_file_repository
-                    .file_exists(&output_dir, filename)
-                    && Path::new(filename)
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("mp4"))
-            });
-            if !healthy {
-                let now = self.clock.now();
+            .filter(|v| v.is_due_for_recovery(now))
+            .map(|video| {
                 warn!(
                     playlist_id = %playlist.id,
                     video_id = %video.youtube_id,
-                    filename = video.filename.as_deref().unwrap_or(""),
-                    "downloaded video's file is missing or not mp4, resetting for redownload"
+                    "permanently errored video found during reconcile, resetting for redownload"
                 );
-                let reset = (*video).clone().reset_for_redownload(now);
-                self.video_repository.update(&reset)?;
-                handled_this_pass.insert(&video.id);
-                self.task_repository.schedule(
-                    &Task::DownloadVideo {
-                        video_id: video.id.as_str().to_string(),
-                        quality: playlist.quality.as_str().to_string(),
-                        output_dir: output_dir.to_string_lossy().to_string(),
-                    },
-                    now,
-                )?;
-                continue;
-            }
+                self.reset_for_redownload(playlist, &local.output_dir, video)?;
+                Ok(&video.id)
+            })
+            .collect()
+    }
 
-            if self.video_metadata_repository.find(&video.id)?.is_some() {
-                continue;
-            }
-            let playlist_position = playlist_position_by_video.get(&video.id).copied().flatten();
-            self.generate_metadata(video, &output_dir, playlist_position);
-        }
-
-        for video in stored_videos
+    /// Safety net for a video still waiting to be downloaded that has no
+    /// download task pending or running (e.g. lost on a crash): schedules
+    /// one again. Skips the `handled` videos, already taken care of.
+    fn reschedule_stranded_downloads(
+        &self,
+        playlist: &Playlist,
+        local: &LocalSnapshot,
+        handled: &HashSet<&VideoRecordId>,
+    ) -> anyhow::Result<()> {
+        local
+            .videos
             .iter()
-            .filter(|v| v.is_due_for_recovery(self.clock.now()))
-        {
-            let now = self.clock.now();
-            warn!(
-                playlist_id = %playlist.id,
-                video_id = %video.youtube_id,
-                "permanently errored video found during reconcile, resetting for redownload"
-            );
-            let reset = video.clone().reset_for_redownload(now);
-            self.video_repository.update(&reset)?;
-            handled_this_pass.insert(&video.id);
-            self.task_repository.schedule(
-                &Task::DownloadVideo {
-                    video_id: video.id.as_str().to_string(),
-                    quality: playlist.quality.as_str().to_string(),
-                    output_dir: output_dir.to_string_lossy().to_string(),
-                },
-                now,
-            )?;
-        }
+            .filter(|v| {
+                !v.is_download_settled()
+                    && !local.downloads_in_flight.contains(v.id.as_str())
+                    && !handled.contains(&v.id)
+            })
+            .try_for_each(|video| {
+                warn!(
+                    playlist_id = %playlist.id,
+                    video_id = %video.youtube_id,
+                    status = video.status.as_str(),
+                    "stranded video found during reconcile, rescheduling its download"
+                );
+                self.schedule_download(playlist, &local.output_dir, video, self.clock.now())
+            })
+    }
 
-        for video in stored_videos.iter().filter(|v| {
-            !v.is_download_settled()
-                && !downloads_in_flight.contains(v.id.as_str())
-                && !handled_this_pass.contains(&v.id)
-        }) {
-            warn!(
-                playlist_id = %playlist.id,
-                video_id = %video.youtube_id,
-                status = video.status.as_str(),
-                "stranded video found during reconcile, rescheduling its download"
-            );
-            self.task_repository.schedule(
-                &Task::DownloadVideo {
-                    video_id: video.id.as_str().to_string(),
-                    quality: playlist.quality.as_str().to_string(),
-                    output_dir: output_dir.to_string_lossy().to_string(),
-                },
-                self.clock.now(),
-            )?;
-        }
-
-        self.thumbnail_fetcher
-            .schedule_missing(&stored_videos, &handled_this_pass, &output_dir)?;
-
-        for file in &files {
-            if protected_top_level.contains(file.as_str()) {
+    /// Deletes every top-level entry of the output directory that doesn't
+    /// belong to a stored video.
+    fn delete_orphaned_files(
+        &self,
+        playlist: &Playlist,
+        local: &LocalSnapshot,
+    ) -> anyhow::Result<()> {
+        for file in &local.files {
+            if local.protected_entries.contains(file) {
                 continue;
             }
-            if self.video_file_repository.delete(&output_dir, file)? {
+            if self.video_file_repository.delete(&local.output_dir, file)? {
                 info!(playlist_id = %playlist.id, file, "deleted orphaned file during reconciliation");
             }
         }
 
         Ok(())
     }
+
+    fn reset_for_redownload(
+        &self,
+        playlist: &Playlist,
+        output_dir: &Path,
+        video: &Video,
+    ) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        self.video_repository
+            .update(&video.clone().reset_for_redownload(now))?;
+        self.schedule_download(playlist, output_dir, video, now)
+    }
+
+    fn schedule_download(
+        &self,
+        playlist: &Playlist,
+        output_dir: &Path,
+        video: &Video,
+        run_at: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
+        self.task_repository.schedule(
+            &Task::DownloadVideo {
+                video_id: video.id.as_str().to_string(),
+                quality: playlist.quality.as_str().to_string(),
+                output_dir: output_dir.to_string_lossy().to_string(),
+            },
+            run_at,
+        )
+    }
+
+    fn schedule_next_reconcile(&self, id: &PlaylistId) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
+        self.task_repository.schedule(
+            &Task::ReconcilePlaylist {
+                playlist_id: id.as_str().to_string(),
+            },
+            next_run_at,
+        )?;
+        info!(playlist_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of playlist");
+
+        Ok(())
+    }
+}
+
+/// What a membership sync changed that the filesystem pass of the same
+/// reconcile must know about.
+#[derive(Default)]
+struct MembershipChanges {
+    /// Videos added by the sync: their thumbnail fetch comes from their own
+    /// video-added event, not from the missing-thumbnail recovery.
+    added_ids: Vec<VideoRecordId>,
+    /// The title each renamed video had before the sync: a download started
+    /// before the rename is still writing into the folder named after it.
+    previous_titles: HashMap<VideoRecordId, String>,
+}
+
+/// A playlist's stored videos and output directory as one pass found them,
+/// before any filesystem step changes them.
+struct LocalSnapshot {
+    output_dir: PathBuf,
+    videos: Vec<Video>,
+    files: Vec<String>,
+    /// Ids of every video with a download task pending or running.
+    downloads_in_flight: HashSet<String>,
+    /// `Downloaded` videos whose file is missing or not mp4.
+    broken_download_ids: HashSet<VideoRecordId>,
+    /// Top-level entries of `output_dir` that orphan cleanup must keep.
+    protected_entries: HashSet<String>,
+    /// Each video's recorded playlist position, used to resolve its
+    /// metadata `sorttitle`.
+    positions: HashMap<VideoRecordId, i64>,
+}
+
+impl LocalSnapshot {
+    fn broken_downloads(&self) -> impl Iterator<Item = &Video> {
+        self.videos
+            .iter()
+            .filter(|v| self.broken_download_ids.contains(&v.id))
+    }
+
+    fn healthy_downloads(&self) -> impl Iterator<Item = &Video> {
+        self.videos.iter().filter(|v| {
+            v.status == VideoStatus::Downloaded && !self.broken_download_ids.contains(&v.id)
+        })
+    }
+}
+
+/// Top-level entries of the output directory orphan cleanup must keep:
+/// every `Downloaded` video's file, every stored video's thumbnail (a
+/// `Pending`/`InProgress` video may already have one pre-fetched, see the
+/// `video-thumbnails` capability), and the folder an in-flight download or
+/// thumbnail fetch is writing into — not recorded yet, so protected by its
+/// predicted name.
+fn protected_entries(
+    videos: &[Video],
+    previous_titles: &HashMap<VideoRecordId, String>,
+) -> HashSet<String> {
+    let downloaded_files = videos
+        .iter()
+        .filter(|v| v.status == VideoStatus::Downloaded)
+        .filter_map(|v| v.filename.clone());
+    let thumbnails = videos.iter().filter_map(|v| v.thumbnail_filename.clone());
+    let unrecorded_folders = videos.iter().flat_map(|video| {
+        video.unrecorded_folder_candidates(previous_titles.get(&video.id).map(String::as_str))
+    });
+
+    downloaded_files
+        .chain(thumbnails)
+        .chain(unrecorded_folders)
+        .map(|entry| top_level_entry(&entry).to_string())
+        .collect()
 }
