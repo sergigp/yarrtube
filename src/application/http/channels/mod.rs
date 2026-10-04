@@ -1188,9 +1188,10 @@ mod tests {
         let playlist_copy = downloaded_video("vid_shared");
         video_repository.save(&playlist_copy).unwrap();
         playlist_video_repository
-            .save(&PlaylistVideo::create(
+            .save(&PlaylistVideo::create_with_position(
                 PlaylistId::new("PL1").unwrap(),
                 playlist_copy.id.clone(),
+                0,
                 fixed_timestamp(),
             ))
             .unwrap();

@@ -106,6 +106,25 @@ mod tests {
     }
 
     #[test]
+    fn it_should_reject_a_playlist_video_without_position() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        apply(&mut conn).unwrap();
+
+        let result = conn
+            .execute(
+                "INSERT INTO playlist_videos (playlist_id, video_id, position, created_at)
+                 VALUES ('PL1', 'rec1', NULL, '2024-01-01T00:00:00+00:00')",
+                [],
+            )
+            .map_err(|e| e.to_string());
+
+        assert_eq!(
+            result,
+            Err("NOT NULL constraint failed: playlist_videos.position".to_string())
+        );
+    }
+
+    #[test]
     fn it_should_default_existing_videos_to_unwatched_when_migrating() {
         let mut conn = Connection::open_in_memory().unwrap();
         Migrations::new(vec![M::up(BASELINE_SQL)])

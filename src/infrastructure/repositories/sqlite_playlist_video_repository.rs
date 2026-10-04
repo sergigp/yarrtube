@@ -241,22 +241,6 @@ mod tests {
     }
 
     #[test]
-    fn it_should_round_trip_a_playlist_video_with_no_position() {
-        let repo = repo();
-        let video = seed_video(&repo, "yt1", "First");
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-
-        repo.save(&PlaylistVideo::create(playlist_id(), video.id.clone(), now))
-            .unwrap();
-
-        let found = repo
-            .find_by_youtube_video(&playlist_id(), &VideoId::new("yt1").unwrap())
-            .unwrap()
-            .unwrap();
-        assert_eq!(found.position, None);
-    }
-
-    #[test]
     fn it_should_list_playlist_videos_ordered_by_position() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
@@ -297,46 +281,25 @@ mod tests {
     }
 
     #[test]
-    fn it_should_sort_playlist_videos_with_no_position_last() {
-        let repo = repo();
-        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        let no_position = seed_video(&repo, "yt_no_position", "No position");
-        let positioned = seed_video(&repo, "yt_positioned", "Positioned");
-        repo.save(&PlaylistVideo::create(
-            playlist_id(),
-            no_position.id.clone(),
-            now,
-        ))
-        .unwrap();
-        repo.save(&PlaylistVideo::create_with_position(
-            playlist_id(),
-            positioned.id.clone(),
-            5,
-            now,
-        ))
-        .unwrap();
-
-        let videos = repo.list_for_playlist(&playlist_id()).unwrap();
-
-        assert_eq!(
-            videos
-                .iter()
-                .map(|pv| pv.video_id.clone())
-                .collect::<Vec<_>>(),
-            vec![positioned.id, no_position.id]
-        );
-    }
-
-    #[test]
     fn it_should_delete_only_the_named_playlist_video() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let one = seed_video(&repo, "yt1", "One");
         let two = seed_video(&repo, "yt2", "Two");
-        repo.save(&PlaylistVideo::create(playlist_id(), one.id.clone(), now))
-            .unwrap();
-        repo.save(&PlaylistVideo::create(playlist_id(), two.id.clone(), now))
-            .unwrap();
+        repo.save(&PlaylistVideo::create_with_position(
+            playlist_id(),
+            one.id.clone(),
+            0,
+            now,
+        ))
+        .unwrap();
+        repo.save(&PlaylistVideo::create_with_position(
+            playlist_id(),
+            two.id.clone(),
+            0,
+            now,
+        ))
+        .unwrap();
 
         repo.delete(&playlist_id(), &VideoId::new("yt1").unwrap())
             .unwrap();
@@ -359,12 +322,18 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let one = seed_video(&repo, "yt1", "One");
         let two = seed_video(&repo, "yt2", "Two");
-        repo.save(&PlaylistVideo::create(playlist_id(), one.id.clone(), now))
-            .unwrap();
+        repo.save(&PlaylistVideo::create_with_position(
+            playlist_id(),
+            one.id.clone(),
+            0,
+            now,
+        ))
+        .unwrap();
         let other_playlist_id = PlaylistId::new("PL2").unwrap();
-        repo.save(&PlaylistVideo::create(
+        repo.save(&PlaylistVideo::create_with_position(
             other_playlist_id.clone(),
             two.id.clone(),
+            0,
             now,
         ))
         .unwrap();
@@ -391,8 +360,13 @@ mod tests {
         let repo = repo();
         let video = seed_video(&repo, "yt1", "First");
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&PlaylistVideo::create(playlist_id(), video.id.clone(), now))
-            .unwrap();
+        repo.save(&PlaylistVideo::create_with_position(
+            playlist_id(),
+            video.id.clone(),
+            0,
+            now,
+        ))
+        .unwrap();
 
         let found = repo.find_by_video(&video.id).unwrap().unwrap();
 

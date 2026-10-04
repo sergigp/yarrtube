@@ -2274,9 +2274,10 @@ mod tests {
     ) {
         video_repository.save(video).unwrap();
         playlist_video_repository
-            .save(&PlaylistVideo::create(
+            .save(&PlaylistVideo::create_with_position(
                 PlaylistId::new(playlist_id).unwrap(),
                 video.id.clone(),
+                0,
                 fixed_timestamp(),
             ))
             .unwrap();
