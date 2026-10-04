@@ -33,6 +33,7 @@ mod tests {
     use crate::application::tasks::log_capture::captured_log_messages;
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::services::ThumbnailFetcher;
@@ -171,10 +172,10 @@ mod tests {
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
                 1,
-                DomainEvent::VideoAddedToChannel {
+                DomainEvent::VideoAddedToChannel(VideoAddedToChannel {
                     channel_id: "@somechannel".to_string(),
                     video_id: video_id.as_str().to_string(),
-                }
+                })
             )]
         );
     }
@@ -280,14 +281,14 @@ mod tests {
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
                 1,
-                DomainEvent::VideoRemovedFromChannel {
+                DomainEvent::VideoRemovedFromChannel(VideoRemovedFromChannel {
                     channel_id: "@somechannel".to_string(),
                     video_id: existing.id.as_str().to_string(),
                     title: "Old".to_string(),
                     filename: None,
                     thumbnail_filename: None,
                     was_downloaded: false,
-                }
+                })
             )]
         );
     }
@@ -1356,17 +1357,17 @@ mod tests {
             vec![
                 pending_event(
                     1,
-                    DomainEvent::VideoAddedToChannel {
+                    DomainEvent::VideoAddedToChannel(VideoAddedToChannel {
                         channel_id: "@somechannel".to_string(),
                         video_id: first_id.as_str().to_string(),
-                    }
+                    })
                 ),
                 pending_event(
                     2,
-                    DomainEvent::VideoAddedToChannel {
+                    DomainEvent::VideoAddedToChannel(VideoAddedToChannel {
                         channel_id: "@somechannel".to_string(),
                         video_id: second_id.as_str().to_string(),
-                    }
+                    })
                 ),
             ]
         );

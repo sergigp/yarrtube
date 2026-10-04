@@ -2,6 +2,7 @@ use crate::domain::event::DomainEvent;
 use crate::domain::playlist::Playlist;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist_video::PlaylistVideo;
+use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
 use crate::domain::task::{ScheduledTask, Task};
 use crate::domain::video::{
@@ -238,10 +239,10 @@ impl PlaylistVideoReconciler {
                         "added video to playlist"
                     );
                     self.event_publisher
-                        .publish(&DomainEvent::VideoAddedToPlaylist {
+                        .publish(&DomainEvent::VideoAddedToPlaylist(VideoAddedToPlaylist {
                             playlist_id: id.as_str().to_string(),
                             video_id: video.id.as_str().to_string(),
-                        })?;
+                        }))?;
                     added_ids.push(video.id);
                 }
                 Some(existing) => {
@@ -284,14 +285,16 @@ impl PlaylistVideoReconciler {
                 .delete(id, &video.youtube_id)?;
             self.video_repository.delete(&video.id)?;
             self.event_publisher
-                .publish(&DomainEvent::VideoRemovedFromPlaylist {
-                    playlist_id: id.as_str().to_string(),
-                    video_id: video.id.as_str().to_string(),
-                    title: video.title.clone(),
-                    filename: video.filename.clone(),
-                    thumbnail_filename: video.thumbnail_filename.clone(),
-                    was_downloaded: video.status == VideoStatus::Downloaded,
-                })?;
+                .publish(&DomainEvent::VideoRemovedFromPlaylist(
+                    VideoRemovedFromPlaylist {
+                        playlist_id: id.as_str().to_string(),
+                        video_id: video.id.as_str().to_string(),
+                        title: video.title.clone(),
+                        filename: video.filename.clone(),
+                        thumbnail_filename: video.thumbnail_filename.clone(),
+                        was_downloaded: video.status == VideoStatus::Downloaded,
+                    },
+                ))?;
         }
 
         Ok(MembershipChanges {

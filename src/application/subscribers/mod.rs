@@ -12,9 +12,14 @@ pub mod reconcile_on_channel_created;
 pub mod reconcile_on_playlist_created;
 pub mod scan_plex_folder_on_video_downloaded;
 
+use crate::domain::channel::{ChannelCreated, ChannelDeleted};
+use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
+use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
+use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::services::{
     ChannelVideoReconciler, PlaylistVideoReconciler, PlexCollectionDeleter, PlexFolderScanner,
 };
+use crate::domain::video::VideoDownloaded;
 use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -53,19 +58,19 @@ pub fn registry(
     let videos_path = videos_path.into();
     let mut registry: SubscriberRegistry = HashMap::new();
     registry.insert(
-        "playlist_created".to_string(),
+        PlaylistCreated::EVENT_TYPE.to_string(),
         vec![Arc::new(ReconcileOnPlaylistCreated::new(
             playlist_video_reconciler,
         ))],
     );
     registry.insert(
-        "channel_created".to_string(),
+        ChannelCreated::EVENT_TYPE.to_string(),
         vec![Arc::new(ReconcileOnChannelCreated::new(
             channel_video_reconciler,
         ))],
     );
     registry.insert(
-        "video_added_to_playlist".to_string(),
+        VideoAddedToPlaylist::EVENT_TYPE.to_string(),
         vec![
             Arc::new(FetchThumbnailOnVideoAddedToPlaylist::new(
                 playlist_repository.clone(),
@@ -82,7 +87,7 @@ pub fn registry(
         ],
     );
     registry.insert(
-        "video_added_to_channel".to_string(),
+        VideoAddedToChannel::EVENT_TYPE.to_string(),
         vec![
             Arc::new(FetchThumbnailOnVideoAddedToChannel::new(
                 channel_repository.clone(),
@@ -99,7 +104,7 @@ pub fn registry(
         ],
     );
     registry.insert(
-        "video_removed_from_playlist".to_string(),
+        VideoRemovedFromPlaylist::EVENT_TYPE.to_string(),
         vec![Arc::new(DeleteVideoFileOnVideoRemovedFromPlaylist::new(
             playlist_repository,
             task_repository.clone(),
@@ -108,7 +113,7 @@ pub fn registry(
         ))],
     );
     registry.insert(
-        "video_removed_from_channel".to_string(),
+        VideoRemovedFromChannel::EVENT_TYPE.to_string(),
         vec![Arc::new(DeleteVideoFileOnVideoRemovedFromChannel::new(
             channel_repository,
             task_repository.clone(),
@@ -117,14 +122,14 @@ pub fn registry(
         ))],
     );
     registry.insert(
-        "playlist_deleted".to_string(),
+        PlaylistDeleted::EVENT_TYPE.to_string(),
         vec![Arc::new(DeletePlaylistFilesOnPlaylistDeleted::new(
             task_repository.clone(),
             clock.clone(),
         ))],
     );
     registry.insert(
-        "channel_deleted".to_string(),
+        ChannelDeleted::EVENT_TYPE.to_string(),
         vec![Arc::new(DeleteChannelFilesOnChannelDeleted::new(
             task_repository,
             clock,
@@ -132,19 +137,19 @@ pub fn registry(
     );
     if let Some(deleter) = plex_collection_deleter {
         registry
-            .get_mut("playlist_deleted")
+            .get_mut(PlaylistDeleted::EVENT_TYPE)
             .expect("playlist_deleted subscribers registered above")
             .push(Arc::new(DeletePlexCollectionOnPlaylistDeleted::new(
                 deleter.clone(),
             )));
         registry
-            .get_mut("channel_deleted")
+            .get_mut(ChannelDeleted::EVENT_TYPE)
             .expect("channel_deleted subscribers registered above")
             .push(Arc::new(DeletePlexCollectionOnChannelDeleted::new(deleter)));
     }
     if let Some(scanner) = plex_folder_scanner {
         registry.insert(
-            "video_downloaded".to_string(),
+            VideoDownloaded::EVENT_TYPE.to_string(),
             vec![Arc::new(ScanPlexFolderOnVideoDownloaded::new(scanner))],
         );
     }

@@ -1,4 +1,5 @@
 pub mod errors;
+pub mod events;
 pub mod home_limits;
 pub mod home_video_view;
 pub mod home_videos;
@@ -16,6 +17,7 @@ pub mod video_status;
 pub mod video_view;
 
 pub use errors::{ListVideosError, UpdateWatchStateError};
+pub use events::VideoDownloaded;
 pub use home_limits::HomeLimits;
 pub use home_video_view::HomeVideoView;
 pub use home_videos::HomeVideos;

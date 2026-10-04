@@ -1,6 +1,7 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::shared::Quality;
 use crate::domain::video::Video;
+use crate::domain::video::VideoDownloaded;
 use crate::domain::video::VideoRecordId;
 use crate::domain::video::thumbnail_filename::expected_thumbnail_filename;
 use crate::domain::video::top_level_entry;
@@ -303,11 +304,11 @@ impl VideoDownloader {
     /// Best-effort: the download is already recorded, and losing the event
     /// only skips reacting to it (e.g. asking Plex to scan the folder).
     fn publish_downloaded(&self, video: &Video, output_dir: &Path, folder: &str) {
-        let event = DomainEvent::VideoDownloaded {
+        let event = DomainEvent::VideoDownloaded(VideoDownloaded {
             video_id: video.id.as_str().to_string(),
             output_dir: output_dir.to_string_lossy().to_string(),
             folder: folder.to_string(),
-        };
+        });
         if let Err(e) = self.event_publisher.publish(&event) {
             warn!(video_id = %video.id, error = %e, "failed to publish that the video was downloaded");
         }

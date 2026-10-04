@@ -1,5 +1,6 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::Playlist;
+use crate::domain::playlist::PlaylistDeleted;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::errors::DeletePlaylistError;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -42,7 +43,8 @@ impl PlaylistDeleterApi for PlaylistDeleter {
     fn delete(&self, id: PlaylistId) -> Result<(), DeletePlaylistError> {
         let playlist = self.find_playlist(&id)?;
         self.delete_playlist_videos(&id)?;
-        self.delete_and_publish(&id, &playlist)?;
+        self.delete_playlist(&id)?;
+        self.publish_playlist_deleted(&id, &playlist)?;
         info!(playlist_id = %id, "deleted playlist");
         Ok(())
     }
@@ -74,20 +76,23 @@ impl PlaylistDeleter {
             .map_err(DeletePlaylistError::Repository)
     }
 
-    fn delete_and_publish(
+    fn delete_playlist(&self, id: &PlaylistId) -> Result<(), DeletePlaylistError> {
+        self.repository
+            .delete(id)
+            .map_err(DeletePlaylistError::Repository)
+    }
+
+    fn publish_playlist_deleted(
         &self,
         id: &PlaylistId,
         playlist: &Playlist,
     ) -> Result<(), DeletePlaylistError> {
-        self.repository
-            .delete(id)
-            .map_err(DeletePlaylistError::Repository)?;
         self.event_publisher
-            .publish(&DomainEvent::PlaylistDeleted {
+            .publish(&DomainEvent::PlaylistDeleted(PlaylistDeleted {
                 playlist_id: id.as_str().to_string(),
                 name: playlist.name.as_str().to_string(),
                 path: playlist.path.as_str().to_string(),
-            })
+            }))
             .map_err(DeletePlaylistError::Repository)
     }
 }

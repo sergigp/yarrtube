@@ -1,3 +1,4 @@
+use crate::domain::channel::ChannelCreated;
 use crate::domain::channel::{Channel, ChannelHandle, CreateChannelError, VideoLimit};
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::PlaylistPath;
@@ -81,7 +82,9 @@ impl ChannelCreatorApi for ChannelCreator {
             avatar_filename,
             self.clock.now(),
         );
-        self.insert_and_publish(&channel)?;
+        self.insert_channel(&channel)?;
+        self.publish_channel_created(&channel)?;
+        info!(channel_id = %channel.id, name = %channel.name, "created channel");
         Ok(CreateChannelOutcome::Created(channel))
     }
 }
@@ -123,16 +126,17 @@ impl ChannelCreator {
         })
     }
 
-    fn insert_and_publish(&self, channel: &Channel) -> Result<(), CreateChannelError> {
+    fn insert_channel(&self, channel: &Channel) -> Result<(), CreateChannelError> {
         self.repository
             .insert(channel)
-            .map_err(CreateChannelError::Repository)?;
+            .map_err(CreateChannelError::Repository)
+    }
+
+    fn publish_channel_created(&self, channel: &Channel) -> Result<(), CreateChannelError> {
         self.event_publisher
-            .publish(&DomainEvent::ChannelCreated {
+            .publish(&DomainEvent::ChannelCreated(ChannelCreated {
                 channel_id: channel.id.as_str().to_string(),
-            })
-            .map_err(CreateChannelError::Repository)?;
-        info!(channel_id = %channel.id, name = %channel.name, "created channel");
-        Ok(())
+            }))
+            .map_err(CreateChannelError::Repository)
     }
 }

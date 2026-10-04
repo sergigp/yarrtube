@@ -101,7 +101,9 @@ mod tests {
     use super::*;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName};
+    use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
     use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::Video;
@@ -600,11 +602,11 @@ mod tests {
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
                 1,
-                DomainEvent::PlaylistDeleted {
+                DomainEvent::PlaylistDeleted(PlaylistDeleted {
                     playlist_id: "PL1".to_string(),
                     name: "Lofi beats".to_string(),
                     path: DEFAULT_PATH.to_string(),
-                }
+                })
             )]
         );
     }
@@ -835,10 +837,10 @@ mod tests {
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
                 1,
-                DomainEvent::VideoAddedToPlaylist {
+                DomainEvent::VideoAddedToPlaylist(VideoAddedToPlaylist {
                     playlist_id: "PL1".to_string(),
                     video_id: video_id.as_str().to_string(),
-                }
+                })
             )]
         );
     }
@@ -883,14 +885,14 @@ mod tests {
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
                 1,
-                DomainEvent::VideoRemovedFromPlaylist {
+                DomainEvent::VideoRemovedFromPlaylist(VideoRemovedFromPlaylist {
                     playlist_id: "PL1".to_string(),
                     video_id: removed.id.as_str().to_string(),
                     title: "Video vid_old".to_string(),
                     filename: None,
                     thumbnail_filename: None,
                     was_downloaded: false,
-                }
+                })
             )]
         );
     }
@@ -1269,9 +1271,9 @@ mod tests {
     }
 
     fn playlist_created(playlist_id: &str) -> DomainEvent {
-        DomainEvent::PlaylistCreated {
+        DomainEvent::PlaylistCreated(PlaylistCreated {
             playlist_id: playlist_id.to_string(),
-        }
+        })
     }
 
     fn create_request(playlist: &str) -> CreatePlaylistRequest {

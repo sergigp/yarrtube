@@ -182,6 +182,7 @@ impl EventRepository for SqliteEventRepository {
 mod tests {
     use super::*;
     use crate::domain::event::EventFailureOutcome;
+    use crate::domain::playlist::PlaylistCreated;
     use crate::infrastructure::shared::domain_events::event_publisher::{
         EventPublisher, SqliteEventPublisher,
     };
@@ -211,9 +212,9 @@ mod tests {
     }
 
     fn event() -> DomainEvent {
-        DomainEvent::PlaylistCreated {
+        DomainEvent::PlaylistCreated(PlaylistCreated {
             playlist_id: "PL1".to_string(),
-        }
+        })
     }
 
     /// Mirrors what `DomainEventsConsumer` does on a dispatch failure: read

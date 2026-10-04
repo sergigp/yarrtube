@@ -106,6 +106,7 @@ impl DomainEventsConsumer {
 mod tests {
     use super::*;
     use crate::domain::event::{DeadLetteredEvent, DomainEvent, ScheduledEvent};
+    use crate::domain::playlist::PlaylistCreated;
     use crate::infrastructure::shared::domain_events::event_publisher::{
         EventPublisher, SqliteEventPublisher,
     };
@@ -276,9 +277,9 @@ mod tests {
     }
 
     fn event() -> DomainEvent {
-        DomainEvent::PlaylistCreated {
+        DomainEvent::PlaylistCreated(PlaylistCreated {
             playlist_id: "PL1".to_string(),
-        }
+        })
     }
 
     /// The row `publish(&event())` stores as id 1, with `retries`.

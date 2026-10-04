@@ -1,3 +1,4 @@
+use crate::domain::channel::ChannelDeleted;
 use crate::domain::channel::{Channel, ChannelHandle, DeleteChannelError};
 use crate::domain::event::DomainEvent;
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::ChannelAvatarRepository;
@@ -47,7 +48,8 @@ impl ChannelDeleterApi for ChannelDeleter {
         let channel = self.find_channel(&id)?;
         self.delete_channel_videos(&id)?;
         self.delete_avatar(&channel)?;
-        self.delete_and_publish(&id, &channel)?;
+        self.delete_channel(&id)?;
+        self.publish_channel_deleted(&id, &channel)?;
         info!(channel_id = %id, "deleted channel");
         Ok(())
     }
@@ -88,20 +90,23 @@ impl ChannelDeleter {
             .map_err(DeleteChannelError::Repository)
     }
 
-    fn delete_and_publish(
+    fn delete_channel(&self, id: &ChannelHandle) -> Result<(), DeleteChannelError> {
+        self.repository
+            .delete(id)
+            .map_err(DeleteChannelError::Repository)
+    }
+
+    fn publish_channel_deleted(
         &self,
         id: &ChannelHandle,
         channel: &Channel,
     ) -> Result<(), DeleteChannelError> {
-        self.repository
-            .delete(id)
-            .map_err(DeleteChannelError::Repository)?;
         self.event_publisher
-            .publish(&DomainEvent::ChannelDeleted {
+            .publish(&DomainEvent::ChannelDeleted(ChannelDeleted {
                 channel_id: id.as_str().to_string(),
                 name: channel.name.clone(),
                 path: channel.path.as_str().to_string(),
-            })
+            }))
             .map_err(DeleteChannelError::Repository)
     }
 }

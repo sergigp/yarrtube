@@ -34,6 +34,7 @@ mod tests {
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
@@ -181,10 +182,10 @@ mod tests {
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
                 1,
-                DomainEvent::VideoAddedToPlaylist {
+                DomainEvent::VideoAddedToPlaylist(VideoAddedToPlaylist {
                     playlist_id: "PL1".to_string(),
                     video_id: video_id.as_str().to_string(),
-                }
+                })
             )]
         );
     }
@@ -378,25 +379,25 @@ mod tests {
             vec![
                 pending_event(
                     1,
-                    DomainEvent::VideoRemovedFromPlaylist {
+                    DomainEvent::VideoRemovedFromPlaylist(VideoRemovedFromPlaylist {
                         playlist_id: "PL1".to_string(),
                         video_id: downloaded.id.as_str().to_string(),
                         title: "Downloaded Video".to_string(),
                         filename: Some("Downloaded Video.mp4".to_string()),
                         thumbnail_filename: Some("Downloaded Video.jpg".to_string()),
                         was_downloaded: true,
-                    }
+                    })
                 ),
                 pending_event(
                     2,
-                    DomainEvent::VideoRemovedFromPlaylist {
+                    DomainEvent::VideoRemovedFromPlaylist(VideoRemovedFromPlaylist {
                         playlist_id: "PL1".to_string(),
                         video_id: pending.id.as_str().to_string(),
                         title: "Pending Video".to_string(),
                         filename: None,
                         thumbnail_filename: None,
                         was_downloaded: false,
-                    }
+                    })
                 ),
             ]
         );
@@ -1725,17 +1726,17 @@ mod tests {
             vec![
                 pending_event(
                     1,
-                    DomainEvent::VideoAddedToPlaylist {
+                    DomainEvent::VideoAddedToPlaylist(VideoAddedToPlaylist {
                         playlist_id: "PL1".to_string(),
                         video_id: first_id.as_str().to_string(),
-                    }
+                    })
                 ),
                 pending_event(
                     2,
-                    DomainEvent::VideoAddedToPlaylist {
+                    DomainEvent::VideoAddedToPlaylist(VideoAddedToPlaylist {
                         playlist_id: "PL1".to_string(),
                         video_id: second_id.as_str().to_string(),
-                    }
+                    })
                 ),
             ]
         );

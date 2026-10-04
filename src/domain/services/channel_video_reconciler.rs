@@ -1,5 +1,6 @@
 use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::channel_video::ChannelVideo;
+use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{ThumbnailFetcher, ThumbnailFetcherApi};
 use crate::domain::task::{ScheduledTask, Task};
@@ -249,10 +250,10 @@ impl ChannelVideoReconciler {
                         "added video to channel"
                     );
                     self.event_publisher
-                        .publish(&DomainEvent::VideoAddedToChannel {
+                        .publish(&DomainEvent::VideoAddedToChannel(VideoAddedToChannel {
                             channel_id: id.as_str().to_string(),
                             video_id: video.id.as_str().to_string(),
-                        })?;
+                        }))?;
                     added_ids.push(video.id);
                 }
                 Some(existing) => {
@@ -295,14 +296,16 @@ impl ChannelVideoReconciler {
                 .delete(id, &video.youtube_id)?;
             self.video_repository.delete(&video.id)?;
             self.event_publisher
-                .publish(&DomainEvent::VideoRemovedFromChannel {
-                    channel_id: id.as_str().to_string(),
-                    video_id: video.id.as_str().to_string(),
-                    title: video.title.clone(),
-                    filename: video.filename.clone(),
-                    thumbnail_filename: video.thumbnail_filename.clone(),
-                    was_downloaded: video.status == VideoStatus::Downloaded,
-                })?;
+                .publish(&DomainEvent::VideoRemovedFromChannel(
+                    VideoRemovedFromChannel {
+                        channel_id: id.as_str().to_string(),
+                        video_id: video.id.as_str().to_string(),
+                        title: video.title.clone(),
+                        filename: video.filename.clone(),
+                        thumbnail_filename: video.thumbnail_filename.clone(),
+                        was_downloaded: video.status == VideoStatus::Downloaded,
+                    },
+                ))?;
         }
 
         Ok(MembershipChanges {

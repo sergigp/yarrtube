@@ -38,6 +38,7 @@ mod tests {
     use crate::application::tasks::log_capture::captured_log_messages;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::video::Video;
+    use crate::domain::video::VideoDownloaded;
     use crate::domain::video::{VideoId, VideoStatus};
     use crate::domain::video_metadata::{VideoMetadata, render_movie_nfo};
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
@@ -124,11 +125,11 @@ mod tests {
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
                 1,
-                DomainEvent::VideoDownloaded {
+                DomainEvent::VideoDownloaded(VideoDownloaded {
                     video_id: video.id.as_str().to_string(),
                     output_dir: "/videos/my-playlist".to_string(),
                     folder: FAKE_FRESH_FOLDER.to_string(),
-                }
+                })
             )]
         );
     }

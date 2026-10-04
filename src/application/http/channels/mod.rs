@@ -123,7 +123,9 @@ pub async fn mark_channel_watched(
 mod tests {
     use super::*;
     use crate::domain::channel::Channel;
+    use crate::domain::channel::{ChannelCreated, ChannelDeleted};
     use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist_video::PlaylistVideo;
@@ -1000,10 +1002,10 @@ mod tests {
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
                 1,
-                DomainEvent::VideoAddedToChannel {
+                DomainEvent::VideoAddedToChannel(VideoAddedToChannel {
                     channel_id: "@somechannel".to_string(),
                     video_id: video_id.as_str().to_string(),
-                }
+                })
             )]
         );
     }
@@ -1049,14 +1051,14 @@ mod tests {
             event_repository.list_eligible().unwrap(),
             vec![pending_event(
                 1,
-                DomainEvent::VideoRemovedFromChannel {
+                DomainEvent::VideoRemovedFromChannel(VideoRemovedFromChannel {
                     channel_id: "@somechannel".to_string(),
                     video_id: evicted.id.as_str().to_string(),
                     title: "Video yt_old".to_string(),
                     filename: None,
                     thumbnail_filename: None,
                     was_downloaded: false,
-                }
+                })
             )]
         );
     }
@@ -1557,17 +1559,17 @@ mod tests {
     }
 
     fn channel_created(channel_handle: &str) -> DomainEvent {
-        DomainEvent::ChannelCreated {
+        DomainEvent::ChannelCreated(ChannelCreated {
             channel_id: channel_handle.to_string(),
-        }
+        })
     }
 
     fn channel_deleted(channel_handle: &str) -> DomainEvent {
-        DomainEvent::ChannelDeleted {
+        DomainEvent::ChannelDeleted(ChannelDeleted {
             channel_id: channel_handle.to_string(),
             name: "Some Channel".to_string(),
             path: "creators/somechannel".to_string(),
-        }
+        })
     }
 
     fn create_request(channel: &str) -> CreateChannelRequest {

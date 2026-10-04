@@ -1,4 +1,5 @@
 use crate::domain::event::DomainEvent;
+use crate::domain::playlist::PlaylistCreated;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::errors::CreatePlaylistError;
 use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
@@ -65,7 +66,9 @@ impl PlaylistCreatorApi for PlaylistCreator {
         let name = self.resolve_on_youtube(&id)?;
         let now = self.clock.now();
         let playlist = Playlist::create(id, name, path, quality, PlaylistKind::YoutubeLinked, now);
-        self.insert_and_publish(&playlist)?;
+        self.insert_playlist(&playlist)?;
+        self.publish_playlist_created(&playlist)?;
+        info!(playlist_id = %playlist.id, name = %playlist.name, "created playlist");
         Ok(CreatePlaylistOutcome::Created(playlist))
     }
 }
@@ -96,16 +99,17 @@ impl PlaylistCreator {
         }
     }
 
-    fn insert_and_publish(&self, playlist: &Playlist) -> Result<(), CreatePlaylistError> {
+    fn insert_playlist(&self, playlist: &Playlist) -> Result<(), CreatePlaylistError> {
         self.repository
             .insert(playlist)
-            .map_err(CreatePlaylistError::Repository)?;
+            .map_err(CreatePlaylistError::Repository)
+    }
+
+    fn publish_playlist_created(&self, playlist: &Playlist) -> Result<(), CreatePlaylistError> {
         self.event_publisher
-            .publish(&DomainEvent::PlaylistCreated {
+            .publish(&DomainEvent::PlaylistCreated(PlaylistCreated {
                 playlist_id: playlist.id.as_str().to_string(),
-            })
-            .map_err(CreatePlaylistError::Repository)?;
-        info!(playlist_id = %playlist.id, name = %playlist.name, "created playlist");
-        Ok(())
+            }))
+            .map_err(CreatePlaylistError::Repository)
     }
 }

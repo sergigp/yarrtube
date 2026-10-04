@@ -1,159 +1,70 @@
-use serde_json::{Value, json};
+use crate::domain::channel::{ChannelCreated, ChannelDeleted};
+use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
+use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
+use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
+use crate::domain::video::VideoDownloaded;
+use serde::Serialize;
+use serde_json::Value;
 
+/// Envelope over every aggregate's events, the unit the event publisher
+/// persists and subscribers are routed by.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainEvent {
-    PlaylistCreated {
-        playlist_id: String,
-    },
-    PlaylistDeleted {
-        playlist_id: String,
-        name: String,
-        path: String,
-    },
-    VideoAddedToPlaylist {
-        playlist_id: String,
-        video_id: String,
-    },
-    VideoRemovedFromPlaylist {
-        playlist_id: String,
-        video_id: String,
-        title: String,
-        filename: Option<String>,
-        thumbnail_filename: Option<String>,
-        was_downloaded: bool,
-    },
-    ChannelCreated {
-        channel_id: String,
-    },
-    ChannelDeleted {
-        channel_id: String,
-        name: String,
-        path: String,
-    },
-    VideoAddedToChannel {
-        channel_id: String,
-        video_id: String,
-    },
-    VideoRemovedFromChannel {
-        channel_id: String,
-        video_id: String,
-        title: String,
-        filename: Option<String>,
-        thumbnail_filename: Option<String>,
-        was_downloaded: bool,
-    },
-    /// A video's media file was downloaded into `folder`, inside its
-    /// owner's `output_dir`.
-    VideoDownloaded {
-        video_id: String,
-        output_dir: String,
-        folder: String,
-    },
+    PlaylistCreated(PlaylistCreated),
+    PlaylistDeleted(PlaylistDeleted),
+    VideoAddedToPlaylist(VideoAddedToPlaylist),
+    VideoRemovedFromPlaylist(VideoRemovedFromPlaylist),
+    ChannelCreated(ChannelCreated),
+    ChannelDeleted(ChannelDeleted),
+    VideoAddedToChannel(VideoAddedToChannel),
+    VideoRemovedFromChannel(VideoRemovedFromChannel),
+    VideoDownloaded(VideoDownloaded),
 }
 
 impl DomainEvent {
     pub fn event_type(&self) -> &'static str {
         match self {
-            Self::PlaylistCreated { .. } => "playlist_created",
-            Self::PlaylistDeleted { .. } => "playlist_deleted",
-            Self::VideoAddedToPlaylist { .. } => "video_added_to_playlist",
-            Self::VideoRemovedFromPlaylist { .. } => "video_removed_from_playlist",
-            Self::ChannelCreated { .. } => "channel_created",
-            Self::ChannelDeleted { .. } => "channel_deleted",
-            Self::VideoAddedToChannel { .. } => "video_added_to_channel",
-            Self::VideoRemovedFromChannel { .. } => "video_removed_from_channel",
-            Self::VideoDownloaded { .. } => "video_downloaded",
+            Self::PlaylistCreated(_) => PlaylistCreated::EVENT_TYPE,
+            Self::PlaylistDeleted(_) => PlaylistDeleted::EVENT_TYPE,
+            Self::VideoAddedToPlaylist(_) => VideoAddedToPlaylist::EVENT_TYPE,
+            Self::VideoRemovedFromPlaylist(_) => VideoRemovedFromPlaylist::EVENT_TYPE,
+            Self::ChannelCreated(_) => ChannelCreated::EVENT_TYPE,
+            Self::ChannelDeleted(_) => ChannelDeleted::EVENT_TYPE,
+            Self::VideoAddedToChannel(_) => VideoAddedToChannel::EVENT_TYPE,
+            Self::VideoRemovedFromChannel(_) => VideoRemovedFromChannel::EVENT_TYPE,
+            Self::VideoDownloaded(_) => VideoDownloaded::EVENT_TYPE,
         }
     }
 
     pub fn payload(&self) -> Value {
         match self {
-            Self::PlaylistCreated { playlist_id } => json!({ "playlist_id": playlist_id }),
-            Self::PlaylistDeleted {
-                playlist_id,
-                name,
-                path,
-            } => json!({
-                "playlist_id": playlist_id,
-                "name": name,
-                "path": path,
-            }),
-            Self::VideoAddedToPlaylist {
-                playlist_id,
-                video_id,
-            } => json!({
-                "playlist_id": playlist_id,
-                "video_id": video_id,
-            }),
-            Self::VideoRemovedFromPlaylist {
-                playlist_id,
-                video_id,
-                title,
-                filename,
-                thumbnail_filename,
-                was_downloaded,
-            } => json!({
-                "playlist_id": playlist_id,
-                "video_id": video_id,
-                "title": title,
-                "filename": filename,
-                "thumbnail_filename": thumbnail_filename,
-                "was_downloaded": was_downloaded,
-            }),
-            Self::ChannelCreated { channel_id } => json!({ "channel_id": channel_id }),
-            Self::ChannelDeleted {
-                channel_id,
-                name,
-                path,
-            } => json!({
-                "channel_id": channel_id,
-                "name": name,
-                "path": path,
-            }),
-            Self::VideoAddedToChannel {
-                channel_id,
-                video_id,
-            } => json!({
-                "channel_id": channel_id,
-                "video_id": video_id,
-            }),
-            Self::VideoRemovedFromChannel {
-                channel_id,
-                video_id,
-                title,
-                filename,
-                thumbnail_filename,
-                was_downloaded,
-            } => json!({
-                "channel_id": channel_id,
-                "video_id": video_id,
-                "title": title,
-                "filename": filename,
-                "thumbnail_filename": thumbnail_filename,
-                "was_downloaded": was_downloaded,
-            }),
-            Self::VideoDownloaded {
-                video_id,
-                output_dir,
-                folder,
-            } => json!({
-                "video_id": video_id,
-                "output_dir": output_dir,
-                "folder": folder,
-            }),
+            Self::PlaylistCreated(event) => to_payload(event),
+            Self::PlaylistDeleted(event) => to_payload(event),
+            Self::VideoAddedToPlaylist(event) => to_payload(event),
+            Self::VideoRemovedFromPlaylist(event) => to_payload(event),
+            Self::ChannelCreated(event) => to_payload(event),
+            Self::ChannelDeleted(event) => to_payload(event),
+            Self::VideoAddedToChannel(event) => to_payload(event),
+            Self::VideoRemovedFromChannel(event) => to_payload(event),
+            Self::VideoDownloaded(event) => to_payload(event),
         }
     }
+}
+
+fn to_payload(event: &impl Serialize) -> Value {
+    serde_json::to_value(event).expect("domain events serialize to JSON")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn it_should_map_playlist_created_to_a_stable_type_and_payload() {
-        let event = DomainEvent::PlaylistCreated {
+        let event = DomainEvent::PlaylistCreated(PlaylistCreated {
             playlist_id: "PL1".to_string(),
-        };
+        });
 
         assert_eq!(event.event_type(), "playlist_created");
         assert_eq!(event.payload(), json!({ "playlist_id": "PL1" }));
@@ -161,11 +72,11 @@ mod tests {
 
     #[test]
     fn it_should_map_video_downloaded_to_a_stable_type_and_payload() {
-        let event = DomainEvent::VideoDownloaded {
+        let event = DomainEvent::VideoDownloaded(VideoDownloaded {
             video_id: "rec1".to_string(),
             output_dir: "/videos/playlists/kids".to_string(),
             folder: "My Video".to_string(),
-        };
+        });
 
         assert_eq!(event.event_type(), "video_downloaded");
         assert_eq!(
@@ -180,11 +91,11 @@ mod tests {
 
     #[test]
     fn it_should_map_playlist_deleted_to_a_stable_type_and_payload() {
-        let event = DomainEvent::PlaylistDeleted {
+        let event = DomainEvent::PlaylistDeleted(PlaylistDeleted {
             playlist_id: "PL1".to_string(),
             name: "Lofi beats".to_string(),
             path: "music/chill".to_string(),
-        };
+        });
 
         assert_eq!(event.event_type(), "playlist_deleted");
         assert_eq!(
@@ -195,10 +106,10 @@ mod tests {
 
     #[test]
     fn it_should_map_video_added_to_playlist_to_a_stable_type_and_payload() {
-        let event = DomainEvent::VideoAddedToPlaylist {
+        let event = DomainEvent::VideoAddedToPlaylist(VideoAddedToPlaylist {
             playlist_id: "PL1".to_string(),
             video_id: "rec1".to_string(),
-        };
+        });
 
         assert_eq!(event.event_type(), "video_added_to_playlist");
         assert_eq!(
@@ -209,14 +120,14 @@ mod tests {
 
     #[test]
     fn it_should_map_video_removed_from_playlist_to_a_stable_type_and_payload() {
-        let event = DomainEvent::VideoRemovedFromPlaylist {
+        let event = DomainEvent::VideoRemovedFromPlaylist(VideoRemovedFromPlaylist {
             playlist_id: "PL1".to_string(),
             video_id: "rec1".to_string(),
             title: "My Video".to_string(),
             filename: Some("My Video.mp4".to_string()),
             thumbnail_filename: Some("My Video.jpg".to_string()),
             was_downloaded: true,
-        };
+        });
 
         assert_eq!(event.event_type(), "video_removed_from_playlist");
         assert_eq!(
@@ -234,14 +145,14 @@ mod tests {
 
     #[test]
     fn it_should_map_video_removed_from_playlist_with_no_recorded_filename() {
-        let event = DomainEvent::VideoRemovedFromPlaylist {
+        let event = DomainEvent::VideoRemovedFromPlaylist(VideoRemovedFromPlaylist {
             playlist_id: "PL1".to_string(),
             video_id: "rec1".to_string(),
             title: "My Video".to_string(),
             filename: None,
             thumbnail_filename: None,
             was_downloaded: false,
-        };
+        });
 
         assert_eq!(
             event.payload(),
@@ -258,9 +169,9 @@ mod tests {
 
     #[test]
     fn it_should_map_channel_created_to_a_stable_type_and_payload() {
-        let event = DomainEvent::ChannelCreated {
+        let event = DomainEvent::ChannelCreated(ChannelCreated {
             channel_id: "@somechannel".to_string(),
-        };
+        });
 
         assert_eq!(event.event_type(), "channel_created");
         assert_eq!(event.payload(), json!({ "channel_id": "@somechannel" }));
@@ -268,11 +179,11 @@ mod tests {
 
     #[test]
     fn it_should_map_channel_deleted_to_a_stable_type_and_payload() {
-        let event = DomainEvent::ChannelDeleted {
+        let event = DomainEvent::ChannelDeleted(ChannelDeleted {
             channel_id: "@somechannel".to_string(),
             name: "Some Channel".to_string(),
             path: "creators/somechannel".to_string(),
-        };
+        });
 
         assert_eq!(event.event_type(), "channel_deleted");
         assert_eq!(
@@ -287,10 +198,10 @@ mod tests {
 
     #[test]
     fn it_should_map_video_added_to_channel_to_a_stable_type_and_payload() {
-        let event = DomainEvent::VideoAddedToChannel {
+        let event = DomainEvent::VideoAddedToChannel(VideoAddedToChannel {
             channel_id: "@somechannel".to_string(),
             video_id: "rec1".to_string(),
-        };
+        });
 
         assert_eq!(event.event_type(), "video_added_to_channel");
         assert_eq!(
@@ -301,14 +212,14 @@ mod tests {
 
     #[test]
     fn it_should_map_video_removed_from_channel_to_a_stable_type_and_payload() {
-        let event = DomainEvent::VideoRemovedFromChannel {
+        let event = DomainEvent::VideoRemovedFromChannel(VideoRemovedFromChannel {
             channel_id: "@somechannel".to_string(),
             video_id: "rec1".to_string(),
             title: "My Video".to_string(),
             filename: Some("My Video.mp4".to_string()),
             thumbnail_filename: Some("My Video.jpg".to_string()),
             was_downloaded: true,
-        };
+        });
 
         assert_eq!(event.event_type(), "video_removed_from_channel");
         assert_eq!(
