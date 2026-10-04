@@ -22,5 +22,5 @@
 
 - [x] 4.1 Raise `REQUEST_TIMEOUT` in `plex_collection_repository.rs` to 30 s and update its comment; verify `cargo test plex` passes
 - [x] 4.2 Document `YARRTUBE_PLEX_VIDEOS_PATH` (meaning, NAS example `/volume1/data/media/yarrtube`, what is skipped without it) in the `doc/INSTALLATION.md` env table and `doc/PLEX.md` (compose example + sync behavior), and pass it through `scripts/run-local.sh`; verify by reading the docs and `bash -n scripts/run-local.sh`
-- [ ] 4.3 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cargo test --locked`; all must pass
+- [x] 4.3 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cargo test --locked`; all must pass
 - [ ] 4.4 After deploying with `YARRTUBE_PLEX_VIDEOS_PATH` set: confirm in `yarrlogs` that the first sync pass logs re-matches for the 10 `local://` items, that a new download logs a folder scan, and that Plex collection counts equal yarrtube's downloaded counts (Bob el manetes after a one-off forced scan)
