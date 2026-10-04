@@ -1,7 +1,7 @@
 ## 1. Metadata before media
 
 - [x] 1.1 Add `VideoDownloaderRepository::prepare_folder` (wrapping `ytdlp::prepare_video_dir`), pass the resolved folder to `download` as its `existing_folder`, and have the downloader remove a freshly prepared folder when the download does not succeed (fakes updated); verify the existing download/thumbnail-ahead tests plus new fresh/reused-folder cleanup tests pass with `cargo test download_video`
-- [ ] 1.2 Add `VideoMetadataRepository::write_nfo` (writes `movie.nfo` only, no DB row) and a `remove_nfo` best-effort delete; verify with repository tests asserting the file is written/removed and `find` returns `None`
+- [x] 1.2 Add `VideoMetadataRepository::write_nfo` (writes `movie.nfo` only, no DB row) and a `remove_nfo` best-effort delete; verify with repository tests asserting the file is written/removed and `find` returns `None`
 - [ ] 1.3 Reorder `VideoDownloader::download`: fetch metadata + position → prepare folder → `write_nfo` with `thumb` = `<folder>.jpg` → `yt-dlp` → on success `save` (re-fetching only if the first fetch failed), on failure `remove_nfo`; verify with downloader tests for every `video-metadata` scenario (nfo present before the fake downloader writes media, thumb dropped when no thumbnail, fetch-fails-before-succeeds-after, download fails → no row and no nfo, fetch fails both times → no nfo)
 
 ## 2. Folder scan on download

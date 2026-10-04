@@ -26,6 +26,11 @@ pub trait VideoMetadataRepository: Send + Sync {
         video_dir: &Path,
     ) -> anyhow::Result<()>;
     fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoMetadata>>;
+    /// Writes only `movie.nfo` into `video_dir`, recording nothing, so it can
+    /// be in place before the video's media file lands there.
+    fn write_nfo(&self, metadata: &VideoMetadata, video_dir: &Path) -> anyhow::Result<()>;
+    /// Removes `video_dir`'s `movie.nfo`; a missing file is not an error.
+    fn remove_nfo(&self, video_dir: &Path) -> anyhow::Result<()>;
 }
 
 /// A `video_metadata` row as read, before its values are parsed into a
@@ -125,6 +130,20 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
         .context("failed to find video metadata")?
         .map(Self::row_to_video_metadata)
         .transpose()
+    }
+
+    fn write_nfo(&self, metadata: &VideoMetadata, video_dir: &Path) -> anyhow::Result<()> {
+        Self::write_movie_nfo(metadata, video_dir)
+    }
+
+    fn remove_nfo(&self, video_dir: &Path) -> anyhow::Result<()> {
+        match std::fs::remove_file(video_dir.join(MOVIE_NFO_FILENAME)) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(anyhow::anyhow!(
+                "failed to remove {MOVIE_NFO_FILENAME} in {video_dir:?}: {e}"
+            )),
+        }
     }
 }
 
@@ -289,6 +308,51 @@ mod tests {
         assert_eq!(found.genre, None);
         assert!(found.tags.is_empty());
         assert_eq!(found.thumb, None);
+        std::fs::remove_dir_all(&video_dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_write_only_movie_nfo() {
+        let repo = repo();
+        let video_dir = unique_temp_dir("video-metadata-write-nfo");
+
+        repo.write_nfo(&metadata(), &video_dir).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(video_dir.join(MOVIE_NFO_FILENAME)).unwrap(),
+            render_movie_nfo(&metadata())
+        );
+        assert_eq!(repo.find(&VideoRecordId::new_generated()).unwrap(), None);
+        std::fs::remove_dir_all(&video_dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_remove_movie_nfo() {
+        let repo = repo();
+        let video_dir = unique_temp_dir("video-metadata-remove-nfo");
+        std::fs::write(video_dir.join(MOVIE_NFO_FILENAME), "<movie></movie>").unwrap();
+        std::fs::write(video_dir.join("My Video.jpg"), "jpg").unwrap();
+
+        repo.remove_nfo(&video_dir).unwrap();
+
+        assert_eq!(
+            std::fs::read_dir(&video_dir)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["My Video.jpg".to_string()]
+        );
+        std::fs::remove_dir_all(&video_dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_ignore_removing_a_missing_movie_nfo() {
+        let repo = repo();
+        let video_dir = unique_temp_dir("video-metadata-remove-missing-nfo");
+
+        let result = repo.remove_nfo(&video_dir);
+
+        assert!(result.is_ok());
         std::fs::remove_dir_all(&video_dir).unwrap();
     }
 
