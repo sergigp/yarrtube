@@ -132,6 +132,21 @@ fn parse_duration_seconds(line: &str) -> Option<i64> {
 /// folder-collision check finds no stale entry and reuses the exact same
 /// folder name — otherwise the retry would see that empty leftover folder
 /// as a collision, append this video's own ID, and abandon it as an orphan.
+/// Resolves and creates the video's per-video folder exactly as
+/// `download_video` would (reusing `existing_folder` verbatim, otherwise a
+/// fresh collision-free one), without running `yt-dlp`, so a caller can put
+/// files in it before the media lands. The returned folder is then passed to
+/// `download_video` as its `existing_folder`; removing a fresh one again on
+/// a failed download becomes that caller's job.
+pub fn prepare_folder(
+    output_path: &Path,
+    desired_filename: &str,
+    video_id: &str,
+    existing_folder: Option<&str>,
+) -> Result<String> {
+    Ok(prepare_video_dir(output_path, desired_filename, video_id, existing_folder)?.folder)
+}
+
 pub fn download_video(
     ytdlp_path: &Path,
     video_url: &str,

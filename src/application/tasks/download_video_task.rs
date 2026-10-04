@@ -53,7 +53,8 @@ mod tests {
         FakeYoutubeMetadataRepository, YoutubeMetadata,
     };
     use crate::infrastructure::repositories::youtube_video_downloader_repository::{
-        FakeVideoDownloaderRepository, VideoDownloaderRepository, YtDlpVideoDownloaderRepository,
+        FAKE_FRESH_FOLDER, FakeVideoDownloaderRepository, VideoDownloaderRepository,
+        YtDlpVideoDownloaderRepository,
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
@@ -652,6 +653,62 @@ mod tests {
     }
 
     #[test]
+    fn it_should_remove_the_fresh_folder_if_download_fails() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(false)),
+            video_file_repository.clone(),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(
+            result,
+            Err(format!("yt-dlp failed to download video {}", video.id))
+        );
+        assert_eq!(
+            *video_file_repository.deleted_calls.lock().unwrap(),
+            vec![(
+                PathBuf::from("/videos/my-playlist"),
+                FAKE_FRESH_FOLDER.to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_keep_the_reused_folder_if_download_fails() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(false)),
+            video_file_repository.clone(),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(
+            result,
+            Err(format!("yt-dlp failed to download video {}", video.id))
+        );
+        assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_use_the_sanitized_title_as_filename() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -679,7 +736,7 @@ mod tests {
             vec![download_call(
                 "My- Messy - Title-",
                 "/videos/my-playlist",
-                None
+                Some(FAKE_FRESH_FOLDER)
             )]
         );
     }
@@ -715,7 +772,11 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             *downloader.calls.lock().unwrap(),
-            vec![download_call("My Video", "/videos/a/b/c", None)]
+            vec![download_call(
+                "My Video",
+                "/videos/a/b/c",
+                Some(FAKE_FRESH_FOLDER)
+            )]
         );
     }
 
@@ -749,7 +810,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_use_no_existing_folder_without_thumbnail() {
+    fn it_should_download_into_a_fresh_folder_without_thumbnail() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video = my_video();
@@ -769,7 +830,11 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             *downloader.calls.lock().unwrap(),
-            vec![download_call("My Video", "/videos/my-playlist", None)]
+            vec![download_call(
+                "My Video",
+                "/videos/my-playlist",
+                Some(FAKE_FRESH_FOLDER)
+            )]
         );
     }
 

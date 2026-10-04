@@ -9,6 +9,18 @@ use std::path::{Path, PathBuf};
 /// into `VideoDownloader`/`ThumbnailFetcher` for the event-driven download
 /// path.
 pub trait VideoDownloaderRepository: Send + Sync {
+    /// Resolves and creates the video's per-video folder (reusing
+    /// `existing_folder` verbatim when `Some`, otherwise a fresh
+    /// collision-free one) and returns its name, so files can be written into
+    /// it before `download` runs with it as `existing_folder`.
+    fn prepare_folder(
+        &self,
+        desired_filename: &str,
+        video_id: &str,
+        output_dir: &Path,
+        existing_folder: Option<&str>,
+    ) -> anyhow::Result<String>;
+
     /// Returns `Ok(DownloadAttempt::Succeeded(..))` with the exact filename
     /// `yt-dlp` saved (and its duration, when known) on a successful
     /// download, `Ok(DownloadAttempt::Failed { stderr })` for a clean
@@ -68,6 +80,16 @@ impl YtDlpVideoDownloaderRepository {
 }
 
 impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
+    fn prepare_folder(
+        &self,
+        desired_filename: &str,
+        video_id: &str,
+        output_dir: &Path,
+        existing_folder: Option<&str>,
+    ) -> anyhow::Result<String> {
+        ytdlp::prepare_folder(output_dir, desired_filename, video_id, existing_folder)
+    }
+
     fn download(
         &self,
         video_url: &str,
@@ -122,6 +144,11 @@ pub(crate) enum DiagnoseOutcome {
     Reason(Option<String>),
     Error,
 }
+
+/// The folder `FakeVideoDownloaderRepository::prepare_folder` resolves when
+/// no folder is reused, matching the folder its successful downloads report.
+#[cfg(test)]
+pub(crate) const FAKE_FRESH_FOLDER: &str = "fake-output";
 
 #[cfg(test)]
 pub struct FakeVideoDownloaderRepository {
@@ -281,6 +308,16 @@ impl FakeVideoDownloaderRepository {
 
 #[cfg(test)]
 impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
+    fn prepare_folder(
+        &self,
+        _desired_filename: &str,
+        _video_id: &str,
+        _output_dir: &Path,
+        existing_folder: Option<&str>,
+    ) -> anyhow::Result<String> {
+        Ok(existing_folder.unwrap_or(FAKE_FRESH_FOLDER).to_string())
+    }
+
     fn download(
         &self,
         video_url: &str,

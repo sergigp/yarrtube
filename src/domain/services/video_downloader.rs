@@ -161,8 +161,11 @@ impl VideoDownloaderApi for VideoDownloader {
 }
 
 impl VideoDownloader {
-    /// Reuses the folder a thumbnail fetched ahead of the download already
-    /// created, if any.
+    /// Resolves the video's folder before `yt-dlp` runs, reusing the one a
+    /// thumbnail fetched ahead of the download already created, if any. A
+    /// folder freshly created for this attempt is removed again when the
+    /// download doesn't succeed, so a retry's collision check reuses the
+    /// same folder name instead of suffixing it.
     fn run_download(
         &self,
         video: &Video,
@@ -171,15 +174,32 @@ impl VideoDownloader {
     ) -> anyhow::Result<DownloadAttempt> {
         let filename = VideoFilename::from_title(&video.title);
         let existing_folder = video.thumbnail_filename.as_deref().map(top_level_entry);
+        let folder = self.video_downloader_repository.prepare_folder(
+            filename.as_str(),
+            video.youtube_id.as_str(),
+            output_dir,
+            existing_folder,
+        )?;
         info!(video_id = %video.id, "downloading video");
-        self.video_downloader_repository.download(
+        let attempt = self.video_downloader_repository.download(
             &video.youtube_id.to_url(),
             filename.as_str(),
             video.youtube_id.as_str(),
             quality,
             output_dir,
-            existing_folder,
-        )
+            Some(&folder),
+        );
+        if existing_folder.is_none() && !matches!(attempt, Ok(DownloadAttempt::Succeeded(_))) {
+            self.remove_fresh_folder(video, output_dir, &folder);
+        }
+        attempt
+    }
+
+    /// Best-effort: a leftover folder only costs the retry a suffixed name.
+    fn remove_fresh_folder(&self, video: &Video, output_dir: &Path, folder: &str) {
+        if let Err(e) = self.video_file_repository.delete(output_dir, folder) {
+            warn!(video_id = %video.id, error = %e, "failed to remove the folder of a download that did not succeed");
+        }
     }
 
     /// The video (or its whole playlist/channel) may have been deleted while
