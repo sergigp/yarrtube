@@ -1,4 +1,4 @@
-use crate::domain::plex::{PlexCollection, PlexItem};
+use crate::domain::plex::{PlexCollection, PlexItem, PlexSection};
 use serde::Deserialize;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -27,6 +27,11 @@ pub trait PlexCollectionRepository: Send + Sync {
     fn add_items(&self, collection_rating_key: &str, rating_keys: &[String]) -> anyhow::Result<()>;
     fn remove_item(&self, collection_rating_key: &str, rating_key: &str) -> anyhow::Result<()>;
     fn delete_collection(&self, collection_rating_key: &str) -> anyhow::Result<()>;
+    /// Every library section on the server, with the folders it scans.
+    fn list_sections(&self) -> anyhow::Result<Vec<PlexSection>>;
+    /// Asks Plex to scan only `path` (a server-side folder) in the section,
+    /// so a new video is imported without waiting for a library scan.
+    fn scan_path(&self, section_id: &str, path: &str) -> anyhow::Result<()>;
 }
 
 pub struct PlexConfig {
@@ -61,6 +66,30 @@ struct Metadata {
 #[derive(Debug, Deserialize)]
 struct Guid {
     id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SectionsResponse {
+    #[serde(rename = "MediaContainer")]
+    media_container: SectionsContainer,
+}
+
+#[derive(Debug, Deserialize)]
+struct SectionsContainer {
+    #[serde(rename = "Directory", default)]
+    directories: Vec<Directory>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Directory {
+    key: String,
+    #[serde(rename = "Location", default)]
+    locations: Vec<Location>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Location {
+    path: String,
 }
 
 impl Metadata {
@@ -176,6 +205,35 @@ impl PlexCollectionRepository for HttpPlexCollectionRepository {
 
     fn delete_collection(&self, collection_rating_key: &str) -> anyhow::Result<()> {
         self.delete(&format!("/library/collections/{collection_rating_key}"))
+    }
+
+    fn list_sections(&self) -> anyhow::Result<Vec<PlexSection>> {
+        let response: SectionsResponse = self.get_json("/library/sections", &[])?;
+        Ok(response
+            .media_container
+            .directories
+            .into_iter()
+            .map(|directory| PlexSection {
+                id: directory.key,
+                locations: directory
+                    .locations
+                    .into_iter()
+                    .map(|location| location.path)
+                    .collect(),
+            })
+            .collect())
+    }
+
+    fn scan_path(&self, section_id: &str, path: &str) -> anyhow::Result<()> {
+        let endpoint = format!("/library/sections/{section_id}/refresh");
+        let response = self
+            .client
+            .get(format!("{}{endpoint}", self.config.base_url))
+            .query(&[("path", path)])
+            .header("Accept", "application/json")
+            .header("X-Plex-Token", &self.config.token)
+            .send()?;
+        Self::ensure_success(&endpoint, response).map(drop)
     }
 }
 
@@ -301,6 +359,7 @@ pub struct FakePlexCollection {
 pub struct FakePlexSection {
     pub items: Vec<PlexItem>,
     pub collections: Vec<FakePlexCollection>,
+    pub locations: Vec<String>,
 }
 
 #[cfg(test)]
@@ -341,8 +400,25 @@ impl FakePlexCollectionRepository {
     ) -> Self {
         self.sections.lock().unwrap().insert(
             section_id.to_string(),
-            FakePlexSection { items, collections },
+            FakePlexSection {
+                items,
+                collections,
+                locations: vec![],
+            },
         );
+        self
+    }
+
+    /// The same fake with `section_id` scanning the server-side folder
+    /// `location` (the section is added if missing).
+    pub fn with_location(self, section_id: &str, location: &str) -> Self {
+        self.sections
+            .lock()
+            .unwrap()
+            .entry(section_id.to_string())
+            .or_default()
+            .locations
+            .push(location.to_string());
         self
     }
 
@@ -517,6 +593,33 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
                     .collections
                     .retain(|collection| collection.rating_key != collection_rating_key)
             });
+        Ok(())
+    }
+
+    fn list_sections(&self) -> anyhow::Result<Vec<PlexSection>> {
+        if self.unreachable {
+            anyhow::bail!("Plex is unreachable");
+        }
+        Ok(self
+            .sections
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(id, section)| PlexSection {
+                id: id.clone(),
+                locations: section.locations.clone(),
+            })
+            .collect())
+    }
+
+    fn scan_path(&self, section_id: &str, path: &str) -> anyhow::Result<()> {
+        if self.unreachable {
+            anyhow::bail!("Plex is unreachable");
+        }
+        self.mutations
+            .lock()
+            .unwrap()
+            .push(format!("scan:{section_id}:{path}"));
         Ok(())
     }
 }
@@ -795,6 +898,95 @@ mod tests {
             result.map_err(|e| e.to_string()),
             Err(
                 "Plex request to /library/collections/c1/items failed with status 400 Bad Request: bad uri"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn it_should_list_sections_with_their_locations() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/sections")
+            .match_header("accept", "application/json")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"Directory": [
+                    {"key": "19", "title": "Kids",
+                     "Location": [{"id": 1, "path": "/volume1/media/yarrtube/playlists"}]},
+                    {"key": "21", "title": "Channels",
+                     "Location": [{"id": 2, "path": "/volume1/media/yarrtube/channels"},
+                                  {"id": 3, "path": "/volume2/channels"}]},
+                    {"key": "30", "title": "Empty"}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let sections = repository.list_sections().unwrap();
+
+        assert_eq!(
+            sections,
+            vec![
+                PlexSection {
+                    id: "19".to_string(),
+                    locations: vec!["/volume1/media/yarrtube/playlists".to_string()],
+                },
+                PlexSection {
+                    id: "21".to_string(),
+                    locations: vec![
+                        "/volume1/media/yarrtube/channels".to_string(),
+                        "/volume2/channels".to_string(),
+                    ],
+                },
+                PlexSection {
+                    id: "30".to_string(),
+                    locations: vec![],
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_scan_a_path_in_a_section() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("GET", "/library/sections/19/refresh")
+            .match_query(mockito::Matcher::UrlEncoded(
+                "path".into(),
+                "/volume1/media/yarrtube/playlists/kids/Excursió al cinema - Titó".into(),
+            ))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.scan_path(
+            "19",
+            "/volume1/media/yarrtube/playlists/kids/Excursió al cinema - Titó",
+        );
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_fail_to_scan_a_path_if_the_server_replies_with_an_error() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/sections/19/refresh")
+            .match_query(mockito::Matcher::Any)
+            .with_status(404)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.scan_path("19", "/volume1/media/yarrtube/playlists/x");
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(
+                "Plex request to /library/sections/19/refresh failed with status 404 Not Found"
                     .to_string()
             )
         );
