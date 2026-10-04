@@ -1,10 +1,10 @@
 ## 1. Walking skeleton
 
-- [ ] 1.1 Add an empty `migrations/0006_playlist_video_position_required.sql` and register it in `sqlite_migrations::apply`. Verify: `cargo build` succeeds and `cargo test --locked` passes.
+- [x] 1.1 Add an empty `migrations/0006_playlist_video_position_required.sql` and register it in `sqlite_migrations::apply`. Verify: `cargo build` succeeds and `cargo test --locked` passes.
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 None new: no new observable behaviour.
+- [x] 2.1 None new: no new observable behaviour.
 
 ## 3. Infrastructure adapters (TDD)
 

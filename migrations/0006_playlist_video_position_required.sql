@@ -1,0 +1,2 @@
+-- Every playlist is YouTube-linked since custom playlists were removed, so
+-- every playlist video has a position.
