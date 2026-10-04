@@ -2,10 +2,10 @@ use crate::application::http::{self, ApiServices, VideosRoot};
 use crate::application::{subscribers, tasks};
 use crate::domain::services::{
     ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelVideoReconciler, ChannelViewSearcher,
-    DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher,
-    PlaylistVideoReconciler, PlexCollectionDeleter, PlexCollectionReconciler, PlexFolderScanner,
-    TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher,
-    VideoWatchStateUpdater,
+    DirectorySearcher, InternalVideoReconciler, PlaylistCreator, PlaylistDeleter,
+    PlaylistPreviewer, PlaylistSearcher, PlaylistVideoReconciler, PlexCollectionDeleter,
+    PlexCollectionReconciler, PlexFolderScanner, TaskViewSearcher, ThumbnailFetcher,
+    VideoDownloader, VideoFileDeleter, VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::infrastructure_container::{
@@ -467,15 +467,11 @@ fn playlist_video_reconciler(infrastructure: &InfrastructureContainer) -> Playli
         infrastructure.video_repository.clone(),
         infrastructure.playlist_video_repository.clone(),
         infrastructure.youtube_playlist_items_repository.clone(),
-        infrastructure.youtube_metadata_repository.clone(),
-        infrastructure.video_metadata_repository.clone(),
         infrastructure.event_publisher.clone(),
         infrastructure.task_repository.clone(),
-        infrastructure.video_file_repository.clone(),
-        thumbnail_fetcher(infrastructure),
+        internal_video_reconciler(infrastructure),
         infrastructure.clock.clone(),
         reconcile_interval_seconds(),
-        videos_path(),
     )
 }
 
@@ -508,6 +504,21 @@ fn video_downloader(infrastructure: &InfrastructureContainer) -> VideoDownloader
         infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
     )
+}
+
+fn internal_video_reconciler(
+    infrastructure: &InfrastructureContainer,
+) -> Arc<InternalVideoReconciler> {
+    Arc::new(InternalVideoReconciler::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.youtube_metadata_repository.clone(),
+        infrastructure.video_metadata_repository.clone(),
+        infrastructure.task_repository.clone(),
+        infrastructure.video_file_repository.clone(),
+        thumbnail_fetcher(infrastructure),
+        infrastructure.clock.clone(),
+        videos_path(),
+    ))
 }
 
 fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailFetcher> {

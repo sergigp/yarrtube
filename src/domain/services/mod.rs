@@ -4,6 +4,7 @@ pub mod channel_previewer;
 pub mod channel_video_reconciler;
 pub mod channel_view_searcher;
 pub mod directory_searcher;
+pub mod internal_video_reconciler;
 pub mod playlist_creator;
 pub mod playlist_deleter;
 pub mod playlist_previewer;
@@ -25,6 +26,9 @@ pub use channel_previewer::{ChannelPreviewer, ChannelPreviewerApi};
 pub use channel_video_reconciler::{ChannelVideoReconciler, ChannelVideoReconcilerApi};
 pub use channel_view_searcher::{ChannelViewSearcher, ChannelViewSearcherApi};
 pub use directory_searcher::{DirectorySearcher, DirectorySearcherApi};
+pub use internal_video_reconciler::{
+    DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
+};
 pub use playlist_creator::{CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi};
 pub use playlist_deleter::{PlaylistDeleter, PlaylistDeleterApi};
 pub use playlist_previewer::{PlaylistPreviewer, PlaylistPreviewerApi};
