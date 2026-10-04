@@ -21,7 +21,7 @@ use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::collections::HashSet;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, info_span, warn};
 
 /// Reconciles a playlist with YouTube: brings its stored membership in line
 /// with YouTube's playlist items, then hands its folder to
@@ -112,8 +112,10 @@ impl PlaylistVideoReconciler {
 
     /// One reconcile pass: brings the database in line with YouTube (the
     /// playlist's membership), then the playlist's folder in line with the
-    /// database.
+    /// database. Everything the pass logs, `InternalVideoReconciler`'s steps
+    /// included, carries the playlist id through the pass's span.
     fn reconcile_playlist(&self, playlist: &Playlist) -> anyhow::Result<()> {
+        let _span = info_span!("reconcile_playlist", playlist_id = %playlist.id).entered();
         info!(playlist_id = %playlist.id, kind = %playlist.kind, "reconciling playlist");
 
         let delta = self.sync_membership_with_youtube(playlist)?;

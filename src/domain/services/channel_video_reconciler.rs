@@ -20,7 +20,7 @@ use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{info, info_span, warn};
 
 /// Reconciles a channel with YouTube: brings its stored membership in line
 /// with its current `video_limit` most recent uploads, then hands its folder
@@ -107,8 +107,10 @@ impl ChannelVideoReconciler {
 
     /// One reconcile pass: brings the database in line with YouTube (the
     /// channel's membership), then the channel's folder in line with the
-    /// database.
+    /// database. Everything the pass logs, `InternalVideoReconciler`'s steps
+    /// included, carries the channel id through the pass's span.
     fn reconcile_channel(&self, channel: &Channel) -> anyhow::Result<()> {
+        let _span = info_span!("reconcile_channel", channel_id = %channel.id).entered();
         info!(channel_id = %channel.id, "reconciling channel");
 
         let delta = self.sync_membership_with_youtube(channel)?;
