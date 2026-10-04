@@ -487,6 +487,7 @@ fn video_downloader(infrastructure: &InfrastructureContainer) -> VideoDownloader
         infrastructure.playlist_video_repository.clone(),
         infrastructure.youtube_metadata_repository.clone(),
         infrastructure.video_metadata_repository.clone(),
+        infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
     )
 }

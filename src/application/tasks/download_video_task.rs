@@ -36,6 +36,7 @@ impl TaskHandler for DownloadVideoTask {
 mod tests {
     use super::*;
     use crate::application::tasks::log_capture::captured_log_messages;
+    use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::video::Video;
     use crate::domain::video::{VideoId, VideoStatus};
     use crate::domain::video_metadata::{VideoMetadata, render_movie_nfo};
@@ -56,6 +57,10 @@ mod tests {
     use crate::infrastructure::repositories::youtube_video_downloader_repository::{
         FAKE_FRESH_FOLDER, FakeVideoDownloaderRepository, VideoDownloaderRepository,
         YtDlpVideoDownloaderRepository,
+    };
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_repository::{
+        EventRepository, SqliteEventRepository,
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
@@ -97,6 +102,38 @@ mod tests {
     }
 
     #[test]
+    fn it_should_publish_that_the_video_was_downloaded() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoDownloaded {
+                    video_id: video.id.as_str().to_string(),
+                    output_dir: "/videos/my-playlist".to_string(),
+                    folder: FAKE_FRESH_FOLDER.to_string(),
+                }
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_record_the_sync_time() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -130,6 +167,7 @@ mod tests {
     fn it_should_retry_a_failed_download() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -155,6 +193,7 @@ mod tests {
                     .mark_errored_retrying(fixed_timestamp())
             ]
         );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
     #[test]
@@ -622,6 +661,7 @@ mod tests {
     fn it_should_remove_the_folder_if_video_deleted_during_download() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video = my_video();
         video_repository.save(&video).unwrap();
@@ -644,6 +684,7 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![(
@@ -1397,6 +1438,10 @@ mod tests {
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             youtube_metadata_repository,
             video_metadata_repository,
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
         )
     }
@@ -1413,6 +1458,10 @@ mod tests {
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
             Arc::new(FakeYoutubeMetadataRepository::default()),
             Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
+            Arc::new(SqliteEventPublisher::new(
+                unused_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
         ))
     }
@@ -1488,6 +1537,18 @@ mod tests {
             .unwrap()
             .map(|entry| entry.unwrap().file_name().into_string().unwrap())
             .collect()
+    }
+
+    fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+        ScheduledEvent {
+            id,
+            event_type: event.event_type().to_string(),
+            payload: event.payload().to_string(),
+            retries: 0,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
     }
 
     fn payload_for(video_id: &str) -> String {

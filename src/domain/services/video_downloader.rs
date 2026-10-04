@@ -1,3 +1,4 @@
+use crate::domain::event::DomainEvent;
 use crate::domain::shared::Quality;
 use crate::domain::video::Video;
 use crate::domain::video::VideoRecordId;
@@ -13,6 +14,7 @@ use crate::infrastructure::repositories::youtube_metadata_repository::YoutubeMet
 use crate::infrastructure::repositories::youtube_video_downloader_repository::{
     DownloadAttempt, DownloadedVideo, VideoDownloaderRepository,
 };
+use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::path::Path;
 use std::sync::Arc;
@@ -83,6 +85,7 @@ pub struct VideoDownloader {
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     youtube_metadata_repository: Arc<dyn YoutubeMetadataRepository>,
     video_metadata_repository: Arc<dyn VideoMetadataRepository>,
+    event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
 }
 
@@ -95,6 +98,7 @@ impl VideoDownloader {
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         youtube_metadata_repository: Arc<dyn YoutubeMetadataRepository>,
         video_metadata_repository: Arc<dyn VideoMetadataRepository>,
+        event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
@@ -104,6 +108,7 @@ impl VideoDownloader {
             playlist_video_repository,
             youtube_metadata_repository,
             video_metadata_repository,
+            event_publisher,
             clock,
         }
     }
@@ -291,7 +296,21 @@ impl VideoDownloader {
             .and_then(|f| Path::new(f).file_name())
             .and_then(|f| f.to_str());
         self.save_metadata(&downloaded_video, &video_dir, thumb_basename, metadata);
+        self.publish_downloaded(&downloaded_video, output_dir, &downloaded.folder);
         Ok(())
+    }
+
+    /// Best-effort: the download is already recorded, and losing the event
+    /// only skips reacting to it (e.g. asking Plex to scan the folder).
+    fn publish_downloaded(&self, video: &Video, output_dir: &Path, folder: &str) {
+        let event = DomainEvent::VideoDownloaded {
+            video_id: video.id.as_str().to_string(),
+            output_dir: output_dir.to_string_lossy().to_string(),
+            folder: folder.to_string(),
+        };
+        if let Err(e) = self.event_publisher.publish(&event) {
+            warn!(video_id = %video.id, error = %e, "failed to publish that the video was downloaded");
+        }
     }
 
     /// The `<folder>/<thumbnail>` path of the thumbnail `yt-dlp` wrote next

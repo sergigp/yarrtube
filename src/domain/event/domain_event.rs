@@ -42,6 +42,13 @@ pub enum DomainEvent {
         thumbnail_filename: Option<String>,
         was_downloaded: bool,
     },
+    /// A video's media file was downloaded into `folder`, inside its
+    /// owner's `output_dir`.
+    VideoDownloaded {
+        video_id: String,
+        output_dir: String,
+        folder: String,
+    },
 }
 
 impl DomainEvent {
@@ -55,6 +62,7 @@ impl DomainEvent {
             Self::ChannelDeleted { .. } => "channel_deleted",
             Self::VideoAddedToChannel { .. } => "video_added_to_channel",
             Self::VideoRemovedFromChannel { .. } => "video_removed_from_channel",
+            Self::VideoDownloaded { .. } => "video_downloaded",
         }
     }
 
@@ -124,6 +132,15 @@ impl DomainEvent {
                 "thumbnail_filename": thumbnail_filename,
                 "was_downloaded": was_downloaded,
             }),
+            Self::VideoDownloaded {
+                video_id,
+                output_dir,
+                folder,
+            } => json!({
+                "video_id": video_id,
+                "output_dir": output_dir,
+                "folder": folder,
+            }),
         }
     }
 }
@@ -140,6 +157,25 @@ mod tests {
 
         assert_eq!(event.event_type(), "playlist_created");
         assert_eq!(event.payload(), json!({ "playlist_id": "PL1" }));
+    }
+
+    #[test]
+    fn it_should_map_video_downloaded_to_a_stable_type_and_payload() {
+        let event = DomainEvent::VideoDownloaded {
+            video_id: "rec1".to_string(),
+            output_dir: "/videos/playlists/kids".to_string(),
+            folder: "My Video".to_string(),
+        };
+
+        assert_eq!(event.event_type(), "video_downloaded");
+        assert_eq!(
+            event.payload(),
+            json!({
+                "video_id": "rec1",
+                "output_dir": "/videos/playlists/kids",
+                "folder": "My Video",
+            })
+        );
     }
 
     #[test]
