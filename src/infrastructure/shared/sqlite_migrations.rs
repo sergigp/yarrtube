@@ -106,6 +106,67 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_playlist_videos_when_making_position_required() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+        ])
+        .to_latest(&mut conn)
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO playlist_videos (id, playlist_id, video_id, position, created_at)
+             VALUES (7, 'PL1', 'rec1', 0, '2024-01-01T00:00:00+00:00');
+             INSERT INTO playlist_videos (id, playlist_id, video_id, position, created_at)
+             VALUES (9, 'PL1', 'rec2', 1, '2024-01-02T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, playlist_id, video_id, position, created_at FROM playlist_videos ORDER BY id",
+            )
+            .unwrap();
+        let rows: Vec<(i64, String, String, i64, String)> = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            })
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                (
+                    7,
+                    "PL1".to_string(),
+                    "rec1".to_string(),
+                    0,
+                    "2024-01-01T00:00:00+00:00".to_string()
+                ),
+                (
+                    9,
+                    "PL1".to_string(),
+                    "rec2".to_string(),
+                    1,
+                    "2024-01-02T00:00:00+00:00".to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_reject_a_playlist_video_without_position() {
         let mut conn = Connection::open_in_memory().unwrap();
         apply(&mut conn).unwrap();
