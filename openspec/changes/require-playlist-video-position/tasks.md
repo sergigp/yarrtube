@@ -14,6 +14,6 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
-- [ ] 4.2 Run `scripts/run-local.sh` against a copy of the prod DB and confirm the migration applies and playlists list in order. Never run it against the prod file itself.
-- [ ] 4.3 `openspec validate require-playlist-video-position --strict` passes.
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
+- [x] 4.2 Apply 0006 with `sqlite3` to a scratch copy of the prod DB and confirm the migration applies, the row count holds and per-playlist order is unchanged. Done this way instead of through `scripts/run-local.sh`, because `serve` on a prod copy would start reconciling: YouTube calls, deleting local files and Plex writes. Result: version 5 → 6, 1197 → 1197 rows, identical order hash, `integrity_check` ok.
+- [x] 4.3 `openspec validate require-playlist-video-position --strict` passes.
