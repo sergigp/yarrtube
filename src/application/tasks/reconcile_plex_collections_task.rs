@@ -92,7 +92,7 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::plex::PlexItem;
+    use crate::domain::plex::{PlexItem, PlexMatchCandidate};
     use crate::domain::services::PlexCollectionReconciler;
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
@@ -170,6 +170,186 @@ mod tests {
                 fixed_timestamp() + chrono::Duration::seconds(INTERVAL_SECONDS),
             )]
         );
+    }
+
+    #[test]
+    fn it_should_rematch_an_unidentified_item_and_collect_it_next_pass() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let plex_repository = Arc::new(
+            FakePlexCollectionRepository::with_items("1", vec![unidentified_plex_item("101")])
+                .with_match_candidates("101", vec![nfo_candidate("yt1")]),
+        );
+        playlist_repository
+            .insert(&playlist("PL1", "Lofi beats"))
+            .unwrap();
+        seed_downloaded_playlist_video(
+            &playlist_video_repository,
+            &video_repository,
+            "PL1",
+            "yt1",
+            0,
+        );
+        let task = ReconcilePlexCollectionsTask::new(
+            PlexCollectionReconciler::new(
+                vec!["1".to_string()],
+                vec![],
+                playlist_repository.clone(),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                playlist_video_repository.clone(),
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                video_repository.clone(),
+                plex_repository.clone(),
+            ),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            INTERVAL_SECONDS,
+        );
+
+        let first = run(&task, "{}");
+        let collections_after_first = plex_repository.collections();
+        let second = run(&task, "{}");
+
+        assert_eq!((first, second), (Ok(()), Ok(())));
+        assert_eq!(collections_after_first, vec![]);
+        assert_eq!(
+            plex_repository.collections(),
+            vec![FakePlexCollection {
+                rating_key: "collection:Lofi beats".to_string(),
+                title: "Lofi beats".to_string(),
+                member_rating_keys: vec!["101".to_string()],
+            }]
+        );
+        assert_eq!(
+            plex_repository.mutations(),
+            vec![
+                "match:101:tv.plex.agents.nfo.movie://movie/youtube_yt1".to_string(),
+                "create:1:Lofi beats".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_skip_an_unidentified_item_without_a_youtube_candidate() {
+        let db = TestDatabase::new();
+        let plex_repository = Arc::new(
+            FakePlexCollectionRepository::with_items(
+                "1",
+                vec![unidentified_plex_item("101"), unidentified_plex_item("102")],
+            )
+            .with_match_candidates(
+                "101",
+                vec![PlexMatchCandidate {
+                    guid: "plex://movie/5d776830880197001ec90f22".to_string(),
+                    name: "Some movie".to_string(),
+                }],
+            ),
+        );
+        let task = ReconcilePlexCollectionsTask::new(
+            PlexCollectionReconciler::new(
+                vec!["1".to_string()],
+                vec![],
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                plex_repository.clone(),
+            ),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            INTERVAL_SECONDS,
+        );
+
+        let result = run(&task, "{}");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex_repository.mutations(), Vec::<String>::new());
+        assert_eq!(
+            plex_repository.items(),
+            vec![unidentified_plex_item("101"), unidentified_plex_item("102")]
+        );
+    }
+
+    #[test]
+    fn it_should_continue_the_pass_if_a_rematch_fails() {
+        let db = TestDatabase::new();
+        let plex_repository = Arc::new(
+            FakePlexCollectionRepository::with_items(
+                "1",
+                vec![unidentified_plex_item("101"), unidentified_plex_item("102")],
+            )
+            .with_match_candidates("101", vec![nfo_candidate("yt1")])
+            .with_match_candidates("102", vec![nfo_candidate("yt2")])
+            .failing_match_for("101"),
+        );
+        let task = ReconcilePlexCollectionsTask::new(
+            PlexCollectionReconciler::new(
+                vec!["1".to_string()],
+                vec![],
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                plex_repository.clone(),
+            ),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            INTERVAL_SECONDS,
+        );
+
+        let result = run(&task, "{}");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            plex_repository.mutations(),
+            vec!["match:102:tv.plex.agents.nfo.movie://movie/youtube_yt2".to_string()]
+        );
+    }
+
+    #[test]
+    fn it_should_not_look_up_matches_if_every_item_is_identified() {
+        let db = TestDatabase::new();
+        let plex_repository = Arc::new(FakePlexCollectionRepository::with_items(
+            "1",
+            vec![plex_item("101", "yt1")],
+        ));
+        let task = ReconcilePlexCollectionsTask::new(
+            PlexCollectionReconciler::new(
+                vec!["1".to_string()],
+                vec![],
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                plex_repository.clone(),
+            ),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            INTERVAL_SECONDS,
+        );
+
+        let result = run(&task, "{}");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex_repository.match_lookups(), Vec::<String>::new());
     }
 
     #[test]
@@ -938,6 +1118,22 @@ mod tests {
                 fixed_timestamp() + chrono::Duration::seconds(INTERVAL_SECONDS),
             )]
         );
+    }
+
+    fn unidentified_plex_item(rating_key: &str) -> PlexItem {
+        PlexItem {
+            rating_key: rating_key.to_string(),
+            youtube_video_id: None,
+        }
+    }
+
+    /// The candidate Plex's NFO agent offers for an item whose `movie.nfo`
+    /// holds `youtube_video_id`.
+    fn nfo_candidate(youtube_video_id: &str) -> PlexMatchCandidate {
+        PlexMatchCandidate {
+            guid: format!("tv.plex.agents.nfo.movie://movie/youtube_{youtube_video_id}"),
+            name: "Some video".to_string(),
+        }
     }
 
     fn plex_item(rating_key: &str, youtube_video_id: &str) -> PlexItem {

@@ -426,6 +426,9 @@ pub struct FakePlexCollectionRepository {
     unreachable: bool,
     /// The match candidates Plex offers per item rating key.
     match_candidates: std::collections::BTreeMap<String, Vec<PlexMatchCandidate>>,
+    /// Rating keys whose match candidates were looked up, in order.
+    match_lookups: Mutex<Vec<String>>,
+    failing_match_rating_keys: Vec<String>,
 }
 
 #[cfg(test)]
@@ -486,6 +489,16 @@ impl FakePlexCollectionRepository {
         self.match_candidates
             .insert(rating_key.to_string(), candidates);
         self
+    }
+
+    /// The same fake, but `match_item` fails for `rating_key`.
+    pub fn failing_match_for(mut self, rating_key: &str) -> Self {
+        self.failing_match_rating_keys.push(rating_key.to_string());
+        self
+    }
+
+    pub fn match_lookups(&self) -> Vec<String> {
+        self.match_lookups.lock().unwrap().clone()
     }
 
     /// Every section's scanned items, ordered by section id.
@@ -699,6 +712,10 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
     }
 
     fn list_match_candidates(&self, rating_key: &str) -> anyhow::Result<Vec<PlexMatchCandidate>> {
+        self.match_lookups
+            .lock()
+            .unwrap()
+            .push(rating_key.to_string());
         Ok(self
             .match_candidates
             .get(rating_key)
@@ -709,6 +726,13 @@ impl PlexCollectionRepository for FakePlexCollectionRepository {
     /// Like Plex re-reading the item's `movie.nfo`: matching to a
     /// `…youtube_<id>` candidate gives the item that YouTube ID.
     fn match_item(&self, rating_key: &str, candidate: &PlexMatchCandidate) -> anyhow::Result<()> {
+        if self
+            .failing_match_rating_keys
+            .iter()
+            .any(|k| k == rating_key)
+        {
+            anyhow::bail!("Plex refused to match {rating_key}");
+        }
         self.mutations
             .lock()
             .unwrap()

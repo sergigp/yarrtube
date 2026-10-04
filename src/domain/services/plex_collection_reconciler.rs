@@ -1,5 +1,6 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
+use crate::domain::plex::PlexItem;
 use crate::domain::video::{VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::plex_collection_repository::PlexCollectionRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -10,7 +11,7 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use crate::infrastructure::shared::error_report;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// Converges every tracked playlist's and channel's Plex collection toward
 /// yarrtube's downloaded videos in one pass, matching them by YouTube ID.
@@ -84,6 +85,18 @@ impl PlexCollectionReconcilerApi for PlexCollectionReconciler {
     }
 }
 
+/// The guid prefix of a match Plex's NFO agent builds from a `movie.nfo`
+/// whose `uniqueid` is a YouTube video ID.
+const NFO_YOUTUBE_GUID_PREFIX: &str = "tv.plex.agents.nfo.movie://movie/youtube_";
+
+/// The section's identified items, keyed by YouTube video ID.
+fn identified_by_youtube_id(items: Vec<PlexItem>) -> HashMap<String, String> {
+    items
+        .into_iter()
+        .filter_map(|item| Some((item.youtube_video_id?, item.rating_key)))
+        .collect()
+}
+
 /// One collection's failure never aborts the pass; the next pass retries it.
 fn log_and_skip_failure(name: &str, result: anyhow::Result<()>) {
     if let Err(e) = result {
@@ -129,12 +142,15 @@ impl PlexCollectionReconciler {
 
     /// The per-section state both kinds' passes start from: the section's
     /// scanned items keyed by YouTube ID, and its existing collections keyed
-    /// by title.
+    /// by title. Items scanned without a YouTube ID are re-matched first, so
+    /// they are keyed by it from the next pass on.
     fn section_setup(
         &self,
         section_id: &str,
     ) -> anyhow::Result<(HashMap<String, String>, HashMap<String, String>)> {
-        let scanned = self.scanned_items_by_youtube_id(section_id)?;
+        let items = self.plex_collection_repository.list_items(section_id)?;
+        self.rematch_unidentified(section_id, &items);
+        let scanned = identified_by_youtube_id(items);
         let collections = self.collections_by_title(section_id)?;
         info!(
             section = section_id,
@@ -145,17 +161,43 @@ impl PlexCollectionReconciler {
         Ok((scanned, collections))
     }
 
-    /// The section's scanned items, keyed by YouTube video ID.
-    fn scanned_items_by_youtube_id(
-        &self,
-        section_id: &str,
-    ) -> anyhow::Result<HashMap<String, String>> {
-        Ok(self
+    /// Plex binds an item's YouTube ID only when it first matches it, so an
+    /// item imported before its `movie.nfo` existed stays unidentified until
+    /// it is matched again to the candidate the NFO agent builds from that
+    /// `movie.nfo`. Never fails the pass: an item without such a candidate,
+    /// or whose match fails, is logged and retried next pass.
+    fn rematch_unidentified(&self, section_id: &str, items: &[PlexItem]) {
+        items
+            .iter()
+            .filter(|item| item.youtube_video_id.is_none())
+            .for_each(|item| match self.rematch(&item.rating_key) {
+                Ok(Some(guid)) => {
+                    info!(section = section_id, rating_key = %item.rating_key, guid = %guid, "re-matched unidentified Plex item to its movie.nfo")
+                }
+                Ok(None) => {
+                    warn!(section = section_id, rating_key = %item.rating_key, "no YouTube match candidate for unidentified Plex item, skipping")
+                }
+                Err(e) => {
+                    warn!(section = section_id, rating_key = %item.rating_key, error = %error_report::cause_chain(&e), "failed to re-match unidentified Plex item, skipping")
+                }
+            });
+    }
+
+    /// Matches the item to its NFO agent YouTube candidate, returning that
+    /// candidate's guid, or `None` when Plex offers no such candidate.
+    fn rematch(&self, rating_key: &str) -> anyhow::Result<Option<String>> {
+        let candidate = self
             .plex_collection_repository
-            .list_items(section_id)?
+            .list_match_candidates(rating_key)?
             .into_iter()
-            .filter_map(|item| Some((item.youtube_video_id?, item.rating_key)))
-            .collect())
+            .find(|candidate| candidate.guid.starts_with(NFO_YOUTUBE_GUID_PREFIX));
+        candidate
+            .map(|candidate| {
+                self.plex_collection_repository
+                    .match_item(rating_key, &candidate)
+                    .map(|()| candidate.guid)
+            })
+            .transpose()
     }
 
     fn collections_by_title(&self, section_id: &str) -> anyhow::Result<HashMap<String, String>> {

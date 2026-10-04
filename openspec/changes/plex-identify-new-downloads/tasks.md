@@ -16,7 +16,7 @@
 
 - [x] 3.1 Make `PlexItem.youtube_video_id` an `Option<String>` and have `list_items` return every item (collection item listing keeps only identified ones); verify with the existing repository tests plus one for an item with only a `local://` guid
 - [x] 3.2 Add `list_match_candidates(rating_key)` (`GET /library/metadata/{key}/matches`) and `match_item(rating_key, guid, name)` (`PUT /library/metadata/{key}/match`) with fake support; verify with mockito tests using the real response shape captured in design.md
-- [ ] 3.3 In `PlexCollectionReconciler`, re-match each unidentified section item to its NFO YouTube candidate before converging collections (info on match, warn on no candidate or failure, never fail the pass, no requests when all items are identified); verify with reconciler tests for each "Unidentified Plex items are re-matched" scenario, and that "Pass is idempotent" still holds
+- [x] 3.3 In `PlexCollectionReconciler`, re-match each unidentified section item to its NFO YouTube candidate before converging collections (info on match, warn on no candidate or failure, never fail the pass, no requests when all items are identified); verify with reconciler tests for each "Unidentified Plex items are re-matched" scenario, and that "Pass is idempotent" still holds
 
 ## 4. Timeout, docs, release checks
 
