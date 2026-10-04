@@ -10,18 +10,6 @@ one-shot sync.
 
 ## Requirements
 
-### Requirement: Reconcile On Playlist Creation
-The system SHALL run one reconcile pass for a playlist as soon as practical
-after it is created, regardless of the playlist's kind.
-
-#### Scenario: Newly created YouTube-linked playlist gets reconciled
-- **WHEN** a YouTube-linked playlist is successfully created
-- **THEN** the system fetches its current members from the YouTube Data API and persists them
-
-#### Scenario: Newly created custom playlist gets reconciled
-- **WHEN** a custom playlist is successfully created
-- **THEN** the system runs a reconcile pass that makes no YouTube API request and completes as a no-op, since the playlist has no videos yet
-
 ### Requirement: Recurring Reconciliation
 The system SHALL schedule the next reconcile of a playlist after every
 reconcile attempt that runs to completion, at a configurable interval,
@@ -47,19 +35,6 @@ value, defaulting to 3600 seconds when it is not set.
 #### Scenario: Interval not configured
 - **WHEN** no reconcile interval configuration value is present
 - **THEN** the system defaults to a 3600 second delay before the next reconcile
-
-### Requirement: YouTube Membership Diff Applies Only To YouTube-Linked Playlists
-The system SHALL fetch and diff a playlist's membership against YouTube only
-when the playlist's kind is YouTube-linked. It SHALL NOT make any YouTube API
-request for a custom playlist's reconcile pass.
-
-#### Scenario: YouTube-linked playlist reconciled
-- **WHEN** a reconcile pass runs for a YouTube-linked playlist
-- **THEN** the system fetches its current members from the YouTube Data API and diffs them against stored videos
-
-#### Scenario: Custom playlist reconciled
-- **WHEN** a reconcile pass runs for a custom playlist
-- **THEN** the system makes no YouTube API request and does not alter the playlist's video membership
 
 ### Requirement: Only Watchable Items Count As Playlist Members (YouTube-Linked Playlists)
 The system SHALL treat an item of the source YouTube playlist as a member of
@@ -224,42 +199,6 @@ The system SHALL, for every playlist regardless of kind, during each reconcile p
 - **WHEN** a reconcile pass finds an excluded video, however long ago it was excluded
 - **THEN** the system leaves the video excluded and does not trigger a download for it
 
-### Requirement: On-Demand Reconciliation
-The system SHALL provide an HTTP endpoint that runs one reconcile pass for a
-playlist immediately, on request, using the same membership-diff and
-filesystem-healing behavior as the recurring and creation-triggered passes
-(YouTube membership diff for YouTube-linked playlists, filesystem healing
-for every playlist), regardless of the playlist's kind, without scheduling
-or otherwise affecting any recurring reconcile task.
-
-#### Scenario: On-demand reconcile of a YouTube-linked playlist
-- **WHEN** a client requests an on-demand reconcile for a playlist ID that
-  exists in storage with kind `youtube_linked`
-- **THEN** the system fetches its current members from the YouTube Data API,
-  diffs them against stored videos, and reconciles the filesystem
-
-#### Scenario: On-demand reconcile of a custom playlist
-- **WHEN** a client requests an on-demand reconcile for a playlist ID that
-  exists in storage with kind `custom`
-- **THEN** the system makes no YouTube API request and reconciles the
-  filesystem
-
-#### Scenario: On-demand reconcile does not affect the recurring schedule
-- **WHEN** an on-demand reconcile runs for a playlist, whether or not it
-  already has a future reconcile task pending (e.g. one scheduled by
-  creation or the last recurring pass)
-- **THEN** the system does not create, cancel, or otherwise modify any
-  reconcile task; whatever was pending before the on-demand reconcile ran
-  remains pending, unchanged, afterward — repeating the on-demand reconcile
-  any number of times never changes the number of pending reconcile tasks
-
-#### Scenario: On-demand reconcile of a nonexistent playlist
-- **WHEN** a client requests an on-demand reconcile for a playlist ID that
-  does not exist in storage
-- **THEN** the system makes no YouTube request, persists nothing, and
-  performs no filesystem sweep, and responds without error, the same as the
-  recurring reconcile task does for a deleted playlist
-
 ### Requirement: Missing Metadata Recovery
 The system SHALL, for every playlist, regenerate a downloaded video's
 metadata during a reconcile pass whenever that video is recorded as
@@ -350,3 +289,63 @@ The system SHALL, for every playlist regardless of kind, during each reconcile p
 #### Scenario: Settled video is never stranded
 - **WHEN** a reconcile pass finds a video in status Downloaded, Excluded or Errored with no download task
 - **THEN** the stranded-video recovery does not trigger a download for it
+
+### Requirement: Playlist Listing Failure Is Not Fatal
+The system SHALL treat a failure to list a playlist's current items on
+YouTube as non-fatal for the reconcile pass: it SHALL leave every stored
+video of that playlist, and its membership, unchanged for that pass, SHALL
+publish no membership event, and SHALL log the failure. The rest of the pass
+SHALL still run from the stored videos, and a recurring pass SHALL still
+schedule the next reconcile of the playlist.
+
+#### Scenario: Listing fails during a recurring reconcile
+- **WHEN** a recurring reconcile pass's attempt to list a playlist's current items fails (e.g. the playlist was deleted or made private on YouTube, or the YouTube Data API errors)
+- **THEN** the system leaves that playlist's stored videos unchanged, publishes no `VideoAddedToPlaylist` or `VideoRemovedFromPlaylist` event, logs the failure, and does not treat the pass as failed
+
+#### Scenario: Filesystem steps still run when listing fails
+- **WHEN** a reconcile pass's attempt to list a playlist's current items fails and a stored video of that playlist needs healing (e.g. its downloaded file is missing)
+- **THEN** the system still heals it the same way as in a pass whose listing succeeded
+
+#### Scenario: Next reconcile still scheduled when listing fails
+- **WHEN** a recurring reconcile pass's attempt to list a playlist's current items fails
+- **THEN** the system still schedules the next reconcile of that playlist after the configured interval
+
+#### Scenario: On-demand reconcile when listing fails
+- **WHEN** an on-demand reconcile of an existing playlist runs and its attempt to list the playlist's current items fails
+- **THEN** the system leaves that playlist's stored videos unchanged and responds without error
+
+### Requirement: Initial Reconcile After Playlist Creation
+The system SHALL run one reconcile pass for a playlist as soon as practical
+after it is created.
+
+#### Scenario: Newly created YouTube-linked playlist gets reconciled
+- **WHEN** a YouTube-linked playlist is successfully created
+- **THEN** the system fetches its current members from the YouTube Data API and persists them
+
+### Requirement: On-Demand Playlist Reconciliation
+The system SHALL provide an HTTP endpoint that runs one reconcile pass for a
+playlist immediately, on request, using the same membership-diff and
+filesystem-healing behavior as the recurring and creation-triggered passes,
+without scheduling or otherwise affecting any recurring reconcile task.
+
+#### Scenario: On-demand reconcile of a YouTube-linked playlist
+- **WHEN** a client requests an on-demand reconcile for a playlist ID that
+  exists in storage with kind `youtube_linked`
+- **THEN** the system fetches its current members from the YouTube Data API,
+  diffs them against stored videos, and reconciles the filesystem
+
+#### Scenario: On-demand reconcile does not affect the recurring schedule
+- **WHEN** an on-demand reconcile runs for a playlist, whether or not it
+  already has a future reconcile task pending (e.g. one scheduled by
+  creation or the last recurring pass)
+- **THEN** the system does not create, cancel, or otherwise modify any
+  reconcile task; whatever was pending before the on-demand reconcile ran
+  remains pending, unchanged, afterward — repeating the on-demand reconcile
+  any number of times never changes the number of pending reconcile tasks
+
+#### Scenario: On-demand reconcile of a nonexistent playlist
+- **WHEN** a client requests an on-demand reconcile for a playlist ID that
+  does not exist in storage
+- **THEN** the system makes no YouTube request, persists nothing, and
+  performs no filesystem sweep, and responds without error, the same as the
+  recurring reconcile task does for a deleted playlist

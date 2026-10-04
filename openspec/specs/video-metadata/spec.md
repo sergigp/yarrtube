@@ -128,25 +128,6 @@ or fewer unchanged.
 - **WHEN** a video's description is 500 characters or fewer
 - **THEN** the generated `plot` contains it unchanged
 
-### Requirement: Sorttitle Reflects Playlist Order Or Publish Date
-The system SHALL derive `sorttitle` as a fixed-width, zero-padded numeric
-prefix followed by the video's title: for a video belonging to a
-YouTube-linked playlist with a recorded playlist position, that position;
-for every other video (a custom-playlist video, or a channel-tracked
-video), a prefix derived from its YouTube publish date instead.
-
-#### Scenario: Video belongs to a YouTube-linked playlist with a known position
-- **WHEN** a video's metadata is generated and it has a recorded position within its owning YouTube-linked playlist
-- **THEN** its `sorttitle` is prefixed with that position, zero-padded to a fixed width
-
-#### Scenario: Video belongs to a custom playlist
-- **WHEN** a video's metadata is generated and it belongs to a custom playlist with no recorded playlist position
-- **THEN** its `sorttitle` is prefixed with a zero-padded value derived from its YouTube publish date
-
-#### Scenario: Video belongs to a tracked channel
-- **WHEN** a video's metadata is generated and it belongs to a tracked channel
-- **THEN** its `sorttitle` is prefixed with a zero-padded value derived from its YouTube publish date, not the channel's recency rank
-
 ### Requirement: Metadata Completeness Is Recorded
 The system SHALL record that a video's metadata has been generated only
 after its `movie.nfo` file has been successfully written, and SHALL treat
@@ -182,3 +163,17 @@ The system SHALL record, with a video's generated metadata, when it was first ge
 #### Scenario: Metadata generated again
 - **WHEN** a video that already has recorded metadata has its metadata generated again (for example, after a redownload)
 - **THEN** its last generated time becomes the new generation time and its first generated time is unchanged
+
+### Requirement: Sorttitle From Playlist Position Or Publish Date
+The system SHALL derive `sorttitle` as a fixed-width, zero-padded numeric
+prefix followed by the video's title: for a video belonging to a playlist,
+its position in that playlist; for a channel-tracked video, a prefix derived
+from its YouTube publish date instead.
+
+#### Scenario: Video belongs to a playlist
+- **WHEN** a video's metadata is generated and it belongs to a playlist
+- **THEN** its `sorttitle` is prefixed with its position in that playlist, zero-padded to a fixed width
+
+#### Scenario: Video belongs to a tracked channel
+- **WHEN** a video's metadata is generated and it belongs to a tracked channel
+- **THEN** its `sorttitle` is prefixed with a zero-padded value derived from its YouTube publish date, not the channel's recency rank

@@ -7,7 +7,7 @@ Provides an HTTP endpoint to list the videos belonging to a single tracked playl
 ## Requirements
 
 ### Requirement: List Videos For A Playlist
-The system SHALL provide an HTTP endpoint that, given a tracked playlist's ID, returns every video recorded for that playlist except those that are excluded, including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and its saved playback position in seconds. For a YouTube-linked playlist, the returned videos SHALL be ordered by their current position in the source YouTube playlist. For a custom playlist, no particular order is guaranteed.
+The system SHALL provide an HTTP endpoint that, given a tracked playlist's ID, returns every video recorded for that playlist except those that are excluded, including each video's ID, title, status, quality (when downloaded), filename (when downloaded), thumbnail filename (when present), duration in seconds (when present), whether it has been watched, and its saved playback position in seconds. The returned videos SHALL be ordered by their current position in the source YouTube playlist.
 
 #### Scenario: Playlist has videos
 - **WHEN** a client requests the videos of a tracked playlist that has one or more recorded videos
