@@ -3,8 +3,9 @@ use crate::application::{subscribers, tasks};
 use crate::domain::services::{
     ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelVideoReconciler, ChannelViewSearcher,
     DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher,
-    PlaylistVideoReconciler, PlexCollectionDeleter, PlexCollectionReconciler, TaskViewSearcher,
-    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher, VideoWatchStateUpdater,
+    PlaylistVideoReconciler, PlexCollectionDeleter, PlexCollectionReconciler, PlexFolderScanner,
+    TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher,
+    VideoWatchStateUpdater,
 };
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::infrastructure_container::{
@@ -174,6 +175,9 @@ struct PlexIntegration {
     repository: Arc<dyn PlexCollectionRepository>,
     playlist_section_ids: Vec<String>,
     channel_section_ids: Vec<String>,
+    /// `YARRTUBE_PLEX_VIDEOS_PATH`: where Plex sees `videos_path()`. Without
+    /// it, downloaded videos' folders aren't scanned into Plex explicitly.
+    plex_videos_path: Option<String>,
 }
 
 fn plex_integration() -> Option<PlexIntegration> {
@@ -190,6 +194,7 @@ fn plex_integration() -> Option<PlexIntegration> {
         })),
         playlist_section_ids,
         channel_section_ids,
+        plex_videos_path: non_empty_env("YARRTUBE_PLEX_VIDEOS_PATH"),
     })
 }
 
@@ -378,14 +383,27 @@ fn event_subscribers(
         infrastructure.task_repository.clone(),
         infrastructure.clock.clone(),
         videos_path(),
-        plex.map(|plex| {
+        plex.clone().map(|plex| {
             PlexCollectionDeleter::new(
                 plex.playlist_section_ids,
                 plex.channel_section_ids,
                 plex.repository,
             )
         }),
+        plex.and_then(plex_folder_scanner),
     )
+}
+
+/// Present only when `YARRTUBE_PLEX_VIDEOS_PATH` says where Plex sees the
+/// videos root; it scans in every configured section, of either kind.
+fn plex_folder_scanner(plex: PlexIntegration) -> Option<PlexFolderScanner> {
+    let plex_videos_path = plex.plex_videos_path?;
+    Some(PlexFolderScanner::new(
+        [plex.playlist_section_ids, plex.channel_section_ids].concat(),
+        videos_path(),
+        plex_videos_path,
+        plex.repository,
+    ))
 }
 
 fn task_executor(
@@ -888,6 +906,42 @@ mod tests {
     }
 
     #[test]
+    fn it_should_register_the_plex_subscribers_with_the_plex_videos_path() {
+        let db = TestDatabase::new();
+        let infrastructure = test_infrastructure(&db);
+
+        let subscribers = event_subscribers(&infrastructure, Some(test_plex(Some("/plex/videos"))));
+
+        assert_eq!(
+            subscribers
+                .iter()
+                .map(|(event_type, subscribers)| (event_type.as_str(), subscribers.len()))
+                .collect::<BTreeMap<_, _>>(),
+            BTreeMap::from([
+                ("channel_created", 1),
+                ("channel_deleted", 2),
+                ("playlist_created", 1),
+                ("playlist_deleted", 2),
+                ("video_added_to_channel", 2),
+                ("video_added_to_playlist", 2),
+                ("video_downloaded", 1),
+                ("video_removed_from_channel", 1),
+                ("video_removed_from_playlist", 1),
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_not_scan_plex_folders_without_the_plex_videos_path() {
+        let db = TestDatabase::new();
+        let infrastructure = test_infrastructure(&db);
+
+        let subscribers = event_subscribers(&infrastructure, Some(test_plex(None)));
+
+        assert_eq!(subscribers.get("video_downloaded").map(Vec::len), None);
+    }
+
+    #[test]
     fn it_should_disable_plex_when_both_section_lists_are_empty() {
         assert_eq!(plex_section_ids(None, None), None);
         assert_eq!(
@@ -984,5 +1038,16 @@ mod tests {
             ytdlp_path: PathBuf::from("yt-dlp"),
         })
         .unwrap()
+    }
+
+    fn test_plex(plex_videos_path: Option<&str>) -> PlexIntegration {
+        PlexIntegration {
+            repository: Arc::new(
+                crate::infrastructure::repositories::plex_collection_repository::FakePlexCollectionRepository::default(),
+            ),
+            playlist_section_ids: vec!["19".to_string()],
+            channel_section_ids: vec!["21".to_string()],
+            plex_videos_path: plex_videos_path.map(str::to_string),
+        }
     }
 }

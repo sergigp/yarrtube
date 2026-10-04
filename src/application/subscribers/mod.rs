@@ -13,7 +13,7 @@ pub mod reconcile_on_playlist_created;
 pub mod scan_plex_folder_on_video_downloaded;
 
 use crate::domain::services::{
-    ChannelVideoReconciler, PlaylistVideoReconciler, PlexCollectionDeleter,
+    ChannelVideoReconciler, PlaylistVideoReconciler, PlexCollectionDeleter, PlexFolderScanner,
 };
 use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -32,6 +32,7 @@ use fetch_thumbnail_on_video_added_to_channel::FetchThumbnailOnVideoAddedToChann
 use fetch_thumbnail_on_video_added_to_playlist::FetchThumbnailOnVideoAddedToPlaylist;
 use reconcile_on_channel_created::ReconcileOnChannelCreated;
 use reconcile_on_playlist_created::ReconcileOnPlaylistCreated;
+use scan_plex_folder_on_video_downloaded::ScanPlexFolderOnVideoDownloaded;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -47,6 +48,7 @@ pub fn registry(
     clock: Arc<dyn Clock>,
     videos_path: impl Into<String>,
     plex_collection_deleter: Option<PlexCollectionDeleter>,
+    plex_folder_scanner: Option<PlexFolderScanner>,
 ) -> SubscriberRegistry {
     let videos_path = videos_path.into();
     let mut registry: SubscriberRegistry = HashMap::new();
@@ -139,6 +141,12 @@ pub fn registry(
             .get_mut("channel_deleted")
             .expect("channel_deleted subscribers registered above")
             .push(Arc::new(DeletePlexCollectionOnChannelDeleted::new(deleter)));
+    }
+    if let Some(scanner) = plex_folder_scanner {
+        registry.insert(
+            "video_downloaded".to_string(),
+            vec![Arc::new(ScanPlexFolderOnVideoDownloaded::new(scanner))],
+        );
     }
     registry
 }
