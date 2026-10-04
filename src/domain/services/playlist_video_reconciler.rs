@@ -229,12 +229,8 @@ impl PlaylistVideoReconciler {
     ) -> anyhow::Result<VideoRecordId> {
         let video = Video::create(youtube_id, current.title.clone(), now);
         self.video_repository.save(&video)?;
-        let playlist_video = PlaylistVideo::create_with_position(
-            playlist.id.clone(),
-            video.id.clone(),
-            current.position,
-            now,
-        );
+        let playlist_video =
+            PlaylistVideo::create(playlist.id.clone(), video.id.clone(), current.position, now);
         self.playlist_video_repository.save(&playlist_video)?;
         info!(
             playlist_id = %playlist.id,
@@ -267,9 +263,9 @@ impl PlaylistVideoReconciler {
                 .update_title(&video.id, &current.title, now)?;
             renamed = Some((video.id, video.title));
         }
-        if existing.position != Some(current.position) {
+        if existing.position != current.position {
             self.playlist_video_repository.save(&PlaylistVideo {
-                position: Some(current.position),
+                position: current.position,
                 created_at: now,
                 ..existing
             })?;
@@ -336,7 +332,7 @@ impl PlaylistVideoReconciler {
         let videos = self.find_videos(&playlist_videos)?;
         let positions = playlist_videos
             .iter()
-            .filter_map(|pv| Some((pv.video_id.clone(), pv.position?)))
+            .map(|pv| (pv.video_id.clone(), pv.position))
             .collect();
         let broken_download_ids = videos
             .iter()
@@ -430,8 +426,9 @@ impl PlaylistVideoReconciler {
     /// `VideoDownloader::download` does at download time. Any failure is
     /// logged and swallowed — a `Downloaded` video's status and file are
     /// never touched by this, and a repeated failure simply tries again on
-    /// the next reconcile pass. `playlist_position` is `None` when no
-    /// position is recorded, resolving `sorttitle` via publish date instead.
+    /// the next reconcile pass. `playlist_position` comes from this pass's
+    /// snapshot; `None` (a video with no playlist row) falls back to the
+    /// publish date.
     fn generate_metadata(&self, video: &Video, output_dir: &Path, playlist_position: Option<i64>) {
         let Some(filename) = video.filename.as_deref() else {
             return;

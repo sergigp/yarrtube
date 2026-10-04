@@ -293,7 +293,7 @@ mod tests {
             .unwrap();
         video_repository.save(&video("rec1", "My Video")).unwrap();
         playlist_video_repository
-            .save(&PlaylistVideo::create_with_position(
+            .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
                 VideoRecordId::new("rec1").unwrap(),
                 0,
@@ -347,7 +347,7 @@ mod tests {
             .unwrap();
         video_repository.save(&video("rec1", "My Video")).unwrap();
         playlist_video_repository
-            .save(&PlaylistVideo::create_with_position(
+            .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
                 VideoRecordId::new("rec1").unwrap(),
                 0,

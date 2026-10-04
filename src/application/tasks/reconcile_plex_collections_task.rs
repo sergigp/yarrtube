@@ -379,7 +379,7 @@ mod tests {
         let pending = Video::create(VideoId::new("yt2").unwrap(), "My Video", fixed_timestamp());
         video_repository.save(&pending).unwrap();
         playlist_video_repository
-            .save(&PlaylistVideo::create_with_position(
+            .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
                 pending.id,
                 1,
@@ -942,7 +942,7 @@ mod tests {
             .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
         video_repository.save(&video).unwrap();
         playlist_video_repository
-            .save(&PlaylistVideo::create_with_position(
+            .save(&PlaylistVideo::create(
                 PlaylistId::new("PL1").unwrap(),
                 video.id.clone(),
                 0,
@@ -1208,7 +1208,7 @@ mod tests {
         .mark_downloaded(Quality::High, "My Video.mp4", None, None, fixed_timestamp());
         video_repository.save(&video).unwrap();
         playlist_video_repository
-            .save(&PlaylistVideo::create_with_position(
+            .save(&PlaylistVideo::create(
                 PlaylistId::new(playlist_id).unwrap(),
                 video.id,
                 position,

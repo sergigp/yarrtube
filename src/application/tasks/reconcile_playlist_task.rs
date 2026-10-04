@@ -166,12 +166,7 @@ mod tests {
                 .unwrap(),
             vec![PlaylistVideo {
                 id: 1,
-                ..PlaylistVideo::create_with_position(
-                    playlist_id(),
-                    video_id.clone(),
-                    0,
-                    fixed_timestamp()
-                )
+                ..PlaylistVideo::create(playlist_id(), video_id.clone(), 0, fixed_timestamp())
             }]
         );
         assert_eq!(
@@ -271,7 +266,7 @@ mod tests {
                 .list_for_playlist(&playlist_id())
                 .unwrap(),
             vec![PlaylistVideo {
-                position: Some(2),
+                position: 2,
                 ..existing_playlist_video
             }]
         );
@@ -2335,7 +2330,7 @@ mod tests {
     ) -> PlaylistVideo {
         video_repository.save(video).unwrap();
         playlist_video_repository
-            .save(&PlaylistVideo::create_with_position(
+            .save(&PlaylistVideo::create(
                 playlist_id(),
                 video.id.clone(),
                 position,

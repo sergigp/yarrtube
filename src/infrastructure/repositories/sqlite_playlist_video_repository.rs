@@ -105,7 +105,7 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
             .prepare(
                 "SELECT id, playlist_id, video_id, position, created_at
                  FROM playlist_videos WHERE playlist_id = ?1
-                 ORDER BY position IS NULL, position ASC, id ASC",
+                 ORDER BY position ASC, id ASC",
             )
             .inspect_err(|e| {
                 tracing::error!(playlist_id = %playlist_id, error = %e, "failed to prepare list-playlist-videos query")
@@ -157,14 +157,14 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
     }
 }
 
-type Columns = (i64, String, String, Option<i64>, String);
+type Columns = (i64, String, String, i64, String);
 
 fn row_to_columns(row: &rusqlite::Row) -> rusqlite::Result<Columns> {
     Ok((
         row.get::<_, i64>(0)?,
         row.get::<_, String>(1)?,
         row.get::<_, String>(2)?,
-        row.get::<_, Option<i64>>(3)?,
+        row.get::<_, i64>(3)?,
         row.get::<_, String>(4)?,
     ))
 }
@@ -224,7 +224,7 @@ mod tests {
         let video = seed_video(&repo, "yt1", "First");
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
 
-        repo.save(&PlaylistVideo::create_with_position(
+        repo.save(&PlaylistVideo::create(
             playlist_id(),
             video.id.clone(),
             0,
@@ -237,7 +237,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(found.video_id, video.id);
-        assert_eq!(found.position, Some(0));
+        assert_eq!(found.position, 0);
     }
 
     #[test]
@@ -247,27 +247,12 @@ mod tests {
         let c = seed_video(&repo, "yt_c", "Third");
         let a = seed_video(&repo, "yt_a", "First");
         let b = seed_video(&repo, "yt_b", "Second");
-        repo.save(&PlaylistVideo::create_with_position(
-            playlist_id(),
-            c.id.clone(),
-            2,
-            now,
-        ))
-        .unwrap();
-        repo.save(&PlaylistVideo::create_with_position(
-            playlist_id(),
-            a.id.clone(),
-            0,
-            now,
-        ))
-        .unwrap();
-        repo.save(&PlaylistVideo::create_with_position(
-            playlist_id(),
-            b.id.clone(),
-            1,
-            now,
-        ))
-        .unwrap();
+        repo.save(&PlaylistVideo::create(playlist_id(), c.id.clone(), 2, now))
+            .unwrap();
+        repo.save(&PlaylistVideo::create(playlist_id(), a.id.clone(), 0, now))
+            .unwrap();
+        repo.save(&PlaylistVideo::create(playlist_id(), b.id.clone(), 1, now))
+            .unwrap();
 
         let videos = repo.list_for_playlist(&playlist_id()).unwrap();
 
@@ -286,14 +271,14 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let one = seed_video(&repo, "yt1", "One");
         let two = seed_video(&repo, "yt2", "Two");
-        repo.save(&PlaylistVideo::create_with_position(
+        repo.save(&PlaylistVideo::create(
             playlist_id(),
             one.id.clone(),
             0,
             now,
         ))
         .unwrap();
-        repo.save(&PlaylistVideo::create_with_position(
+        repo.save(&PlaylistVideo::create(
             playlist_id(),
             two.id.clone(),
             0,
@@ -322,7 +307,7 @@ mod tests {
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let one = seed_video(&repo, "yt1", "One");
         let two = seed_video(&repo, "yt2", "Two");
-        repo.save(&PlaylistVideo::create_with_position(
+        repo.save(&PlaylistVideo::create(
             playlist_id(),
             one.id.clone(),
             0,
@@ -330,7 +315,7 @@ mod tests {
         ))
         .unwrap();
         let other_playlist_id = PlaylistId::new("PL2").unwrap();
-        repo.save(&PlaylistVideo::create_with_position(
+        repo.save(&PlaylistVideo::create(
             other_playlist_id.clone(),
             two.id.clone(),
             0,
@@ -360,7 +345,7 @@ mod tests {
         let repo = repo();
         let video = seed_video(&repo, "yt1", "First");
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        repo.save(&PlaylistVideo::create_with_position(
+        repo.save(&PlaylistVideo::create(
             playlist_id(),
             video.id.clone(),
             0,

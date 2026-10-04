@@ -435,7 +435,7 @@ impl VideoDownloader {
         };
 
         let playlist_position = match self.playlist_video_repository.find_by_video(&video.id) {
-            Ok(playlist_video) => playlist_video.and_then(|pv| pv.position),
+            Ok(playlist_video) => playlist_video.map(|pv| pv.position),
             Err(e) => {
                 warn!(video_id = %video.id, error = %e, "failed to look up playlist position, falling back to publish-date sorttitle");
                 None
