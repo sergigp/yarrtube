@@ -79,9 +79,15 @@ pub async fn record_video_progress(
 }
 
 pub async fn mark_video_watched(
-    State(_video_watch_state_updater): State<VideoWatchStateUpdater>,
-    Path(_youtube_id): Path<String>,
+    State(video_watch_state_updater): State<VideoWatchStateUpdater>,
+    Path(youtube_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    let youtube_id = VideoId::new(youtube_id)?;
+
+    run_blocking(move || video_watch_state_updater.mark_video_watched(&youtube_id))
+        .await?
+        .map_err(update_watch_state_error)?;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -2254,6 +2260,35 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_mark_a_video_watched() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = Video {
+            playback_position: PlaybackPosition::new(40).unwrap(),
+            ..video_with_duration("vid1", Some(100))
+        };
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = mark_watched(video_watch_state_updater, "vid1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                watched_at: Some(watched_timestamp()),
+                playback_position: PlaybackPosition::start(),
+                ..video
+            }]
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -2584,6 +2619,17 @@ mod tests {
         )
         .await
         .map(|Json(response)| response)
+    }
+
+    async fn mark_watched(
+        video_watch_state_updater: VideoWatchStateUpdater,
+        youtube_id: &str,
+    ) -> Result<StatusCode, ApiError> {
+        mark_video_watched(
+            State(video_watch_state_updater),
+            Path(youtube_id.to_string()),
+        )
+        .await
     }
 
     async fn list_for_playlist(
