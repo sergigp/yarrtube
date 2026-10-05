@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { CheckCheck, RotateCw, Trash2 } from 'lucide-react'
+import { CheckCheck, RotateCw } from 'lucide-react'
 import type { Video } from '@/api/types'
 import { ConfirmDialog } from './ConfirmDialog'
+import { EntryActionsMenu } from './EntryActionsMenu'
 import { Thumbnail } from './Thumbnail'
 import { Button } from '@/components/ui/button'
 
@@ -105,15 +106,7 @@ export function DetailHeader({
             <span className="hidden sm:inline">Mark all watched</span>
           </Button>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-destructive hover:text-destructive"
-          aria-label="Delete"
-          onClick={() => setConfirmingDelete(true)}
-        >
-          <Trash2 />
-        </Button>
+        <EntryActionsMenu name={name} onDeleteRequest={() => setConfirmingDelete(true)} />
       </div>
 
       <ConfirmDialog

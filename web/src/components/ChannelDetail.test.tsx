@@ -197,7 +197,8 @@ describe('ChannelDetail', () => {
     )
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: 'Delete' }))
+    await user.click(await screen.findByRole('button', { name: 'Actions for The Channel' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('Delete "The Channel"?')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))

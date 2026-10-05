@@ -1,7 +1,8 @@
-import { EllipsisVertical } from 'lucide-react'
+import { EllipsisVertical, Trash2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
@@ -20,8 +21,10 @@ interface EntryActionsMenuProps {
 }
 
 /** A vertical "⋮" menu of actions on one channel or playlist. */
-export function EntryActionsMenu({ name, className }: EntryActionsMenuProps) {
+export function EntryActionsMenu({ name, onDeleteRequest, className }: EntryActionsMenuProps) {
   return (
+    // Non-modal so opening the delete confirmation from it doesn't leave the
+    // page with pointer events disabled.
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger
         className={cn(
@@ -32,7 +35,12 @@ export function EntryActionsMenu({ name, className }: EntryActionsMenuProps) {
       >
         <EllipsisVertical className="size-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-auto min-w-44" />
+      <DropdownMenuContent align="end" className="w-auto min-w-44">
+        <DropdownMenuItem variant="destructive" onSelect={onDeleteRequest}>
+          <Trash2 />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
     </DropdownMenu>
   )
 }

@@ -44,7 +44,7 @@
 - [x] 2.22 `Sidebar` "includes an excluded playlist in home from its row menu": PATCH `{exclude_from_home: false}`
 - [x] 2.23 `Sidebar` "a channel row menu offers no home item"
 - [x] 2.24 `Sidebar` "alerts when changing a playlist's home setting fails"
-- [ ] 2.25 `PlaylistDetail` "keeps Sync visible and the other actions in the ⋮ menu": `DetailHeader` uses `EntryActionsMenu`
+- [x] 2.25 `PlaylistDetail` "keeps Sync visible and the other actions in the ⋮ menu": `DetailHeader` uses `EntryActionsMenu`
 - [ ] 2.26 `PlaylistDetail` "excludes the playlist from home from its page header menu"
 - [ ] 2.27 `PlaylistDetail` "deletes the playlist from its page header menu after confirming"
 - [ ] 2.28 `ChannelDetail` "marks the channel watched from its page header menu"
