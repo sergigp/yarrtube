@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { PlaylistDetail } from './PlaylistDetail'
@@ -127,5 +127,29 @@ describe('PlaylistDetail', () => {
 
     expect(await screen.findByText('home page')).toBeInTheDocument()
     expect(remove).toHaveBeenCalledOnce()
+  })
+
+  it("alerts and leaves the playlist as it was when changing its home setting fails", async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderPlaylist(
+      {
+        'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'The Playlist' })],
+        'GET /api/playlists/PL1/videos': [],
+        'PATCH /api/playlists/PL1': { status: 500, error: 'database is locked' },
+      },
+      '/playlists/PL1',
+    )
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for The Playlist' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Exclude from home' }))
+
+    await waitFor(() =>
+      expect(alert).toHaveBeenCalledWith(
+        'Failed to exclude "The Playlist" from home: database is locked',
+      ),
+    )
+    await user.click(screen.getByRole('button', { name: 'Actions for The Playlist' }))
+    expect(await screen.findByRole('menuitem', { name: 'Exclude from home' })).toBeInTheDocument()
   })
 })
