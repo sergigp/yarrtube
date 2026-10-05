@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MobileNavToggle } from './MobileNavToggle'
 
 describe('MobileNavToggle', () => {
@@ -18,5 +19,15 @@ describe('MobileNavToggle', () => {
       'aria-expanded',
       'true',
     )
+  })
+
+  it('toggles when clicked', async () => {
+    const user = userEvent.setup()
+    const onToggle = vi.fn()
+    render(<MobileNavToggle open={false} onToggle={onToggle} controls="nav" />)
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+
+    expect(onToggle).toHaveBeenCalledOnce()
   })
 })
