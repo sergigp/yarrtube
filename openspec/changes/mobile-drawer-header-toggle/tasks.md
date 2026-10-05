@@ -20,5 +20,5 @@ _None — no new pure logic._
 
 ## 4. Verification
 
-- [ ] 4.1 Run `npm run check` (typecheck + lint + test) in `web/` and confirm it passes.
-- [ ] 4.2 Manually verify in the running app via `scripts/run-local.sh` at a phone-width viewport: header stays visible and clickable over the open drawer, hamburger ↔ X animation, reduced-motion disables it, Escape/backdrop/logo/Settings → Tasks/row selection all close the drawer, desktop layout unchanged.
+- [x] 4.1 Run `npm run check` (typecheck + lint + test) in `web/` and confirm it passes.
+- [x] 4.2 Manually verify in the running app via `scripts/run-local.sh` at a phone-width viewport: header stays visible and clickable over the open drawer, hamburger ↔ X animation, reduced-motion disables it, Escape/backdrop/logo/Settings → Tasks/row selection all close the drawer, desktop layout unchanged.
