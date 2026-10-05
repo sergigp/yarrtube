@@ -32,4 +32,18 @@ describe('usePlaybackSpeed', () => {
 
     expect(result.current.rate).toBe(1.75)
   })
+
+  it('resets to normal speed when another video is selected', () => {
+    const element = document.createElement('video')
+    const { result, rerender } = renderHook(
+      ({ videoId }) => usePlaybackSpeed(element, videoId),
+      { initialProps: { videoId: 'abc' } },
+    )
+    act(() => result.current.changeRate(2))
+
+    rerender({ videoId: 'def' })
+
+    expect(element.playbackRate).toBe(1)
+    expect(result.current.rate).toBe(1)
+  })
 })

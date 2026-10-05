@@ -16,7 +16,7 @@ export interface PlaybackSpeed {
  */
 export function usePlaybackSpeed(
   videoElement: HTMLVideoElement | null,
-  _videoId: string | null,
+  videoId: string | null,
 ): PlaybackSpeed {
   const [rate, setRate] = useState(1)
 
@@ -30,12 +30,23 @@ export function usePlaybackSpeed(
     return () => element.removeEventListener('ratechange', follow)
   }, [videoElement])
 
+  // Every newly selected video starts at normal speed.
+  useEffect(() => {
+    if (videoElement) {
+      setSpeed(videoElement, 1)
+    }
+  }, [videoElement, videoId])
+
   // The element's 'ratechange' brings `rate` along, as for the native controls.
   const changeRate = (next: number) => {
     if (videoElement) {
-      videoElement.playbackRate = next
+      setSpeed(videoElement, next)
     }
   }
 
   return { rate, changeRate }
+}
+
+function setSpeed(element: HTMLVideoElement, rate: number): void {
+  element.playbackRate = rate
 }
