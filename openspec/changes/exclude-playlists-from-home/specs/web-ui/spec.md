@@ -40,7 +40,7 @@ Each tracked channel or playlist row in the sidebar SHALL provide an always-visi
 - **THEN** it offers neither "Exclude from home" nor "Include in home"
 
 ### Requirement: Add Dialog Download Options
-Both add dialogs SHALL present video quality and the folder name inside a collapsed "Advanced options" section that is not expanded by default; the add channel dialog SHALL also present the video limit there, and the add playlist dialog SHALL also present an "Exclude from home" checkbox there, unchecked by default, whose value is sent as the playlist's `exclude_from_home` setting. The parent folder SHALL NOT be inside "Advanced options"; it is chosen through the always-visible "Save to" list. The video quality control SHALL be labeled "Video quality" and SHALL offer a tooltip explaining that it controls the download resolution and that a lower resolution reduces storage use. In the add channel dialog, the video limit field SHALL default to 3 and SHALL accept whole numbers from 1 to 1000.
+Both add dialogs SHALL present video quality and the folder name inside a collapsed "Advanced options" section that is not expanded by default; the add channel dialog SHALL also present the video limit there, and the add playlist dialog SHALL also present an "Exclude from home" checkbox there, unchecked by default, whose value is sent as the playlist's `exclude_from_home` setting. The checkbox SHALL show always-visible hint text below its label reading "Videos from this playlist won't show up in home recommendations.", exposed as the checkbox's accessible description rather than behind a tooltip. The parent folder SHALL NOT be inside "Advanced options"; it is chosen through the always-visible "Save to" list. The video quality control SHALL be labeled "Video quality" and SHALL offer a tooltip explaining that it controls the download resolution and that a lower resolution reduces storage use. In the add channel dialog, the video limit field SHALL default to 3 and SHALL accept whole numbers from 1 to 1000.
 
 #### Scenario: Advanced options start collapsed
 - **WHEN** a user opens either add dialog
@@ -69,6 +69,10 @@ Both add dialogs SHALL present video quality and the folder name inside a collap
 #### Scenario: Adding a playlist excluded from home
 - **WHEN** a user checks "Exclude from home" in the add playlist dialog and submits
 - **THEN** the playlist is created with `exclude_from_home` `true`
+
+#### Scenario: Exclude from home is explained
+- **WHEN** a user expands "Advanced options" in the add playlist dialog
+- **THEN** the "Exclude from home" checkbox shows the hint "Videos from this playlist won't show up in home recommendations." below its label, and assistive technology announces it as the checkbox's description
 
 #### Scenario: Add channel dialog has no exclude from home option
 - **WHEN** a user opens the add channel dialog and expands "Advanced options"

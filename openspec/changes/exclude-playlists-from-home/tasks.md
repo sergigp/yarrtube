@@ -35,6 +35,7 @@
 - [x] 2.13 `it_should_fill_home_with_shown_playlists_if_an_excluded_one_has_newer_videos`: only the shown playlist's videos, in sync order
 - [x] 2.14 `AddPlaylistDialog` "sends exclude_from_home false by default"
 - [x] 2.15 `AddPlaylistDialog` "sends exclude_from_home true when "Exclude from home" is checked": checkbox under Advanced options
+- [x] 2.15a `AddPlaylistDialog` "explains what "Exclude from home" does": inline hint below the label, as the checkbox's accessible description
 - [x] 2.16 `VideoActionsMenu` "excludes the playlist from home when its item is chosen": PATCH routed, home and library refetched
 - [x] 2.17 `VideoActionsMenu` "offers no exclude item without a playlist"
 - [x] 2.18 `VideoActionsMenu` "alerts and leaves the playlist as it was when excluding fails"

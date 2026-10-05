@@ -22,7 +22,7 @@
 - `web/src/test/helpers.tsx`: `aPlaylist` defaults `exclude_from_home: false`.
 - `web/src/api/client.ts`: `CreatePlaylistRequest.exclude_from_home`; new `updatePlaylist`.
 - `web/src/api/queries.ts`: new `useSetPlaylistExcludedFromHome` hook (invalidates library + home).
-- `web/src/components/AddPlaylistDialog.tsx`: "Exclude from home" checkbox under Advanced options.
+- `web/src/components/AddPlaylistDialog.tsx`: "Exclude from home" checkbox under Advanced options, with an inline hint linked via `aria-describedby`.
 - `web/src/components/EntryActionsMenu.tsx` (new): shared "⋮" menu (mark watched / exclude-include home / delete), used by the sidebar row and the detail header.
 - `web/src/components/Sidebar.tsx`: `SidebarRowMenu` adds the exclude/include item (keeps Sync in its menu).
 - `web/src/components/DetailHeader.tsx`: visible Sync button + `EntryActionsMenu`.
@@ -223,6 +223,7 @@ DetailHeader ⋮ "Exclude/Include in home"   --+       updatePlaylist(id, {exclu
 **3. Web (Vitest, colocated)**
 17. `AddPlaylistDialog` "sends exclude_from_home false by default".
 18. `AddPlaylistDialog` "sends exclude_from_home true when "Exclude from home" is checked": checkbox under Advanced options.
+18a. `AddPlaylistDialog` "explains what "Exclude from home" does": the checkbox's accessible description is the hint text.
 19. `VideoActionsMenu` "excludes the playlist from home when its item is chosen": PATCH `{exclude_from_home: true}` routed, home and library refetched.
 20. `VideoActionsMenu` "offers no exclude item without a playlist".
 21. `VideoActionsMenu` "alerts and leaves the playlist as it was when excluding fails".
