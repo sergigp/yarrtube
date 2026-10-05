@@ -12,6 +12,7 @@ pub struct Playlist {
     pub path: PlaylistPath,
     pub quality: Quality,
     pub kind: PlaylistKind,
+    pub exclude_from_home: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -22,6 +23,7 @@ impl Playlist {
         path: PlaylistPath,
         quality: Quality,
         kind: PlaylistKind,
+        exclude_from_home: bool,
         created_at: DateTime<Utc>,
     ) -> Self {
         Self {
@@ -30,7 +32,12 @@ impl Playlist {
             path,
             quality,
             kind,
+            exclude_from_home,
             created_at,
         }
+    }
+
+    pub fn with_exclude_from_home(self, _exclude_from_home: bool) -> Self {
+        self
     }
 }

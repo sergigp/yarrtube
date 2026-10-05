@@ -26,6 +26,7 @@ export interface PlaylistListItem {
   path: string
   quality: string
   kind: string
+  exclude_from_home: boolean
   created_at: string
 }
 

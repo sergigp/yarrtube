@@ -1,0 +1,1 @@
+ALTER TABLE playlists ADD COLUMN exclude_from_home INTEGER NOT NULL DEFAULT 0;

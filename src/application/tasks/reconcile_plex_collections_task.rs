@@ -1188,6 +1188,7 @@ mod tests {
             PlaylistPath::new("music/chill").unwrap(),
             Quality::High,
             PlaylistKind::YoutubeLinked,
+            false,
             fixed_timestamp(),
         )
     }

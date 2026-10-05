@@ -51,6 +51,23 @@ impl fmt::Display for DeletePlaylistError {
 impl std::error::Error for DeletePlaylistError {}
 
 #[derive(Debug)]
+pub enum UpdatePlaylistError {
+    NotFound(PlaylistId),
+    Repository(anyhow::Error),
+}
+
+impl fmt::Display for UpdatePlaylistError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotFound(id) => write!(f, "playlist {id} not found"),
+            Self::Repository(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for UpdatePlaylistError {}
+
+#[derive(Debug)]
 pub enum PreviewPlaylistError {
     YoutubePlaylistNotFound(PlaylistId),
     Lookup(anyhow::Error),

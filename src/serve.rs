@@ -3,7 +3,7 @@ use crate::application::{subscribers, tasks};
 use crate::domain::services::{
     ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelVideoReconciler, ChannelViewSearcher,
     DirectorySearcher, InternalVideoReconciler, MetadataGenerator, PlaylistCreator,
-    PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher, PlaylistVideoReconciler,
+    PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher, PlaylistUpdater, PlaylistVideoReconciler,
     PlexCollectionDeleter, PlexCollectionReconciler, PlexFolderScanner, TaskViewSearcher,
     ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoSearcher, VideoWatchStateUpdater,
 };
@@ -310,6 +310,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.youtube_playlist_repository.clone(),
         ),
         playlist_searcher: PlaylistSearcher::new(infrastructure.playlist_repository.clone()),
+        playlist_updater: PlaylistUpdater::new(infrastructure.playlist_repository.clone()),
         playlist_video_reconciler: playlist_video_reconciler(infrastructure),
         video_searcher: VideoSearcher::new(
             infrastructure.playlist_repository.clone(),

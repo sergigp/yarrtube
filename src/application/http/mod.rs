@@ -10,7 +10,8 @@ pub mod videos;
 use crate::domain::services::{
     ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelVideoReconciler, ChannelViewSearcher,
     DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher,
-    PlaylistVideoReconciler, TaskViewSearcher, VideoSearcher, VideoWatchStateUpdater,
+    PlaylistUpdater, PlaylistVideoReconciler, TaskViewSearcher, VideoSearcher,
+    VideoWatchStateUpdater,
 };
 use axum::Router;
 use axum::extract::FromRef;
@@ -28,6 +29,7 @@ pub struct ApiServices {
     pub playlist_deleter: PlaylistDeleter,
     pub playlist_previewer: PlaylistPreviewer,
     pub playlist_searcher: PlaylistSearcher,
+    pub playlist_updater: PlaylistUpdater,
     pub playlist_video_reconciler: PlaylistVideoReconciler,
     pub video_searcher: VideoSearcher,
     pub task_view_searcher: TaskViewSearcher,
@@ -51,7 +53,7 @@ pub fn api_router(api_services: ApiServices) -> Router {
         .route("/playlists/preview", get(playlists::preview_playlist))
         .route(
             "/playlists/{id}",
-            axum::routing::delete(playlists::delete_playlist),
+            axum::routing::delete(playlists::delete_playlist).patch(playlists::update_playlist),
         )
         .route(
             "/playlists/{id}/reconcile",

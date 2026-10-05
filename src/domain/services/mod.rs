@@ -10,6 +10,7 @@ pub mod playlist_creator;
 pub mod playlist_deleter;
 pub mod playlist_previewer;
 pub mod playlist_searcher;
+pub mod playlist_updater;
 pub mod playlist_video_reconciler;
 pub mod plex_collection_deleter;
 pub mod plex_collection_reconciler;
@@ -35,6 +36,7 @@ pub use playlist_creator::{CreatePlaylistOutcome, PlaylistCreator, PlaylistCreat
 pub use playlist_deleter::{PlaylistDeleter, PlaylistDeleterApi};
 pub use playlist_previewer::{PlaylistPreviewer, PlaylistPreviewerApi};
 pub use playlist_searcher::{PlaylistSearcher, PlaylistSearcherApi};
+pub use playlist_updater::{PlaylistUpdater, PlaylistUpdaterApi};
 pub use playlist_video_reconciler::{PlaylistVideoReconciler, PlaylistVideoReconcilerApi};
 pub use plex_collection_deleter::{PlexCollectionDeleter, PlexCollectionDeleterApi};
 pub use plex_collection_reconciler::{PlexCollectionReconciler, PlexCollectionReconcilerApi};

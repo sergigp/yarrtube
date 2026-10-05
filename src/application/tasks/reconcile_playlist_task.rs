@@ -1011,6 +1011,7 @@ mod tests {
             PlaylistPath::new("my-playlist").unwrap(),
             Quality::High,
             PlaylistKind::YoutubeLinked,
+            false,
             fixed_timestamp(),
         )
     }

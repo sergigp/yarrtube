@@ -9,6 +9,14 @@ pub struct CreatePlaylistRequest {
     pub path: Option<String>,
     #[serde(default)]
     pub quality: Option<String>,
+    #[serde(default)]
+    pub exclude_from_home: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePlaylistRequest {
+    #[serde(default)]
+    pub exclude_from_home: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,6 +32,7 @@ pub struct PlaylistResponse {
     pub path: String,
     pub quality: String,
     pub kind: String,
+    pub exclude_from_home: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -35,6 +44,7 @@ impl From<Playlist> for PlaylistResponse {
             path: playlist.path.as_str().to_string(),
             quality: playlist.quality.as_str().to_string(),
             kind: playlist.kind.as_str().to_string(),
+            exclude_from_home: playlist.exclude_from_home,
             created_at: playlist.created_at,
         }
     }

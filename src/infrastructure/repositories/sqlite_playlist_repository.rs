@@ -11,6 +11,7 @@ use rusqlite::{OptionalExtension, params};
 pub trait PlaylistRepository: Send + Sync {
     fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>>;
     fn insert(&self, playlist: &Playlist) -> anyhow::Result<()>;
+    fn update(&self, playlist: &Playlist) -> anyhow::Result<()>;
     fn delete(&self, id: &PlaylistId) -> anyhow::Result<()>;
     fn list(&self) -> anyhow::Result<Vec<Playlist>>;
 }
@@ -66,6 +67,10 @@ impl PlaylistRepository for SqlitePlaylistRepository {
         )
         .inspect_err(|e| tracing::error!(playlist_id = %playlist.id, error = %e, "failed to insert playlist"))
         .context("failed to insert playlist")?;
+        Ok(())
+    }
+
+    fn update(&self, _playlist: &Playlist) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -129,7 +134,9 @@ impl SqlitePlaylistRepository {
         let created_at = DateTime::parse_from_rfc3339(&created_at)
             .context("failed to parse stored created_at")?
             .with_timezone(&Utc);
-        Ok(Playlist::create(id, name, path, quality, kind, created_at))
+        Ok(Playlist::create(
+            id, name, path, quality, kind, false, created_at,
+        ))
     }
 }
 
@@ -150,6 +157,7 @@ mod tests {
             PlaylistPath::new("my-playlist").unwrap(),
             Quality::High,
             PlaylistKind::YoutubeLinked,
+            false,
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         )
     }

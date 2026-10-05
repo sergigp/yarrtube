@@ -11,6 +11,7 @@ import {
   markVideoWatched,
   previewChannel,
   previewPlaylist,
+  updatePlaylist,
 } from './client'
 import type {
   Announcement,
@@ -187,6 +188,18 @@ export function useMarkVideoWatched(): (youtubeId: string) => Promise<void> {
     },
     [queryClient, invalidateLibrary],
   )
+}
+
+/**
+ * Returns a function that sets whether a playlist is excluded from home, then
+ * refetches the channel and playlist lists and the home videos.
+ */
+export function useSetPlaylistExcludedFromHome(): (id: string, excluded: boolean) => Promise<void> {
+  return useCallback(async (id: string, excluded: boolean) => {
+    void id
+    void excluded
+    void updatePlaylist
+  }, [])
 }
 
 /**

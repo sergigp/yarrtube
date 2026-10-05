@@ -48,6 +48,7 @@ pub trait PlaylistCreatorApi: Send + Sync {
         id: PlaylistId,
         path: PlaylistPath,
         quality: Quality,
+        exclude_from_home: bool,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError>;
 }
 
@@ -57,6 +58,7 @@ impl PlaylistCreatorApi for PlaylistCreator {
         id: PlaylistId,
         path: PlaylistPath,
         quality: Quality,
+        _exclude_from_home: bool,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError> {
         if let Some(existing) = self.find_existing(&id)? {
             return Ok(CreatePlaylistOutcome::AlreadyExisted(existing));
@@ -65,7 +67,15 @@ impl PlaylistCreatorApi for PlaylistCreator {
         self.ensure_path_free(&path)?;
         let name = self.resolve_on_youtube(&id)?;
         let now = self.clock.now();
-        let playlist = Playlist::create(id, name, path, quality, PlaylistKind::YoutubeLinked, now);
+        let playlist = Playlist::create(
+            id,
+            name,
+            path,
+            quality,
+            PlaylistKind::YoutubeLinked,
+            false,
+            now,
+        );
         self.insert_playlist(&playlist)?;
         self.publish_playlist_created(&playlist)?;
         info!(playlist_id = %playlist.id, name = %playlist.name, "created playlist");

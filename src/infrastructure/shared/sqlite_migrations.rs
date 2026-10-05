@@ -10,6 +10,8 @@ const LAST_ERRORED_AT_SQL: &str = include_str!("../../../migrations/0004_last_er
 const LAST_PLAYED_AT_SQL: &str = include_str!("../../../migrations/0005_last_played_at.sql");
 const PLAYLIST_VIDEO_POSITION_REQUIRED_SQL: &str =
     include_str!("../../../migrations/0006_playlist_video_position_required.sql");
+const PLAYLIST_EXCLUDE_FROM_HOME_SQL: &str =
+    include_str!("../../../migrations/0007_playlist_exclude_from_home.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -19,6 +21,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(LAST_ERRORED_AT_SQL),
         M::up(LAST_PLAYED_AT_SQL),
         M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+        M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))

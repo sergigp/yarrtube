@@ -15,7 +15,7 @@ import type {
 import { parseAnnouncements } from '@/lib/announcements'
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   body?: unknown
   /** Names the request in the fallback error message; defaults to the path. */
   label?: string
@@ -89,6 +89,7 @@ export interface CreatePlaylistRequest {
   playlist: string
   path: string
   quality: string
+  exclude_from_home?: boolean
 }
 
 export function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistListItem> {
@@ -105,6 +106,18 @@ export function previewPlaylist(playlist: string): Promise<PlaylistPreview> {
 
 export function previewChannel(channel: string): Promise<ChannelPreview> {
   return request(`/channels/preview?channel=${encodeURIComponent(channel)}`)
+}
+
+/** Changes whether a playlist's videos are left out of the home view. */
+export function updatePlaylist(
+  id: string,
+  body: { exclude_from_home: boolean },
+): Promise<PlaylistListItem> {
+  return request(`/playlists/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body,
+    label: `update playlist ${id}`,
+  })
 }
 
 export async function deletePlaylist(id: string): Promise<void> {

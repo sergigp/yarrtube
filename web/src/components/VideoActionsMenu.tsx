@@ -14,6 +14,8 @@ interface VideoActionsMenuProps {
   title: string
   /** When false, "Mark as watched" is disabled. */
   markable: boolean
+  /** The playlist the card is sourced from, offered for exclusion from home. */
+  excludablePlaylist?: { id: string; name: string }
   className?: string
 }
 

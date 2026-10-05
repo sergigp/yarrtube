@@ -8,7 +8,9 @@ pub mod playlist_name;
 pub mod playlist_path;
 pub mod playlist_preview;
 
-pub use errors::{CreatePlaylistError, DeletePlaylistError, PreviewPlaylistError};
+pub use errors::{
+    CreatePlaylistError, DeletePlaylistError, PreviewPlaylistError, UpdatePlaylistError,
+};
 pub use events::{PlaylistCreated, PlaylistDeleted};
 pub use playlist::Playlist;
 pub use playlist_id::PlaylistId;

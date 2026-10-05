@@ -2,21 +2,26 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
-use super::validation::{MISSING_QUALITY, required};
+use super::validation::{MISSING_EXCLUDE_FROM_HOME, MISSING_QUALITY, required};
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{
     CreatePlaylistError, DeletePlaylistError, PlaylistPath, PreviewPlaylistError,
+    UpdatePlaylistError,
 };
 use crate::domain::services::{
     CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi, PlaylistDeleter,
     PlaylistDeleterApi, PlaylistPreviewer, PlaylistPreviewerApi, PlaylistSearcher,
-    PlaylistSearcherApi, PlaylistVideoReconciler, PlaylistVideoReconcilerApi,
+    PlaylistSearcherApi, PlaylistUpdater, PlaylistUpdaterApi, PlaylistVideoReconciler,
+    PlaylistVideoReconcilerApi,
 };
 use crate::domain::shared::Quality;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use dto::{CreatePlaylistRequest, PlaylistPreviewResponse, PlaylistResponse, PreviewPlaylistQuery};
+use dto::{
+    CreatePlaylistRequest, PlaylistPreviewResponse, PlaylistResponse, PreviewPlaylistQuery,
+    UpdatePlaylistRequest,
+};
 
 const MISSING_PATH: &str = "Playlist path must not be empty";
 
@@ -27,8 +32,10 @@ pub async fn create_playlist(
     let id = PlaylistId::from_url_or_id(request.playlist)?;
     let path = PlaylistPath::new(required(request.path, MISSING_PATH)?)?;
     let quality = Quality::new(required(request.quality, MISSING_QUALITY)?)?;
+    let exclude_from_home = request.exclude_from_home.unwrap_or(false);
 
-    let outcome = run_blocking(move || playlist_creator.create(id, path, quality)).await?;
+    let outcome =
+        run_blocking(move || playlist_creator.create(id, path, quality, exclude_from_home)).await?;
 
     match outcome {
         Ok(CreatePlaylistOutcome::Created(playlist)) => {
@@ -69,6 +76,23 @@ pub async fn delete_playlist(
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e @ DeletePlaylistError::NotFound(_)) => Err(ApiError::bad_request(e)),
         Err(e @ DeletePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
+    }
+}
+
+pub async fn update_playlist(
+    State(playlist_updater): State<PlaylistUpdater>,
+    Path(id): Path<String>,
+    Json(request): Json<UpdatePlaylistRequest>,
+) -> Result<Json<PlaylistResponse>, ApiError> {
+    let id = PlaylistId::new(id)?;
+    let exclude_from_home = required(request.exclude_from_home, MISSING_EXCLUDE_FROM_HOME)?;
+
+    match run_blocking(move || playlist_updater.update_exclude_from_home(id, exclude_from_home))
+        .await?
+    {
+        Ok(playlist) => Ok(Json(PlaylistResponse::from(playlist))),
+        Err(e @ UpdatePlaylistError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
+        Err(e @ UpdatePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
 
@@ -1315,6 +1339,7 @@ mod tests {
             PlaylistPath::new(path).unwrap(),
             Quality::High,
             PlaylistKind::YoutubeLinked,
+            false,
             fixed_timestamp(),
         )
     }
@@ -1375,6 +1400,7 @@ mod tests {
             playlist: playlist.to_string(),
             path: Some(DEFAULT_PATH.to_string()),
             quality: Some("high".to_string()),
+            exclude_from_home: None,
         }
     }
 
@@ -1399,6 +1425,7 @@ mod tests {
             path: path.to_string(),
             quality: "high".to_string(),
             kind: "youtube_linked".to_string(),
+            exclude_from_home: false,
             created_at: fixed_timestamp(),
         }
     }
