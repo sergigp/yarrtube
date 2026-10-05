@@ -136,6 +136,27 @@ describe('ChannelDetail', () => {
     expect(screen.getByRole('heading', { name: 'First Video' })).toBeInTheDocument()
   })
 
+  it('the selected row shows no menu', async () => {
+    const channel = aChannel({ id: 'chan' })
+    renderChannel(
+      {
+        'GET /api/channels': [channel],
+        'GET /api/channels/chan/videos': [
+          aVideo({ title: 'First Video' }),
+          aVideo({ title: 'Second Video' }),
+        ],
+      },
+      '/channels/chan',
+    )
+
+    const list = await screen.findByRole('list')
+    expect(
+      within(list).queryByRole('button', { name: 'Actions for First Video' }),
+    ).not.toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: 'Actions for Second Video' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Actions for First Video' })).toBeInTheDocument()
+  })
+
   it('explains when the selected video is not downloaded yet', async () => {
     const channel = aChannel({ id: 'chan' })
     renderChannel(
