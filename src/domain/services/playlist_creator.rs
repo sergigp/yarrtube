@@ -58,7 +58,7 @@ impl PlaylistCreatorApi for PlaylistCreator {
         id: PlaylistId,
         path: PlaylistPath,
         quality: Quality,
-        _exclude_from_home: bool,
+        exclude_from_home: bool,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError> {
         if let Some(existing) = self.find_existing(&id)? {
             return Ok(CreatePlaylistOutcome::AlreadyExisted(existing));
@@ -73,7 +73,7 @@ impl PlaylistCreatorApi for PlaylistCreator {
             path,
             quality,
             PlaylistKind::YoutubeLinked,
-            false,
+            exclude_from_home,
             now,
         );
         self.insert_playlist(&playlist)?;
