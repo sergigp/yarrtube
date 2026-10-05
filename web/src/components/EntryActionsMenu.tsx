@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { CheckCheck, EllipsisVertical, Eye, EyeOff, Trash2 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -43,6 +43,7 @@ export function EntryActionsMenu({
   onDeleteRequest,
   className,
 }: EntryActionsMenuProps) {
+  const [markingWatched, setMarkingWatched] = useState(false)
   const offersHomeItem = excludedFromHome !== undefined && onSetExcludedFromHome !== undefined
   const hasItemsAboveDelete = Boolean(leadingItems) || Boolean(onMarkWatched) || offersHomeItem
 
@@ -63,11 +64,15 @@ export function EntryActionsMenu({
         {leadingItems}
         {onMarkWatched && (
           <DropdownMenuItem
+            disabled={markingWatched}
             onSelect={async () => {
+              setMarkingWatched(true)
               try {
                 await onMarkWatched()
               } catch (err) {
                 window.alert(`Failed to mark "${name}" watched: ${errorMessage(err)}`)
+              } finally {
+                setMarkingWatched(false)
               }
             }}
           >
