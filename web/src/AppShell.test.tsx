@@ -45,4 +45,17 @@ describe('AppShell', () => {
       'false',
     )
   })
+
+  it('closes the sidebar when the logo is clicked while already home', async () => {
+    renderShell({ route: '/' })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+
+    await user.click(screen.getByRole('link', { name: 'Yarrtube' }))
+
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  })
 })
