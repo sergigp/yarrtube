@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 export interface PlaybackSpeed {
-  /** The `<video>` element's current playback speed. */
+  /** The selected video's playback speed; 1 until it plays at another. */
   rate: number
   /** Plays the video at `rate`. */
   changeRate: (rate: number) => void
@@ -18,17 +18,20 @@ export function usePlaybackSpeed(
   videoElement: HTMLVideoElement | null,
   videoId: string | null,
 ): PlaybackSpeed {
-  const [rate, setRate] = useState(1)
+  // The speed last seen on the element, and which video it was playing. Any
+  // other video reads as normal speed, even while no element reports it.
+  const [followed, setFollowed] = useState<FollowedSpeed | null>(null)
+  const rate = followed?.videoId === videoId ? followed.rate : 1
 
   useEffect(() => {
     const element = videoElement
     if (!element) {
       return undefined
     }
-    const follow = () => setRate(element.playbackRate)
+    const follow = () => setFollowed({ videoId, rate: element.playbackRate })
     element.addEventListener('ratechange', follow)
     return () => element.removeEventListener('ratechange', follow)
-  }, [videoElement])
+  }, [videoElement, videoId])
 
   // Every newly selected video starts at normal speed.
   useEffect(() => {
@@ -49,4 +52,9 @@ export function usePlaybackSpeed(
 
 function setSpeed(element: HTMLVideoElement, rate: number): void {
   element.playbackRate = rate
+}
+
+interface FollowedSpeed {
+  videoId: string | null
+  rate: number
 }

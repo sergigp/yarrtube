@@ -87,6 +87,7 @@ Vitest, existing `it('...')` naming.
    2. `it('applies a chosen speed to the video element')` — after `changeRate(1.5)`, element `playbackRate` and `rate` are 1.5.
    3. `it('follows speed changes made by the native controls')` — set element `playbackRate = 1.75` + dispatch `ratechange` → `rate` 1.75.
    4. `it('resets to normal speed when another video is selected')` — `changeRate(2)`, rerender with new `videoId` → element `playbackRate` and `rate` are 1.
+   5. `it('resets to normal speed when the player is replaced by another video')` — `changeRate(2)`, rerender with no element (not downloaded) → `rate` 1; rerender with a new element and `videoId` → `rate` 1.
 3. `components/PlaybackSpeedMenu.test.tsx`
    1. `it('shows the current speed and marks it in the menu')` — trigger reads "1.25x"; "1.25x" item checked.
    2. `it('reports the chosen speed')` — choosing "1.5x" calls `onRateChange(1.5)`.

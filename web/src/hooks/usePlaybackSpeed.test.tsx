@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
-import { usePlaybackSpeed } from './usePlaybackSpeed'
+import { usePlaybackSpeed, type PlaybackSpeed } from './usePlaybackSpeed'
 
 describe('usePlaybackSpeed', () => {
   it('starts at normal speed', () => {
@@ -45,5 +45,22 @@ describe('usePlaybackSpeed', () => {
 
     expect(element.playbackRate).toBe(1)
     expect(result.current.rate).toBe(1)
+  })
+
+  it('resets to normal speed when the player is replaced by another video', () => {
+    const { result, rerender } = renderHook<
+      PlaybackSpeed,
+      { element: HTMLVideoElement | null; videoId: string }
+    >(({ element, videoId }) => usePlaybackSpeed(element, videoId), {
+      initialProps: { element: document.createElement('video'), videoId: 'abc' },
+    })
+    act(() => result.current.changeRate(2))
+
+    // A video not downloaded yet has no player, and the next one gets a new one.
+    rerender({ element: null, videoId: 'pending' })
+    const rateWithoutPlayer = result.current.rate
+    rerender({ element: document.createElement('video'), videoId: 'def' })
+
+    expect([rateWithoutPlayer, result.current.rate]).toEqual([1, 1])
   })
 })

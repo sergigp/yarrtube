@@ -15,6 +15,7 @@
 - [x] 2.9 `it('marks no speed when the current one is not offered')` — drives off-list speed display.
 - [x] 2.10 `it('disables the speed control until the video is downloaded')` — drives `VideoDetail`'s `disabled` wiring.
 - [x] 2.11 `it('plays the selected video at the chosen speed and resets it for the next video')` — end-to-end through `PlaylistDetail`.
+- [x] 2.12 `it('resets to normal speed when the player is replaced by another video')` — drives deriving `rate` per video, so the label resets even when the `<video>` element is swapped or absent (no `ratechange` fires).
 
 ## 3. Infrastructure adapters (TDD)
 
