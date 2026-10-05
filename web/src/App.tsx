@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
 import { Home } from './components/Home'
 import { PlaylistDetail } from './components/PlaylistDetail'
 import { ChannelDetail } from './components/ChannelDetail'
@@ -23,6 +23,15 @@ export default function App() {
 export function AppShell() {
   const [addDialog, setAddDialog] = useState<'channel' | 'playlist' | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const closeSidebar = () => setSidebarOpen(false)
+
+  // Any navigation closes the mobile sidebar, whatever triggered it.
+  const { pathname } = useLocation()
+  const [shownPathname, setShownPathname] = useState(pathname)
+  if (pathname !== shownPathname) {
+    setShownPathname(pathname)
+    setSidebarOpen(false)
+  }
 
   return (
     <div className="flex min-h-dvh flex-col md:h-dvh">
@@ -35,7 +44,7 @@ export function AppShell() {
         />
         <Link
           to="/"
-          onClick={() => setSidebarOpen(false)}
+          onClick={closeSidebar}
           className="flex items-center no-underline"
           aria-label="Yarrtube"
         >
@@ -48,7 +57,7 @@ export function AppShell() {
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <Sidebar
           open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
+          onClose={closeSidebar}
           onAddChannel={() => setAddDialog('channel')}
           onAddPlaylist={() => setAddDialog('playlist')}
         />

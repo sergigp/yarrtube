@@ -10,7 +10,7 @@ behaviour/infrastructure split. See proposal.md for the why.
   `AppShell` (header + sidebar + routes + dialogs) so tests can render the
   shell under `renderWithProviders`'s `MemoryRouter`. `AppShell` owns
   `sidebarOpen`, renders `MobileNavToggle`, closes the drawer on logo click and
-  on `location.pathname` change.
+  on `pathname` change.
 - `web/src/AppShell.test.tsx` — shell-level behaviour: toggle, logo, route
   change, header reachable while open.
 - `web/src/components/MobileNavToggle.tsx` — new; header button whose three
@@ -59,8 +59,10 @@ Toggle:
 Close on navigation:
 1. Logo `<Link to="/" onClick={() => setSidebarOpen(false)}>` — covers clicking
    the logo while already on `/`.
-2. `useEffect(() => setSidebarOpen(false), [location.pathname])` in `AppShell`
-   — covers any route change (Settings → Tasks, back button).
+2. `AppShell` keeps the last seen `pathname` in state and, during render, when
+   it differs: `setSidebarOpen(false)` — covers any route change (Settings →
+   Tasks, back button). Render-time adjustment, not `useEffect`, per the
+   repo's `set-state-in-effect` lint.
 3. Sidebar rows keep `onNavigate={onClose}` — covers clicking the active row
    (no route change).
 

@@ -58,4 +58,19 @@ describe('AppShell', () => {
       'false',
     )
   })
+
+  it('closes the sidebar when navigating from the settings menu', async () => {
+    renderShell({ route: '/' })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Tasks' }))
+
+    expect(await screen.findByText('Loading tasks…')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  })
 })
