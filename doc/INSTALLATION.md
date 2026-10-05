@@ -64,7 +64,7 @@ services:
 
 ## Configuration
 
-Environment variables read by Yarrtube are listed below. Every variable except `YOUTUBE_API_KEY` has a default, so you only need to set the ones you want to override:
+Environment variables read by Yarrtube are listed below. Every variable except `YOUTUBE_API_KEY` is optional, so you only need to set the ones you want to override:
 
 | Variable                                   | Default               | Description                                                                                                                                                                                                                  |
 | ------------------------------------------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

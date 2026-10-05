@@ -123,4 +123,5 @@ Several layers, from fast/isolated to slow/real:
 - **Smoke tests** (`smoke-tests/`, Playwright) — end-to-end against the
   real Docker image, hitting the real YouTube API and downloading a real
   video with `yt-dlp`. No doubles. Covers the full create → download →
-  playback flow; runs in CI on every PR.
+  playback flow; run manually (locally or via the `workflow_dispatch`
+  workflow), not on every PR.

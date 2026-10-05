@@ -38,10 +38,12 @@ downloaded videos (`videos/`) live in the repo root, and both are gitignored.
 Pass `--skip-web-build` to reuse the existing `web/dist/`, or `--help` for the
 other options.
 
-To run the binary yourself, set at least `YOUTUBE_API_KEY` and `YTDLP_PATH`
-(the default, `/app/bin/yt-dlp`, only exists in the Docker image) and run
-`target/release/yarrtube serve`. All variables are listed in
-[INSTALLATION.md](INSTALLATION.md#configuration).
+To run the binary yourself, set at least `YOUTUBE_API_KEY`, `YTDLP_PATH`
+and `YARRTUBE_VIDEOS_PATH` (their defaults, `/app/bin/yt-dlp` and `/videos`,
+only make sense in the Docker image) and run `target/release/yarrtube serve`.
+All variables are listed in [INSTALLATION.md](INSTALLATION.md#configuration);
+that table shows the image's defaults, but outside Docker the database and
+avatars default to `yarrtube.sqlite3` and `avatars/` in the working directory.
 
 ## Web UI
 
