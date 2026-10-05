@@ -2,7 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
-use super::validation::{MISSING_POSITION, required};
+use super::validation::{MISSING_POSITION, MISSING_WAS_WATCHED, required};
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
@@ -66,8 +66,7 @@ pub async fn record_video_progress(
         .duration_seconds
         .map(VideoDuration::new)
         .transpose()?;
-
-    let was_watched = request.was_watched.unwrap_or_default();
+    let was_watched = required(request.was_watched, MISSING_WAS_WATCHED)?;
 
     let watched = run_blocking(move || {
         video_watch_state_updater.update(&youtube_id, position, reported_duration, was_watched)
@@ -2248,6 +2247,23 @@ mod tests {
             response,
             Err(ApiError::bad_request(
                 "Playback position must not be negative (missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_record_progress_if_was_watched_missing() {
+        let request = RecordProgressRequest {
+            was_watched: None,
+            ..progress_request(30)
+        };
+
+        let response = record_progress(any_video_watch_state_updater(), "vid1", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Whether the video was watched must be stated (missing)"
             ))
         );
     }
