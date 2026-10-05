@@ -102,9 +102,20 @@ export interface SyncTarget {
   id: string
 }
 
+// Which payload field holds the id each syncable task type targets.
+const SYNC_ID_FIELD: Record<string, { kind: SyncTarget['kind']; field: string }> = {
+  reconcile_playlist: { kind: 'playlist', field: 'playlist_id' },
+  reconcile_channel: { kind: 'channel', field: 'channel_id' },
+}
+
 /** The playlist or channel a Run now on this task would sync, if it offers one. */
-export function syncTarget(_task: Task): SyncTarget | null {
-  return null
+export function syncTarget(task: Task): SyncTarget | null {
+  const target = SYNC_ID_FIELD[task.task_type]
+  const id = target && task.payload[target.field]
+  if (task.status === 'running' || !id) {
+    return null
+  }
+  return { kind: target.kind, id }
 }
 
 export function matchesTask(task: Task, text: string): boolean {

@@ -3,6 +3,7 @@ import {
   byCategory,
   describeTask,
   matchesTask,
+  syncTarget,
   tabCounts,
   tasksForTab,
   taskCategory,
@@ -205,6 +206,22 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskKind(aTask({ task_type: 'delete_channel_files' }))).toBe('delete')
     expect(taskKind(aTask({ task_type: 'update_ytdlp' }))).toBe('maintenance')
     expect(taskKind(aTask({ task_type: 'mystery_task' }))).toBe('maintenance')
+  })
+
+  it('returns a sync target for pending playlist and channel reconciles only', () => {
+    expect(
+      syncTarget(aTask({ task_type: 'reconcile_playlist', payload: { playlist_id: 'PL1' } })),
+    ).toEqual({ kind: 'playlist', id: 'PL1' })
+    expect(
+      syncTarget(aTask({ task_type: 'reconcile_channel', payload: { channel_id: '@chan' } })),
+    ).toEqual({ kind: 'channel', id: '@chan' })
+    expect(
+      syncTarget(
+        aTask({ task_type: 'reconcile_channel', status: 'running', payload: { channel_id: '@chan' } }),
+      ),
+    ).toBeNull()
+    expect(syncTarget(aTask({ task_type: 'reconcile_playlist', payload: {} }))).toBeNull()
+    expect(syncTarget(aTask({ task_type: 'reconcile_plex_collections', payload: {} }))).toBeNull()
   })
 
   it('matches on the description, ignoring case', () => {
