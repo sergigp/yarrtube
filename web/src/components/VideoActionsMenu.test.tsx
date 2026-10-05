@@ -129,4 +129,39 @@ describe('VideoActionsMenu', () => {
       (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
     ).toEqual(['Mark as watched'])
   })
+
+  it('alerts and leaves the playlist as it was when excluding fails', async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    const channels = vi.fn(() => [])
+    const home = vi.fn(() => EMPTY_HOME)
+    mockApi({
+      'PATCH /api/playlists/PL1': { status: 500, error: 'database is locked' },
+      'GET /api/channels': channels,
+      'GET /api/videos/home': home,
+    })
+    renderWithProviders(
+      <>
+        <LibraryObserver />
+        <VideoActionsMenu
+          videoId="abc"
+          title="My Video"
+          markable
+          excludablePlaylist={{ id: 'PL1', name: 'Bluey' }}
+        />
+      </>,
+    )
+    await waitFor(() => expect(home).toHaveBeenCalledOnce())
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Exclude "Bluey" from home' }))
+
+    await waitFor(() =>
+      expect(alert).toHaveBeenCalledWith(
+        'Failed to exclude "Bluey" from home: database is locked',
+      ),
+    )
+    expect(channels).toHaveBeenCalledOnce()
+    expect(home).toHaveBeenCalledOnce()
+  })
 })

@@ -58,7 +58,13 @@ export function VideoActionsMenu({
         {excludablePlaylist && (
           <DropdownMenuItem
             onSelect={async () => {
-              await setPlaylistExcludedFromHome(excludablePlaylist.id, true)
+              try {
+                await setPlaylistExcludedFromHome(excludablePlaylist.id, true)
+              } catch (err) {
+                window.alert(
+                  `Failed to exclude "${excludablePlaylist.name}" from home: ${errorMessage(err)}`,
+                )
+              }
             }}
           >
             <EyeOff />
