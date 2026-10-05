@@ -979,6 +979,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_a_playlist_in_home_again() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&Playlist {
+                exclude_from_home: true,
+                ..playlist("PL1", DEFAULT_PATH)
+            })
+            .unwrap();
+        let playlist_updater = PlaylistUpdater::new(playlist_repository.clone());
+
+        let response = update(playlist_updater, "PL1", update_request(false)).await;
+
+        assert_eq!(response, Ok(playlist_response("PL1", DEFAULT_PATH)));
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_add_new_videos_on_reconcile() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
