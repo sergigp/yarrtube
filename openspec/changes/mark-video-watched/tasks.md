@@ -28,7 +28,7 @@
 - [x] 2.7 `it_should_fail_to_mark_watched_if_invalid_video_id_provided`: 400 for an invalid ID
 - [x] 2.8 `it_should_ignore_a_stale_progress_report_on_a_video_marked_watched`: `was_watched: false` at 40% on a watched video responds `watched: true`, video unchanged including `last_played_at`
 - [x] 2.9 `it_should_fail_to_record_progress_if_was_watched_missing`: 400 and nothing recorded when `was_watched` is absent
-- [ ] 2.10 `VideoActionsMenu` "marks the video watched when "Mark as watched" is chosen": POST routed, channels and home refetched
+- [x] 2.10 `VideoActionsMenu` "marks the video watched when "Mark as watched" is chosen": POST routed, channels and home refetched
 - [ ] 2.11 `VideoActionsMenu` "disables "Mark as watched" when not markable"
 - [ ] 2.12 `VideoActionsMenu` "alerts and leaves the video as it was when marking fails"
 - [ ] 2.13 `Home` "marking a continue-watching video watched removes it from the section": menu placed right of the card title block

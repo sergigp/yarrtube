@@ -5,6 +5,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useMarkVideoWatched } from '@/api/queries'
 import { cn } from '@/lib/utils'
 
 interface VideoActionsMenuProps {
@@ -17,7 +18,9 @@ interface VideoActionsMenuProps {
 }
 
 /** A vertical "⋮" menu of actions on one video. */
-export function VideoActionsMenu({ title, className }: VideoActionsMenuProps) {
+export function VideoActionsMenu({ videoId, title, className }: VideoActionsMenuProps) {
+  const markVideoWatched = useMarkVideoWatched()
+
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger
@@ -30,7 +33,7 @@ export function VideoActionsMenu({ title, className }: VideoActionsMenuProps) {
         <EllipsisVertical className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-44">
-        <DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => markVideoWatched(videoId)}>
           <Check />
           Mark as watched
         </DropdownMenuItem>

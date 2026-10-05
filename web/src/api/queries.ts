@@ -175,9 +175,18 @@ export function useLibraryAction() {
  * and playlist lists (and their video lists) and the home videos.
  */
 export function useMarkVideoWatched(): (youtubeId: string) => Promise<void> {
-  return useCallback(async (youtubeId: string) => {
-    await markVideoWatched(youtubeId)
-  }, [])
+  const queryClient = useQueryClient()
+  const invalidateLibrary = useInvalidateLibrary()
+  return useCallback(
+    async (youtubeId: string) => {
+      await markVideoWatched(youtubeId)
+      await Promise.all([
+        invalidateLibrary(),
+        queryClient.invalidateQueries({ queryKey: queryKeys.recentVideos }),
+      ])
+    },
+    [queryClient, invalidateLibrary],
+  )
 }
 
 /**
