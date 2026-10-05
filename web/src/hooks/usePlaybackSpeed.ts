@@ -19,16 +19,18 @@ export function usePlaybackSpeed(
   videoId: string | null,
 ): PlaybackSpeed {
   // The speed last seen on the element, and which video it was playing. Any
-  // other video reads as normal speed, even while no element reports it.
+  // other video or element reads as normal speed, even while no element
+  // reports it: a new element starts at normal speed without a 'ratechange'.
   const [followed, setFollowed] = useState<FollowedSpeed | null>(null)
-  const rate = followed?.videoId === videoId ? followed.rate : 1
+  const rate =
+    followed?.element === videoElement && followed.videoId === videoId ? followed.rate : 1
 
   useEffect(() => {
     const element = videoElement
     if (!element) {
       return undefined
     }
-    const follow = () => setFollowed({ videoId, rate: element.playbackRate })
+    const follow = () => setFollowed({ element, videoId, rate: element.playbackRate })
     element.addEventListener('ratechange', follow)
     return () => element.removeEventListener('ratechange', follow)
   }, [videoElement, videoId])
@@ -55,6 +57,7 @@ function setSpeed(element: HTMLVideoElement, rate: number): void {
 }
 
 interface FollowedSpeed {
+  element: HTMLVideoElement
   videoId: string | null
   rate: number
 }

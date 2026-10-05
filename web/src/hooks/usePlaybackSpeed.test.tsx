@@ -63,4 +63,24 @@ describe('usePlaybackSpeed', () => {
 
     expect([rateWithoutPlayer, result.current.rate]).toEqual([1, 1])
   })
+
+  it('resets to normal speed when returning to a video on a new player', () => {
+    const { result, rerender } = renderHook<
+      PlaybackSpeed,
+      { element: HTMLVideoElement | null; videoId: string }
+    >(({ element, videoId }) => usePlaybackSpeed(element, videoId), {
+      initialProps: { element: document.createElement('video'), videoId: 'abc' },
+    })
+    act(() => result.current.changeRate(2))
+
+    // A video not downloaded yet has no player; going back mounts a new one,
+    // already at normal speed as in browsers, so resetting it fires no
+    // 'ratechange' (jsdom only reports normal speed once it is set).
+    rerender({ element: null, videoId: 'pending' })
+    const newPlayer = document.createElement('video')
+    newPlayer.playbackRate = 1
+    rerender({ element: newPlayer, videoId: 'abc' })
+
+    expect(result.current.rate).toBe(1)
+  })
 })
