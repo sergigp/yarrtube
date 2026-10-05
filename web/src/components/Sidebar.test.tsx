@@ -230,6 +230,20 @@ describe('Sidebar', () => {
     expect(await screen.findByRole('menuitem', { name: 'Exclude from home' })).toBeInTheDocument()
   })
 
+  it('a channel row menu offers no home item', async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A' })],
+      'GET /api/playlists': [],
+    })
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Chan A' }))
+
+    expect(
+      (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
+    ).toEqual(['Sync', 'Mark all watched', 'Delete'])
+  })
+
   it('closes when Escape is pressed while open', async () => {
     mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [] })
     const onClose = vi.fn()
