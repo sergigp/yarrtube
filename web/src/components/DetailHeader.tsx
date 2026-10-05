@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCheck, RotateCw } from 'lucide-react'
+import { RotateCw } from 'lucide-react'
 import type { Video } from '@/api/types'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
@@ -52,7 +52,6 @@ export function DetailHeader({
   deleteDescription,
 }: DetailHeaderProps) {
   const [syncing, setSyncing] = useState(false)
-  const [markingWatched, setMarkingWatched] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const summary = summaryFor(videos, unwatchedCount)
 
@@ -90,29 +89,18 @@ export function DetailHeader({
           <RotateCw className={syncing ? 'animate-spin' : undefined} />
           <span className="hidden sm:inline">Sync</span>
         </Button>
-        {onMarkWatched && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={markingWatched}
-            aria-label="Mark all watched"
-            onClick={async () => {
-              setMarkingWatched(true)
+        <EntryActionsMenu
+          name={name}
+          onMarkWatched={
+            onMarkWatched &&
+            (async () => {
               try {
                 await onMarkWatched()
               } catch (err) {
                 window.alert(`Failed to mark "${name}" watched: ${errorMessage(err)}`)
-              } finally {
-                setMarkingWatched(false)
               }
-            }}
-          >
-            <CheckCheck />
-            <span className="hidden sm:inline">Mark all watched</span>
-          </Button>
-        )}
-        <EntryActionsMenu
-          name={name}
+            })
+          }
           excludedFromHome={excludedFromHome}
           onSetExcludedFromHome={onSetExcludedFromHome}
           onDeleteRequest={() => setConfirmingDelete(true)}

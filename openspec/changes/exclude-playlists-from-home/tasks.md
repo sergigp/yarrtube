@@ -47,7 +47,7 @@
 - [x] 2.25 `PlaylistDetail` "keeps Sync visible and the other actions in the ⋮ menu": `DetailHeader` uses `EntryActionsMenu`
 - [x] 2.26 `PlaylistDetail` "excludes the playlist from home from its page header menu"
 - [x] 2.27 `PlaylistDetail` "deletes the playlist from its page header menu after confirming"
-- [ ] 2.28 `ChannelDetail` "marks the channel watched from its page header menu"
+- [x] 2.28 `ChannelDetail` "marks the channel watched from its page header menu"
 
 ## 3. Infrastructure adapters (TDD)
 

@@ -1,4 +1,4 @@
-import { EllipsisVertical, Eye, EyeOff, Trash2 } from 'lucide-react'
+import { CheckCheck, EllipsisVertical, Eye, EyeOff, Trash2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +24,7 @@ interface EntryActionsMenuProps {
 /** A vertical "⋮" menu of actions on one channel or playlist. */
 export function EntryActionsMenu({
   name,
+  onMarkWatched,
   excludedFromHome,
   onSetExcludedFromHome,
   onDeleteRequest,
@@ -45,6 +46,12 @@ export function EntryActionsMenu({
         <EllipsisVertical className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-44">
+        {onMarkWatched && (
+          <DropdownMenuItem onSelect={onMarkWatched}>
+            <CheckCheck />
+            Mark all watched
+          </DropdownMenuItem>
+        )}
         {offersHomeItem && (
           <DropdownMenuItem
             onSelect={async () => {
@@ -61,7 +68,7 @@ export function EntryActionsMenu({
             {excludedFromHome ? 'Include in home' : 'Exclude from home'}
           </DropdownMenuItem>
         )}
-        {offersHomeItem && <DropdownMenuSeparator />}
+        {(onMarkWatched || offersHomeItem) && <DropdownMenuSeparator />}
         <DropdownMenuItem variant="destructive" onSelect={onDeleteRequest}>
           <Trash2 />
           Delete

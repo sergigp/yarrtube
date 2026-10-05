@@ -100,7 +100,8 @@ describe('DetailHeader', () => {
     )
   })
 
-  it('offers mark-all-watched only when supported', () => {
+  it('offers mark-all-watched in its menu only when supported', async () => {
+    const user = userEvent.setup()
     const { rerender } = render(
       <DetailHeader
         name="The Channel"
@@ -112,7 +113,9 @@ describe('DetailHeader', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: 'Mark all watched' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Actions for The Channel' }))
+    expect(await screen.findByRole('menuitem', { name: 'Mark all watched' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
 
     rerender(
       <DetailHeader
@@ -124,6 +127,8 @@ describe('DetailHeader', () => {
       />,
     )
 
-    expect(screen.queryByRole('button', { name: 'Mark all watched' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Actions for The Channel' }))
+    expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Mark all watched' })).not.toBeInTheDocument()
   })
 })
