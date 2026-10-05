@@ -117,4 +117,16 @@ describe('VideoActionsMenu', () => {
     await waitFor(() => expect(channels).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(home).toHaveBeenCalledTimes(2))
   })
+
+  it('offers no exclude item without a playlist', async () => {
+    mockApi({})
+    renderWithProviders(<VideoActionsMenu videoId="abc" title="My Video" markable />)
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
+
+    expect(
+      (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
+    ).toEqual(['Mark as watched'])
+  })
 })
