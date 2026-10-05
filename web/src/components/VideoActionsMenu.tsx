@@ -33,11 +33,24 @@ export function VideoActionsMenu({ videoId, title, markable, className }: VideoA
         <EllipsisVertical className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-44">
-        <DropdownMenuItem disabled={!markable} onSelect={() => markVideoWatched(videoId)}>
+        <DropdownMenuItem
+          disabled={!markable}
+          onSelect={async () => {
+            try {
+              await markVideoWatched(videoId)
+            } catch (err) {
+              window.alert(`Failed to mark "${title}" watched: ${errorMessage(err)}`)
+            }
+          }}
+        >
           <Check />
           Mark as watched
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
 }

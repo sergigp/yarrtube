@@ -53,4 +53,33 @@ describe('VideoActionsMenu', () => {
       'true',
     )
   })
+  it('alerts and leaves the video as it was when marking fails', async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    const channels = vi.fn(() => [])
+    const home = vi.fn(() => EMPTY_HOME)
+    mockApi({
+      'POST /api/videos/abc/watched': { status: 400, error: 'video abc is not downloaded' },
+      'GET /api/channels': channels,
+      'GET /api/videos/home': home,
+    })
+    renderWithProviders(
+      <>
+        <LibraryObserver />
+        <VideoActionsMenu videoId="abc" title="My Video" markable />
+      </>,
+    )
+    await waitFor(() => expect(home).toHaveBeenCalledOnce())
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark as watched' }))
+
+    await waitFor(() =>
+      expect(alert).toHaveBeenCalledWith(
+        'Failed to mark "My Video" watched: video abc is not downloaded',
+      ),
+    )
+    expect(channels).toHaveBeenCalledOnce()
+    expect(home).toHaveBeenCalledOnce()
+  })
 })

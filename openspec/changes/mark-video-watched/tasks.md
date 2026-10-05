@@ -30,7 +30,7 @@
 - [x] 2.9 `it_should_fail_to_record_progress_if_was_watched_missing`: 400 and nothing recorded when `was_watched` is absent
 - [x] 2.10 `VideoActionsMenu` "marks the video watched when "Mark as watched" is chosen": POST routed, channels and home refetched
 - [x] 2.11 `VideoActionsMenu` "disables "Mark as watched" when not markable"
-- [ ] 2.12 `VideoActionsMenu` "alerts and leaves the video as it was when marking fails"
+- [x] 2.12 `VideoActionsMenu` "alerts and leaves the video as it was when marking fails"
 - [ ] 2.13 `Home` "marking a continue-watching video watched removes it from the section": menu placed right of the card title block
 - [ ] 2.14 `ChannelDetail` "opening a row's menu does not change the selected video": `VideoListPane` row split into a select button plus a sibling menu
 - [ ] 2.15 `ChannelDetail` "marking a row watched shows its tick"
