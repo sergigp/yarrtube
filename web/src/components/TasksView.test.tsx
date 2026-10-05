@@ -230,6 +230,34 @@ describe('TasksView', () => {
     await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2))
   })
 
+  it('offers no Run now on a running sync or outside the Syncs tab', async () => {
+    const user = userEvent.setup()
+    mockApi({
+      'GET /api/tasks': [
+        aTask({
+          id: 1,
+          task_type: 'reconcile_channel',
+          status: 'running',
+          payload: { channel_id: '@chan', channel_name: 'Chan' },
+        }),
+        aTask({
+          id: 2,
+          task_type: 'reconcile_plex_collections',
+          run_at: '2999-01-01T00:00:00Z',
+        }),
+        aTask({ id: 3, task_type: 'download_video', run_at: '2999-01-01T00:00:00Z' }),
+      ],
+    })
+
+    renderWithProviders(<TasksView />)
+
+    expect(await screen.findByText('Syncing channel Chan')).toBeInTheDocument()
+    for (const tab of [/Active/, /Syncs/, /Downloads/, /Other/]) {
+      await user.click(screen.getByRole('tab', { name: tab }))
+      expect(screen.queryByRole('button', { name: /Run now/ })).not.toBeInTheDocument()
+    }
+  })
+
   it('lists download and thumbnail tasks under Downloads, and no sync or cleanup tasks', async () => {
     const user = userEvent.setup()
     mockApi({ 'GET /api/tasks': aMixOfTasks() })
