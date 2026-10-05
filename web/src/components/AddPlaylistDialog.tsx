@@ -78,7 +78,7 @@ export function AddPlaylistDialog({ open, onOpenChange }: AddPlaylistDialogProps
 
 function AddPlaylistForm({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ playlist: '', quality: 'high' })
-  const [excludeFromHome] = useState(false)
+  const [excludeFromHome, setExcludeFromHome] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -156,6 +156,16 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
             value={form.quality}
             onChange={setField('quality')}
           />
+          <div className="flex items-center gap-2">
+            <input
+              id="add-playlist-exclude-from-home"
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={excludeFromHome}
+              onChange={(event) => setExcludeFromHome(event.target.checked)}
+            />
+            <Label htmlFor="add-playlist-exclude-from-home">Exclude from home</Label>
+          </div>
         </div>
       </div>
 
