@@ -114,6 +114,24 @@ describe('TasksView', () => {
     ])
   })
 
+  it('shows a live indicator on the Active tab only while a task is running', async () => {
+    mockApi({ 'GET /api/tasks': aMixOfTasks() })
+    const { unmount } = renderWithProviders(<TasksView />)
+
+    const activeTab = await screen.findByRole('tab', { name: /Active/ })
+    expect(within(activeTab).getByRole('img', { name: 'Tasks running' })).toBeInTheDocument()
+
+    unmount()
+
+    mockApi({
+      'GET /api/tasks': aMixOfTasks().map((task) => ({ ...task, status: 'pending' })),
+    })
+    renderWithProviders(<TasksView />)
+
+    const idleTab = await screen.findByRole('tab', { name: /Active/ })
+    expect(within(idleTab).queryByRole('img', { name: 'Tasks running' })).not.toBeInTheDocument()
+  })
+
   it('lists download and thumbnail tasks under Downloads, and no sync or cleanup tasks', async () => {
     const user = userEvent.setup()
     mockApi({ 'GET /api/tasks': aMixOfTasks() })

@@ -96,6 +96,9 @@ export function TasksView() {
                 <TabIcon aria-hidden />
                 {TAB_LABELS[value]}
                 <Badge variant="secondary">{counts[value]}</Badge>
+                {value === 'active' && counts.active > 0 && (
+                  <Beacon variant="live" label="Tasks running" />
+                )}
               </TabsTrigger>
             )
           })}

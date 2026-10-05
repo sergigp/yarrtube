@@ -15,7 +15,7 @@
 - [x] 2.9 `maps each task type to its icon kind`: drives `taskKind` (download, sync, delete, maintenance). Commit.
 - [x] 2.10 `returns a sync target for pending playlist and channel reconciles only`: drives `syncTarget`, which returns null for a running task, a Plex sync or a missing id. Commit.
 - [x] 2.11 `shows Active, Downloads, Syncs and Other tabs with counts, and no Cleanup or All tab`: drives the tab triggers in TasksView. Commit.
-- [ ] 2.12 `shows a live indicator on the Active tab only while a task is running`: drives the Beacon beside the Active count. Commit.
+- [x] 2.12 `shows a live indicator on the Active tab only while a task is running`: drives the Beacon beside the Active count. Commit.
 - [ ] 2.13 `runs a playlist sync now from the Syncs tab and refetches the tasks`: render `RunNowButton` on Syncs rows; on success it calls `reconcilePlaylist` and then invalidates the tasks and library queries. Commit.
 - [ ] 2.14 `runs a channel sync now from the Syncs tab`: drives the channel branch through `reconcileChannel`. Commit.
 - [ ] 2.15 `disables Run now while the sync is in progress`: the button is disabled with a spinning icon while the request is pending. Commit.
