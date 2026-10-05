@@ -11,16 +11,10 @@ use rusqlite::{OptionalExtension, params};
 pub trait PlaylistVideoRepository: Send + Sync {
     /// Insert-or-replace keyed by `(playlist_id, video_id)`.
     fn save(&self, playlist_video: &PlaylistVideo) -> anyhow::Result<()>;
-    fn find_by_youtube_video(
-        &self,
-        playlist_id: &PlaylistId,
-        youtube_video_id: &VideoId,
-    ) -> anyhow::Result<Option<PlaylistVideo>>;
     /// Finds whichever playlist a video belongs to, keyed by the video's own
     /// surrogate ID rather than a `(playlist_id, youtube_video_id)` pair.
     fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<PlaylistVideo>>;
-    /// Ordered by position (YouTube-defined order), with no-position rows
-    /// sorted last, by insertion order.
+    /// Ordered by position (YouTube-defined order), then by insertion order.
     fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>>;
     fn delete(&self, playlist_id: &PlaylistId, youtube_video_id: &VideoId) -> anyhow::Result<()>;
     fn delete_all_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<()>;
@@ -57,29 +51,6 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
         })
         .context("failed to save playlist video")?;
         Ok(())
-    }
-
-    fn find_by_youtube_video(
-        &self,
-        playlist_id: &PlaylistId,
-        youtube_video_id: &VideoId,
-    ) -> anyhow::Result<Option<PlaylistVideo>> {
-        let conn = self.db.read()?;
-        conn.query_row(
-            "SELECT pv.id, pv.playlist_id, pv.video_id, pv.position, pv.created_at
-             FROM playlist_videos pv
-             JOIN videos v ON v.id = pv.video_id
-             WHERE pv.playlist_id = ?1 AND v.youtube_id = ?2",
-            params![playlist_id.as_str(), youtube_video_id.as_str()],
-            row_to_columns,
-        )
-        .optional()
-        .inspect_err(|e| {
-            tracing::error!(playlist_id = %playlist_id, error = %e, "failed to find playlist video")
-        })
-        .context("failed to find playlist video")?
-        .map(columns_to_playlist_video)
-        .transpose()
     }
 
     fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<PlaylistVideo>> {
@@ -232,12 +203,13 @@ mod tests {
         ))
         .unwrap();
 
-        let found = repo
-            .find_by_youtube_video(&playlist_id(), &VideoId::new("yt1").unwrap())
-            .unwrap()
-            .unwrap();
-        assert_eq!(found.video_id, video.id);
-        assert_eq!(found.position, 0);
+        assert_eq!(
+            repo.list_for_playlist(&playlist_id()).unwrap(),
+            vec![PlaylistVideo {
+                id: 1,
+                ..PlaylistVideo::create(playlist_id(), video.id, 0, now)
+            }]
+        );
     }
 
     #[test]
@@ -289,15 +261,13 @@ mod tests {
         repo.delete(&playlist_id(), &VideoId::new("yt1").unwrap())
             .unwrap();
 
-        assert!(
-            repo.find_by_youtube_video(&playlist_id(), &VideoId::new("yt1").unwrap())
+        assert_eq!(
+            repo.list_for_playlist(&playlist_id())
                 .unwrap()
-                .is_none()
-        );
-        assert!(
-            repo.find_by_youtube_video(&playlist_id(), &VideoId::new("yt2").unwrap())
-                .unwrap()
-                .is_some()
+                .into_iter()
+                .map(|v| v.video_id)
+                .collect::<Vec<_>>(),
+            vec![two.id]
         );
     }
 
@@ -327,17 +297,6 @@ mod tests {
 
         assert!(repo.list_for_playlist(&playlist_id()).unwrap().is_empty());
         assert_eq!(repo.list_for_playlist(&other_playlist_id).unwrap().len(), 1);
-    }
-
-    #[test]
-    fn it_should_return_none_when_finding_a_missing_playlist_video() {
-        let repo = repo();
-
-        let found = repo
-            .find_by_youtube_video(&playlist_id(), &VideoId::new("yt1").unwrap())
-            .unwrap();
-
-        assert!(found.is_none());
     }
 
     #[test]

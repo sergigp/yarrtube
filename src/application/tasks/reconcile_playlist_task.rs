@@ -186,6 +186,69 @@ mod tests {
     }
 
     #[test]
+    fn it_should_store_a_video_listed_twice_once() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            vec![
+                playlist_item("vid1", "One", 0),
+                playlist_item("vid1", "One", 2),
+            ],
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        let videos = video_repository.list().unwrap();
+        let video_id = videos[0].id.clone();
+        assert_eq!(
+            videos,
+            vec![Video {
+                id: video_id.clone(),
+                ..Video::create(VideoId::new("vid1").unwrap(), "One", fixed_timestamp())
+            }]
+        );
+        assert_eq!(
+            playlist_video_repository
+                .list_for_playlist(&playlist_id())
+                .unwrap(),
+            vec![PlaylistVideo {
+                id: 1,
+                ..PlaylistVideo::create(playlist_id(), video_id.clone(), 2, fixed_timestamp())
+            }]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![next_reconcile(1)]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoAddedToPlaylist(VideoAddedToPlaylist {
+                    playlist_id: "PL1".to_string(),
+                    video_id: video_id.as_str().to_string(),
+                })
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_refresh_title_of_existing_videos() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));

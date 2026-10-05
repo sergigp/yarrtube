@@ -24,7 +24,11 @@ use tracing::{info, warn};
 pub struct DesiredState {
     pub path: PlaylistPath,
     pub quality: Quality,
-    pub videos: Vec<Video>,
+    /// The videos the folder holds, in their owner's order. Only their ids:
+    /// the videos themselves are read with the folder's actual state, after
+    /// the downloads in flight, so a download finishing mid-pass is never
+    /// seen as an unsettled video with no download task.
+    pub video_ids: Vec<VideoRecordId>,
     /// Each video's position in its playlist, used to resolve its metadata
     /// `sorttitle`. Empty for a channel, whose videos sort by publish date.
     pub sort_positions: HashMap<VideoRecordId, i64>,
@@ -114,7 +118,7 @@ impl InternalVideoReconcilerApi for InternalVideoReconciler {
             .collect();
         self.reschedule_stranded_downloads(desired, &actual, &handled)?;
         self.thumbnail_fetcher
-            .schedule_missing(&desired.videos, &handled, &actual.output_dir)?;
+            .schedule_missing(&actual.videos, &handled, &actual.output_dir)?;
 
         self.delete_orphaned_files(&actual)
     }
@@ -122,7 +126,9 @@ impl InternalVideoReconcilerApi for InternalVideoReconciler {
 
 impl InternalVideoReconciler {
     /// Reads the folder's actual state once, so every step works from the
-    /// same picture taken before any of them changes something.
+    /// same picture taken before any of them changes something. The videos
+    /// are read last: a download that completes between these reads is then
+    /// seen as `Downloaded`, never as unsettled with no download in flight.
     fn read_actual_state(
         &self,
         desired: &DesiredState,
@@ -131,19 +137,20 @@ impl InternalVideoReconciler {
         let downloads_in_flight = self.video_ids_with_download_in_flight()?;
         let output_dir = resolve_output_dir(&self.videos_path, desired.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
-        let broken_download_ids = desired
-            .videos
+        let videos = self.video_repository.find_many(&desired.video_ids)?;
+        let broken_download_ids = videos
             .iter()
             .filter(|v| {
                 v.status == VideoStatus::Downloaded && !self.has_healthy_file(v, &output_dir)
             })
             .map(|v| v.id.clone())
             .collect();
-        let protected_entries = protected_entries(&desired.videos, &delta.previous_titles);
+        let protected_entries = protected_entries(&videos, &delta.previous_titles);
 
         Ok(ActualState {
             output_dir,
             files,
+            videos,
             downloads_in_flight,
             broken_download_ids,
             protected_entries,
@@ -176,10 +183,10 @@ impl InternalVideoReconciler {
     /// filename. Returns the ids it reset.
     fn redownload_broken_files<'a>(
         &self,
-        desired: &'a DesiredState,
-        actual: &ActualState,
+        desired: &DesiredState,
+        actual: &'a ActualState,
     ) -> anyhow::Result<Vec<&'a VideoRecordId>> {
-        desired
+        actual
             .videos
             .iter()
             .filter(|v| actual.is_broken(v))
@@ -202,7 +209,7 @@ impl InternalVideoReconciler {
         desired: &DesiredState,
         actual: &ActualState,
     ) -> anyhow::Result<()> {
-        for video in desired
+        for video in actual
             .videos
             .iter()
             .filter(|v| v.status == VideoStatus::Downloaded && !actual.is_broken(v))
@@ -256,11 +263,11 @@ impl InternalVideoReconciler {
     /// video may be recovered. Returns the ids it reset.
     fn recover_errored_videos<'a>(
         &self,
-        desired: &'a DesiredState,
-        actual: &ActualState,
+        desired: &DesiredState,
+        actual: &'a ActualState,
     ) -> anyhow::Result<Vec<&'a VideoRecordId>> {
         let now = self.clock.now();
-        desired
+        actual
             .videos
             .iter()
             .filter(|v| v.is_due_for_recovery(now))
@@ -284,7 +291,7 @@ impl InternalVideoReconciler {
         actual: &ActualState,
         handled: &HashSet<&VideoRecordId>,
     ) -> anyhow::Result<()> {
-        desired
+        actual
             .videos
             .iter()
             .filter(|v| {
@@ -354,6 +361,8 @@ impl InternalVideoReconciler {
 struct ActualState {
     output_dir: PathBuf,
     files: Vec<String>,
+    /// The desired videos as stored, read after `downloads_in_flight`.
+    videos: Vec<Video>,
     /// Ids of every video with a download task pending or running.
     downloads_in_flight: HashSet<String>,
     /// `Downloaded` videos whose file is missing or not mp4.
@@ -584,6 +593,8 @@ mod tests {
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![deleted("orphan.mp4")]
         );
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
     #[test]
@@ -611,7 +622,11 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![download_video_task(1, &video.id)]
+        );
     }
 
     #[test]
@@ -639,7 +654,14 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                download_video_task(1, &video.id),
+                fetch_thumbnail_task(2, &video.id)
+            ]
+        );
     }
 
     #[test]
@@ -667,7 +689,11 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![download_video_task(1, &video.id)]
+        );
     }
 
     #[test]
@@ -697,7 +723,14 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                download_video_task(1, &video.id),
+                fetch_thumbnail_task(2, &video.id)
+            ]
+        );
     }
 
     #[test]
@@ -728,6 +761,11 @@ mod tests {
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![deleted("Other")]
+        );
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![download_video_task(1, &video.id)]
         );
     }
 
@@ -1064,7 +1102,11 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![fetch_thumbnail_task(1, &video.id)]
+        );
     }
 
     #[test]
@@ -1093,7 +1135,8 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
     #[test]
@@ -1108,15 +1151,15 @@ mod tests {
             "My Video.mp4".to_string(),
             "stray.jpg".to_string(),
         ]));
-        let _video = downloaded_video("My Video.mp4", None);
-        video_repository.save(&_video).unwrap();
+        let video = downloaded_video("My Video.mp4", None);
+        video_repository.save(&video).unwrap();
         let reconciler = internal_video_reconciler(
             &db,
             video_repository.clone(),
             task_repository.clone(),
             video_file_repository.clone(),
         );
-        let desired = desired_state(vec![(_video.clone(), 0)]);
+        let desired = desired_state(vec![(video.clone(), 0)]);
 
         let result = reconcile(&reconciler, &desired, &MembershipDelta::default());
 
@@ -1124,6 +1167,11 @@ mod tests {
         assert_eq!(
             *video_file_repository.deleted_calls.lock().unwrap(),
             vec![deleted("stray.jpg")]
+        );
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![fetch_thumbnail_task(1, &video.id)]
         );
     }
 
@@ -1186,7 +1234,11 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![download_video_task(1, &video.id)]
+        );
     }
 
     #[test]
@@ -1397,6 +1449,83 @@ mod tests {
             video_metadata_repository.find(&video.id).unwrap(),
             Some(existing_metadata)
         );
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::FetchThumbnail {
+                    video_id: video.id.as_str().to_string(),
+                    output_dir: videos_root
+                        .path()
+                        .join("my-playlist")
+                        .to_string_lossy()
+                        .to_string(),
+                },
+                fixed_timestamp(),
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_not_generate_metadata_for_a_video_being_redownloaded() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let videos_root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(videos_root.path().join("my-playlist/My Video")).unwrap();
+        let video = downloaded_video("My Video/My Video.mp4", None);
+        video_repository.save(&video).unwrap();
+        let reconciler = InternalVideoReconciler::new(
+            video_repository.clone(),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository {
+                    metadata: Some(youtube_metadata("My Video")),
+                }),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            video_metadata_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::with_file_exists(false)),
+            Arc::new(ThumbnailFetcher::new(
+                video_repository.clone(),
+                Arc::new(FakeVideoDownloaderRepository::default()),
+                task_repository.clone(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            videos_root.path().to_string_lossy(),
+        );
+        let desired = desired_state(vec![(video.clone(), 3)]);
+
+        let result = reconcile(&reconciler, &desired, &MembershipDelta::default());
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.clone().reset_for_redownload(fixed_timestamp())]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::DownloadVideo {
+                    video_id: video.id.as_str().to_string(),
+                    quality: "high".to_string(),
+                    output_dir: videos_root
+                        .path()
+                        .join("my-playlist")
+                        .to_string_lossy()
+                        .to_string(),
+                },
+                fixed_timestamp(),
+            )]
+        );
     }
 
     #[test]
@@ -1500,6 +1629,7 @@ mod tests {
                 download_video_task(2, &video.id)
             ]
         );
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
     }
 
     #[test]
@@ -1648,7 +1778,8 @@ mod tests {
             *video_downloader_repository.thumbnail_calls.lock().unwrap(),
             vec![]
         );
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
     #[test]
@@ -1742,7 +1873,11 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
-        assert_eq!(video_repository.list().unwrap(), vec![renamed]);
+        assert_eq!(video_repository.list().unwrap(), vec![renamed.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![download_video_task(1, &renamed.id)]
+        );
     }
 
     #[test]
@@ -1815,7 +1950,7 @@ mod tests {
                 .iter()
                 .map(|(video, position)| (video.id.clone(), *position))
                 .collect(),
-            videos: videos.into_iter().map(|(video, _)| video).collect(),
+            video_ids: videos.into_iter().map(|(video, _)| video.id).collect(),
         }
     }
 

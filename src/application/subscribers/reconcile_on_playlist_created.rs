@@ -29,7 +29,8 @@ impl EventSubscriber for ReconcileOnPlaylistCreated {
         let Ok(playlist_id) = PlaylistId::new(payload.playlist_id) else {
             return Ok(());
         };
-        self.playlist_video_reconciler.reconcile(playlist_id)
+        self.playlist_video_reconciler
+            .initial_reconcile(playlist_id)
     }
 }
 
@@ -94,6 +95,54 @@ mod tests {
                 fixed_timestamp() + chrono::Duration::seconds(3600),
             )]
         );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_fail_if_listing_fails() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.database());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let subscriber = ReconcileOnPlaylistCreated::new(PlaylistVideoReconciler::new(
+            playlist_repository,
+            video_repository.clone(),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(FakeYoutubePlaylistItemsRepository::failing()),
+            event_publisher(&db),
+            task_repository.clone(),
+            Arc::new(InternalVideoReconciler::new(
+                video_repository.clone(),
+                Arc::new(MetadataGenerator::new(
+                    Arc::new(FakeYoutubeMetadataRepository::default()),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    Arc::new(FakeVideoDownloaderRepository::default()),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+        ));
+
+        let result = handle(&subscriber, r#"{"playlist_id": "PL1"}"#);
+
+        assert_eq!(result, Err("failed to list playlist items".to_string()));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 

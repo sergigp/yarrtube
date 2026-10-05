@@ -11,11 +11,6 @@ use rusqlite::{OptionalExtension, params};
 pub trait ChannelVideoRepository: Send + Sync {
     /// Insert-or-replace keyed by `(channel_id, video_id)`.
     fn save(&self, channel_video: &ChannelVideo) -> anyhow::Result<()>;
-    fn find_by_youtube_video(
-        &self,
-        channel_id: &ChannelHandle,
-        youtube_video_id: &VideoId,
-    ) -> anyhow::Result<Option<ChannelVideo>>;
     /// Finds whichever channel a video belongs to, keyed by the video's own
     /// surrogate ID rather than a `(channel_id, youtube_video_id)` pair.
     fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<ChannelVideo>>;
@@ -58,29 +53,6 @@ impl ChannelVideoRepository for SqliteChannelVideoRepository {
         })
         .context("failed to save channel video")?;
         Ok(())
-    }
-
-    fn find_by_youtube_video(
-        &self,
-        channel_id: &ChannelHandle,
-        youtube_video_id: &VideoId,
-    ) -> anyhow::Result<Option<ChannelVideo>> {
-        let conn = self.db.read()?;
-        conn.query_row(
-            "SELECT cv.id, cv.channel_id, cv.video_id, cv.position, cv.created_at
-             FROM channel_videos cv
-             JOIN videos v ON v.id = cv.video_id
-             WHERE cv.channel_id = ?1 AND v.youtube_id = ?2",
-            params![channel_id.as_str(), youtube_video_id.as_str()],
-            row_to_columns,
-        )
-        .optional()
-        .inspect_err(|e| {
-            tracing::error!(channel_id = %channel_id, error = %e, "failed to find channel video")
-        })
-        .context("failed to find channel video")?
-        .map(columns_to_channel_video)
-        .transpose()
     }
 
     fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<ChannelVideo>> {
@@ -255,12 +227,13 @@ mod tests {
         ))
         .unwrap();
 
-        let found = repo
-            .find_by_youtube_video(&channel_id(), &VideoId::new("yt1").unwrap())
-            .unwrap()
-            .unwrap();
-        assert_eq!(found.video_id, video.id);
-        assert_eq!(found.position, 0);
+        assert_eq!(
+            repo.list_for_channel(&channel_id()).unwrap(),
+            vec![ChannelVideo {
+                id: 1,
+                ..ChannelVideo::create(channel_id(), video.id, 0, now)
+            }]
+        );
     }
 
     #[test]
@@ -350,15 +323,13 @@ mod tests {
         repo.delete(&channel_id(), &VideoId::new("yt1").unwrap())
             .unwrap();
 
-        assert!(
-            repo.find_by_youtube_video(&channel_id(), &VideoId::new("yt1").unwrap())
+        assert_eq!(
+            repo.list_for_channel(&channel_id())
                 .unwrap()
-                .is_none()
-        );
-        assert!(
-            repo.find_by_youtube_video(&channel_id(), &VideoId::new("yt2").unwrap())
-                .unwrap()
-                .is_some()
+                .into_iter()
+                .map(|v| v.video_id)
+                .collect::<Vec<_>>(),
+            vec![two.id]
         );
     }
 
@@ -383,17 +354,6 @@ mod tests {
 
         assert!(repo.list_for_channel(&channel_id()).unwrap().is_empty());
         assert_eq!(repo.list_for_channel(&other_channel_id).unwrap().len(), 1);
-    }
-
-    #[test]
-    fn it_should_return_none_when_finding_a_missing_channel_video() {
-        let repo = repo();
-
-        let found = repo
-            .find_by_youtube_video(&channel_id(), &VideoId::new("yt1").unwrap())
-            .unwrap();
-
-        assert!(found.is_none());
     }
 
     #[test]

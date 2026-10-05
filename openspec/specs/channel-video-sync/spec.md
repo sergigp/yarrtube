@@ -27,15 +27,19 @@ character) cannot corrupt discovery of that video or any other.
 - **THEN** the system correctly records that video's exact title and ID, and no other discovered video's data is corrupted by it
 
 #### Scenario: yt-dlp fails to list a channel's videos
-- **WHEN** a reconcile pass's attempt to discover a channel's current videos fails (e.g. the channel is private, terminated, or `yt-dlp` errors)
+- **WHEN** a recurring or on-demand reconcile pass's attempt to discover a channel's current videos fails (e.g. the channel is private, terminated, or `yt-dlp` errors)
 - **THEN** the system does not alter any of that channel's stored videos, logs the failure, and does not treat it as a fatal error for the reconcile pass
 
 ### Requirement: Reconcile On Channel Creation
-The system SHALL run one reconcile pass for a channel as soon as practical after it is created.
+The system SHALL run one reconcile pass for a channel as soon as practical after it is created. If discovering the channel's current videos fails, that pass SHALL fail, so it is retried with the creation event's processing rather than leaving the new channel empty until a recurring pass.
 
 #### Scenario: Newly created channel gets reconciled
 - **WHEN** a channel is successfully created
 - **THEN** the system discovers its current most-recent videos (up to `video_limit`) and persists them
+
+#### Scenario: Discovery fails during the initial reconcile
+- **WHEN** the initial reconcile pass of a newly created channel fails to discover the channel's current videos
+- **THEN** the system stores no video, publishes no event, schedules no recurring reconcile of the channel, and fails the `ChannelCreated` event's processing so it is retried
 
 ### Requirement: Recurring Channel Reconciliation
 The system SHALL schedule the next reconcile of a channel after every reconcile attempt that runs to completion, using the same configurable reconcile interval used for playlist reconciliation, regardless of whether any videos were added or evicted.

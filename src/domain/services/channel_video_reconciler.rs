@@ -69,7 +69,18 @@ impl ChannelVideoReconciler {
 pub trait ChannelVideoReconcilerApi: Send + Sync {
     /// Runs one reconcile pass for a channel and reschedules the next
     /// recurring pass — no-ops entirely if the channel no longer exists.
+    /// Called by the recurring `ReconcileChannelTask`. A failure to list
+    /// the channel's videos is not fatal: membership is left untouched for
+    /// this pass.
     fn reconcile(&self, id: ChannelHandle) -> anyhow::Result<()>;
+
+    /// Runs the first reconcile pass of a newly created channel and
+    /// schedules its recurring passes — no-ops entirely if the channel no
+    /// longer exists. Called by the one-shot `ChannelCreated` reaction.
+    /// Unlike `reconcile`, a failure to list the channel's videos fails the
+    /// pass and schedules nothing, so the caller retries it instead of
+    /// leaving the new channel empty until a recurring pass.
+    fn initial_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()>;
 
     /// Runs one reconcile pass for a channel immediately, on demand, without
     /// touching the recurring reconcile schedule. No-ops entirely if the
@@ -83,7 +94,16 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
             return Ok(());
         };
 
-        self.reconcile_channel(&channel)?;
+        self.reconcile_channel(&channel, ListingFailure::SkipMembership)?;
+        self.schedule_next_reconcile(&id)
+    }
+
+    fn initial_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
+        let Some(channel) = self.find_channel(&id)? else {
+            return Ok(());
+        };
+
+        self.reconcile_channel(&channel, ListingFailure::FailPass)?;
         self.schedule_next_reconcile(&id)
     }
 
@@ -92,7 +112,7 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
             return Ok(());
         };
 
-        self.reconcile_channel(&channel)
+        self.reconcile_channel(&channel, ListingFailure::SkipMembership)
     }
 }
 
@@ -109,11 +129,15 @@ impl ChannelVideoReconciler {
     /// channel's membership), then the channel's folder in line with the
     /// database. Everything the pass logs, `InternalVideoReconciler`'s steps
     /// included, carries the channel id through the pass's span.
-    fn reconcile_channel(&self, channel: &Channel) -> anyhow::Result<()> {
+    fn reconcile_channel(
+        &self,
+        channel: &Channel,
+        on_listing_failure: ListingFailure,
+    ) -> anyhow::Result<()> {
         let _span = info_span!("reconcile_channel", channel_id = %channel.id).entered();
         info!(channel_id = %channel.id, "reconciling channel");
 
-        let delta = self.sync_membership_with_youtube(channel)?;
+        let delta = self.sync_membership_with_youtube(channel, on_listing_failure)?;
         let desired = self.desired_state(channel)?;
         self.internal_video_reconciler.reconcile(&desired, &delta)
     }
@@ -122,33 +146,47 @@ impl ChannelVideoReconciler {
     /// `video_limit` most recent uploads: adds newly seen videos, refreshes
     /// the title and position of known ones, and removes stored videos no
     /// longer among them (removed on YouTube or aged past the limit). A
-    /// failed listing is not fatal: membership is left untouched for this
-    /// pass and the filesystem steps still run from the stored rows.
-    fn sync_membership_with_youtube(&self, channel: &Channel) -> anyhow::Result<MembershipDelta> {
-        let Some(current_videos) = self.list_current_videos(channel) else {
+    /// failed listing either leaves membership untouched for this pass, the
+    /// filesystem steps still running from the stored rows, or fails the
+    /// pass, per `on_listing_failure`.
+    fn sync_membership_with_youtube(
+        &self,
+        channel: &Channel,
+        on_listing_failure: ListingFailure,
+    ) -> anyhow::Result<MembershipDelta> {
+        let Some(current_videos) = self.list_current_videos(channel, on_listing_failure)? else {
             return Ok(MembershipDelta::default());
         };
-        let stored_videos = self
-            .channel_video_repository
-            .list_for_channel(&channel.id)?;
+        let stored_videos = self.list_stored_videos(channel)?;
         let now = self.clock.now();
 
+        // Keyed by YouTube id; a video added below joins it, so a video
+        // listed twice is stored once.
+        let mut known_videos: HashMap<String, (ChannelVideo, Video)> = stored_videos
+            .iter()
+            .map(|(cv, video)| {
+                (
+                    video.youtube_id.as_str().to_string(),
+                    (cv.clone(), video.clone()),
+                )
+            })
+            .collect();
         let mut delta = MembershipDelta::default();
         for current in &current_videos {
-            let youtube_id = VideoId::new(&current.youtube_id)?;
-            match self
-                .channel_video_repository
-                .find_by_youtube_video(&channel.id, &youtube_id)?
-            {
+            match known_videos.get(&current.youtube_id) {
                 None => {
-                    let added_id = self.add_video(channel, youtube_id, current, now)?;
-                    delta.added_ids.push(added_id);
+                    let youtube_id = VideoId::new(&current.youtube_id)?;
+                    let added = self.add_video(channel, youtube_id, current, now)?;
+                    delta.added_ids.push(added.1.id.clone());
+                    known_videos.insert(current.youtube_id.clone(), added);
                 }
-                Some(existing) => {
-                    if let Some((video_id, previous_title)) =
-                        self.refresh_known_video(existing, current, now)?
+                Some((existing, video)) => {
+                    if let Some(previous_title) =
+                        self.refresh_known_video(existing, video, current, now)?
                     {
-                        delta.previous_titles.insert(video_id, previous_title);
+                        delta
+                            .previous_titles
+                            .insert(video.id.clone(), previous_title);
                     }
                 }
             }
@@ -163,20 +201,54 @@ impl ChannelVideoReconciler {
         Ok(delta)
     }
 
-    /// The channel's current most recent uploads, or `None` (logged) when
-    /// they can't be listed — see `channel-video-sync`'s "yt-dlp fails to
-    /// list a channel's videos".
-    fn list_current_videos(&self, channel: &Channel) -> Option<Vec<ChannelVideoListing>> {
-        self.channel_videos_repository
-            .list_current_videos(&channel.id, channel.video_limit.value())
-            .inspect_err(|e| {
+    /// The channel's current most recent uploads. When they can't be listed
+    /// (see `channel-video-sync`'s "yt-dlp fails to list a channel's
+    /// videos"), either `None` (logged) or the error, per
+    /// `on_listing_failure`.
+    fn list_current_videos(
+        &self,
+        channel: &Channel,
+        on_listing_failure: ListingFailure,
+    ) -> anyhow::Result<Option<Vec<ChannelVideoListing>>> {
+        match (
+            self.channel_videos_repository
+                .list_current_videos(&channel.id, channel.video_limit.value()),
+            on_listing_failure,
+        ) {
+            (Ok(videos), _) => Ok(Some(videos)),
+            (Err(e), ListingFailure::FailPass) => Err(e.context("failed to list channel videos")),
+            (Err(e), ListingFailure::SkipMembership) => {
                 warn!(
                     channel_id = %channel.id,
-                    error = %error_report::cause_chain(e),
+                    error = %error_report::cause_chain(&e),
                     "failed to list channel videos"
                 );
-            })
-            .ok()
+                Ok(None)
+            }
+        }
+    }
+
+    /// Every stored video of the channel with its membership, in recency
+    /// order, read with one query per table.
+    fn list_stored_videos(&self, channel: &Channel) -> anyhow::Result<Vec<(ChannelVideo, Video)>> {
+        let channel_videos = self
+            .channel_video_repository
+            .list_for_channel(&channel.id)?;
+        let video_ids: Vec<VideoRecordId> = channel_videos
+            .iter()
+            .map(|cv| cv.video_id.clone())
+            .collect();
+        let mut videos: HashMap<VideoRecordId, Video> = self
+            .video_repository
+            .find_many(&video_ids)?
+            .into_iter()
+            .map(|video| (video.id.clone(), video))
+            .collect();
+
+        Ok(channel_videos
+            .into_iter()
+            .filter_map(|cv| videos.remove(&cv.video_id).map(|video| (cv, video)))
+            .collect())
     }
 
     /// Stores a newly seen video as `PENDING` at its recency position and
@@ -187,7 +259,7 @@ impl ChannelVideoReconciler {
         youtube_id: VideoId,
         current: &ChannelVideoListing,
         now: DateTime<Utc>,
-    ) -> anyhow::Result<VideoRecordId> {
+    ) -> anyhow::Result<(ChannelVideo, Video)> {
         let video = Video::create(youtube_id, current.title.clone(), now);
         self.video_repository.save(&video)?;
         let channel_video =
@@ -205,34 +277,32 @@ impl ChannelVideoReconciler {
                 video_id: video.id.as_str().to_string(),
             }))?;
 
-        Ok(video.id)
+        Ok((channel_video, video))
     }
 
     /// Follows a known video's title and recency position on YouTube.
     /// Returns the video's previous title when it was renamed.
     fn refresh_known_video(
         &self,
-        existing: ChannelVideo,
+        existing: &ChannelVideo,
+        video: &Video,
         current: &ChannelVideoListing,
         now: DateTime<Utc>,
-    ) -> anyhow::Result<Option<(VideoRecordId, String)>> {
-        let mut renamed = None;
-        if let Some(video) = self.video_repository.find(&existing.video_id)?
-            && video.title != current.title
-        {
+    ) -> anyhow::Result<Option<String>> {
+        let renamed = video.title != current.title;
+        if renamed {
             self.video_repository
                 .update_title(&video.id, &current.title, now)?;
-            renamed = Some((video.id, video.title));
         }
         if existing.position != current.position {
             self.channel_video_repository.save(&ChannelVideo {
                 position: current.position,
                 created_at: now,
-                ..existing
+                ..existing.clone()
             })?;
         }
 
-        Ok(renamed)
+        Ok(renamed.then(|| video.title.clone()))
     }
 
     /// Deletes every stored video whose YouTube id is not in
@@ -241,39 +311,34 @@ impl ChannelVideoReconciler {
     fn remove_videos_not_in(
         &self,
         channel: &Channel,
-        stored_videos: &[ChannelVideo],
+        stored_videos: &[(ChannelVideo, Video)],
         current_youtube_ids: &HashSet<&str>,
     ) -> anyhow::Result<()> {
-        for stored in stored_videos {
-            let Some(video) = self.video_repository.find(&stored.video_id)? else {
-                continue;
-            };
-            if current_youtube_ids.contains(video.youtube_id.as_str()) {
-                continue;
-            }
-
-            info!(
-                channel_id = %channel.id,
-                video_id = %video.youtube_id,
-                "removing video from channel (no longer among its most recent uploads)"
-            );
-            self.channel_video_repository
-                .delete(&channel.id, &video.youtube_id)?;
-            self.video_repository.delete(&video.id)?;
-            self.event_publisher
-                .publish(&DomainEvent::VideoRemovedFromChannel(
-                    VideoRemovedFromChannel {
-                        channel_id: channel.id.as_str().to_string(),
-                        video_id: video.id.as_str().to_string(),
-                        title: video.title.clone(),
-                        filename: video.filename.clone(),
-                        thumbnail_filename: video.thumbnail_filename.clone(),
-                        was_downloaded: video.status == VideoStatus::Downloaded,
-                    },
-                ))?;
-        }
-
-        Ok(())
+        stored_videos
+            .iter()
+            .map(|(_, video)| video)
+            .filter(|video| !current_youtube_ids.contains(video.youtube_id.as_str()))
+            .try_for_each(|video| {
+                info!(
+                    channel_id = %channel.id,
+                    video_id = %video.youtube_id,
+                    "removing video from channel (no longer among its most recent uploads)"
+                );
+                self.channel_video_repository
+                    .delete(&channel.id, &video.youtube_id)?;
+                self.video_repository.delete(&video.id)?;
+                self.event_publisher
+                    .publish(&DomainEvent::VideoRemovedFromChannel(
+                        VideoRemovedFromChannel {
+                            channel_id: channel.id.as_str().to_string(),
+                            video_id: video.id.as_str().to_string(),
+                            title: video.title.clone(),
+                            filename: video.filename.clone(),
+                            thumbnail_filename: video.thumbnail_filename.clone(),
+                            was_downloaded: video.status == VideoStatus::Downloaded,
+                        },
+                    ))
+            })
     }
 
     /// What the database says the channel's folder should contain. A
@@ -282,17 +347,14 @@ impl ChannelVideoReconciler {
         Ok(DesiredState {
             path: channel.path.clone(),
             quality: channel.quality,
-            videos: self.list_stored_videos(&channel.id)?,
+            video_ids: self
+                .channel_video_repository
+                .list_for_channel(&channel.id)?
+                .into_iter()
+                .map(|cv| cv.video_id)
+                .collect(),
             sort_positions: HashMap::new(),
         })
-    }
-
-    fn list_stored_videos(&self, id: &ChannelHandle) -> anyhow::Result<Vec<Video>> {
-        self.channel_video_repository
-            .list_for_channel(id)?
-            .iter()
-            .filter_map(|cv| self.video_repository.find(&cv.video_id).transpose())
-            .collect()
     }
 
     fn schedule_next_reconcile(&self, id: &ChannelHandle) -> anyhow::Result<()> {
@@ -308,4 +370,13 @@ impl ChannelVideoReconciler {
 
         Ok(())
     }
+}
+
+/// What a pass does when listing the channel's videos on YouTube fails.
+#[derive(Clone, Copy)]
+enum ListingFailure {
+    /// Leave membership untouched and run the rest of the pass.
+    SkipMembership,
+    /// Fail the pass.
+    FailPass,
 }
