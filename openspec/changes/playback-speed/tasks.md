@@ -23,5 +23,5 @@ None — frontend only, no adapters added or changed.
 
 ## 4. Verification
 
-- [ ] 4.1 `npm run check` and `npm run build` in `web/` pass; `cargo build --release` and `cargo test --locked` pass.
+- [x] 4.1 `npm run check` and `npm run build` in `web/` pass; `cargo build --release` and `cargo test --locked` pass.
 - [ ] 4.2 Manual check via `scripts/run-local.sh`: in a playlist and a channel view, pick 1.1x/1.5x/2x and confirm playback speed changes, the label updates, selecting another video and reloading reset to 1x, Chrome's native speed menu is reflected in the control, and the control is disabled on a not-yet-downloaded video; check the title row layout on a mobile-width viewport.
