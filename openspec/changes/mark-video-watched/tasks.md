@@ -24,7 +24,7 @@
 - [x] 2.3 `it_should_not_change_the_last_played_time_when_marking_a_video_watched`: `last_played_at` untouched
 - [x] 2.4 `it_should_leave_an_already_watched_video_unchanged_when_marking_it_watched`: 204, `watched_at` keeps the earlier time
 - [x] 2.5 `it_should_fail_to_mark_watched_a_video_not_downloaded`: 400 when no copy is `Downloaded`, nothing changes
-- [ ] 2.6 `it_should_fail_to_mark_watched_an_unknown_video`: 400 for an untracked YouTube ID
+- [x] 2.6 `it_should_fail_to_mark_watched_an_unknown_video`: 400 for an untracked YouTube ID
 - [ ] 2.7 `it_should_fail_to_mark_watched_if_invalid_video_id_provided`: 400 for an invalid ID
 - [ ] 2.8 `it_should_ignore_a_stale_progress_report_on_a_video_marked_watched`: `was_watched: false` at 40% on a watched video responds `watched: true`, video unchanged including `last_played_at`
 - [ ] 2.9 `it_should_fail_to_record_progress_if_was_watched_missing`: 400 and nothing recorded when `was_watched` is absent

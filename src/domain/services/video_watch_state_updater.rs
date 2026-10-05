@@ -166,13 +166,9 @@ impl VideoWatchStateUpdater {
         &self,
         youtube_id: &VideoId,
     ) -> Result<Vec<Video>, UpdateWatchStateError> {
-        Some(
-            self.video_repository
-                .find_by_youtube_id(youtube_id)
-                .map_err(UpdateWatchStateError::Repository)?,
-        )
-        .filter(|copies| copies.iter().any(Video::is_downloaded))
-        .ok_or_else(|| UpdateWatchStateError::VideoNotDownloaded(youtube_id.clone()))
+        Some(self.find_copies(youtube_id)?)
+            .filter(|copies| copies.iter().any(Video::is_downloaded))
+            .ok_or_else(|| UpdateWatchStateError::VideoNotDownloaded(youtube_id.clone()))
     }
 
     fn find_copies(&self, youtube_id: &VideoId) -> Result<Vec<Video>, UpdateWatchStateError> {
