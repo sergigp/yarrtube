@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Video Actions Menu
-Every video card on the home view, every row of a playlist or channel detail view's video list, and the title row of the video detail pane SHALL show an always-visible vertical "⋮" control to the right of the video's title. Activating it SHALL open a menu with a "Mark as watched" item, without selecting or navigating to the video. Choosing the item SHALL mark the video watched without confirmation. The item SHALL be disabled when the video is already watched or has not finished downloading. When marking fails, the application SHALL tell the user and leave the video as it was.
+Every video card on the home view, every row of a playlist or channel detail view's video list except the selected video's row, and the title row of the video detail pane SHALL show an always-visible vertical "⋮" control to the right of the video's title. Activating it SHALL open a menu with a "Mark as watched" item, without selecting or navigating to the video. Choosing the item SHALL mark the video watched without confirmation. The item SHALL be disabled when the video is already watched or has not finished downloading. When marking fails, the application SHALL tell the user and leave the video as it was. The selected video's row SHALL keep the space the control would take, so rows stay aligned when the selection changes.
 
 #### Scenario: Marking a video watched from a home card
 - **WHEN** a user chooses "Mark as watched" from the menu of a "Continue watching" card
@@ -14,6 +14,10 @@ Every video card on the home view, every row of a playlist or channel detail vie
 #### Scenario: Marking the selected video watched from its detail pane
 - **WHEN** a user chooses "Mark as watched" from the menu in the video detail pane
 - **THEN** the selected video is watched and its row in the list shows a tick
+
+#### Scenario: The selected row leaves the menu to the detail pane
+- **WHEN** a video is selected in a playlist or channel detail view
+- **THEN** its row in the list shows no "⋮" control, while the detail pane shows one
 
 #### Scenario: Opening the menu doesn't navigate
 - **WHEN** a user opens the menu on a home card or a list row

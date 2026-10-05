@@ -38,6 +38,7 @@
 - [x] 2.17 `useWatchProgress` "reports was_watched as the session's state"
 - [x] 2.18 `useWatchProgress` "pauses, rewinds and reports nothing when the video becomes watched while loaded": unmounting after the flip sends no report
 - [x] 2.19 `useWatchProgress` "reports was_watched true after a flip once playback moves on"
+- [ ] 2.20 `ChannelDetail` "the selected row shows no menu": selected row renders a same-size placeholder instead of `VideoActionsMenu`
 
 ## 3. Infrastructure adapters (TDD)
 

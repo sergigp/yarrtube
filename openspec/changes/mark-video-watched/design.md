@@ -16,7 +16,7 @@ Web:
 - `web/src/hooks/useWatchProgress.ts`: playback session; new session on a watched flip; reports `was_watched`
 - `web/src/components/VideoActionsMenu.tsx` (new): vertical ⋮ with "Mark as watched"
 - `web/src/components/Home.tsx`: menu right of the card title block
-- `web/src/components/VideoListPane.tsx`: row split into a select `<button>` plus a sibling menu
+- `web/src/components/VideoListPane.tsx`: row split into a select `<button>` plus a sibling menu; the selected row renders an empty placeholder of the same size instead of the menu
 - `web/src/components/VideoDetail.tsx`: menu in the title row
 - `web/src/test/helpers.tsx`: route helpers for the new endpoint if needed
 
@@ -189,6 +189,7 @@ Web (Vitest):
 
 14. `opening a row's menu does not change the selected video`
 15. `marking a row watched shows its tick`
+20. `the selected row shows no menu`
 
 `VideoDetail.test.tsx`:
 

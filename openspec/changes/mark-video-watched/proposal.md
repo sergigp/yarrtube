@@ -9,7 +9,7 @@ A video dropped halfway stays in "Continue watching" forever: there is no way to
 - The player's progress tracking starts a new playback session when the selected video's watched state changes under it. It drops the held position, pauses, and seeks to 0, so a stale position is never re-sent.
 - A vertical "⋮" menu with a "Mark as watched" item appears on:
   - every home card
-  - every row of the channel and playlist video lists
+  - every row of the channel and playlist video lists, except the selected video's row (its menu is in the detail pane)
   - the title row of the video detail pane under the player
 
   The item is disabled when the video is already watched or not downloaded.
