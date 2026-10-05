@@ -219,6 +219,18 @@ mod tests {
     }
 
     #[test]
+    fn it_should_update_an_existing_playlist() {
+        let repo = repo();
+        let original = playlist("PL1", "First");
+        repo.insert(&original).unwrap();
+        let updated = original.with_exclude_from_home(true);
+
+        repo.update(&updated).unwrap();
+
+        assert_eq!(repo.find(&updated.id).unwrap(), Some(updated));
+    }
+
+    #[test]
     fn it_should_fail_when_inserting_a_duplicate_id() {
         let repo = repo();
         let playlist = playlist("PL1", "First");
