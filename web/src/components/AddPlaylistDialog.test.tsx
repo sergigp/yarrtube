@@ -286,6 +286,17 @@ describe('AddPlaylistDialog', () => {
     expect(JSON.parse(createCall[1].body as string)).toMatchObject({ exclude_from_home: true })
   })
 
+  it('explains what "Exclude from home" does', async () => {
+    renderDialog({})
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: /Advanced options/ }))
+
+    expect(screen.getByRole('checkbox', { name: 'Exclude from home' })).toHaveAccessibleDescription(
+      "Videos from this playlist won't show up in home recommendations.",
+    )
+  })
+
   it('blocks a playlist that is already tracked', async () => {
     renderDialog({
       'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'Existing Mix' })],

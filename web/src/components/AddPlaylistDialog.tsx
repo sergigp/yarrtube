@@ -156,15 +156,21 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
             value={form.quality}
             onChange={setField('quality')}
           />
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <input
               id="add-playlist-exclude-from-home"
               type="checkbox"
-              className="size-4 accent-primary"
+              className="mt-0.5 size-4 shrink-0 accent-primary"
               checked={excludeFromHome}
               onChange={(event) => setExcludeFromHome(event.target.checked)}
+              aria-describedby="add-playlist-exclude-from-home-hint"
             />
-            <Label htmlFor="add-playlist-exclude-from-home">Exclude from home</Label>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="add-playlist-exclude-from-home">Exclude from home</Label>
+              <p id="add-playlist-exclude-from-home-hint" className="text-xs text-muted-foreground">
+                Videos from this playlist won't show up in home recommendations.
+              </p>
+            </div>
           </div>
         </div>
       </div>
