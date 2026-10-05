@@ -186,4 +186,12 @@ describe('Sidebar', () => {
 
     expect(onClose).toHaveBeenCalledOnce()
   })
+
+  it('has no title or close button of its own', async () => {
+    renderSidebar({ 'GET /api/channels': [], 'GET /api/playlists': [] })
+
+    expect(await screen.findByRole('heading', { name: 'Channels' })).toBeInTheDocument()
+    expect(screen.queryByText('Menu')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Close menu' })).not.toBeInTheDocument()
+  })
 })

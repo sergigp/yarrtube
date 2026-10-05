@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { CheckCheck, Ellipsis, Plus, RotateCw, Trash2, X } from 'lucide-react'
+import { CheckCheck, Ellipsis, Plus, RotateCw, Trash2 } from 'lucide-react'
 import {
   queryKeys,
   useChannels,
@@ -430,7 +430,7 @@ export function Sidebar({ open = false, onClose, onAddChannel, onAddPlaylist }: 
     <>
       {open && (
         <div
-          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          className="fixed inset-x-0 top-(--header-height) bottom-0 z-30 bg-black/40 md:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -438,22 +438,11 @@ export function Sidebar({ open = false, onClose, onAddChannel, onAddPlaylist }: 
       <aside
         id={SIDEBAR_ID}
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-64 max-w-[85%] flex-col gap-6 overflow-y-auto border-r border-border bg-background px-3 py-4 shadow-lg transition-transform duration-200 ease-in-out',
+          'fixed top-(--header-height) bottom-0 left-0 z-40 flex w-64 max-w-[85%] flex-col gap-6 overflow-y-auto border-r border-border bg-background px-3 py-4 shadow-lg transition-transform duration-200 ease-in-out',
           open ? 'translate-x-0' : '-translate-x-full',
           'md:static md:z-auto md:h-full md:w-60 md:max-w-none md:translate-x-0 md:shadow-none md:transition-none md:py-6',
         )}
       >
-        <div className="flex items-center justify-between md:hidden">
-          <span className="font-heading text-sm font-semibold text-foreground">Menu</span>
-          <button
-            type="button"
-            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            onClick={onClose}
-            aria-label="Close menu"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
         {searchable && (
           <Input
             type="search"
