@@ -177,6 +177,29 @@ describe('TasksView', () => {
     expect(reconcile).toHaveBeenCalledOnce()
   })
 
+  it('disables Run now while the sync is in progress', async () => {
+    const user = userEvent.setup()
+    mockApi({
+      'GET /api/tasks': [
+        aTask({
+          id: 1,
+          task_type: 'reconcile_playlist',
+          run_at: '2999-01-01T00:00:00Z',
+          payload: { playlist_id: 'PL1', playlist_name: 'Mix' },
+        }),
+      ],
+      'POST /api/playlists/PL1/reconcile': pendingForever(),
+    })
+
+    renderWithProviders(<TasksView />)
+
+    await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
+    const runNow = screen.getByRole('button', { name: 'Run now: Syncing playlist Mix' })
+    await user.click(runNow)
+
+    expect(runNow).toBeDisabled()
+  })
+
   it('lists download and thumbnail tasks under Downloads, and no sync or cleanup tasks', async () => {
     const user = userEvent.setup()
     mockApi({ 'GET /api/tasks': aMixOfTasks() })

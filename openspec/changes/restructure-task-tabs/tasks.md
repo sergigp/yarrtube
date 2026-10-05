@@ -18,7 +18,7 @@
 - [x] 2.12 `shows a live indicator on the Active tab only while a task is running`: drives the Beacon beside the Active count. Commit.
 - [x] 2.13 `runs a playlist sync now from the Syncs tab and refetches the tasks`: render `RunNowButton` on Syncs rows; on success it calls `reconcilePlaylist` and then invalidates the tasks and library queries. Commit.
 - [x] 2.14 `runs a channel sync now from the Syncs tab`: drives the channel branch through `reconcileChannel`. Commit.
-- [ ] 2.15 `disables Run now while the sync is in progress`: the button is disabled with a spinning icon while the request is pending. Commit.
+- [x] 2.15 `disables Run now while the sync is in progress`: the button is disabled with a spinning icon while the request is pending. Commit.
 - [ ] 2.16 `shows the failure on the row and lets Run now be retried`: shows the error inline and re-enables the button. Commit.
 - [ ] 2.17 `offers no Run now on a running sync or outside the Syncs tab`: guards on the tab and on `syncTarget`. Commit.
 - [ ] 2.18 Restyle the `line` variant in `ui/tabs.tsx` and the TasksView tab bar to meet the "Tasks View Tab Bar Affordance" requirement. This is a visual task, not a TDD cycle:
