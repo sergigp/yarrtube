@@ -48,7 +48,7 @@
 
 - [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass
 - [x] 4.2 `npm run check` passes in `web/`
-- [ ] 4.3 Manual check with `scripts/run-local.sh`:
+- [x] 4.3 Manual check with `scripts/run-local.sh`:
   - (a) Open a "Continue watching" video, mark its channel watched, navigate home. The video is gone and the badge is 0.
   - (b) Mark a playing video watched from the detail pane, then leave. It stays watched.
   - (c) Mark a video watched from a home card. It leaves "Continue watching".
