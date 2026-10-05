@@ -11,7 +11,7 @@
 - [x] 2.5 `it('follows speed changes made by the native controls')` — drives the `ratechange` listener.
 - [x] 2.6 `it('resets to normal speed when another video is selected')` — drives the per-video reset.
 - [x] 2.7 `it('shows the current speed and marks it in the menu')` — drives the menu trigger label and checked radio item.
-- [ ] 2.8 `it('reports the chosen speed')` — drives `onRateChange` from radio selection.
+- [x] 2.8 `it('reports the chosen speed')` — drives `onRateChange` from radio selection.
 - [ ] 2.9 `it('marks no speed when the current one is not offered')` — drives off-list speed display.
 - [ ] 2.10 `it('disables the speed control until the video is downloaded')` — drives `VideoDetail`'s `disabled` wiring.
 - [ ] 2.11 `it('plays the selected video at the chosen speed and resets it for the next video')` — end-to-end through `PlaylistDetail`.

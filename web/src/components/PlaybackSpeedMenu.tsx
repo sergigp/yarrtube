@@ -17,7 +17,12 @@ interface PlaybackSpeedMenuProps {
 }
 
 /** A menu of playback speeds, labelled with the current one. */
-export function PlaybackSpeedMenu({ rate, disabled, className }: PlaybackSpeedMenuProps) {
+export function PlaybackSpeedMenu({
+  rate,
+  onRateChange,
+  disabled,
+  className,
+}: PlaybackSpeedMenuProps) {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger
@@ -32,7 +37,10 @@ export function PlaybackSpeedMenu({ rate, disabled, className }: PlaybackSpeedMe
         <ChevronDown className="size-3.5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-24">
-        <DropdownMenuRadioGroup value={String(rate)}>
+        <DropdownMenuRadioGroup
+          value={String(rate)}
+          onValueChange={(value) => onRateChange(Number(value))}
+        >
           {PLAYBACK_SPEEDS.map((speed) => (
             <DropdownMenuRadioItem key={speed} value={String(speed)}>
               {formatPlaybackSpeed(speed)}

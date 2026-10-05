@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PlaybackSpeedMenu } from './PlaybackSpeedMenu'
@@ -23,5 +23,16 @@ describe('PlaybackSpeedMenu', () => {
       ['1.5x', 'false'],
       ['2x', 'false'],
     ])
+  })
+
+  it('reports the chosen speed', async () => {
+    const onRateChange = vi.fn()
+    render(<PlaybackSpeedMenu rate={1} onRateChange={onRateChange} disabled={false} />)
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Playback speed' }))
+    await user.click(await screen.findByRole('menuitemradio', { name: '1.5x' }))
+
+    expect(onRateChange).toHaveBeenCalledExactlyOnceWith(1.5)
   })
 })
