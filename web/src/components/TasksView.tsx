@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Activity, Download, RotateCw, Trash2, Wrench, type LucideIcon } from 'lucide-react'
-import { reconcilePlaylist } from '@/api/client'
+import { reconcileChannel, reconcilePlaylist } from '@/api/client'
 import { useInvalidateTasks, useTasks } from '@/api/queries'
 import { formatRelativeTime } from '@/lib/formatDateTime'
 import {
@@ -181,7 +181,9 @@ function RunNowButton({ target, name }: { target: SyncTarget; name: string }) {
       size="sm"
       aria-label={`Run now: ${name}`}
       onClick={async () => {
-        await reconcilePlaylist(target.id)
+        await (target.kind === 'playlist'
+          ? reconcilePlaylist(target.id)
+          : reconcileChannel(target.id))
         await invalidateTasks()
       }}
     >

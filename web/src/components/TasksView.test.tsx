@@ -154,6 +154,29 @@ describe('TasksView', () => {
     await waitFor(() => expect(tasks).toHaveBeenCalledTimes(2))
   })
 
+  it('runs a channel sync now from the Syncs tab', async () => {
+    const user = userEvent.setup()
+    const reconcile = vi.fn(() => null)
+    mockApi({
+      'GET /api/tasks': [
+        aTask({
+          id: 1,
+          task_type: 'reconcile_channel',
+          run_at: '2999-01-01T00:00:00Z',
+          payload: { channel_id: '@chan', channel_name: 'Chan' },
+        }),
+      ],
+      'POST /api/channels/%40chan/reconcile': reconcile,
+    })
+
+    renderWithProviders(<TasksView />)
+
+    await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
+    await user.click(screen.getByRole('button', { name: 'Run now: Syncing channel Chan' }))
+
+    expect(reconcile).toHaveBeenCalledOnce()
+  })
+
   it('lists download and thumbnail tasks under Downloads, and no sync or cleanup tasks', async () => {
     const user = userEvent.setup()
     mockApi({ 'GET /api/tasks': aMixOfTasks() })
