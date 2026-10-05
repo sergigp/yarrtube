@@ -51,7 +51,7 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 `SqlitePlaylistRepository` `it_should_return_the_exclude_from_home_of_an_inserted_playlist`: insert with `true` → `find` returns `true`
+- [x] 3.1 `SqlitePlaylistRepository` `it_should_return_the_exclude_from_home_of_an_inserted_playlist`: insert with `true` → `find` returns `true`
 - [ ] 3.2 `SqlitePlaylistRepository` `it_should_update_an_existing_playlist`: `update` with `with_exclude_from_home(true)` → `find` returns it, other fields unchanged
 - [ ] 3.3 `sqlite_migrations` `it_should_default_existing_playlists_to_shown_on_home_when_migrating`: a pre-0007 playlist row has `exclude_from_home = 0` after migrating
 

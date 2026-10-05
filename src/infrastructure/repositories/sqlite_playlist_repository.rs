@@ -206,6 +206,19 @@ mod tests {
     }
 
     #[test]
+    fn it_should_return_the_exclude_from_home_of_an_inserted_playlist() {
+        let repo = repo();
+        let playlist = Playlist {
+            exclude_from_home: true,
+            ..playlist("PL1", "First")
+        };
+
+        repo.insert(&playlist).unwrap();
+
+        assert_eq!(repo.find(&playlist.id).unwrap(), Some(playlist));
+    }
+
+    #[test]
     fn it_should_fail_when_inserting_a_duplicate_id() {
         let repo = repo();
         let playlist = playlist("PL1", "First");
