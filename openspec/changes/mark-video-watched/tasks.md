@@ -33,7 +33,7 @@
 - [x] 2.12 `VideoActionsMenu` "alerts and leaves the video as it was when marking fails"
 - [x] 2.13 `Home` "marking a continue-watching video watched removes it from the section": menu placed right of the card title block
 - [x] 2.14 `ChannelDetail` "opening a row's menu does not change the selected video": `VideoListPane` row split into a select button plus a sibling menu
-- [ ] 2.15 `ChannelDetail` "marking a row watched shows its tick"
+- [x] 2.15 `ChannelDetail` "marking a row watched shows its tick"
 - [ ] 2.16 `VideoDetail` "marks the selected video watched from the detail pane": menu in the title row
 - [ ] 2.17 `useWatchProgress` "reports was_watched as the session's state"
 - [ ] 2.18 `useWatchProgress` "pauses, rewinds and reports nothing when the video becomes watched while loaded": unmounting after the flip sends no report

@@ -108,6 +108,34 @@ describe('ChannelDetail', () => {
     expect(screen.getByRole('heading', { name: 'First Video' })).toBeInTheDocument()
   })
 
+  it('marking a row watched shows its tick', async () => {
+    const channel = aChannel({ id: 'chan' })
+    const first = aVideo({ title: 'First Video' })
+    const second = aVideo({ id: 'second', title: 'Second Video' })
+    let marked = false
+    renderChannel(
+      {
+        'GET /api/channels': [channel],
+        'GET /api/channels/chan/videos': () => [first, { ...second, watched: marked }],
+        'POST /api/videos/second/watched': () => {
+          marked = true
+          return null
+        },
+      },
+      '/channels/chan',
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Second Video' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark as watched' }))
+
+    // The row's tick comes first in its select button's accessible name.
+    expect(
+      await screen.findByRole('button', { name: /^Watched.*Second Video$/ }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'First Video' })).toBeInTheDocument()
+  })
+
   it('explains when the selected video is not downloaded yet', async () => {
     const channel = aChannel({ id: 'chan' })
     renderChannel(
