@@ -64,7 +64,7 @@
 - [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass
 - [x] 4.2 `npm run check` passes in `web/`
 - [x] 4.3 Extend `smoke-tests/tests/playlist.spec.js`: exclude the playlist from home through its ⋮ menu → its card leaves home; include it again → it returns. Run `scripts/run-smoke-tests.sh` and it passes
-- [ ] 4.4 Manual check with `scripts/run-local.sh`:
+- [x] 4.4 Manual check with `scripts/run-local.sh`:
   - (a) Add a playlist with "Exclude from home" checked. Its videos never show on home.
   - (b) From a home card of a shown playlist, choose `Exclude "<name>" from home`. All its cards disappear.
   - (c) Sidebar and page header ⋮ show "Include in home" for that playlist, and choosing it brings the cards back.
