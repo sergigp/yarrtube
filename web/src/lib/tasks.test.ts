@@ -7,6 +7,7 @@ import {
   tasksForTab,
   taskCategory,
   taskFamily,
+  taskKind,
 } from './tasks'
 import { aTask } from '@/test/helpers'
 
@@ -191,6 +192,19 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     ]
 
     expect(tabCounts(tasks)).toEqual({ active: 2, downloads: 2, syncs: 1, other: 3 })
+  })
+
+  it('maps each task type to its icon kind', () => {
+    expect(taskKind(aTask({ task_type: 'download_video' }))).toBe('download')
+    expect(taskKind(aTask({ task_type: 'fetch_thumbnail' }))).toBe('download')
+    expect(taskKind(aTask({ task_type: 'reconcile_playlist' }))).toBe('sync')
+    expect(taskKind(aTask({ task_type: 'reconcile_channel' }))).toBe('sync')
+    expect(taskKind(aTask({ task_type: 'reconcile_plex_collections' }))).toBe('sync')
+    expect(taskKind(aTask({ task_type: 'delete_video_file' }))).toBe('delete')
+    expect(taskKind(aTask({ task_type: 'delete_playlist_files' }))).toBe('delete')
+    expect(taskKind(aTask({ task_type: 'delete_channel_files' }))).toBe('delete')
+    expect(taskKind(aTask({ task_type: 'update_ytdlp' }))).toBe('maintenance')
+    expect(taskKind(aTask({ task_type: 'mystery_task' }))).toBe('maintenance')
   })
 
   it('matches on the description, ignoring case', () => {

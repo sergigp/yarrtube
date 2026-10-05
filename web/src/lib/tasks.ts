@@ -81,9 +81,20 @@ export function tabCounts(tasks: Task[]): Record<TaskTab, number> {
 
 export type TaskKind = 'download' | 'sync' | 'delete' | 'maintenance'
 
+const KIND_BY_TYPE: Record<string, TaskKind> = {
+  download_video: 'download',
+  fetch_thumbnail: 'download',
+  reconcile_playlist: 'sync',
+  reconcile_channel: 'sync',
+  reconcile_plex_collections: 'sync',
+  delete_video_file: 'delete',
+  delete_playlist_files: 'delete',
+  delete_channel_files: 'delete',
+}
+
 /** What kind of work a task does, which picks its row icon. */
-export function taskKind(_task: Task): TaskKind {
-  return 'maintenance'
+export function taskKind(task: Task): TaskKind {
+  return KIND_BY_TYPE[task.task_type] ?? 'maintenance'
 }
 
 export interface SyncTarget {

@@ -12,7 +12,7 @@
 - [x] 2.6 `lists only playlist and channel reconciles in the syncs tab`: Plex sync is no longer in Syncs. Commit.
 - [x] 2.7 `collects Plex sync, yt-dlp update, deletions and unknown types in the other tab`: drives `tasksForTab(tasks, 'other')`. Commit.
 - [x] 2.8 `returns counts where downloads, syncs and other add up to every task`: drives `tabCounts` over the new tabs. Commit.
-- [ ] 2.9 `maps each task type to its icon kind`: drives `taskKind` (download, sync, delete, maintenance). Commit.
+- [x] 2.9 `maps each task type to its icon kind`: drives `taskKind` (download, sync, delete, maintenance). Commit.
 - [ ] 2.10 `returns a sync target for pending playlist and channel reconciles only`: drives `syncTarget`, which returns null for a running task, a Plex sync or a missing id. Commit.
 - [ ] 2.11 `shows Active, Downloads, Syncs and Other tabs with counts, and no Cleanup or All tab`: drives the tab triggers in TasksView. Commit.
 - [ ] 2.12 `shows a live indicator on the Active tab only while a task is running`: drives the Beacon beside the Active count. Commit.
