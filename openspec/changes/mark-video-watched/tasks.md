@@ -41,12 +41,12 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 None. No adapter changes (design.md Test Plan §2); verify by confirming no file under `src/infrastructure/` is in the diff.
+- [x] 3.1 None. No adapter changes (design.md Test Plan §2); verify by confirming no file under `src/infrastructure/` is in the diff.
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass
-- [ ] 4.2 `npm run check` passes in `web/`
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass
+- [x] 4.2 `npm run check` passes in `web/`
 - [ ] 4.3 Manual check with `scripts/run-local.sh`:
   - (a) Open a "Continue watching" video, mark its channel watched, navigate home. The video is gone and the badge is 0.
   - (b) Mark a playing video watched from the detail pane, then leave. It stays watched.
