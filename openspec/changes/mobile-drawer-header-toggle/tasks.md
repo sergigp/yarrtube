@@ -4,7 +4,7 @@
 
 ## 2. Component behaviour (TDD)
 
-- [ ] 2.1 `MobileNavToggle` closed: named "Open menu" with `aria-expanded="false"` — verify the test fails first, then passes.
+- [x] 2.1 `MobileNavToggle` closed: named "Open menu" with `aria-expanded="false"` — verify the test fails first, then passes.
 - [ ] 2.2 `MobileNavToggle` open: named "Close menu" with `aria-expanded="true"`, bars morph into an X (motion-reduce safe) — verify the test fails first, then passes.
 - [ ] 2.3 `MobileNavToggle` click calls `onToggle` — verify the test passes.
 - [ ] 2.4 `Sidebar` pressing Escape while open calls `onClose` — verify the test fails first, then passes.

@@ -8,7 +8,7 @@ interface MobileNavToggleProps {
   controls: string
 }
 
-export function MobileNavToggle({ onToggle, controls }: MobileNavToggleProps) {
+export function MobileNavToggle({ open, onToggle, controls }: MobileNavToggleProps) {
   return (
     <Button
       variant="ghost"
@@ -16,6 +16,7 @@ export function MobileNavToggle({ onToggle, controls }: MobileNavToggleProps) {
       className="md:hidden"
       onClick={onToggle}
       aria-label="Open menu"
+      aria-expanded={open}
       aria-controls={controls}
     >
       <Menu className="size-5" />
