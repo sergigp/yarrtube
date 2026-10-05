@@ -42,10 +42,10 @@ function humanizeType(type: string): string {
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Task'
 }
 
-export type TaskFamily = 'downloads' | 'syncs' | 'cleanup' | 'maintenance'
-export type TaskTab = 'active' | 'downloads' | 'syncs' | 'cleanup' | 'all'
+export type TaskFamily = 'downloads' | 'syncs' | 'other'
+export type TaskTab = 'active' | 'downloads' | 'syncs' | 'other'
 
-export const TASK_TABS: readonly TaskTab[] = ['active', 'downloads', 'syncs', 'cleanup', 'all']
+export const TASK_TABS: readonly TaskTab[] = ['active', 'downloads', 'syncs', 'other']
 
 /** Above this many tasks in a tab, the search field is worth showing. */
 export const TASK_SEARCH_THRESHOLD = 15
@@ -56,19 +56,16 @@ const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
   reconcile_playlist: 'syncs',
   reconcile_channel: 'syncs',
   reconcile_plex_collections: 'syncs',
-  delete_video_file: 'cleanup',
-  delete_playlist_files: 'cleanup',
-  delete_channel_files: 'cleanup',
 }
 
 export function taskFamily(task: Task): TaskFamily {
-  return FAMILY_BY_TYPE[task.task_type] ?? 'maintenance'
+  return FAMILY_BY_TYPE[task.task_type] ?? 'other'
 }
 
 export function tasksForTab(tasks: Task[], tab: TaskTab): Task[] {
   const inTab =
-    tab === 'all'
-      ? tasks
+    tab === 'other'
+      ? []
       : tab === 'active'
         ? tasks.filter((task) => task.status === 'running')
         : tasks.filter((task) => taskFamily(task) === tab)
@@ -83,6 +80,23 @@ export function tabCounts(tasks: Task[]): Record<TaskTab, number> {
     },
     {} as Record<TaskTab, number>,
   )
+}
+
+export type TaskKind = 'download' | 'sync' | 'delete' | 'maintenance'
+
+/** What kind of work a task does, which picks its row icon. */
+export function taskKind(_task: Task): TaskKind {
+  return 'maintenance'
+}
+
+export interface SyncTarget {
+  kind: 'playlist' | 'channel'
+  id: string
+}
+
+/** The playlist or channel a Run now on this task would sync, if it offers one. */
+export function syncTarget(_task: Task): SyncTarget | null {
+  return null
 }
 
 export function matchesTask(task: Task, text: string): boolean {

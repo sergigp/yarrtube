@@ -1,21 +1,24 @@
 import { useState } from 'react'
-import { Download, RotateCw, Trash2, Wrench, type LucideIcon } from 'lucide-react'
+import { Activity, Download, RotateCw, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import { useTasks } from '@/api/queries'
 import { formatRelativeTime } from '@/lib/formatDateTime'
 import {
   describeTask,
   matchesTask,
   tabCounts,
+  syncTarget,
   tasksForTab,
   taskCategory,
-  taskFamily,
+  taskKind,
   TASK_SEARCH_THRESHOLD,
   TASK_TABS,
-  type TaskFamily,
+  type SyncTarget,
+  type TaskKind,
   type TaskTab,
 } from '@/lib/tasks'
 import { Beacon } from './Beacon'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -36,14 +39,20 @@ const TAB_LABELS: Record<TaskTab, string> = {
   active: 'Active',
   downloads: 'Downloads',
   syncs: 'Syncs',
-  cleanup: 'Cleanup',
-  all: 'All',
+  other: 'Other',
 }
 
-const FAMILY_ICON: Record<TaskFamily, LucideIcon> = {
+const TAB_ICON: Record<TaskTab, LucideIcon> = {
+  active: Activity,
   downloads: Download,
   syncs: RotateCw,
-  cleanup: Trash2,
+  other: Wrench,
+}
+
+const KIND_ICON: Record<TaskKind, LucideIcon> = {
+  download: Download,
+  sync: RotateCw,
+  delete: Trash2,
   maintenance: Wrench,
 }
 
@@ -79,13 +88,17 @@ export function TasksView() {
           setSearch('')
         }}
       >
-        <TabsList className="w-full">
-          {TASK_TABS.map((value) => (
-            <TabsTrigger key={value} value={value}>
-              {TAB_LABELS[value]}
-              <Badge variant="secondary">{counts[value]}</Badge>
-            </TabsTrigger>
-          ))}
+        <TabsList variant="line" className="w-full">
+          {TASK_TABS.map((value) => {
+            const TabIcon = TAB_ICON[value]
+            return (
+              <TabsTrigger key={value} value={value}>
+                <TabIcon aria-hidden />
+                {TAB_LABELS[value]}
+                <Badge variant="secondary">{counts[value]}</Badge>
+              </TabsTrigger>
+            )
+          })}
         </TabsList>
         <TabsContent value={tab} className="flex flex-col gap-2">
           {showSearch && (
@@ -109,7 +122,8 @@ export function TasksView() {
             <ul className="flex flex-col divide-y divide-border">
               {rows.map((task, index) => {
                 const category = taskCategory(task)
-                const Icon = FAMILY_ICON[taskFamily(task)]
+                const Icon = KIND_ICON[taskKind(task)]
+                const target = tab === 'syncs' ? syncTarget(task) : null
                 return (
                   <li
                     key={task.id}
@@ -139,6 +153,7 @@ export function TasksView() {
                         {category}
                       </Badge>
                       {task.retries > 0 && <Badge variant="outline">{task.retries} retries</Badge>}
+                      {target && <RunNowButton target={target} name={describeTask(task)} />}
                       <span className="w-16 text-right text-xs text-muted-foreground">
                         {category === 'pending' ? formatRelativeTime(task.run_at) : ''}
                       </span>
@@ -151,5 +166,14 @@ export function TasksView() {
         </TabsContent>
       </Tabs>
     </TooltipProvider>
+  )
+}
+
+function RunNowButton({ target, name }: { target: SyncTarget; name: string }) {
+  return (
+    <Button variant="outline" size="sm" aria-label={`Run ${name} now`} data-target={target.id}>
+      <RotateCw />
+      Run now
+    </Button>
   )
 }

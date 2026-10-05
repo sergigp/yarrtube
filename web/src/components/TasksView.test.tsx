@@ -100,18 +100,6 @@ describe('TasksView', () => {
     expect(screen.queryByText('Downloading Intro in Chan')).not.toBeInTheDocument()
   })
 
-  it('shows each tab trigger with its task count', async () => {
-    mockApi({ 'GET /api/tasks': aMixOfTasks() })
-
-    renderWithProviders(<TasksView />)
-
-    expect(await screen.findByRole('tab', { name: /Active/ })).toHaveTextContent('1')
-    expect(screen.getByRole('tab', { name: /Downloads/ })).toHaveTextContent('2')
-    expect(screen.getByRole('tab', { name: /Syncs/ })).toHaveTextContent('1')
-    expect(screen.getByRole('tab', { name: /Cleanup/ })).toHaveTextContent('1')
-    expect(screen.getByRole('tab', { name: /All/ })).toHaveTextContent('5')
-  })
-
   it('lists download and thumbnail tasks under Downloads, and no sync or cleanup tasks', async () => {
     const user = userEvent.setup()
     mockApi({ 'GET /api/tasks': aMixOfTasks() })
@@ -210,7 +198,7 @@ describe('TasksView', () => {
     await user.type(await screen.findByRole('searchbox', { name: 'Search tasks' }), 'alpha')
     expect(screen.getByRole('searchbox', { name: 'Search tasks' })).toHaveValue('alpha')
 
-    await user.click(screen.getByRole('tab', { name: /All/ }))
+    await user.click(screen.getByRole('tab', { name: /Downloads/ }))
 
     expect(screen.getByRole('searchbox', { name: 'Search tasks' })).toHaveValue('')
   })

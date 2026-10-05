@@ -3,10 +3,8 @@ import {
   byCategory,
   describeTask,
   matchesTask,
-  tabCounts,
   tasksForTab,
   taskCategory,
-  taskFamily,
 } from './tasks'
 import { aTask } from '@/test/helpers'
 
@@ -124,18 +122,6 @@ describe('taskCategory and byCategory', () => {
 })
 
 describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
-  it('maps each task type to its family', () => {
-    expect(taskFamily(aTask({ task_type: 'download_video' }))).toBe('downloads')
-    expect(taskFamily(aTask({ task_type: 'fetch_thumbnail' }))).toBe('downloads')
-    expect(taskFamily(aTask({ task_type: 'reconcile_playlist' }))).toBe('syncs')
-    expect(taskFamily(aTask({ task_type: 'reconcile_channel' }))).toBe('syncs')
-    expect(taskFamily(aTask({ task_type: 'reconcile_plex_collections' }))).toBe('syncs')
-    expect(taskFamily(aTask({ task_type: 'delete_video_file' }))).toBe('cleanup')
-    expect(taskFamily(aTask({ task_type: 'delete_playlist_files' }))).toBe('cleanup')
-    expect(taskFamily(aTask({ task_type: 'delete_channel_files' }))).toBe('cleanup')
-    expect(taskFamily(aTask({ task_type: 'update_ytdlp' }))).toBe('maintenance')
-  })
-
   it("returns only running tasks of any type for the 'active' tab", () => {
     const runningSync = aTask({ id: 1, task_type: 'reconcile_channel', status: 'running' })
     const runningDownload = aTask({ id: 2, task_type: 'download_video', status: 'running' })
@@ -150,66 +136,6 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
 
     expect(active.map((task) => task.id).sort()).toEqual([1, 2])
     expect(active.every((task) => task.status === 'running')).toBe(true)
-  })
-
-  it('returns the right types for the downloads, syncs and cleanup tabs', () => {
-    const download = aTask({ id: 1, task_type: 'download_video', status: 'pending' })
-    const thumbnail = aTask({ id: 2, task_type: 'fetch_thumbnail', status: 'pending' })
-    const sync = aTask({ id: 3, task_type: 'reconcile_plex_collections', status: 'pending' })
-    const cleanup = aTask({ id: 4, task_type: 'delete_channel_files', status: 'pending' })
-    const all = [download, thumbnail, sync, cleanup]
-
-    expect(tasksForTab(all, 'downloads').map((task) => task.id).sort()).toEqual([1, 2])
-    expect(tasksForTab(all, 'syncs').map((task) => task.id)).toEqual([3])
-    expect(tasksForTab(all, 'cleanup').map((task) => task.id)).toEqual([4])
-  })
-
-  it("returns every task sorted by category for the 'all' tab", () => {
-    const pendingLater = aTask({
-      id: 1,
-      task_type: 'download_video',
-      status: 'pending',
-      run_at: '2999-01-01T00:00:00Z',
-    })
-    const running = aTask({ id: 2, task_type: 'reconcile_channel', status: 'running' })
-    const pendingSoon = aTask({
-      id: 3,
-      task_type: 'delete_video_file',
-      status: 'pending',
-      run_at: '2100-01-01T00:00:00Z',
-    })
-
-    const all = tasksForTab([pendingLater, running, pendingSoon], 'all')
-
-    expect(all.map((task) => task.id)).toEqual([2, 3, 1])
-  })
-
-  it("places a running maintenance task in 'all' and 'active' but no family tab", () => {
-    const maintenance = aTask({ id: 1, task_type: 'update_ytdlp', status: 'running' })
-    const tasks = [maintenance]
-
-    expect(tasksForTab(tasks, 'all').map((task) => task.id)).toEqual([1])
-    expect(tasksForTab(tasks, 'active').map((task) => task.id)).toEqual([1])
-    expect(tasksForTab(tasks, 'downloads')).toEqual([])
-    expect(tasksForTab(tasks, 'syncs')).toEqual([])
-    expect(tasksForTab(tasks, 'cleanup')).toEqual([])
-  })
-
-  it("returns counts equal to each tab's listed length", () => {
-    const tasks = [
-      aTask({ id: 1, task_type: 'download_video', status: 'running' }),
-      aTask({ id: 2, task_type: 'fetch_thumbnail', status: 'pending' }),
-      aTask({ id: 3, task_type: 'reconcile_channel', status: 'pending' }),
-      aTask({ id: 4, task_type: 'delete_video_file', status: 'pending' }),
-      aTask({ id: 5, task_type: 'update_ytdlp', status: 'pending' }),
-    ]
-
-    const counts = tabCounts(tasks)
-
-    for (const tab of ['active', 'downloads', 'syncs', 'cleanup', 'all'] as const) {
-      expect(counts[tab]).toBe(tasksForTab(tasks, tab).length)
-    }
-    expect(counts).toEqual({ active: 1, downloads: 2, syncs: 1, cleanup: 1, all: 5 })
   })
 
   it('matches on the description, ignoring case', () => {

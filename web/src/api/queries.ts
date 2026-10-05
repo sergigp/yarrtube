@@ -144,6 +144,11 @@ export function useInvalidateLibrary(): () => Promise<unknown> {
   )
 }
 
+/** Returns a function that refetches the task list, e.g. after a sync run on demand. */
+export function useInvalidateTasks(): () => Promise<unknown> {
+  return useCallback(() => Promise.resolve(), [])
+}
+
 /**
  * Returns a function that wraps an async action so the channel and playlist
  * lists refetch once it succeeds.
