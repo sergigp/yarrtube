@@ -10,4 +10,13 @@ describe('MobileNavToggle', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(toggle).toHaveAttribute('aria-controls', 'nav')
   })
+
+  it('offers to close the menu while open', () => {
+    render(<MobileNavToggle open onToggle={() => {}} controls="nav" />)
+
+    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+  })
 })
