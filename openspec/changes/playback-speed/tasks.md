@@ -14,7 +14,7 @@
 - [x] 2.8 `it('reports the chosen speed')` — drives `onRateChange` from radio selection.
 - [x] 2.9 `it('marks no speed when the current one is not offered')` — drives off-list speed display.
 - [x] 2.10 `it('disables the speed control until the video is downloaded')` — drives `VideoDetail`'s `disabled` wiring.
-- [ ] 2.11 `it('plays the selected video at the chosen speed and resets it for the next video')` — end-to-end through `PlaylistDetail`.
+- [x] 2.11 `it('plays the selected video at the chosen speed and resets it for the next video')` — end-to-end through `PlaylistDetail`.
 
 ## 3. Infrastructure adapters (TDD)
 

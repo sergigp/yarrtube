@@ -152,4 +152,36 @@ describe('PlaylistDetail', () => {
     await user.click(screen.getByRole('button', { name: 'More actions for The Playlist' }))
     expect(await screen.findByRole('menuitem', { name: 'Exclude from home' })).toBeInTheDocument()
   })
+
+  it('plays the selected video at the chosen speed and resets it for the next video', async () => {
+    const playlist = aPlaylist({ id: 'PL1' })
+    renderPlaylist(
+      {
+        'GET /api/playlists': [playlist],
+        'GET /api/playlists/PL1/videos': [
+          aVideo({ id: 'first', title: 'First Video', filename: 'first.mp4' }),
+          aVideo({
+            id: 'second',
+            title: 'Second Video',
+            filename: 'second.mp4',
+            duration_seconds: 120,
+          }),
+        ],
+      },
+      '/playlists/PL1',
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Playback speed' }))
+    await user.click(await screen.findByRole('menuitemradio', { name: '2x' }))
+
+    expect(document.querySelector('video')?.playbackRate).toBe(2)
+    expect(screen.getByRole('button', { name: 'Playback speed' })).toHaveTextContent('2x')
+
+    await user.click(screen.getByRole('button', { name: '2:00 Second Video' }))
+
+    expect(await screen.findByRole('heading', { name: 'Second Video' })).toBeInTheDocument()
+    expect(document.querySelector('video')?.playbackRate).toBe(1)
+    expect(screen.getByRole('button', { name: 'Playback speed' })).toHaveTextContent('1x')
+  })
 })
