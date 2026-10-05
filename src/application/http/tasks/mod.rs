@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_playlist_name_in_reconcile_playlist_tasks() {
+    async fn it_should_include_playlist_id_in_reconcile_playlist_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.database(),
@@ -173,7 +173,7 @@ mod tests {
             response,
             Ok(vec![pending_task(
                 "reconcile_playlist",
-                &[("playlist_name", "My Playlist")]
+                &[("playlist_id", "PL1"), ("playlist_name", "My Playlist")]
             )])
         );
     }
