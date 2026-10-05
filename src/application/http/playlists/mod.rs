@@ -233,6 +233,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_create_a_playlist_shown_on_home_by_default() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let request = CreatePlaylistRequest {
+            exclude_from_home: None,
+            ..create_request("PL1")
+        };
+
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                PlaylistResponse {
+                    exclude_from_home: false,
+                    ..playlist_response("PL1", DEFAULT_PATH)
+                }
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![Playlist {
+                exclude_from_home: false,
+                ..playlist("PL1", DEFAULT_PATH)
+            }]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_name_the_playlist_after_its_id_if_youtube_title_blank() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
