@@ -165,13 +165,19 @@ impl Video {
     /// becomes unwatched again once a rewatch passes 10%, as long as it is
     /// still below 90%. With no known duration an unwatched video only keeps
     /// the position. Whatever the outcome, the video counts as played `now`.
+    /// A report is stale when its playback began with the video unwatched
+    /// (`was_watched` false) but the video is now watched: it was marked
+    /// watched since, so the video is returned unchanged, not even played.
     pub fn update_watch_state(
         self,
         position: PlaybackPosition,
         reported_duration: Option<VideoDuration>,
-        _was_watched: bool,
+        was_watched: bool,
         now: DateTime<Utc>,
     ) -> Self {
+        if !was_watched && self.is_watched() {
+            return self;
+        }
         let progress = self
             .known_duration_seconds(reported_duration)
             .map(|duration| position.seconds() as f64 / duration as f64);

@@ -26,7 +26,7 @@
 - [x] 2.5 `it_should_fail_to_mark_watched_a_video_not_downloaded`: 400 when no copy is `Downloaded`, nothing changes
 - [x] 2.6 `it_should_fail_to_mark_watched_an_unknown_video`: 400 for an untracked YouTube ID
 - [x] 2.7 `it_should_fail_to_mark_watched_if_invalid_video_id_provided`: 400 for an invalid ID
-- [ ] 2.8 `it_should_ignore_a_stale_progress_report_on_a_video_marked_watched`: `was_watched: false` at 40% on a watched video responds `watched: true`, video unchanged including `last_played_at`
+- [x] 2.8 `it_should_ignore_a_stale_progress_report_on_a_video_marked_watched`: `was_watched: false` at 40% on a watched video responds `watched: true`, video unchanged including `last_played_at`
 - [ ] 2.9 `it_should_fail_to_record_progress_if_was_watched_missing`: 400 and nothing recorded when `was_watched` is absent
 - [ ] 2.10 `VideoActionsMenu` "marks the video watched when "Mark as watched" is chosen": POST routed, channels and home refetched
 - [ ] 2.11 `VideoActionsMenu` "disables "Mark as watched" when not markable"
