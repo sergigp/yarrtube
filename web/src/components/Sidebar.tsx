@@ -357,6 +357,8 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
+export const SIDEBAR_ID = 'app-sidebar'
+
 interface SidebarProps {
   open?: boolean
   onClose: () => void
@@ -417,6 +419,7 @@ export function Sidebar({ open = false, onClose, onAddChannel, onAddPlaylist }: 
         />
       )}
       <aside
+        id={SIDEBAR_ID}
         className={cn(
           'fixed inset-y-0 left-0 z-40 flex w-64 max-w-[85%] flex-col gap-6 overflow-y-auto border-r border-border bg-background px-3 py-4 shadow-lg transition-transform duration-200 ease-in-out',
           open ? 'translate-x-0' : '-translate-x-full',
