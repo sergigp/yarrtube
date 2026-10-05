@@ -38,7 +38,7 @@ No adapter changes in this change, so this section has no tasks.
 
 ## 4. Verification
 
-- [ ] 4.1 Run `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `npm run check`; all must pass.
+- [x] 4.1 Run `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `npm run check`; all must pass.
 - [ ] 4.2 Check manually with `scripts/run-local.sh`:
   - the tasks view shows Active, Downloads, Syncs and Other with correct counts
   - Plex, yt-dlp and cleanup tasks appear under Other
