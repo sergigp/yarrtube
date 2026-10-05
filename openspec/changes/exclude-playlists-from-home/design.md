@@ -5,6 +5,7 @@
 - `src/infrastructure/shared/sqlite_migrations.rs`: registers migration 0007.
 - `src/domain/playlist/playlist.rs`: `Playlist` gains `exclude_from_home`, `create` takes it, and a new `with_exclude_from_home` transition.
 - `src/domain/playlist/errors.rs`: new `UpdatePlaylistError`.
+- `src/domain/playlist/mod.rs`: re-exports `UpdatePlaylistError`.
 - `src/infrastructure/repositories/sqlite_playlist_repository.rs`: reads and writes the column; new `update` port method.
 - `src/domain/services/playlist_creator.rs`: `create` takes `exclude_from_home`.
 - `src/domain/services/playlist_updater.rs` (new): the use case that changes a playlist's exclude-from-home setting.
@@ -18,19 +19,21 @@
 - Every other `Playlist::create(..)` call site (tests): passes `false`.
 
 **Web**
-- `web/src/api/types.ts`: `PlaylistListItem.exclude_from_home`.
+- `web/src/api/types.ts`: `PlaylistListItem.exclude_from_home`; `LibraryItem.exclude_from_home?` (set for playlists, so a sidebar row knows its setting).
 - `web/src/test/helpers.tsx`: `aPlaylist` defaults `exclude_from_home: false`.
 - `web/src/api/client.ts`: `CreatePlaylistRequest.exclude_from_home`; new `updatePlaylist`.
 - `web/src/api/queries.ts`: new `useSetPlaylistExcludedFromHome` hook (invalidates library + home).
 - `web/src/components/AddPlaylistDialog.tsx`: "Exclude from home" checkbox under Advanced options, with an inline hint linked via `aria-describedby`.
-- `web/src/components/EntryActionsMenu.tsx` (new): shared "⋮" menu (mark watched / exclude-include home / delete), used by the sidebar row and the detail header.
-- `web/src/components/Sidebar.tsx`: `SidebarRowMenu` adds the exclude/include item (keeps Sync in its menu).
-- `web/src/components/DetailHeader.tsx`: visible Sync button + `EntryActionsMenu`.
-- `web/src/components/PlaylistDetail.tsx` / `ChannelDetail.tsx`: pass the new props.
+- `web/src/components/EntryActionsMenu.tsx` (new): shared "⋮" menu (mark watched / exclude-include home / delete), used by the sidebar row and the detail header. Owns the failure alerts for mark watched and the home toggle, and disables "Mark all watched" while it runs.
+- `web/src/lib/errorMessage.ts` (new) / `web/src/lib/homeSetting.ts` (new): failure-alert helpers shared by the menus, unit tested.
+- `web/src/components/Sidebar.tsx`: `SidebarRowMenu` renders `EntryActionsMenu`, passing Sync as a leading item and its own trigger icon; playlist rows get the exclude/include item.
+- `web/src/components/DetailHeader.tsx`: visible Sync button + `EntryActionsMenu`, labelled "More actions for <name>" so it differs from the sidebar row's "Actions for <name>" on the same screen.
+- `web/src/components/PlaylistDetail.tsx`: passes the playlist's setting and `useSetPlaylistExcludedFromHome`. (`ChannelDetail.tsx` needs no change: its existing props now reach `EntryActionsMenu` through `DetailHeader`.)
 - `web/src/components/VideoActionsMenu.tsx`: optional exclude-playlist item.
 - `web/src/components/Home.tsx`: passes the card's playlist source to `VideoActionsMenu`.
 - Colocated `*.test.tsx` for each changed component.
-- `smoke-tests/tests/playlist.spec.js`: exercises `PATCH /playlists/{id}` through the UI (route wiring).
+- `smoke-tests/tests/playlist.spec.js` + `smoke-tests/helpers/sidebar.js` (`includeItemInHome`): exercise `PATCH /playlists/{id}` through the UI (route wiring).
+- `smoke-tests/tests/tasks.spec.js`: unrelated fix found while verifying; the yt-dlp update task is now under the "Other" tab (since #80).
 
 ## Types & Signatures
 
@@ -133,6 +136,9 @@ export function useSetPlaylistExcludedFromHome(): (id: string, excluded: boolean
 // web/src/components/EntryActionsMenu.tsx
 interface EntryActionsMenuProps {
   name: string
+  label?: string                            // trigger aria-label; default "Actions for <name>"
+  leadingItems?: ReactNode                  // sidebar only: Sync
+  triggerIcon?: ReactNode                   // sidebar only: horizontal ellipsis / sync spinner
   onMarkWatched?: () => Promise<void>       // channels only
   excludedFromHome?: boolean                // playlists only; undefined hides the item
   onSetExcludedFromHome?: (excluded: boolean) => Promise<void>
@@ -237,6 +243,9 @@ DetailHeader ⋮ "Exclude/Include in home"   --+       updatePlaylist(id, {exclu
 29. `PlaylistDetail` "excludes the playlist from home from its page header menu".
 30. `PlaylistDetail` "deletes the playlist from its page header menu after confirming".
 31. `ChannelDetail` "marks the channel watched from its page header menu".
+31a. `PlaylistDetail` "alerts and leaves the playlist as it was when changing its home setting fails".
+31b. `DetailHeader` "disables mark-all-watched while it runs".
+31c. `lib/errorMessage`, `lib/homeSetting` unit tests.
 
 **4. Smoke (Playwright)**
 32. `smoke-tests/tests/playlist.spec.js`: exclude the playlist from home through its ⋮ menu → its card leaves home; include it again → the card returns (covers the `PATCH /playlists/{id}` route).

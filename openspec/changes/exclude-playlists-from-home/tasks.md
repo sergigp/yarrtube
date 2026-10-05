@@ -49,6 +49,9 @@
 - [x] 2.26 `PlaylistDetail` "excludes the playlist from home from its page header menu"
 - [x] 2.27 `PlaylistDetail` "deletes the playlist from its page header menu after confirming"
 - [x] 2.28 `ChannelDetail` "marks the channel watched from its page header menu"
+- [x] 2.29 `PlaylistDetail` "alerts and leaves the playlist as it was when changing its home setting fails"
+- [x] 2.30 `DetailHeader` "disables mark-all-watched while it runs"
+- [x] 2.31 Sidebar row renders `EntryActionsMenu` (Sync as a leading item); failure-alert helpers moved to `src/lib/` with unit tests; page header trigger labelled "More actions for <name>"
 
 ## 3. Infrastructure adapters (TDD)
 
