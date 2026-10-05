@@ -1498,6 +1498,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fill_home_with_shown_playlists_if_an_excluded_one_has_newer_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        playlist_repository
+            .insert(&Playlist {
+                exclude_from_home: true,
+                ..playlist("PL2")
+            })
+            .unwrap();
+        save_numbered_playlist_videos(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            20,
+        );
+        (0..20).for_each(|i| {
+            save_playlist_video(
+                video_repository.as_ref(),
+                playlist_video_repository.as_ref(),
+                "PL2",
+                &downloaded_video(
+                    &format!("excluded{i}"),
+                    &format!("Excluded {i}"),
+                    None,
+                    1_000 + i,
+                ),
+            )
+        });
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: numbered_latest_videos((2..20).rev()),
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_order_continue_watching_by_last_played_first_on_home() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
