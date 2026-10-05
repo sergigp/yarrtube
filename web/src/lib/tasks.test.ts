@@ -3,6 +3,7 @@ import {
   byCategory,
   describeTask,
   matchesTask,
+  tabCounts,
   tasksForTab,
   taskCategory,
   taskFamily,
@@ -177,6 +178,19 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     ]
 
     expect(tasksForTab(tasks, 'other').map((task) => task.id)).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it('returns counts where downloads, syncs and other add up to every task', () => {
+    const tasks = [
+      aTask({ id: 1, task_type: 'download_video', status: 'running' }),
+      aTask({ id: 2, task_type: 'fetch_thumbnail', status: 'pending' }),
+      aTask({ id: 3, task_type: 'reconcile_channel', status: 'pending' }),
+      aTask({ id: 4, task_type: 'reconcile_plex_collections', status: 'pending' }),
+      aTask({ id: 5, task_type: 'delete_video_file', status: 'pending' }),
+      aTask({ id: 6, task_type: 'update_ytdlp', status: 'running' }),
+    ]
+
+    expect(tabCounts(tasks)).toEqual({ active: 2, downloads: 2, syncs: 1, other: 3 })
   })
 
   it('matches on the description, ignoring case', () => {
