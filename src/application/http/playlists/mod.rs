@@ -1000,6 +1000,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_leave_a_playlist_unchanged_if_already_set() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let excluded = Playlist {
+            exclude_from_home: true,
+            ..playlist("PL1", DEFAULT_PATH)
+        };
+        playlist_repository.insert(&excluded).unwrap();
+        let playlist_updater = PlaylistUpdater::new(playlist_repository.clone());
+
+        let response = update(playlist_updater, "PL1", update_request(true)).await;
+
+        assert_eq!(
+            response,
+            Ok(PlaylistResponse {
+                exclude_from_home: true,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            })
+        );
+        assert_eq!(playlist_repository.list().unwrap(), vec![excluded]);
+    }
+
+    #[tokio::test]
     async fn it_should_add_new_videos_on_reconcile() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
