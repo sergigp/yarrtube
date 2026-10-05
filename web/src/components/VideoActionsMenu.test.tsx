@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { VideoActionsMenu } from './VideoActionsMenu'
 import { useChannels, useRecentVideos } from '@/api/queries'
-import { mockApi, renderWithProviders } from '@/test/helpers'
+import { aPlaylist, mockApi, renderWithProviders } from '@/test/helpers'
 
 /** Keeps the channel list and home videos observed, so a refetch of them shows up as a request. */
 function LibraryObserver() {
@@ -81,5 +81,40 @@ describe('VideoActionsMenu', () => {
     )
     expect(channels).toHaveBeenCalledOnce()
     expect(home).toHaveBeenCalledOnce()
+  })
+
+  it('excludes the playlist from home when its item is chosen', async () => {
+    const update = vi.fn(() => aPlaylist({ id: 'PL1', exclude_from_home: true }))
+    const channels = vi.fn(() => [])
+    const home = vi.fn(() => EMPTY_HOME)
+    const fetchMock = mockApi({
+      'PATCH /api/playlists/PL1': update,
+      'GET /api/channels': channels,
+      'GET /api/videos/home': home,
+    })
+    renderWithProviders(
+      <>
+        <LibraryObserver />
+        <VideoActionsMenu
+          videoId="abc"
+          title="My Video"
+          markable
+          excludablePlaylist={{ id: 'PL1', name: 'Bluey' }}
+        />
+      </>,
+    )
+    await waitFor(() => expect(home).toHaveBeenCalledOnce())
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Exclude "Bluey" from home' }))
+
+    expect(update).toHaveBeenCalledOnce()
+    const patchCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PATCH',
+    ) as [string, RequestInit]
+    expect(JSON.parse(patchCall[1].body as string)).toEqual({ exclude_from_home: true })
+    await waitFor(() => expect(channels).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(home).toHaveBeenCalledTimes(2))
   })
 })

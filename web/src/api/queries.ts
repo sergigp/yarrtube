@@ -176,17 +176,13 @@ export function useLibraryAction() {
  * and playlist lists (and their video lists) and the home videos.
  */
 export function useMarkVideoWatched(): (youtubeId: string) => Promise<void> {
-  const queryClient = useQueryClient()
-  const invalidateLibrary = useInvalidateLibrary()
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
   return useCallback(
     async (youtubeId: string) => {
       await markVideoWatched(youtubeId)
-      await Promise.all([
-        invalidateLibrary(),
-        queryClient.invalidateQueries({ queryKey: queryKeys.recentVideos }),
-      ])
+      await invalidateLibraryAndHome()
     },
-    [queryClient, invalidateLibrary],
+    [invalidateLibraryAndHome],
   )
 }
 
@@ -195,11 +191,28 @@ export function useMarkVideoWatched(): (youtubeId: string) => Promise<void> {
  * refetches the channel and playlist lists and the home videos.
  */
 export function useSetPlaylistExcludedFromHome(): (id: string, excluded: boolean) => Promise<void> {
-  return useCallback(async (id: string, excluded: boolean) => {
-    void id
-    void excluded
-    void updatePlaylist
-  }, [])
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
+  return useCallback(
+    async (id: string, excluded: boolean) => {
+      await updatePlaylist(id, { exclude_from_home: excluded })
+      await invalidateLibraryAndHome()
+    },
+    [invalidateLibraryAndHome],
+  )
+}
+
+/** Refetches the channel and playlist lists (and their video lists) and the home videos. */
+function useInvalidateLibraryAndHome(): () => Promise<unknown> {
+  const queryClient = useQueryClient()
+  const invalidateLibrary = useInvalidateLibrary()
+  return useCallback(
+    () =>
+      Promise.all([
+        invalidateLibrary(),
+        queryClient.invalidateQueries({ queryKey: queryKeys.recentVideos }),
+      ]),
+    [queryClient, invalidateLibrary],
+  )
 }
 
 /**
