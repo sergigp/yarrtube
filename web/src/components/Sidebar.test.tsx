@@ -202,6 +202,34 @@ describe('Sidebar', () => {
     expect(await screen.findByRole('menuitem', { name: 'Include in home' })).toBeInTheDocument()
   })
 
+  it('includes an excluded playlist in home from its row menu', async () => {
+    let playlist = aPlaylist({ id: 'PL1', name: 'Bluey', exclude_from_home: true })
+    const update = vi.fn(() => {
+      playlist = { ...playlist, exclude_from_home: false }
+      return playlist
+    })
+    const fetchMock = mockApi({
+      'GET /api/channels': [],
+      'GET /api/playlists': () => [playlist],
+      'PATCH /api/playlists/PL1': update,
+    })
+    renderWithProviders(
+      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+    )
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Bluey' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Include in home' }))
+
+    expect(update).toHaveBeenCalledOnce()
+    const patchCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PATCH',
+    ) as [string, RequestInit]
+    expect(JSON.parse(patchCall[1].body as string)).toEqual({ exclude_from_home: false })
+    await user.click(await screen.findByRole('button', { name: 'Actions for Bluey' }))
+    expect(await screen.findByRole('menuitem', { name: 'Exclude from home' })).toBeInTheDocument()
+  })
+
   it('closes when Escape is pressed while open', async () => {
     mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [] })
     const onClose = vi.fn()

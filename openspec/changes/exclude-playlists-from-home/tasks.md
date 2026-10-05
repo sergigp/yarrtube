@@ -41,7 +41,7 @@
 - [x] 2.19 `Home` "excluding a card's playlist from home removes its cards": `Home` passes the playlist source to `VideoActionsMenu`
 - [x] 2.20 `Home` "a channel card offers no exclude item"
 - [x] 2.21 `Sidebar` "excludes a playlist from home from its row menu": label flips to "Include in home"
-- [ ] 2.22 `Sidebar` "includes an excluded playlist in home from its row menu": PATCH `{exclude_from_home: false}`
+- [x] 2.22 `Sidebar` "includes an excluded playlist in home from its row menu": PATCH `{exclude_from_home: false}`
 - [ ] 2.23 `Sidebar` "a channel row menu offers no home item"
 - [ ] 2.24 `Sidebar` "alerts when changing a playlist's home setting fails"
 - [ ] 2.25 `PlaylistDetail` "keeps Sync visible and the other actions in the ⋮ menu": `DetailHeader` uses `EntryActionsMenu`
