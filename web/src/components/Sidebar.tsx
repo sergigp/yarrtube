@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { CheckCheck, Ellipsis, Plus, RotateCw, Trash2 } from 'lucide-react'
+import { CheckCheck, Ellipsis, Eye, EyeOff, Plus, RotateCw, Trash2 } from 'lucide-react'
 import {
   queryKeys,
   useChannels,
   useLibraryAction,
   usePlaylists,
   useRemoveQuery,
+  useSetPlaylistExcludedFromHome,
 } from '@/api/queries'
 import {
   reconcileChannel,
@@ -116,10 +117,19 @@ interface SidebarRowMenuProps {
   item: LibraryItem
   onSync: () => Promise<void>
   onMarkWatched?: (() => Promise<void>) | undefined
+  onSetExcludedFromHome?: ((excluded: boolean) => Promise<void>) | undefined
   onDeleteRequest: () => void
 }
 
-function SidebarRowMenu({ item, onSync, onMarkWatched, onDeleteRequest }: SidebarRowMenuProps) {
+function SidebarRowMenu({
+  item,
+  onSync,
+  onMarkWatched,
+  onSetExcludedFromHome,
+  onDeleteRequest,
+}: SidebarRowMenuProps) {
+  const excludedFromHome = item.exclude_from_home ?? false
+
   const [syncing, setSyncing] = useState(false)
 
   return (
@@ -157,6 +167,12 @@ function SidebarRowMenu({ item, onSync, onMarkWatched, onDeleteRequest }: Sideba
             Mark all watched
           </DropdownMenuItem>
         )}
+        {onSetExcludedFromHome && (
+          <DropdownMenuItem onSelect={() => onSetExcludedFromHome(!excludedFromHome)}>
+            {excludedFromHome ? <Eye /> : <EyeOff />}
+            {excludedFromHome ? 'Include in home' : 'Exclude from home'}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem variant="destructive" onSelect={onDeleteRequest}>
           <Trash2 />
           Delete
@@ -172,6 +188,7 @@ interface SidebarRowProps {
   href: string
   onSync: () => Promise<void>
   onMarkWatched?: (() => Promise<void>) | undefined
+  onSetExcludedFromHome?: ((excluded: boolean) => Promise<void>) | undefined
   onDeleteRequest: () => void
   showAvatar?: boolean | undefined
   onNavigate: () => void
@@ -183,6 +200,7 @@ function SidebarRow({
   href,
   onSync,
   onMarkWatched,
+  onSetExcludedFromHome,
   onDeleteRequest,
   showAvatar,
   onNavigate,
@@ -219,6 +237,7 @@ function SidebarRow({
         item={item}
         onSync={onSync}
         onMarkWatched={onMarkWatched}
+        onSetExcludedFromHome={onSetExcludedFromHome}
         onDeleteRequest={onDeleteRequest}
       />
     </li>
@@ -240,6 +259,7 @@ interface SidebarSectionProps {
   hrefFor: (item: LibraryItem) => string
   onSync: (id: string) => Promise<void>
   onMarkWatched?: (id: string) => Promise<void>
+  onSetExcludedFromHome?: (id: string, excluded: boolean) => Promise<void>
   onDelete: (id: string) => Promise<void>
   deleteDescription: string
   showAvatar?: boolean
@@ -261,6 +281,7 @@ function SidebarSection({
   hrefFor,
   onSync,
   onMarkWatched,
+  onSetExcludedFromHome,
   onDelete,
   deleteDescription,
   showAvatar,
@@ -317,6 +338,10 @@ function SidebarSection({
                     window.alert(`Failed to mark "${item.name}" watched: ${errorMessage(err)}`)
                   }
                 })
+              }
+              onSetExcludedFromHome={
+                onSetExcludedFromHome &&
+                ((excluded: boolean) => onSetExcludedFromHome(item.id, excluded))
               }
               onDeleteRequest={() => setPendingDelete(item)}
             />
@@ -381,6 +406,7 @@ export function Sidebar({
   const { data: playlists, error: playlistsError } = usePlaylists()
   const refreshing = useLibraryAction()
   const removeQuery = useRemoveQuery()
+  const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
   const [search, setSearch] = useState('')
   const [channelsExpanded, toggleChannelsExpanded] = useExpandedState('channels')
   const [playlistsExpanded, togglePlaylistsExpanded] = useExpandedState('playlists')
@@ -509,6 +535,7 @@ export function Sidebar({
             hrefFor={(playlist) => `/playlists/${playlist.id}`}
             onNavigate={onClose}
             onSync={refreshing(reconcilePlaylist)}
+            onSetExcludedFromHome={setPlaylistExcludedFromHome}
             onDelete={refreshing(async (id: string) => {
               await deletePlaylist(id)
               removeQuery(queryKeys.playlistVideos(id))
