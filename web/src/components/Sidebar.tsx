@@ -388,6 +388,23 @@ export function Sidebar({ open = false, onClose, onAddChannel, onAddPlaylist }: 
     }
   }, [open])
 
+  // Escape already consumed by an open row menu or dialog (Radix prevents
+  // default) dismisses only that layer, not the drawer behind it.
+  useEffect(() => {
+    if (!open) {
+      return undefined
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open, onClose])
+
   const activeChannelId = activeIdFrom(location.pathname, '/channels/')
   const activePlaylistId = activeIdFrom(location.pathname, '/playlists/')
 

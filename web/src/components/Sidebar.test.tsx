@@ -173,4 +173,17 @@ describe('Sidebar', () => {
     expect(await screen.findByRole('menuitem', { name: 'Sync' })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'Mark all watched' })).not.toBeInTheDocument()
   })
+
+  it('closes when Escape is pressed while open', async () => {
+    mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [] })
+    const onClose = vi.fn()
+    renderWithProviders(
+      <Sidebar open onClose={onClose} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+    )
+
+    const user = userEvent.setup()
+    await user.keyboard('{Escape}')
+
+    expect(onClose).toHaveBeenCalledOnce()
+  })
 })
