@@ -164,6 +164,21 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(tasksForTab(tasks, 'syncs').map((task) => task.id)).toEqual([1, 2])
   })
 
+  it('collects Plex sync, yt-dlp update, deletions and unknown types in the other tab', () => {
+    const tasks = [
+      aTask({ id: 1, task_type: 'reconcile_plex_collections' }),
+      aTask({ id: 2, task_type: 'update_ytdlp' }),
+      aTask({ id: 3, task_type: 'delete_video_file' }),
+      aTask({ id: 4, task_type: 'delete_playlist_files' }),
+      aTask({ id: 5, task_type: 'delete_channel_files' }),
+      aTask({ id: 6, task_type: 'mystery_task' }),
+      aTask({ id: 7, task_type: 'download_video' }),
+      aTask({ id: 8, task_type: 'reconcile_channel' }),
+    ]
+
+    expect(tasksForTab(tasks, 'other').map((task) => task.id)).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
   it('matches on the description, ignoring case', () => {
     const task = aTask({ task_type: 'reconcile_channel', payload: { channel_name: 'Rustaceans' } })
 

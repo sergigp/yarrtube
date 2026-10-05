@@ -63,11 +63,9 @@ export function taskFamily(task: Task): TaskFamily {
 
 export function tasksForTab(tasks: Task[], tab: TaskTab): Task[] {
   const inTab =
-    tab === 'other'
-      ? []
-      : tab === 'active'
-        ? tasks.filter((task) => task.status === 'running')
-        : tasks.filter((task) => taskFamily(task) === tab)
+    tab === 'active'
+      ? tasks.filter((task) => task.status === 'running')
+      : tasks.filter((task) => taskFamily(task) === tab)
   return [...inTab].sort(byCategory)
 }
 

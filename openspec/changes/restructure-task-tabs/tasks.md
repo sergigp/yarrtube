@@ -10,7 +10,7 @@
 - [x] 2.4 `it_should_keep_channel_id_if_channel_is_gone`: the id stays when the channel can't be found. It replaces `it_should_omit_details_if_channel_is_gone`. Commit.
 - [x] 2.5 `maps each task type to downloads, syncs or other, and unknown types to other`: drives `FAMILY_BY_TYPE` and the `other` fallback. Commit.
 - [x] 2.6 `lists only playlist and channel reconciles in the syncs tab`: Plex sync is no longer in Syncs. Commit.
-- [ ] 2.7 `collects Plex sync, yt-dlp update, deletions and unknown types in the other tab`: drives `tasksForTab(tasks, 'other')`. Commit.
+- [x] 2.7 `collects Plex sync, yt-dlp update, deletions and unknown types in the other tab`: drives `tasksForTab(tasks, 'other')`. Commit.
 - [ ] 2.8 `returns counts where downloads, syncs and other add up to every task`: drives `tabCounts` over the new tabs. Commit.
 - [ ] 2.9 `maps each task type to its icon kind`: drives `taskKind` (download, sync, delete, maintenance). Commit.
 - [ ] 2.10 `returns a sync target for pending playlist and channel reconciles only`: drives `syncTarget`, which returns null for a running task, a Plex sync or a missing id. Commit.
