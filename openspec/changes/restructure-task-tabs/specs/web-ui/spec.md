@@ -49,7 +49,7 @@ Every task SHALL appear in exactly one of Downloads, Syncs, or Other, and additi
 - **THEN** the Active tab shows a message that nothing is running rather than an empty area, and the other tabs still list their tasks
 
 ### Requirement: Tasks View Tab Bar Affordance
-The tasks view's tab bar SHALL make each tab look clickable and SHALL make the selected tab unmistakable. The tab bar SHALL be drawn as a row of tabs over a horizontal rule, with the selected tab marked by an underline in the application's primary colour and its label in the full foreground colour and a heavier weight; unselected tabs SHALL show a muted label. Hovering an unselected tab SHALL visibly change its background and label colour. Each tab SHALL show an icon for its family before its name, and its count as a pill after its name, with the selected tab's pill in the primary colour. While at least one task is running, the **Active** tab SHALL show a live indicator beside its count. Each tab SHALL be at least 40 pixels tall, sized to its content rather than stretched across the full width, and SHALL show a visible focus ring when focused from the keyboard. When the tabs do not fit the available width, the tab bar SHALL scroll horizontally rather than wrap or shrink its tabs. The tab bar SHALL meet these requirements in both light and dark themes.
+The tasks view's tab bar SHALL make each tab look clickable and SHALL make the selected tab unmistakable. The tasks view SHALL be limited to a readable width and centred in the space beside the sidebar, and the tab bar SHALL span exactly the width of the task list, its tabs sharing that width equally. The tab bar SHALL be drawn as a row of tabs over a horizontal rule, with the selected tab marked by an underline in the application's primary colour and its label in the full foreground colour and a heavier weight; unselected tabs SHALL show a muted label. Hovering an unselected tab SHALL visibly change its background and label colour. Each tab SHALL show an icon for its family, its name, and its count as a pill, with the selected tab's pill in the primary colour. On narrow screens each tab SHALL show only its icon and count, keeping its name as its accessible name, so that all tabs fit without horizontal scrolling. While at least one task is running, the **Active** tab SHALL show a live indicator beside its count. Each tab SHALL be at least 40 pixels tall and SHALL show a visible focus ring when focused from the keyboard. The tab bar SHALL look the same whatever the operating system's colour-scheme preference.
 
 #### Scenario: Selected tab is marked
 - **WHEN** a user views the tasks view with the Syncs tab selected
@@ -71,9 +71,13 @@ The tasks view's tab bar SHALL make each tab look clickable and SHALL make the s
 - **WHEN** a user moves keyboard focus onto a tab
 - **THEN** that tab shows a visible focus ring
 
+#### Scenario: Wide screen
+- **WHEN** the tasks view is shown on a wide desktop screen
+- **THEN** the view is centred at a readable width, and the tab bar's rule and the task list share the same left and right edges
+
 #### Scenario: Narrow screen
-- **WHEN** the tasks view is shown on a screen too narrow for all tabs
-- **THEN** the tab bar scrolls horizontally and each tab keeps its full label, icon, and count
+- **WHEN** the tasks view is shown on a phone-width screen
+- **THEN** every tab shows its icon and count without its visible name, all four tabs are visible without scrolling, and each tab is still announced by its name to assistive technology
 
 ### Requirement: Run Sync Now From Tasks View
 Each playlist or channel reconciliation task listed in the **Syncs** tab SHALL offer a **Run now** action. Activating it SHALL trigger the on-demand reconcile of that task's playlist or channel — the same action the sidebar's sync offers — and SHALL leave the listed task itself and its scheduled run time unchanged. While the triggered reconcile is in progress, that row's action SHALL show that it is working and SHALL NOT accept another activation. When the reconcile completes, the tasks view SHALL refresh its list. When the reconcile fails, the view SHALL show the failure on that row without removing it. A reconciliation task whose status is `running` SHALL NOT offer Run now, since its sync is already underway. Tasks in other tabs SHALL NOT offer this action.

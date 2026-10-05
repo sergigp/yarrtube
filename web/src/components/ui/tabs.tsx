@@ -44,7 +44,7 @@ const tabsTriggerVariants = cva(
       variant: {
         default:
           "h-[calc(100%-1px)] flex-1 rounded-md border border-transparent px-1.5 py-0.5 text-foreground/60 hover:text-foreground focus-visible:border-ring has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:text-muted-foreground dark:hover:text-foreground dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 dark:data-[state=active]:text-foreground",
-        line: "h-10 flex-none cursor-pointer rounded-t-md px-3 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-inset data-[state=active]:font-semibold data-[state=active]:text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary after:opacity-0 after:transition-opacity data-[state=active]:after:opacity-100",
+        line: "h-10 min-w-fit flex-1 cursor-pointer rounded-t-md px-3 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-inset data-[state=active]:font-semibold data-[state=active]:text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary after:opacity-0 after:transition-opacity data-[state=active]:after:opacity-100",
       },
     },
     defaultVariants: {

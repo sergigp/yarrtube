@@ -30,6 +30,9 @@ import {
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
+// The view keeps to a readable width, centred beside the sidebar.
+const VIEW_WIDTH = 'mx-auto w-full max-w-3xl'
+
 const CATEGORY_BADGE_VARIANT: Record<string, 'default' | 'outline' | 'secondary'> = {
   running: 'default',
   queued: 'outline',
@@ -63,15 +66,15 @@ export function TasksView() {
   const [search, setSearch] = useState('')
 
   if (error) {
-    return <p className="text-sm text-destructive">Failed to load tasks: {error.message}</p>
+    return <p className={cn(VIEW_WIDTH, 'text-sm text-destructive')}>Failed to load tasks: {error.message}</p>
   }
 
   if (!tasks) {
-    return <p className="text-sm text-muted-foreground">Loading tasks…</p>
+    return <p className={cn(VIEW_WIDTH, 'text-sm text-muted-foreground')}>Loading tasks…</p>
   }
 
   if (tasks.length === 0) {
-    return <p className="text-sm text-muted-foreground">No pending or in-progress tasks.</p>
+    return <p className={cn(VIEW_WIDTH, 'text-sm text-muted-foreground')}>No pending or in-progress tasks.</p>
   }
 
   const counts = tabCounts(tasks)
@@ -83,6 +86,7 @@ export function TasksView() {
   return (
     <TooltipProvider>
       <Tabs
+        className={VIEW_WIDTH}
         value={tab}
         onValueChange={(value) => {
           setTab(value as TaskTab)
@@ -95,7 +99,7 @@ export function TasksView() {
             return (
               <TabsTrigger key={value} value={value}>
                 <TabIcon aria-hidden />
-                {TAB_LABELS[value]}
+                <span className="sr-only sm:not-sr-only">{TAB_LABELS[value]}</span>
                 <Badge variant={value === tab ? 'default' : 'secondary'} className="tabular-nums">
                   {counts[value]}
                 </Badge>
@@ -203,7 +207,7 @@ function RunNowButton({ target, name }: { target: SyncTarget; name: string }) {
         }}
       >
         <RotateCw className={running ? 'animate-spin' : undefined} />
-        Run now
+        <span className="hidden sm:inline">Run now</span>
       </Button>
     </>
   )

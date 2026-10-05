@@ -26,11 +26,18 @@
   - heavier full-colour label when selected, muted label otherwise
   - hover background
   - icon and count pill, with a primary pill on the selected tab
-  - tabs ≥40px tall and sized to their content
+  - tabs ≥40px tall
   - focus ring
   - horizontal scroll when the tabs overflow
 
   Verify: `npm run check` passes, and checking the page in a browser in light and dark themes at desktop and phone widths matches the spec scenarios. Commit.
+
+- [x] 2.19 Layout feedback, a visual task and not a TDD cycle:
+  - centre the tasks view at `max-w-3xl`
+  - make the line-variant tabs share the bar width equally (`flex-1`)
+  - below `sm`, hide tab labels visually (`sr-only sm:not-sr-only`) so they show icon + count only
+
+  Verify: `npm run check` passes, and in the browser the desktop tab rule lines up with the list edges and all four tabs fit at 375px without scrolling. Commit.
 
 ## 3. Infrastructure adapters (TDD)
 

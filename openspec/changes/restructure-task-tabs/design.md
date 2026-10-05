@@ -5,8 +5,8 @@
 - `web/src/lib/tasks.ts` — families `downloads | syncs | other` (unlisted → `other`), tabs `active | downloads | syncs | other`, `taskKind` for row icons, `syncTarget` for Run now.
 - `web/src/lib/tasks.test.ts` — unit tests for the above.
 - `web/src/api/queries.ts` — `useInvalidateTasks` so Run now refetches the task list.
-- `web/src/components/ui/tabs.tsx` — restyle the `line` variant into the underline tab bar (primary indicator, hover bg, ≥40px, content-sized, horizontal scroll). The only tabs consumer is TasksView.
-- `web/src/components/TasksView.tsx` — new tabs with icon + count pill + Active live beacon, per-type row icons, private `RunNowButton` on Syncs rows.
+- `web/src/components/ui/tabs.tsx` — restyle the `line` variant into the underline tab bar (primary indicator, hover bg, ≥40px, equal-width tabs). The only tabs consumer is TasksView.
+- `web/src/components/TasksView.tsx` — view centred at `max-w-3xl`, new tabs with icon + label (hidden below `sm`) + count pill + Active live beacon, per-type row icons, private `RunNowButton` on Syncs rows.
 - `web/src/components/TasksView.test.tsx` — component tests for tabs and Run now.
 
 No change to `web/src/api/types.ts`: `Task.payload` is already `Record<string, string>`.
