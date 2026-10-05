@@ -6,6 +6,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useMarkVideoWatched, useSetPlaylistExcludedFromHome } from '@/api/queries'
+import { errorMessage } from '@/lib/errorMessage'
+import { homeSettingAction } from '@/lib/homeSetting'
 import { cn } from '@/lib/utils'
 
 interface VideoActionsMenuProps {
@@ -62,7 +64,7 @@ export function VideoActionsMenu({
                 await setPlaylistExcludedFromHome(excludablePlaylist.id, true)
               } catch (err) {
                 window.alert(
-                  `Failed to exclude "${excludablePlaylist.name}" from home: ${errorMessage(err)}`,
+                  `Failed to ${homeSettingAction(true, excludablePlaylist.name)}: ${errorMessage(err)}`,
                 )
               }
             }}
@@ -74,8 +76,4 @@ export function VideoActionsMenu({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
 }

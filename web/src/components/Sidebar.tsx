@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { CheckCheck, Ellipsis, Eye, EyeOff, Plus, RotateCw, Trash2 } from 'lucide-react'
+import { Ellipsis, Plus, RotateCw } from 'lucide-react'
 import {
   queryKeys,
   useChannels,
@@ -27,14 +27,11 @@ import {
   orderChannels,
 } from '@/lib/sidebarSections'
 import { ConfirmDialog } from './ConfirmDialog'
+import { EntryActionsMenu } from './EntryActionsMenu'
 import { Thumbnail } from './Thumbnail'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { errorMessage } from '@/lib/errorMessage'
 import { cn } from '@/lib/utils'
 
 function activeIdFrom(pathname: string, prefix: string): string | null {
@@ -128,25 +125,15 @@ function SidebarRowMenu({
   onSetExcludedFromHome,
   onDeleteRequest,
 }: SidebarRowMenuProps) {
-  const excludedFromHome = item.exclude_from_home ?? false
-
   const [syncing, setSyncing] = useState(false)
 
   return (
-    // Non-modal so opening the delete confirmation from it doesn't leave the
-    // page with pointer events disabled.
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
-        aria-label={`Actions for ${item.name}`}
-      >
-        {syncing ? (
-          <RotateCw className="size-3.5 animate-spin" />
-        ) : (
-          <Ellipsis className="size-4" />
-        )}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-auto min-w-44">
+    <EntryActionsMenu
+      name={item.name}
+      triggerIcon={
+        syncing ? <RotateCw className="size-3.5 animate-spin" /> : <Ellipsis className="size-4" />
+      }
+      leadingItems={
         <DropdownMenuItem
           disabled={syncing}
           onSelect={async () => {
@@ -161,24 +148,12 @@ function SidebarRowMenu({
           <RotateCw />
           Sync
         </DropdownMenuItem>
-        {onMarkWatched && (
-          <DropdownMenuItem onSelect={onMarkWatched}>
-            <CheckCheck />
-            Mark all watched
-          </DropdownMenuItem>
-        )}
-        {onSetExcludedFromHome && (
-          <DropdownMenuItem onSelect={() => onSetExcludedFromHome(!excludedFromHome)}>
-            {excludedFromHome ? <Eye /> : <EyeOff />}
-            {excludedFromHome ? 'Include in home' : 'Exclude from home'}
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem variant="destructive" onSelect={onDeleteRequest}>
-          <Trash2 />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      }
+      onMarkWatched={onMarkWatched}
+      excludedFromHome={onSetExcludedFromHome && (item.exclude_from_home ?? false)}
+      onSetExcludedFromHome={onSetExcludedFromHome}
+      onDeleteRequest={onDeleteRequest}
+    />
   )
 }
 
@@ -329,27 +304,10 @@ function SidebarSection({
                   window.alert(`Failed to sync "${item.name}": ${errorMessage(err)}`)
                 }
               }}
-              onMarkWatched={
-                onMarkWatched &&
-                (async () => {
-                  try {
-                    await onMarkWatched(item.id)
-                  } catch (err) {
-                    window.alert(`Failed to mark "${item.name}" watched: ${errorMessage(err)}`)
-                  }
-                })
-              }
+              onMarkWatched={onMarkWatched && (() => onMarkWatched(item.id))}
               onSetExcludedFromHome={
                 onSetExcludedFromHome &&
-                (async (excluded: boolean) => {
-                  try {
-                    await onSetExcludedFromHome(item.id, excluded)
-                  } catch (err) {
-                    window.alert(
-                      `Failed to ${homeSettingAction(excluded, item.name)}: ${errorMessage(err)}`,
-                    )
-                  }
-                })
+                ((excluded: boolean) => onSetExcludedFromHome(item.id, excluded))
               }
               onDeleteRequest={() => setPendingDelete(item)}
             />
@@ -384,14 +342,6 @@ function SidebarSection({
       />
     </div>
   )
-}
-
-function homeSettingAction(excluded: boolean, name: string): string {
-  return excluded ? `exclude "${name}" from home` : `include "${name}" in home`
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
 }
 
 export const SIDEBAR_ID = 'app-sidebar'

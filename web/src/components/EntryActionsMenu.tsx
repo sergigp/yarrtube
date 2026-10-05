@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { CheckCheck, EllipsisVertical, Eye, EyeOff, Trash2 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -6,24 +7,36 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { errorMessage } from '@/lib/errorMessage'
+import { homeSettingAction } from '@/lib/homeSetting'
 import { cn } from '@/lib/utils'
 
 interface EntryActionsMenuProps {
   /** Names the channel or playlist in the trigger's label and failure alerts. */
   name: string
+  /** Items listed first, e.g. the sidebar's Sync; they report their own failures. */
+  leadingItems?: ReactNode
+  /** Replaces the trigger's default vertical "⋮" icon. */
+  triggerIcon?: ReactNode
   /** Channels only: marks every downloaded video watched. */
-  onMarkWatched?: () => Promise<void>
+  onMarkWatched?: (() => Promise<void>) | undefined
   /** Playlists only: the current setting; undefined hides the home item. */
-  excludedFromHome?: boolean
-  onSetExcludedFromHome?: (excluded: boolean) => Promise<void>
+  excludedFromHome?: boolean | undefined
+  onSetExcludedFromHome?: ((excluded: boolean) => Promise<void>) | undefined
   /** Asks for confirmation; the caller owns the confirm dialog. */
   onDeleteRequest: () => void
   className?: string
 }
 
-/** A vertical "⋮" menu of actions on one channel or playlist. */
+/**
+ * A "⋮" menu of actions on one channel or playlist, shared by its sidebar row
+ * and its page header. It alerts when marking watched or changing the home
+ * setting fails, leaving the entry as it was.
+ */
 export function EntryActionsMenu({
   name,
+  leadingItems,
+  triggerIcon,
   onMarkWatched,
   excludedFromHome,
   onSetExcludedFromHome,
@@ -31,6 +44,7 @@ export function EntryActionsMenu({
   className,
 }: EntryActionsMenuProps) {
   const offersHomeItem = excludedFromHome !== undefined && onSetExcludedFromHome !== undefined
+  const hasItemsAboveDelete = Boolean(leadingItems) || Boolean(onMarkWatched) || offersHomeItem
 
   return (
     // Non-modal so opening the delete confirmation from it doesn't leave the
@@ -43,11 +57,20 @@ export function EntryActionsMenu({
         )}
         aria-label={`Actions for ${name}`}
       >
-        <EllipsisVertical className="size-4" />
+        {triggerIcon ?? <EllipsisVertical className="size-4" />}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-44">
+        {leadingItems}
         {onMarkWatched && (
-          <DropdownMenuItem onSelect={onMarkWatched}>
+          <DropdownMenuItem
+            onSelect={async () => {
+              try {
+                await onMarkWatched()
+              } catch (err) {
+                window.alert(`Failed to mark "${name}" watched: ${errorMessage(err)}`)
+              }
+            }}
+          >
             <CheckCheck />
             Mark all watched
           </DropdownMenuItem>
@@ -68,7 +91,7 @@ export function EntryActionsMenu({
             {excludedFromHome ? 'Include in home' : 'Exclude from home'}
           </DropdownMenuItem>
         )}
-        {(onMarkWatched || offersHomeItem) && <DropdownMenuSeparator />}
+        {hasItemsAboveDelete && <DropdownMenuSeparator />}
         <DropdownMenuItem variant="destructive" onSelect={onDeleteRequest}>
           <Trash2 />
           Delete
@@ -76,12 +99,4 @@ export function EntryActionsMenu({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
-
-function homeSettingAction(excluded: boolean, name: string): string {
-  return excluded ? `exclude "${name}" from home` : `include "${name}" in home`
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
 }

@@ -5,6 +5,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { Thumbnail } from './Thumbnail'
 import { Button } from '@/components/ui/button'
+import { errorMessage } from '@/lib/errorMessage'
 
 function summaryFor(videos: Video[] | undefined, unwatchedCount: number | undefined): string | null {
   if (!videos) {
@@ -91,16 +92,7 @@ export function DetailHeader({
         </Button>
         <EntryActionsMenu
           name={name}
-          onMarkWatched={
-            onMarkWatched &&
-            (async () => {
-              try {
-                await onMarkWatched()
-              } catch (err) {
-                window.alert(`Failed to mark "${name}" watched: ${errorMessage(err)}`)
-              }
-            })
-          }
+          onMarkWatched={onMarkWatched}
           excludedFromHome={excludedFromHome}
           onSetExcludedFromHome={onSetExcludedFromHome}
           onDeleteRequest={() => setConfirmingDelete(true)}
@@ -116,8 +108,4 @@ export function DetailHeader({
       />
     </div>
   )
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
 }
