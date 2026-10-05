@@ -35,4 +35,16 @@ describe('PlaybackSpeedMenu', () => {
 
     expect(onRateChange).toHaveBeenCalledExactlyOnceWith(1.5)
   })
+
+  it('marks no speed when the current one is not offered', async () => {
+    render(<PlaybackSpeedMenu rate={1.75} onRateChange={() => {}} disabled={false} />)
+    const trigger = screen.getByRole('button', { name: 'Playback speed' })
+
+    await userEvent.setup().click(trigger)
+
+    expect(trigger).toHaveTextContent('1.75x')
+    expect(
+      screen.getAllByRole('menuitemradio').filter((item) => item.getAttribute('aria-checked') === 'true'),
+    ).toEqual([])
+  })
 })
