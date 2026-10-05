@@ -1047,6 +1047,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_update_if_exclude_from_home_missing() {
+        let request = UpdatePlaylistRequest {
+            exclude_from_home: None,
+        };
+
+        let response = update(any_playlist_updater(), "PL1", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Whether the playlist is excluded from home must be stated (missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_add_new_videos_on_reconcile() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -1409,6 +1425,12 @@ mod tests {
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
             unused_event_publisher(),
         )
+    }
+
+    /// An updater for tests whose request is rejected before reaching it (see
+    /// `any_playlist_creator`).
+    fn any_playlist_updater() -> PlaylistUpdater {
+        PlaylistUpdater::new(Arc::new(SqlitePlaylistRepository::new(unused_connection())))
     }
 
     /// Builds a reconciler around the repositories a test seeds and asserts;

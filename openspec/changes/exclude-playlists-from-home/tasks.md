@@ -28,7 +28,7 @@
 - [x] 2.6 `it_should_include_a_playlist_in_home_again`: PATCH `false` on an excluded playlist → `false` returned and stored
 - [x] 2.7 `it_should_leave_a_playlist_unchanged_if_already_set`: PATCH `true` on an excluded playlist → 200, storage unchanged
 - [x] 2.8 `it_should_fail_to_update_an_unknown_playlist`: 404 `playlist <id> not found`, nothing stored
-- [ ] 2.9 `it_should_fail_to_update_if_exclude_from_home_missing`: 400 `MISSING_EXCLUDE_FROM_HOME`
+- [x] 2.9 `it_should_fail_to_update_if_exclude_from_home_missing`: 400 `MISSING_EXCLUDE_FROM_HOME`
 - [ ] 2.10 `it_should_fail_to_update_if_invalid_id_provided`: 400 with the `PlaylistId` validation message
 - [ ] 2.11 `it_should_leave_videos_of_a_playlist_excluded_from_home_out_of_home`: in-progress, short and long videos of an excluded playlist → `empty_home()`
 - [ ] 2.12 `it_should_show_a_video_of_an_excluded_playlist_through_another_source_on_home`: same video in an excluded and a shown playlist → once under latest, sourced from the shown playlist
