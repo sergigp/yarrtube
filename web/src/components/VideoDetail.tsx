@@ -5,6 +5,7 @@ import { avatarMediaUrl } from '@/api/client'
 import type { ChannelListItem, Video } from '@/api/types'
 import { formatDate, formatDateTime, formatRelativeTime } from '@/lib/formatDateTime'
 import { Thumbnail } from './Thumbnail'
+import { PlaybackSpeedMenu } from './PlaybackSpeedMenu'
 import { VideoActionsMenu } from './VideoActionsMenu'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -26,15 +27,24 @@ interface VideoDetailProps {
   basePath: string
   video: Video
   channel?: ChannelListItem
+  playbackRate: number
+  onPlaybackRateChange: (rate: number) => void
 }
 
 /**
  * The selected video's detail pane in a playlist or channel detail view.
  * `channel` is only given in a channel view, where its avatar is shown and
  * links to the channel; in a playlist view the meta line names the video's
- * channel instead.
+ * channel instead. `playbackRate` is the player's current speed, shown in
+ * the title row's speed control.
  */
-export function VideoDetail({ basePath, video, channel }: VideoDetailProps) {
+export function VideoDetail({
+  basePath,
+  video,
+  channel,
+  playbackRate,
+  onPlaybackRateChange,
+}: VideoDetailProps) {
   const [expanded, setExpanded] = useState(() => window.matchMedia(DESKTOP_QUERY).matches)
   const path = video.filename ? `${basePath}/${video.filename}` : basePath
 
@@ -52,6 +62,12 @@ export function VideoDetail({ basePath, video, channel }: VideoDetailProps) {
         <h3 className="min-w-0 flex-1 font-heading text-lg font-semibold text-foreground md:text-xl">
           {video.title}
         </h3>
+        <PlaybackSpeedMenu
+          rate={playbackRate}
+          onRateChange={onPlaybackRateChange}
+          disabled={false}
+          className="mt-0.5"
+        />
         <VideoActionsMenu
           videoId={video.id}
           title={video.title}

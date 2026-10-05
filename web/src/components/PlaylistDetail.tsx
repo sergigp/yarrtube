@@ -10,6 +10,7 @@ import {
 } from '@/api/queries'
 import { reconcilePlaylist, deletePlaylist } from '@/api/client'
 import { useWatchProgress } from '@/hooks/useWatchProgress'
+import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
 import { VideoPlayer } from './VideoPlayer'
 import { VideoDetail } from './VideoDetail'
@@ -29,6 +30,7 @@ export function PlaylistDetail() {
   const { selectedVideo, autoplay, selectVideo } = useVideoSelection(videos)
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
   useWatchProgress(videoElement, selectedVideo)
+  const playbackSpeed = usePlaybackSpeed(videoElement, selectedVideo?.id ?? null)
 
   if (playlistsError) {
     return (
@@ -69,7 +71,12 @@ export function PlaylistDetail() {
           />
 
           {selectedVideo ? (
-            <VideoDetail basePath={playlist.path} video={selectedVideo} />
+            <VideoDetail
+              basePath={playlist.path}
+              video={selectedVideo}
+              playbackRate={playbackSpeed.rate}
+              onPlaybackRateChange={playbackSpeed.changeRate}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">No video selected.</p>
           )}

@@ -8,6 +8,7 @@ import {
   avatarMediaUrl,
 } from '@/api/client'
 import { useWatchProgress } from '@/hooks/useWatchProgress'
+import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
 import { VideoPlayer } from './VideoPlayer'
 import { VideoDetail } from './VideoDetail'
@@ -26,6 +27,7 @@ export function ChannelDetail() {
   const { selectedVideo, autoplay, selectVideo } = useVideoSelection(videos)
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
   useWatchProgress(videoElement, selectedVideo)
+  const playbackSpeed = usePlaybackSpeed(videoElement, selectedVideo?.id ?? null)
 
   if (channelsError) {
     return (
@@ -68,7 +70,13 @@ export function ChannelDetail() {
           />
 
           {selectedVideo ? (
-            <VideoDetail basePath={channel.path} video={selectedVideo} channel={channel} />
+            <VideoDetail
+              basePath={channel.path}
+              video={selectedVideo}
+              channel={channel}
+              playbackRate={playbackSpeed.rate}
+              onPlaybackRateChange={playbackSpeed.changeRate}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">No video selected.</p>
           )}
