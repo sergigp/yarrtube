@@ -169,6 +169,7 @@ impl Video {
         self,
         position: PlaybackPosition,
         reported_duration: Option<VideoDuration>,
+        _was_watched: bool,
         now: DateTime<Utc>,
     ) -> Self {
         let progress = self

@@ -122,12 +122,13 @@ describe('mutations', () => {
     const fetchMock = mockApi({ 'POST /api/videos/abc/progress': { watched: true } })
 
     await expect(
-      recordVideoProgress('abc', { position_seconds: 42, duration_seconds: 100 }),
+      recordVideoProgress('abc', { position_seconds: 42, duration_seconds: 100, was_watched: false }),
     ).resolves.toEqual({ watched: true })
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(JSON.parse(init.body as string)).toEqual({
       position_seconds: 42,
       duration_seconds: 100,
+      was_watched: false,
     })
   })
 
@@ -135,7 +136,7 @@ describe('mutations', () => {
     const sendBeacon = vi.fn(() => true)
     vi.stubGlobal('navigator', { sendBeacon })
 
-    beaconVideoProgress('a b', { position_seconds: 10, duration_seconds: 60 })
+    beaconVideoProgress('a b', { position_seconds: 10, duration_seconds: 60, was_watched: false })
 
     expect(sendBeacon).toHaveBeenCalledWith('/api/videos/a%20b/progress', expect.any(Blob))
   })

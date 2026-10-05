@@ -38,6 +38,7 @@ export function useWatchProgress(videoElement: HTMLVideoElement | null, video: V
     let lastReportAt = Date.now()
     let lastReportedPosition: number | null = null
     let lastWatched = Boolean(latestVideo.current?.watched)
+    const sessionWatched = lastWatched
     // Kept up to date while playing, since by cleanup time the element may
     // already have switched to another video's source.
     let progress: VideoProgress | null = null
@@ -49,6 +50,7 @@ export function useWatchProgress(videoElement: HTMLVideoElement | null, video: V
       progress = {
         position_seconds: Math.floor(element.currentTime),
         duration_seconds: reportableDuration(element.duration),
+        was_watched: sessionWatched,
       }
     }
 

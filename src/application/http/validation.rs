@@ -2,6 +2,7 @@ use super::error::ApiError;
 
 pub const MISSING_QUALITY: &str = "Quality must be one of \"high\", \"mid\", or \"low\" (missing)";
 pub const MISSING_POSITION: &str = "Playback position must not be negative (missing)";
+pub const MISSING_WAS_WATCHED: &str = "Whether the video was watched must be stated (missing)";
 
 /// Unwraps a field the request must carry, rejecting the request with a
 /// `400 Bad Request` whose message is `missing_message` when it is absent.

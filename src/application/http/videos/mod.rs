@@ -13,6 +13,7 @@ use crate::domain::video::{
 };
 use axum::Json;
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use dto::{HomeResponse, RecordProgressRequest, RecordProgressResponse, VideoResponse};
 
 const HOME_LIMITS: HomeLimits = HomeLimits {
@@ -66,8 +67,10 @@ pub async fn record_video_progress(
         .map(VideoDuration::new)
         .transpose()?;
 
+    let was_watched = request.was_watched.unwrap_or_default();
+
     let watched = run_blocking(move || {
-        video_watch_state_updater.update(&youtube_id, position, reported_duration)
+        video_watch_state_updater.update(&youtube_id, position, reported_duration, was_watched)
     })
     .await?
     .map_err(update_watch_state_error)?;
@@ -75,9 +78,17 @@ pub async fn record_video_progress(
     Ok(Json(RecordProgressResponse { watched }))
 }
 
+pub async fn mark_video_watched(
+    State(_video_watch_state_updater): State<VideoWatchStateUpdater>,
+    Path(_youtube_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub fn update_watch_state_error(error: UpdateWatchStateError) -> ApiError {
     match error {
         e @ UpdateWatchStateError::VideoNotFound(_) => ApiError::bad_request(e),
+        e @ UpdateWatchStateError::VideoNotDownloaded(_) => ApiError::bad_request(e),
         e @ UpdateWatchStateError::ChannelNotFound(_) => ApiError::bad_request(e),
         e @ UpdateWatchStateError::Repository(_) => ApiError::internal(e),
     }
@@ -2043,7 +2054,10 @@ mod tests {
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FixedClock(watched_timestamp())),
         );
-        let request = progress_request(11);
+        let request = RecordProgressRequest {
+            was_watched: Some(true),
+            ..progress_request(11)
+        };
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
@@ -2071,7 +2085,10 @@ mod tests {
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FixedClock(watched_timestamp())),
         );
-        let request = progress_request(95);
+        let request = RecordProgressRequest {
+            was_watched: Some(true),
+            ..progress_request(95)
+        };
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
@@ -2152,7 +2169,10 @@ mod tests {
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FixedClock(watched_timestamp())),
         );
-        let request = progress_request(10);
+        let request = RecordProgressRequest {
+            was_watched: Some(true),
+            ..progress_request(10)
+        };
 
         let response = record_progress(video_watch_state_updater, "vid1", request).await;
 
@@ -2544,6 +2564,7 @@ mod tests {
         RecordProgressRequest {
             position_seconds: Some(position_seconds),
             duration_seconds: None,
+            was_watched: Some(false),
         }
     }
 

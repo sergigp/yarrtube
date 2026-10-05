@@ -8,6 +8,8 @@ pub struct RecordProgressRequest {
     pub position_seconds: Option<i64>,
     #[serde(default)]
     pub duration_seconds: Option<i64>,
+    #[serde(default)]
+    pub was_watched: Option<bool>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]

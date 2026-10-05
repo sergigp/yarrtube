@@ -130,6 +130,8 @@ export interface ChannelPreview {
 export interface VideoProgress {
   position_seconds: number
   duration_seconds?: number
+  /** Whether the video was watched when the current playback session began. */
+  was_watched: boolean
 }
 
 /** Response of `POST /api/videos/:id/progress`. */

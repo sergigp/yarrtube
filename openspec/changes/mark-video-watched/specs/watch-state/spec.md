@@ -1,0 +1,116 @@
+## ADDED Requirements
+
+### Requirement: Mark A Video Watched
+The system SHALL provide an HTTP endpoint that, given a YouTube video ID, marks every stored copy of that video as watched, with its saved position reset to 0. A video SHALL be marked only when at least one of its stored copies has finished downloading. A video that is already watched SHALL be left unchanged. On success the endpoint SHALL respond with HTTP status 204.
+
+#### Scenario: Marking a video watched
+- **WHEN** a client marks a downloaded, unwatched video as watched
+- **THEN** the daemon responds with HTTP status 204, the video is watched and its saved position is 0
+
+#### Scenario: Every stored copy is marked
+- **WHEN** a client marks as watched a video tracked by both a channel and a playlist
+- **THEN** both stored copies are watched
+
+#### Scenario: Marking drops the video from continue watching
+- **WHEN** a client marks as watched a video listed under "Continue watching"
+- **THEN** the video no longer qualifies for "Continue watching", and its channel's unwatched count drops by one
+
+#### Scenario: Already watched video
+- **WHEN** a client marks as watched a video that is already watched
+- **THEN** the daemon responds with HTTP status 204 and the video's watched time is unchanged
+
+#### Scenario: Video not downloaded
+- **WHEN** a client marks as watched a video none of whose stored copies has finished downloading
+- **THEN** the daemon responds with HTTP status 400 and changes nothing
+
+#### Scenario: Unknown video
+- **WHEN** a client marks as watched a YouTube video ID that no playlist or channel tracks
+- **THEN** the daemon responds with HTTP status 400 and changes nothing
+
+## MODIFIED Requirements
+
+### Requirement: Record Playback Progress
+The system SHALL provide an HTTP endpoint that, given a YouTube video ID and a playback position in whole seconds (plus, optionally, the duration reported by the player), records playback progress for every stored copy of that video. Each report SHALL state whether the client believed the video watched when its playback began (`was_watched`). A report SHALL be stale when it states the video was unwatched but the video is now watched. The video was marked watched after that playback began, so the reported position predates the mark. A stale report SHALL change nothing. The recorded duration SHALL be used. The reported duration SHALL be used only when no duration is recorded. When included, the reported duration SHALL be a positive number of whole seconds. The endpoint SHALL respond with HTTP status 200 on success, including stale reports, with a body stating whether the video is watched once the report is applied (`{ "watched": true }` or `{ "watched": false }`). It SHALL accept requests sent as a browser beacon on page unload.
+
+#### Scenario: Progress on an unwatched video
+- **WHEN** a client records a position below 90% of the video's duration for an unwatched video
+- **THEN** the daemon responds with HTTP status 200 and `watched: false`, the video stays unwatched, and its saved position becomes the given position
+
+#### Scenario: Progress reaches 90%
+- **WHEN** a client records a position at or above 90% of the video's duration for an unwatched video
+- **THEN** the daemon responds with `watched: true`, the video becomes watched and its saved position resets to 0
+
+#### Scenario: Duration only known by the player
+- **WHEN** a client records progress for a video with no recorded duration and includes the player's duration
+- **THEN** the 90% rule is applied against the player's duration
+
+#### Scenario: Duration unknown
+- **WHEN** a client records progress for a video with no recorded duration and no player duration
+- **THEN** the saved position becomes the given position and the video's watched status does not change
+
+#### Scenario: Early in a rewatch
+- **WHEN** a client that believed the video watched records a position at or below 10% of the duration for a watched video
+- **THEN** the video stays watched and its saved position stays 0
+
+#### Scenario: Rewatch passes 10%
+- **WHEN** a client that believed the video watched records a position above 10% and below 90% of the duration for a watched video
+- **THEN** the daemon responds with `watched: false`, the video becomes unwatched and its saved position becomes the given position
+
+#### Scenario: Playing on past 90%
+- **WHEN** a client that believed the video watched records a position at or above 90% of the duration for a watched video
+- **THEN** the video stays watched and its saved position stays 0
+
+#### Scenario: Stale report after the video was marked watched
+- **WHEN** a client that believed the video unwatched records a position above 10% and below 90% of the duration for a video that is now watched
+- **THEN** the daemon responds with HTTP status 200 and `watched: true`, and the video stays watched with a saved position of 0
+
+#### Scenario: Video un-watched elsewhere
+- **WHEN** a client that believed the video watched records progress for a video that is now unwatched
+- **THEN** the report is applied by the unwatched-video rules
+
+#### Scenario: Unknown video
+- **WHEN** a client records progress for a YouTube video ID that no playlist or channel tracks
+- **THEN** the daemon responds with HTTP status 400 and records nothing
+
+#### Scenario: Invalid reported duration
+- **WHEN** a client records progress with a reported duration of 0 or less
+- **THEN** the daemon responds with HTTP status 400 and records nothing
+
+#### Scenario: Missing or invalid position
+- **WHEN** a client records progress without a position, or with a negative position
+- **THEN** the daemon responds with HTTP status 400 and records nothing
+
+#### Scenario: Missing believed watched state
+- **WHEN** a client records progress without stating whether it believed the video watched
+- **THEN** the daemon responds with HTTP status 400 and records nothing
+
+### Requirement: Last Played Time
+The system SHALL record, for each video, the time playback progress was last recorded for it. Every successful progress report that is not stale SHALL set this time on every stored copy of that YouTube video, whether or not the report changes the video's watched status or saved position. A video whose progress has never been recorded SHALL have no last played time. Marking a channel or a single video watched SHALL NOT change any video's last played time.
+
+#### Scenario: Progress sets the last played time
+- **WHEN** a client records playback progress for a video
+- **THEN** every stored copy of that video has its last played time set to the time of the report
+
+#### Scenario: Progress that doesn't change the watch state still counts as played
+- **WHEN** a client that believed the video watched records a position at or below 10% of the duration for a watched video
+- **THEN** the video stays watched, and its last played time is set to the time of the report
+
+#### Scenario: A newly recorded video has never been played
+- **WHEN** a video is recorded for a playlist or channel for the first time
+- **THEN** it has no last played time
+
+#### Scenario: Marking a channel watched leaves last played times alone
+- **WHEN** a client marks a tracked channel as watched
+- **THEN** the last played time of each of its videos is unchanged
+
+#### Scenario: Marking a video watched leaves its last played time alone
+- **WHEN** a client marks a single video as watched
+- **THEN** the last played time of each of its stored copies is unchanged
+
+#### Scenario: A stale report records nothing
+- **WHEN** a progress report is stale
+- **THEN** no video's last played time changes
+
+#### Scenario: Rejected progress records nothing
+- **WHEN** a progress report is rejected as invalid or for an unknown video
+- **THEN** no video's last played time changes

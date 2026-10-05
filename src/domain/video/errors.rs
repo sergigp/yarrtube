@@ -36,6 +36,7 @@ impl std::error::Error for ListVideosError {}
 #[derive(Debug)]
 pub enum UpdateWatchStateError {
     VideoNotFound(VideoId),
+    VideoNotDownloaded(VideoId),
     ChannelNotFound(ChannelHandle),
     Repository(anyhow::Error),
 }
@@ -44,6 +45,7 @@ impl fmt::Display for UpdateWatchStateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::VideoNotFound(id) => write!(f, "video {id} not found"),
+            Self::VideoNotDownloaded(id) => write!(f, "video {id} is not downloaded"),
             Self::ChannelNotFound(id) => write!(f, "channel {id} not found"),
             Self::Repository(e) => write!(f, "{e}"),
         }

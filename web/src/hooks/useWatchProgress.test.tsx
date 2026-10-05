@@ -65,7 +65,11 @@ describe('useWatchProgress', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(JSON.parse(init.body as string)).toEqual({ position_seconds: 63, duration_seconds: 300 })
+    expect(JSON.parse(init.body as string)).toEqual({
+      position_seconds: 63,
+      duration_seconds: 300,
+      was_watched: false,
+    })
   })
 
   it('reports pending progress once on unmount, not twice for the same position', async () => {
@@ -91,7 +95,7 @@ describe('useWatchProgress', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(JSON.parse(init.body as string)).toEqual({ position_seconds: 10 })
+    expect(JSON.parse(init.body as string)).toEqual({ position_seconds: 10, was_watched: false })
   })
 
   it('reports through a beacon when the page hides', () => {

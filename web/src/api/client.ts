@@ -161,6 +161,13 @@ export async function markChannelWatched(handle: string): Promise<void> {
   })
 }
 
+export async function markVideoWatched(youtubeId: string): Promise<void> {
+  await send(`/videos/${encodeURIComponent(youtubeId)}/watched`, {
+    method: 'POST',
+    label: `mark video ${youtubeId} watched`,
+  })
+}
+
 export function recordVideoProgress(
   youtubeId: string,
   progress: VideoProgress,
