@@ -1063,6 +1063,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_update_if_invalid_id_provided() {
+        let response = update(any_playlist_updater(), " ", update_request(true)).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "YouTube playlist ID must not be empty"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_add_new_videos_on_reconcile() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
