@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { VideoDetail } from './VideoDetail'
-import { aChannel, aVideo, renderWithProviders } from '@/test/helpers'
+import { aChannel, aVideo, mockApi, renderWithProviders } from '@/test/helpers'
 
 describe('VideoDetail', () => {
   it('shows the title and a collapsed detail below the desktop breakpoint', () => {
@@ -86,5 +86,17 @@ describe('VideoDetail', () => {
       '/channels/chan',
     )
     expect(screen.queryByText('The Channel', { selector: 'span' })).not.toBeInTheDocument()
+  })
+  it('marks the selected video watched from the detail pane', async () => {
+    const markWatched = vi.fn(() => null)
+    mockApi({ 'POST /api/videos/abc/watched': markWatched })
+    const video = aVideo({ id: 'abc', title: 'My Video' })
+    renderWithProviders(<VideoDetail basePath="playlists/mix" video={video} />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark as watched' }))
+
+    expect(markWatched).toHaveBeenCalledOnce()
   })
 })

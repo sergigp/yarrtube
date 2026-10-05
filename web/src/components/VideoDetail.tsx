@@ -5,6 +5,7 @@ import { avatarMediaUrl } from '@/api/client'
 import type { ChannelListItem, Video } from '@/api/types'
 import { formatDate, formatDateTime, formatRelativeTime } from '@/lib/formatDateTime'
 import { Thumbnail } from './Thumbnail'
+import { VideoActionsMenu } from './VideoActionsMenu'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
@@ -51,6 +52,12 @@ export function VideoDetail({ basePath, video, channel }: VideoDetailProps) {
         <h3 className="min-w-0 flex-1 font-heading text-lg font-semibold text-foreground md:text-xl">
           {video.title}
         </h3>
+        <VideoActionsMenu
+          videoId={video.id}
+          title={video.title}
+          markable={!video.watched && video.status === 'DOWNLOADED'}
+          className="mt-0.5"
+        />
       </div>
       <MetaLine video={video} showChannelName={!channel} />
       {expanded && (
