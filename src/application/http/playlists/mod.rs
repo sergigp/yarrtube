@@ -884,6 +884,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_playlists_with_their_exclude_from_home() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", "music/first"))
+            .unwrap();
+        playlist_repository
+            .insert(&Playlist {
+                exclude_from_home: true,
+                ..playlist("PL2", "music/second")
+            })
+            .unwrap();
+        let playlist_searcher = PlaylistSearcher::new(playlist_repository);
+
+        let response = list(playlist_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                playlist_response("PL1", "music/first"),
+                PlaylistResponse {
+                    exclude_from_home: true,
+                    ..playlist_response("PL2", "music/second")
+                },
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlists_sorted_by_name_ignoring_case() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));

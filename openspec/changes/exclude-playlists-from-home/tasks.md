@@ -23,7 +23,7 @@
 - [x] 2.1 `it_should_create_a_playlist_shown_on_home_by_default`: no `exclude_from_home` → 201 with `false`, stored with `false`
 - [x] 2.2 `it_should_create_a_playlist_excluded_from_home`: `Some(true)` → response and stored playlist have `true`
 - [x] 2.3 `it_should_keep_exclude_from_home_of_an_existing_playlist_on_duplicate_create`: stored `false`, request `true` → 200 with the existing record, storage unchanged
-- [ ] 2.4 `it_should_list_playlists_with_their_exclude_from_home`: seeded mix → each flag in the list response
+- [x] 2.4 `it_should_list_playlists_with_their_exclude_from_home`: seeded mix → each flag in the list response
 - [ ] 2.5 `it_should_exclude_a_playlist_from_home`: PATCH `true` on a shown playlist → 200 with `true`, stored as `original.with_exclude_from_home(true)`
 - [ ] 2.6 `it_should_include_a_playlist_in_home_again`: PATCH `false` on an excluded playlist → `false` returned and stored
 - [ ] 2.7 `it_should_leave_a_playlist_unchanged_if_already_set`: PATCH `true` on an excluded playlist → 200, storage unchanged
