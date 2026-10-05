@@ -857,45 +857,6 @@ channel it belongs to, the same way it describes a video download task.
 - **WHEN** the tasks view lists a thumbnail fetch task whose video title could not be resolved
 - **THEN** the task is still described as a thumbnail fetch, using a generic placeholder in place of the missing names
 
-### Requirement: Tasks View Tabbed By Family
-The tasks view SHALL group its tasks into tabs by task family, in this order: **Active**, **Downloads**, **Syncs**, **Cleanup**, and **All**. Each tab SHALL show, beside its name, a count of the tasks it currently contains. A task belongs to a tab as follows:
-
-- **Active**: every task whose status is `running`, regardless of its type.
-- **Downloads**: video download and thumbnail fetch tasks.
-- **Syncs**: playlist reconciliation, channel reconciliation, and Plex collection reconciliation tasks.
-- **Cleanup**: tasks that delete a video file, a playlist's files, or a channel's files.
-- **All**: every task, whatever its type or status.
-
-A task that fits no download, sync, or cleanup family (such as the yt-dlp self-update) SHALL still appear in **All**, and in **Active** while it is running. The view SHALL open on the **Active** tab. Each tab SHALL list its tasks in the view's usual order (running first, then tasks already due, then tasks scheduled for later).
-
-#### Scenario: View opens on the Active tab
-- **WHEN** a user opens the tasks view
-- **THEN** the Active tab is selected and lists only the tasks whose status is `running`
-
-#### Scenario: Running task appears under Active regardless of type
-- **WHEN** a sync task is running
-- **THEN** it appears in the Active tab as well as in its own family tab and in All
-
-#### Scenario: Downloads tab lists download and thumbnail tasks
-- **WHEN** the tasks include video downloads and thumbnail fetches
-- **THEN** the Downloads tab lists those tasks and no sync or cleanup tasks
-
-#### Scenario: Syncs tab lists reconcile tasks
-- **WHEN** the tasks include playlist, channel, and Plex collection reconciliations
-- **THEN** the Syncs tab lists those tasks and no download or cleanup tasks
-
-#### Scenario: Cleanup tab lists deletion tasks
-- **WHEN** the tasks include a video-file deletion and a deleted container's file cleanup
-- **THEN** the Cleanup tab lists those tasks and no download or sync tasks
-
-#### Scenario: All tab lists every task
-- **WHEN** tasks of several families, including a yt-dlp self-update, are present
-- **THEN** the All tab lists every task, and each tab's count matches the number of tasks it lists
-
-#### Scenario: Active tab is empty
-- **WHEN** no task is running
-- **THEN** the Active tab shows a message that nothing is running rather than an empty area, and the other tabs still list their tasks
-
 ### Requirement: Tasks View Search
 The tasks view SHALL show a search field above the currently selected tab's list when that tab lists more than 15 tasks, and SHALL NOT show it otherwise. While the field contains text, the current tab SHALL list only the tasks whose plain-language description contains that text, ignoring case, keeping the tab's usual order. When no task in the current tab matches, the view SHALL say that nothing matches. Clearing the field SHALL restore the tab's full list. The search text SHALL apply only to the current tab; switching tabs SHALL clear it.
 
@@ -944,3 +905,107 @@ When a task the tasks view lists has a recorded last error, the view SHALL show 
 #### Scenario: Task without an error shows none
 - **WHEN** the tasks view lists a task with no recorded last error
 - **THEN** the task's row shows no error text
+
+### Requirement: Tasks View Tabs
+The tasks view SHALL group its tasks into tabs by task family, in this order: **Active**, **Downloads**, **Syncs**, and **Other**. Each tab SHALL show, beside its name, a count of the tasks it currently contains. A task belongs to a tab as follows:
+
+- **Active**: every task whose status is `running`, regardless of its type.
+- **Downloads**: video download and thumbnail fetch tasks.
+- **Syncs**: playlist reconciliation and channel reconciliation tasks.
+- **Other**: every task that belongs to neither Downloads nor Syncs, including Plex collection reconciliation, the yt-dlp self-update, deletion of a video file or of a playlist's or channel's files, and any task type the view does not otherwise recognise.
+
+Every task SHALL appear in exactly one of Downloads, Syncs, or Other, and additionally in **Active** while it is running. The view SHALL open on the **Active** tab. Each tab SHALL list its tasks in the view's usual order (running first, then tasks already due, then tasks scheduled for later). Each task row SHALL show an icon that reflects the kind of work the task does (download, sync, deletion, or maintenance), so rows of different kinds within **Other** remain distinguishable.
+
+#### Scenario: View opens on the Active tab
+- **WHEN** a user opens the tasks view
+- **THEN** the Active tab is selected and lists only the tasks whose status is `running`
+
+#### Scenario: Running task appears under Active regardless of type
+- **WHEN** a sync task is running
+- **THEN** it appears in the Active tab as well as in the Syncs tab
+
+#### Scenario: Downloads tab lists download and thumbnail tasks
+- **WHEN** the tasks include video downloads and thumbnail fetches
+- **THEN** the Downloads tab lists those tasks and no sync or other tasks
+
+#### Scenario: Syncs tab lists only playlist and channel reconciles
+- **WHEN** the tasks include playlist, channel, and Plex collection reconciliations
+- **THEN** the Syncs tab lists the playlist and channel reconciliations and not the Plex collection reconciliation
+
+#### Scenario: Other tab collects everything else
+- **WHEN** the tasks include a Plex collection reconciliation, a yt-dlp self-update, a video-file deletion, a deleted container's file cleanup, and a task of an unrecognised type
+- **THEN** the Other tab lists all of them and no download or playlist/channel sync tasks
+
+#### Scenario: Counts match listed tasks
+- **WHEN** tasks of several families are present
+- **THEN** each tab's count matches the number of tasks it lists, and the Downloads, Syncs, and Other counts add up to the total number of tasks
+
+#### Scenario: No Cleanup or All tab
+- **WHEN** a user opens the tasks view
+- **THEN** no Cleanup tab and no All tab are offered
+
+#### Scenario: Active tab is empty
+- **WHEN** no task is running
+- **THEN** the Active tab shows a message that nothing is running rather than an empty area, and the other tabs still list their tasks
+
+### Requirement: Tasks View Tab Bar Affordance
+The tasks view's tab bar SHALL make each tab look clickable and SHALL make the selected tab unmistakable. The tasks view SHALL be limited to a readable width and centred in the space beside the sidebar, and the tab bar SHALL span exactly the width of the task list, its tabs sharing that width equally. The tab bar SHALL be drawn as a row of tabs over a horizontal rule, with the selected tab marked by an underline in the application's primary colour and its label in the full foreground colour and a heavier weight; unselected tabs SHALL show a muted label. Hovering an unselected tab SHALL visibly change its background and label colour. Each tab SHALL show an icon for its family, its name, and its count as a pill, with the selected tab's pill in the primary colour. On narrow screens each tab SHALL show only its icon and count, keeping its name as its accessible name, so that all tabs fit without horizontal scrolling. While at least one task is running, the **Active** tab SHALL show a live indicator beside its count. Each tab SHALL be at least 40 pixels tall and SHALL show a visible focus ring when focused from the keyboard. The tab bar SHALL look the same whatever the operating system's colour-scheme preference.
+
+#### Scenario: Selected tab is marked
+- **WHEN** a user views the tasks view with the Syncs tab selected
+- **THEN** the Syncs tab shows the primary-coloured underline, a full-colour heavier label, and a primary-coloured count pill, and no other tab does
+
+#### Scenario: Hovering an unselected tab
+- **WHEN** a user hovers an unselected tab with a pointer
+- **THEN** that tab's background and label colour change
+
+#### Scenario: Live indicator on Active
+- **WHEN** at least one task is running
+- **THEN** the Active tab shows a live indicator beside its count
+
+#### Scenario: No live indicator when idle
+- **WHEN** no task is running
+- **THEN** the Active tab shows no live indicator
+
+#### Scenario: Keyboard focus
+- **WHEN** a user moves keyboard focus onto a tab
+- **THEN** that tab shows a visible focus ring
+
+#### Scenario: Wide screen
+- **WHEN** the tasks view is shown on a wide desktop screen
+- **THEN** the view is centred at a readable width, and the tab bar's rule and the task list share the same left and right edges
+
+#### Scenario: Narrow screen
+- **WHEN** the tasks view is shown on a phone-width screen
+- **THEN** every tab shows its icon and count without its visible name, all four tabs are visible without scrolling, and each tab is still announced by its name to assistive technology
+
+### Requirement: Run Sync Now From Tasks View
+Each playlist or channel reconciliation task listed in the **Syncs** tab SHALL offer a **Run now** action. Activating it SHALL trigger the on-demand reconcile of that task's playlist or channel — the same action the sidebar's sync offers — and SHALL leave the listed task itself and its scheduled run time unchanged. While the triggered reconcile is in progress, that row's action SHALL show that it is working and SHALL NOT accept another activation. When the reconcile completes, the tasks view SHALL refresh its list. When the reconcile fails, the view SHALL show the failure on that row without removing it. A reconciliation task whose status is `running` SHALL NOT offer Run now, since its sync is already underway. Tasks in other tabs SHALL NOT offer this action.
+
+#### Scenario: Running a playlist sync now
+- **WHEN** a user activates Run now on a playlist reconciliation task in the Syncs tab
+- **THEN** the application triggers a reconcile of that playlist, and the task remains listed with its scheduled run time unchanged
+
+#### Scenario: Running a channel sync now
+- **WHEN** a user activates Run now on a channel reconciliation task in the Syncs tab
+- **THEN** the application triggers a reconcile of that channel
+
+#### Scenario: Run now while in progress
+- **WHEN** a user has activated Run now on a row and the reconcile has not completed yet
+- **THEN** that row's action indicates it is working and cannot be activated again
+
+#### Scenario: Run now completes
+- **WHEN** a triggered reconcile completes successfully
+- **THEN** the tasks view refreshes its list of tasks
+
+#### Scenario: Run now fails
+- **WHEN** a triggered reconcile fails
+- **THEN** the view shows that the sync failed, and the row's action can be activated again
+
+#### Scenario: No Run now on a running sync
+- **WHEN** the Syncs tab lists a reconciliation task whose status is `running`
+- **THEN** that row offers no Run now action
+
+#### Scenario: No Run now outside Syncs
+- **WHEN** a user views the Downloads, Other, or Active tab
+- **THEN** no task row offers a Run now action
