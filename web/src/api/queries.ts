@@ -146,7 +146,11 @@ export function useInvalidateLibrary(): () => Promise<unknown> {
 
 /** Returns a function that refetches the task list, e.g. after a sync run on demand. */
 export function useInvalidateTasks(): () => Promise<unknown> {
-  return useCallback(() => Promise.resolve(), [])
+  const queryClient = useQueryClient()
+  return useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.tasks }),
+    [queryClient],
+  )
 }
 
 /**

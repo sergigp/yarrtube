@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TasksView } from './TasksView'
 import { aTask, mockApi, pendingForever, renderWithProviders } from '@/test/helpers'
@@ -130,6 +130,28 @@ describe('TasksView', () => {
 
     const idleTab = await screen.findByRole('tab', { name: /Active/ })
     expect(within(idleTab).queryByRole('img', { name: 'Tasks running' })).not.toBeInTheDocument()
+  })
+
+  it('runs a playlist sync now from the Syncs tab and refetches the tasks', async () => {
+    const user = userEvent.setup()
+    const tasks = vi.fn(() => [
+      aTask({
+        id: 1,
+        task_type: 'reconcile_playlist',
+        run_at: '2999-01-01T00:00:00Z',
+        payload: { playlist_id: 'PL1', playlist_name: 'Mix' },
+      }),
+    ])
+    const reconcile = vi.fn(() => null)
+    mockApi({ 'GET /api/tasks': tasks, 'POST /api/playlists/PL1/reconcile': reconcile })
+
+    renderWithProviders(<TasksView />)
+
+    await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
+    await user.click(screen.getByRole('button', { name: 'Run now: Syncing playlist Mix' }))
+
+    expect(reconcile).toHaveBeenCalledOnce()
+    await waitFor(() => expect(tasks).toHaveBeenCalledTimes(2))
   })
 
   it('lists download and thumbnail tasks under Downloads, and no sync or cleanup tasks', async () => {

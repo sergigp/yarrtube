@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Activity, Download, RotateCw, Trash2, Wrench, type LucideIcon } from 'lucide-react'
-import { useTasks } from '@/api/queries'
+import { reconcilePlaylist } from '@/api/client'
+import { useInvalidateTasks, useTasks } from '@/api/queries'
 import { formatRelativeTime } from '@/lib/formatDateTime'
 import {
   describeTask,
@@ -173,8 +174,17 @@ export function TasksView() {
 }
 
 function RunNowButton({ target, name }: { target: SyncTarget; name: string }) {
+  const invalidateTasks = useInvalidateTasks()
   return (
-    <Button variant="outline" size="sm" aria-label={`Run ${name} now`} data-target={target.id}>
+    <Button
+      variant="outline"
+      size="sm"
+      aria-label={`Run now: ${name}`}
+      onClick={async () => {
+        await reconcilePlaylist(target.id)
+        await invalidateTasks()
+      }}
+    >
       <RotateCw />
       Run now
     </Button>
