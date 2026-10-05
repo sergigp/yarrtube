@@ -142,6 +142,28 @@ describe('useWatchProgress', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('reports was_watched true after a flip once playback moves on', async () => {
+    const fetchMock = mockApi({ 'POST /api/videos/abc/progress': { watched: true } })
+    const element = fakeVideoElement({ currentTime: 40, duration: 100, paused: false })
+    const video = aVideo({ id: 'abc', watched: false })
+    const { rerender } = renderHook(({ current }) => useWatchProgress(element, current), {
+      wrapper: Wrapper,
+      initialProps: { current: video },
+    })
+    rerender({ current: { ...video, watched: true } })
+
+    element.currentTime = 5
+    element.dispatchEvent(new Event('pause'))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({
+      position_seconds: 5,
+      duration_seconds: 100,
+      was_watched: true,
+    })
+  })
+
   it('reports through a beacon when the page hides', () => {
     const sendBeacon = vi.fn(() => true)
     Object.defineProperty(window.navigator, 'sendBeacon', {
