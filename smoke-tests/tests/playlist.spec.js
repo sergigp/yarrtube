@@ -6,7 +6,7 @@ import {
   destinationNotice,
 } from '../helpers/addDialog.js'
 import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
-import { syncItem, deleteItem, sectionRows } from '../helpers/sidebar.js'
+import { syncItem, deleteItem, sectionRows, includeItemInHome } from '../helpers/sidebar.js'
 
 const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
 const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
@@ -82,6 +82,18 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   const homeCard = page.locator('main').getByRole('link').filter({ has: page.locator('img') }).first()
   await expect(homeCard).toBeVisible()
   await expect(homeCard.getByText(/^\d+:\d{2}(:\d{2})?$/)).toBeVisible()
+
+  // Excluding the playlist from home through a card's menu takes its cards
+  // off home; including it again from the sidebar brings them back.
+  const excluded = page.waitForResponse(
+    (response) => response.request().method() === 'PATCH' && response.url().includes('/playlists/'),
+  )
+  await continueWatching.getByRole('button', { name: `Actions for ${videoTitle}` }).click()
+  await page.getByRole('menuitem', { name: `Exclude "${PLAYLIST_NAME}" from home` }).click()
+  expect((await excluded).status()).toBe(200)
+  await expect(page.locator('main').getByText(videoTitle, { exact: true })).toHaveCount(0)
+  await includeItemInHome(page, { section: 'Playlists', name: PLAYLIST_NAME })
+  await expect(continueWatching.getByText(videoTitle, { exact: true })).toBeVisible()
 
   // Sync from the sidebar completes without an error dialog/alert.
   await syncItem(page, { section: 'Playlists', name: PLAYLIST_NAME })

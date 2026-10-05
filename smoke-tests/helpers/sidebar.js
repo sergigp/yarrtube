@@ -86,3 +86,12 @@ export async function markItemWatched(page, { section, name }) {
     throw new Error(`mark watched failed: ${alertMessage}`)
   }
 }
+
+export async function includeItemInHome(page, { section, name }) {
+  const row = await rowFor(page, section, name)
+  const updated = page.waitForResponse(
+    (response) => response.request().method() === 'PATCH' && response.url().includes('/playlists/'),
+  )
+  await chooseRowAction(page, row, 'Include in home')
+  expect((await updated).status()).toBe(200)
+}
