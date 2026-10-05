@@ -104,6 +104,7 @@ impl TaskViewSearcher {
         let mut view = HashMap::new();
         let channel_id = ChannelHandle::new(Task::decode_reconcile_channel_payload(payload)?)?;
         if let Some(channel) = self.channel_repository.find(&channel_id)? {
+            view.insert("channel_id".to_string(), channel_id.as_str().to_string());
             view.insert("channel_name".to_string(), channel.name.clone());
         }
         Ok(view)

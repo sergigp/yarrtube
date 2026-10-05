@@ -214,7 +214,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_include_channel_name_in_reconcile_channel_tasks() {
+    async fn it_should_include_channel_id_in_reconcile_channel_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.database(),
@@ -247,7 +247,10 @@ mod tests {
             response,
             Ok(vec![pending_task(
                 "reconcile_channel",
-                &[("channel_name", "Some Channel")]
+                &[
+                    ("channel_id", "@somechannel"),
+                    ("channel_name", "Some Channel")
+                ]
             )])
         );
     }
