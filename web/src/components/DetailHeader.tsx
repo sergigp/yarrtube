@@ -25,6 +25,9 @@ interface DetailHeaderProps {
   unwatchedCount?: number
   onSync: () => Promise<void>
   onMarkWatched?: () => Promise<void>
+  /** Playlists only: whether the playlist is excluded from home. */
+  excludedFromHome?: boolean
+  onSetExcludedFromHome?: (excluded: boolean) => Promise<void>
   onDelete: () => Promise<void>
   deleteDescription: string
 }
@@ -43,6 +46,8 @@ export function DetailHeader({
   unwatchedCount,
   onSync,
   onMarkWatched,
+  excludedFromHome,
+  onSetExcludedFromHome,
   onDelete,
   deleteDescription,
 }: DetailHeaderProps) {
@@ -106,7 +111,12 @@ export function DetailHeader({
             <span className="hidden sm:inline">Mark all watched</span>
           </Button>
         )}
-        <EntryActionsMenu name={name} onDeleteRequest={() => setConfirmingDelete(true)} />
+        <EntryActionsMenu
+          name={name}
+          excludedFromHome={excludedFromHome}
+          onSetExcludedFromHome={onSetExcludedFromHome}
+          onDeleteRequest={() => setConfirmingDelete(true)}
+        />
       </div>
 
       <ConfirmDialog

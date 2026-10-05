@@ -1,8 +1,9 @@
-import { EllipsisVertical, Trash2 } from 'lucide-react'
+import { EllipsisVertical, Eye, EyeOff, Trash2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
@@ -21,7 +22,15 @@ interface EntryActionsMenuProps {
 }
 
 /** A vertical "⋮" menu of actions on one channel or playlist. */
-export function EntryActionsMenu({ name, onDeleteRequest, className }: EntryActionsMenuProps) {
+export function EntryActionsMenu({
+  name,
+  excludedFromHome,
+  onSetExcludedFromHome,
+  onDeleteRequest,
+  className,
+}: EntryActionsMenuProps) {
+  const offersHomeItem = excludedFromHome !== undefined && onSetExcludedFromHome !== undefined
+
   return (
     // Non-modal so opening the delete confirmation from it doesn't leave the
     // page with pointer events disabled.
@@ -36,6 +45,23 @@ export function EntryActionsMenu({ name, onDeleteRequest, className }: EntryActi
         <EllipsisVertical className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-44">
+        {offersHomeItem && (
+          <DropdownMenuItem
+            onSelect={async () => {
+              try {
+                await onSetExcludedFromHome(!excludedFromHome)
+              } catch (err) {
+                window.alert(
+                  `Failed to ${homeSettingAction(!excludedFromHome, name)}: ${errorMessage(err)}`,
+                )
+              }
+            }}
+          >
+            {excludedFromHome ? <Eye /> : <EyeOff />}
+            {excludedFromHome ? 'Include in home' : 'Exclude from home'}
+          </DropdownMenuItem>
+        )}
+        {offersHomeItem && <DropdownMenuSeparator />}
         <DropdownMenuItem variant="destructive" onSelect={onDeleteRequest}>
           <Trash2 />
           Delete
@@ -43,4 +69,12 @@ export function EntryActionsMenu({ name, onDeleteRequest, className }: EntryActi
       </DropdownMenuContent>
     </DropdownMenu>
   )
+}
+
+function homeSettingAction(excluded: boolean, name: string): string {
+  return excluded ? `exclude "${name}" from home` : `include "${name}" in home`
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
 }

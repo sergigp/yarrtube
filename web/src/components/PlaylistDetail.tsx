@@ -1,6 +1,13 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { queryKeys, useLibraryAction, usePlaylists, usePlaylistVideos, useRemoveQuery } from '@/api/queries'
+import {
+  queryKeys,
+  useLibraryAction,
+  usePlaylists,
+  usePlaylistVideos,
+  useRemoveQuery,
+  useSetPlaylistExcludedFromHome,
+} from '@/api/queries'
 import { reconcilePlaylist, deletePlaylist } from '@/api/client'
 import { useWatchProgress } from '@/hooks/useWatchProgress'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
@@ -15,6 +22,7 @@ export function PlaylistDetail() {
   const { data: playlists, error: playlistsError } = usePlaylists()
   const refreshing = useLibraryAction()
   const removeQuery = useRemoveQuery()
+  const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
   const playlist = playlists?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = usePlaylistVideos(id)
@@ -42,6 +50,8 @@ export function PlaylistDetail() {
         name={playlist.name}
         videos={videos}
         onSync={refreshing(() => reconcilePlaylist(id))}
+        excludedFromHome={playlist.exclude_from_home}
+        onSetExcludedFromHome={(excluded) => setPlaylistExcludedFromHome(id, excluded)}
         onDelete={refreshing(async () => {
           await deletePlaylist(id)
           removeQuery(queryKeys.playlistVideos(id))

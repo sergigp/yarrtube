@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
@@ -79,5 +79,29 @@ describe('PlaylistDetail', () => {
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Actions for The Playlist' }))
     expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+  })
+
+  it('excludes the playlist from home from its page header menu', async () => {
+    let playlist = aPlaylist({ id: 'PL1', name: 'The Playlist' })
+    const update = vi.fn(() => {
+      playlist = { ...playlist, exclude_from_home: true }
+      return playlist
+    })
+    renderPlaylist(
+      {
+        'GET /api/playlists': () => [playlist],
+        'GET /api/playlists/PL1/videos': [],
+        'PATCH /api/playlists/PL1': update,
+      },
+      '/playlists/PL1',
+    )
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for The Playlist' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Exclude from home' }))
+
+    expect(update).toHaveBeenCalledOnce()
+    await user.click(screen.getByRole('button', { name: 'Actions for The Playlist' }))
+    expect(await screen.findByRole('menuitem', { name: 'Include in home' })).toBeInTheDocument()
   })
 })
