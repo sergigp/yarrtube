@@ -33,7 +33,12 @@ export function AppShell() {
           onToggle={() => setSidebarOpen((wasOpen) => !wasOpen)}
           controls={SIDEBAR_ID}
         />
-        <Link to="/" className="flex items-center no-underline" aria-label="Yarrtube">
+        <Link
+          to="/"
+          onClick={() => setSidebarOpen(false)}
+          className="flex items-center no-underline"
+          aria-label="Yarrtube"
+        >
           <img src="/logo.png" alt="Yarrtube" className="h-10 w-auto sm:h-12" />
         </Link>
         <div className="ml-auto flex items-center gap-2">
