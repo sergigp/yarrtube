@@ -79,7 +79,9 @@ The system SHALL include each video's publish time, description and channel name
 - **THEN** that video's entry reports its publish time, description and channel name as absent, and every other field is still returned
 
 ### Requirement: List Home Videos Across Sources
-The system SHALL provide an HTTP endpoint that returns, in one response, the downloaded videos of the three home sections across every tracked playlist and channel, so that a YouTube video appears in at most one section.
+The system SHALL provide an HTTP endpoint that returns, in one response, the downloaded videos of the three home sections across every tracked channel and every tracked playlist not excluded from home, so that a YouTube video appears in at most one section.
+
+A playlist excluded from home SHALL NOT be the source of any video in any section. A video it tracks SHALL still appear when another source that is not excluded tracks it, through that source.
 
 "Continue watching" SHALL hold up to 6 videos the user has started and not finished recently:
 - each is unwatched, with a saved playback position greater than 30 seconds, and was last played within the past 7 days
@@ -184,3 +186,19 @@ Each returned video SHALL include:
 #### Scenario: Playlist source has no avatar filename
 - **WHEN** a returned video's source is a playlist
 - **THEN** the source's avatar filename is absent
+
+#### Scenario: Videos of a playlist excluded from home are left out
+- **WHEN** a downloaded video that would qualify for any section is tracked only by a playlist excluded from home
+- **THEN** it appears in no section
+
+#### Scenario: A video also tracked by a source shown on home still appears
+- **WHEN** a downloaded video is tracked by a playlist excluded from home and by a channel or playlist that is not
+- **THEN** it appears as usual, with the source that is not excluded as its source
+
+#### Scenario: Excluded videos leave room for others
+- **WHEN** a playlist excluded from home holds more recently synced videos than a playlist shown on home
+- **THEN** "Latest videos" and "Quick watches" fill with the shown playlist's videos, as if the excluded playlist were not tracked
+
+#### Scenario: Including a playlist in home again
+- **WHEN** a playlist excluded from home is included in home again
+- **THEN** its downloaded videos appear in the home sections they qualify for
