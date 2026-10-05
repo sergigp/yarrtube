@@ -256,7 +256,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_omit_details_if_channel_is_gone() {
+    async fn it_should_keep_channel_id_if_channel_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.database(),
@@ -281,7 +281,13 @@ mod tests {
 
         let response = list(task_view_searcher).await;
 
-        assert_eq!(response, Ok(vec![pending_task("reconcile_channel", &[])]));
+        assert_eq!(
+            response,
+            Ok(vec![pending_task(
+                "reconcile_channel",
+                &[("channel_id", "@somechannel")]
+            )])
+        );
     }
 
     #[tokio::test]
