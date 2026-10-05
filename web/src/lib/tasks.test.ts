@@ -5,6 +5,7 @@ import {
   matchesTask,
   tasksForTab,
   taskCategory,
+  taskFamily,
 } from './tasks'
 import { aTask } from '@/test/helpers'
 
@@ -122,6 +123,19 @@ describe('taskCategory and byCategory', () => {
 })
 
 describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
+  it('maps each task type to downloads, syncs or other, and unknown types to other', () => {
+    expect(taskFamily(aTask({ task_type: 'download_video' }))).toBe('downloads')
+    expect(taskFamily(aTask({ task_type: 'fetch_thumbnail' }))).toBe('downloads')
+    expect(taskFamily(aTask({ task_type: 'reconcile_playlist' }))).toBe('syncs')
+    expect(taskFamily(aTask({ task_type: 'reconcile_channel' }))).toBe('syncs')
+    expect(taskFamily(aTask({ task_type: 'reconcile_plex_collections' }))).toBe('other')
+    expect(taskFamily(aTask({ task_type: 'update_ytdlp' }))).toBe('other')
+    expect(taskFamily(aTask({ task_type: 'delete_video_file' }))).toBe('other')
+    expect(taskFamily(aTask({ task_type: 'delete_playlist_files' }))).toBe('other')
+    expect(taskFamily(aTask({ task_type: 'delete_channel_files' }))).toBe('other')
+    expect(taskFamily(aTask({ task_type: 'mystery_task' }))).toBe('other')
+  })
+
   it("returns only running tasks of any type for the 'active' tab", () => {
     const runningSync = aTask({ id: 1, task_type: 'reconcile_channel', status: 'running' })
     const runningDownload = aTask({ id: 2, task_type: 'download_video', status: 'running' })

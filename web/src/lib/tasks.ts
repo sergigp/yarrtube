@@ -55,7 +55,6 @@ const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
   fetch_thumbnail: 'downloads',
   reconcile_playlist: 'syncs',
   reconcile_channel: 'syncs',
-  reconcile_plex_collections: 'syncs',
 }
 
 export function taskFamily(task: Task): TaskFamily {
