@@ -154,7 +154,7 @@ impl VideoSearcher {
     }
 
     /// Every downloaded video of every tracked channel, then of every tracked
-    /// playlist, once per source.
+    /// playlist not excluded from home, once per source.
     fn downloaded_across_sources(&self) -> Result<Vec<SourcedVideo>, ListVideosError> {
         let mut videos = self.downloaded_from_channels()?;
         videos.extend(self.downloaded_from_playlists()?);
@@ -256,6 +256,7 @@ impl VideoSearcher {
 
         playlists
             .iter()
+            .filter(|playlist| !playlist.exclude_from_home)
             .map(|playlist| -> anyhow::Result<Vec<SourcedVideo>> {
                 let playlist_videos = self
                     .playlist_video_repository

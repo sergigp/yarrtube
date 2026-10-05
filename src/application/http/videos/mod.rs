@@ -1406,6 +1406,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_leave_videos_of_a_playlist_excluded_from_home_out_of_home() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&Playlist {
+                exclude_from_home: true,
+                ..playlist("PL1")
+            })
+            .unwrap();
+        [
+            started_video("started", "Started", 120, watched_timestamp()),
+            video_lasting("short", "Short", Some(600), 100),
+            video_lasting("long", "Long", Some(3600), 100),
+        ]
+        .iter()
+        .for_each(|video| {
+            save_playlist_video(
+                video_repository.as_ref(),
+                playlist_video_repository.as_ref(),
+                "PL1",
+                video,
+            )
+        });
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(response, Ok(empty_home()));
+    }
+
+    #[tokio::test]
     async fn it_should_order_continue_watching_by_last_played_first_on_home() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

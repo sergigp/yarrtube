@@ -30,7 +30,7 @@
 - [x] 2.8 `it_should_fail_to_update_an_unknown_playlist`: 404 `playlist <id> not found`, nothing stored
 - [x] 2.9 `it_should_fail_to_update_if_exclude_from_home_missing`: 400 `MISSING_EXCLUDE_FROM_HOME`
 - [x] 2.10 `it_should_fail_to_update_if_invalid_id_provided`: 400 with the `PlaylistId` validation message
-- [ ] 2.11 `it_should_leave_videos_of_a_playlist_excluded_from_home_out_of_home`: in-progress, short and long videos of an excluded playlist → `empty_home()`
+- [x] 2.11 `it_should_leave_videos_of_a_playlist_excluded_from_home_out_of_home`: in-progress, short and long videos of an excluded playlist → `empty_home()`
 - [ ] 2.12 `it_should_show_a_video_of_an_excluded_playlist_through_another_source_on_home`: same video in an excluded and a shown playlist → once under latest, sourced from the shown playlist
 - [ ] 2.13 `it_should_fill_home_with_shown_playlists_if_an_excluded_one_has_newer_videos`: only the shown playlist's videos, in sync order
 - [ ] 2.14 `AddPlaylistDialog` "sends exclude_from_home false by default"
