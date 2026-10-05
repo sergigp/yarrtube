@@ -79,13 +79,33 @@ describe('ChannelDetail', () => {
 
     await userEvent
       .setup()
-      .click(await screen.findByRole('button', { name: /Second Video/ }))
+      .click(await screen.findByRole('button', { name: '2:00 Second Video' }))
 
     await waitFor(() =>
       expect(document.querySelector('video')?.getAttribute('src')).toBe(
         `/media/${channel.path}/second.mp4`,
       ),
     )
+  })
+
+  it("opening a row's menu does not change the selected video", async () => {
+    const channel = aChannel({ id: 'chan' })
+    renderChannel(
+      {
+        'GET /api/channels': [channel],
+        'GET /api/channels/chan/videos': [
+          aVideo({ title: 'First Video' }),
+          aVideo({ title: 'Second Video' }),
+        ],
+      },
+      '/channels/chan',
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Second Video' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Mark as watched' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'First Video' })).toBeInTheDocument()
   })
 
   it('explains when the selected video is not downloaded yet', async () => {

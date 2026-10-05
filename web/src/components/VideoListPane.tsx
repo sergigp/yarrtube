@@ -5,6 +5,7 @@ import { formatDuration } from '@/lib/formatDuration'
 import { Thumbnail } from './Thumbnail'
 import { WatchedTick } from './WatchedTick'
 import { Beacon } from './Beacon'
+import { VideoActionsMenu } from './VideoActionsMenu'
 import { cn } from '@/lib/utils'
 
 const STATUS_MESSAGES: Record<string, string> = {
@@ -43,8 +44,9 @@ interface VideoListPaneProps {
 
 /**
  * The scrollable video list beside a detail view's player: one row per
- * video with its thumbnail, watched tick, duration and download status,
- * highlighting the selected one.
+ * video with its thumbnail, watched tick, duration, download status and
+ * actions menu, highlighting the selected one. The menu sits beside the
+ * row's select button, not inside it, so opening it never selects the video.
  */
 export function VideoListPane({
   noun,
@@ -66,12 +68,15 @@ export function VideoListPane({
           {videos.map((video) => {
             const active = selectedVideoId === video.id
             return (
-              <li key={video.id}>
+              <li
+                key={video.id}
+                className={cn(
+                  'flex items-start gap-1 rounded-md pr-1 transition-colors hover:bg-accent',
+                  active && 'bg-accent',
+                )}
+              >
                 <button
-                  className={cn(
-                    'flex w-full items-start gap-3 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-accent',
-                    active && 'bg-accent',
-                  )}
+                  className="flex min-w-0 flex-1 items-start gap-3 py-2.5 pl-2 text-left"
                   onClick={() => onSelect(video.id)}
                 >
                   <div className="relative shrink-0">
@@ -100,6 +105,12 @@ export function VideoListPane({
                   </span>
                   <VideoStatusIndicator status={video.status} />
                 </button>
+                <VideoActionsMenu
+                  videoId={video.id}
+                  title={video.title}
+                  markable={!video.watched && video.status === 'DOWNLOADED'}
+                  className="mt-2"
+                />
               </li>
             )
           })}
