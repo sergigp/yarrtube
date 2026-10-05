@@ -5,6 +5,7 @@ pub mod error;
 pub mod playlists;
 pub mod tasks;
 pub mod validation;
+pub mod version;
 pub mod videos;
 
 use crate::domain::services::{
@@ -22,6 +23,12 @@ use axum::routing::{get, post};
 /// location. Reported on every directory listing.
 #[derive(Clone)]
 pub struct VideosRoot(pub String);
+
+/// The version this binary was built for, carried in the adapter layer like
+/// `VideosRoot`: build metadata, not business logic, so no domain service
+/// stands behind it.
+#[derive(Clone)]
+pub struct RunningVersion(pub String);
 
 #[derive(Clone, FromRef)]
 pub struct ApiServices {
@@ -42,6 +49,7 @@ pub struct ApiServices {
     pub directory_searcher: DirectorySearcher,
     pub video_watch_state_updater: VideoWatchStateUpdater,
     pub videos_root: VideosRoot,
+    pub running_version: RunningVersion,
 }
 
 pub fn api_router(api_services: ApiServices) -> Router {
@@ -68,6 +76,7 @@ pub fn api_router(api_services: ApiServices) -> Router {
         .route("/videos/{id}/progress", post(videos::record_video_progress))
         .route("/videos/{id}/watched", post(videos::mark_video_watched))
         .route("/tasks", get(tasks::list_tasks))
+        .route("/version", get(version::get_version))
         .route(
             "/channels",
             post(channels::create_channel).get(channels::list_channels),

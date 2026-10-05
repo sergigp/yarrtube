@@ -1,5 +1,6 @@
 import type {
   Announcement,
+  AppVersion,
   ChannelListItem,
   ChannelPreview,
   CreatedChannel,
@@ -62,6 +63,11 @@ export function fetchHomeVideos(): Promise<HomeVideos> {
 
 export function fetchTasks(): Promise<Task[]> {
   return request('/tasks')
+}
+
+/** The version the running daemon was built for (`dev` for local builds). */
+export function fetchVersion(): Promise<AppVersion> {
+  return request('/version')
 }
 
 /**

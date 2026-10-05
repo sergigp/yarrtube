@@ -10,6 +10,7 @@ import { SIDEBAR_ID, Sidebar } from './components/Sidebar'
 import { SettingsMenu } from './components/SettingsMenu'
 import { AnnouncementBar } from './components/AnnouncementBar'
 import { MobileNavToggle } from './components/MobileNavToggle'
+import { VersionLabel } from './components/VersionLabel'
 
 export default function App() {
   return (
@@ -72,6 +73,7 @@ export function AppShell() {
         >
           <img src="/logo.png" alt="Yarrtube" className="h-10 w-auto sm:h-12" />
         </Link>
+        <VersionLabel />
         <div className="ml-auto flex items-center gap-2">
           <SettingsMenu />
         </div>

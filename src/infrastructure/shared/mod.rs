@@ -1,3 +1,4 @@
+pub mod app_version;
 pub mod domain_events;
 pub mod error_report;
 pub mod sqlite_connection;

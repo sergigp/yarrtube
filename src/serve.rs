@@ -1,4 +1,4 @@
-use crate::application::http::{self, ApiServices, VideosRoot};
+use crate::application::http::{self, ApiServices, RunningVersion, VideosRoot};
 use crate::application::{subscribers, tasks};
 use crate::domain::services::{
     ChannelAvatarRestorer, ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelUpdater,
@@ -20,6 +20,7 @@ use crate::infrastructure::repositories::plex_library_repository::{
     HttpPlexLibraryRepository, PlexConfig, PlexLibraryRepository,
 };
 use crate::infrastructure::repositories::task_executor::{HandlerRegistry, TaskExecutor};
+use crate::infrastructure::shared::app_version::APP_VERSION;
 use crate::infrastructure::shared::web_assets::WebAssets;
 use crate::infrastructure::shared::{sqlite_connection, sqlite_migrations};
 use anyhow::{Context, Result};
@@ -421,6 +422,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.clock.clone(),
         ),
         videos_root: VideosRoot(videos_path()),
+        running_version: RunningVersion(APP_VERSION.to_string()),
     }
 }
 

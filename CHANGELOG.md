@@ -20,6 +20,9 @@ All notable changes to yarrtube are documented here. The format follows
   1 minute to 24 hours: under "Advanced options" when adding it, or from
   "Edit settings" afterwards (playlists gain an "Edit settings" dialog).
   A shorter interval brings the next check forward right away.
+- The web UI header shows the running version (e.g. `v0.9.3`) next to the
+  logo, and `GET /api/version` reports it, so you can tell when an
+  automatically released image has been picked up.
 
 ## [0.9.0] - 2026-10-13
 

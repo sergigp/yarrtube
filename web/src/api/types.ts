@@ -151,3 +151,8 @@ export interface Announcement {
   id: string
   text: string
 }
+
+/** Response of `GET /api/version`. */
+export interface AppVersion {
+  version: string
+}

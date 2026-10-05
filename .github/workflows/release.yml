@@ -43,6 +43,21 @@ jobs:
           platform=${{ matrix.platform }}
           echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
 
+      # The version the binary reports: the release tag, or `edge-<short sha>`
+      # for a manual test build.
+      - name: Compute version
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ -n "$TAG" ]; then
+            version="$TAG"
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            version="edge-${GITHUB_SHA::7}"
+          else
+            version="$GITHUB_REF_NAME"
+          fi
+          echo "YARRTUBE_VERSION=$version" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -71,6 +86,7 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: YARRTUBE_VERSION=${{ env.YARRTUBE_VERSION }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,scope=${{ env.PLATFORM_PAIR }},mode=max

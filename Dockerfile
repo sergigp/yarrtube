@@ -24,6 +24,10 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY migrations ./migrations
 COPY --from=web-build /web/dist ./web/dist
+# Stamped into the binary as its reported version (`dev` when unset).
+# Declared after `cargo chef cook` so a new version never invalidates the
+# dependency layer.
+ARG YARRTUBE_VERSION
 RUN cargo build --release --locked
 
 # Bundles a known-good yt-dlp binary into the image at build time, so a

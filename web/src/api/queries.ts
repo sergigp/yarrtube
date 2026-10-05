@@ -7,6 +7,7 @@ import {
   fetchHomeVideos,
   fetchPlaylists,
   fetchTasks,
+  fetchVersion,
   fetchVideos,
   markVideoWatched,
   previewChannel,
@@ -18,6 +19,7 @@ import {
 } from './client'
 import type {
   Announcement,
+  AppVersion,
   ChannelListItem,
   ChannelPreview,
   HomeVideos,
@@ -40,6 +42,7 @@ export const queryKeys = {
   recentVideos: ['videos', 'recent'] as const,
   tasks: ['tasks'] as const,
   announcements: ['announcements'] as const,
+  version: ['version'] as const,
   // Outside the `['playlists']` and `['channels']` prefixes so refetching the
   // library leaves them be.
   playlistPreview: (value: string) => ['playlist-preview', value] as const,
@@ -127,6 +130,17 @@ export function useAnnouncements(): UseQueryResult<Announcement[], Error> {
   return useQuery({
     queryKey: queryKeys.announcements,
     queryFn: fetchAnnouncements,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: false,
+  })
+}
+
+/** Fetched once per page load: the running version only changes on a restart. */
+export function useVersion(): UseQueryResult<AppVersion, Error> {
+  return useQuery({
+    queryKey: queryKeys.version,
+    queryFn: fetchVersion,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     retry: false,
