@@ -8,7 +8,7 @@
 - [x] 2.2 `it('formats a speed as its multiplier')` — drives `formatPlaybackSpeed`.
 - [x] 2.3 `it('starts at normal speed')` — drives the hook's initial `rate`.
 - [x] 2.4 `it('applies a chosen speed to the video element')` — drives `changeRate` setting `playbackRate`.
-- [ ] 2.5 `it('follows speed changes made by the native controls')` — drives the `ratechange` listener.
+- [x] 2.5 `it('follows speed changes made by the native controls')` — drives the `ratechange` listener.
 - [ ] 2.6 `it('resets to normal speed when another video is selected')` — drives the per-video reset.
 - [ ] 2.7 `it('shows the current speed and marks it in the menu')` — drives the menu trigger label and checked radio item.
 - [ ] 2.8 `it('reports the chosen speed')` — drives `onRateChange` from radio selection.

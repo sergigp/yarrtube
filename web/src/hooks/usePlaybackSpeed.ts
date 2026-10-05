@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export interface PlaybackSpeed {
   /** The `<video>` element's current playback speed. */
@@ -20,11 +20,21 @@ export function usePlaybackSpeed(
 ): PlaybackSpeed {
   const [rate, setRate] = useState(1)
 
+  useEffect(() => {
+    const element = videoElement
+    if (!element) {
+      return undefined
+    }
+    const follow = () => setRate(element.playbackRate)
+    element.addEventListener('ratechange', follow)
+    return () => element.removeEventListener('ratechange', follow)
+  }, [videoElement])
+
+  // The element's 'ratechange' brings `rate` along, as for the native controls.
   const changeRate = (next: number) => {
     if (videoElement) {
       videoElement.playbackRate = next
     }
-    setRate(next)
   }
 
   return { rate, changeRate }

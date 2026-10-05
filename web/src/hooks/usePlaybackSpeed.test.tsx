@@ -20,4 +20,16 @@ describe('usePlaybackSpeed', () => {
     expect(element.playbackRate).toBe(1.5)
     expect(result.current.rate).toBe(1.5)
   })
+
+  it('follows speed changes made by the native controls', () => {
+    const element = document.createElement('video')
+    const { result } = renderHook(() => usePlaybackSpeed(element, 'abc'))
+
+    // jsdom fires 'ratechange' when the speed is set, as browsers do.
+    act(() => {
+      element.playbackRate = 1.75
+    })
+
+    expect(result.current.rate).toBe(1.75)
+  })
 })
