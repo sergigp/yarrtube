@@ -236,6 +236,7 @@ mod tests {
     async fn it_should_create_a_playlist_shown_on_home_by_default() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -268,12 +269,17 @@ mod tests {
                 ..playlist("PL1", DEFAULT_PATH)
             }]
         );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, playlist_created("PL1"))]
+        );
     }
 
     #[tokio::test]
     async fn it_should_create_a_playlist_excluded_from_home() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
         let playlist_creator = PlaylistCreator::new(
             playlist_repository.clone(),
             Arc::new(FakeYoutubePlaylistRepository {
@@ -305,6 +311,10 @@ mod tests {
                 exclude_from_home: true,
                 ..playlist("PL1", DEFAULT_PATH)
             }]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, playlist_created("PL1"))]
         );
     }
 
