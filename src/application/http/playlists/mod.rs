@@ -428,6 +428,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_exclude_from_home_of_an_existing_playlist_on_duplicate_create() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let request = CreatePlaylistRequest {
+            exclude_from_home: Some(true),
+            ..create_request("PL1")
+        };
+
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((StatusCode::OK, playlist_response("PL1", DEFAULT_PATH)))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", DEFAULT_PATH)]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_publish_playlist_created_only_once() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
