@@ -79,10 +79,9 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
     }
 
     fn mark_video_watched(&self, youtube_id: &VideoId) -> Result<(), UpdateWatchStateError> {
+        let copies = self.find_downloaded_copies(youtube_id)?;
         let now = self.clock.now();
-        self.video_repository
-            .find_by_youtube_id(youtube_id)
-            .map_err(UpdateWatchStateError::Repository)?
+        copies
             .into_iter()
             .filter(|video| !video.is_watched())
             .map(|video| video.mark_watched(now))
@@ -159,6 +158,21 @@ impl VideoWatchStateUpdater {
             .map(|video| video.mark_watched(now))
             .try_for_each(|video| self.video_repository.update(&video))
             .map_err(UpdateWatchStateError::Repository)
+    }
+
+    /// Every stored copy of `youtube_id`, as long as at least one of them is
+    /// `Downloaded`.
+    fn find_downloaded_copies(
+        &self,
+        youtube_id: &VideoId,
+    ) -> Result<Vec<Video>, UpdateWatchStateError> {
+        Some(
+            self.video_repository
+                .find_by_youtube_id(youtube_id)
+                .map_err(UpdateWatchStateError::Repository)?,
+        )
+        .filter(|copies| copies.iter().any(Video::is_downloaded))
+        .ok_or_else(|| UpdateWatchStateError::VideoNotDownloaded(youtube_id.clone()))
     }
 
     fn find_copies(&self, youtube_id: &VideoId) -> Result<Vec<Video>, UpdateWatchStateError> {

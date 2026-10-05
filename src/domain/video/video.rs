@@ -210,9 +210,13 @@ impl Video {
         self.watched_at.is_some()
     }
 
+    pub fn is_downloaded(&self) -> bool {
+        self.status == VideoStatus::Downloaded
+    }
+
     /// Downloaded and not yet watched: counted in unwatched badges.
     pub fn is_downloaded_and_unwatched(&self) -> bool {
-        self.status == VideoStatus::Downloaded && !self.is_watched()
+        self.is_downloaded() && !self.is_watched()
     }
 
     /// Downloaded, unwatched, position over 30s and last played within the
