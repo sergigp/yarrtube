@@ -90,8 +90,11 @@ export function DetailHeader({
           <RotateCw className={syncing ? 'animate-spin' : undefined} />
           <span className="hidden sm:inline">Sync</span>
         </Button>
+        {/* Labelled apart from the sidebar row's "Actions for <name>", which is
+            on screen at the same time. */}
         <EntryActionsMenu
           name={name}
+          label={`More actions for ${name}`}
           onMarkWatched={onMarkWatched}
           excludedFromHome={excludedFromHome}
           onSetExcludedFromHome={onSetExcludedFromHome}

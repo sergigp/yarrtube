@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils'
 interface EntryActionsMenuProps {
   /** Names the channel or playlist in the trigger's label and failure alerts. */
   name: string
+  /** The trigger's accessible label; defaults to "Actions for <name>". */
+  label?: string
   /** Items listed first, e.g. the sidebar's Sync; they report their own failures. */
   leadingItems?: ReactNode
   /** Replaces the trigger's default vertical "⋮" icon. */
@@ -35,6 +37,7 @@ interface EntryActionsMenuProps {
  */
 export function EntryActionsMenu({
   name,
+  label,
   leadingItems,
   triggerIcon,
   onMarkWatched,
@@ -56,7 +59,7 @@ export function EntryActionsMenu({
           'flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground',
           className,
         )}
-        aria-label={`Actions for ${name}`}
+        aria-label={label ?? `Actions for ${name}`}
       >
         {triggerIcon ?? <EllipsisVertical className="size-4" />}
       </DropdownMenuTrigger>

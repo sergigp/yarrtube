@@ -78,7 +78,7 @@ describe('PlaylistDetail', () => {
     expect(await screen.findByRole('button', { name: 'Sync' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Actions for The Playlist' }))
+    await user.click(screen.getByRole('button', { name: 'More actions for The Playlist' }))
     expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
   })
 
@@ -98,11 +98,11 @@ describe('PlaylistDetail', () => {
     )
 
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Actions for The Playlist' }))
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Playlist' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Exclude from home' }))
 
     expect(update).toHaveBeenCalledOnce()
-    await user.click(screen.getByRole('button', { name: 'Actions for The Playlist' }))
+    await user.click(screen.getByRole('button', { name: 'More actions for The Playlist' }))
     expect(await screen.findByRole('menuitem', { name: 'Include in home' })).toBeInTheDocument()
   })
 
@@ -118,7 +118,7 @@ describe('PlaylistDetail', () => {
     )
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: 'Actions for The Playlist' }))
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Playlist' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('Delete "The Playlist"?')).toBeInTheDocument()
@@ -141,7 +141,7 @@ describe('PlaylistDetail', () => {
     )
 
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Actions for The Playlist' }))
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Playlist' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Exclude from home' }))
 
     await waitFor(() =>
@@ -149,7 +149,7 @@ describe('PlaylistDetail', () => {
         'Failed to exclude "The Playlist" from home: database is locked',
       ),
     )
-    await user.click(screen.getByRole('button', { name: 'Actions for The Playlist' }))
+    await user.click(screen.getByRole('button', { name: 'More actions for The Playlist' }))
     expect(await screen.findByRole('menuitem', { name: 'Exclude from home' })).toBeInTheDocument()
   })
 })
