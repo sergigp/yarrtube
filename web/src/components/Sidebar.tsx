@@ -341,7 +341,15 @@ function SidebarSection({
               }
               onSetExcludedFromHome={
                 onSetExcludedFromHome &&
-                ((excluded: boolean) => onSetExcludedFromHome(item.id, excluded))
+                (async (excluded: boolean) => {
+                  try {
+                    await onSetExcludedFromHome(item.id, excluded)
+                  } catch (err) {
+                    window.alert(
+                      `Failed to ${homeSettingAction(excluded, item.name)}: ${errorMessage(err)}`,
+                    )
+                  }
+                })
               }
               onDeleteRequest={() => setPendingDelete(item)}
             />
@@ -376,6 +384,10 @@ function SidebarSection({
       />
     </div>
   )
+}
+
+function homeSettingAction(excluded: boolean, name: string): string {
+  return excluded ? `exclude "${name}" from home` : `include "${name}" in home`
 }
 
 function errorMessage(err: unknown): string {

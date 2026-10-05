@@ -244,6 +244,27 @@ describe('Sidebar', () => {
     ).toEqual(['Sync', 'Mark all watched', 'Delete'])
   })
 
+  it("alerts when changing a playlist's home setting fails", async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'Bluey' })],
+      'PATCH /api/playlists/PL1': { status: 500, error: 'database is locked' },
+    })
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Bluey' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Exclude from home' }))
+
+    await waitFor(() =>
+      expect(alert).toHaveBeenCalledWith(
+        'Failed to exclude "Bluey" from home: database is locked',
+      ),
+    )
+    await user.click(await screen.findByRole('button', { name: 'Actions for Bluey' }))
+    expect(await screen.findByRole('menuitem', { name: 'Exclude from home' })).toBeInTheDocument()
+  })
+
   it('closes when Escape is pressed while open', async () => {
     mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [] })
     const onClose = vi.fn()
