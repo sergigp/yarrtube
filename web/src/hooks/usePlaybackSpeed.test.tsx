@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { usePlaybackSpeed } from './usePlaybackSpeed'
 
 describe('usePlaybackSpeed', () => {
@@ -9,5 +9,15 @@ describe('usePlaybackSpeed', () => {
     const { result } = renderHook(() => usePlaybackSpeed(element, 'abc'))
 
     expect(result.current.rate).toBe(1)
+  })
+
+  it('applies a chosen speed to the video element', () => {
+    const element = document.createElement('video')
+    const { result } = renderHook(() => usePlaybackSpeed(element, 'abc'))
+
+    act(() => result.current.changeRate(1.5))
+
+    expect(element.playbackRate).toBe(1.5)
+    expect(result.current.rate).toBe(1.5)
   })
 })

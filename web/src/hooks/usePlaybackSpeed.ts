@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 export interface PlaybackSpeed {
   /** The `<video>` element's current playback speed. */
   rate: number
@@ -13,8 +15,17 @@ export interface PlaybackSpeed {
  * `useWatchProgress`.
  */
 export function usePlaybackSpeed(
-  _videoElement: HTMLVideoElement | null,
+  videoElement: HTMLVideoElement | null,
   _videoId: string | null,
 ): PlaybackSpeed {
-  return { rate: 1, changeRate: () => {} }
+  const [rate, setRate] = useState(1)
+
+  const changeRate = (next: number) => {
+    if (videoElement) {
+      videoElement.playbackRate = next
+    }
+    setRate(next)
+  }
+
+  return { rate, changeRate }
 }
