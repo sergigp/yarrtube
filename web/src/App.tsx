@@ -30,7 +30,7 @@ export function AppShell() {
       <header className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center gap-4 border-b border-border bg-background px-4 sm:px-6">
         <MobileNavToggle
           open={sidebarOpen}
-          onToggle={() => setSidebarOpen(true)}
+          onToggle={() => setSidebarOpen((wasOpen) => !wasOpen)}
           controls={SIDEBAR_ID}
         />
         <Link to="/" className="flex items-center no-underline" aria-label="Yarrtube">

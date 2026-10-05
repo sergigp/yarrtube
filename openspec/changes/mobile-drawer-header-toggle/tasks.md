@@ -9,7 +9,7 @@
 - [x] 2.3 `MobileNavToggle` click calls `onToggle` — verify the test passes.
 - [x] 2.4 `Sidebar` pressing Escape while open calls `onClose` — verify the test fails first, then passes.
 - [x] 2.5 `Sidebar` open drawer has no "Menu" title and no in-drawer "Close menu" button; offset `aside` and backdrop to start at `top-(--header-height)` — verify the test fails first, then passes.
-- [ ] 2.6 `AppShell` header control toggles the drawer open and closed (`setSidebarOpen((o) => !o)`) — verify the test fails first, then passes.
+- [x] 2.6 `AppShell` header control toggles the drawer open and closed (`setSidebarOpen((o) => !o)`) — verify the test fails first, then passes.
 - [ ] 2.7 `AppShell` with the drawer open, clicking the logo navigates home and closes the drawer — verify the test fails first, then passes.
 - [ ] 2.8 `AppShell` with the drawer open on `/`, clicking the logo closes the drawer — verify the test passes.
 - [ ] 2.9 `AppShell` with the drawer open, Settings → Tasks shows the Tasks view and closes the drawer (close on `location.pathname` change) — verify the test fails first, then passes.
