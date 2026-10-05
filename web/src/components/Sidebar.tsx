@@ -361,12 +361,20 @@ export const SIDEBAR_ID = 'app-sidebar'
 
 interface SidebarProps {
   open?: boolean
+  /** Viewport offset the mobile drawer and its backdrop start at, below the header. */
+  top?: number
   onClose: () => void
   onAddChannel: () => void
   onAddPlaylist: () => void
 }
 
-export function Sidebar({ open = false, onClose, onAddChannel, onAddPlaylist }: SidebarProps) {
+export function Sidebar({
+  open = false,
+  top = 0,
+  onClose,
+  onAddChannel,
+  onAddPlaylist,
+}: SidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { data: channels, error: channelsError } = useChannels()
@@ -430,15 +438,17 @@ export function Sidebar({ open = false, onClose, onAddChannel, onAddPlaylist }: 
     <>
       {open && (
         <div
-          className="fixed inset-x-0 top-(--header-height) bottom-0 z-30 bg-black/40 md:hidden"
+          className="fixed inset-x-0 bottom-0 z-30 bg-black/40 md:hidden"
+          style={{ top }}
           onClick={onClose}
           aria-hidden="true"
         />
       )}
       <aside
         id={SIDEBAR_ID}
+        style={{ top }}
         className={cn(
-          'fixed top-(--header-height) bottom-0 left-0 z-40 flex w-64 max-w-[85%] flex-col gap-6 overflow-y-auto border-r border-border bg-background px-3 py-4 shadow-lg transition-transform duration-200 ease-in-out',
+          'fixed bottom-0 left-0 z-40 flex w-64 max-w-[85%] flex-col gap-6 overflow-y-auto border-r border-border bg-background px-3 py-4 shadow-lg transition-transform duration-200 ease-in-out',
           open ? 'translate-x-0' : '-translate-x-full',
           'md:static md:z-auto md:h-full md:w-60 md:max-w-none md:translate-x-0 md:shadow-none md:transition-none md:py-6',
         )}

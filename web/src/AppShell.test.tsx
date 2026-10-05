@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AppShell } from './App'
+import { ANNOUNCEMENTS_URL } from '@/api/client'
 import { mockApi, pendingForever, renderWithProviders } from '@/test/helpers'
 
 function renderShell({ route = '/' } = {}) {
@@ -10,6 +11,7 @@ function renderShell({ route = '/' } = {}) {
     'GET /api/playlists': [],
     'GET /api/videos/home': pendingForever(),
     'GET /api/tasks': pendingForever(),
+    [`GET ${ANNOUNCEMENTS_URL}`]: [],
   })
   return renderWithProviders(<AppShell />, { route })
 }

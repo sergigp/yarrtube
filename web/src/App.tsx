@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
 import { Home } from './components/Home'
 import { PlaylistDetail } from './components/PlaylistDetail'
@@ -24,6 +24,17 @@ export function AppShell() {
   const [addDialog, setAddDialog] = useState<'channel' | 'playlist' | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const closeSidebar = () => setSidebarOpen(false)
+  // The mobile sidebar opens right below the header, wherever it sits: an
+  // announcement bar above it pushes it down until scrolled away. The page
+  // can't scroll while the sidebar is open, so measuring once holds.
+  const headerRef = useRef<HTMLElement>(null)
+  const [sidebarTop, setSidebarTop] = useState(0)
+  const toggleSidebar = () => {
+    if (!sidebarOpen) {
+      setSidebarTop(headerRef.current?.getBoundingClientRect().bottom ?? 0)
+    }
+    setSidebarOpen(!sidebarOpen)
+  }
 
   // Any navigation closes the mobile sidebar, whatever triggered it.
   const { pathname } = useLocation()
@@ -36,12 +47,11 @@ export function AppShell() {
   return (
     <div className="flex min-h-dvh flex-col md:h-dvh">
       <AnnouncementBar />
-      <header className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center gap-4 border-b border-border bg-background px-4 sm:px-6">
-        <MobileNavToggle
-          open={sidebarOpen}
-          onToggle={() => setSidebarOpen((wasOpen) => !wasOpen)}
-          controls={SIDEBAR_ID}
-        />
+      <header
+        ref={headerRef}
+        className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center gap-4 border-b border-border bg-background px-4 sm:px-6"
+      >
+        <MobileNavToggle open={sidebarOpen} onToggle={toggleSidebar} controls={SIDEBAR_ID} />
         <Link
           to="/"
           onClick={closeSidebar}
@@ -57,6 +67,7 @@ export function AppShell() {
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <Sidebar
           open={sidebarOpen}
+          top={sidebarTop}
           onClose={closeSidebar}
           onAddChannel={() => setAddDialog('channel')}
           onAddPlaylist={() => setAddDialog('playlist')}
