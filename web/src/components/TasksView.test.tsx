@@ -200,6 +200,36 @@ describe('TasksView', () => {
     expect(runNow).toBeDisabled()
   })
 
+  it('shows the failure on the row and lets Run now be retried', async () => {
+    const user = userEvent.setup()
+    const reconcile = vi.fn(() => ({ status: 500, error: 'youtube down' }))
+    mockApi({
+      'GET /api/tasks': [
+        aTask({
+          id: 1,
+          task_type: 'reconcile_playlist',
+          run_at: '2999-01-01T00:00:00Z',
+          payload: { playlist_id: 'PL1', playlist_name: 'Mix' },
+        }),
+      ],
+      'POST /api/playlists/PL1/reconcile': reconcile,
+    })
+
+    renderWithProviders(<TasksView />)
+
+    await user.click(await screen.findByRole('tab', { name: /Syncs/ }))
+    const runNow = screen.getByRole('button', { name: 'Run now: Syncing playlist Mix' })
+    await user.click(runNow)
+
+    const row = screen.getByText('Syncing playlist Mix').closest('li')!
+    expect(await within(row).findByText('Sync failed: youtube down')).toBeInTheDocument()
+    expect(runNow).toBeEnabled()
+
+    await user.click(runNow)
+
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2))
+  })
+
   it('lists download and thumbnail tasks under Downloads, and no sync or cleanup tasks', async () => {
     const user = userEvent.setup()
     mockApi({ 'GET /api/tasks': aMixOfTasks() })

@@ -176,26 +176,33 @@ export function TasksView() {
 function RunNowButton({ target, name }: { target: SyncTarget; name: string }) {
   const invalidateTasks = useInvalidateTasks()
   const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={running}
-      aria-label={`Run now: ${name}`}
-      onClick={async () => {
-        setRunning(true)
-        try {
-          await (target.kind === 'playlist'
-            ? reconcilePlaylist(target.id)
-            : reconcileChannel(target.id))
-          await invalidateTasks()
-        } finally {
-          setRunning(false)
-        }
-      }}
-    >
-      <RotateCw className={running ? 'animate-spin' : undefined} />
-      Run now
-    </Button>
+    <>
+      {error && <span className="text-xs text-destructive">Sync failed: {error}</span>}
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={running}
+        aria-label={`Run now: ${name}`}
+        onClick={async () => {
+          setRunning(true)
+          setError(null)
+          try {
+            await (target.kind === 'playlist'
+              ? reconcilePlaylist(target.id)
+              : reconcileChannel(target.id))
+            await invalidateTasks()
+          } catch (err) {
+            setError(err instanceof Error ? err.message : String(err))
+          } finally {
+            setRunning(false)
+          }
+        }}
+      >
+        <RotateCw className={running ? 'animate-spin' : undefined} />
+        Run now
+      </Button>
+    </>
   )
 }
