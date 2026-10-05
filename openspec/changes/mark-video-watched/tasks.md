@@ -20,8 +20,8 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `it_should_mark_a_video_watched`: marking a downloaded unwatched video responds 204 and leaves it watched, position 0, `watched_at` = clock
-- [ ] 2.2 `it_should_mark_every_copy_of_a_video_watched`: channel and playlist copies both become watched
-- [ ] 2.3 `it_should_not_change_the_last_played_time_when_marking_a_video_watched`: `last_played_at` untouched
+- [x] 2.2 `it_should_mark_every_copy_of_a_video_watched`: channel and playlist copies both become watched
+- [x] 2.3 `it_should_not_change_the_last_played_time_when_marking_a_video_watched`: `last_played_at` untouched
 - [ ] 2.4 `it_should_leave_an_already_watched_video_unchanged_when_marking_it_watched`: 204, `watched_at` keeps the earlier time
 - [ ] 2.5 `it_should_fail_to_mark_watched_a_video_not_downloaded`: 400 when no copy is `Downloaded`, nothing changes
 - [ ] 2.6 `it_should_fail_to_mark_watched_an_unknown_video`: 400 for an untracked YouTube ID
