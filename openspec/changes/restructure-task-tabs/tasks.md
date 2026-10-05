@@ -21,7 +21,7 @@
 - [x] 2.15 `disables Run now while the sync is in progress`: the button is disabled with a spinning icon while the request is pending. Commit.
 - [x] 2.16 `shows the failure on the row and lets Run now be retried`: shows the error inline and re-enables the button. Commit.
 - [x] 2.17 `offers no Run now on a running sync or outside the Syncs tab`: guards on the tab and on `syncTarget`. Commit.
-- [ ] 2.18 Restyle the `line` variant in `ui/tabs.tsx` and the TasksView tab bar to meet the "Tasks View Tab Bar Affordance" requirement. This is a visual task, not a TDD cycle:
+- [x] 2.18 Restyle the `line` variant in `ui/tabs.tsx` and the TasksView tab bar to meet the "Tasks View Tab Bar Affordance" requirement. This is a visual task, not a TDD cycle:
   - primary underline on the selected tab
   - heavier full-colour label when selected, muted label otherwise
   - hover background

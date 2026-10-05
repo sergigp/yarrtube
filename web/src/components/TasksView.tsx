@@ -89,14 +89,16 @@ export function TasksView() {
           setSearch('')
         }}
       >
-        <TabsList variant="line" className="w-full">
+        <TabsList variant="line">
           {TASK_TABS.map((value) => {
             const TabIcon = TAB_ICON[value]
             return (
               <TabsTrigger key={value} value={value}>
                 <TabIcon aria-hidden />
                 {TAB_LABELS[value]}
-                <Badge variant="secondary">{counts[value]}</Badge>
+                <Badge variant={value === tab ? 'default' : 'secondary'} className="tabular-nums">
+                  {counts[value]}
+                </Badge>
                 {value === 'active' && counts.active > 0 && (
                   <Beacon variant="live" label="Tasks running" />
                 )}
