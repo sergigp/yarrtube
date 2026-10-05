@@ -179,7 +179,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_omit_details_if_playlist_is_gone() {
+    async fn it_should_keep_playlist_id_if_playlist_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.database(),
@@ -204,7 +204,13 @@ mod tests {
 
         let response = list(task_view_searcher).await;
 
-        assert_eq!(response, Ok(vec![pending_task("reconcile_playlist", &[])]));
+        assert_eq!(
+            response,
+            Ok(vec![pending_task(
+                "reconcile_playlist",
+                &[("playlist_id", "PL1")]
+            )])
+        );
     }
 
     #[tokio::test]

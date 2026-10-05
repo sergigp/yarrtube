@@ -5,7 +5,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `it_should_include_playlist_id_in_reconcile_playlist_tasks`: the playlist reconcile task view carries `playlist_id` next to `playlist_name`. Remove the superseded `it_should_include_playlist_name_in_reconcile_playlist_tasks`. Commit.
-- [ ] 2.2 `it_should_keep_playlist_id_if_playlist_is_gone`: the id stays in the payload when the playlist can't be found. It replaces `it_should_omit_details_if_playlist_is_gone`. Commit.
+- [x] 2.2 `it_should_keep_playlist_id_if_playlist_is_gone`: the id stays in the payload when the playlist can't be found. It replaces `it_should_omit_details_if_playlist_is_gone`. Commit.
 - [ ] 2.3 `it_should_include_channel_id_in_reconcile_channel_tasks`: the channel reconcile task view carries `channel_id` next to `channel_name`. Remove the superseded `it_should_include_channel_name_in_reconcile_channel_tasks`. Commit.
 - [ ] 2.4 `it_should_keep_channel_id_if_channel_is_gone`: the id stays when the channel can't be found. It replaces `it_should_omit_details_if_channel_is_gone`. Commit.
 - [ ] 2.5 `maps each task type to downloads, syncs or other, and unknown types to other`: drives `FAMILY_BY_TYPE` and the `other` fallback. Commit.
