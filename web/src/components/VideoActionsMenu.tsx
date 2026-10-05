@@ -18,7 +18,7 @@ interface VideoActionsMenuProps {
 }
 
 /** A vertical "⋮" menu of actions on one video. */
-export function VideoActionsMenu({ videoId, title, className }: VideoActionsMenuProps) {
+export function VideoActionsMenu({ videoId, title, markable, className }: VideoActionsMenuProps) {
   const markVideoWatched = useMarkVideoWatched()
 
   return (
@@ -33,7 +33,7 @@ export function VideoActionsMenu({ videoId, title, className }: VideoActionsMenu
         <EllipsisVertical className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-44">
-        <DropdownMenuItem onSelect={() => markVideoWatched(videoId)}>
+        <DropdownMenuItem disabled={!markable} onSelect={() => markVideoWatched(videoId)}>
           <Check />
           Mark as watched
         </DropdownMenuItem>

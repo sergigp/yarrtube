@@ -40,4 +40,17 @@ describe('VideoActionsMenu', () => {
     await waitFor(() => expect(channels).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(home).toHaveBeenCalledTimes(2))
   })
+
+  it('disables "Mark as watched" when not markable', async () => {
+    mockApi({})
+    renderWithProviders(<VideoActionsMenu videoId="abc" title="My Video" markable={false} />)
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Mark as watched' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  })
 })
