@@ -37,7 +37,10 @@ impl Playlist {
         }
     }
 
-    pub fn with_exclude_from_home(self, _exclude_from_home: bool) -> Self {
-        self
+    pub fn with_exclude_from_home(self, exclude_from_home: bool) -> Self {
+        Self {
+            exclude_from_home,
+            ..self
+        }
     }
 }

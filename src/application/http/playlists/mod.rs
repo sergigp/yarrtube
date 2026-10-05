@@ -952,6 +952,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_exclude_a_playlist_from_home() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let playlist_updater = PlaylistUpdater::new(playlist_repository.clone());
+
+        let response = update(playlist_updater, "PL1", update_request(true)).await;
+
+        assert_eq!(
+            response,
+            Ok(PlaylistResponse {
+                exclude_from_home: true,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            })
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![Playlist {
+                exclude_from_home: true,
+                ..playlist("PL1", DEFAULT_PATH)
+            }]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_add_new_videos_on_reconcile() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -1543,6 +1570,12 @@ mod tests {
         }
     }
 
+    fn update_request(exclude_from_home: bool) -> UpdatePlaylistRequest {
+        UpdatePlaylistRequest {
+            exclude_from_home: Some(exclude_from_home),
+        }
+    }
+
     fn preview_query(playlist: &str) -> PreviewPlaylistQuery {
         PreviewPlaylistQuery {
             playlist: Some(playlist.to_string()),
@@ -1595,6 +1628,16 @@ mod tests {
         list_playlists(State(playlist_searcher))
             .await
             .map(|Json(playlists)| playlists)
+    }
+
+    async fn update(
+        playlist_updater: PlaylistUpdater,
+        id: &str,
+        request: UpdatePlaylistRequest,
+    ) -> Result<PlaylistResponse, ApiError> {
+        update_playlist(State(playlist_updater), Path(id.to_string()), Json(request))
+            .await
+            .map(|Json(playlist)| playlist)
     }
 
     async fn reconcile(

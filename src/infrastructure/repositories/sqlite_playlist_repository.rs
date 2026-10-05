@@ -72,7 +72,22 @@ impl PlaylistRepository for SqlitePlaylistRepository {
         Ok(())
     }
 
-    fn update(&self, _playlist: &Playlist) -> anyhow::Result<()> {
+    fn update(&self, playlist: &Playlist) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "UPDATE playlists SET name = ?2, path = ?3, quality = ?4, kind = ?5, exclude_from_home = ?6, created_at = ?7 WHERE id = ?1",
+            params![
+                playlist.id.as_str(),
+                playlist.name.as_str(),
+                playlist.path.as_str(),
+                playlist.quality.as_str(),
+                playlist.kind.as_str(),
+                playlist.exclude_from_home,
+                playlist.created_at.to_rfc3339()
+            ],
+        )
+        .inspect_err(|e| tracing::error!(playlist_id = %playlist.id, error = %e, "failed to update playlist"))
+        .context("failed to update playlist")?;
         Ok(())
     }
 

@@ -3,6 +3,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::errors::UpdatePlaylistError;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use std::sync::Arc;
+use tracing::info;
 
 /// Changes the settings of an existing playlist.
 #[derive(Clone)]
@@ -30,9 +31,29 @@ impl PlaylistUpdaterApi for PlaylistUpdater {
     fn update_exclude_from_home(
         &self,
         id: PlaylistId,
-        _exclude_from_home: bool,
+        exclude_from_home: bool,
     ) -> Result<Playlist, UpdatePlaylistError> {
-        let _ = &self.repository;
-        Err(UpdatePlaylistError::NotFound(id))
+        let playlist = self
+            .find_playlist(&id)?
+            .with_exclude_from_home(exclude_from_home);
+        self.update_playlist(&playlist)?;
+        info!(playlist_id = %id, exclude_from_home, "updated playlist");
+        Ok(playlist)
+    }
+}
+
+impl PlaylistUpdater {
+    fn find_playlist(&self, id: &PlaylistId) -> Result<Playlist, UpdatePlaylistError> {
+        match self.repository.find(id) {
+            Ok(Some(playlist)) => Ok(playlist),
+            Ok(None) => Err(UpdatePlaylistError::NotFound(id.clone())),
+            Err(e) => Err(UpdatePlaylistError::Repository(e)),
+        }
+    }
+
+    fn update_playlist(&self, playlist: &Playlist) -> Result<(), UpdatePlaylistError> {
+        self.repository
+            .update(playlist)
+            .map_err(UpdatePlaylistError::Repository)
     }
 }
