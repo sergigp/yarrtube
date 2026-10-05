@@ -31,7 +31,7 @@
 - [x] 2.10 `VideoActionsMenu` "marks the video watched when "Mark as watched" is chosen": POST routed, channels and home refetched
 - [x] 2.11 `VideoActionsMenu` "disables "Mark as watched" when not markable"
 - [x] 2.12 `VideoActionsMenu` "alerts and leaves the video as it was when marking fails"
-- [ ] 2.13 `Home` "marking a continue-watching video watched removes it from the section": menu placed right of the card title block
+- [x] 2.13 `Home` "marking a continue-watching video watched removes it from the section": menu placed right of the card title block
 - [ ] 2.14 `ChannelDetail` "opening a row's menu does not change the selected video": `VideoListPane` row split into a select button plus a sibling menu
 - [ ] 2.15 `ChannelDetail` "marking a row watched shows its tick"
 - [ ] 2.16 `VideoDetail` "marks the selected video watched from the detail pane": menu in the title row

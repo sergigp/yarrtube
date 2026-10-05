@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Home } from './Home'
 import { aHomeVideo, mockApi, renderWithProviders } from '@/test/helpers'
 
@@ -102,5 +103,28 @@ describe('Home', () => {
     renderWithProviders(<Home />)
 
     expect(await screen.findByRole('img', { name: 'Watched' })).toBeInTheDocument()
+  })
+  it('marking a continue-watching video watched removes it from the section', async () => {
+    const halfWatched = aHomeVideo({ id: 'half', title: 'Half Watched', position_seconds: 60 })
+    let marked = false
+    mockApi({
+      'GET /api/videos/home': () => ({
+        continue_watching: marked ? [] : [halfWatched],
+        quick_watches: [],
+        latest: [aHomeVideo({ title: 'Fresh Video' })],
+      }),
+      'POST /api/videos/half/watched': () => {
+        marked = true
+        return null
+      },
+    })
+    renderWithProviders(<Home />)
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Half Watched' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark as watched' }))
+
+    await waitFor(() => expect(screen.queryByText('Half Watched')).not.toBeInTheDocument())
+    expect(screen.queryByText('Continue watching')).not.toBeInTheDocument()
   })
 })

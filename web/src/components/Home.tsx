@@ -6,6 +6,7 @@ import { formatDuration } from '@/lib/formatDuration'
 import { Thumbnail } from './Thumbnail'
 import { WatchedTick } from './WatchedTick'
 import { WatchProgressBar } from './WatchProgressBar'
+import { VideoActionsMenu } from './VideoActionsMenu'
 
 function videoDetailPath(source: HomeVideoSource): string {
   const base = source.kind === 'channel' ? `/channels/${source.id}` : `/playlists/${source.id}`
@@ -64,7 +65,7 @@ function VideoGrid({ videos, showProgress }: { videos: HomeVideo[]; showProgress
                     />
                   </Link>
                 )}
-                <div className="flex min-w-0 flex-col gap-0.5">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <Link
                     to={videoPath}
                     className="line-clamp-2 text-sm leading-snug font-medium text-foreground no-underline"
@@ -80,6 +81,12 @@ function VideoGrid({ videos, showProgress }: { videos: HomeVideo[]; showProgress
                     </Link>
                   )}
                 </div>
+                <VideoActionsMenu
+                  videoId={video.id}
+                  title={video.title}
+                  markable={!video.watched}
+                  className="-mt-0.5 -mr-1.5"
+                />
               </div>
             </div>
           </li>
