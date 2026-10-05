@@ -65,7 +65,7 @@ export function VideoDetail({
         <PlaybackSpeedMenu
           rate={playbackRate}
           onRateChange={onPlaybackRateChange}
-          disabled={false}
+          disabled={video.status !== 'DOWNLOADED'}
           className="mt-0.5"
         />
         <VideoActionsMenu

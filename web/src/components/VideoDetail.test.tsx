@@ -113,7 +113,13 @@ describe('VideoDetail', () => {
     const channel = aChannel({ id: 'chan', name: 'The Channel' })
     const video = aVideo({ channel_name: 'The Channel' })
     renderWithProviders(
-      <VideoDetail playbackRate={1} onPlaybackRateChange={() => {}} basePath="channels/chan" video={video} channel={channel} />,
+      <VideoDetail
+        basePath="channels/chan"
+        video={video}
+        channel={channel}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
     )
 
     expect(screen.getByRole('link', { name: 'The Channel' })).toHaveAttribute(
@@ -140,5 +146,20 @@ describe('VideoDetail', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Mark as watched' }))
 
     expect(markWatched).toHaveBeenCalledOnce()
+  })
+
+  it('disables the speed control until the video is downloaded', () => {
+    const video = aVideo({ status: 'IN_PROGRESS', filename: null })
+
+    renderWithProviders(
+      <VideoDetail
+        basePath="playlists/mix"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Playback speed' })).toBeDisabled()
   })
 })
