@@ -100,6 +100,20 @@ describe('TasksView', () => {
     expect(screen.queryByText('Downloading Intro in Chan')).not.toBeInTheDocument()
   })
 
+  it('shows Active, Downloads, Syncs and Other tabs with counts, and no Cleanup or All tab', async () => {
+    mockApi({ 'GET /api/tasks': aMixOfTasks() })
+
+    renderWithProviders(<TasksView />)
+
+    const tabs = await screen.findAllByRole('tab')
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Active1',
+      'Downloads2',
+      'Syncs1',
+      'Other2',
+    ])
+  })
+
   it('lists download and thumbnail tasks under Downloads, and no sync or cleanup tasks', async () => {
     const user = userEvent.setup()
     mockApi({ 'GET /api/tasks': aMixOfTasks() })
