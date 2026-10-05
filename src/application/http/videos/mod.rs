@@ -2428,6 +2428,16 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![video]);
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_mark_watched_if_invalid_video_id_provided() {
+        let response = mark_watched(any_video_watch_state_updater(), "").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("YouTube video ID must not be empty"))
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
