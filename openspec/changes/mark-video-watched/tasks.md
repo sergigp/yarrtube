@@ -36,7 +36,7 @@
 - [x] 2.15 `ChannelDetail` "marking a row watched shows its tick"
 - [x] 2.16 `VideoDetail` "marks the selected video watched from the detail pane": menu in the title row
 - [x] 2.17 `useWatchProgress` "reports was_watched as the session's state"
-- [ ] 2.18 `useWatchProgress` "pauses, rewinds and reports nothing when the video becomes watched while loaded": unmounting after the flip sends no report
+- [x] 2.18 `useWatchProgress` "pauses, rewinds and reports nothing when the video becomes watched while loaded": unmounting after the flip sends no report
 - [ ] 2.19 `useWatchProgress` "reports was_watched true after a flip once playback moves on"
 
 ## 3. Infrastructure adapters (TDD)
