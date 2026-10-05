@@ -2368,6 +2368,25 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_leave_an_already_watched_video_unchanged_when_marking_it_watched() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = video_with_duration("vid1", Some(100)).mark_watched(fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = mark_watched(video_watch_state_updater, "vid1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.

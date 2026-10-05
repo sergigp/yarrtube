@@ -79,7 +79,15 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
     }
 
     fn mark_video_watched(&self, youtube_id: &VideoId) -> Result<(), UpdateWatchStateError> {
-        self.mark_copies_watched(youtube_id, self.clock.now())
+        let now = self.clock.now();
+        self.video_repository
+            .find_by_youtube_id(youtube_id)
+            .map_err(UpdateWatchStateError::Repository)?
+            .into_iter()
+            .filter(|video| !video.is_watched())
+            .map(|video| video.mark_watched(now))
+            .try_for_each(|video| self.video_repository.update(&video))
+            .map_err(UpdateWatchStateError::Repository)
     }
 
     fn mark_channel_watched(
