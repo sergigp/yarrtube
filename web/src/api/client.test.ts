@@ -73,7 +73,12 @@ describe('mutations', () => {
   it('POSTs the playlist creation payload as JSON', async () => {
     const fetchMock = mockApi({ 'POST /api/playlists': { id: 'PL1' } })
 
-    await createPlaylist({ playlist: 'PL1', path: 'playlists/mix', quality: 'high' })
+    await createPlaylist({
+      playlist: 'PL1',
+      path: 'playlists/mix',
+      quality: 'high',
+      exclude_from_home: false,
+    })
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(init.headers).toEqual({ 'content-type': 'application/json' })
@@ -81,6 +86,7 @@ describe('mutations', () => {
       playlist: 'PL1',
       path: 'playlists/mix',
       quality: 'high',
+      exclude_from_home: false,
     })
   })
 

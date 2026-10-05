@@ -78,6 +78,7 @@ export function AddPlaylistDialog({ open, onOpenChange }: AddPlaylistDialogProps
 
 function AddPlaylistForm({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ playlist: '', quality: 'high' })
+  const [excludeFromHome] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -107,6 +108,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
         playlist: form.playlist,
         path: location.value.path,
         quality: form.quality,
+        exclude_from_home: excludeFromHome,
       })
       location.remember()
       invalidateLibrary()

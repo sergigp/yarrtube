@@ -89,7 +89,7 @@ export interface CreatePlaylistRequest {
   playlist: string
   path: string
   quality: string
-  exclude_from_home?: boolean
+  exclude_from_home: boolean
 }
 
 export function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistListItem> {
