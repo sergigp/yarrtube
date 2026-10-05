@@ -1447,6 +1447,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_show_a_video_of_an_excluded_playlist_through_another_source_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        playlist_repository
+            .insert(&Playlist {
+                exclude_from_home: true,
+                ..playlist("PL2")
+            })
+            .unwrap();
+        let shared = downloaded_video("vid_shared", "Shared", None, 100);
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &shared,
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL2",
+            &shared,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: vec![home_video_response(
+                    "vid_shared",
+                    "Shared",
+                    playlist_source()
+                )],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_order_continue_watching_by_last_played_first_on_home() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
