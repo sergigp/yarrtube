@@ -162,4 +162,33 @@ describe('Home', () => {
     expect(screen.queryByText('Bluey Short')).not.toBeInTheDocument()
     expect(screen.getByText('Fresh Video')).toBeInTheDocument()
   })
+
+  it('a channel card offers no exclude item', async () => {
+    mockApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        quick_watches: [],
+        latest: [
+          aHomeVideo({
+            title: 'Channel Video',
+            source: {
+              kind: 'channel',
+              id: 'chan',
+              name: 'The Channel',
+              path: 'channels/chan',
+              avatar_filename: null,
+            },
+          }),
+        ],
+      },
+    })
+    renderWithProviders(<Home />)
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Channel Video' }))
+
+    expect(
+      (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
+    ).toEqual(['Mark as watched'])
+  })
 })

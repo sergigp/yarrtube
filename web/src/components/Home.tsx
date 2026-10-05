@@ -85,7 +85,11 @@ function VideoGrid({ videos, showProgress }: { videos: HomeVideo[]; showProgress
                   videoId={video.id}
                   title={video.title}
                   markable={!video.watched}
-                  excludablePlaylist={{ id: video.source.id, name: video.source.name }}
+                  excludablePlaylist={
+                    video.source.kind === 'playlist'
+                      ? { id: video.source.id, name: video.source.name }
+                      : undefined
+                  }
                   className="-mt-0.5 -mr-1.5"
                 />
               </div>

@@ -39,7 +39,7 @@
 - [x] 2.17 `VideoActionsMenu` "offers no exclude item without a playlist"
 - [x] 2.18 `VideoActionsMenu` "alerts and leaves the playlist as it was when excluding fails"
 - [x] 2.19 `Home` "excluding a card's playlist from home removes its cards": `Home` passes the playlist source to `VideoActionsMenu`
-- [ ] 2.20 `Home` "a channel card offers no exclude item"
+- [x] 2.20 `Home` "a channel card offers no exclude item"
 - [ ] 2.21 `Sidebar` "excludes a playlist from home from its row menu": label flips to "Include in home"
 - [ ] 2.22 `Sidebar` "includes an excluded playlist in home from its row menu": PATCH `{exclude_from_home: false}`
 - [ ] 2.23 `Sidebar` "a channel row menu offers no home item"
