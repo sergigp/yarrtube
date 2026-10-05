@@ -152,6 +152,18 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(active.every((task) => task.status === 'running')).toBe(true)
   })
 
+  it('lists only playlist and channel reconciles in the syncs tab', () => {
+    const tasks = [
+      aTask({ id: 1, task_type: 'reconcile_playlist' }),
+      aTask({ id: 2, task_type: 'reconcile_channel' }),
+      aTask({ id: 3, task_type: 'reconcile_plex_collections' }),
+      aTask({ id: 4, task_type: 'download_video' }),
+      aTask({ id: 5, task_type: 'update_ytdlp' }),
+    ]
+
+    expect(tasksForTab(tasks, 'syncs').map((task) => task.id)).toEqual([1, 2])
+  })
+
   it('matches on the description, ignoring case', () => {
     const task = aTask({ task_type: 'reconcile_channel', payload: { channel_name: 'Rustaceans' } })
 
