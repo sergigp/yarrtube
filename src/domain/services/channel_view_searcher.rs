@@ -81,6 +81,8 @@ impl ChannelViewSearcher {
             id: channel.id,
             name: channel.name,
             path: channel.path,
+            quality: channel.quality,
+            video_limit: channel.video_limit,
             avatar_filename: channel.avatar_filename,
         }
     }

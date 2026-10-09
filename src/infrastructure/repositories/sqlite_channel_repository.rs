@@ -11,6 +11,7 @@ use rusqlite::{OptionalExtension, params};
 pub trait ChannelRepository: Send + Sync {
     fn find(&self, id: &ChannelHandle) -> anyhow::Result<Option<Channel>>;
     fn insert(&self, channel: &Channel) -> anyhow::Result<()>;
+    fn update(&self, channel: &Channel) -> anyhow::Result<()>;
     fn delete(&self, id: &ChannelHandle) -> anyhow::Result<()>;
     fn list(&self) -> anyhow::Result<Vec<Channel>>;
 }
@@ -81,6 +82,28 @@ impl ChannelRepository for SqliteChannelRepository {
         )
         .inspect_err(|e| tracing::error!(channel_id = %channel.id, error = %e, "failed to insert channel"))
         .context("failed to insert channel")?;
+        Ok(())
+    }
+
+    fn update(&self, channel: &Channel) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "UPDATE channels SET name = ?2, youtube_channel_id = ?3, quality = ?4, video_limit = ?5, path = ?6, avatar_filename = ?7, created_at = ?8 WHERE id = ?1",
+            params![
+                channel.id.as_str(),
+                channel.name,
+                channel.youtube_channel_id,
+                channel.quality.as_str(),
+                channel.video_limit.value(),
+                channel.path.as_str(),
+                channel.avatar_filename,
+                channel.created_at.to_rfc3339()
+            ],
+        )
+        .inspect_err(
+            |e| tracing::error!(channel_id = %channel.id, error = %e, "failed to update channel"),
+        )
+        .context("failed to update channel")?;
         Ok(())
     }
 
@@ -273,6 +296,30 @@ mod tests {
         let found = repo.find(&channel.id).unwrap();
 
         assert_eq!(found, Some(channel));
+    }
+
+    #[test]
+    fn it_should_update_an_existing_channel() {
+        let repo = repo();
+        let original = channel("@somechannel", "Some Channel");
+        let other = channel("@other", "Other");
+        repo.insert(&original).unwrap();
+        repo.insert(&other).unwrap();
+        let updated = Channel {
+            name: "Renamed Channel".to_string(),
+            youtube_channel_id: "UC456".to_string(),
+            quality: Quality::Low,
+            video_limit: VideoLimit::new(42).unwrap(),
+            path: PlaylistPath::new("creators/renamed").unwrap(),
+            avatar_filename: Some("avatar.jpg".to_string()),
+            created_at: DateTime::<Utc>::from_timestamp(60, 0).unwrap(),
+            ..original
+        };
+
+        repo.update(&updated).unwrap();
+
+        assert_eq!(repo.find(&updated.id).unwrap(), Some(updated));
+        assert_eq!(repo.find(&other.id).unwrap(), Some(other));
     }
 
     #[test]

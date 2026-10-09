@@ -1,6 +1,7 @@
 pub mod channel_creator;
 pub mod channel_deleter;
 pub mod channel_previewer;
+pub mod channel_updater;
 pub mod channel_video_reconciler;
 pub mod channel_view_searcher;
 pub mod directory_searcher;
@@ -25,6 +26,7 @@ pub mod video_watch_state_updater;
 pub use channel_creator::{ChannelCreator, ChannelCreatorApi, CreateChannelOutcome};
 pub use channel_deleter::{ChannelDeleter, ChannelDeleterApi};
 pub use channel_previewer::{ChannelPreviewer, ChannelPreviewerApi};
+pub use channel_updater::{ChannelUpdater, ChannelUpdaterApi};
 pub use channel_video_reconciler::{ChannelVideoReconciler, ChannelVideoReconcilerApi};
 pub use channel_view_searcher::{ChannelViewSearcher, ChannelViewSearcherApi};
 pub use directory_searcher::{DirectorySearcher, DirectorySearcherApi};

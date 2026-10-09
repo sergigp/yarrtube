@@ -90,6 +90,8 @@ export function aChannel(overrides: Partial<ChannelListItem> = {}): ChannelListI
     id: `channel-${uniqueId}`,
     name: `Channel ${uniqueId}`,
     path: `channels/channel-${uniqueId}`,
+    quality: 'high',
+    video_limit: 3,
     avatar_filename: null,
     unwatched_count: 0,
     ...overrides,

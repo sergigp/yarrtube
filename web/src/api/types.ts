@@ -15,6 +15,8 @@ export interface ChannelListItem {
   id: string
   name: string
   path: string
+  quality: VideoQuality
+  video_limit: number
   avatar_filename: string | null
   unwatched_count: number
 }

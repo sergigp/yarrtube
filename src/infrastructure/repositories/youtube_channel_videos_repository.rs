@@ -83,11 +83,19 @@ impl ChannelVideosRepository for FakeChannelVideosRepository {
     fn list_current_videos(
         &self,
         _channel_id: &ChannelHandle,
-        _limit: u32,
+        limit: u32,
     ) -> anyhow::Result<Vec<ChannelVideoListing>> {
         if *self.fails.lock().unwrap() {
             anyhow::bail!("yt-dlp failed to list channel videos");
         }
-        Ok(self.videos.lock().unwrap().clone())
+        // Like yt-dlp's `-I 1:{limit}`: only the `limit` most recent uploads.
+        Ok(self
+            .videos
+            .lock()
+            .unwrap()
+            .iter()
+            .take(limit as usize)
+            .cloned()
+            .collect())
     }
 }

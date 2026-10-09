@@ -160,6 +160,21 @@ export function createChannel(body: CreateChannelRequest): Promise<CreatedChanne
   return request('/channels', { method: 'POST', body, label: '/channels' })
 }
 
+/** Only the settings to change; an absent one keeps its stored value. */
+export interface UpdateChannelRequest {
+  quality?: string
+  video_limit?: number
+}
+
+/** Changes a channel's quality and/or video limit, applied from its next sync. */
+export function updateChannel(handle: string, body: UpdateChannelRequest): Promise<CreatedChannel> {
+  return request(`/channels/${encodeURIComponent(handle)}`, {
+    method: 'PATCH',
+    body,
+    label: `update channel ${handle}`,
+  })
+}
+
 export async function deleteChannel(id: string): Promise<void> {
   await send(`/channels/${encodeURIComponent(id)}`, {
     method: 'DELETE',

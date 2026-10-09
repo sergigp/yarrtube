@@ -11,6 +11,6 @@ pub use channel::Channel;
 pub use channel_handle::ChannelHandle;
 pub use channel_preview::ChannelPreview;
 pub use channel_view::ChannelView;
-pub use errors::{CreateChannelError, DeleteChannelError, PreviewChannelError};
+pub use errors::{CreateChannelError, DeleteChannelError, PreviewChannelError, UpdateChannelError};
 pub use events::{ChannelCreated, ChannelDeleted};
 pub use video_limit::VideoLimit;

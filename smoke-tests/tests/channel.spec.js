@@ -21,7 +21,7 @@ const CHANNEL_FOLDER = CHANNEL_HANDLE.replace(/^@+/, '')
   .replace(/[^a-z0-9]+/g, '-')
   .replace(/^-+|-+$/g, '')
 
-test('channel lifecycle: add, download, play, resume, mark watched, sync, invalid handle error, delete', async ({ page }) => {
+test('channel lifecycle: add, download, play, resume, mark watched, sync, edit settings, invalid handle error, delete', async ({ page }) => {
   await page.goto('/')
 
   // Add via the sidebar's "Add channel" and confirm it lands in the sidebar. The
@@ -79,6 +79,22 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, invali
 
   // Sync from the sidebar completes without an error dialog/alert.
   await syncItem(page, { section: 'Channels', name: CHANNEL_HANDLE })
+
+  // Change the video quality from the page header's "⋮" menu; reopening the
+  // dialog shows the saved value (covers PATCH /channels/{handle}).
+  const editChannel = async () => {
+    await page.getByRole('button', { name: /^More actions for / }).click()
+    await page.getByRole('menuitem', { name: 'Edit settings' }).click()
+    return page.getByRole('dialog', { name: /^Edit .+ settings$/ })
+  }
+  let editDialog = await editChannel()
+  await editDialog.getByRole('combobox', { name: /Video quality/ }).click()
+  await page.getByRole('option', { name: 'Low' }).click()
+  await editDialog.getByRole('button', { name: 'Save' }).click()
+  await editDialog.waitFor({ state: 'hidden' })
+  editDialog = await editChannel()
+  await expect(editDialog.getByRole('combobox', { name: /Video quality/ })).toHaveText('Low')
+  await editDialog.getByRole('button', { name: 'Close' }).click()
 
   // An invalid handle is explained in the notice and can't be submitted.
   await openAddChannelDialog(page)

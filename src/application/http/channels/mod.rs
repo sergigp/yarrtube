@@ -5,14 +5,15 @@ use super::error::ApiError;
 use super::validation::{MISSING_QUALITY, required};
 use super::videos::update_watch_state_error;
 use crate::domain::channel::{
-    ChannelHandle, CreateChannelError, DeleteChannelError, PreviewChannelError, VideoLimit,
+    ChannelHandle, CreateChannelError, DeleteChannelError, PreviewChannelError, UpdateChannelError,
+    VideoLimit,
 };
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::services::{
     ChannelCreator, ChannelCreatorApi, ChannelDeleter, ChannelDeleterApi, ChannelPreviewer,
-    ChannelPreviewerApi, ChannelVideoReconciler, ChannelVideoReconcilerApi, ChannelViewSearcher,
-    ChannelViewSearcherApi, CreateChannelOutcome, VideoWatchStateUpdater,
-    VideoWatchStateUpdaterApi,
+    ChannelPreviewerApi, ChannelUpdater, ChannelUpdaterApi, ChannelVideoReconciler,
+    ChannelVideoReconcilerApi, ChannelViewSearcher, ChannelViewSearcherApi, CreateChannelOutcome,
+    VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use crate::domain::shared::Quality;
 use axum::Json;
@@ -20,11 +21,12 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use dto::{
     ChannelListItemResponse, ChannelPreviewResponse, ChannelResponse, CreateChannelRequest,
-    PreviewChannelQuery,
+    PreviewChannelQuery, UpdateChannelRequest,
 };
 
 const MISSING_VIDEO_LIMIT: &str = "Video limit must be a positive integer (missing)";
 const MISSING_PATH: &str = "Channel path must not be empty";
+const NOTHING_TO_UPDATE: &str = "Request must change the quality or the video limit";
 
 pub async fn create_channel(
     State(channel_creator): State<ChannelCreator>,
@@ -76,6 +78,25 @@ pub async fn delete_channel(
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e @ DeleteChannelError::NotFound(_)) => Err(ApiError::bad_request(e)),
         Err(e @ DeleteChannelError::Repository(_)) => Err(ApiError::internal(e)),
+    }
+}
+
+pub async fn update_channel(
+    State(channel_updater): State<ChannelUpdater>,
+    Path(handle): Path<String>,
+    Json(request): Json<UpdateChannelRequest>,
+) -> Result<Json<ChannelResponse>, ApiError> {
+    let id = ChannelHandle::new(handle)?;
+    let quality = request.quality.map(Quality::new).transpose()?;
+    let video_limit = request.video_limit.map(VideoLimit::new).transpose()?;
+    if quality.is_none() && video_limit.is_none() {
+        return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
+    }
+
+    match run_blocking(move || channel_updater.update_settings(id, quality, video_limit)).await? {
+        Ok(channel) => Ok(Json(ChannelResponse::from(channel))),
+        Err(e @ UpdateChannelError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
+        Err(e @ UpdateChannelError::Repository(_)) => Err(ApiError::internal(e)),
     }
 }
 
@@ -827,6 +848,190 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_update_a_channels_quality() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let channel_updater = ChannelUpdater::new(channel_repository.clone());
+
+        let request = UpdateChannelRequest {
+            quality: Some("low".to_string()),
+            ..update_request()
+        };
+        let response = update(channel_updater, "@somechannel", request).await;
+
+        assert_eq!(
+            response,
+            Ok(ChannelResponse {
+                quality: "low".to_string(),
+                ..some_channel_response()
+            })
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel").with_quality(Quality::Low)]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_update_a_channels_video_limit() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let channel_updater = ChannelUpdater::new(channel_repository.clone());
+
+        let request = UpdateChannelRequest {
+            video_limit: Some(20),
+            ..update_request()
+        };
+        let response = update(channel_updater, "@somechannel", request).await;
+
+        assert_eq!(
+            response,
+            Ok(ChannelResponse {
+                video_limit: 20,
+                ..some_channel_response()
+            })
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel").with_video_limit(VideoLimit::new(20).unwrap())]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_update_both_settings_of_a_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let channel_updater = ChannelUpdater::new(channel_repository.clone());
+
+        let request = UpdateChannelRequest {
+            quality: Some("mid".to_string()),
+            video_limit: Some(3),
+        };
+        let response = update(channel_updater, "@somechannel", request).await;
+
+        assert_eq!(
+            response,
+            Ok(ChannelResponse {
+                quality: "mid".to_string(),
+                video_limit: 3,
+                ..some_channel_response()
+            })
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![
+                channel("@somechannel")
+                    .with_quality(Quality::Mid)
+                    .with_video_limit(VideoLimit::new(3).unwrap())
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_leave_a_channel_unchanged_if_settings_already_set() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let channel_updater = ChannelUpdater::new(channel_repository.clone());
+
+        let request = UpdateChannelRequest {
+            quality: Some("high".to_string()),
+            video_limit: Some(10),
+        };
+        let response = update(channel_updater, "@somechannel", request).await;
+
+        assert_eq!(response, Ok(some_channel_response()));
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_update_an_unknown_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let channel_updater = ChannelUpdater::new(channel_repository.clone());
+
+        let request = UpdateChannelRequest {
+            quality: Some("low".to_string()),
+            ..update_request()
+        };
+        let response = update(channel_updater, "@missing", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "channel @missing not found"
+            ))
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![channel("@somechannel")]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_update_if_nothing_to_update() {
+        let response = update(any_channel_updater(), "@somechannel", update_request()).await;
+
+        assert_eq!(response, Err(ApiError::bad_request(NOTHING_TO_UPDATE)));
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_update_if_invalid_quality_provided() {
+        let request = UpdateChannelRequest {
+            quality: Some("ultra".to_string()),
+            ..update_request()
+        };
+        let response = update(any_channel_updater(), "@somechannel", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Quality must be one of \"high\", \"mid\", or \"low\" (got \"ultra\")"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_update_if_invalid_video_limit_provided() {
+        let request = UpdateChannelRequest {
+            video_limit: Some(1001),
+            ..update_request()
+        };
+        let response = update(any_channel_updater(), "@somechannel", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Video limit must be between 1 and 1000 (got 1001)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_update_if_invalid_handle_provided() {
+        let request = UpdateChannelRequest {
+            quality: Some("low".to_string()),
+            ..update_request()
+        };
+        let response = update(any_channel_updater(), "noatsign", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Channel handle must start with \"@\" (got \"noatsign\")"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_no_channels() {
         let db = TestDatabase::new();
         let channel_view_searcher = ChannelViewSearcher::new(
@@ -854,6 +1059,51 @@ mod tests {
         let response = list(channel_view_searcher).await;
 
         assert_eq!(response, Ok(vec![some_channel_list_item_response()]));
+    }
+
+    #[tokio::test]
+    async fn it_should_list_channels_with_their_quality_and_video_limit() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository
+            .insert(&Channel {
+                name: "A".to_string(),
+                ..channel("@a")
+            })
+            .unwrap();
+        channel_repository
+            .insert(&Channel {
+                name: "B".to_string(),
+                ..channel("@b")
+                    .with_quality(Quality::Low)
+                    .with_video_limit(VideoLimit::new(25).unwrap())
+            })
+            .unwrap();
+        let channel_view_searcher = ChannelViewSearcher::new(
+            channel_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+        );
+
+        let response = list(channel_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                ChannelListItemResponse {
+                    id: "@a".to_string(),
+                    name: "A".to_string(),
+                    ..some_channel_list_item_response()
+                },
+                ChannelListItemResponse {
+                    id: "@b".to_string(),
+                    name: "B".to_string(),
+                    quality: "low".to_string(),
+                    video_limit: 25,
+                    ..some_channel_list_item_response()
+                },
+            ])
+        );
     }
 
     #[tokio::test]
@@ -1329,6 +1579,10 @@ mod tests {
         )
     }
 
+    fn any_channel_updater() -> ChannelUpdater {
+        ChannelUpdater::new(Arc::new(SqliteChannelRepository::new(unused_connection())))
+    }
+
     /// Builds a reconciler around the repositories a test seeds and asserts;
     /// the remaining ports (metadata, files, thumbnails) are ones no channel
     /// reconcile test observes. Events go to `db`'s outbox table.
@@ -1614,6 +1868,13 @@ mod tests {
         }
     }
 
+    fn update_request() -> UpdateChannelRequest {
+        UpdateChannelRequest {
+            quality: None,
+            video_limit: None,
+        }
+    }
+
     fn some_channel_response() -> ChannelResponse {
         ChannelResponse {
             id: "@somechannel".to_string(),
@@ -1632,6 +1893,8 @@ mod tests {
             id: "@somechannel".to_string(),
             name: "Some Channel".to_string(),
             path: "creators/somechannel".to_string(),
+            quality: "high".to_string(),
+            video_limit: 10,
             avatar_filename: None,
             unwatched_count: 0,
         }
@@ -1660,6 +1923,20 @@ mod tests {
         channel_handle: &str,
     ) -> Result<StatusCode, ApiError> {
         delete_channel(State(channel_deleter), Path(channel_handle.to_string())).await
+    }
+
+    async fn update(
+        channel_updater: ChannelUpdater,
+        channel_handle: &str,
+        request: UpdateChannelRequest,
+    ) -> Result<ChannelResponse, ApiError> {
+        update_channel(
+            State(channel_updater),
+            Path(channel_handle.to_string()),
+            Json(request),
+        )
+        .await
+        .map(|Json(channel)| channel)
     }
 
     async fn list(

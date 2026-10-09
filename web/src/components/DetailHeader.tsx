@@ -29,6 +29,8 @@ interface DetailHeaderProps {
   /** Playlists only: whether the playlist is excluded from home. */
   excludedFromHome?: boolean
   onSetExcludedFromHome?: (excluded: boolean) => Promise<void>
+  /** Channels only: opens the edit channel dialog, which the caller owns. */
+  onEditRequest?: () => void
   onDelete: () => Promise<void>
   deleteDescription: string
 }
@@ -49,6 +51,7 @@ export function DetailHeader({
   onMarkWatched,
   excludedFromHome,
   onSetExcludedFromHome,
+  onEditRequest,
   onDelete,
   deleteDescription,
 }: DetailHeaderProps) {
@@ -98,6 +101,7 @@ export function DetailHeader({
           onMarkWatched={onMarkWatched}
           excludedFromHome={excludedFromHome}
           onSetExcludedFromHome={onSetExcludedFromHome}
+          onEditRequest={onEditRequest}
           onDeleteRequest={() => setConfirmingDelete(true)}
         />
       </div>

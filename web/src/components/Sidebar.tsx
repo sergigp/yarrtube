@@ -27,10 +27,12 @@ import {
   orderChannels,
 } from '@/lib/sidebarSections'
 import { ConfirmDialog } from './ConfirmDialog'
+import { EditChannelDialog } from './EditChannelDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { Thumbnail } from './Thumbnail'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { useSaveChannelSettings } from '@/hooks/useSaveChannelSettings'
 import { errorMessage } from '@/lib/errorMessage'
 import { cn } from '@/lib/utils'
 
@@ -115,6 +117,7 @@ interface SidebarRowMenuProps {
   onSync: () => Promise<void>
   onMarkWatched?: (() => Promise<void>) | undefined
   onSetExcludedFromHome?: ((excluded: boolean) => Promise<void>) | undefined
+  onEditRequest?: (() => void) | undefined
   onDeleteRequest: () => void
 }
 
@@ -123,6 +126,7 @@ function SidebarRowMenu({
   onSync,
   onMarkWatched,
   onSetExcludedFromHome,
+  onEditRequest,
   onDeleteRequest,
 }: SidebarRowMenuProps) {
   const [syncing, setSyncing] = useState(false)
@@ -152,6 +156,7 @@ function SidebarRowMenu({
       onMarkWatched={onMarkWatched}
       excludedFromHome={onSetExcludedFromHome && (item.exclude_from_home ?? false)}
       onSetExcludedFromHome={onSetExcludedFromHome}
+      onEditRequest={onEditRequest}
       onDeleteRequest={onDeleteRequest}
     />
   )
@@ -164,6 +169,7 @@ interface SidebarRowProps {
   onSync: () => Promise<void>
   onMarkWatched?: (() => Promise<void>) | undefined
   onSetExcludedFromHome?: ((excluded: boolean) => Promise<void>) | undefined
+  onEditRequest?: (() => void) | undefined
   onDeleteRequest: () => void
   showAvatar?: boolean | undefined
   onNavigate: () => void
@@ -176,6 +182,7 @@ function SidebarRow({
   onSync,
   onMarkWatched,
   onSetExcludedFromHome,
+  onEditRequest,
   onDeleteRequest,
   showAvatar,
   onNavigate,
@@ -213,6 +220,7 @@ function SidebarRow({
         onSync={onSync}
         onMarkWatched={onMarkWatched}
         onSetExcludedFromHome={onSetExcludedFromHome}
+        onEditRequest={onEditRequest}
         onDeleteRequest={onDeleteRequest}
       />
     </li>
@@ -235,6 +243,8 @@ interface SidebarSectionProps {
   onSync: (id: string) => Promise<void>
   onMarkWatched?: (id: string) => Promise<void>
   onSetExcludedFromHome?: (id: string, excluded: boolean) => Promise<void>
+  /** Channels only: opens the edit channel dialog, which the caller owns. */
+  onEditRequest?: (id: string) => void
   onDelete: (id: string) => Promise<void>
   deleteDescription: string
   showAvatar?: boolean
@@ -257,6 +267,7 @@ function SidebarSection({
   onSync,
   onMarkWatched,
   onSetExcludedFromHome,
+  onEditRequest,
   onDelete,
   deleteDescription,
   showAvatar,
@@ -309,6 +320,7 @@ function SidebarSection({
                 onSetExcludedFromHome &&
                 ((excluded: boolean) => onSetExcludedFromHome(item.id, excluded))
               }
+              onEditRequest={onEditRequest && (() => onEditRequest(item.id))}
               onDeleteRequest={() => setPendingDelete(item)}
             />
           ))}
@@ -369,6 +381,9 @@ export function Sidebar({
   const refreshing = useLibraryAction()
   const removeQuery = useRemoveQuery()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
+  const saveChannelSettings = useSaveChannelSettings()
+  const [editingChannelId, setEditingChannelId] = useState<string | null>(null)
+  const editingChannel = channels?.find((channel) => channel.id === editingChannelId) ?? null
   const [search, setSearch] = useState('')
   const [channelsExpanded, toggleChannelsExpanded] = useExpandedState('channels')
   const [playlistsExpanded, togglePlaylistsExpanded] = useExpandedState('playlists')
@@ -471,6 +486,7 @@ export function Sidebar({
             onNavigate={onClose}
             onSync={refreshing(reconcileChannel)}
             onMarkWatched={refreshing(markChannelWatched)}
+            onEditRequest={setEditingChannelId}
             onDelete={refreshing(async (id: string) => {
               await deleteChannel(id)
               removeQuery(queryKeys.channelVideos(id))
@@ -509,6 +525,18 @@ export function Sidebar({
           />
         )}
       </aside>
+      {editingChannel && (
+        <EditChannelDialog
+          channel={editingChannel}
+          open
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setEditingChannelId(null)
+            }
+          }}
+          onSave={(changes) => saveChannelSettings(editingChannel, changes)}
+        />
+      )}
     </>
   )
 }

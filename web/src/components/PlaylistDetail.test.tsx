@@ -184,4 +184,20 @@ describe('PlaylistDetail', () => {
     expect(document.querySelector('video')?.playbackRate).toBe(1)
     expect(screen.getByRole('button', { name: 'Playback speed' })).toHaveTextContent('1x')
   })
+
+  it('offers no Edit settings item', async () => {
+    renderPlaylist(
+      {
+        'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'The Playlist' })],
+        'GET /api/playlists/PL1/videos': [],
+      },
+      '/playlists/PL1',
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Playlist' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Edit settings' })).not.toBeInTheDocument()
+  })
 })

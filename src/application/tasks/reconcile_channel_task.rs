@@ -294,6 +294,201 @@ mod tests {
     }
 
     #[test]
+    fn it_should_remove_the_oldest_videos_after_the_video_limit_is_lowered() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let original = Channel {
+            video_limit: VideoLimit::new(3).unwrap(),
+            ..channel("@somechannel")
+        };
+        channel_repository.insert(&original).unwrap();
+        let newest = Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp());
+        let middle = Video::create(VideoId::new("yt2").unwrap(), "Two", fixed_timestamp());
+        let oldest = Video::create(VideoId::new("yt3").unwrap(), "Three", fixed_timestamp());
+        let newest_channel_video = save_channel_video_at(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &newest,
+            0,
+        );
+        let middle_channel_video = save_channel_video_at(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &middle,
+            1,
+        );
+        save_channel_video_at(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &oldest,
+            2,
+        );
+        channel_repository
+            .update(&original.with_video_limit(VideoLimit::new(2).unwrap()))
+            .unwrap();
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "One", 0),
+                listed_video("yt2", "Two", 1),
+                listed_video("yt3", "Three", 2),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![newest.clone(), middle.clone()]
+        );
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            vec![newest_channel_video, middle_channel_video]
+        );
+        // The kept videos are still pending, so the pass queues their downloads.
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                download_video_task(1, &newest.id),
+                download_video_task(2, &middle.id),
+                fetch_thumbnail_task(3, &newest.id),
+                fetch_thumbnail_task(4, &middle.id),
+                next_reconcile(5),
+            ]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoRemovedFromChannel(VideoRemovedFromChannel {
+                    channel_id: "@somechannel".to_string(),
+                    video_id: oldest.id.as_str().to_string(),
+                    title: "Three".to_string(),
+                    filename: None,
+                    thumbnail_filename: None,
+                    was_downloaded: false,
+                })
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_add_the_next_most_recent_videos_after_the_video_limit_is_raised() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let original = Channel {
+            video_limit: VideoLimit::new(1).unwrap(),
+            ..channel("@somechannel")
+        };
+        channel_repository.insert(&original).unwrap();
+        let newest = Video::create(VideoId::new("yt1").unwrap(), "One", fixed_timestamp());
+        let newest_channel_video = save_channel_video_at(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &newest,
+            0,
+        );
+        channel_repository
+            .update(&original.with_video_limit(VideoLimit::new(2).unwrap()))
+            .unwrap();
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "One", 0),
+                listed_video("yt2", "Two", 1),
+                listed_video("yt3", "Three", 2),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        let videos = video_repository.list().unwrap();
+        let added_id = videos
+            .iter()
+            .find(|video| video.youtube_id.as_str() == "yt2")
+            .unwrap()
+            .id
+            .clone();
+        assert_eq!(
+            videos,
+            vec![
+                newest.clone(),
+                Video {
+                    id: added_id.clone(),
+                    ..Video::create(VideoId::new("yt2").unwrap(), "Two", fixed_timestamp())
+                },
+            ]
+        );
+        assert_eq!(
+            channel_video_repository
+                .list_for_channel(&handle("@somechannel"))
+                .unwrap(),
+            vec![
+                newest_channel_video,
+                ChannelVideo {
+                    id: 2,
+                    ..ChannelVideo::create(
+                        handle("@somechannel"),
+                        added_id.clone(),
+                        1,
+                        fixed_timestamp()
+                    )
+                },
+            ]
+        );
+        // The kept video is still pending, so the pass queues its download;
+        // the added one's is triggered by its `VideoAddedToChannel` instead.
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                download_video_task(1, &newest.id),
+                fetch_thumbnail_task(2, &newest.id),
+                next_reconcile(3),
+            ]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoAddedToChannel(VideoAddedToChannel {
+                    channel_id: "@somechannel".to_string(),
+                    video_id: added_id.as_str().to_string(),
+                })
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_keep_videos_if_listing_fails() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -828,12 +1023,22 @@ mod tests {
         channel_video_repository: &dyn ChannelVideoRepository,
         video: &Video,
     ) -> ChannelVideo {
+        save_channel_video_at(video_repository, channel_video_repository, video, 0)
+    }
+
+    /// Like `save_channel_video`, at the given recency position.
+    fn save_channel_video_at(
+        video_repository: &dyn VideoRepository,
+        channel_video_repository: &dyn ChannelVideoRepository,
+        video: &Video,
+        position: i64,
+    ) -> ChannelVideo {
         video_repository.save(video).unwrap();
         channel_video_repository
             .save(&ChannelVideo::create(
                 handle("@somechannel"),
                 video.id.clone(),
-                0,
+                position,
                 fixed_timestamp(),
             ))
             .unwrap();

@@ -43,6 +43,23 @@ impl fmt::Display for DeleteChannelError {
 impl std::error::Error for DeleteChannelError {}
 
 #[derive(Debug)]
+pub enum UpdateChannelError {
+    NotFound(ChannelHandle),
+    Repository(anyhow::Error),
+}
+
+impl fmt::Display for UpdateChannelError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotFound(handle) => write!(f, "channel {handle} not found"),
+            Self::Repository(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for UpdateChannelError {}
+
+#[derive(Debug)]
 pub enum PreviewChannelError {
     YoutubeChannelNotFound(ChannelHandle),
     Lookup(anyhow::Error),

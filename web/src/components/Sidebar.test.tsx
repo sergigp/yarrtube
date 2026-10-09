@@ -172,6 +172,7 @@ describe('Sidebar', () => {
 
     expect(await screen.findByRole('menuitem', { name: 'Sync' })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'Mark all watched' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Edit settings' })).not.toBeInTheDocument()
   })
 
   it('excludes a playlist from home from its row menu', async () => {
@@ -241,7 +242,77 @@ describe('Sidebar', () => {
 
     expect(
       (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
-    ).toEqual(['Sync', 'Mark all watched', 'Delete'])
+    ).toEqual(['Sync', 'Mark all watched', 'Edit settings', 'Delete'])
+  })
+
+  it("edits a channel's settings from its row menu", async () => {
+    let channel = aChannel({
+      id: 'chan',
+      name: 'Chan A',
+      quality: 'high',
+      video_limit: 5,
+    })
+    const update = vi.fn(() => {
+      channel = { ...channel, quality: 'low' }
+      return channel
+    })
+    const fetchMock = mockApi({
+      'GET /api/channels': () => [channel],
+      'GET /api/playlists': [],
+      'PATCH /api/channels/chan': update,
+    })
+    renderWithProviders(
+      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+    )
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Chan A' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit settings' }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Edit Chan A settings',
+    })
+    await user.click(within(dialog).getByRole('combobox', { name: /Video quality/ }))
+    await user.click(await screen.findByRole('option', { name: 'Low' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    expect(update).toHaveBeenCalledOnce()
+    const patchCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PATCH',
+    ) as [string, RequestInit]
+    expect(JSON.parse(patchCall[1].body as string)).toEqual({ quality: 'low' })
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/channels/chan/reconcile')).toBe(false)
+  })
+
+  it('syncs a channel after its video limit changes from its row menu', async () => {
+    const reconcile = vi.fn(() => null)
+    mockApi({
+      'GET /api/channels': [aChannel({ id: 'chan', name: 'Chan A', video_limit: 5 })],
+      'GET /api/playlists': [],
+      'PATCH /api/channels/chan': aChannel({
+        id: 'chan',
+        name: 'Chan A',
+        video_limit: 20,
+      }),
+      'POST /api/channels/chan/reconcile': reconcile,
+    })
+    renderWithProviders(
+      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+    )
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Chan A' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit settings' }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Edit Chan A settings',
+    })
+    const limit = within(dialog).getByLabelText('Video limit')
+    await user.clear(limit)
+    await user.type(limit, '20')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(reconcile).toHaveBeenCalledOnce())
+    expect(dialog).not.toBeInTheDocument()
   })
 
   it("alerts when changing a playlist's home setting fails", async () => {

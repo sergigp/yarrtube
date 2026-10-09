@@ -11,7 +11,9 @@ import {
   markVideoWatched,
   previewChannel,
   previewPlaylist,
+  updateChannel,
   updatePlaylist,
+  type UpdateChannelRequest,
 } from './client'
 import type {
   Announcement,
@@ -198,6 +200,24 @@ export function useSetPlaylistExcludedFromHome(): (id: string, excluded: boolean
       await invalidateLibraryAndHome()
     },
     [invalidateLibraryAndHome],
+  )
+}
+
+/**
+ * Returns a function that changes a channel's settings, then refetches the
+ * channel and playlist lists.
+ */
+export function useUpdateChannelSettings(): (
+  handle: string,
+  changes: UpdateChannelRequest,
+) => Promise<void> {
+  const invalidateLibrary = useInvalidateLibrary()
+  return useCallback(
+    async (handle: string, changes: UpdateChannelRequest) => {
+      await updateChannel(handle, changes)
+      await invalidateLibrary()
+    },
+    [invalidateLibrary],
   )
 }
 

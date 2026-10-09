@@ -15,6 +15,14 @@ pub struct CreateChannelRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct UpdateChannelRequest {
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub video_limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct PreviewChannelQuery {
     #[serde(default)]
     pub channel: Option<String>,
@@ -52,6 +60,8 @@ pub struct ChannelListItemResponse {
     pub id: String,
     pub name: String,
     pub path: String,
+    pub quality: String,
+    pub video_limit: u32,
     pub avatar_filename: Option<String>,
     pub unwatched_count: usize,
 }
@@ -62,6 +72,8 @@ impl From<ChannelView> for ChannelListItemResponse {
             id: channel.id.as_str().to_string(),
             name: channel.name,
             path: channel.path.as_str().to_string(),
+            quality: channel.quality.as_str().to_string(),
+            video_limit: channel.video_limit.value(),
             avatar_filename: channel.avatar_filename,
             unwatched_count: channel.unwatched_count,
         }
