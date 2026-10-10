@@ -450,6 +450,17 @@ impl SqliteVideoRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::channel::ChannelHandle;
+    use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::playlist::PlaylistId;
+    use crate::domain::playlist_video::PlaylistVideo;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, SqliteChannelVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+        PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    };
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
 
     fn repo() -> SqliteVideoRepository {
         let mut conn = Connection::open_in_memory().unwrap();
@@ -789,5 +800,68 @@ mod tests {
         let found = repo.find_by_youtube_id(&VideoId::new("unknown").unwrap());
 
         assert_eq!(found.unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_assign_the_first_index_of_the_day() {
+        let db = TestDatabase::new();
+        let repo = SqliteVideoRepository::new(db.database());
+        let video = video("First", fixed_timestamp());
+        repo.save(&video).unwrap();
+        link_to_playlist(&db, &video, "PL1");
+
+        let number = repo.assign_episode_number(&video.id, published_at());
+
+        assert_eq!(number.unwrap(), episode(31501));
+        assert_eq!(
+            repo.find(&video.id).unwrap(),
+            Some(Video {
+                episode_number: Some(episode(31501)),
+                ..video
+            })
+        );
+    }
+
+    fn link_to_playlist(db: &TestDatabase, video: &Video, playlist_id: &str) {
+        SqlitePlaylistVideoRepository::new(db.database())
+            .save(&PlaylistVideo::create(
+                PlaylistId::new(playlist_id).unwrap(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    fn link_to_channel(db: &TestDatabase, video: &Video, channel_id: &str) {
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                ChannelHandle::new(channel_id).unwrap(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    /// Records `number` on a stored `video`.
+    fn numbered(repo: &SqliteVideoRepository, video: Video, number: EpisodeNumber) -> Video {
+        let numbered = video.with_episode_number(number, fixed_timestamp());
+        repo.update(&numbered).unwrap();
+        numbered
+    }
+
+    fn episode(episode: u32) -> EpisodeNumber {
+        EpisodeNumber::new(2026, episode).unwrap()
+    }
+
+    fn published_at() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339("2026-03-15T10:00:00Z")
+            .unwrap()
+            .to_utc()
+    }
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 }

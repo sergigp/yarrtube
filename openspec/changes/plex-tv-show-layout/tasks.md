@@ -53,7 +53,7 @@
 - [x] 3.9 FilesystemVideoFileRepository: `it_should_delete_a_file_or_a_dir_by_relative_path` — episode file and legacy folder
 - [x] 3.10 FilesystemShowFileRepository: `it_should_write_the_show_nfo_and_copy_the_poster` — bytes equal the source avatar
 - [x] 3.11 FilesystemShowFileRepository: `it_should_overwrite_an_existing_poster`
-- [ ] 3.12 SqliteVideoRepository: `it_should_assign_the_first_index_of_the_day` — `031501`
+- [x] 3.12 SqliteVideoRepository: `it_should_assign_the_first_index_of_the_day` — `031501`
 - [ ] 3.13 SqliteVideoRepository: `it_should_assign_the_next_free_index_within_the_same_show_and_day` — sibling via `playlist_videos` and via `channel_videos`
 - [ ] 3.14 SqliteVideoRepository: `it_should_number_copies_in_different_shows_independently`
 - [ ] 3.15 SqliteVideoRepository: `it_should_return_the_existing_number_when_already_assigned`
