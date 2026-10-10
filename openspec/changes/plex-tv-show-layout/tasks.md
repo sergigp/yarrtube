@@ -50,7 +50,7 @@
 - [x] 3.6 FilesystemVideoFileRepository: `it_should_list_top_level_entries_and_season_files` — `Season 2026/<file>` entries plus legacy top-level entries, temp files excluded
 - [x] 3.7 FilesystemVideoFileRepository: `it_should_move_a_file_creating_its_parent` — rename into a not-yet-existing season folder
 - [x] 3.8 FilesystemVideoFileRepository: `it_should_remove_an_empty_dir_only` — non-empty dir left alone
-- [ ] 3.9 FilesystemVideoFileRepository: `it_should_delete_a_file_or_a_dir_by_relative_path` — episode file and legacy folder
+- [x] 3.9 FilesystemVideoFileRepository: `it_should_delete_a_file_or_a_dir_by_relative_path` — episode file and legacy folder
 - [ ] 3.10 FilesystemShowFileRepository: `it_should_write_the_show_nfo_and_copy_the_poster` — bytes equal the source avatar
 - [ ] 3.11 FilesystemShowFileRepository: `it_should_overwrite_an_existing_poster`
 - [ ] 3.12 SqliteVideoRepository: `it_should_assign_the_first_index_of_the_day` — `031501`

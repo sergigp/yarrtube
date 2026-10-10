@@ -436,6 +436,36 @@ mod tests {
     }
 
     #[test]
+    fn it_should_delete_a_file_or_a_dir_by_relative_path() {
+        let dir = unique_temp_dir("video-file-repository-delete-relative");
+        std::fs::create_dir_all(dir.join("Season 2026")).unwrap();
+        std::fs::write(dir.join("Season 2026/S2026E031501 - One.mp4"), b"").unwrap();
+        std::fs::create_dir_all(dir.join("Legacy")).unwrap();
+        std::fs::write(dir.join("Legacy/Legacy.mp4"), b"").unwrap();
+
+        let deleted = [
+            FilesystemVideoFileRepository
+                .delete(&dir, "Season 2026/S2026E031501 - One.mp4")
+                .unwrap(),
+            FilesystemVideoFileRepository
+                .delete(&dir, "Legacy")
+                .unwrap(),
+        ];
+
+        assert_eq!(deleted, [true, true]);
+        assert_eq!(
+            [
+                dir.join("Season 2026/S2026E031501 - One.mp4"),
+                dir.join("Season 2026"),
+                dir.join("Legacy"),
+            ]
+            .map(|path| path.exists()),
+            [false, true, false]
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn it_should_exclude_in_progress_temp_files_from_the_listing() {
         let dir = unique_temp_dir("video-file-repository-list-temp");
         std::fs::write(dir.join("Done.mp4"), b"").unwrap();
