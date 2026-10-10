@@ -61,7 +61,7 @@
 - [x] 3.17 SqliteVideoRepository: `it_should_list_downloaded_videos`
 - [x] 3.18 SqliteVideoMetadataRepository: `it_should_write_an_episode_nfo_with_season_episode_and_aired` — `<episodedetails>` with `season`, `episode`, `aired`, `uniqueid`, escaped text
 - [x] 3.19 SqliteVideoMetadataRepository: `it_should_write_the_nfo_at_the_given_path`
-- [ ] 3.20 SqliteVideoMetadataRepository: `it_should_remove_the_nfo_at_the_given_path`
+- [x] 3.20 SqliteVideoMetadataRepository: `it_should_remove_the_nfo_at_the_given_path`
 - [ ] 3.21 sqlite_migrations: `it_should_add_the_episode_number_columns`
 - [ ] 3.22 HttpPlexLibraryRepository: keep the `list_sections`/`scan_path` mockito tests green after trimming the trait, delete the collection tests
 - [ ] 3.23 FilesystemChannelAvatarRepository: `it_should_resolve_the_path_of_a_stored_avatar`

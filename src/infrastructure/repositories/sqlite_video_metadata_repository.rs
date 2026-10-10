@@ -297,13 +297,18 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 3.18"]
     fn it_should_leave_no_db_row_when_the_file_write_fails() {
         let repo = repo();
-        let missing_dir = unique_temp_dir("video-metadata-missing-parent").join("does-not-exist");
+        let dir = unique_temp_dir("video-metadata-unwritable-season");
+        std::fs::write(dir.join("Season 2024"), b"not a folder").unwrap();
         let video_id = VideoRecordId::new_generated();
 
-        let result = repo.save(&video_id, &metadata(), &number(), &missing_dir.join(NFO));
+        let result = repo.save(
+            &video_id,
+            &metadata(),
+            &number(),
+            &dir.join("Season 2024").join(NFO),
+        );
 
         assert!(result.is_err());
         assert!(repo.find(&video_id).unwrap().is_none());
@@ -381,33 +386,30 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 3.19"]
-    fn it_should_remove_movie_nfo() {
+    fn it_should_remove_the_nfo_at_the_given_path() {
         let repo = repo();
-        let video_dir = unique_temp_dir("video-metadata-remove-nfo");
-        std::fs::write(video_dir.join(MOVIE_NFO_FILENAME), "<movie></movie>").unwrap();
-        std::fs::write(video_dir.join("My Video.jpg"), "jpg").unwrap();
+        let season_dir = unique_temp_dir("video-metadata-remove-nfo");
+        std::fs::write(season_dir.join(NFO), "<episodedetails/>").unwrap();
+        std::fs::write(season_dir.join("S2024E010201 - My Video.jpg"), "jpg").unwrap();
 
-        repo.remove_nfo(&video_dir.join(MOVIE_NFO_FILENAME))
-            .unwrap();
+        repo.remove_nfo(&season_dir.join(NFO)).unwrap();
 
         assert_eq!(
-            std::fs::read_dir(&video_dir)
+            std::fs::read_dir(&season_dir)
                 .unwrap()
                 .map(|entry| entry.unwrap().file_name().into_string().unwrap())
                 .collect::<Vec<_>>(),
-            vec!["My Video.jpg".to_string()]
+            vec!["S2024E010201 - My Video.jpg".to_string()]
         );
-        std::fs::remove_dir_all(&video_dir).unwrap();
+        std::fs::remove_dir_all(&season_dir).unwrap();
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 3.19"]
-    fn it_should_ignore_removing_a_missing_movie_nfo() {
+    fn it_should_ignore_removing_a_missing_nfo() {
         let repo = repo();
         let video_dir = unique_temp_dir("video-metadata-remove-missing-nfo");
 
-        let result = repo.remove_nfo(&video_dir.join(MOVIE_NFO_FILENAME));
+        let result = repo.remove_nfo(&video_dir.join(NFO));
 
         assert!(result.is_ok());
         std::fs::remove_dir_all(&video_dir).unwrap();

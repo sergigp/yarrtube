@@ -852,7 +852,8 @@ mod tests {
             &channel_sibling,
             &channel_video,
         ]
-        .map(|video| repo.save(video).unwrap());
+        .into_iter()
+        .for_each(|video| repo.save(video).unwrap());
         let _ = numbered(&repo, playlist_sibling.clone(), episode(31501));
         let _ = numbered(&repo, channel_sibling.clone(), episode(31503));
         link_to_playlist(&db, &playlist_sibling, "PL1");
@@ -942,7 +943,9 @@ mod tests {
                 fixed_timestamp(),
             );
         let errored = video("Errored", fixed_timestamp()).mark_errored(fixed_timestamp());
-        [&pending, &downloaded, &errored].map(|video| repo.save(video).unwrap());
+        [&pending, &downloaded, &errored]
+            .into_iter()
+            .for_each(|video| repo.save(video).unwrap());
 
         let listed = repo.list_downloaded();
 
