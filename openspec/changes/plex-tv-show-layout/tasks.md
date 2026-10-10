@@ -66,7 +66,7 @@
 - [x] 3.22 HttpPlexLibraryRepository: keep the `list_sections`/`scan_path` mockito tests green after trimming the trait, delete the collection tests
 - [x] 3.23 FilesystemChannelAvatarRepository: `it_should_resolve_the_path_of_a_stored_avatar`
 - [ ] 3.24 web: `storageLocation.test.ts` (season folder from an episode filename, base path when no file) and `VideoDetail.test.tsx` `shows the season folder as the storage location`; remove the `reconcile_plex_collections` label and its tests; `npm run check` passes
-- [ ] 3.25 SqliteVideoRepository: `it_should_peek_the_next_episode_number_without_recording_it`
+- [x] 3.25 SqliteVideoRepository: `it_should_peek_the_next_episode_number_without_recording_it`
 
 ## 4. Docs, config and verification
 

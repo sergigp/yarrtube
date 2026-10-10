@@ -952,6 +952,24 @@ mod tests {
         assert_eq!(listed.unwrap(), vec![downloaded]);
     }
 
+    #[test]
+    fn it_should_peek_the_next_episode_number_without_recording_it() {
+        let db = TestDatabase::new();
+        let repo = SqliteVideoRepository::new(db.database());
+        let sibling = video("Sibling", fixed_timestamp());
+        let video = video("Next", fixed_timestamp());
+        repo.save(&sibling).unwrap();
+        repo.save(&video).unwrap();
+        let _ = numbered(&repo, sibling.clone(), episode(31501));
+        link_to_playlist(&db, &sibling, "PL1");
+        link_to_playlist(&db, &video, "PL1");
+
+        let number = repo.next_episode_number(&video.id, published_at());
+
+        assert_eq!(number.unwrap(), episode(31502));
+        assert_eq!(repo.find(&video.id).unwrap(), Some(video));
+    }
+
     fn link_to_playlist(db: &TestDatabase, video: &Video, playlist_id: &str) {
         SqlitePlaylistVideoRepository::new(db.database())
             .save(&PlaylistVideo::create(
