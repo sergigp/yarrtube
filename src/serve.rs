@@ -181,16 +181,34 @@ struct PlexIntegration {
 }
 
 fn plex_integration() -> Option<PlexIntegration> {
-    let base_url = non_empty_env("YARRTUBE_PLEX_URL")?;
-    let token = non_empty_env("YARRTUBE_PLEX_TOKEN")?;
-    let plex_videos_path = non_empty_env("YARRTUBE_PLEX_VIDEOS_PATH")?;
-    Some(PlexIntegration {
-        repository: Arc::new(HttpPlexLibraryRepository::new(PlexConfig {
-            base_url,
-            token,
-        })),
-        plex_videos_path,
-    })
+    plex_integration_from(
+        non_empty_env("YARRTUBE_PLEX_URL"),
+        non_empty_env("YARRTUBE_PLEX_TOKEN"),
+        non_empty_env("YARRTUBE_PLEX_VIDEOS_PATH"),
+    )
+}
+
+fn plex_integration_from(
+    base_url: Option<String>,
+    token: Option<String>,
+    plex_videos_path: Option<String>,
+) -> Option<PlexIntegration> {
+    match (base_url, token, plex_videos_path) {
+        (Some(base_url), Some(token), Some(plex_videos_path)) => Some(PlexIntegration {
+            repository: Arc::new(HttpPlexLibraryRepository::new(PlexConfig {
+                base_url,
+                token,
+            })),
+            plex_videos_path,
+        }),
+        (None, None, None) => None,
+        _ => {
+            warn!(
+                "Plex scan integration disabled: YARRTUBE_PLEX_URL, YARRTUBE_PLEX_TOKEN and YARRTUBE_PLEX_VIDEOS_PATH must all be set"
+            );
+            None
+        }
+    }
 }
 
 fn non_empty_env(name: &str) -> Option<String> {
@@ -921,29 +939,37 @@ mod tests {
     }
 
     #[test]
-    fn it_should_register_the_plex_subscribers_with_the_plex_videos_path() {
+    fn it_should_register_the_scan_subscriber_only_with_url_token_and_videos_path() {
         let db = TestDatabase::new();
         let infrastructure = test_infrastructure(&db);
+        let configurations = [
+            (
+                Some("http://plex:32400"),
+                Some("token"),
+                Some("/plex/videos"),
+            ),
+            (None, Some("token"), Some("/plex/videos")),
+            (Some("http://plex:32400"), None, Some("/plex/videos")),
+            (Some("http://plex:32400"), Some("token"), None),
+        ];
 
-        let subscribers = event_subscribers(&infrastructure, Some(test_plex()));
+        let scan_subscribers: Vec<Option<usize>> = configurations
+            .into_iter()
+            .map(|(url, token, videos_path)| {
+                plex_integration_from(
+                    url.map(str::to_string),
+                    token.map(str::to_string),
+                    videos_path.map(str::to_string),
+                )
+            })
+            .map(|plex| {
+                event_subscribers(&infrastructure, plex)
+                    .get("video_downloaded")
+                    .map(Vec::len)
+            })
+            .collect();
 
-        assert_eq!(
-            subscribers
-                .iter()
-                .map(|(event_type, subscribers)| (event_type.as_str(), subscribers.len()))
-                .collect::<BTreeMap<_, _>>(),
-            BTreeMap::from([
-                ("channel_created", 1),
-                ("channel_deleted", 1),
-                ("playlist_created", 1),
-                ("playlist_deleted", 1),
-                ("video_added_to_channel", 2),
-                ("video_added_to_playlist", 2),
-                ("video_downloaded", 1),
-                ("video_removed_from_channel", 1),
-                ("video_removed_from_playlist", 1),
-            ])
-        );
+        assert_eq!(scan_subscribers, vec![Some(1), None, None, None]);
     }
 
     #[test]
@@ -1010,14 +1036,5 @@ mod tests {
             ytdlp_path: PathBuf::from("yt-dlp"),
         })
         .unwrap()
-    }
-
-    fn test_plex() -> PlexIntegration {
-        PlexIntegration {
-            repository: Arc::new(
-                crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository::default(),
-            ),
-            plex_videos_path: "/plex/videos".to_string(),
-        }
     }
 }

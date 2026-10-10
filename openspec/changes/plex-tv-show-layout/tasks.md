@@ -30,7 +30,7 @@
 - [x] 2.20 `it_should_delete_a_legacy_per_video_folder` — delete task removes the whole legacy folder
 - [x] 2.21 `it_should_scan_the_show_folder_in_every_section_containing_it` — scan subscriber scans `output_dir` in the containing section only
 - [x] 2.22 `it_should_skip_the_scan_when_no_section_contains_the_show_folder` — warning logged, `Ok`
-- [ ] 2.23 `it_should_register_the_scan_subscriber_only_with_url_token_and_videos_path` — serve wiring with and without each variable, replacing the section-id tests
+- [x] 2.23 `it_should_register_the_scan_subscriber_only_with_url_token_and_videos_path` — serve wiring with and without each variable, replacing the section-id tests
 - [ ] 2.24 `it_should_migrate_a_legacy_library_into_the_tv_layout` — migrate-layout over two sources and three videos (one `[id]`-suffixed): files moved, rows updated, show files written, old folders gone, report lists three moves
 - [ ] 2.25 `it_should_number_a_same_day_batch_in_publish_time_order` — three same-day videos get `01..03` by `published_at`
 - [ ] 2.26 `it_should_skip_videos_without_metadata_or_without_a_file` — both skips reported with reasons, nothing moved for them
