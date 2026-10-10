@@ -688,6 +688,48 @@ mod tests {
     }
 
     #[test]
+    fn it_should_protect_files_sharing_the_base_name_of_an_in_progress_numbered_video() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
+            "Season 2026".to_string(),
+            "Season 2026/S2026E031501 - My Video.nfo".to_string(),
+        ]));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = my_video()
+            .start_download(fixed_timestamp())
+            .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), fixed_timestamp());
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &video,
+            0,
+        );
+        video_repository.update(&video).unwrap();
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            vec![member_playlist_item()],
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
+    }
+
+    #[test]
     #[ignore = "plex-tv-show-layout: replaced by task 2.16"]
     fn it_should_generate_missing_metadata() {
         let db = TestDatabase::new();

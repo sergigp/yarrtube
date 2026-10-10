@@ -6,6 +6,7 @@ use crate::domain::services::{
 use crate::domain::shared::Quality;
 use crate::domain::task::{ScheduledTask, Task};
 use crate::domain::video::VideoRecordId;
+use crate::domain::video::video_filename::episode_base_name;
 use crate::domain::video::{
     SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, Video, VideoStatus, is_episode_path, is_season_folder,
     nfo_path_for, resolve_output_dir, top_level_entry,
@@ -152,6 +153,7 @@ impl InternalVideoReconciler {
             .map(|v| v.id.clone())
             .collect();
         let protected_entries = protected_entries(&videos);
+        let numbered_episode_paths = numbered_episode_paths(&videos);
 
         Ok(ActualState {
             output_dir,
@@ -160,6 +162,7 @@ impl InternalVideoReconciler {
             downloads_in_flight,
             broken_download_ids,
             protected_entries,
+            numbered_episode_paths,
         })
     }
 
@@ -336,7 +339,7 @@ impl InternalVideoReconciler {
     /// a season folder, nor a file of a stored video.
     fn delete_orphaned_files(&self, actual: &ActualState) -> anyhow::Result<()> {
         for file in &actual.files {
-            if actual.protected_entries.contains(file) || is_season_folder(file) {
+            if actual.is_protected(file) {
                 continue;
             }
             if self
@@ -390,13 +393,28 @@ struct ActualState {
     downloads_in_flight: HashSet<String>,
     /// `Downloaded` videos whose file is missing or not mp4.
     broken_download_ids: HashSet<VideoRecordId>,
-    /// Top-level entries of `output_dir` that orphan cleanup must keep.
+    /// Entries of `output_dir` that orphan cleanup must keep.
     protected_entries: HashSet<String>,
+    /// `Season <s>/<base name>` of every numbered video: whatever a download
+    /// or thumbnail fetch already moved into place under it is kept, even
+    /// before the video records it.
+    numbered_episode_paths: HashSet<String>,
 }
 
 impl ActualState {
     fn is_broken(&self, video: &Video) -> bool {
         self.broken_download_ids.contains(&video.id)
+    }
+
+    fn is_protected(&self, entry: &str) -> bool {
+        self.protected_entries.contains(entry)
+            || is_season_folder(entry)
+            || self.numbered_episode_paths.contains(
+                Path::new(entry)
+                    .with_extension("")
+                    .to_string_lossy()
+                    .as_ref(),
+            )
     }
 }
 
@@ -436,6 +454,21 @@ fn protected_entries(videos: &[Video]) -> HashSet<String> {
         .into_iter()
         .chain(recorded)
         .chain(episode_nfos)
+        .collect()
+}
+
+fn numbered_episode_paths(videos: &[Video]) -> HashSet<String> {
+    videos
+        .iter()
+        .filter_map(|v| {
+            v.episode_number.map(|number| {
+                format!(
+                    "{}/{}",
+                    number.season_folder(),
+                    episode_base_name(&number, &v.title)
+                )
+            })
+        })
         .collect()
 }
 
