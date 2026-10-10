@@ -577,6 +577,98 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_report_a_failed_move_and_continue() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let videos_root = tempfile::tempdir().unwrap();
+        let playlist_dir = videos_root.path().join("playlists/kids");
+        let video_file_repository = Arc::new(
+            FakeVideoFileRepository::with_file_exists(true)
+                .with_failing_move(playlist_dir.join("Beta/Beta.mp4")),
+        );
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&my_playlist())
+            .unwrap();
+        let alpha = legacy_video("yt1", "Alpha", "Alpha/Alpha.mp4", None);
+        let beta = legacy_video("yt2", "Beta", "Beta/Beta.mp4", None);
+        let gamma = legacy_video("yt3", "Gamma", "Gamma/Gamma.mp4", None);
+        seed_playlist_video(&db, &alpha, 0);
+        seed_playlist_video(&db, &beta, 1);
+        seed_playlist_video(&db, &gamma, 2);
+        seed_metadata(
+            &db,
+            &alpha,
+            published("2026-03-15T10:00:00Z"),
+            &playlist_dir.join("Alpha"),
+        );
+        seed_metadata(
+            &db,
+            &beta,
+            published("2026-03-16T10:00:00Z"),
+            &playlist_dir.join("Beta"),
+        );
+        seed_metadata(
+            &db,
+            &gamma,
+            published("2026-03-17T10:00:00Z"),
+            &playlist_dir.join("Gamma"),
+        );
+        let migrator = layout_migrator(
+            &db,
+            video_file_repository.clone(),
+            Arc::new(FakeShowFileRepository::default()),
+            videos_root.path(),
+        );
+
+        let result = migrator.migrate(false);
+
+        assert_eq!(
+            result.unwrap(),
+            MigrationReport {
+                moved: vec![
+                    moved(
+                        "playlists/kids/Alpha/Alpha.mp4",
+                        "playlists/kids/Season 2026/S2026E031501 - Alpha.mp4"
+                    ),
+                    moved(
+                        "playlists/kids/Gamma/Gamma.mp4",
+                        "playlists/kids/Season 2026/S2026E031701 - Gamma.mp4"
+                    ),
+                ],
+                skipped: vec![],
+                failed: vec![(
+                    "playlists/kids/Beta/Beta.mp4".to_string(),
+                    format!(
+                        "permission denied moving {:?}",
+                        playlist_dir.join("Beta/Beta.mp4")
+                    )
+                )],
+            }
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                alpha.relocate_to_episode(
+                    episode(2026, 31501),
+                    "Season 2026/S2026E031501 - Alpha.mp4",
+                    None,
+                    fixed_timestamp(),
+                ),
+                Video {
+                    episode_number: Some(episode(2026, 31601)),
+                    ..beta
+                },
+                gamma.relocate_to_episode(
+                    episode(2026, 31701),
+                    "Season 2026/S2026E031701 - Gamma.mp4",
+                    None,
+                    fixed_timestamp(),
+                ),
+            ]
+        );
+    }
+
     /// Builds a migrator around the ports a test configures or asserts, over
     /// `db`'s real repositories and `videos_root`.
     fn layout_migrator(

@@ -36,7 +36,7 @@
 - [x] 2.26 `it_should_skip_videos_without_metadata_or_without_a_file` — both skips reported with reasons, nothing moved for them
 - [ ] 2.27 `it_should_change_nothing_on_a_dry_run` — report equals the real plan, filesystem and rows untouched
 - [x] 2.28 `it_should_move_nothing_on_a_second_run` — zero moves, show files rewritten
-- [ ] 2.29 `it_should_report_a_failed_move_and_continue` — one failing move: that row unchanged, others moved, one failure in the report
+- [x] 2.29 `it_should_report_a_failed_move_and_continue` — one failing move: that row unchanged, others moved, one failure in the report
 - [x] 2.30 `it_should_exit_non_zero_when_a_move_failed` — CLI returns a failure exit code
 - [ ] 2.31 `it_should_not_register_the_collections_task_or_subscribers` — handler registry has no `reconcile_plex_collections`, no deletion subscribers
 

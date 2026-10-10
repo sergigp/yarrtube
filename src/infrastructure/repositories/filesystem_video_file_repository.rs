@@ -155,6 +155,8 @@ pub struct FakeVideoFileRepository {
     /// what is already on disk when a file is moved into place.
     #[allow(clippy::type_complexity)]
     pub(crate) on_move: Option<Box<dyn Fn(&Path, &Path) + Send + Sync>>,
+    /// Sources whose `move_file` fails, as a permission error would.
+    pub(crate) failing_moves: Vec<std::path::PathBuf>,
 }
 
 #[cfg(test)]
@@ -186,6 +188,14 @@ impl FakeVideoFileRepository {
     pub fn with_on_move(self, hook: impl Fn(&Path, &Path) + Send + Sync + 'static) -> Self {
         Self {
             on_move: Some(Box::new(hook)),
+            ..self
+        }
+    }
+
+    /// The same fake, failing every move of `from`.
+    pub fn with_failing_move(self, from: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            failing_moves: [self.failing_moves, vec![from.into()]].concat(),
             ..self
         }
     }
@@ -242,6 +252,9 @@ impl VideoFileRepository for FakeVideoFileRepository {
     fn move_file(&self, from: &Path, to: &Path) -> anyhow::Result<()> {
         if let Some(hook) = &self.on_move {
             hook(from, to);
+        }
+        if self.failing_moves.iter().any(|failing| failing == from) {
+            anyhow::bail!("permission denied moving {from:?}");
         }
         self.moved
             .lock()
