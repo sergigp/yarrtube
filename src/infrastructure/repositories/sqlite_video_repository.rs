@@ -110,8 +110,8 @@ impl VideoRepository for SqliteVideoRepository {
     fn save(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
              ON CONFLICT (id) DO UPDATE SET
                 youtube_id = excluded.youtube_id,
                 title = excluded.title,
@@ -126,7 +126,9 @@ impl VideoRepository for SqliteVideoRepository {
                 playback_position_seconds = excluded.playback_position_seconds,
                 synced_at = excluded.synced_at,
                 last_errored_at = excluded.last_errored_at,
-                last_played_at = excluded.last_played_at",
+                last_played_at = excluded.last_played_at,
+                season = excluded.season,
+                episode = excluded.episode",
             params![
                 video.id.as_str(),
                 video.youtube_id.as_str(),
@@ -143,6 +145,8 @@ impl VideoRepository for SqliteVideoRepository {
                 video.synced_at.map(|s| s.to_rfc3339()),
                 video.last_errored_at.map(|e| e.to_rfc3339()),
                 video.last_played_at.map(|p| p.to_rfc3339()),
+                video.episode_number.map(|n| n.season()),
+                video.episode_number.map(|n| n.episode()),
             ],
         )
         .inspect_err(|e| {
@@ -889,6 +893,27 @@ mod tests {
 
         assert_eq!(number.unwrap(), episode(31503));
         assert_eq!(repo.find(&video.id).unwrap(), Some(video));
+    }
+
+    #[test]
+    fn it_should_persist_and_read_the_episode_number() {
+        let repo = repo();
+        let saved = video("Saved", fixed_timestamp())
+            .with_episode_number(episode(31501), fixed_timestamp());
+        let updated = video("Updated", fixed_timestamp());
+        repo.save(&saved).unwrap();
+        repo.save(&updated).unwrap();
+        let updated = updated.with_episode_number(episode(31502), fixed_timestamp());
+
+        repo.update(&updated).unwrap();
+
+        assert_eq!(
+            [
+                repo.find(&saved.id).unwrap(),
+                repo.find(&updated.id).unwrap()
+            ],
+            [Some(saved), Some(updated)]
+        );
     }
 
     fn link_to_playlist(db: &TestDatabase, video: &Video, playlist_id: &str) {
