@@ -96,4 +96,23 @@ mod tests {
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }
+
+    #[test]
+    fn it_should_overwrite_an_existing_poster() {
+        let dir = unique_temp_dir("show-file-repository-overwrite");
+        let show_dir = dir.join("channels/somechannel");
+        std::fs::create_dir_all(&show_dir).unwrap();
+        std::fs::write(show_dir.join("poster.jpg"), b"old avatar").unwrap();
+        std::fs::write(dir.join("@somechannel.jpg"), b"new avatar").unwrap();
+
+        FilesystemShowFileRepository
+            .copy_poster(&show_dir, &dir.join("@somechannel.jpg"))
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read(show_dir.join("poster.jpg")).ok(),
+            Some(b"new avatar".to_vec())
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
