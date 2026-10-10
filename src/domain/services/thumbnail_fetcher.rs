@@ -82,21 +82,7 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
             return;
         }
 
-        let placed = match self.fetch_thumbnail(video, output_dir) {
-            Ok(ThumbnailFetch::Fetched(fetched)) => self
-                .place_thumbnail(video, fetched, output_dir)
-                .inspect_err(|e| warn!(video_id = %video.id, error = %e, "failed to place fetched thumbnail"))
-                .is_ok(),
-            Ok(ThumbnailFetch::Unavailable { reason }) => {
-                warn!(video_id = %video.id, reason = reason.as_deref(), "no thumbnail available for video");
-                false
-            }
-            Err(e) => {
-                warn!(video_id = %video.id, error = %e, "failed to fetch video thumbnail");
-                false
-            }
-        };
-        if !placed {
+        if !self.fetch_and_place(video, output_dir) {
             self.discard_staging(video);
         }
     }
@@ -120,6 +106,25 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
 }
 
 impl ThumbnailFetcher {
+    /// Whether a thumbnail was fetched and placed; every other outcome is
+    /// logged.
+    fn fetch_and_place(&self, video: &Video, output_dir: &Path) -> bool {
+        match self.fetch_thumbnail(video, output_dir) {
+            Ok(ThumbnailFetch::Fetched(fetched)) => self
+                .place_thumbnail(video, fetched, output_dir)
+                .inspect_err(|e| warn!(video_id = %video.id, error = %e, "failed to place fetched thumbnail"))
+                .is_ok(),
+            Ok(ThumbnailFetch::Unavailable { reason }) => {
+                warn!(video_id = %video.id, reason = reason.as_deref(), "no thumbnail available for video");
+                false
+            }
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to fetch video thumbnail");
+                false
+            }
+        }
+    }
+
     fn fetch_thumbnail(&self, video: &Video, _output_dir: &Path) -> anyhow::Result<ThumbnailFetch> {
         self.video_downloader_repository.fetch_thumbnail(
             &video.youtube_id.to_url(),
