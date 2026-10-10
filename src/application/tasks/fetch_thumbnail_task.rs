@@ -252,10 +252,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.10"]
-    fn it_should_succeed_without_recording_if_thumbnail_fetch_fails() {
+    fn it_should_leave_the_video_untouched_when_the_thumbnail_fetch_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository =
             Arc::new(FakeVideoDownloaderRepository::default().with_thumbnail_error());
         let video = my_video();
@@ -265,7 +265,7 @@ mod tests {
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
                 video_downloader_repository.clone(),
-                Arc::new(FakeVideoFileRepository::default()),
+                video_file_repository.clone(),
                 Arc::new(SqliteTaskRepository::new(
                     db.database(),
                     Arc::new(FixedClock(later())),
@@ -279,6 +279,11 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![PathBuf::from("/videos/.downloads/yt1")]
+        );
         assert_eq!(
             *video_downloader_repository.thumbnail_calls.lock().unwrap(),
             vec![thumbnail_call()]

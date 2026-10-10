@@ -82,20 +82,22 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
             return;
         }
 
-        match self.fetch_thumbnail(video, output_dir) {
-            Ok(ThumbnailFetch::Fetched(fetched)) => {
-                if let Err(e) = self.place_thumbnail(video, fetched, output_dir) {
-                    warn!(video_id = %video.id, error = %e, "failed to place fetched thumbnail");
-                }
+        let placed = match self.fetch_thumbnail(video, output_dir) {
+            Ok(ThumbnailFetch::Fetched(fetched)) => self
+                .place_thumbnail(video, fetched, output_dir)
+                .inspect_err(|e| warn!(video_id = %video.id, error = %e, "failed to place fetched thumbnail"))
+                .is_ok(),
+            Ok(ThumbnailFetch::Unavailable { reason }) => {
+                warn!(video_id = %video.id, reason = reason.as_deref(), "no thumbnail available for video");
+                false
             }
-            Ok(ThumbnailFetch::Unavailable { reason }) => warn!(
-                video_id = %video.id,
-                reason = reason.as_deref(),
-                "no thumbnail available for video"
-            ),
             Err(e) => {
                 warn!(video_id = %video.id, error = %e, "failed to fetch video thumbnail");
+                false
             }
+        };
+        if !placed {
+            self.discard_staging(video);
         }
     }
 
@@ -153,5 +155,14 @@ impl ThumbnailFetcher {
             .move_file(&fetched.path, &output_dir.join(&thumbnail_filename))?;
         self.video_repository
             .update_thumbnail(&video.id, &thumbnail_filename, self.clock.now())
+    }
+
+    /// Best-effort: a leftover staging dir is harmless, Plex and Kodi ignore
+    /// the staging root.
+    fn discard_staging(&self, video: &Video) {
+        let dir = staging_dir(&self.videos_path, &video.youtube_id);
+        if let Err(e) = self.video_file_repository.delete_dir_recursive(&dir) {
+            warn!(video_id = %video.id, error = %e, "failed to discard the staging dir");
+        }
     }
 }
