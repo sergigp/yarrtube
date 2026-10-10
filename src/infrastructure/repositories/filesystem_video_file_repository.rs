@@ -1,3 +1,4 @@
+use crate::domain::video::is_season_folder;
 use std::path::Path;
 
 /// yt-dlp's own in-progress-download marker extensions — never treated as
@@ -19,7 +20,8 @@ pub trait VideoFileRepository: Send + Sync {
     /// "nothing to delete" (`Ok(false)`), not an error.
     fn delete(&self, output_dir: &Path, filename: &str) -> anyhow::Result<bool>;
 
-    /// Lists the filenames currently present in `output_dir`, excluding
+    /// Lists the entries currently present in `output_dir` plus every file
+    /// inside its `Season ` folders (as `Season <s>/<file>`), excluding
     /// yt-dlp's own in-progress-download temporary files. A missing
     /// `output_dir` is an empty listing (`Ok(vec![])`), not an error.
     fn list(&self, output_dir: &Path) -> anyhow::Result<Vec<String>>;
@@ -74,35 +76,19 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
     }
 
     fn list(&self, output_dir: &Path) -> anyhow::Result<Vec<String>> {
-        let entries = match std::fs::read_dir(output_dir) {
-            Ok(entries) => entries,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => {
-                tracing::error!(output_dir = ?output_dir, error = %e, "failed to read output directory");
-                return Err(anyhow::anyhow!(
-                    "failed to read output directory {output_dir:?}: {e}"
-                ));
-            }
-        };
-
-        entries
-            .filter_map(|entry| {
-                let entry = match entry {
-                    Ok(entry) => entry,
-                    Err(e) => {
-                        tracing::error!(output_dir = ?output_dir, error = %e, "failed to read directory entry");
-                        return Some(Err(anyhow::anyhow!("failed to read directory entry: {e}")));
-                    }
-                };
-                if is_in_progress_temp_file(&entry.path()) {
-                    return None;
-                }
-                Some(entry.file_name().into_string().map_err(|name| {
-                    tracing::error!(output_dir = ?output_dir, filename = ?name, "non-UTF-8 filename");
-                    anyhow::anyhow!("non-UTF-8 filename: {name:?}")
-                }))
+        let entries = list_entries(output_dir)?;
+        let season_files = entries
+            .iter()
+            .filter(|entry| is_season_folder(entry) && output_dir.join(entry).is_dir())
+            .map(|season| {
+                Ok(list_entries(&output_dir.join(season))?
+                    .into_iter()
+                    .map(|file| format!("{season}/{file}"))
+                    .collect::<Vec<_>>())
             })
-            .collect()
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .concat();
+        Ok([entries, season_files].concat())
     }
 
     fn delete_dir_recursive(&self, dir: &Path) -> anyhow::Result<()> {
@@ -127,6 +113,40 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
     fn remove_if_empty(&self, _dir: &Path) -> anyhow::Result<()> {
         Ok(())
     }
+}
+
+/// The entries directly in `output_dir`, excluding yt-dlp's in-progress
+/// temp files; a missing `output_dir` has none.
+fn list_entries(output_dir: &Path) -> anyhow::Result<Vec<String>> {
+    let entries = match std::fs::read_dir(output_dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => {
+            tracing::error!(output_dir = ?output_dir, error = %e, "failed to read output directory");
+            return Err(anyhow::anyhow!(
+                "failed to read output directory {output_dir:?}: {e}"
+            ));
+        }
+    };
+
+    entries
+        .filter_map(|entry| {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => {
+                    tracing::error!(output_dir = ?output_dir, error = %e, "failed to read directory entry");
+                    return Some(Err(anyhow::anyhow!("failed to read directory entry: {e}")));
+                }
+            };
+            if is_in_progress_temp_file(&entry.path()) {
+                return None;
+            }
+            Some(entry.file_name().into_string().map_err(|name| {
+                tracing::error!(output_dir = ?output_dir, filename = ?name, "non-UTF-8 filename");
+                anyhow::anyhow!("non-UTF-8 filename: {name:?}")
+            }))
+        })
+        .collect()
 }
 
 fn is_in_progress_temp_file(path: &Path) -> bool {
@@ -326,6 +346,31 @@ mod tests {
         listed.sort();
 
         assert_eq!(listed, vec!["One.mp4".to_string(), "Two.mp4".to_string()]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_list_top_level_entries_and_season_files() {
+        let dir = unique_temp_dir("video-file-repository-list-seasons");
+        std::fs::write(dir.join("tvshow.nfo"), b"").unwrap();
+        std::fs::create_dir_all(dir.join("Legacy")).unwrap();
+        std::fs::write(dir.join("Legacy/Legacy.mp4"), b"").unwrap();
+        std::fs::create_dir_all(dir.join("Season 2026")).unwrap();
+        std::fs::write(dir.join("Season 2026/S2026E031501 - One.mp4"), b"").unwrap();
+        std::fs::write(dir.join("Season 2026/S2026E031502 - Two.mp4.part"), b"").unwrap();
+
+        let mut listed = FilesystemVideoFileRepository.list(&dir).unwrap();
+        listed.sort();
+
+        assert_eq!(
+            listed,
+            vec![
+                "Legacy".to_string(),
+                "Season 2026".to_string(),
+                "Season 2026/S2026E031501 - One.mp4".to_string(),
+                "tvshow.nfo".to_string(),
+            ]
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
