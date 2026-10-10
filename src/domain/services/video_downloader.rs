@@ -224,9 +224,7 @@ impl VideoDownloader {
         self.move_into_place(&downloaded, output_dir, &files)?;
         let downloaded_video =
             self.record_downloaded(video, &downloaded, &files, quality, number)?;
-        if let Some(metadata) = &metadata {
-            self.save_metadata(&downloaded_video, metadata, &number, &files.nfo_path);
-        }
+        self.save_metadata(&downloaded_video, metadata, &number, &files);
         self.discard_staging(&downloaded_video);
         self.publish_downloaded(&downloaded_video, output_dir, &number.season_folder());
         Ok(())
@@ -284,19 +282,26 @@ impl VideoDownloader {
         }
     }
 
-    /// Records the downloaded video's metadata (rewriting its NFO). A failure
-    /// is logged and swallowed, never failing the download; reconcile
+    /// Records the downloaded video's metadata (rewriting its NFO), fetching
+    /// it once more when the fetch before the download failed. A failure is
+    /// logged and swallowed, never failing the download; reconcile
     /// regenerates it.
     fn save_metadata(
         &self,
         video: &Video,
-        metadata: &VideoMetadata,
+        metadata: Option<VideoMetadata>,
         number: &EpisodeNumber,
-        nfo_path: &Path,
+        files: &EpisodeFiles,
     ) {
-        if let Err(e) = self
-            .video_metadata_repository
-            .save(&video.id, metadata, number, nfo_path)
+        let Some(metadata) = metadata.or_else(|| {
+            self.fetch_metadata(video)
+                .map(|metadata| metadata.with_thumb(files.thumb.clone()))
+        }) else {
+            return;
+        };
+        if let Err(e) =
+            self.video_metadata_repository
+                .save(&video.id, &metadata, number, &files.nfo_path)
         {
             warn!(video_id = %video.id, error = %e, "failed to save video metadata");
         }

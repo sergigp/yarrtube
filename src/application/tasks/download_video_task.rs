@@ -1301,20 +1301,19 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.6"]
     fn it_should_generate_metadata_if_fetch_fails_only_before_the_download() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         let output_dir = tempfile::tempdir().unwrap();
-        let video_dir = output_dir.path().join(FAKE_FRESH_FOLDER);
-        std::fs::create_dir_all(&video_dir).unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::new(true)),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                staged_download(),
+            )),
             Arc::new(FakeVideoFileRepository::default()),
             Arc::new(FailingOnceYoutubeMetadataRepository::new(youtube_metadata())),
             video_metadata_repository.clone(),
@@ -1325,11 +1324,19 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_metadata_repository.find(&video.id).unwrap(),
-            Some(generated_metadata(None))
+            Some(generated_metadata(Some("S2026E031501 - My Video.jpg")))
         );
         assert_eq!(
-            std::fs::read_to_string(video_dir.join(MOVIE_NFO_FILENAME)).unwrap(),
-            render_episode_nfo(&generated_metadata(None), &episode_number())
+            std::fs::read_to_string(
+                output_dir
+                    .path()
+                    .join("Season 2026/S2026E031501 - My Video.nfo")
+            )
+            .unwrap(),
+            render_episode_nfo(
+                &generated_metadata(Some("S2026E031501 - My Video.jpg")),
+                &published_episode()
+            )
         );
     }
 
