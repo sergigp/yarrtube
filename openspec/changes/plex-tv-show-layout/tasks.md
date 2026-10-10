@@ -16,7 +16,7 @@
 - [x] 2.6 `it_should_download_under_its_episode_name_without_metadata` — Data API failing twice: file placed, no nfo, no metadata row
 - [x] 2.7 `it_should_discard_the_staging_dir_when_the_download_fails` — staging gone, season folder untouched
 - [x] 2.8 `it_should_discard_the_download_when_the_video_was_deleted_meanwhile` — staging gone, nothing recorded, show dir untouched
-- [ ] 2.9 `it_should_place_a_prefetched_thumbnail_as_the_episode_image` — thumbnail task: jpg at episode path, number and thumbnail recorded, status untouched
+- [x] 2.9 `it_should_place_a_prefetched_thumbnail_as_the_episode_image` — thumbnail task: jpg at episode path, number and thumbnail recorded, status untouched
 - [ ] 2.10 `it_should_leave_the_video_untouched_when_the_thumbnail_fetch_fails` — staging removed, no number, no thumbnail
 - [ ] 2.11 `it_should_write_the_show_files_when_a_channel_is_created` — `tvshow.nfo` with name and channel id, `poster.jpg` equal to the avatar
 - [ ] 2.12 `it_should_write_the_show_nfo_without_a_poster_for_a_playlist` — playlist created: nfo with playlist id, no poster

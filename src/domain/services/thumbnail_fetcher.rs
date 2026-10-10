@@ -3,6 +3,7 @@ use crate::domain::video::Video;
 use crate::domain::video::VideoRecordId;
 use crate::domain::video::VideoStatus;
 use crate::domain::video::staging_dir;
+use crate::domain::video::video_filename::episode_relative_path;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -139,10 +140,18 @@ impl ThumbnailFetcher {
     /// video may have changed its status since `video` was read.
     fn place_thumbnail(
         &self,
-        _video: &Video,
-        _fetched: FetchedThumbnail,
-        _output_dir: &Path,
+        video: &Video,
+        fetched: FetchedThumbnail,
+        output_dir: &Path,
     ) -> anyhow::Result<()> {
-        Ok(())
+        let published_at = fetched.published_at.unwrap_or_else(|| self.clock.now());
+        let number = self
+            .video_repository
+            .assign_episode_number(&video.id, published_at)?;
+        let thumbnail_filename = episode_relative_path(&number, &video.title, "jpg");
+        self.video_file_repository
+            .move_file(&fetched.path, &output_dir.join(&thumbnail_filename))?;
+        self.video_repository
+            .update_thumbnail(&video.id, &thumbnail_filename, self.clock.now())
     }
 }

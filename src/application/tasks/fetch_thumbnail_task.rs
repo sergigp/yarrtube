@@ -45,7 +45,7 @@ impl TaskHandler for FetchThumbnailTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::video::{Video, VideoId};
+    use crate::domain::video::{EpisodeNumber, Video, VideoId};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
@@ -58,15 +58,15 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.9"]
-    fn it_should_fetch_and_record_the_thumbnail() {
+    fn it_should_place_a_prefetched_thumbnail_as_the_episode_image() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
                 FetchedThumbnail {
-                    path: std::path::PathBuf::from("My Video.jpg"),
-                    published_at: None,
+                    path: PathBuf::from("yt1.jpg"),
+                    published_at: Some(published_at()),
                 },
             )),
         );
@@ -77,7 +77,7 @@ mod tests {
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
                 video_downloader_repository.clone(),
-                Arc::new(FakeVideoFileRepository::default()),
+                video_file_repository.clone(),
                 Arc::new(SqliteTaskRepository::new(
                     db.database(),
                     Arc::new(FixedClock(later())),
@@ -92,7 +92,18 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![video.with_thumbnail("My Video/My Video.jpg", later())]
+            vec![
+                video
+                    .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), later())
+                    .with_thumbnail("Season 2026/S2026E031501 - My Video.jpg", later())
+            ]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![(
+                PathBuf::from("/videos/.downloads/yt1/yt1.jpg"),
+                PathBuf::from("/videos/my-playlist/Season 2026/S2026E031501 - My Video.jpg"),
+            )]
         );
         assert_eq!(
             *video_downloader_repository.thumbnail_calls.lock().unwrap(),
@@ -294,6 +305,13 @@ mod tests {
         }
         .payload()
         .to_string()
+    }
+
+    /// The publish time `yt-dlp` reports with the thumbnail.
+    fn published_at() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339("2026-03-15T10:00:00Z")
+            .unwrap()
+            .to_utc()
     }
 
     fn fixed_timestamp() -> DateTime<Utc> {
