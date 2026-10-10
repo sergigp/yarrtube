@@ -261,20 +261,39 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 3.18"]
-    fn it_should_write_movie_nfo_and_record_a_row_on_save() {
+    fn it_should_write_an_episode_nfo_with_season_episode_and_aired() {
         let repo = repo();
-        let video_dir = unique_temp_dir("video-metadata-save");
-        let video_id = VideoRecordId::new_generated();
+        let show_dir = unique_temp_dir("video-metadata-episode-nfo");
+        let nfo_path = show_dir.join("Season 2024").join(NFO);
+        let metadata = VideoMetadata {
+            title: "Fish & Chips <live>".to_string(),
+            ..metadata()
+        };
 
-        repo.save(&video_id, &metadata(), &number(), &video_dir.join(NFO))
-            .unwrap();
+        repo.write_nfo(&metadata, &number(), &nfo_path).unwrap();
 
-        assert!(video_dir.join(MOVIE_NFO_FILENAME).is_file());
-        let found = repo.find(&video_id).unwrap().unwrap();
-        assert_eq!(found.title, "My Video");
-        assert_eq!(found.tags, vec!["tag1".to_string(), "tag2".to_string()]);
-        std::fs::remove_dir_all(&video_dir).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&nfo_path).ok(),
+            Some(
+                concat!(
+                    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><episodedetails>"#,
+                    "<title>Fish &amp; Chips &lt;live&gt;</title>",
+                    "<plot>A description</plot>",
+                    "<season>2024</season>",
+                    "<episode>10201</episode>",
+                    "<aired>2024-01-02</aired>",
+                    "<premiered>2024-01-02</premiered>",
+                    "<year>2024</year>",
+                    "<studio>My Channel</studio>",
+                    "<director>My Channel</director>",
+                    r#"<uniqueid type="youtube">yt1</uniqueid>"#,
+                    "<thumb>My Video.jpg</thumb>",
+                    "</episodedetails>",
+                )
+                .to_string()
+            )
+        );
+        std::fs::remove_dir_all(&show_dir).unwrap();
     }
 
     #[test]
