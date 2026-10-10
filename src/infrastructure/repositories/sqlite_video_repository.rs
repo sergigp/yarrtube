@@ -4,9 +4,7 @@ use crate::domain::video::{VideoId, VideoRecordId};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-#[cfg(test)]
-use rusqlite::Connection;
-use rusqlite::{OptionalExtension, Row, params, params_from_iter};
+use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use std::collections::HashMap;
 
 const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode";
@@ -285,24 +283,11 @@ impl VideoRepository for SqliteVideoRepository {
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<EpisodeNumber> {
         let conn = self.db.write()?;
+        if let Some(recorded) = Self::recorded_episode_number(&conn, id)? {
+            return Ok(recorded);
+        }
         let first = EpisodeNumber::first_of_day(published_at);
-        let last_of_day: Option<u32> = conn
-            .query_row(
-                "SELECT MAX(episode) FROM videos
-                 WHERE season = ?2 AND episode / 100 = ?3 AND id IN (
-                     SELECT video_id FROM playlist_videos WHERE playlist_id IN (
-                         SELECT playlist_id FROM playlist_videos WHERE video_id = ?1)
-                     UNION
-                     SELECT video_id FROM channel_videos WHERE channel_id IN (
-                         SELECT channel_id FROM channel_videos WHERE video_id = ?1))",
-                params![id.as_str(), first.season(), first.same_day_prefix()],
-                |row| row.get(0),
-            )
-            .inspect_err(|e| {
-                tracing::error!(video_id = %id, error = %e, "failed to find the last episode of the day")
-            })
-            .context("failed to find the last episode of the day")?;
-        let number = match last_of_day {
+        let number = match Self::last_sibling_episode_of_day(&conn, id, &first)? {
             Some(last) => EpisodeNumber::new(first.season(), last + 1)?,
             None => first,
         };
@@ -310,9 +295,9 @@ impl VideoRepository for SqliteVideoRepository {
             "UPDATE videos SET season = ?2, episode = ?3 WHERE id = ?1",
             params![id.as_str(), number.season(), number.episode()],
         )
-        .inspect_err(|e| {
-            tracing::error!(video_id = %id, error = %e, "failed to record the episode number")
-        })
+        .inspect_err(
+            |e| tracing::error!(video_id = %id, error = %e, "failed to record the episode number"),
+        )
         .context("failed to record the episode number")?;
         Ok(number)
     }
@@ -323,6 +308,50 @@ impl VideoRepository for SqliteVideoRepository {
 }
 
 impl SqliteVideoRepository {
+    fn recorded_episode_number(
+        conn: &Connection,
+        id: &VideoRecordId,
+    ) -> anyhow::Result<Option<EpisodeNumber>> {
+        let (season, episode): (Option<i32>, Option<u32>) = conn
+            .query_row(
+                "SELECT season, episode FROM videos WHERE id = ?1",
+                params![id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .inspect_err(|e| {
+                tracing::error!(video_id = %id, error = %e, "failed to read the episode number")
+            })
+            .context("failed to read the episode number")?;
+        season
+            .zip(episode)
+            .map(|(season, episode)| EpisodeNumber::new(season, episode).map_err(Into::into))
+            .transpose()
+    }
+
+    /// The highest episode recorded on `first`'s day among the videos sharing
+    /// a playlist or channel with `id`.
+    fn last_sibling_episode_of_day(
+        conn: &Connection,
+        id: &VideoRecordId,
+        first: &EpisodeNumber,
+    ) -> anyhow::Result<Option<u32>> {
+        conn.query_row(
+            "SELECT MAX(episode) FROM videos
+             WHERE season = ?2 AND episode / 100 = ?3 AND id IN (
+                 SELECT video_id FROM playlist_videos WHERE playlist_id IN (
+                     SELECT playlist_id FROM playlist_videos WHERE video_id = ?1)
+                 UNION
+                 SELECT video_id FROM channel_videos WHERE channel_id IN (
+                     SELECT channel_id FROM channel_videos WHERE video_id = ?1))",
+            params![id.as_str(), first.season(), first.same_day_prefix()],
+            |row| row.get(0),
+        )
+        .inspect_err(|e| {
+            tracing::error!(video_id = %id, error = %e, "failed to find the last episode of the day")
+        })
+        .context("failed to find the last episode of the day")
+    }
+
     fn read_row(row: &Row<'_>) -> rusqlite::Result<VideoRow> {
         Ok(VideoRow {
             id: row.get(0)?,

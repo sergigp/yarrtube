@@ -176,12 +176,13 @@ mod tests {
         let nfo_when_media_moved = Arc::new(std::sync::Mutex::new(None));
         let observed = nfo_when_media_moved.clone();
         let observed_nfo_path = nfo_path.clone();
-        let video_file_repository =
-            Arc::new(FakeVideoFileRepository::default().with_on_move(move |_, to| {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default().with_on_move(
+            move |_, to| {
                 if to.extension().is_some_and(|ext| ext == "mp4") {
                     *observed.lock().unwrap() = std::fs::read_to_string(&observed_nfo_path).ok();
                 }
-            }));
+            },
+        ));
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = DownloadVideoTask::new(video_downloader(
@@ -215,15 +216,19 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
         let output_dir = tempfile::tempdir().unwrap();
-        let first = Video::create(VideoId::new("yt0").unwrap(), "First Video", fixed_timestamp())
-            .mark_downloaded(
-                Quality::High,
-                "Season 2026/S2026E031501 - First Video.mp4",
-                None,
-                None,
-                fixed_timestamp(),
-            )
-            .with_episode_number(published_episode(), fixed_timestamp());
+        let first = Video::create(
+            VideoId::new("yt0").unwrap(),
+            "First Video",
+            fixed_timestamp(),
+        )
+        .mark_downloaded(
+            Quality::High,
+            "Season 2026/S2026E031501 - First Video.mp4",
+            None,
+            None,
+            fixed_timestamp(),
+        )
+        .with_episode_number(published_episode(), fixed_timestamp());
         let video = my_video();
         video_repository.save(&first).unwrap();
         video_repository.update(&first).unwrap();
@@ -275,6 +280,66 @@ mod tests {
                         EpisodeNumber::new(2026, 31502).unwrap(),
                         fixed_timestamp()
                     )
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_reuse_the_number_recorded_by_the_thumbnail_fetch() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let output_dir = tempfile::tempdir().unwrap();
+        let prefetched_number = EpisodeNumber::new(2026, 31503).unwrap();
+        let video = my_video()
+            .with_thumbnail("Season 2026/S2026E031503 - My Video.jpg", fixed_timestamp())
+            .with_episode_number(prefetched_number, fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        video_repository.update(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                staged_download(),
+            )),
+            video_file_repository.clone(),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "Season 2026/S2026E031503 - My Video.mp4",
+                        Some("Season 2026/S2026E031503 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+            ]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![
+                (
+                    PathBuf::from("/videos/.downloads/yt1/yt1.mp4"),
+                    output_dir
+                        .path()
+                        .join("Season 2026/S2026E031503 - My Video.mp4"),
+                ),
+                (
+                    PathBuf::from("/videos/.downloads/yt1/yt1.jpg"),
+                    output_dir
+                        .path()
+                        .join("Season 2026/S2026E031503 - My Video.jpg"),
+                ),
             ]
         );
     }
@@ -891,32 +956,6 @@ mod tests {
                     )
                     .with_episode_number(published_episode(), fixed_timestamp())
             ]
-        );
-    }
-
-    #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.4"]
-    fn it_should_reuse_the_existing_video_folder() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
-        video_repository.save(&video).unwrap();
-        let downloader = Arc::new(FakeVideoDownloaderRepository::new(true));
-        let task = DownloadVideoTask::new(video_downloader(
-            &db,
-            video_repository.clone(),
-            downloader.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-        ));
-
-        let result = run(&task, &payload_for(video.id.as_str()), false);
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(
-            *downloader.calls.lock().unwrap(),
-            vec![download_call("/videos/.downloads/yt1")]
         );
     }
 

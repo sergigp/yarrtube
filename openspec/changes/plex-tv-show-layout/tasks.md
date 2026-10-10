@@ -11,7 +11,7 @@
 - [x] 2.1 `it_should_save_a_downloaded_video_as_an_episode_in_its_season_folder` — download task places media/jpg/nfo at `Season 2026/S2026E031501 - Title.*`, records relative filenames and the number, removes staging, publishes `VideoDownloaded` with the show dir
 - [x] 2.2 `it_should_write_the_episode_nfo_before_moving_the_media_into_place` — fake file repository order shows the nfo write before the media move
 - [x] 2.3 `it_should_number_two_same_day_videos_of_one_show_consecutively` — second same-day download gets `031502`
-- [ ] 2.4 `it_should_reuse_the_number_recorded_by_the_thumbnail_fetch` — download lands next to the prefetched jpg under the same base name
+- [x] 2.4 `it_should_reuse_the_number_recorded_by_the_thumbnail_fetch` — download lands next to the prefetched jpg under the same base name
 - [ ] 2.5 `it_should_number_from_the_upload_date_when_no_timestamp_is_reported` — number derived from `upload_date` only
 - [ ] 2.6 `it_should_download_under_its_episode_name_without_metadata` — Data API failing twice: file placed, no nfo, no metadata row
 - [ ] 2.7 `it_should_discard_the_staging_dir_when_the_download_fails` — staging gone, season folder untouched
