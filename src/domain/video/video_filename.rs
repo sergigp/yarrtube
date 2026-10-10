@@ -47,14 +47,18 @@ impl fmt::Display for VideoFilename {
 
 /// An episode's file base name (no extension): its episode code followed by
 /// the sanitized title, e.g. `S2026E031501 - My Video`.
-pub fn episode_base_name(_number: &EpisodeNumber, _title: &str) -> String {
-    String::new()
+pub fn episode_base_name(number: &EpisodeNumber, title: &str) -> String {
+    format!("{} - {}", number.code(), VideoFilename::from_title(title))
 }
 
 /// An episode file's path relative to its show directory:
 /// `Season <year>/<base name>.<ext>`.
-pub fn episode_relative_path(_number: &EpisodeNumber, _title: &str, _ext: &str) -> String {
-    String::new()
+pub fn episode_relative_path(number: &EpisodeNumber, title: &str, ext: &str) -> String {
+    format!(
+        "{}/{}.{ext}",
+        number.season_folder(),
+        episode_base_name(number, title)
+    )
 }
 
 /// Keeps letters, marks, numbers and punctuation (Unicode general category

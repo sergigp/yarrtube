@@ -1,6 +1,10 @@
 use crate::domain::video::VideoId;
 use std::path::{Path, PathBuf};
 
+/// Where downloads are staged under the videos root; dot-prefixed so Plex
+/// and Kodi ignore it.
+pub const STAGING_DIRNAME: &str = ".downloads";
+
 /// A show's NFO, at the root of its playlist's or channel's directory.
 pub const SHOW_NFO_FILENAME: &str = "tvshow.nfo";
 /// A show's poster, at the root of its playlist's or channel's directory.
@@ -41,8 +45,10 @@ pub fn nfo_path_for(_relative_path: &str) -> String {
 
 /// Where a video's download or thumbnail fetch is staged before being moved
 /// into its show: `<videos root>/.downloads/<youtube id>`.
-pub fn staging_dir(videos_path: &str, _youtube_id: &VideoId) -> PathBuf {
-    PathBuf::from(videos_path)
+pub fn staging_dir(videos_path: &str, youtube_id: &VideoId) -> PathBuf {
+    Path::new(videos_path)
+        .join(STAGING_DIRNAME)
+        .join(youtube_id.as_str())
 }
 
 #[cfg(test)]

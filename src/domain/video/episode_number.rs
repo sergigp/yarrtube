@@ -1,5 +1,5 @@
 use crate::domain::shared::ValidationError;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, Utc};
 
 /// A video's TV-show episode number within its show: the season is the
 /// publish year and the episode is the publish month and day followed by a
@@ -19,10 +19,10 @@ impl EpisodeNumber {
 
     /// The day's first episode (index `01`) for a video published at
     /// `published_at`.
-    pub fn first_of_day(_published_at: DateTime<Utc>) -> Self {
+    pub fn first_of_day(published_at: DateTime<Utc>) -> Self {
         Self {
-            season: 0,
-            episode: 0,
+            season: published_at.year(),
+            episode: (published_at.month() * 100 + published_at.day()) * 100 + 1,
         }
     }
 
@@ -41,11 +41,11 @@ impl EpisodeNumber {
 
     /// The `S<season>E<MMDDii>` code, e.g. `S2026E031501`.
     pub fn code(&self) -> String {
-        String::new()
+        format!("S{}E{:06}", self.season, self.episode)
     }
 
     /// The season folder name, e.g. `Season 2026`.
     pub fn season_folder(&self) -> String {
-        String::new()
+        format!("Season {}", self.season)
     }
 }

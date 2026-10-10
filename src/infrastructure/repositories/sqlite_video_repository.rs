@@ -9,7 +9,7 @@ use rusqlite::Connection;
 use rusqlite::{OptionalExtension, Row, params, params_from_iter};
 use std::collections::HashMap;
 
-const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at";
+const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode";
 
 /// A `videos` row as read, before its values are parsed into a `Video`.
 struct VideoRow {
@@ -28,6 +28,8 @@ struct VideoRow {
     synced_at: Option<String>,
     last_errored_at: Option<String>,
     last_played_at: Option<String>,
+    season: Option<i32>,
+    episode: Option<u32>,
 }
 
 pub trait VideoRepository: Send + Sync {
@@ -187,7 +189,7 @@ impl VideoRepository for SqliteVideoRepository {
     fn update(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14
+            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16
              WHERE id = ?1",
             params![
                 video.id.as_str(),
@@ -204,6 +206,8 @@ impl VideoRepository for SqliteVideoRepository {
                 video.synced_at.map(|s| s.to_rfc3339()),
                 video.last_errored_at.map(|e| e.to_rfc3339()),
                 video.last_played_at.map(|p| p.to_rfc3339()),
+                video.episode_number.map(|n| n.season()),
+                video.episode_number.map(|n| n.episode()),
             ],
         )
         .inspect_err(|e| {
@@ -306,6 +310,8 @@ impl SqliteVideoRepository {
             synced_at: row.get(12)?,
             last_errored_at: row.get(13)?,
             last_played_at: row.get(14)?,
+            season: row.get(15)?,
+            episode: row.get(16)?,
         })
     }
 
@@ -338,7 +344,11 @@ impl SqliteVideoRepository {
                 .last_played_at
                 .map(|p| Self::parse_timestamp(&p, "last_played_at"))
                 .transpose()?,
-            episode_number: None,
+            episode_number: row
+                .season
+                .zip(row.episode)
+                .map(|(season, episode)| EpisodeNumber::new(season, episode))
+                .transpose()?,
         })
     }
 

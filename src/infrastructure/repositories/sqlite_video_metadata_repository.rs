@@ -1,5 +1,5 @@
 use crate::domain::video::{EpisodeNumber, VideoRecordId};
-use crate::domain::video_metadata::VideoMetadata;
+use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -67,12 +67,18 @@ impl SqliteVideoMetadataRepository {
         Self { db }
     }
 
+    /// Writes the episode NFO, creating its season folder first.
     fn write_episode_nfo(
-        _metadata: &VideoMetadata,
-        _number: &EpisodeNumber,
-        _nfo_path: &Path,
+        metadata: &VideoMetadata,
+        number: &EpisodeNumber,
+        nfo_path: &Path,
     ) -> anyhow::Result<()> {
-        Ok(())
+        if let Some(season_dir) = nfo_path.parent() {
+            std::fs::create_dir_all(season_dir)
+                .map_err(|e| anyhow::anyhow!("failed to create {season_dir:?}: {e}"))?;
+        }
+        std::fs::write(nfo_path, render_episode_nfo(metadata, number))
+            .map_err(|e| anyhow::anyhow!("failed to write {nfo_path:?}: {e}"))
     }
 }
 

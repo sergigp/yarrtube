@@ -1,3 +1,4 @@
+use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater};
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::{
     ChannelAvatarRepository, FilesystemChannelAvatarRepository,
@@ -61,10 +62,6 @@ use crate::infrastructure::shared::system_clock::{Clock, SystemClock};
 use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
-
-/// The staging directory's name under the videos root; dot-prefixed so
-/// Plex and Kodi ignore it.
-pub const STAGING_DIRNAME: &str = ".downloads";
 
 /// Where the adapters that touch the outside world point at.
 pub struct InfrastructureSettings {

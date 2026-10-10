@@ -1,8 +1,8 @@
+use crate::domain::event::DomainEvent;
 use crate::domain::services::{MetadataGenerator, MetadataGeneratorApi};
 use crate::domain::shared::Quality;
-use crate::domain::video::Video;
-use crate::domain::video::VideoRecordId;
-use crate::domain::video::staging_dir;
+use crate::domain::video::video_filename::{episode_base_name, episode_relative_path};
+use crate::domain::video::{EpisodeNumber, Video, VideoDownloaded, VideoRecordId, staging_dir};
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
@@ -13,7 +13,7 @@ use crate::infrastructure::repositories::youtube_video_downloader_repository::{
 };
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
@@ -209,18 +209,137 @@ impl VideoDownloader {
     /// and publishes `VideoDownloaded`.
     fn place_download(
         &self,
-        _video: Video,
-        _downloaded: DownloadedVideo,
-        _quality: Quality,
-        _output_dir: &Path,
-        _metadata: Option<VideoMetadata>,
+        video: Video,
+        downloaded: DownloadedVideo,
+        quality: Quality,
+        output_dir: &Path,
+        metadata: Option<VideoMetadata>,
     ) -> anyhow::Result<()> {
+        let number = self.assign_episode_number(&video, &downloaded)?;
+        let files = EpisodeFiles::new(&number, &video.title, &downloaded, output_dir);
+        let metadata = metadata.map(|metadata| metadata.with_thumb(files.thumb.clone()));
+        if let Some(metadata) = &metadata {
+            self.write_nfo(&video, metadata, &number, &files.nfo_path);
+        }
+        self.move_into_place(&downloaded, output_dir, &files)?;
+        let downloaded_video =
+            self.record_downloaded(video, &downloaded, &files, quality, number)?;
+        if let Some(metadata) = &metadata {
+            self.save_metadata(&downloaded_video, metadata, &number, &files.nfo_path);
+        }
+        self.discard_staging(&downloaded_video);
+        self.publish_downloaded(&downloaded_video, output_dir, &number.season_folder());
         Ok(())
     }
 
+    /// The number recorded for the video, or a fresh one from the publish
+    /// time `yt-dlp` reported (now, when it reported none).
+    fn assign_episode_number(
+        &self,
+        video: &Video,
+        downloaded: &DownloadedVideo,
+    ) -> anyhow::Result<EpisodeNumber> {
+        let published_at = downloaded.published_at.unwrap_or_else(|| self.clock.now());
+        self.video_repository
+            .assign_episode_number(&video.id, published_at)
+    }
+
+    fn record_downloaded(
+        &self,
+        video: Video,
+        downloaded: &DownloadedVideo,
+        files: &EpisodeFiles,
+        quality: Quality,
+        number: EpisodeNumber,
+    ) -> anyhow::Result<Video> {
+        let now = self.clock.now();
+        let downloaded_video = video
+            .mark_downloaded(
+                quality,
+                files.filename.clone(),
+                files.thumbnail_filename.clone(),
+                downloaded.duration_seconds,
+                now,
+            )
+            .with_episode_number(number, now);
+        self.video_repository.update(&downloaded_video)?;
+        info!(video_id = %downloaded_video.id, "video downloaded");
+        Ok(downloaded_video)
+    }
+
+    /// Best-effort: without it the episode still lands, and Plex imports it
+    /// without its NFO until `save_metadata` or reconcile writes one.
+    fn write_nfo(
+        &self,
+        video: &Video,
+        metadata: &VideoMetadata,
+        number: &EpisodeNumber,
+        nfo_path: &Path,
+    ) {
+        if let Err(e) = self
+            .video_metadata_repository
+            .write_nfo(metadata, number, nfo_path)
+        {
+            warn!(video_id = %video.id, error = %e, "failed to write the episode NFO");
+        }
+    }
+
+    /// Records the downloaded video's metadata (rewriting its NFO). A failure
+    /// is logged and swallowed, never failing the download; reconcile
+    /// regenerates it.
+    fn save_metadata(
+        &self,
+        video: &Video,
+        metadata: &VideoMetadata,
+        number: &EpisodeNumber,
+        nfo_path: &Path,
+    ) {
+        if let Err(e) = self
+            .video_metadata_repository
+            .save(&video.id, metadata, number, nfo_path)
+        {
+            warn!(video_id = %video.id, error = %e, "failed to save video metadata");
+        }
+    }
+
+    fn move_into_place(
+        &self,
+        downloaded: &DownloadedVideo,
+        output_dir: &Path,
+        files: &EpisodeFiles,
+    ) -> anyhow::Result<()> {
+        self.video_file_repository
+            .move_file(&downloaded.media_path, &output_dir.join(&files.filename))?;
+        match (&downloaded.thumbnail_path, &files.thumbnail_filename) {
+            (Some(from), Some(to)) => self
+                .video_file_repository
+                .move_file(from, &output_dir.join(to)),
+            _ => Ok(()),
+        }
+    }
+
+    /// Best-effort: the download is already recorded, and losing the event
+    /// only skips reacting to it (e.g. asking Plex to scan the show).
+    fn publish_downloaded(&self, video: &Video, output_dir: &Path, folder: &str) {
+        let event = DomainEvent::VideoDownloaded(VideoDownloaded {
+            video_id: video.id.as_str().to_string(),
+            output_dir: output_dir.to_string_lossy().to_string(),
+            folder: folder.to_string(),
+        });
+        if let Err(e) = self.event_publisher.publish(&event) {
+            warn!(video_id = %video.id, error = %e, "failed to publish that the video was downloaded");
+        }
+    }
+
     /// Best-effort: removes the video's staging dir and whatever a download
-    /// or thumbnail fetch left in it.
-    fn discard_staging(&self, _video: &Video) {}
+    /// or thumbnail fetch left in it; a leftover is harmless, Plex and Kodi
+    /// ignore the staging root.
+    fn discard_staging(&self, video: &Video) {
+        let dir = staging_dir(&self.videos_path, &video.youtube_id);
+        if let Err(e) = self.video_file_repository.delete_dir_recursive(&dir) {
+            warn!(video_id = %video.id, error = %e, "failed to discard the staging dir");
+        }
+    }
 
     /// A clean `yt-dlp` failure: diagnoses the precise reason (see design.md),
     /// logs it, and either excludes a permanently-unavailable video (settling
@@ -323,6 +442,38 @@ impl VideoDownloader {
         };
         self.metadata_generator
             .generate(video, playlist_position, None)
+    }
+}
+
+/// Where a downloaded video's files go in its show: the recorded media and
+/// thumbnail paths (relative to the show dir), the episode NFO's path, and the
+/// thumbnail's name as the NFO references it.
+struct EpisodeFiles {
+    filename: String,
+    thumbnail_filename: Option<String>,
+    nfo_path: PathBuf,
+    thumb: Option<String>,
+}
+
+impl EpisodeFiles {
+    fn new(
+        number: &EpisodeNumber,
+        title: &str,
+        downloaded: &DownloadedVideo,
+        output_dir: &Path,
+    ) -> Self {
+        let extension = downloaded
+            .media_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("mp4");
+        let has_thumbnail = downloaded.thumbnail_path.is_some();
+        Self {
+            filename: episode_relative_path(number, title, extension),
+            thumbnail_filename: has_thumbnail.then(|| episode_relative_path(number, title, "jpg")),
+            nfo_path: output_dir.join(episode_relative_path(number, title, "nfo")),
+            thumb: has_thumbnail.then(|| format!("{}.jpg", episode_base_name(number, title))),
+        }
     }
 }
 

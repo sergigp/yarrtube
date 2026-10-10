@@ -276,8 +276,12 @@ impl Video {
     }
 
     /// Records the episode number assigned to this video.
-    pub fn with_episode_number(self, _number: EpisodeNumber, _now: DateTime<Utc>) -> Self {
-        self
+    pub fn with_episode_number(self, number: EpisodeNumber, now: DateTime<Utc>) -> Self {
+        Self {
+            episode_number: Some(number),
+            updated_at: now,
+            ..self
+        }
     }
 
     /// Whether the video's recorded file is in the per-video-folder (or flat)

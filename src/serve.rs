@@ -8,9 +8,10 @@ use crate::domain::services::{
     ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoRelocator, VideoSearcher,
     VideoWatchStateUpdater,
 };
+use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
 use crate::infrastructure::infrastructure_container::{
-    InfrastructureContainer, InfrastructureSettings, STAGING_DIRNAME,
+    InfrastructureContainer, InfrastructureSettings,
 };
 use crate::infrastructure::repositories::domain_events_consumer::{
     DomainEventsConsumer, SubscriberRegistry,

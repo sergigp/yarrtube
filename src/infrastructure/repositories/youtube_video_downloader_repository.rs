@@ -146,6 +146,11 @@ impl FakeVideoDownloaderRepository {
         }))
     }
 
+    /// Succeeds with `downloaded`, its paths relative to the staging dir.
+    pub fn succeeding_with(downloaded: DownloadedVideo) -> Self {
+        Self::with_result(DownloadAttempt::Succeeded(downloaded))
+    }
+
     /// Fails the download, carrying `stderr` as the reported `yt-dlp`
     /// error text.
     pub fn with_failed_stderr(stderr: &str) -> Self {
