@@ -79,6 +79,7 @@ mod tests {
     use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
+    use std::path::PathBuf;
     use std::sync::Arc;
 
     #[test]
@@ -570,6 +571,91 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![next_reconcile(1)]
+        );
+    }
+
+    #[test]
+    fn it_should_rewrite_missing_show_files_on_a_recurring_reconcile() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let show_file_repository = Arc::new(FakeShowFileRepository::default());
+        channel_repository
+            .insert(&Channel {
+                avatar_filename: Some("@somechannel.jpg".to_string()),
+                ..channel("@somechannel")
+            })
+            .unwrap();
+        let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
+            channel_repository,
+            video_repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            task_repository.clone(),
+            Arc::new(InternalVideoReconciler::new(
+                video_repository.clone(),
+                Arc::new(MetadataGenerator::new(
+                    Arc::new(FakeYoutubeMetadataRepository::default()),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    Arc::new(FakeVideoDownloaderRepository::default()),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                    "/videos",
+                )),
+                Arc::new(VideoRelocator::new(
+                    video_repository.clone(),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
+            )),
+            Arc::new(ShowFileWriter::new(
+                show_file_repository.clone(),
+                "avatars",
+                "/videos",
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *show_file_repository.show_nfos.lock().unwrap(),
+            vec![(
+                PathBuf::from("/videos/creators/somechannel"),
+                concat!(
+                    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+                    "<tvshow><title>Some Channel</title><studio>Some Channel</studio>",
+                    r#"<uniqueid type="youtube">UC123</uniqueid><status>Continuing</status></tvshow>"#,
+                )
+                .to_string()
+            )]
+        );
+        assert_eq!(
+            *show_file_repository.posters.lock().unwrap(),
+            vec![(
+                PathBuf::from("/videos/creators/somechannel"),
+                PathBuf::from("avatars/@somechannel.jpg")
+            )]
         );
     }
 
