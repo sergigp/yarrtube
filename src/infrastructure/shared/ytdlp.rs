@@ -107,6 +107,10 @@ fn parse_duration_seconds(line: &str) -> Option<i64> {
     trimmed.parse::<f64>().ok().map(|seconds| seconds as i64)
 }
 
+/// Names every staged file after the video's YouTube id, so the media and
+/// its thumbnail share one stem whatever the title.
+const STAGED_OUTPUT_TEMPLATE: &str = "%(id)s.%(ext)s";
+
 /// Runs `<ytdlp_path> <args> <video_url>` inside `staging_dir` (created
 /// first), outside any show directory, so partial files never reach the
 /// library. This is a pure process-invocation layer with no YouTube API or
@@ -128,6 +132,8 @@ pub fn download_video(
     ensure_output_dir(staging_dir)?;
     let mut args = args_for_quality(quality);
     args.extend([
+        "-o".to_string(),
+        STAGED_OUTPUT_TEMPLATE.to_string(),
         "--concurrent-fragments".to_string(),
         "4".to_string(),
         "--embed-thumbnail".to_string(),
@@ -734,6 +740,35 @@ mod tests {
             })
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_download_into_the_staging_dir_with_the_video_id_as_name() {
+        use test_support::{FakeYtDlp, unique_temp_dir};
+
+        let staging_dir = unique_temp_dir("ytdlp-staging").join("yt1");
+        let fake = FakeYtDlp::with_downloaded_files("yt1.mp4", &["yt1.mp4"]);
+
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                Quality::High,
+                &staging_dir,
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(result.media_path, staging_dir.join("yt1.mp4"));
+        assert_eq!(staging_dir.join("yt1.mp4").is_file(), true);
+        assert_eq!(
+            fake.captured_args()
+                .windows(2)
+                .any(|pair| pair == ["-o", "%(id)s.%(ext)s"]),
+            true
+        );
+        std::fs::remove_dir_all(staging_dir.parent().unwrap()).unwrap();
     }
 
     #[test]

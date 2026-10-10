@@ -42,7 +42,7 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 ytdlp: `it_should_download_into_the_staging_dir_with_the_video_id_as_name` — `-o "%(id)s.%(ext)s"`, cwd = staging dir
+- [x] 3.1 ytdlp: `it_should_download_into_the_staging_dir_with_the_video_id_as_name` — `-o "%(id)s.%(ext)s"`, cwd = staging dir
 - [ ] 3.2 ytdlp: `it_should_report_the_publish_timestamp_printed_by_ytdlp` — `--print %(timestamp)s` parsed to UTC
 - [ ] 3.3 ytdlp: `it_should_fall_back_to_the_upload_date_when_the_timestamp_is_na` — `upload_date` → midnight UTC
 - [ ] 3.4 ytdlp: `it_should_report_the_written_thumbnail_path` — thumbnail fetch returns the staged jpg path and timestamp
