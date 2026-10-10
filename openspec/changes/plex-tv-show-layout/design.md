@@ -247,6 +247,7 @@ pub struct FetchedThumbnail { pub path: PathBuf, pub published_at: Option<DateTi
 pub fn download_video(ytdlp_path: &Path, video_url: &str, quality: Quality, staging_dir: &Path) -> anyhow::Result<DownloadAttempt>;
 pub fn fetch_thumbnail(ytdlp_path: &Path, video_url: &str, staging_dir: &Path) -> anyhow::Result<ThumbnailFetch>;
 // -o "%(id)s.%(ext)s", --print "%(timestamp)s", --print "%(upload_date)s"; removed: prepare_folder/prepare_video_dir/create_fresh_video_dir
+// download_video: thumbnail_path = the `<media stem>.jpg` --write-thumbnail left in staging_dir, None when absent
 
 // src/infrastructure/repositories/youtube_video_downloader_repository.rs
 pub trait VideoDownloaderRepository {
@@ -396,7 +397,7 @@ Behaviour tests (application layer):
 
 Infrastructure tests:
 
-- `ytdlp`: `it_should_download_into_the_staging_dir_with_the_video_id_as_name`, `it_should_report_the_publish_timestamp_printed_by_ytdlp`, `it_should_fall_back_to_the_upload_date_when_the_timestamp_is_na`, `it_should_report_the_written_thumbnail_path` (thumbnail fetch).
+- `ytdlp`: `it_should_download_into_the_staging_dir_with_the_video_id_as_name`, `it_should_report_the_publish_timestamp_printed_by_ytdlp`, `it_should_fall_back_to_the_upload_date_when_the_timestamp_is_na`, `it_should_report_the_staged_thumbnail_written_next_to_the_download`, `it_should_report_the_written_thumbnail_path` (thumbnail fetch).
 - `FilesystemVideoFileRepository`: `it_should_list_top_level_entries_and_season_files`, `it_should_move_a_file_creating_its_parent`, `it_should_remove_an_empty_dir_only`, `it_should_delete_a_file_or_a_dir_by_relative_path`.
 - `FilesystemShowFileRepository`: `it_should_write_the_show_nfo_and_copy_the_poster`, `it_should_overwrite_an_existing_poster`.
 - `SqliteVideoRepository`: `it_should_assign_the_first_index_of_the_day`, `it_should_assign_the_next_free_index_within_the_same_show_and_day`, `it_should_number_copies_in_different_shows_independently`, `it_should_return_the_existing_number_when_already_assigned`, `it_should_persist_and_read_the_episode_number`, `it_should_list_downloaded_videos`.

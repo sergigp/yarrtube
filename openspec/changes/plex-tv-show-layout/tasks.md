@@ -46,25 +46,26 @@
 - [ ] 3.2 ytdlp: `it_should_report_the_publish_timestamp_printed_by_ytdlp` — `--print %(timestamp)s` parsed to UTC
 - [ ] 3.3 ytdlp: `it_should_fall_back_to_the_upload_date_when_the_timestamp_is_na` — `upload_date` → midnight UTC
 - [ ] 3.4 ytdlp: `it_should_report_the_written_thumbnail_path` — thumbnail fetch returns the staged jpg path and timestamp
-- [ ] 3.5 FilesystemVideoFileRepository: `it_should_list_top_level_entries_and_season_files` — `Season 2026/<file>` entries plus legacy top-level entries, temp files excluded
-- [ ] 3.6 FilesystemVideoFileRepository: `it_should_move_a_file_creating_its_parent` — rename into a not-yet-existing season folder
-- [ ] 3.7 FilesystemVideoFileRepository: `it_should_remove_an_empty_dir_only` — non-empty dir left alone
-- [ ] 3.8 FilesystemVideoFileRepository: `it_should_delete_a_file_or_a_dir_by_relative_path` — episode file and legacy folder
-- [ ] 3.9 FilesystemShowFileRepository: `it_should_write_the_show_nfo_and_copy_the_poster` — bytes equal the source avatar
-- [ ] 3.10 FilesystemShowFileRepository: `it_should_overwrite_an_existing_poster`
-- [ ] 3.11 SqliteVideoRepository: `it_should_assign_the_first_index_of_the_day` — `031501`
-- [ ] 3.12 SqliteVideoRepository: `it_should_assign_the_next_free_index_within_the_same_show_and_day` — sibling via `playlist_videos` and via `channel_videos`
-- [ ] 3.13 SqliteVideoRepository: `it_should_number_copies_in_different_shows_independently`
-- [ ] 3.14 SqliteVideoRepository: `it_should_return_the_existing_number_when_already_assigned`
-- [ ] 3.15 SqliteVideoRepository: `it_should_persist_and_read_the_episode_number` — round trip through `save`/`find`/`update`
-- [ ] 3.16 SqliteVideoRepository: `it_should_list_downloaded_videos`
-- [ ] 3.17 SqliteVideoMetadataRepository: `it_should_write_an_episode_nfo_with_season_episode_and_aired` — `<episodedetails>` with `season`, `episode`, `aired`, `uniqueid`, escaped text
-- [ ] 3.18 SqliteVideoMetadataRepository: `it_should_write_the_nfo_at_the_given_path`
-- [ ] 3.19 SqliteVideoMetadataRepository: `it_should_remove_the_nfo_at_the_given_path`
-- [ ] 3.20 sqlite_migrations: `it_should_add_the_episode_number_columns`
-- [ ] 3.21 HttpPlexLibraryRepository: keep the `list_sections`/`scan_path` mockito tests green after trimming the trait, delete the collection tests
-- [ ] 3.22 FilesystemChannelAvatarRepository: `it_should_resolve_the_path_of_a_stored_avatar`
-- [ ] 3.23 web: `storageLocation.test.ts` (season folder from an episode filename, base path when no file) and `VideoDetail.test.tsx` `shows the season folder as the storage location`; remove the `reconcile_plex_collections` label and its tests; `npm run check` passes
+- [ ] 3.5 ytdlp: `it_should_report_the_staged_thumbnail_written_next_to_the_download` — after a successful download, `thumbnail_path` is the `<media stem>.jpg` in the staging dir when present, `None` otherwise; also rewrite and un-ignore the download task's `it_should_detect_a_real_thumbnail_file_written_by_yt_dlp_alongside_the_video` (real fake-yt-dlp script, episode paths)
+- [ ] 3.6 FilesystemVideoFileRepository: `it_should_list_top_level_entries_and_season_files` — `Season 2026/<file>` entries plus legacy top-level entries, temp files excluded
+- [ ] 3.7 FilesystemVideoFileRepository: `it_should_move_a_file_creating_its_parent` — rename into a not-yet-existing season folder
+- [ ] 3.8 FilesystemVideoFileRepository: `it_should_remove_an_empty_dir_only` — non-empty dir left alone
+- [ ] 3.9 FilesystemVideoFileRepository: `it_should_delete_a_file_or_a_dir_by_relative_path` — episode file and legacy folder
+- [ ] 3.10 FilesystemShowFileRepository: `it_should_write_the_show_nfo_and_copy_the_poster` — bytes equal the source avatar
+- [ ] 3.11 FilesystemShowFileRepository: `it_should_overwrite_an_existing_poster`
+- [ ] 3.12 SqliteVideoRepository: `it_should_assign_the_first_index_of_the_day` — `031501`
+- [ ] 3.13 SqliteVideoRepository: `it_should_assign_the_next_free_index_within_the_same_show_and_day` — sibling via `playlist_videos` and via `channel_videos`
+- [ ] 3.14 SqliteVideoRepository: `it_should_number_copies_in_different_shows_independently`
+- [ ] 3.15 SqliteVideoRepository: `it_should_return_the_existing_number_when_already_assigned`
+- [ ] 3.16 SqliteVideoRepository: `it_should_persist_and_read_the_episode_number` — round trip through `save`/`find`/`update`
+- [ ] 3.17 SqliteVideoRepository: `it_should_list_downloaded_videos`
+- [ ] 3.18 SqliteVideoMetadataRepository: `it_should_write_an_episode_nfo_with_season_episode_and_aired` — `<episodedetails>` with `season`, `episode`, `aired`, `uniqueid`, escaped text
+- [ ] 3.19 SqliteVideoMetadataRepository: `it_should_write_the_nfo_at_the_given_path`
+- [ ] 3.20 SqliteVideoMetadataRepository: `it_should_remove_the_nfo_at_the_given_path`
+- [ ] 3.21 sqlite_migrations: `it_should_add_the_episode_number_columns`
+- [ ] 3.22 HttpPlexLibraryRepository: keep the `list_sections`/`scan_path` mockito tests green after trimming the trait, delete the collection tests
+- [ ] 3.23 FilesystemChannelAvatarRepository: `it_should_resolve_the_path_of_a_stored_avatar`
+- [ ] 3.24 web: `storageLocation.test.ts` (season folder from an episode filename, base path when no file) and `VideoDetail.test.tsx` `shows the season folder as the storage location`; remove the `reconcile_plex_collections` label and its tests; `npm run check` passes
 
 ## 4. Docs, config and verification
 
