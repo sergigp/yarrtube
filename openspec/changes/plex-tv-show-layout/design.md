@@ -66,6 +66,12 @@ See proposal.md for why. Current state that shapes the approach:
    for delete and sweep.
 7. **`VideoDownloaded` keeps its shape**; the scanner scans `output_dir` (the
    show) and ignores `folder`.
+8. **Dry run plans numbers in memory.** `assign_episode_number` is a write,
+   so a dry run uses `VideoRepository::next_episode_number`, a read-only
+   peek with the same rule (recorded number, else next free same-day index),
+   and numbers each video as `max(peek, last number planned this run for the
+   same show, season and day + 1)`. Its plan equals the real run's, a
+   same-day batch included, without any write.
 
 ## Risks / Trade-offs
 
@@ -89,6 +95,9 @@ See proposal.md for why. Current state that shapes the approach:
   new path (skip). A half-moved set (media moved, row not updated) is
   detected by the media existing at the target and is completed, not
   duplicated.
+- [Media move fails after the number is assigned] → the number stays
+  recorded while paths and status are unchanged; a rerun reuses it, so
+  numbering stays stable.
 - [Two copies of one YouTube video in one show] → impossible, a source holds
   a video once; copies across sources number independently.
 
@@ -173,6 +182,7 @@ impl EpisodeNumber {
 pub struct Video { /* existing */ pub episode_number: Option<EpisodeNumber> }
 impl Video {
     pub fn with_episode_number(self, number: EpisodeNumber, now: DateTime<Utc>) -> Self;
+    pub fn relocate_to_episode(self, number: EpisodeNumber, filename: impl Into<String>, thumbnail_filename: Option<String>, now: DateTime<Utc>) -> Self;
     pub fn is_in_legacy_layout(&self) -> bool;   // recorded filename not under "Season "
 }
 
@@ -211,12 +221,15 @@ pub trait ShowFileWriterApi {
 
 // src/domain/services/video_relocator.rs
 pub struct VideoRelocator { video_repository, video_file_repository, video_metadata_repository, clock }
-pub enum Relocation { Moved { from: String, to: String }, AlreadyInPlace, Skipped(SkipReason) }
+pub enum Relocation { Moved { from: String, to: String, number: EpisodeNumber }, AlreadyInPlace, Skipped(SkipReason) }
 pub enum SkipReason { NoPublishTimestamp, FileMissing }
 pub trait VideoRelocatorApi {
     /// Assigns the number from `published_at` if absent, moves media/thumbnail/nfo
     /// into the season folder, rewrites the NFO, records the new filenames.
-    fn relocate(&self, video: &Video, published_at: Option<DateTime<Utc>>, output_dir: &Path, dry_run: bool) -> anyhow::Result<Relocation>;
+    fn relocate(&self, video: &Video, published_at: Option<DateTime<Utc>>, output_dir: &Path) -> anyhow::Result<Relocation>;
+    /// Dry run: the same outcome `relocate` would have, numbered from
+    /// `next_episode_number` and the numbers already `planned` this run; changes nothing.
+    fn plan(&self, video: &Video, published_at: Option<DateTime<Utc>>, output_dir: &Path, planned: &[EpisodeNumber]) -> anyhow::Result<Relocation>;
 }
 
 // src/domain/services/layout_migrator.rs
@@ -277,6 +290,7 @@ pub struct FilesystemShowFileRepository;
 pub trait VideoRepository { /* existing */
     fn assign_episode_number(&self, id: &VideoRecordId, published_at: DateTime<Utc>) -> anyhow::Result<EpisodeNumber>;
     fn list_downloaded(&self) -> anyhow::Result<Vec<Video>>;
+    fn next_episode_number(&self, id: &VideoRecordId, published_at: DateTime<Utc>) -> anyhow::Result<EpisodeNumber>; // read-only peek, same rule as assign
 }
 
 // src/infrastructure/repositories/sqlite_video_metadata_repository.rs
@@ -356,8 +370,9 @@ Playlist path identical via `PlaylistVideoReconciler` and `write_playlist_show`.
 
 **Migrate layout**
 `main` → `cli::migrate_layout::run(dry_run)` → `build_infrastructure` → `LayoutMigrator::migrate(dry_run)`:
-for each source (`PlaylistRepository::list`, `ChannelRepository::list`): `ShowFileWriter::write_*_show` (skipped on dry run) → its downloaded videos (`list_downloaded` joined via link repositories) in legacy layout, with `VideoMetadataRepository::find` → grouped by publish day, sorted by `published_at` → `VideoRelocator::relocate(video, Some(published_at), output_dir, dry_run)`; `None` metadata → `Skipped(NoPublishTimestamp)`; missing file → `Skipped(FileMissing)`; error → `failed`.
-`relocate` (not dry run): `assign_episode_number` → `move_file` media → `move_file` thumbnail → `write_nfo` at new path, `remove_nfo(old movie.nfo)` → `remove_if_empty(old folder)` → `VideoRepository::update(video.mark_downloaded(.. new filenames ..))`.
+for each source (`PlaylistRepository::list`, `ChannelRepository::list`): `ShowFileWriter::write_*_show` (skipped on dry run) → its downloaded videos (`list_downloaded` joined via link repositories) in legacy layout, with `VideoMetadataRepository::find` → grouped by publish day, sorted by `published_at` → real run: `VideoRelocator::relocate(video, Some(published_at), output_dir)`; dry run: `VideoRelocator::plan(video, Some(published_at), output_dir, planned)` with the numbers of this source's earlier `Moved` plans; `None` metadata → `Skipped(NoPublishTimestamp)`; missing file → `Skipped(FileMissing)`; error → `failed`.
+`relocate`: `assign_episode_number` → `move_file` media → `move_file` thumbnail → `VideoMetadataRepository::save` at the new NFO path (thumb renamed) when metadata is recorded, `remove_nfo(old movie.nfo)` → `remove_if_empty(old folder)` → `VideoRepository::update(video.relocate_to_episode(..))`.
+`plan`: `next_episode_number` → bumped past `planned` numbers of the same season and day → `Moved` with the would-be paths; no write.
 
 ## Test Plan
 
@@ -389,7 +404,7 @@ Behaviour tests (application layer):
 24. `it_should_migrate_a_legacy_library_into_the_tv_layout` — migrate-layout: two sources, three videos incl. a `[id]`-suffixed folder; files moved, rows updated, show files written, old folders gone, report lists three moves.
 25. `it_should_number_a_same_day_batch_in_publish_time_order` — migrate-layout: three videos published seconds apart get `01..03` by time.
 26. `it_should_skip_videos_without_metadata_or_without_a_file` — report lists both skips with reasons, nothing moved for them.
-27. `it_should_change_nothing_on_a_dry_run` — same fixtures: report equal to the real plan, filesystem and rows untouched.
+27. `it_should_change_nothing_on_a_dry_run` — same fixtures, including a same-day batch planned `01..03`: report equal to the real plan, filesystem and rows untouched.
 28. `it_should_move_nothing_on_a_second_run` — rerun reports zero moves, rewrites show files.
 29. `it_should_report_a_failed_move_and_continue` — failing file repository for one video: that row unchanged, others moved, report has one failure.
 30. `it_should_exit_non_zero_when_a_move_failed` — CLI run returns failure code.
@@ -400,7 +415,7 @@ Infrastructure tests:
 - `ytdlp`: `it_should_download_into_the_staging_dir_with_the_video_id_as_name`, `it_should_report_the_publish_timestamp_printed_by_ytdlp`, `it_should_fall_back_to_the_upload_date_when_the_timestamp_is_na`, `it_should_report_the_staged_thumbnail_written_next_to_the_download`, `it_should_report_the_written_thumbnail_path` (thumbnail fetch).
 - `FilesystemVideoFileRepository`: `it_should_list_top_level_entries_and_season_files`, `it_should_move_a_file_creating_its_parent`, `it_should_remove_an_empty_dir_only`, `it_should_delete_a_file_or_a_dir_by_relative_path`.
 - `FilesystemShowFileRepository`: `it_should_write_the_show_nfo_and_copy_the_poster`, `it_should_overwrite_an_existing_poster`.
-- `SqliteVideoRepository`: `it_should_assign_the_first_index_of_the_day`, `it_should_assign_the_next_free_index_within_the_same_show_and_day`, `it_should_number_copies_in_different_shows_independently`, `it_should_return_the_existing_number_when_already_assigned`, `it_should_persist_and_read_the_episode_number`, `it_should_list_downloaded_videos`.
+- `SqliteVideoRepository`: `it_should_assign_the_first_index_of_the_day`, `it_should_assign_the_next_free_index_within_the_same_show_and_day`, `it_should_number_copies_in_different_shows_independently`, `it_should_return_the_existing_number_when_already_assigned`, `it_should_persist_and_read_the_episode_number`, `it_should_list_downloaded_videos`, `it_should_peek_the_next_episode_number_without_recording_it`.
 - `SqliteVideoMetadataRepository`: `it_should_write_an_episode_nfo_with_season_episode_and_aired`, `it_should_write_the_nfo_at_the_given_path`, `it_should_remove_the_nfo_at_the_given_path`.
 - `sqlite_migrations`: `it_should_add_the_episode_number_columns`.
 - `HttpPlexLibraryRepository`: existing `list_sections` and `scan_path` tests kept; collection tests removed.

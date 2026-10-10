@@ -17,7 +17,7 @@ The system SHALL provide a `migrate-layout` CLI subcommand that converts every d
 
 #### Scenario: Move fails for one video
 - **WHEN** moving one video's files fails (for example a permission error)
-- **THEN** that video's record is unchanged, the failure is printed, the remaining videos are still processed, and the command exits non-zero
+- **THEN** that video's recorded paths and status are unchanged (an episode number assigned before the failure is kept, so a rerun reuses it), the failure is printed, the remaining videos are still processed, and the command exits non-zero
 
 ### Requirement: Dry Run
 The subcommand SHALL accept a `--dry-run` flag under which it prints exactly what it would do (each video's current and new path, each skip with its reason, and the summary) and changes nothing on disk or in the database.
@@ -25,6 +25,10 @@ The subcommand SHALL accept a `--dry-run` flag under which it prints exactly wha
 #### Scenario: Dry run
 - **WHEN** `migrate-layout --dry-run` runs
 - **THEN** the plan is printed, no file is moved or written, and no video record changes
+
+#### Scenario: Dry run of a same-day batch
+- **WHEN** `migrate-layout --dry-run` runs over videos of one source published on the same day
+- **THEN** the planned same-day indexes are exactly those the real run assigns (`01`, `02`, `03` in publish order), and no episode number is recorded
 
 ### Requirement: Videos The Migration Cannot Place Are Skipped
 The subcommand SHALL skip, with a printed reason, a downloaded video that has no recorded metadata (so no publish timestamp), or whose recorded file is missing from disk, and SHALL leave its record and files unchanged; such videos are healed by later reconcile passes (metadata recovery assigns the number and moves the files; a missing file triggers a redownload). Videos that are not downloaded SHALL be ignored.

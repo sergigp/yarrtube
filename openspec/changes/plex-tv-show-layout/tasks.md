@@ -34,7 +34,7 @@
 - [x] 2.24 `it_should_migrate_a_legacy_library_into_the_tv_layout` — migrate-layout over two sources and three videos (one `[id]`-suffixed): files moved, rows updated, show files written, old folders gone, report lists three moves
 - [x] 2.25 `it_should_number_a_same_day_batch_in_publish_time_order` — three same-day videos get `01..03` by `published_at`
 - [x] 2.26 `it_should_skip_videos_without_metadata_or_without_a_file` — both skips reported with reasons, nothing moved for them
-- [ ] 2.27 `it_should_change_nothing_on_a_dry_run` — report equals the real plan, filesystem and rows untouched
+- [ ] 2.27 `it_should_change_nothing_on_a_dry_run` — report equals the real plan (a same-day batch planned `01..03`), filesystem and rows untouched
 - [x] 2.28 `it_should_move_nothing_on_a_second_run` — zero moves, show files rewritten
 - [x] 2.29 `it_should_report_a_failed_move_and_continue` — one failing move: that row unchanged, others moved, one failure in the report
 - [x] 2.30 `it_should_exit_non_zero_when_a_move_failed` — CLI returns a failure exit code
@@ -66,6 +66,7 @@
 - [ ] 3.22 HttpPlexLibraryRepository: keep the `list_sections`/`scan_path` mockito tests green after trimming the trait, delete the collection tests
 - [ ] 3.23 FilesystemChannelAvatarRepository: `it_should_resolve_the_path_of_a_stored_avatar`
 - [ ] 3.24 web: `storageLocation.test.ts` (season folder from an episode filename, base path when no file) and `VideoDetail.test.tsx` `shows the season folder as the storage location`; remove the `reconcile_plex_collections` label and its tests; `npm run check` passes
+- [ ] 3.25 SqliteVideoRepository: `it_should_peek_the_next_episode_number_without_recording_it`
 
 ## 4. Docs, config and verification
 
