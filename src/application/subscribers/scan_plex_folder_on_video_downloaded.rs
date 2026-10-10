@@ -34,6 +34,7 @@ impl EventSubscriber for ScanPlexFolderOnVideoDownloaded {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::tasks::log_capture::captured_log_messages;
     use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
     use std::sync::Arc;
 
@@ -81,7 +82,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_skip_a_folder_no_section_contains() {
+    fn it_should_skip_the_scan_when_no_section_contains_the_show_folder() {
         let plex_repository = Arc::new(
             FakePlexLibraryRepository::default()
                 .with_location("19", "/volume1/media/yarrtube/playlists"),
@@ -92,13 +93,20 @@ mod tests {
             plex_repository.clone(),
         ));
 
-        let result = handle(
-            &subscriber,
-            &payload("/videos/channels/Some Channel", "Some video"),
-        );
+        let mut result = Ok(());
+        let logs = captured_log_messages(|| {
+            result = handle(
+                &subscriber,
+                &payload("/videos/channels/Some Channel", "Season 2026"),
+            );
+        });
 
         assert_eq!(result, Ok(()));
         assert_eq!(plex_repository.mutations(), Vec::<String>::new());
+        assert_eq!(
+            logs,
+            vec!["no Plex section contains the folder, skipping Plex scan".to_string()]
+        );
     }
 
     #[test]
