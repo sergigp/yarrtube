@@ -121,8 +121,21 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
             .map_err(|e| anyhow::anyhow!("failed to move {from:?} to {to:?}: {e}"))
     }
 
-    fn remove_if_empty(&self, _dir: &Path) -> anyhow::Result<()> {
-        Ok(())
+    fn remove_if_empty(&self, dir: &Path) -> anyhow::Result<()> {
+        let is_empty = match std::fs::read_dir(dir) {
+            Ok(mut entries) => entries.next().is_none(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+            Err(e) => {
+                tracing::error!(dir = ?dir, error = %e, "failed to read directory");
+                return Err(anyhow::anyhow!("failed to read directory {dir:?}: {e}"));
+            }
+        };
+        if !is_empty {
+            return Ok(());
+        }
+        std::fs::remove_dir(dir)
+            .inspect_err(|e| tracing::error!(dir = ?dir, error = %e, "failed to remove directory"))
+            .map_err(|e| anyhow::anyhow!("failed to remove directory {dir:?}: {e}"))
     }
 }
 
@@ -398,6 +411,27 @@ mod tests {
 
         assert_eq!(std::fs::read(&to).ok(), Some(b"media".to_vec()));
         assert_eq!(dir.join(".downloads/yt1/yt1.mp4").exists(), false);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_remove_an_empty_dir_only() {
+        let dir = unique_temp_dir("video-file-repository-remove-if-empty");
+        std::fs::create_dir_all(dir.join("Empty")).unwrap();
+        std::fs::create_dir_all(dir.join("Full")).unwrap();
+        std::fs::write(dir.join("Full/leftover.mp4"), b"").unwrap();
+
+        let results = [
+            FilesystemVideoFileRepository.remove_if_empty(&dir.join("Empty")),
+            FilesystemVideoFileRepository.remove_if_empty(&dir.join("Full")),
+            FilesystemVideoFileRepository.remove_if_empty(&dir.join("Missing")),
+        ];
+
+        assert_eq!(results.map(|result| result.is_ok()), [true, true, true]);
+        assert_eq!(
+            [dir.join("Empty"), dir.join("Full/leftover.mp4")].map(|path| path.exists()),
+            [false, true]
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
