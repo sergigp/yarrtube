@@ -221,6 +221,37 @@ mod tests {
     }
 
     #[test]
+    fn it_should_add_the_episode_number_columns() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+            M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+            M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
+        ])
+        .to_latest(&mut conn)
+        .unwrap();
+        conn.execute(
+            "INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec1', 'yt1', 'My Video', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let episode_number = conn.query_row(
+            "SELECT season, episode FROM videos WHERE id = 'rec1'",
+            [],
+            |row| Ok((row.get::<_, Option<i64>>(0)?, row.get::<_, Option<i64>>(1)?)),
+        );
+        assert_eq!(episode_number, Ok((None, None)));
+    }
+
+    #[test]
     fn it_should_default_existing_videos_to_unwatched_when_migrating() {
         let mut conn = Connection::open_in_memory().unwrap();
         Migrations::new(vec![M::up(BASELINE_SQL)])
