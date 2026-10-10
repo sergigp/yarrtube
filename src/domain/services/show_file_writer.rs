@@ -1,5 +1,5 @@
 use crate::domain::channel::Channel;
-use crate::domain::playlist::Playlist;
+use crate::domain::playlist::{Playlist, PlaylistPath};
 use crate::domain::show::Show;
 use crate::domain::video::resolve_output_dir;
 use crate::domain::video_metadata::render_show_nfo;
@@ -42,17 +42,25 @@ pub trait ShowFileWriterApi: Send + Sync {
 
 impl ShowFileWriterApi for ShowFileWriter {
     fn write_channel_show(&self, channel: &Channel) -> anyhow::Result<()> {
-        let show = Show::from_channel(channel, &self.avatars_dir);
-        let show_dir = resolve_output_dir(&self.videos_path, channel.path.as_str());
+        self.write_show(
+            &Show::from_channel(channel, &self.avatars_dir),
+            &channel.path,
+        )
+    }
+
+    fn write_playlist_show(&self, playlist: &Playlist) -> anyhow::Result<()> {
+        self.write_show(&Show::from_playlist(playlist), &playlist.path)
+    }
+}
+
+impl ShowFileWriter {
+    fn write_show(&self, show: &Show, path: &PlaylistPath) -> anyhow::Result<()> {
+        let show_dir = resolve_output_dir(&self.videos_path, path.as_str());
         self.show_file_repository
-            .write_show_nfo(&show_dir, &render_show_nfo(&show))?;
+            .write_show_nfo(&show_dir, &render_show_nfo(show))?;
         match &show.poster_source {
             Some(source) => self.show_file_repository.copy_poster(&show_dir, source),
             None => Ok(()),
         }
-    }
-
-    fn write_playlist_show(&self, _playlist: &Playlist) -> anyhow::Result<()> {
-        Ok(())
     }
 }

@@ -19,7 +19,7 @@
 - [x] 2.9 `it_should_place_a_prefetched_thumbnail_as_the_episode_image` — thumbnail task: jpg at episode path, number and thumbnail recorded, status untouched
 - [x] 2.10 `it_should_leave_the_video_untouched_when_the_thumbnail_fetch_fails` — staging removed, no number, no thumbnail
 - [x] 2.11 `it_should_write_the_show_files_when_a_channel_is_created` — `tvshow.nfo` with name and channel id, `poster.jpg` equal to the avatar
-- [ ] 2.12 `it_should_write_the_show_nfo_without_a_poster_for_a_playlist` — playlist created: nfo with playlist id, no poster
+- [x] 2.12 `it_should_write_the_show_nfo_without_a_poster_for_a_playlist` — playlist created: nfo with playlist id, no poster
 - [ ] 2.13 `it_should_rewrite_missing_show_files_on_a_recurring_reconcile` — reconcile channel task rewrites a removed `tvshow.nfo`
 - [ ] 2.14 `it_should_not_sweep_show_files_season_folders_or_episode_files_of_recorded_videos` — only the stray file in the season folder is deleted
 - [ ] 2.15 `it_should_protect_files_sharing_the_base_name_of_an_in_progress_numbered_video` — nfo of an in-progress numbered video kept

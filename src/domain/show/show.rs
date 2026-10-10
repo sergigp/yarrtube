@@ -24,10 +24,10 @@ impl Show {
         }
     }
 
-    pub fn from_playlist(_playlist: &Playlist) -> Self {
+    pub fn from_playlist(playlist: &Playlist) -> Self {
         Self {
-            title: String::new(),
-            uniqueid: String::new(),
+            title: playlist.name.as_str().to_string(),
+            uniqueid: playlist.id.as_str().to_string(),
             poster_source: None,
         }
     }
