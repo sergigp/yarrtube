@@ -73,6 +73,15 @@ See proposal.md for why. Current state that shapes the approach:
   implementation (spike task 0); the fallback is a four-digit `MMDD` episode
   with the same-day index appended to the title part of the base name,
   decided only if the spike fails.
+  Spike outcome (2026-10-10, real server, TV library with
+  `tv.plex.agents.nfo.series` + "Plex TV Series" scanner): six-digit
+  (`S2026E031501` → episode 31501) and eight-digit (`S2026E03150201` →
+  3150201) numbers both scan, with the NFO title, `aired` date, show poster.
+  Renaming a watched episode's three files to `S2026E031502` and rescanning
+  creates a new item (new ratingKey) that keeps the watched flag; while its
+  nfo still said `<episode>31501` Plex showed "Episode 31502", so a
+  renumber must rewrite the nfo's `<episode>` with the files. Six digits
+  kept, no fallback needed.
 - [`.downloads` staging on a different filesystem than the show dir] → both
   are under the videos root; documented as a requirement of the volume.
 - [Migration interrupted mid-video] → each video is moved file by file and

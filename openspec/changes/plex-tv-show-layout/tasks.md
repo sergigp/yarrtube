@@ -1,6 +1,6 @@
 ## 0. Spike (manual, before any code)
 
-- [ ] 0.1 On the real Plex server, create a scratch TV Shows library (Plex NFO Series agent) over a folder holding `Test Show/tvshow.nfo`, `poster.jpg` and `Season 2026/S2026E031501 - One.{mp4,nfo,jpg}` plus an 8-digit variant; verify both episodes appear with the NFO title and the right numbers, then mark one watched, rename its three files to `S2026E031502`, rescan and note whether the watched flag follows the number; record the outcome in design.md "Risks" and stop if six digits fail
+- [x] 0.1 On the real Plex server, create a scratch TV Shows library (Plex NFO Series agent) over a folder holding `Test Show/tvshow.nfo`, `poster.jpg` and `Season 2026/S2026E031501 - One.{mp4,nfo,jpg}` plus an 8-digit variant; verify both episodes appear with the NFO title and the right numbers, then mark one watched, rename its three files to `S2026E031502`, rescan and note whether the watched flag follows the number; record the outcome in design.md "Risks" and stop if six digits fail
 
 ## 1. Walking skeleton
 
