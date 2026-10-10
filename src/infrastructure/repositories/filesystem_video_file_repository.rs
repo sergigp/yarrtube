@@ -34,6 +34,14 @@ pub trait VideoFileRepository: Send + Sync {
     /// check, which needs to test one specific recorded path directly
     /// rather than intersect against a top-level directory listing.
     fn file_exists(&self, output_dir: &Path, filename: &str) -> bool;
+
+    /// Moves the file at `from` to `to`, creating `to`'s parent directory
+    /// first. A rename, so it is atomic within one filesystem.
+    fn move_file(&self, from: &Path, to: &Path) -> anyhow::Result<()>;
+
+    /// Removes `dir` if it is empty; a non-empty or missing `dir` is left
+    /// alone, not an error.
+    fn remove_if_empty(&self, dir: &Path) -> anyhow::Result<()>;
 }
 
 pub struct FilesystemVideoFileRepository;
@@ -111,6 +119,14 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
     fn file_exists(&self, output_dir: &Path, filename: &str) -> bool {
         output_dir.join(filename).is_file()
     }
+
+    fn move_file(&self, _from: &Path, _to: &Path) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn remove_if_empty(&self, _dir: &Path) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 fn is_in_progress_temp_file(path: &Path) -> bool {
@@ -133,6 +149,8 @@ pub struct FakeVideoFileRepository {
     pub(crate) list_snapshot: std::sync::Mutex<Option<Vec<String>>>,
     pub(crate) deleted_dirs: std::sync::Mutex<Vec<std::path::PathBuf>>,
     pub(crate) file_exists_result: std::sync::Mutex<Option<bool>>,
+    pub(crate) moved: std::sync::Mutex<Vec<(std::path::PathBuf, std::path::PathBuf)>>,
+    pub(crate) removed_if_empty: std::sync::Mutex<Vec<std::path::PathBuf>>,
 }
 
 #[cfg(test)]
@@ -145,6 +163,7 @@ impl FakeVideoFileRepository {
             list_snapshot: std::sync::Mutex::new(None),
             deleted_dirs: std::sync::Mutex::new(Vec::new()),
             file_exists_result: std::sync::Mutex::new(None),
+            ..Self::default()
         }
     }
 
@@ -156,6 +175,7 @@ impl FakeVideoFileRepository {
             list_snapshot: std::sync::Mutex::new(Some(files)),
             deleted_dirs: std::sync::Mutex::new(Vec::new()),
             file_exists_result: std::sync::Mutex::new(None),
+            ..Self::default()
         }
     }
 
@@ -167,6 +187,7 @@ impl FakeVideoFileRepository {
             list_snapshot: std::sync::Mutex::new(None),
             deleted_dirs: std::sync::Mutex::new(Vec::new()),
             file_exists_result: std::sync::Mutex::new(Some(exists)),
+            ..Self::default()
         }
     }
 }
@@ -205,6 +226,22 @@ impl VideoFileRepository for FakeVideoFileRepository {
             .unwrap()
             .as_ref()
             .is_some_and(|files| files.iter().any(|f| f == filename))
+    }
+
+    fn move_file(&self, from: &Path, to: &Path) -> anyhow::Result<()> {
+        self.moved
+            .lock()
+            .unwrap()
+            .push((from.to_path_buf(), to.to_path_buf()));
+        Ok(())
+    }
+
+    fn remove_if_empty(&self, dir: &Path) -> anyhow::Result<()> {
+        self.removed_if_empty
+            .lock()
+            .unwrap()
+            .push(dir.to_path_buf());
+        Ok(())
     }
 }
 

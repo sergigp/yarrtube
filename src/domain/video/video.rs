@@ -1,6 +1,6 @@
+use super::episode_number::EpisodeNumber;
 use super::playback_position::PlaybackPosition;
 use super::video_duration::VideoDuration;
-use super::video_filename::video_folder_candidates;
 use super::video_id::VideoId;
 use super::video_record_id::VideoRecordId;
 use super::video_status::VideoStatus;
@@ -43,6 +43,9 @@ pub struct Video {
     pub synced_at: Option<DateTime<Utc>>,
     pub last_errored_at: Option<DateTime<Utc>>,
     pub last_played_at: Option<DateTime<Utc>>,
+    /// The video's episode number within its show, assigned once by the
+    /// first thumbnail fetch, download or relocation that places a file.
+    pub episode_number: Option<EpisodeNumber>,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -66,6 +69,7 @@ impl Video {
             synced_at: None,
             last_errored_at: None,
             last_played_at: None,
+            episode_number: None,
         }
     }
 
@@ -271,21 +275,16 @@ impl Video {
         !matches!(self.status, VideoStatus::Excluded | VideoStatus::Errored)
     }
 
-    /// The folders a download or thumbnail fetch of this video may be writing
-    /// into right now. Until the video is downloaded its folder isn't
-    /// recorded (a thumbnail fetch records it only once it finishes), so it
-    /// is predicted from the title, and also from `previous_title` when the
-    /// video was just renamed: a download started before the rename still
-    /// writes under the old name. Empty once the download recorded its
+    /// Records the episode number assigned to this video.
+    pub fn with_episode_number(self, _number: EpisodeNumber, _now: DateTime<Utc>) -> Self {
+        self
+    }
+
+    /// Whether the video's recorded file is in the per-video-folder (or flat)
+    /// layout that predates the TV-show layout, i.e. not under a `Season `
     /// folder.
-    pub fn unrecorded_folder_candidates(&self, previous_title: Option<&str>) -> Vec<String> {
-        match self.filename {
-            Some(_) => Vec::new(),
-            None => std::iter::once(self.title.as_str())
-                .chain(previous_title)
-                .flat_map(|title| video_folder_candidates(title, &self.youtube_id))
-                .collect(),
-        }
+    pub fn is_in_legacy_layout(&self) -> bool {
+        false
     }
 
     /// The recorded duration, else the reported one. The reported one is

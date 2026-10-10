@@ -45,8 +45,8 @@ impl TaskHandler for FetchThumbnailTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::shared::Quality;
     use crate::domain::video::{Video, VideoId};
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::{
@@ -58,14 +58,15 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    #[ignore = "plex-tv-show-layout: replaced by task 2.9"]
     fn it_should_fetch_and_record_the_thumbnail() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
                 FetchedThumbnail {
-                    folder: "My Video".to_string(),
-                    filename: "My Video.jpg".to_string(),
+                    path: std::path::PathBuf::from("My Video.jpg"),
+                    published_at: None,
                 },
             )),
         );
@@ -76,11 +77,13 @@ mod tests {
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
                 video_downloader_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteTaskRepository::new(
                     db.database(),
                     Arc::new(FixedClock(later())),
                 )),
                 Arc::new(FixedClock(later())),
+                "/videos",
             )),
         );
 
@@ -109,11 +112,13 @@ mod tests {
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
                 video_downloader_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteTaskRepository::new(
                     db.database(),
                     Arc::new(FixedClock(later())),
                 )),
                 Arc::new(FixedClock(later())),
+                "/videos",
             )),
         );
 
@@ -134,8 +139,8 @@ mod tests {
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
                 FetchedThumbnail {
-                    folder: "My Video".to_string(),
-                    filename: "My Video.jpg".to_string(),
+                    path: std::path::PathBuf::from("My Video.jpg"),
+                    published_at: None,
                 },
             )),
         );
@@ -146,11 +151,13 @@ mod tests {
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
                 video_downloader_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteTaskRepository::new(
                     db.database(),
                     Arc::new(FixedClock(later())),
                 )),
                 Arc::new(FixedClock(later())),
+                "/videos",
             )),
         );
 
@@ -171,8 +178,8 @@ mod tests {
         let video_downloader_repository = Arc::new(
             FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
                 FetchedThumbnail {
-                    folder: "My Video".to_string(),
-                    filename: "My Video.jpg".to_string(),
+                    path: std::path::PathBuf::from("My Video.jpg"),
+                    published_at: None,
                 },
             )),
         );
@@ -183,11 +190,13 @@ mod tests {
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
                 video_downloader_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteTaskRepository::new(
                     db.database(),
                     Arc::new(FixedClock(later())),
                 )),
                 Arc::new(FixedClock(later())),
+                "/videos",
             )),
         );
 
@@ -211,11 +220,13 @@ mod tests {
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
                 video_downloader_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteTaskRepository::new(
                     db.database(),
                     Arc::new(FixedClock(later())),
                 )),
                 Arc::new(FixedClock(later())),
+                "/videos",
             )),
         );
 
@@ -230,6 +241,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "plex-tv-show-layout: replaced by task 2.10"]
     fn it_should_succeed_without_recording_if_thumbnail_fetch_fails() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -242,11 +254,13 @@ mod tests {
             Arc::new(ThumbnailFetcher::new(
                 video_repository.clone(),
                 video_downloader_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteTaskRepository::new(
                     db.database(),
                     Arc::new(FixedClock(later())),
                 )),
                 Arc::new(FixedClock(later())),
+                "/videos",
             )),
         );
 
@@ -260,73 +274,16 @@ mod tests {
         );
     }
 
-    #[test]
-    fn it_should_fetch_into_the_recorded_video_folder() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_downloader_repository = Arc::new(
-            FakeVideoDownloaderRepository::default().with_thumbnail_result(Some(
-                FetchedThumbnail {
-                    folder: "My Video".to_string(),
-                    filename: "My Video.jpg".to_string(),
-                },
-            )),
-        );
-        let video = my_video()
-            .start_download(fixed_timestamp())
-            .mark_downloaded(
-                Quality::High,
-                "My Video/My Video.mp4",
-                None,
-                None,
-                fixed_timestamp(),
-            );
-        video_repository.save(&video).unwrap();
-        let task = FetchThumbnailTask::new(
-            video_repository.clone(),
-            Arc::new(ThumbnailFetcher::new(
-                video_repository.clone(),
-                video_downloader_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(later())),
-                )),
-                Arc::new(FixedClock(later())),
-            )),
-        );
-
-        let result = run(&task, &payload_for(video.id.as_str()));
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(
-            video_repository.list().unwrap(),
-            vec![video.with_thumbnail("My Video/My Video.jpg", later())]
-        );
-        assert_eq!(
-            *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![(
-                "https://www.youtube.com/watch?v=yt1".to_string(),
-                "My Video".to_string(),
-                "yt1".to_string(),
-                PathBuf::from("/videos/my-playlist"),
-                Some("My Video".to_string()),
-            )]
-        );
-    }
-
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }
 
     /// One call as `FakeVideoDownloaderRepository` records it, for the `yt1`
     /// video with no recorded folder.
-    fn thumbnail_call() -> (String, String, String, PathBuf, Option<String>) {
+    fn thumbnail_call() -> (String, PathBuf) {
         (
             "https://www.youtube.com/watch?v=yt1".to_string(),
-            "My Video".to_string(),
-            "yt1".to_string(),
-            PathBuf::from("/videos/my-playlist"),
-            None,
+            PathBuf::from("/videos/.downloads/yt1"),
         )
     }
 

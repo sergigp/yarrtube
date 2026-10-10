@@ -7,6 +7,7 @@ pub mod playlist_video;
 pub mod plex;
 pub mod services;
 pub mod shared;
+pub mod show;
 pub mod task;
 pub mod video;
 pub mod video_metadata;

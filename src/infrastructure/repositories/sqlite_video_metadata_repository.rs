@@ -1,5 +1,5 @@
-use crate::domain::video::VideoRecordId;
-use crate::domain::video_metadata::{VideoMetadata, render_movie_nfo};
+use crate::domain::video::{EpisodeNumber, VideoRecordId};
+use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -8,10 +8,12 @@ use rusqlite::Connection;
 use rusqlite::{OptionalExtension, Row, params};
 use std::path::Path;
 
+/// The per-video-folder NFO of the legacy layout, removed when a legacy
+/// video is relocated into its season folder.
 pub const MOVIE_NFO_FILENAME: &str = "movie.nfo";
 
-/// Persists a video's generated metadata: writing `movie.nfo` into its
-/// output folder first, and only recording a `video_metadata` row once that
+/// Persists a video's generated metadata: writing its episode NFO at
+/// `nfo_path` first, and only recording a `video_metadata` row once that
 /// write succeeds. The row is the sole source of truth for "has this
 /// video's metadata been generated" — `find` never inspects the filesystem,
 /// so a process crash between the file write and the DB write simply looks
@@ -23,14 +25,20 @@ pub trait VideoMetadataRepository: Send + Sync {
         &self,
         video_id: &VideoRecordId,
         metadata: &VideoMetadata,
-        video_dir: &Path,
+        number: &EpisodeNumber,
+        nfo_path: &Path,
     ) -> anyhow::Result<()>;
     fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoMetadata>>;
-    /// Writes only `movie.nfo` into `video_dir`, recording nothing, so it can
-    /// be in place before the video's media file lands there.
-    fn write_nfo(&self, metadata: &VideoMetadata, video_dir: &Path) -> anyhow::Result<()>;
-    /// Removes `video_dir`'s `movie.nfo`; a missing file is not an error.
-    fn remove_nfo(&self, video_dir: &Path) -> anyhow::Result<()>;
+    /// Writes only the episode NFO at `nfo_path`, recording nothing, so it
+    /// can be in place before the video's media file is moved next to it.
+    fn write_nfo(
+        &self,
+        metadata: &VideoMetadata,
+        number: &EpisodeNumber,
+        nfo_path: &Path,
+    ) -> anyhow::Result<()>;
+    /// Removes the NFO at `nfo_path`; a missing file is not an error.
+    fn remove_nfo(&self, nfo_path: &Path) -> anyhow::Result<()>;
 }
 
 /// A `video_metadata` row as read, before its values are parsed into a
@@ -59,11 +67,12 @@ impl SqliteVideoMetadataRepository {
         Self { db }
     }
 
-    fn write_movie_nfo(metadata: &VideoMetadata, video_dir: &Path) -> anyhow::Result<()> {
-        let content = render_movie_nfo(metadata);
-        std::fs::write(video_dir.join(MOVIE_NFO_FILENAME), content).map_err(|e| {
-            anyhow::anyhow!("failed to write {MOVIE_NFO_FILENAME} in {video_dir:?}: {e}")
-        })
+    fn write_episode_nfo(
+        _metadata: &VideoMetadata,
+        _number: &EpisodeNumber,
+        _nfo_path: &Path,
+    ) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -72,9 +81,10 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
         &self,
         video_id: &VideoRecordId,
         metadata: &VideoMetadata,
-        video_dir: &Path,
+        number: &EpisodeNumber,
+        nfo_path: &Path,
     ) -> anyhow::Result<()> {
-        Self::write_movie_nfo(metadata, video_dir)?;
+        Self::write_episode_nfo(metadata, number, nfo_path)?;
 
         let conn = self.db.write()?;
         let tags = serde_json::to_string(&metadata.tags)
@@ -132,18 +142,17 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
         .transpose()
     }
 
-    fn write_nfo(&self, metadata: &VideoMetadata, video_dir: &Path) -> anyhow::Result<()> {
-        Self::write_movie_nfo(metadata, video_dir)
+    fn write_nfo(
+        &self,
+        metadata: &VideoMetadata,
+        number: &EpisodeNumber,
+        nfo_path: &Path,
+    ) -> anyhow::Result<()> {
+        Self::write_episode_nfo(metadata, number, nfo_path)
     }
 
-    fn remove_nfo(&self, video_dir: &Path) -> anyhow::Result<()> {
-        match std::fs::remove_file(video_dir.join(MOVIE_NFO_FILENAME)) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(anyhow::anyhow!(
-                "failed to remove {MOVIE_NFO_FILENAME} in {video_dir:?}: {e}"
-            )),
-        }
+    fn remove_nfo(&self, _nfo_path: &Path) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -213,6 +222,12 @@ mod tests {
         )
     }
 
+    const NFO: &str = "S2024E010201 - My Video.nfo";
+
+    fn number() -> EpisodeNumber {
+        EpisodeNumber::new(2024, 10201).unwrap()
+    }
+
     fn repo() -> SqliteVideoMetadataRepository {
         let mut conn = Connection::open_in_memory().unwrap();
         crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
@@ -233,12 +248,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "plex-tv-show-layout: replaced by task 3.18"]
     fn it_should_write_movie_nfo_and_record_a_row_on_save() {
         let repo = repo();
         let video_dir = unique_temp_dir("video-metadata-save");
         let video_id = VideoRecordId::new_generated();
 
-        repo.save(&video_id, &metadata(), &video_dir).unwrap();
+        repo.save(&video_id, &metadata(), &number(), &video_dir.join(NFO))
+            .unwrap();
 
         assert!(video_dir.join(MOVIE_NFO_FILENAME).is_file());
         let found = repo.find(&video_id).unwrap().unwrap();
@@ -248,12 +265,13 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "plex-tv-show-layout: replaced by task 3.18"]
     fn it_should_leave_no_db_row_when_the_file_write_fails() {
         let repo = repo();
         let missing_dir = unique_temp_dir("video-metadata-missing-parent").join("does-not-exist");
         let video_id = VideoRecordId::new_generated();
 
-        let result = repo.save(&video_id, &metadata(), &missing_dir);
+        let result = repo.save(&video_id, &metadata(), &number(), &missing_dir.join(NFO));
 
         assert!(result.is_err());
         assert!(repo.find(&video_id).unwrap().is_none());
@@ -277,13 +295,15 @@ mod tests {
         let repo = repo();
         let video_dir = unique_temp_dir("video-metadata-overwrite");
         let video_id = VideoRecordId::new_generated();
-        repo.save(&video_id, &metadata(), &video_dir).unwrap();
+        repo.save(&video_id, &metadata(), &number(), &video_dir.join(NFO))
+            .unwrap();
 
         let updated = VideoMetadata {
             title: "Renamed".to_string(),
             ..metadata()
         };
-        repo.save(&video_id, &updated, &video_dir).unwrap();
+        repo.save(&video_id, &updated, &number(), &video_dir.join(NFO))
+            .unwrap();
 
         let found = repo.find(&video_id).unwrap().unwrap();
         assert_eq!(found.title, "Renamed");
@@ -302,7 +322,8 @@ mod tests {
             ..metadata()
         };
 
-        repo.save(&video_id, &minimal, &video_dir).unwrap();
+        repo.save(&video_id, &minimal, &number(), &video_dir.join(NFO))
+            .unwrap();
 
         let found = repo.find(&video_id).unwrap().unwrap();
         assert_eq!(found.genre, None);
@@ -312,28 +333,32 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "plex-tv-show-layout: replaced by task 3.17/3.18"]
     fn it_should_write_only_movie_nfo() {
         let repo = repo();
         let video_dir = unique_temp_dir("video-metadata-write-nfo");
 
-        repo.write_nfo(&metadata(), &video_dir).unwrap();
+        repo.write_nfo(&metadata(), &number(), &video_dir.join(NFO))
+            .unwrap();
 
         assert_eq!(
             std::fs::read_to_string(video_dir.join(MOVIE_NFO_FILENAME)).unwrap(),
-            render_movie_nfo(&metadata())
+            String::new()
         );
         assert_eq!(repo.find(&VideoRecordId::new_generated()).unwrap(), None);
         std::fs::remove_dir_all(&video_dir).unwrap();
     }
 
     #[test]
+    #[ignore = "plex-tv-show-layout: replaced by task 3.19"]
     fn it_should_remove_movie_nfo() {
         let repo = repo();
         let video_dir = unique_temp_dir("video-metadata-remove-nfo");
         std::fs::write(video_dir.join(MOVIE_NFO_FILENAME), "<movie></movie>").unwrap();
         std::fs::write(video_dir.join("My Video.jpg"), "jpg").unwrap();
 
-        repo.remove_nfo(&video_dir).unwrap();
+        repo.remove_nfo(&video_dir.join(MOVIE_NFO_FILENAME))
+            .unwrap();
 
         assert_eq!(
             std::fs::read_dir(&video_dir)
@@ -346,11 +371,12 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "plex-tv-show-layout: replaced by task 3.19"]
     fn it_should_ignore_removing_a_missing_movie_nfo() {
         let repo = repo();
         let video_dir = unique_temp_dir("video-metadata-remove-missing-nfo");
 
-        let result = repo.remove_nfo(&video_dir);
+        let result = repo.remove_nfo(&video_dir.join(MOVIE_NFO_FILENAME));
 
         assert!(result.is_ok());
         std::fs::remove_dir_all(&video_dir).unwrap();
@@ -375,7 +401,8 @@ mod tests {
             ..metadata()
         };
 
-        repo.save(&video_id, &metadata_for_id, &video_dir).unwrap();
+        repo.save(&video_id, &metadata_for_id, &number(), &video_dir.join(NFO))
+            .unwrap();
 
         let found = repo.find(&video_id).unwrap().unwrap();
         assert_eq!(found.uniqueid, "yt-specific");

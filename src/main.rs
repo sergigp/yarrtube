@@ -14,5 +14,6 @@ fn main() -> ExitCode {
     match cli.command {
         Commands::Serve => serve::run(),
         Commands::UpdateYtdlp => application::cli::update_ytdlp::run(),
+        Commands::MigrateLayout { dry_run } => application::cli::migrate_layout::run(dry_run),
     }
 }

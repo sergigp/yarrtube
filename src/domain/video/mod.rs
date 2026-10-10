@@ -1,3 +1,4 @@
+pub mod episode_number;
 pub mod errors;
 pub mod events;
 pub mod home_limits;
@@ -16,6 +17,7 @@ pub mod video_record_id;
 pub mod video_status;
 pub mod video_view;
 
+pub use episode_number::EpisodeNumber;
 pub use errors::{ListVideosError, UpdateWatchStateError};
 pub use events::VideoDownloaded;
 pub use home_limits::HomeLimits;
@@ -26,7 +28,10 @@ pub use sourced_video::{SourcedVideo, VideoSource};
 pub use video::Video;
 pub use video_duration::VideoDuration;
 pub use video_id::VideoId;
-pub use video_output_entry::{resolve_output_dir, top_level_entry, video_dir_for_filename};
+pub use video_output_entry::{
+    SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, is_episode_path, nfo_path_for, resolve_output_dir,
+    staging_dir, top_level_entry,
+};
 pub use video_record_id::VideoRecordId;
 pub use video_status::VideoStatus;
 pub use video_view::VideoView;

@@ -1,5 +1,5 @@
 use crate::domain::shared::Quality;
-use crate::domain::video::{PlaybackPosition, Video, VideoStatus};
+use crate::domain::video::{EpisodeNumber, PlaybackPosition, Video, VideoStatus};
 use crate::domain::video::{VideoId, VideoRecordId};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -62,6 +62,16 @@ pub trait VideoRepository: Send + Sync {
     fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()>;
     /// Every stored copy of a YouTube video, across all playlists/channels.
     fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>>;
+    /// The video's episode number: the one already recorded, if any, else the
+    /// next free same-day index among the videos of the same playlist or
+    /// channel published on `published_at`'s day, recorded in one write.
+    fn assign_episode_number(
+        &self,
+        id: &VideoRecordId,
+        published_at: DateTime<Utc>,
+    ) -> anyhow::Result<EpisodeNumber>;
+    /// Every `Downloaded` video, across all playlists and channels.
+    fn list_downloaded(&self) -> anyhow::Result<Vec<Video>>;
 }
 
 pub struct SqliteVideoRepository {
@@ -264,6 +274,18 @@ impl VideoRepository for SqliteVideoRepository {
             .map(Self::row_to_video)
             .collect()
     }
+
+    fn assign_episode_number(
+        &self,
+        _id: &VideoRecordId,
+        published_at: DateTime<Utc>,
+    ) -> anyhow::Result<EpisodeNumber> {
+        Ok(EpisodeNumber::first_of_day(published_at))
+    }
+
+    fn list_downloaded(&self) -> anyhow::Result<Vec<Video>> {
+        Ok(Vec::new())
+    }
 }
 
 impl SqliteVideoRepository {
@@ -316,6 +338,7 @@ impl SqliteVideoRepository {
                 .last_played_at
                 .map(|p| Self::parse_timestamp(&p, "last_played_at"))
                 .transpose()?,
+            episode_number: None,
         })
     }
 

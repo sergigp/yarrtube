@@ -4,6 +4,7 @@ use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel}
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{
     DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
+    ShowFileWriter, ShowFileWriterApi,
 };
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
@@ -35,6 +36,7 @@ pub struct ChannelVideoReconciler {
     event_publisher: Arc<dyn EventPublisher>,
     task_repository: Arc<dyn TaskRepository>,
     internal_video_reconciler: Arc<InternalVideoReconciler>,
+    show_file_writer: Arc<ShowFileWriter>,
     clock: Arc<dyn Clock>,
     reconcile_interval_seconds: i64,
 }
@@ -49,6 +51,7 @@ impl ChannelVideoReconciler {
         event_publisher: Arc<dyn EventPublisher>,
         task_repository: Arc<dyn TaskRepository>,
         internal_video_reconciler: Arc<InternalVideoReconciler>,
+        show_file_writer: Arc<ShowFileWriter>,
         clock: Arc<dyn Clock>,
         reconcile_interval_seconds: i64,
     ) -> Self {
@@ -60,6 +63,7 @@ impl ChannelVideoReconciler {
             event_publisher,
             task_repository,
             internal_video_reconciler,
+            show_file_writer,
             clock,
             reconcile_interval_seconds,
         }
@@ -137,6 +141,7 @@ impl ChannelVideoReconciler {
         let _span = info_span!("reconcile_channel", channel_id = %channel.id).entered();
         info!(channel_id = %channel.id, "reconciling channel");
 
+        self.show_file_writer.write_channel_show(channel)?;
         let delta = self.sync_membership_with_youtube(channel, on_listing_failure)?;
         let desired = self.desired_state(channel)?;
         self.internal_video_reconciler.reconcile(&desired, &delta)

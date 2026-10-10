@@ -698,6 +698,7 @@ mod tests {
             synced_at: None,
             last_errored_at: None,
             last_played_at: None,
+            episode_number: None,
         }
     }
 

@@ -21,6 +21,9 @@ pub trait ChannelAvatarRepository: Send + Sync {
     /// Deletes a previously stored avatar file, if present. A missing file
     /// is not an error.
     fn delete(&self, filename: &str) -> anyhow::Result<()>;
+
+    /// The local path of a stored avatar file.
+    fn path_of(&self, filename: &str) -> PathBuf;
 }
 
 pub struct FilesystemChannelAvatarRepository {
@@ -91,6 +94,10 @@ impl ChannelAvatarRepository for FilesystemChannelAvatarRepository {
                 ))
             }
         }
+    }
+
+    fn path_of(&self, _filename: &str) -> PathBuf {
+        PathBuf::new()
     }
 }
 
@@ -184,6 +191,10 @@ impl ChannelAvatarRepository for FakeChannelAvatarRepository {
             .unwrap()
             .retain(|(stored, _)| stored != filename);
         Ok(())
+    }
+
+    fn path_of(&self, _filename: &str) -> PathBuf {
+        PathBuf::new()
     }
 }
 

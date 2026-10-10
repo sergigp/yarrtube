@@ -7,7 +7,6 @@ pub mod fetch_thumbnail_task;
 pub(crate) mod log_capture;
 pub mod reconcile_channel_task;
 pub mod reconcile_playlist_task;
-pub mod reconcile_plex_collections_task;
 pub mod update_ytdlp_task;
 
 use crate::domain::services::{
@@ -26,7 +25,6 @@ use download_video_task::DownloadVideoTask;
 use fetch_thumbnail_task::FetchThumbnailTask;
 use reconcile_channel_task::ReconcileChannelTask;
 use reconcile_playlist_task::ReconcilePlaylistTask;
-use reconcile_plex_collections_task::ReconcilePlexCollectionsTask;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -46,7 +44,6 @@ pub fn registry(
     clock: Arc<dyn Clock>,
     ytdlp_updater: Arc<dyn YtdlpUpdater>,
     ytdlp_path: PathBuf,
-    reconcile_plex_collections: Option<ReconcilePlexCollectionsTask>,
 ) -> HandlerRegistry {
     let mut registry: HandlerRegistry = HashMap::new();
     registry.insert(
@@ -86,8 +83,5 @@ pub fn registry(
             clock,
         )),
     );
-    if let Some(task) = reconcile_plex_collections {
-        registry.insert("reconcile_plex_collections".to_string(), Arc::new(task));
-    }
     registry
 }

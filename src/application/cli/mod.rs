@@ -1,3 +1,4 @@
+pub mod migrate_layout;
 pub mod update_ytdlp;
 
 use clap::{Parser, Subcommand};
@@ -17,4 +18,11 @@ pub enum Commands {
 
     /// Download the latest yt-dlp release and replace the local binary
     UpdateYtdlp,
+
+    /// Move an existing library into the TV-show layout (stop the daemon first)
+    MigrateLayout {
+        /// Print what would move without changing anything
+        #[arg(long)]
+        dry_run: bool,
+    },
 }

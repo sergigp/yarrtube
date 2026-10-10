@@ -4,5 +4,5 @@ pub mod nfo;
 pub mod video_metadata;
 
 pub use mapping::{build_video_metadata, resolve_sorttitle};
-pub use nfo::render_movie_nfo;
+pub use nfo::{render_episode_nfo, render_show_nfo};
 pub use video_metadata::VideoMetadata;

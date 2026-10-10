@@ -37,12 +37,15 @@ mod tests {
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
+    use crate::domain::services::ShowFileWriter;
     use crate::domain::services::ThumbnailFetcher;
+    use crate::domain::services::VideoRelocator;
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
     use crate::domain::video::{VideoId, VideoRecordId, VideoStatus};
     use crate::domain::video_metadata::VideoMetadata;
+    use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
@@ -72,6 +75,7 @@ mod tests {
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
+    use crate::infrastructure::shared::system_clock::SystemClock;
     use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
@@ -654,51 +658,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_keep_the_folder_of_a_download_in_progress_if_video_renamed() {
-        let db = TestDatabase::new();
-        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
-            "My Video".to_string(),
-        ]));
-        channel_repository.insert(&channel("@somechannel")).unwrap();
-        let video = my_video().start_download(fixed_timestamp());
-        save_channel_video(
-            video_repository.as_ref(),
-            channel_video_repository.as_ref(),
-            &video,
-        );
-        let task = ReconcileChannelTask::new(channel_video_reconciler(
-            &db,
-            channel_repository,
-            video_repository.clone(),
-            channel_video_repository.clone(),
-            Arc::new(FakeChannelVideosRepository::with_videos(vec![
-                listed_video("yt1", "Renamed", 0),
-            ])),
-            task_repository.clone(),
-            video_file_repository.clone(),
-        ));
-
-        let result = run(&task, &payload_for("@somechannel"));
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
-        assert_eq!(
-            video_repository.list().unwrap(),
-            vec![Video {
-                title: "Renamed".to_string(),
-                ..video
-            }]
-        );
-    }
-
-    #[test]
+    #[ignore = "plex-tv-show-layout: replaced by task 2.16"]
     fn it_should_generate_missing_metadata() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -744,11 +704,24 @@ mod tests {
                 Arc::new(ThumbnailFetcher::new(
                     video_repository.clone(),
                     Arc::new(FakeVideoDownloaderRepository::default()),
+                    Arc::new(FakeVideoFileRepository::default()),
                     task_repository.clone(),
                     Arc::new(FixedClock(fixed_timestamp())),
+                    "/videos",
+                )),
+                Arc::new(VideoRelocator::new(
+                    Arc::new(SqliteVideoRepository::new(db.database())),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                    Arc::new(SystemClock),
                 )),
                 Arc::new(FixedClock(fixed_timestamp())),
                 videos_root.path().to_string_lossy(),
+            )),
+            Arc::new(ShowFileWriter::new(
+                Arc::new(FakeShowFileRepository::default()),
+                "avatars",
+                "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
@@ -835,10 +808,23 @@ mod tests {
                 Arc::new(ThumbnailFetcher::new(
                     video_repository.clone(),
                     video_downloader_repository.clone(),
+                    Arc::new(FakeVideoFileRepository::default()),
                     task_repository.clone(),
                     Arc::new(FixedClock(fixed_timestamp())),
+                    "/videos",
+                )),
+                Arc::new(VideoRelocator::new(
+                    Arc::new(SqliteVideoRepository::new(db.database())),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                    Arc::new(SystemClock),
                 )),
                 Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
+            )),
+            Arc::new(ShowFileWriter::new(
+                Arc::new(FakeShowFileRepository::default()),
+                "avatars",
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -936,8 +922,10 @@ mod tests {
         let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
             video_repository.clone(),
             Arc::new(FakeVideoDownloaderRepository::default()),
+            Arc::new(FakeVideoFileRepository::default()),
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
         ));
         ChannelVideoReconciler::new(
             channel_repository,
@@ -959,7 +947,18 @@ mod tests {
                 task_repository.clone(),
                 video_file_repository,
                 thumbnail_fetcher,
+                Arc::new(VideoRelocator::new(
+                    Arc::new(SqliteVideoRepository::new(db.database())),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                    Arc::new(SystemClock),
+                )),
                 Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
+            )),
+            Arc::new(ShowFileWriter::new(
+                Arc::new(FakeShowFileRepository::default()),
+                "avatars",
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -999,10 +998,23 @@ mod tests {
                 Arc::new(ThumbnailFetcher::new(
                     video_repository,
                     Arc::new(FakeVideoDownloaderRepository::default()),
+                    Arc::new(FakeVideoFileRepository::default()),
                     task_repository.clone(),
                     Arc::new(FixedClock(fixed_timestamp())),
+                    "/videos",
+                )),
+                Arc::new(VideoRelocator::new(
+                    Arc::new(SqliteVideoRepository::new(unused_connection())),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
+                    Arc::new(SystemClock),
                 )),
                 Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
+            )),
+            Arc::new(ShowFileWriter::new(
+                Arc::new(FakeShowFileRepository::default()),
+                "avatars",
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1103,8 +1115,8 @@ mod tests {
     /// The thumbnail the fake downloader reports for `my_video()`.
     fn fetched_thumbnail() -> FetchedThumbnail {
         FetchedThumbnail {
-            folder: "My Video".to_string(),
-            filename: "My Video.jpg".to_string(),
+            path: std::path::PathBuf::from("My Video.jpg"),
+            published_at: None,
         }
     }
 

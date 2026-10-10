@@ -5,6 +5,7 @@ use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::services::{
     DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
+    ShowFileWriter, ShowFileWriterApi,
 };
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
@@ -35,6 +36,7 @@ pub struct PlaylistVideoReconciler {
     event_publisher: Arc<dyn EventPublisher>,
     task_repository: Arc<dyn TaskRepository>,
     internal_video_reconciler: Arc<InternalVideoReconciler>,
+    show_file_writer: Arc<ShowFileWriter>,
     clock: Arc<dyn Clock>,
     reconcile_interval_seconds: i64,
 }
@@ -49,6 +51,7 @@ impl PlaylistVideoReconciler {
         event_publisher: Arc<dyn EventPublisher>,
         task_repository: Arc<dyn TaskRepository>,
         internal_video_reconciler: Arc<InternalVideoReconciler>,
+        show_file_writer: Arc<ShowFileWriter>,
         clock: Arc<dyn Clock>,
         reconcile_interval_seconds: i64,
     ) -> Self {
@@ -60,6 +63,7 @@ impl PlaylistVideoReconciler {
             event_publisher,
             task_repository,
             internal_video_reconciler,
+            show_file_writer,
             clock,
             reconcile_interval_seconds,
         }
@@ -140,6 +144,7 @@ impl PlaylistVideoReconciler {
         let _span = info_span!("reconcile_playlist", playlist_id = %playlist.id).entered();
         info!(playlist_id = %playlist.id, kind = %playlist.kind, "reconciling playlist");
 
+        self.show_file_writer.write_playlist_show(playlist)?;
         let delta = self.sync_membership_with_youtube(playlist, on_listing_failure)?;
         let desired = self.desired_state(playlist)?;
         self.internal_video_reconciler.reconcile(&desired, &delta)

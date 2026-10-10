@@ -5,6 +5,9 @@ use crate::infrastructure::repositories::filesystem_channel_avatar_repository::{
 use crate::infrastructure::repositories::filesystem_directory_repository::{
     DirectoryRepository, FilesystemDirectoryRepository,
 };
+use crate::infrastructure::repositories::filesystem_show_file_repository::{
+    FilesystemShowFileRepository, ShowFileRepository,
+};
 use crate::infrastructure::repositories::filesystem_video_file_repository::{
     FilesystemVideoFileRepository, VideoFileRepository,
 };
@@ -59,6 +62,10 @@ use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+/// The staging directory's name under the videos root; dot-prefixed so
+/// Plex and Kodi ignore it.
+pub const STAGING_DIRNAME: &str = ".downloads";
+
 /// Where the adapters that touch the outside world point at.
 pub struct InfrastructureSettings {
     pub db_path: PathBuf,
@@ -90,9 +97,13 @@ pub struct InfrastructureContainer {
     pub channel_videos_repository: Arc<dyn ChannelVideosRepository>,
     pub video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
     pub video_file_repository: Arc<dyn VideoFileRepository>,
+    pub show_file_repository: Arc<dyn ShowFileRepository>,
     pub channel_avatar_repository: Arc<dyn ChannelAvatarRepository>,
     pub directory_repository: Arc<dyn DirectoryRepository>,
     pub ytdlp_updater: Arc<dyn YtdlpUpdater>,
+    /// `<videos root>/.downloads`: where downloads and thumbnail fetches are
+    /// staged before being moved into their show.
+    pub staging_root: PathBuf,
 }
 
 impl InfrastructureContainer {
@@ -106,6 +117,7 @@ impl InfrastructureContainer {
         // itself) plus a read connection that, being distinct, reads
         // concurrently with an in-progress write under WAL.
         let db = sqlite_connection::Database::open(db_path)?;
+        let staging_root = settings.videos_path.join(STAGING_DIRNAME);
 
         Ok(Self {
             playlist_repository: Arc::new(SqlitePlaylistRepository::new(db.clone())),
@@ -136,6 +148,7 @@ impl InfrastructureContainer {
                 settings.ytdlp_path,
             )),
             video_file_repository: Arc::new(FilesystemVideoFileRepository),
+            show_file_repository: Arc::new(FilesystemShowFileRepository),
             channel_avatar_repository: Arc::new(FilesystemChannelAvatarRepository::new(
                 settings.avatars_path,
             )),
@@ -143,6 +156,7 @@ impl InfrastructureContainer {
                 settings.videos_path,
             )),
             ytdlp_updater: Arc::new(RealYtdlpUpdater),
+            staging_root,
             clock,
         })
     }

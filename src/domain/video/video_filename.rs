@@ -1,4 +1,4 @@
-use crate::domain::video::VideoId;
+use crate::domain::video::EpisodeNumber;
 use std::fmt;
 use unicode_general_category::get_general_category;
 use unicode_normalization::UnicodeNormalization;
@@ -45,18 +45,16 @@ impl fmt::Display for VideoFilename {
     }
 }
 
-/// The folder names a download of this video may be writing into: the bare
-/// sanitized title, and the collision-suffixed one.
-pub fn video_folder_candidates(title: &str, youtube_id: &VideoId) -> [String; 2] {
-    let folder = VideoFilename::from_title(title).as_str().to_string();
-    let suffixed = collision_suffixed_folder(&folder, youtube_id.as_str());
-    [folder, suffixed]
+/// An episode's file base name (no extension): its episode code followed by
+/// the sanitized title, e.g. `S2026E031501 - My Video`.
+pub fn episode_base_name(_number: &EpisodeNumber, _title: &str) -> String {
+    String::new()
 }
 
-/// The folder a video falls back to when `folder` is already taken on disk:
-/// `"{folder} [{youtube_id}]"`, unique per video.
-pub fn collision_suffixed_folder(folder: &str, youtube_id: &str) -> String {
-    format!("{folder} [{youtube_id}]")
+/// An episode file's path relative to its show directory:
+/// `Season <year>/<base name>.<ext>`.
+pub fn episode_relative_path(_number: &EpisodeNumber, _title: &str, _ext: &str) -> String {
+    String::new()
 }
 
 /// Keeps letters, marks, numbers and punctuation (Unicode general category
