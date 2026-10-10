@@ -151,6 +151,10 @@ pub struct FakeVideoFileRepository {
     pub(crate) file_exists_result: std::sync::Mutex<Option<bool>>,
     pub(crate) moved: std::sync::Mutex<Vec<(std::path::PathBuf, std::path::PathBuf)>>,
     pub(crate) removed_if_empty: std::sync::Mutex<Vec<std::path::PathBuf>>,
+    /// Runs on every `move_file`, before it is recorded, e.g. to observe
+    /// what is already on disk when a file is moved into place.
+    #[allow(clippy::type_complexity)]
+    pub(crate) on_move: Option<Box<dyn Fn(&Path, &Path) + Send + Sync>>,
 }
 
 #[cfg(test)]
@@ -176,6 +180,13 @@ impl FakeVideoFileRepository {
             deleted_dirs: std::sync::Mutex::new(Vec::new()),
             file_exists_result: std::sync::Mutex::new(None),
             ..Self::default()
+        }
+    }
+
+    pub fn with_on_move(self, hook: impl Fn(&Path, &Path) + Send + Sync + 'static) -> Self {
+        Self {
+            on_move: Some(Box::new(hook)),
+            ..self
         }
     }
 
@@ -229,6 +240,9 @@ impl VideoFileRepository for FakeVideoFileRepository {
     }
 
     fn move_file(&self, from: &Path, to: &Path) -> anyhow::Result<()> {
+        if let Some(hook) = &self.on_move {
+            hook(from, to);
+        }
         self.moved
             .lock()
             .unwrap()

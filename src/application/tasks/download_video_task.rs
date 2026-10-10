@@ -162,6 +162,50 @@ mod tests {
     }
 
     #[test]
+    fn it_should_write_the_episode_nfo_before_moving_the_media_into_place() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let nfo_path = output_dir
+            .path()
+            .join("Season 2026/S2026E031501 - My Video.nfo");
+        let nfo_when_media_moved = Arc::new(std::sync::Mutex::new(None));
+        let observed = nfo_when_media_moved.clone();
+        let observed_nfo_path = nfo_path.clone();
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_on_move(move |_, to| {
+                if to.extension().is_some_and(|ext| ext == "mp4") {
+                    *observed.lock().unwrap() = std::fs::read_to_string(&observed_nfo_path).ok();
+                }
+            }));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                staged_download(),
+            )),
+            video_file_repository,
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *nfo_when_media_moved.lock().unwrap(),
+            Some(render_episode_nfo(
+                &generated_metadata(Some("S2026E031501 - My Video.jpg")),
+                &published_episode()
+            ))
+        );
+    }
+
+    #[test]
     fn it_should_retry_a_failed_download() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1039,47 +1083,6 @@ mod tests {
         assert_eq!(
             folder_entries(&output_dir.path().join(FAKE_FRESH_FOLDER)),
             Vec::<String>::new()
-        );
-    }
-
-    #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.2"]
-    fn it_should_write_movie_nfo_before_the_video_lands() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
-        let video_dir = output_dir.path().join(FAKE_FRESH_FOLDER);
-        std::fs::create_dir_all(&video_dir).unwrap();
-        let video = my_video();
-        video_repository.save(&video).unwrap();
-        let nfo_while_downloading = Arc::new(std::sync::Mutex::new(None));
-        let observed = nfo_while_downloading.clone();
-        let observed_dir = video_dir.clone();
-        let task = DownloadVideoTask::new(video_downloader(
-            &db,
-            video_repository.clone(),
-            Arc::new(
-                FakeVideoDownloaderRepository::new(true).with_on_download(move || {
-                    *observed.lock().unwrap() =
-                        std::fs::read_to_string(observed_dir.join(MOVIE_NFO_FILENAME)).ok();
-                }),
-            ),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository {
-                metadata: Some(youtube_metadata()),
-            }),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-        ));
-
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(
-            *nfo_while_downloading.lock().unwrap(),
-            Some(render_episode_nfo(
-                &generated_metadata(Some("fake-output.jpg")),
-                &episode_number()
-            ))
         );
     }
 
