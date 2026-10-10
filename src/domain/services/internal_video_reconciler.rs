@@ -6,7 +6,10 @@ use crate::domain::services::{
 use crate::domain::shared::Quality;
 use crate::domain::task::{ScheduledTask, Task};
 use crate::domain::video::VideoRecordId;
-use crate::domain::video::{Video, VideoStatus, nfo_path_for, resolve_output_dir, top_level_entry};
+use crate::domain::video::{
+    SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, Video, VideoStatus, is_episode_path, is_season_folder,
+    nfo_path_for, resolve_output_dir, top_level_entry,
+};
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -329,11 +332,11 @@ impl InternalVideoReconciler {
             })
     }
 
-    /// Deletes every top-level entry of the output folder that doesn't
-    /// belong to a stored video.
+    /// Deletes every entry of the output folder that is neither a show file,
+    /// a season folder, nor a file of a stored video.
     fn delete_orphaned_files(&self, actual: &ActualState) -> anyhow::Result<()> {
         for file in &actual.files {
-            if actual.protected_entries.contains(file) {
+            if actual.protected_entries.contains(file) || is_season_folder(file) {
                 continue;
             }
             if self
@@ -397,19 +400,42 @@ impl ActualState {
     }
 }
 
-/// Entries of the output folder orphan cleanup must keep: every
-/// `Downloaded` video's file and every stored video's thumbnail (a
-/// `Pending`/`InProgress` video may already have one pre-fetched, see the
-/// `video-thumbnails` capability).
+/// Entries of the output folder orphan cleanup must keep: the show files,
+/// every `Downloaded` video's file and episode NFO, and every stored video's
+/// thumbnail (a `Pending`/`InProgress` video may already have one
+/// pre-fetched, see the `video-thumbnails` capability). An episode file is
+/// kept by its path in its season folder, a legacy video by its top-level
+/// folder or flat file.
 fn protected_entries(videos: &[Video]) -> HashSet<String> {
-    let downloaded_files = videos
+    let downloaded_files: Vec<&str> = videos
         .iter()
         .filter(|v| v.status == VideoStatus::Downloaded)
-        .filter_map(|v| v.filename.clone());
-    let thumbnails = videos.iter().filter_map(|v| v.thumbnail_filename.clone());
-    downloaded_files
+        .filter_map(|v| v.filename.as_deref())
+        .collect();
+    let thumbnails = videos
+        .iter()
+        .filter_map(|v| v.thumbnail_filename.as_deref());
+    let episode_nfos = downloaded_files
+        .iter()
+        .filter(|filename| is_episode_path(filename))
+        .map(|filename| nfo_path_for(filename));
+    let recorded = downloaded_files
+        .iter()
+        .copied()
         .chain(thumbnails)
-        .map(|entry| top_level_entry(&entry).to_string())
+        .map(|path| {
+            if is_episode_path(path) {
+                path
+            } else {
+                top_level_entry(path)
+            }
+        })
+        .map(str::to_string);
+    [SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME]
+        .map(str::to_string)
+        .into_iter()
+        .chain(recorded)
+        .chain(episode_nfos)
         .collect()
 }
 

@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 /// and Kodi ignore it.
 pub const STAGING_DIRNAME: &str = ".downloads";
 
+/// What every season folder's name starts with, e.g. `Season 2026`.
+const SEASON_FOLDER_PREFIX: &str = "Season ";
+
 /// A show's NFO, at the root of its playlist's or channel's directory.
 pub const SHOW_NFO_FILENAME: &str = "tvshow.nfo";
 /// A show's poster, at the root of its playlist's or channel's directory.
@@ -33,14 +36,25 @@ pub fn resolve_output_dir(videos_path: &str, path: &str) -> PathBuf {
 /// Whether a recorded `filename`/`thumbnail_filename` is in the TV-show
 /// layout: its first segment is a `Season ` folder. Anything else is a legacy
 /// per-video folder or flat file.
-pub fn is_episode_path(_relative_path: &str) -> bool {
-    false
+pub fn is_episode_path(relative_path: &str) -> bool {
+    relative_path
+        .split_once('/')
+        .is_some_and(|(first, _)| is_season_folder(first))
+}
+
+/// Whether a top-level entry of a show directory is one of its `Season `
+/// folders.
+pub fn is_season_folder(entry: &str) -> bool {
+    !entry.contains('/') && entry.starts_with(SEASON_FOLDER_PREFIX)
 }
 
 /// The episode NFO sitting next to an episode file: the same path with a
 /// `.nfo` extension.
-pub fn nfo_path_for(_relative_path: &str) -> String {
-    String::new()
+pub fn nfo_path_for(relative_path: &str) -> String {
+    Path::new(relative_path)
+        .with_extension("nfo")
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Where a video's download or thumbnail fetch is staged before being moved

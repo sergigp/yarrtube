@@ -42,7 +42,7 @@ mod tests {
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
-    use crate::domain::video::{VideoId, VideoRecordId};
+    use crate::domain::video::{EpisodeNumber, VideoId, VideoRecordId};
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
@@ -78,6 +78,7 @@ mod tests {
     use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
+    use std::path::PathBuf;
     use std::sync::Arc;
 
     #[test]
@@ -636,6 +637,57 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_sweep_show_files_season_folders_or_episode_files_of_recorded_videos() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
+            "tvshow.nfo".to_string(),
+            "poster.jpg".to_string(),
+            "Season 2026".to_string(),
+            "Season 2026/S2026E031501 - My Video.mp4".to_string(),
+            "Season 2026/S2026E031501 - My Video.jpg".to_string(),
+            "Season 2026/S2026E031501 - My Video.nfo".to_string(),
+            "Season 2026/stray.mp4".to_string(),
+        ]));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = episode_video();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &video,
+            0,
+        );
+        video_repository.update(&video).unwrap();
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            vec![member_playlist_item()],
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            *video_file_repository.deleted_calls.lock().unwrap(),
+            vec![(
+                PathBuf::from("/videos/my-playlist"),
+                "Season 2026/stray.mp4".to_string()
+            )]
+        );
+    }
+
+    #[test]
     #[ignore = "plex-tv-show-layout: replaced by task 2.16"]
     fn it_should_generate_missing_metadata() {
         let db = TestDatabase::new();
@@ -1060,6 +1112,16 @@ mod tests {
                 None,
                 fixed_timestamp(),
             )
+    }
+
+    /// `my_video()` downloaded in the TV-show layout as the first episode of
+    /// 2026-03-15.
+    fn episode_video() -> Video {
+        downloaded_video(
+            "Season 2026/S2026E031501 - My Video.mp4",
+            Some("Season 2026/S2026E031501 - My Video.jpg"),
+        )
+        .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), fixed_timestamp())
     }
 
     fn playlist_item(video_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {
