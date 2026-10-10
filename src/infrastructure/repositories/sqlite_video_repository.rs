@@ -822,6 +822,36 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_assign_the_next_free_index_within_the_same_show_and_day() {
+        let db = TestDatabase::new();
+        let repo = SqliteVideoRepository::new(db.database());
+        let playlist_sibling = video("Playlist sibling", fixed_timestamp());
+        let playlist_video = video("Playlist video", fixed_timestamp());
+        let channel_sibling = video("Channel sibling", fixed_timestamp());
+        let channel_video = video("Channel video", fixed_timestamp());
+        [
+            &playlist_sibling,
+            &playlist_video,
+            &channel_sibling,
+            &channel_video,
+        ]
+        .map(|video| repo.save(video).unwrap());
+        let _ = numbered(&repo, playlist_sibling.clone(), episode(31501));
+        let _ = numbered(&repo, channel_sibling.clone(), episode(31503));
+        link_to_playlist(&db, &playlist_sibling, "PL1");
+        link_to_playlist(&db, &playlist_video, "PL1");
+        link_to_channel(&db, &channel_sibling, "@somechannel");
+        link_to_channel(&db, &channel_video, "@somechannel");
+
+        let numbers = [&playlist_video, &channel_video].map(|video| {
+            repo.assign_episode_number(&video.id, published_at())
+                .unwrap()
+        });
+
+        assert_eq!(numbers, [episode(31502), episode(31504)]);
+    }
+
     fn link_to_playlist(db: &TestDatabase, video: &Video, playlist_id: &str) {
         SqlitePlaylistVideoRepository::new(db.database())
             .save(&PlaylistVideo::create(
