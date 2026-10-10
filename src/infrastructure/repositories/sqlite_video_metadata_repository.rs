@@ -365,20 +365,19 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 3.17/3.18"]
-    fn it_should_write_only_movie_nfo() {
+    fn it_should_write_the_nfo_at_the_given_path() {
         let repo = repo();
-        let video_dir = unique_temp_dir("video-metadata-write-nfo");
+        let show_dir = unique_temp_dir("video-metadata-write-nfo");
+        let nfo_path = show_dir.join("Season 2024").join(NFO);
 
-        repo.write_nfo(&metadata(), &number(), &video_dir.join(NFO))
-            .unwrap();
+        repo.write_nfo(&metadata(), &number(), &nfo_path).unwrap();
 
         assert_eq!(
-            std::fs::read_to_string(video_dir.join(MOVIE_NFO_FILENAME)).unwrap(),
-            String::new()
+            std::fs::read_to_string(&nfo_path).ok(),
+            Some(render_episode_nfo(&metadata(), &number()))
         );
         assert_eq!(repo.find(&VideoRecordId::new_generated()).unwrap(), None);
-        std::fs::remove_dir_all(&video_dir).unwrap();
+        std::fs::remove_dir_all(&show_dir).unwrap();
     }
 
     #[test]
