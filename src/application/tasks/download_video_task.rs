@@ -991,12 +991,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.8"]
-    fn it_should_remove_the_folder_if_video_deleted_during_download() {
+    fn it_should_discard_the_download_when_the_video_was_deleted_meanwhile() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let output_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
         let deleting_repository = video_repository.clone();
@@ -1005,27 +1005,30 @@ mod tests {
             &db,
             video_repository.clone(),
             Arc::new(
-                FakeVideoDownloaderRepository::new(true).with_on_download(move || {
-                    deleting_repository.delete(&deleted_id).unwrap();
-                }),
+                FakeVideoDownloaderRepository::succeeding_with(staged_download()).with_on_download(
+                    move || {
+                        deleting_repository.delete(&deleted_id).unwrap();
+                    },
+                ),
             ),
             video_file_repository.clone(),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
         ));
 
-        let result = run(&task, &payload_for(video.id.as_str()), false);
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
         assert_eq!(
-            *video_file_repository.deleted_calls.lock().unwrap(),
-            vec![(
-                PathBuf::from("/videos/my-playlist"),
-                "fake-output".to_string()
-            )]
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![PathBuf::from("/videos/.downloads/yt1")]
         );
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(folder_entries(output_dir.path()), Vec::<String>::new());
     }
 
     #[test]
@@ -1442,9 +1445,6 @@ mod tests {
         ))
     }
 
-    /// The per-video folder the old layout's fake download reported.
-    const FAKE_FRESH_FOLDER: &str = "fake-output";
-
     fn unused_connection() -> crate::infrastructure::shared::sqlite_connection::Database {
         crate::infrastructure::shared::sqlite_connection::Database::single(
             Connection::open_in_memory().unwrap(),
@@ -1470,16 +1470,6 @@ mod tests {
         }
     }
 
-    /// One call as `FakeVideoDownloaderRepository` records it, for the
-    /// `yt1` video at high quality.
-    fn download_call(staging_dir: &str) -> (String, Quality, PathBuf) {
-        (
-            "https://www.youtube.com/watch?v=yt1".to_string(),
-            Quality::High,
-            PathBuf::from(staging_dir),
-        )
-    }
-
     /// A download `yt-dlp` staged for `my_video()`, published on
     /// 2026-03-15, with its converted thumbnail.
     fn staged_download() -> DownloadedVideo {
@@ -1499,10 +1489,6 @@ mod tests {
     /// The first episode of `staged_download()`'s publish day.
     fn published_episode() -> EpisodeNumber {
         EpisodeNumber::new(2026, 31501).unwrap()
-    }
-
-    fn episode_number() -> EpisodeNumber {
-        EpisodeNumber::new(2023, 111401).unwrap()
     }
 
     /// The metadata a download of `my_video()` generates from
