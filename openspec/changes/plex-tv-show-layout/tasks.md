@@ -28,7 +28,7 @@
 - [x] 2.18 `it_should_reset_a_numbered_video_whose_file_is_missing_without_dropping_its_number` — PENDING, filenames cleared, number kept
 - [x] 2.19 `it_should_delete_an_episodes_media_thumbnail_and_nfo` — delete task removes the three files, show files untouched
 - [x] 2.20 `it_should_delete_a_legacy_per_video_folder` — delete task removes the whole legacy folder
-- [ ] 2.21 `it_should_scan_the_show_folder_in_every_section_containing_it` — scan subscriber scans `output_dir` in the containing section only
+- [x] 2.21 `it_should_scan_the_show_folder_in_every_section_containing_it` — scan subscriber scans `output_dir` in the containing section only
 - [ ] 2.22 `it_should_skip_the_scan_when_no_section_contains_the_show_folder` — warning logged, `Ok`
 - [ ] 2.23 `it_should_register_the_scan_subscriber_only_with_url_token_and_videos_path` — serve wiring with and without each variable, replacing the section-id tests
 - [ ] 2.24 `it_should_migrate_a_legacy_library_into_the_tv_layout` — migrate-layout over two sources and three videos (one `[id]`-suffixed): files moved, rows updated, show files written, old folders gone, report lists three moves

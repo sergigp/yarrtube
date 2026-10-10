@@ -3,13 +3,15 @@ use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use serde::Deserialize;
 use std::path::Path;
 
+/// The event's `folder` (the season folder) is ignored: the whole show is
+/// scanned.
 #[derive(Debug, Deserialize)]
 struct VideoDownloadedPayload {
     output_dir: String,
-    folder: String,
 }
 
-/// Reacts to `VideoDownloaded` by asking Plex to scan the video's folder.
+/// Reacts to `VideoDownloaded` by asking Plex to scan the video's show
+/// folder.
 /// Registered only when `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN` and
 /// `YARRTUBE_PLEX_VIDEOS_PATH` are configured. A Plex failure fails the event, so it is retried.
 pub struct ScanPlexFolderOnVideoDownloaded {
@@ -25,8 +27,7 @@ impl ScanPlexFolderOnVideoDownloaded {
 impl EventSubscriber for ScanPlexFolderOnVideoDownloaded {
     fn handle(&self, payload: &str) -> anyhow::Result<()> {
         let payload: VideoDownloadedPayload = serde_json::from_str(payload)?;
-        self.scanner
-            .scan_folder(&Path::new(&payload.output_dir).join(&payload.folder))
+        self.scanner.scan_folder(Path::new(&payload.output_dir))
     }
 }
 
@@ -37,10 +38,11 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn it_should_scan_the_folder_in_the_section_containing_it() {
+    fn it_should_scan_the_show_folder_in_every_section_containing_it() {
         let plex_repository = Arc::new(
             FakePlexLibraryRepository::default()
-                .with_location("19", "/volume1/media/yarrtube/playlists"),
+                .with_location("19", "/volume1/media/yarrtube/channels")
+                .with_location("20", "/volume1/media/yarrtube/playlists"),
         );
         let subscriber = ScanPlexFolderOnVideoDownloaded::new(PlexFolderScanner::new(
             "/videos",
@@ -50,13 +52,13 @@ mod tests {
 
         let result = handle(
             &subscriber,
-            &payload("/videos/playlists/kids", "Some video"),
+            &payload("/videos/channels/Some Channel", "Season 2026"),
         );
 
         assert_eq!(result, Ok(()));
         assert_eq!(
             plex_repository.mutations(),
-            vec!["scan:19:/volume1/media/yarrtube/playlists/kids/Some video".to_string()]
+            vec!["scan:19:/volume1/media/yarrtube/channels/Some Channel".to_string()]
         );
     }
 
