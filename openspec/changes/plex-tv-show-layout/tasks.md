@@ -56,7 +56,7 @@
 - [x] 3.12 SqliteVideoRepository: `it_should_assign_the_first_index_of_the_day` — `031501`
 - [x] 3.13 SqliteVideoRepository: `it_should_assign_the_next_free_index_within_the_same_show_and_day` — sibling via `playlist_videos` and via `channel_videos`
 - [x] 3.14 SqliteVideoRepository: `it_should_number_copies_in_different_shows_independently`
-- [ ] 3.15 SqliteVideoRepository: `it_should_return_the_existing_number_when_already_assigned`
+- [x] 3.15 SqliteVideoRepository: `it_should_return_the_existing_number_when_already_assigned`
 - [ ] 3.16 SqliteVideoRepository: `it_should_persist_and_read_the_episode_number` — round trip through `save`/`find`/`update`
 - [ ] 3.17 SqliteVideoRepository: `it_should_list_downloaded_videos`
 - [ ] 3.18 SqliteVideoMetadataRepository: `it_should_write_an_episode_nfo_with_season_episode_and_aired` — `<episodedetails>` with `season`, `episode`, `aired`, `uniqueid`, escaped text

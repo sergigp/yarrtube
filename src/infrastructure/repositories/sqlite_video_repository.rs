@@ -871,6 +871,26 @@ mod tests {
         assert_eq!(numbers, [episode(31501), episode(31501)]);
     }
 
+    #[test]
+    fn it_should_return_the_existing_number_when_already_assigned() {
+        let db = TestDatabase::new();
+        let repo = SqliteVideoRepository::new(db.database());
+        let video = video("First", fixed_timestamp());
+        repo.save(&video).unwrap();
+        let video = numbered(&repo, video, episode(31503));
+        link_to_playlist(&db, &video, "PL1");
+
+        let number = repo.assign_episode_number(
+            &video.id,
+            DateTime::parse_from_rfc3339("2026-04-01T10:00:00Z")
+                .unwrap()
+                .to_utc(),
+        );
+
+        assert_eq!(number.unwrap(), episode(31503));
+        assert_eq!(repo.find(&video.id).unwrap(), Some(video));
+    }
+
     fn link_to_playlist(db: &TestDatabase, video: &Video, playlist_id: &str) {
         SqlitePlaylistVideoRepository::new(db.database())
             .save(&PlaylistVideo::create(
