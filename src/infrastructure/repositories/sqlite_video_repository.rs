@@ -852,6 +852,25 @@ mod tests {
         assert_eq!(numbers, [episode(31502), episode(31504)]);
     }
 
+    #[test]
+    fn it_should_number_copies_in_different_shows_independently() {
+        let db = TestDatabase::new();
+        let repo = SqliteVideoRepository::new(db.database());
+        let playlist_copy = video("Copy", fixed_timestamp());
+        let channel_copy = video("Copy", fixed_timestamp());
+        repo.save(&playlist_copy).unwrap();
+        repo.save(&channel_copy).unwrap();
+        link_to_playlist(&db, &playlist_copy, "PL1");
+        link_to_channel(&db, &channel_copy, "@somechannel");
+
+        let numbers = [&playlist_copy, &channel_copy].map(|video| {
+            repo.assign_episode_number(&video.id, published_at())
+                .unwrap()
+        });
+
+        assert_eq!(numbers, [episode(31501), episode(31501)]);
+    }
+
     fn link_to_playlist(db: &TestDatabase, video: &Video, playlist_id: &str) {
         SqlitePlaylistVideoRepository::new(db.database())
             .save(&PlaylistVideo::create(
