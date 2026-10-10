@@ -13,11 +13,14 @@ pub struct Show {
 }
 
 impl Show {
-    pub fn from_channel(_channel: &Channel, _avatars_dir: &Path) -> Self {
+    pub fn from_channel(channel: &Channel, avatars_dir: &Path) -> Self {
         Self {
-            title: String::new(),
-            uniqueid: String::new(),
-            poster_source: None,
+            title: channel.name.clone(),
+            uniqueid: channel.youtube_channel_id.clone(),
+            poster_source: channel
+                .avatar_filename
+                .as_ref()
+                .map(|avatar| avatars_dir.join(avatar)),
         }
     }
 
