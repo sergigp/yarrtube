@@ -1,7 +1,7 @@
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::services::{
-    MetadataGenerator, MetadataGeneratorApi, ThumbnailFetcher, ThumbnailFetcherApi, VideoRelocator,
-    VideoRelocatorApi,
+    MetadataGenerator, MetadataGeneratorApi, Relocation, ThumbnailFetcher, ThumbnailFetcherApi,
+    VideoRelocator, VideoRelocatorApi,
 };
 use crate::domain::shared::Quality;
 use crate::domain::task::{ScheduledTask, Task};
@@ -237,33 +237,25 @@ impl InternalVideoReconciler {
 
     /// Regenerates `video`'s metadata the same way `VideoDownloader` does at
     /// download time, referencing the thumbnail already on disk; a video still
-    /// in the legacy layout is relocated into its season folder instead, now
+    /// in the legacy layout is first relocated into its season folder, now
     /// that its publish time is known. Any failure is logged and swallowed —
     /// a `Downloaded` video's status is never touched by this, and a repeated
     /// failure simply tries again on the next reconcile pass.
     fn generate_metadata(&self, video: &Video, output_dir: &Path, sort_position: Option<i64>) {
-        let Some(filename) = video.filename.as_deref() else {
-            return;
-        };
-        let thumbnail_filename = video
-            .thumbnail_filename
-            .as_deref()
-            .and_then(|f| Path::new(f).file_name())
-            .and_then(|f| f.to_str())
-            .map(str::to_string);
         let Some(video_metadata) =
             self.metadata_generator
-                .generate(video, sort_position, thumbnail_filename)
+                .generate(video, sort_position, thumbnail_basename(video))
         else {
             return;
         };
-        if video.is_in_legacy_layout() {
-            self.relocate(video, &video_metadata, output_dir);
-            return;
-        }
-        let Some(number) = video.episode_number else {
+        let Some(video) = self.relocate_if_legacy(video, &video_metadata, output_dir) else {
             return;
         };
+        let (Some(filename), Some(number)) = (video.filename.as_deref(), video.episode_number)
+        else {
+            return;
+        };
+        let video_metadata = video_metadata.with_thumb(thumbnail_basename(&video));
         let nfo_path = output_dir.join(nfo_path_for(filename));
 
         if let Err(e) =
@@ -274,12 +266,28 @@ impl InternalVideoReconciler {
         }
     }
 
-    fn relocate(&self, video: &Video, metadata: &VideoMetadata, output_dir: &Path) {
-        if let Err(e) =
-            self.video_relocator
-                .relocate(video, Some(metadata.published_at), output_dir, false)
+    /// `video` itself when already in its season folder, else `video` as
+    /// stored once relocated there; `None` when the relocation failed or
+    /// moved nothing.
+    fn relocate_if_legacy(
+        &self,
+        video: &Video,
+        metadata: &VideoMetadata,
+        output_dir: &Path,
+    ) -> Option<Video> {
+        if !video.is_in_legacy_layout() {
+            return Some(video.clone());
+        }
+        match self
+            .video_relocator
+            .relocate(video, Some(metadata.published_at), output_dir, false)
         {
-            warn!(video_id = %video.id, error = %e, "failed to relocate legacy video during reconcile");
+            Ok(Relocation::Moved { .. }) => self.video_repository.find(&video.id).ok().flatten(),
+            Ok(_) => None,
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to relocate legacy video during reconcile");
+                None
+            }
         }
     }
 
@@ -455,6 +463,16 @@ fn protected_entries(videos: &[Video]) -> HashSet<String> {
         .chain(recorded)
         .chain(episode_nfos)
         .collect()
+}
+
+/// The thumbnail's file name as an NFO references it, next to the episode.
+fn thumbnail_basename(video: &Video) -> Option<String> {
+    video
+        .thumbnail_filename
+        .as_deref()
+        .and_then(|f| Path::new(f).file_name())
+        .and_then(|f| f.to_str())
+        .map(str::to_string)
 }
 
 fn numbered_episode_paths(videos: &[Video]) -> HashSet<String> {
@@ -1139,7 +1157,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.16"]
     fn it_should_generate_missing_metadata() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1149,9 +1166,11 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let videos_root = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(videos_root.path().join("my-playlist/My Video")).unwrap();
-        let video = downloaded_video("My Video/My Video.mp4", None);
+        std::fs::create_dir_all(videos_root.path().join("my-playlist/Season 2026")).unwrap();
+        let video = downloaded_video("Season 2026/S2026E031501 - My Video.mp4", None)
+            .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), fixed_timestamp());
         video_repository.save(&video).unwrap();
+        video_repository.update(&video).unwrap();
         let reconciler = InternalVideoReconciler::new(
             video_repository.clone(),
             Arc::new(MetadataGenerator::new(
@@ -1220,7 +1239,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.16"]
     fn it_should_generate_missing_metadata_sorted_by_publish_date_without_a_position() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1230,9 +1248,11 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let videos_root = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(videos_root.path().join("my-playlist/My Video")).unwrap();
-        let video = downloaded_video("My Video/My Video.mp4", None);
+        std::fs::create_dir_all(videos_root.path().join("my-playlist/Season 2026")).unwrap();
+        let video = downloaded_video("Season 2026/S2026E031501 - My Video.mp4", None)
+            .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), fixed_timestamp());
         video_repository.save(&video).unwrap();
+        video_repository.update(&video).unwrap();
         let reconciler = InternalVideoReconciler::new(
             video_repository.clone(),
             Arc::new(MetadataGenerator::new(

@@ -2,6 +2,7 @@ use super::episode_number::EpisodeNumber;
 use super::playback_position::PlaybackPosition;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
+use super::video_output_entry::is_episode_path;
 use super::video_record_id::VideoRecordId;
 use super::video_status::VideoStatus;
 use crate::domain::shared::Quality;
@@ -284,11 +285,31 @@ impl Video {
         }
     }
 
+    /// Records a legacy video's files at their new paths in its season
+    /// folder, under the episode number they were relocated for.
+    pub fn relocate_to_episode(
+        self,
+        number: EpisodeNumber,
+        filename: impl Into<String>,
+        thumbnail_filename: Option<String>,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            filename: Some(filename.into()),
+            thumbnail_filename,
+            episode_number: Some(number),
+            updated_at: now,
+            ..self
+        }
+    }
+
     /// Whether the video's recorded file is in the per-video-folder (or flat)
     /// layout that predates the TV-show layout, i.e. not under a `Season `
     /// folder.
     pub fn is_in_legacy_layout(&self) -> bool {
-        false
+        self.filename
+            .as_deref()
+            .is_some_and(|filename| !is_episode_path(filename))
     }
 
     /// The recorded duration, else the reported one. The reported one is

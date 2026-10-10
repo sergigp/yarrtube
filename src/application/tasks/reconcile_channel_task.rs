@@ -43,8 +43,8 @@ mod tests {
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
-    use crate::domain::video::{VideoId, VideoRecordId, VideoStatus};
-    use crate::domain::video_metadata::VideoMetadata;
+    use crate::domain::video::{EpisodeNumber, VideoId, VideoRecordId, VideoStatus};
+    use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -744,8 +744,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.16"]
-    fn it_should_generate_missing_metadata() {
+    fn it_should_relocate_a_legacy_video_when_its_metadata_is_recovered() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -755,10 +754,13 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
+        let relocated_files = Arc::new(FakeVideoFileRepository::with_file_exists(true));
         let videos_root = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(videos_root.path().join("creators/somechannel/My Video")).unwrap();
+        let show_dir = videos_root.path().join("creators/somechannel");
+        std::fs::create_dir_all(show_dir.join("My Video")).unwrap();
+        std::fs::write(show_dir.join("My Video/movie.nfo"), "<movie/>").unwrap();
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let video = downloaded_video("My Video/My Video.mp4", None);
+        let video = downloaded_video("My Video/My Video.mp4", Some("My Video/My Video.jpg"));
         save_channel_video(
             video_repository.as_ref(),
             channel_video_repository.as_ref(),
@@ -796,10 +798,10 @@ mod tests {
                     "/videos",
                 )),
                 Arc::new(VideoRelocator::new(
-                    Arc::new(SqliteVideoRepository::new(db.database())),
-                    Arc::new(FakeVideoFileRepository::default()),
-                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                    Arc::new(SystemClock),
+                    video_repository.clone(),
+                    relocated_files.clone(),
+                    video_metadata_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
                 )),
                 Arc::new(FixedClock(fixed_timestamp())),
                 videos_root.path().to_string_lossy(),
@@ -817,39 +819,44 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(
-            video_metadata_repository.find(&video.id).unwrap(),
-            Some(VideoMetadata::new(
-                "My Video",
-                "A description",
-                "My Channel",
-                "My Channel",
+            video_repository.list().unwrap(),
+            vec![video.clone().relocate_to_episode(
+                recovered_episode(),
+                "Season 2023/S2023E111401 - My Video.mp4",
+                Some("Season 2023/S2023E111401 - My Video.jpg".to_string()),
                 fixed_timestamp(),
-                None,
-                Vec::new(),
-                "yt1",
-                None,
-                "20231114 My Video",
-                fixed_timestamp(),
-            ))
+            )]
         );
-        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            *relocated_files.moved.lock().unwrap(),
+            vec![
+                (
+                    show_dir.join("My Video/My Video.mp4"),
+                    show_dir.join("Season 2023/S2023E111401 - My Video.mp4"),
+                ),
+                (
+                    show_dir.join("My Video/My Video.jpg"),
+                    show_dir.join("Season 2023/S2023E111401 - My Video.jpg"),
+                ),
+            ]
+        );
+        assert_eq!(
+            *relocated_files.removed_if_empty.lock().unwrap(),
+            vec![show_dir.join("My Video")]
+        );
+        assert_eq!(show_dir.join("My Video/movie.nfo").exists(), false);
+        assert_eq!(
+            video_metadata_repository.find(&video.id).unwrap(),
+            Some(recovered_metadata())
+        );
+        assert_eq!(
+            std::fs::read_to_string(show_dir.join("Season 2023/S2023E111401 - My Video.nfo"))
+                .unwrap(),
+            render_episode_nfo(&recovered_metadata(), &recovered_episode())
+        );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![
-                pending_task(
-                    1,
-                    &Task::FetchThumbnail {
-                        video_id: video.id.as_str().to_string(),
-                        output_dir: videos_root
-                            .path()
-                            .join("creators/somechannel")
-                            .to_string_lossy()
-                            .to_string(),
-                    },
-                    fixed_timestamp(),
-                ),
-                next_reconcile(2),
-            ]
+            vec![next_reconcile(1)]
         );
     }
 
@@ -1177,6 +1184,28 @@ mod tests {
                 None,
                 fixed_timestamp(),
             )
+    }
+
+    /// The episode `my_video()` gets from `youtube_metadata()`'s publish time.
+    fn recovered_episode() -> EpisodeNumber {
+        EpisodeNumber::new(2023, 111401).unwrap()
+    }
+
+    /// The metadata reconcile recovers for `my_video()` once relocated.
+    fn recovered_metadata() -> VideoMetadata {
+        VideoMetadata::new(
+            "My Video",
+            "A description",
+            "My Channel",
+            "My Channel",
+            fixed_timestamp(),
+            None,
+            Vec::new(),
+            "yt1",
+            Some("S2023E111401 - My Video.jpg".to_string()),
+            "20231114 My Video",
+            fixed_timestamp(),
+        )
     }
 
     fn listed_video(youtube_id: &str, title: &str, position: i64) -> ChannelVideoListing {

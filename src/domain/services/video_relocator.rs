@@ -1,5 +1,7 @@
-use crate::domain::video::Video;
+use crate::domain::video::video_filename::episode_relative_path;
+use crate::domain::video::{EpisodeNumber, Video, top_level_entry};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
+use crate::infrastructure::repositories::sqlite_video_metadata_repository::MOVIE_NFO_FILENAME;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -72,11 +74,98 @@ pub trait VideoRelocatorApi: Send + Sync {
 impl VideoRelocatorApi for VideoRelocator {
     fn relocate(
         &self,
-        _video: &Video,
-        _published_at: Option<DateTime<Utc>>,
-        _output_dir: &Path,
+        video: &Video,
+        published_at: Option<DateTime<Utc>>,
+        output_dir: &Path,
         _dry_run: bool,
     ) -> anyhow::Result<Relocation> {
-        Ok(Relocation::AlreadyInPlace)
+        let Some(from) = video
+            .filename
+            .clone()
+            .filter(|_| video.is_in_legacy_layout())
+        else {
+            return Ok(Relocation::AlreadyInPlace);
+        };
+        let Some(published_at) = published_at else {
+            return Ok(Relocation::Skipped(SkipReason::NoPublishTimestamp));
+        };
+        let number = self
+            .video_repository
+            .assign_episode_number(&video.id, published_at)?;
+        let files = RelocatedFiles::new(video, &from, &number);
+        self.move_files(video, &files, output_dir)?;
+        self.discard_legacy_folder(&from, output_dir)?;
+        self.record_relocated(video, &files, number)?;
+        Ok(Relocation::Moved {
+            from,
+            to: files.filename,
+        })
+    }
+}
+
+impl VideoRelocator {
+    fn move_files(
+        &self,
+        video: &Video,
+        files: &RelocatedFiles,
+        output_dir: &Path,
+    ) -> anyhow::Result<()> {
+        let from = video.filename.iter().chain(&video.thumbnail_filename);
+        let to = std::iter::once(&files.filename).chain(&files.thumbnail_filename);
+        from.zip(to).try_for_each(|(from, to)| {
+            self.video_file_repository
+                .move_file(&output_dir.join(from), &output_dir.join(to))
+        })
+    }
+
+    /// Removes the legacy per-video folder's `movie.nfo`, then the folder
+    /// itself once empty; a flat legacy file has no folder.
+    fn discard_legacy_folder(&self, from: &str, output_dir: &Path) -> anyhow::Result<()> {
+        let folder = top_level_entry(from);
+        if folder == from {
+            return Ok(());
+        }
+        let folder = output_dir.join(folder);
+        self.video_metadata_repository
+            .remove_nfo(&folder.join(MOVIE_NFO_FILENAME))?;
+        self.video_file_repository.remove_if_empty(&folder)
+    }
+
+    fn record_relocated(
+        &self,
+        video: &Video,
+        files: &RelocatedFiles,
+        number: EpisodeNumber,
+    ) -> anyhow::Result<()> {
+        let relocated = video.clone().relocate_to_episode(
+            number,
+            files.filename.clone(),
+            files.thumbnail_filename.clone(),
+            self.clock.now(),
+        );
+        self.video_repository.update(&relocated)
+    }
+}
+
+/// A legacy video's media and thumbnail paths in its season folder,
+/// relative to the show directory.
+struct RelocatedFiles {
+    filename: String,
+    thumbnail_filename: Option<String>,
+}
+
+impl RelocatedFiles {
+    fn new(video: &Video, from: &str, number: &EpisodeNumber) -> Self {
+        let extension = Path::new(from)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("mp4");
+        Self {
+            filename: episode_relative_path(number, &video.title, extension),
+            thumbnail_filename: video
+                .thumbnail_filename
+                .as_ref()
+                .map(|_| episode_relative_path(number, &video.title, "jpg")),
+        }
     }
 }

@@ -730,7 +730,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.16"]
     fn it_should_generate_missing_metadata() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -742,15 +741,17 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let videos_root = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(videos_root.path().join("my-playlist/My Video")).unwrap();
+        std::fs::create_dir_all(videos_root.path().join("my-playlist/Season 2026")).unwrap();
         playlist_repository.insert(&playlist("PL1")).unwrap();
-        let video = downloaded_video("My Video/My Video.mp4", None);
+        let video = downloaded_video("Season 2026/S2026E031501 - My Video.mp4", None)
+            .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), fixed_timestamp());
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
             &video,
             3,
         );
+        video_repository.update(&video).unwrap();
         let task = ReconcilePlaylistTask::new(PlaylistVideoReconciler::new(
             playlist_repository,
             video_repository.clone(),

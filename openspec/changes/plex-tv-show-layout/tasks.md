@@ -23,7 +23,7 @@
 - [x] 2.13 `it_should_rewrite_missing_show_files_on_a_recurring_reconcile` — reconcile channel task rewrites a removed `tvshow.nfo`
 - [x] 2.14 `it_should_not_sweep_show_files_season_folders_or_episode_files_of_recorded_videos` — only the stray file in the season folder is deleted
 - [x] 2.15 `it_should_protect_files_sharing_the_base_name_of_an_in_progress_numbered_video` — nfo of an in-progress numbered video kept
-- [ ] 2.16 `it_should_relocate_a_legacy_video_when_its_metadata_is_recovered` — legacy folder moved into the season folder, `movie.nfo` removed, empty folder removed, filenames and number recorded from `published_at`
+- [x] 2.16 `it_should_relocate_a_legacy_video_when_its_metadata_is_recovered` — legacy folder moved into the season folder, `movie.nfo` removed, empty folder removed, filenames and number recorded from `published_at`
 - [ ] 2.17 `it_should_leave_a_legacy_video_in_place_when_its_metadata_is_still_unavailable` — no move, no reset
 - [ ] 2.18 `it_should_reset_a_numbered_video_whose_file_is_missing_without_dropping_its_number` — PENDING, filenames cleared, number kept
 - [ ] 2.19 `it_should_delete_an_episodes_media_thumbnail_and_nfo` — delete task removes the three files, show files untouched

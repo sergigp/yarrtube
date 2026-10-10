@@ -157,8 +157,15 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
         Self::write_episode_nfo(metadata, number, nfo_path)
     }
 
-    fn remove_nfo(&self, _nfo_path: &Path) -> anyhow::Result<()> {
-        Ok(())
+    fn remove_nfo(&self, nfo_path: &Path) -> anyhow::Result<()> {
+        match std::fs::remove_file(nfo_path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => {
+                tracing::error!(path = ?nfo_path, error = %e, "failed to remove NFO");
+                Err(anyhow::anyhow!("failed to remove {nfo_path:?}: {e}"))
+            }
+        }
     }
 }
 
