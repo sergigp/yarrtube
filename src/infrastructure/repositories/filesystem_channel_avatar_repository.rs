@@ -96,8 +96,8 @@ impl ChannelAvatarRepository for FilesystemChannelAvatarRepository {
         }
     }
 
-    fn path_of(&self, _filename: &str) -> PathBuf {
-        PathBuf::new()
+    fn path_of(&self, filename: &str) -> PathBuf {
+        self.avatars_dir.join(filename)
     }
 }
 
@@ -298,5 +298,14 @@ mod tests {
         let repo = FilesystemChannelAvatarRepository::new(dir);
 
         assert!(repo.delete("does-not-exist.jpg").is_ok());
+    }
+
+    #[test]
+    fn it_should_resolve_the_path_of_a_stored_avatar() {
+        let repo = FilesystemChannelAvatarRepository::new(PathBuf::from("/data/avatars"));
+
+        let path = repo.path_of("@somechannel.jpg");
+
+        assert_eq!(path, PathBuf::from("/data/avatars/@somechannel.jpg"));
     }
 }
