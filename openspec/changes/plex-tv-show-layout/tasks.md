@@ -38,7 +38,7 @@
 - [x] 2.28 `it_should_move_nothing_on_a_second_run` — zero moves, show files rewritten
 - [x] 2.29 `it_should_report_a_failed_move_and_continue` — one failing move: that row unchanged, others moved, one failure in the report
 - [x] 2.30 `it_should_exit_non_zero_when_a_move_failed` — CLI returns a failure exit code
-- [ ] 2.31 `it_should_not_register_the_collections_task_or_subscribers` — handler registry has no `reconcile_plex_collections`, no deletion subscribers
+- [x] 2.31 `it_should_not_register_the_collections_task_or_subscribers` — handler registry has no `reconcile_plex_collections`, no deletion subscribers
 
 ## 3. Infrastructure adapters (TDD)
 

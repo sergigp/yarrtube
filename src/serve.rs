@@ -973,6 +973,27 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_register_the_collections_task_or_subscribers() {
+        let db = TestDatabase::new();
+        let infrastructure = test_infrastructure(&db);
+        let plex = plex_integration_from(
+            Some("http://plex:32400".to_string()),
+            Some("token".to_string()),
+            Some("/plex/videos".to_string()),
+        );
+
+        let handlers = task_handlers(&infrastructure);
+        let subscribers = event_subscribers(&infrastructure, plex);
+
+        assert_eq!(handlers.contains_key("reconcile_plex_collections"), false);
+        assert_eq!(
+            ["playlist_deleted", "channel_deleted"]
+                .map(|event_type| subscribers.get(event_type).map(Vec::len)),
+            [Some(1), Some(1)]
+        );
+    }
+
+    #[test]
     fn it_should_default_download_concurrency_when_invalid() {
         let concurrencies: Vec<usize> = [None, Some("0"), Some("-1"), Some("abc"), Some("4")]
             .into_iter()
