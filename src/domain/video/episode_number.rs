@@ -36,7 +36,7 @@ impl EpisodeNumber {
 
     /// The publish month and day (`MMDD`) shared by every episode of a day.
     pub fn same_day_prefix(&self) -> u32 {
-        0
+        self.episode / 100
     }
 
     /// The `S<season>E<MMDDii>` code, e.g. `S2026E031501`.

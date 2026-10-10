@@ -37,6 +37,8 @@ mod tests {
     use super::*;
     use crate::application::tasks::log_capture::captured_log_messages;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
+    use crate::domain::playlist::PlaylistId;
+    use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::video::EpisodeNumber;
     use crate::domain::video::Video;
@@ -46,7 +48,9 @@ mod tests {
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
         FakeVideoFileRepository, FilesystemVideoFileRepository, VideoFileRepository,
     };
-    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+        PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
         MOVIE_NFO_FILENAME, SqliteVideoMetadataRepository, VideoMetadataRepository,
     };
@@ -202,6 +206,76 @@ mod tests {
                 &generated_metadata(Some("S2026E031501 - My Video.jpg")),
                 &published_episode()
             ))
+        );
+    }
+
+    #[test]
+    fn it_should_number_two_same_day_videos_of_one_show_consecutively() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let output_dir = tempfile::tempdir().unwrap();
+        let first = Video::create(VideoId::new("yt0").unwrap(), "First Video", fixed_timestamp())
+            .mark_downloaded(
+                Quality::High,
+                "Season 2026/S2026E031501 - First Video.mp4",
+                None,
+                None,
+                fixed_timestamp(),
+            )
+            .with_episode_number(published_episode(), fixed_timestamp());
+        let video = my_video();
+        video_repository.save(&first).unwrap();
+        video_repository.update(&first).unwrap();
+        video_repository.save(&video).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                my_playlist_id(),
+                first.id.clone(),
+                1,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                my_playlist_id(),
+                video.id.clone(),
+                2,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                staged_download(),
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                first,
+                video
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "Season 2026/S2026E031502 - My Video.mp4",
+                        Some("Season 2026/S2026E031502 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+                    .with_episode_number(
+                        EpisodeNumber::new(2026, 31502).unwrap(),
+                        fixed_timestamp()
+                    )
+            ]
         );
     }
 
@@ -1294,6 +1368,10 @@ mod tests {
         crate::infrastructure::shared::sqlite_connection::Database::single(
             Connection::open_in_memory().unwrap(),
         )
+    }
+
+    fn my_playlist_id() -> PlaylistId {
+        PlaylistId::new("PL1").unwrap()
     }
 
     fn my_video() -> Video {

@@ -281,10 +281,40 @@ impl VideoRepository for SqliteVideoRepository {
 
     fn assign_episode_number(
         &self,
-        _id: &VideoRecordId,
+        id: &VideoRecordId,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<EpisodeNumber> {
-        Ok(EpisodeNumber::first_of_day(published_at))
+        let conn = self.db.write()?;
+        let first = EpisodeNumber::first_of_day(published_at);
+        let last_of_day: Option<u32> = conn
+            .query_row(
+                "SELECT MAX(episode) FROM videos
+                 WHERE season = ?2 AND episode / 100 = ?3 AND id IN (
+                     SELECT video_id FROM playlist_videos WHERE playlist_id IN (
+                         SELECT playlist_id FROM playlist_videos WHERE video_id = ?1)
+                     UNION
+                     SELECT video_id FROM channel_videos WHERE channel_id IN (
+                         SELECT channel_id FROM channel_videos WHERE video_id = ?1))",
+                params![id.as_str(), first.season(), first.same_day_prefix()],
+                |row| row.get(0),
+            )
+            .inspect_err(|e| {
+                tracing::error!(video_id = %id, error = %e, "failed to find the last episode of the day")
+            })
+            .context("failed to find the last episode of the day")?;
+        let number = match last_of_day {
+            Some(last) => EpisodeNumber::new(first.season(), last + 1)?,
+            None => first,
+        };
+        conn.execute(
+            "UPDATE videos SET season = ?2, episode = ?3 WHERE id = ?1",
+            params![id.as_str(), number.season(), number.episode()],
+        )
+        .inspect_err(|e| {
+            tracing::error!(video_id = %id, error = %e, "failed to record the episode number")
+        })
+        .context("failed to record the episode number")?;
+        Ok(number)
     }
 
     fn list_downloaded(&self) -> anyhow::Result<Vec<Video>> {
