@@ -24,7 +24,7 @@ describe('VideoDetail', () => {
     expect(screen.getByRole('button', { name: /More/ })).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('expands to the description, file path and YouTube link', async () => {
+  it('expands to the description, storage location and YouTube link', async () => {
     const video = aVideo({
       id: 'abc',
       title: 'My Video',
@@ -43,11 +43,28 @@ describe('VideoDetail', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: /More/ }))
 
     expect(screen.getByText('The description.')).toBeInTheDocument()
-    expect(screen.getByText('playlists/mix/my-video.mp4')).toBeInTheDocument()
+    expect(screen.getByText('playlists/mix')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open on YouTube' })).toHaveAttribute(
       'href',
       'https://www.youtube.com/watch?v=abc',
     )
+  })
+
+  it('shows the season folder as the storage location', async () => {
+    const video = aVideo({ filename: 'Season 2026/S2026E031501 - Title.mp4' })
+    renderWithProviders(
+      <VideoDetail
+        basePath="channels/some-channel"
+        video={video}
+        playbackRate={1}
+        onPlaybackRateChange={() => {}}
+      />,
+    )
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /More/ }))
+
+    expect(screen.getByText('channels/some-channel/Season 2026')).toBeInTheDocument()
+    expect(screen.queryByText(/S2026E031501/)).not.toBeInTheDocument()
   })
 
   it('renders URLs in the description as links', async () => {

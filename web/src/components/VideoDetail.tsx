@@ -9,6 +9,7 @@ import { PlaybackSpeedMenu } from './PlaybackSpeedMenu'
 import { VideoActionsMenu } from './VideoActionsMenu'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { storageLocation } from '@/lib/storageLocation'
 
 const STATUS_LABELS: Record<string, string> = {
   IN_PROGRESS: 'Downloading',
@@ -46,7 +47,7 @@ export function VideoDetail({
   onPlaybackRateChange,
 }: VideoDetailProps) {
   const [expanded, setExpanded] = useState(() => window.matchMedia(DESKTOP_QUERY).matches)
-  const path = video.filename ? `${basePath}/${video.filename}` : basePath
+  const location = storageLocation(basePath, video.filename)
 
   return (
     <div className="rounded-lg border border-border p-4">
@@ -84,7 +85,7 @@ export function VideoDetail({
             </Badge>
           )}
           {video.description && <Description key={video.id} text={video.description} />}
-          <p className="mt-2 text-xs break-words text-muted-foreground">{path}</p>
+          <p className="mt-2 text-xs break-words text-muted-foreground">{location}</p>
           <a
             className="mt-3 inline-block text-sm text-primary underline-offset-4 hover:underline"
             href={`https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`}

@@ -242,7 +242,7 @@ describe('TasksView', () => {
         }),
         aTask({
           id: 2,
-          task_type: 'reconcile_plex_collections',
+          task_type: 'update_ytdlp',
           run_at: '2999-01-01T00:00:00Z',
         }),
         aTask({ id: 3, task_type: 'download_video', run_at: '2999-01-01T00:00:00Z' }),

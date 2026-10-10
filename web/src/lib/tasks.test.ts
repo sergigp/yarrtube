@@ -65,12 +65,6 @@ describe('describeTask', () => {
     )
   })
 
-  it('describes a Plex collection reconciliation in plain language', () => {
-    expect(describeTask(aTask({ task_type: 'reconcile_plex_collections', payload: {} }))).toBe(
-      'Syncing Plex collections',
-    )
-  })
-
   it('describes a yt-dlp self-update in plain language', () => {
     expect(describeTask(aTask({ task_type: 'update_ytdlp', payload: {} }))).toBe('Updating yt-dlp')
   })
@@ -131,7 +125,6 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskFamily(aTask({ task_type: 'fetch_thumbnail' }))).toBe('downloads')
     expect(taskFamily(aTask({ task_type: 'reconcile_playlist' }))).toBe('syncs')
     expect(taskFamily(aTask({ task_type: 'reconcile_channel' }))).toBe('syncs')
-    expect(taskFamily(aTask({ task_type: 'reconcile_plex_collections' }))).toBe('other')
     expect(taskFamily(aTask({ task_type: 'update_ytdlp' }))).toBe('other')
     expect(taskFamily(aTask({ task_type: 'delete_video_file' }))).toBe('other')
     expect(taskFamily(aTask({ task_type: 'delete_playlist_files' }))).toBe('other')
@@ -159,27 +152,25 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     const tasks = [
       aTask({ id: 1, task_type: 'reconcile_playlist' }),
       aTask({ id: 2, task_type: 'reconcile_channel' }),
-      aTask({ id: 3, task_type: 'reconcile_plex_collections' }),
-      aTask({ id: 4, task_type: 'download_video' }),
-      aTask({ id: 5, task_type: 'update_ytdlp' }),
+      aTask({ id: 3, task_type: 'download_video' }),
+      aTask({ id: 4, task_type: 'update_ytdlp' }),
     ]
 
     expect(tasksForTab(tasks, 'syncs').map((task) => task.id)).toEqual([1, 2])
   })
 
-  it('collects Plex sync, yt-dlp update, deletions and unknown types in the other tab', () => {
+  it('collects yt-dlp update, deletions and unknown types in the other tab', () => {
     const tasks = [
-      aTask({ id: 1, task_type: 'reconcile_plex_collections' }),
-      aTask({ id: 2, task_type: 'update_ytdlp' }),
-      aTask({ id: 3, task_type: 'delete_video_file' }),
-      aTask({ id: 4, task_type: 'delete_playlist_files' }),
-      aTask({ id: 5, task_type: 'delete_channel_files' }),
-      aTask({ id: 6, task_type: 'mystery_task' }),
-      aTask({ id: 7, task_type: 'download_video' }),
-      aTask({ id: 8, task_type: 'reconcile_channel' }),
+      aTask({ id: 1, task_type: 'update_ytdlp' }),
+      aTask({ id: 2, task_type: 'delete_video_file' }),
+      aTask({ id: 3, task_type: 'delete_playlist_files' }),
+      aTask({ id: 4, task_type: 'delete_channel_files' }),
+      aTask({ id: 5, task_type: 'mystery_task' }),
+      aTask({ id: 6, task_type: 'download_video' }),
+      aTask({ id: 7, task_type: 'reconcile_channel' }),
     ]
 
-    expect(tasksForTab(tasks, 'other').map((task) => task.id)).toEqual([1, 2, 3, 4, 5, 6])
+    expect(tasksForTab(tasks, 'other').map((task) => task.id)).toEqual([1, 2, 3, 4, 5])
   })
 
   it('returns counts where downloads, syncs and other add up to every task', () => {
@@ -187,12 +178,11 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
       aTask({ id: 1, task_type: 'download_video', status: 'running' }),
       aTask({ id: 2, task_type: 'fetch_thumbnail', status: 'pending' }),
       aTask({ id: 3, task_type: 'reconcile_channel', status: 'pending' }),
-      aTask({ id: 4, task_type: 'reconcile_plex_collections', status: 'pending' }),
-      aTask({ id: 5, task_type: 'delete_video_file', status: 'pending' }),
-      aTask({ id: 6, task_type: 'update_ytdlp', status: 'running' }),
+      aTask({ id: 4, task_type: 'delete_video_file', status: 'pending' }),
+      aTask({ id: 5, task_type: 'update_ytdlp', status: 'running' }),
     ]
 
-    expect(tabCounts(tasks)).toEqual({ active: 2, downloads: 2, syncs: 1, other: 3 })
+    expect(tabCounts(tasks)).toEqual({ active: 2, downloads: 2, syncs: 1, other: 2 })
   })
 
   it('maps each task type to its icon kind', () => {
@@ -200,7 +190,6 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskKind(aTask({ task_type: 'fetch_thumbnail' }))).toBe('download')
     expect(taskKind(aTask({ task_type: 'reconcile_playlist' }))).toBe('sync')
     expect(taskKind(aTask({ task_type: 'reconcile_channel' }))).toBe('sync')
-    expect(taskKind(aTask({ task_type: 'reconcile_plex_collections' }))).toBe('sync')
     expect(taskKind(aTask({ task_type: 'delete_video_file' }))).toBe('delete')
     expect(taskKind(aTask({ task_type: 'delete_playlist_files' }))).toBe('delete')
     expect(taskKind(aTask({ task_type: 'delete_channel_files' }))).toBe('delete')
@@ -221,7 +210,6 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
       ),
     ).toBeNull()
     expect(syncTarget(aTask({ task_type: 'reconcile_playlist', payload: {} }))).toBeNull()
-    expect(syncTarget(aTask({ task_type: 'reconcile_plex_collections', payload: {} }))).toBeNull()
   })
 
   it('matches on the description, ignoring case', () => {
