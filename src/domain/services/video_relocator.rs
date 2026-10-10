@@ -89,6 +89,9 @@ impl VideoRelocatorApi for VideoRelocator {
         let Some(published_at) = published_at else {
             return Ok(Relocation::Skipped(SkipReason::NoPublishTimestamp));
         };
+        if !self.video_file_repository.file_exists(output_dir, &from) {
+            return Ok(Relocation::Skipped(SkipReason::FileMissing));
+        }
         let number = self
             .video_repository
             .assign_episode_number(&video.id, published_at)?;

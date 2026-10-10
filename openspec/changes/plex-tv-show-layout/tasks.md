@@ -33,7 +33,7 @@
 - [x] 2.23 `it_should_register_the_scan_subscriber_only_with_url_token_and_videos_path` — serve wiring with and without each variable, replacing the section-id tests
 - [x] 2.24 `it_should_migrate_a_legacy_library_into_the_tv_layout` — migrate-layout over two sources and three videos (one `[id]`-suffixed): files moved, rows updated, show files written, old folders gone, report lists three moves
 - [x] 2.25 `it_should_number_a_same_day_batch_in_publish_time_order` — three same-day videos get `01..03` by `published_at`
-- [ ] 2.26 `it_should_skip_videos_without_metadata_or_without_a_file` — both skips reported with reasons, nothing moved for them
+- [x] 2.26 `it_should_skip_videos_without_metadata_or_without_a_file` — both skips reported with reasons, nothing moved for them
 - [ ] 2.27 `it_should_change_nothing_on_a_dry_run` — report equals the real plan, filesystem and rows untouched
 - [ ] 2.28 `it_should_move_nothing_on_a_second_run` — zero moves, show files rewritten
 - [ ] 2.29 `it_should_report_a_failed_move_and_continue` — one failing move: that row unchanged, others moved, one failure in the report

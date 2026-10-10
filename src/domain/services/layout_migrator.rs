@@ -437,6 +437,88 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_skip_videos_without_metadata_or_without_a_file() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
+            "Present/Present.mp4".to_string(),
+            "Unpublished/Unpublished.mp4".to_string(),
+        ]));
+        let videos_root = tempfile::tempdir().unwrap();
+        let playlist_dir = videos_root.path().join("playlists/kids");
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&my_playlist())
+            .unwrap();
+        let present = legacy_video("yt1", "Present", "Present/Present.mp4", None);
+        let unpublished = legacy_video("yt2", "Unpublished", "Unpublished/Unpublished.mp4", None);
+        let missing = legacy_video("yt3", "Missing", "Missing/Missing.mp4", None);
+        seed_playlist_video(&db, &present, 0);
+        seed_playlist_video(&db, &unpublished, 1);
+        seed_playlist_video(&db, &missing, 2);
+        seed_metadata(
+            &db,
+            &present,
+            published("2026-03-15T10:00:00Z"),
+            &playlist_dir.join("Present"),
+        );
+        seed_metadata(
+            &db,
+            &missing,
+            published("2026-03-15T09:00:00Z"),
+            &playlist_dir.join("Missing"),
+        );
+        let migrator = layout_migrator(
+            &db,
+            video_file_repository.clone(),
+            Arc::new(FakeShowFileRepository::default()),
+            videos_root.path(),
+        );
+
+        let result = migrator.migrate(false);
+
+        assert_eq!(
+            result.unwrap(),
+            MigrationReport {
+                moved: vec![moved(
+                    "playlists/kids/Present/Present.mp4",
+                    "playlists/kids/Season 2026/S2026E031501 - Present.mp4"
+                )],
+                skipped: vec![
+                    (
+                        "playlists/kids/Unpublished/Unpublished.mp4".to_string(),
+                        SkipReason::NoPublishTimestamp
+                    ),
+                    (
+                        "playlists/kids/Missing/Missing.mp4".to_string(),
+                        SkipReason::FileMissing
+                    ),
+                ],
+                failed: vec![],
+            }
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                present.clone().relocate_to_episode(
+                    episode(2026, 31501),
+                    "Season 2026/S2026E031501 - Present.mp4",
+                    None,
+                    fixed_timestamp(),
+                ),
+                unpublished,
+                missing,
+            ]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![(
+                playlist_dir.join("Present/Present.mp4"),
+                playlist_dir.join("Season 2026/S2026E031501 - Present.mp4")
+            )]
+        );
+    }
+
     /// Builds a migrator around the ports a test configures or asserts, over
     /// `db`'s real repositories and `videos_root`.
     fn layout_migrator(
