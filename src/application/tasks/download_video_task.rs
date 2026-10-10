@@ -393,6 +393,66 @@ mod tests {
     }
 
     #[test]
+    fn it_should_download_under_its_episode_name_without_metadata() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let output_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                staged_download(),
+            )),
+            video_file_repository.clone(),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            video_metadata_repository.clone(),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "Season 2026/S2026E031501 - My Video.mp4",
+                        Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+                    .with_episode_number(published_episode(), fixed_timestamp())
+            ]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![
+                (
+                    PathBuf::from("/videos/.downloads/yt1/yt1.mp4"),
+                    output_dir
+                        .path()
+                        .join("Season 2026/S2026E031501 - My Video.mp4"),
+                ),
+                (
+                    PathBuf::from("/videos/.downloads/yt1/yt1.jpg"),
+                    output_dir
+                        .path()
+                        .join("Season 2026/S2026E031501 - My Video.jpg"),
+                ),
+            ]
+        );
+        assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
+        assert_eq!(folder_entries(output_dir.path()), Vec::<String>::new());
+    }
+
+    #[test]
     fn it_should_retry_a_failed_download() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1200,50 +1260,6 @@ mod tests {
         assert_eq!(
             video_metadata_repository.find(&video.id).unwrap(),
             Some(generated_metadata(Some("S2026E031501 - My Video.jpg")))
-        );
-    }
-
-    #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.6"]
-    fn it_should_download_even_if_metadata_fetch_fails() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(output_dir.path().join(FAKE_FRESH_FOLDER)).unwrap();
-        let video = my_video();
-        video_repository.save(&video).unwrap();
-        let task = DownloadVideoTask::new(video_downloader(
-            &db,
-            video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::new(true)),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            video_metadata_repository.clone(),
-        ));
-
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(
-            video_repository.list().unwrap(),
-            vec![
-                video
-                    .clone()
-                    .start_download(fixed_timestamp())
-                    .mark_downloaded(
-                        Quality::High,
-                        "fake-output/fake-output.mp4",
-                        None,
-                        None,
-                        fixed_timestamp(),
-                    )
-            ]
-        );
-        assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
-        assert_eq!(
-            folder_entries(&output_dir.path().join(FAKE_FRESH_FOLDER)),
-            Vec::<String>::new()
         );
     }
 
