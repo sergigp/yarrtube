@@ -5,12 +5,15 @@
 Yarrtube tracks YouTube playlists and channels and downloads their videos to
 a local directory via `yt-dlp`. It's packaged as a Docker image meant to run
 continuously (e.g. on a NAS): a `serve` daemon exposes an HTTP API plus an
-embedded React web UI, syncs tracked sources on an interval, writes NFO
-metadata for Plex/Kodi/Jellyfin, and optionally keeps Plex collections in sync.
+embedded React web UI, syncs tracked sources on an interval, lays each
+tracked source out as a TV show (`Season <year>/S<year>E<MMDDii> - <title>.*`
+with NFO metadata) for Plex/Kodi/Jellyfin, and optionally asks Plex to scan a
+show folder after each download. `yarrtube migrate-layout` moves a library
+from the old per-video-folder layout.
 
 Docs: `doc/INSTALLATION.md` (Docker, Compose, every environment variable),
-`doc/DEVELOPMENT.md` (building from source), `doc/PLEX.md` (Plex
-collections), `doc/ARCHITECTURE.md`. Releases are cut by pushing a `vX.Y.Z`
+`doc/DEVELOPMENT.md` (building from source), `doc/PLEX.md` (Plex TV Shows
+library, scan trigger, migration), `doc/ARCHITECTURE.md`. Releases are cut by pushing a `vX.Y.Z`
 tag, which triggers `.github/workflows/release.yml` to publish the
 multi-arch image to `ghcr.io`.
 

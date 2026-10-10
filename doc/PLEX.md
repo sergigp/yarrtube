@@ -1,49 +1,116 @@
-# Plex Collections integration
+# Plex (TV Shows library)
 
 ## What you get
 
-While writing this (Plex Version 1.43.4.10903), collection support via NFO files is still very limited. You can, though, create collections via Plex API and this is the mechanism yarrtube uses, but it comes with some required setup.
+Yarrtube lays every tracked playlist and channel out on disk as a **TV
+show**, the layout Plex, Kodi and Jellyfin read natively:
 
-Without the integration, a Plex library over yarrtube's videos is a flat
-grid of every downloaded video. With it, yarrtube keeps **one Plex
-collection per tracked playlist and channel**: the library becomes one tile
-per playlist/channel, videos inside keep their playlist order (publish
-order for channels), and autoplay carries you from one video to the next.
+```
+channels/Some Channel/              <- one show per playlist or channel
+├── tvshow.nfo                      <- show title, YouTube id
+├── poster.jpg                      <- the channel's avatar (channels only)
+├── Season 2025/
+│   └── S2025E120101 - A video.{mp4,jpg,nfo}
+└── Season 2026/
+    ├── S2026E031501 - First video of 15 March.{mp4,jpg,nfo}
+    └── S2026E031502 - Second video of 15 March.{mp4,jpg,nfo}
+```
 
-Everything below is a one-time setup. Once configured, yarrtube converges
-the collections automatically in the background: new downloads are added once Plex has scanned them, videos that leave yarrtube's state are removed, and deleting a playlist/channel in yarrtube deletes its collection in Plex.
+In Plex this gives you one tile per playlist/channel with a real poster,
+16:9 episode thumbnails, Continue Watching, On Deck and "play next
+episode", none of which a collection offers.
 
-## Requirements
+Episodes are numbered from the video's YouTube publish time: the season is
+the publish year, the episode is the month and day followed by a two-digit
+index for videos of the same show published that day (`S2026E031502` is
+the second video of 15 March 2026). A number is assigned once and never
+changes, so files never rename and Plex keeps watch state on the right
+episode.
 
-In order to let yarrtube create and manage collections in Plex, you need:
+Nothing below is required to *use* the layout: any player that reads TV
+show folders picks it up. The optional part is the **scan trigger**, which
+asks Plex to import a new episode as soon as it is downloaded.
 
-- Plex set up to read yarrtube's metadata files (NFOs) so it can match videos by YouTube ID.
-- A Plex token (`X-Plex-Token`) to authenticate yarrtube's API requests.
-- The section ID(s) of the Plex library or libraries holding your yarrtube content (like library IDs for Plex).
-- The yarrtube env variables set.
+## 1. Set up a TV Shows library
 
-## 1. Setup Plex library
+Create a **TV Shows** library over the folders holding yarrtube's videos
+(for example the host folders mounted at `/videos/playlists` and
+`/videos/channels`), and in its _Advanced_ settings:
 
-Next to every video, yarrtube writes a `movie.nfo` with meta information Plex can read.
-To tell Plex to read them, you need a **Movies** library whose _Advanced_ settings use the **Plex Movie** scanner and the **Plex NFO Movie** agent. You can also disable cinema trailers, credits detection and other stuff, and make sure **Use local assets** is enabled.
+- **Scanner**: Plex TV Series.
+- **Agent**: **Plex NFO Series** (reads `tvshow.nfo` and each episode's
+  `.nfo`, matching videos by their YouTube id).
+- **Seasons**: _Hide for single-season series_, so a channel that only
+  published this year opens straight onto its episodes.
+- **Use local assets**: on, so `poster.jpg` and each episode's `.jpg` are
+  used.
 
-<p align="center">
-  <img src="plex_setup/plex_library1.png" alt="Plex Library Setup" width="450"/>
-</p>
-
-The Plex NFO Movie agent needs Plex Media Server 1.43.1 or newer. If it's
-missing from the agent list:
+The Plex NFO agents need Plex Media Server 1.43.1 or newer. If **Plex NFO
+Series** is missing from the agent list:
 
 - Check the server version under _Settings → General_ and update if it's
   older than 1.43.1.
-- Pick **Plex Movie** as the scanner, not the legacy **Plex Movie Scanner**.
-- After upgrading from a version without the NFO agent, restart Plex Media
+- After upgrading from a version without the NFO agents, restart Plex Media
   Server once more by hand.
 - If it still isn't listed, open the server's own web app at
   `http://<YOUR_PLEX_IP>:32400/web` and create the library there. The
   hosted app at app.plex.tv may not list it yet, even after an upgrade.
 
-## 2. Get your Plex token (`YARRTUBE_PLEX_TOKEN`)
+Optionally enable _Settings → Library → Scan my library automatically_ and
+_Run a partial scan when changes are detected_: Plex then imports new
+episodes on its own, and the scan trigger below just makes it immediate.
+
+## 2. Migrating a library downloaded by an older yarrtube
+
+Older versions stored each video in its own folder with a `movie.nfo`.
+Upgrading does not move those files: new downloads land in the TV layout,
+old ones stay playable where they are until you migrate them once.
+
+1. Back up your videos folder and database.
+2. Stop the daemon.
+3. Preview the migration. It prints every move (`from -> to`), every
+   skipped video with its reason, and a summary, and changes nothing:
+
+   ```bash
+   docker compose run --rm yarrtube yarrtube migrate-layout --dry-run
+   ```
+
+4. Run it for real:
+
+   ```bash
+   docker compose run --rm yarrtube yarrtube migrate-layout
+   ```
+
+   It writes every show's `tvshow.nfo` and `poster.jpg`, moves each
+   downloaded video's file, thumbnail and NFO into its season folder under
+   its episode name, rewrites the NFO as an episode NFO and removes the old
+   per-video folders. It exits non-zero if any video failed to move; the
+   others are migrated anyway. Running it again is safe: it only moves what
+   is still in the old layout.
+
+5. Start the daemon again.
+6. In Plex, create the TV Shows library described above on the same folders
+   and delete the old Movies library.
+
+Videos the migration skips are healed by the daemon later: one with no
+recorded metadata (so no publish time) is moved into its season folder as
+soon as a reconcile pass manages to fetch its metadata, and one whose file
+is missing is downloaded again.
+
+**Watch history does not carry over** from the old Movies library: Plex
+keys it by library item, and the episodes in the new library are new
+items.
+
+## 3. Scan trigger (optional)
+
+With the scan trigger on, yarrtube asks Plex to scan a show's folder as soon
+as one of its videos finishes downloading, in every library whose folders
+contain it. You need:
+
+- A Plex token (`X-Plex-Token`) to authenticate yarrtube's requests.
+- The path at which the Plex server sees yarrtube's videos root.
+
+### Get your Plex token (`YARRTUBE_PLEX_TOKEN`)
 
 Follow Plex's official guide:
 [Finding an authentication token / X-Plex-Token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
@@ -64,30 +131,7 @@ sudo grep -o 'PlexOnlineToken="[^"]*"' \
 The value between the quotes is the token. Treat it like a password: it
 gives full access to your Plex account and server.
 
-## 3. Find the library section ID(s)
-
-Section IDs are like identifiers for each Plex library. You have two ways to get the IDs of the libraries you want yarrtube to create collections in:
-
-- **Browser URL**: open the library in the Plex web app and look at the
-  address bar. The number after `source=` is the section ID.
-- **API**: list all libraries and pick the `key` of the one(s) holding
-  yarrtube content:
-
-  The section ID is each library's `key`. To print just a `title → key`
-  table instead of the raw JSON response, pipe it through `jq`:
-
-  ```bash
-  curl -sH "Accept: application/json" \
-    "http://<YOUR_PLEX_IP>:32400/library/sections?X-Plex-Token=<YOUR_TOKEN>" \
-    | jq -r '.MediaContainer.Directory[]
-             | "\(.key)\t\(.title)\t\(.Location[].path)"'
-  ```
-
-  <p align="center">
-    <img src="plex_setup/section_ids.png" alt="Section ids via curl" width="450"/>
-  </p>
-
-## 4. Configure yarrtube
+### Configure yarrtube
 
 Set the environment variables on the yarrtube container and restart it:
 
@@ -95,17 +139,15 @@ Set the environment variables on the yarrtube container and restart it:
 environment:
   - YARRTUBE_PLEX_URL=http://<YOUR_PLEX_IP>:32400
   - YARRTUBE_PLEX_TOKEN=<YOUR_TOKEN>
-  # the playlist library section id(s), and the channel library section
-  # id(s); each takes one id or a comma-separated list (e.g. 2,5). Set
-  # whichever kinds you use — you can set just one of the two:
-  - YARRTUBE_PLEX_PLAYLIST_SECTION_ID=<YOUR_PLAYLIST_SECTION_ID>
-  - YARRTUBE_PLEX_CHANNEL_SECTION_ID=<YOUR_CHANNEL_SECTION_ID>
-  # optional, defaults to 900 (15 minutes):
-  # - YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS=900
-  # recommended: the path at which Plex sees yarrtube's videos root, i.e.
-  # the host side of the /videos volume (e.g. /volume1/data/media/yarrtube):
+  # the path at which Plex sees yarrtube's videos root, i.e. the host side
+  # of the /videos volume (e.g. /volume1/data/media/yarrtube):
   - YARRTUBE_PLEX_VIDEOS_PATH=<HOST_PATH_MOUNTED_AT_/videos>
 ```
+
+The trigger is **off unless all three are set**; with only some of them
+yarrtube logs a warning at startup and never contacts Plex. Libraries are
+discovered, not configured: yarrtube lists the server's libraries and scans
+the show folder in each one whose folders contain it.
 
 `YARRTUBE_PLEX_URL` must be reachable from inside the yarrtube container.
 `localhost` there is the container itself, not the machine running Docker,
@@ -115,47 +157,25 @@ IP (e.g. `http://192.168.1.10:32400`) or run yarrtube with
 `network_mode: host`. With host networking, `ports:` is ignored, so set
 `YARRTUBE_PORT` to choose the port the web UI listens on.
 
-`YARRTUBE_PLEX_VIDEOS_PATH` is optional. With it, yarrtube asks Plex to
-scan each video's folder as soon as the download finishes, in the
-configured sections whose library folders contain it. Without it, new
-videos reach Plex only through Plex's own scanning.
-
-The integration is **off unless `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN`
-and at least one of the two section variables are set** — without them
-yarrtube behaves exactly as before and never contacts Plex.
-
-## How the sync behaves (what to expect)
-
-- A new video shows up in its collection only after **both** yarrtube has
-  downloaded it **and** Plex has scanned it. With `YARRTUBE_PLEX_VIDEOS_PATH`
-  set, yarrtube triggers that scan itself; otherwise enable Plex's "Scan my
-  library automatically" so new files are picked up quickly. If it's
-  missing, wait for the next sync pass; nothing needs fixing manually.
-- yarrtube writes each video's `movie.nfo` before the video file, so Plex
-  identifies it on import. A video Plex imported without its YouTube ID
-  (e.g. before its `movie.nfo` existed) is re-matched to its `movie.nfo` by
-  the next sync pass and joins its collection on the pass after.
-- A collection is only created once at least one of its videos is scanned —
-  you'll never see empty collections.
-- Deleting a playlist/channel in yarrtube deletes its Plex collection.
-  Deleting a collection by hand in Plex is not permanent: the next sync
-  pass recreates it (with its current videos).
-- Collections are matched **by name**: the collection's title is the
-  playlist/channel name as shown in yarrtube. Renaming a collection in Plex
-  will make yarrtube create a fresh one with the original name.
-- If Plex is down, yarrtube keeps downloading normally; the sync pass logs
-  an error and retries on the next interval.
+A failed scan request never affects the download: it is logged and retried
+a few times.
 
 ## Troubleshooting
 
-- **No collections appear at all**: check the startup log for
-  `scheduled recurring Plex collections reconcile task` (integration
-  enabled?) and for `Plex collections reconcile pass failed` errors (wrong
-  URL/token/section id?). Test your values by hand:
-  `curl "http://<PLEX>:32400/library/sections/<ID>/all?X-Plex-Token=<TOKEN>"`.
+- **A show is missing its poster**: only channels have one (a copy of the
+  channel's avatar); playlists have none. Show files are rewritten on every
+  sync of their playlist or channel, so a deleted `tvshow.nfo` or
+  `poster.jpg` comes back on the next pass.
+- **Episodes show as "Episode 31502" without their title**: the library is
+  not using the **Plex NFO Series** agent, or _Use local assets_ is off.
+- **New episodes don't appear until Plex's next scheduled scan**: check the
+  log for `requested Plex scan of downloaded video's folder` after a
+  download. If you see `no Plex section contains the folder` instead,
+  `YARRTUBE_PLEX_VIDEOS_PATH` doesn't match the folders your TV Shows
+  library points at.
 - **`error sending request for url (http://.../library/sections)`** in the
   log: yarrtube can't open a connection to Plex at all. A wrong token gives
   a 401 instead. Unless yarrtube uses host networking, check that
   `YARRTUBE_PLEX_URL` isn't `localhost` (see
-  [Configure yarrtube](#4-configure-yarrtube)) and that no firewall on the
+  [Configure yarrtube](#configure-yarrtube)) and that no firewall on the
   Plex machine blocks port 32400 from Docker's network.

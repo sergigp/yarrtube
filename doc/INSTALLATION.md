@@ -66,40 +66,59 @@ services:
 
 Environment variables read by Yarrtube are listed below. Every variable except `YOUTUBE_API_KEY` is optional, so you only need to set the ones you want to override:
 
-| Variable                                   | Default               | Description                                                                                                                                                                                                                  |
-| ------------------------------------------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `YOUTUBE_API_KEY`                          | —                     | YouTube Data API v3 key (required)                                                                                                                                                                                           |
-| `PUID`                                     | `0` (root)            | Numeric user ID the daemon runs as and that owns downloaded files                                                                                                                                                            |
-| `PGID`                                     | `0` (root)            | Numeric group ID the daemon runs as and that owns downloaded files                                                                                                                                                           |
-| `YARRTUBE_PORT`                            | `8080`                | HTTP port to listen on                                                                                                                                                                                                       |
-| `YARRTUBE_RECONCILE_INTERVAL_SECONDS`      | `3600`                | How often each tracked playlist or channel is reconciled                                                                                                                                                                     |
-| `YARRTUBE_DB_PATH`                         | `/config/yarrtube.db` | Path to the SQLite database (inside the container)                                                                                                                                                                           |
-| `YARRTUBE_VIDEOS_PATH`                     | `/videos`             | Root directory downloaded videos are saved under (inside the container)                                                                                                                                                      |
-| `YARRTUBE_DOWNLOAD_CONCURRENCY`            | `2`                   | How many videos download at the same time. Higher values download faster but make YouTube more likely to throttle or bot-check you                                                                                           |
-| `YARRTUBE_RETRY_BASE_DELAY_SECONDS`        | `150`                 | Delay before retrying a failed task; it grows exponentially with each further retry                                                                                                                                          |
-| `YARRTUBE_AVATARS_PATH`                    | `/config/avatars`     | Directory channel avatars are stored in (inside the container)                                                                                                                                                               |
-| `YTDLP_PATH`                               | `/app/bin/yt-dlp`     | Path to the managed `yt-dlp` binary (also the path bundled into the image at build time)                                                                                                                                     |
-| `RUST_LOG`                                 | `info`                | Log verbosity (e.g. `RUST_LOG=debug`)                                                                                                                                                                                        |
-| `YARRTUBE_PLEX_URL`                        | —                     | Base URL of your Plex server (e.g. `http://192.168.1.10:32400`). Enables the [Plex collections integration](#plex-collections)                                                                                               |
-| `YARRTUBE_PLEX_TOKEN`                      | —                     | Plex authentication token (`X-Plex-Token`)                                                                                                                                                                                   |
-| `YARRTUBE_PLEX_PLAYLIST_SECTION_ID`        | —                     | ID(s) of the Plex library section(s) holding yarrtube's **playlist** videos, comma-separated when spread across several libraries (e.g. `2,5`)                                                                               |
-| `YARRTUBE_PLEX_CHANNEL_SECTION_ID`         | —                     | ID(s) of the Plex library section(s) holding yarrtube's **channel** videos, comma-separated when spread across several libraries (e.g. `3,6`)                                                                                |
-| `YARRTUBE_PLEX_RECONCILE_INTERVAL_SECONDS` | `900`                 | How often Plex collections are synced toward yarrtube's state                                                                                                                                                                |
-| `YARRTUBE_PLEX_VIDEOS_PATH`                | —                     | Where the Plex server sees yarrtube's videos root (`YARRTUBE_VIDEOS_PATH`), e.g. the host path `/volume1/data/media/yarrtube` mounted at `/videos`. When set, each downloaded video's folder is scanned into Plex right away |
+| Variable                              | Default               | Description                                                                                                                                                                                                   |
+| ------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `YOUTUBE_API_KEY`                     | —                     | YouTube Data API v3 key (required)                                                                                                                                                                            |
+| `PUID`                                | `0` (root)            | Numeric user ID the daemon runs as and that owns downloaded files                                                                                                                                             |
+| `PGID`                                | `0` (root)            | Numeric group ID the daemon runs as and that owns downloaded files                                                                                                                                            |
+| `YARRTUBE_PORT`                       | `8080`                | HTTP port to listen on                                                                                                                                                                                        |
+| `YARRTUBE_RECONCILE_INTERVAL_SECONDS` | `3600`                | How often each tracked playlist or channel is reconciled                                                                                                                                                      |
+| `YARRTUBE_DB_PATH`                    | `/config/yarrtube.db` | Path to the SQLite database (inside the container)                                                                                                                                                            |
+| `YARRTUBE_VIDEOS_PATH`                | `/videos`             | Root directory downloaded videos are saved under (inside the container)                                                                                                                                       |
+| `YARRTUBE_DOWNLOAD_CONCURRENCY`       | `2`                   | How many videos download at the same time. Higher values download faster but make YouTube more likely to throttle or bot-check you                                                                            |
+| `YARRTUBE_RETRY_BASE_DELAY_SECONDS`   | `150`                 | Delay before retrying a failed task; it grows exponentially with each further retry                                                                                                                           |
+| `YARRTUBE_AVATARS_PATH`               | `/config/avatars`     | Directory channel avatars are stored in (inside the container)                                                                                                                                                |
+| `YTDLP_PATH`                          | `/app/bin/yt-dlp`     | Path to the managed `yt-dlp` binary (also the path bundled into the image at build time)                                                                                                                      |
+| `RUST_LOG`                            | `info`                | Log verbosity (e.g. `RUST_LOG=debug`)                                                                                                                                                                         |
+| `YARRTUBE_PLEX_URL`                   | —                     | Base URL of your Plex server (e.g. `http://192.168.1.10:32400`). With the token and `YARRTUBE_PLEX_VIDEOS_PATH`, enables the [Plex scan trigger](#plex)                                                       |
+| `YARRTUBE_PLEX_TOKEN`                 | —                     | Plex authentication token (`X-Plex-Token`)                                                                                                                                                                    |
+| `YARRTUBE_PLEX_VIDEOS_PATH`           | —                     | Where the Plex server sees yarrtube's videos root (`YARRTUBE_VIDEOS_PATH`), e.g. the host path `/volume1/data/media/yarrtube` mounted at `/videos`. Plex is asked to scan a show's folder after each download |
 
-## Plex collections
+## Videos on disk
 
-Yarrtube can keep one Plex collection per tracked playlist and channel,
-turning a flat library of thousands of loose videos into one tile per
-playlist/channel, with correct in-playlist ordering and autoplay across
-episodes. The integration is off by default: it activates only when
-`YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN` and at least one of
-`YARRTUBE_PLEX_PLAYLIST_SECTION_ID` / `YARRTUBE_PLEX_CHANNEL_SECTION_ID`
-are set. Each Plex library holds a single kind — playlists or channels.
+Every tracked playlist and channel is stored as a TV show under its storage
+path: a `tvshow.nfo` (and, for a channel, a `poster.jpg` from its avatar)
+plus one `Season <year>` folder per publish year, each video saved there as
+`S<year>E<MMDDii> - <title>.mp4` next to its `.jpg` thumbnail and `.nfo`
+metadata. Plex, Kodi and Jellyfin read this layout natively as TV shows.
+Downloads are staged in a hidden `.downloads` folder under the videos root
+and moved into place once complete, so the videos root must be a single
+filesystem.
 
-The Plex-side setup (library configuration, obtaining the token and
-section IDs, recommended library settings) is covered step by step in
-[PLEX.md](PLEX.md).
+## Plex
+
+Point a Plex **TV Shows** library (Plex NFO Series agent) at your videos
+folders. Optionally, set `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN` and
+`YARRTUBE_PLEX_VIDEOS_PATH` (all three) and yarrtube asks Plex to scan a
+show's folder as soon as one of its videos is downloaded. The library setup
+and the scan trigger are covered step by step in [PLEX.md](PLEX.md).
+
+## Migrating from the per-video-folder layout
+
+Libraries downloaded by older versions kept each video in its own folder
+with a `movie.nfo`. They stay playable, but run the `migrate-layout`
+subcommand once, with the daemon stopped, to move them into the TV layout:
+
+```bash
+docker compose run --rm yarrtube yarrtube migrate-layout --dry-run   # preview
+docker compose run --rm yarrtube yarrtube migrate-layout
+```
+
+The dry run prints each move and skip and changes nothing. The real run
+moves every downloaded video's files into its season folder, writes the
+show files, and exits non-zero if any video failed to move. It is safe to
+run again. See [PLEX.md](PLEX.md#2-migrating-a-library-downloaded-by-an-older-yarrtube)
+for the full procedure, including the Plex side.
 
 ## Updating
 
