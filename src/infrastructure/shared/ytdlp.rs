@@ -125,6 +125,15 @@ fn parse_timestamp(line: &str) -> Option<DateTime<Utc>> {
         .and_then(|seconds| DateTime::from_timestamp(seconds, 0))
 }
 
+/// Parses `yt-dlp`'s `--print %(upload_date)s` line (`YYYYMMDD`) into
+/// midnight UTC of that day, the publish time when no timestamp is known.
+fn parse_upload_date(line: &str) -> Option<DateTime<Utc>> {
+    chrono::NaiveDate::parse_from_str(line.trim(), "%Y%m%d")
+        .ok()
+        .and_then(|date| date.and_hms_opt(0, 0, 0))
+        .map(|midnight| midnight.and_utc())
+}
+
 /// Names every staged file after the video's YouTube id, so the media and
 /// its thumbnail share one stem whatever the title.
 const STAGED_OUTPUT_TEMPLATE: &str = "%(id)s.%(ext)s";
@@ -216,7 +225,9 @@ pub fn download_video(
         }
     };
     let duration_seconds = line_before_last(&lines, 1).and_then(parse_duration_seconds);
-    let published_at = line_before_last(&lines, 3).and_then(parse_timestamp);
+    let published_at = line_before_last(&lines, 3)
+        .and_then(parse_timestamp)
+        .or_else(|| line_before_last(&lines, 2).and_then(parse_upload_date));
 
     Ok(DownloadAttempt::Succeeded(DownloadedVideo {
         media_path: staging_dir.join(filename),
@@ -957,6 +968,33 @@ mod tests {
                 .windows(4)
                 .any(|args| args == ["--print", "%(timestamp)s", "--print", "%(upload_date)s"]),
             true
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_fall_back_to_the_upload_date_when_the_timestamp_is_na() {
+        let fake = test_support::FakeYtDlp::with_stdout("NA\n20260315\n223\nyt1.mp4\n");
+        let staging_dir = test_support::unique_temp_dir("ytdlp-output-upload-date");
+
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                Quality::High,
+                &staging_dir,
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            result.published_at,
+            Some(
+                DateTime::parse_from_rfc3339("2026-03-15T00:00:00Z")
+                    .unwrap()
+                    .to_utc()
+            )
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
