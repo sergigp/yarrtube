@@ -155,6 +155,33 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_delete_an_episodes_media_thumbnail_and_nfo() {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
+            video_file_repository.clone(),
+            "/videos",
+        ));
+
+        let result = run(
+            &task,
+            &payload_for(
+                Some("Season 2026/S2026E031501 - My Video.mp4"),
+                Some("Season 2026/S2026E031501 - My Video.jpg"),
+            ),
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *video_file_repository.deleted_calls.lock().unwrap(),
+            vec![
+                deleted("Season 2026/S2026E031501 - My Video.mp4"),
+                deleted("Season 2026/S2026E031501 - My Video.nfo"),
+                deleted("Season 2026/S2026E031501 - My Video.jpg"),
+            ]
+        );
+    }
+
     fn payload_for(filename: Option<&str>, thumbnail_filename: Option<&str>) -> String {
         Task::DeleteVideoFile {
             filename: filename.map(str::to_string),

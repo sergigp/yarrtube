@@ -26,6 +26,17 @@ pub fn top_level_entry(relative_path: &str) -> &str {
         .map_or(relative_path, |(first, _)| first)
 }
 
+/// The entry of a show directory a recorded path is deleted or protected
+/// by: the path itself for an episode file in its season folder, else its
+/// legacy top-level folder or flat file.
+pub fn owning_entry(relative_path: &str) -> &str {
+    if is_episode_path(relative_path) {
+        relative_path
+    } else {
+        top_level_entry(relative_path)
+    }
+}
+
 /// Resolves a playlist's/channel's output directory: `videos_path` joined
 /// with its recorded `path`. Shared by every service that reads or writes
 /// to a container's directory on disk.

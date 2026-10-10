@@ -9,7 +9,7 @@ use crate::domain::video::VideoRecordId;
 use crate::domain::video::video_filename::episode_base_name;
 use crate::domain::video::{
     SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, Video, VideoStatus, is_episode_path, is_season_folder,
-    nfo_path_for, resolve_output_dir, top_level_entry,
+    nfo_path_for, owning_entry, resolve_output_dir,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -449,14 +449,7 @@ fn protected_entries(videos: &[Video]) -> HashSet<String> {
         .iter()
         .copied()
         .chain(thumbnails)
-        .map(|path| {
-            if is_episode_path(path) {
-                path
-            } else {
-                top_level_entry(path)
-            }
-        })
-        .map(str::to_string);
+        .map(|path| owning_entry(path).to_string());
     [SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME]
         .map(str::to_string)
         .into_iter()

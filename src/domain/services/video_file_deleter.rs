@@ -1,6 +1,6 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
-use crate::domain::video::{resolve_output_dir, top_level_entry};
+use crate::domain::video::{is_episode_path, nfo_path_for, owning_entry, resolve_output_dir};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use std::path::Path;
 use std::sync::Arc;
@@ -32,13 +32,12 @@ pub trait VideoFileDeleterApi: Send + Sync {
     /// `subscribers::delete_video_file_on_video_removed_from_playlist`/
     /// `..._channel` whenever a downloaded video is removed from its
     /// container. `output_dir` is the container's already-resolved output
-    /// directory. Each recorded path is reduced to its `top_level_entry()`
-    /// before deleting, so a new-style video's whole folder (owning its file,
-    /// thumbnail, and `movie.nfo` together) is removed as one unit, while a
-    /// legacy flat video's file and thumbnail are still deleted individually
-    /// exactly as before. No-ops (without erroring) for either entry it has
-    /// no recorded filename for, or no matching entry is found, so the task
-    /// is safe to retry.
+    /// directory. An episode's media file, its NFO and its thumbnail are
+    /// deleted from its season folder, leaving the show files and the
+    /// folder in place; a legacy video's per-video folder is removed as one
+    /// unit, a legacy flat video's file and thumbnail individually. No-ops
+    /// (without erroring) for either entry it has no recorded filename for,
+    /// or no matching entry is found, so the task is safe to retry.
     fn delete_video_file(
         &self,
         filename: Option<String>,
@@ -105,6 +104,8 @@ impl VideoFileDeleterApi for VideoFileDeleter {
 }
 
 impl VideoFileDeleter {
+    /// An episode's media file and the NFO next to it, or a legacy video's
+    /// whole folder or flat file.
     fn delete_video_entry(
         &self,
         filename: Option<String>,
@@ -114,13 +115,10 @@ impl VideoFileDeleter {
             debug!("video has no recorded filename, skipping file deletion");
             return Ok(());
         };
-        let entry = top_level_entry(&filename);
-        if self.video_file_repository.delete(output_dir, entry)? {
-            info!(filename, entry, "deleted video file");
-        } else {
-            debug!(filename, entry, "no matching video file found to delete");
-        }
-        Ok(())
+        let nfo = is_episode_path(&filename).then(|| nfo_path_for(&filename));
+        std::iter::once(owning_entry(&filename))
+            .chain(nfo.as_deref())
+            .try_for_each(|entry| self.delete_entry(output_dir, entry))
     }
 
     fn delete_thumbnail_entry(
@@ -132,14 +130,14 @@ impl VideoFileDeleter {
             debug!("video has no recorded thumbnail filename, skipping file deletion");
             return Ok(());
         };
-        let entry = top_level_entry(&thumbnail_filename);
+        self.delete_entry(output_dir, owning_entry(&thumbnail_filename))
+    }
+
+    fn delete_entry(&self, output_dir: &Path, entry: &str) -> anyhow::Result<()> {
         if self.video_file_repository.delete(output_dir, entry)? {
-            info!(thumbnail_filename, entry, "deleted video thumbnail file");
+            info!(entry, "deleted video file");
         } else {
-            debug!(
-                thumbnail_filename,
-                entry, "no matching video thumbnail file found to delete"
-            );
+            debug!(entry, "no matching video file found to delete");
         }
         Ok(())
     }
