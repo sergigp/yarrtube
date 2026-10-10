@@ -12,7 +12,13 @@ pub(crate) fn captured_log_messages(body: impl FnOnce()) -> Vec<String> {
 
     let messages: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
     let subscriber = tracing_subscriber::registry().with(CaptureLayer(Arc::clone(&messages)));
-    tracing::subscriber::with_default(subscriber, body);
+    tracing::subscriber::with_default(subscriber, || {
+        // Another test thread may have cached a callsite as uninteresting
+        // while no capturing subscriber was alive; re-ask every callsite now
+        // that this one is.
+        tracing::callsite::rebuild_interest_cache();
+        body()
+    });
     messages.lock().unwrap().clone()
 }
 
