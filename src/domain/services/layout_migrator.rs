@@ -519,6 +519,64 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_move_nothing_on_a_second_run() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_file_exists(true));
+        let show_file_repository = Arc::new(FakeShowFileRepository::default());
+        let videos_root = tempfile::tempdir().unwrap();
+        let playlist_dir = videos_root.path().join("playlists/kids");
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&my_playlist())
+            .unwrap();
+        let alpha = legacy_video("yt1", "Alpha", "Alpha/Alpha.mp4", None);
+        seed_playlist_video(&db, &alpha, 0);
+        seed_metadata(
+            &db,
+            &alpha,
+            published("2026-03-15T10:00:00Z"),
+            &playlist_dir.join("Alpha"),
+        );
+        let migrator = layout_migrator(
+            &db,
+            video_file_repository.clone(),
+            show_file_repository.clone(),
+            videos_root.path(),
+        );
+        migrator.migrate(false).unwrap();
+
+        let result = migrator.migrate(false);
+
+        assert_eq!(result.unwrap(), MigrationReport::default());
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![alpha.relocate_to_episode(
+                episode(2026, 31501),
+                "Season 2026/S2026E031501 - Alpha.mp4",
+                None,
+                fixed_timestamp(),
+            )]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![(
+                playlist_dir.join("Alpha/Alpha.mp4"),
+                playlist_dir.join("Season 2026/S2026E031501 - Alpha.mp4")
+            )]
+        );
+        assert_eq!(
+            show_file_repository
+                .show_nfos
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(dir, _)| dir.clone())
+                .collect::<Vec<_>>(),
+            vec![playlist_dir.clone(), playlist_dir.clone()]
+        );
+    }
+
     /// Builds a migrator around the ports a test configures or asserts, over
     /// `db`'s real repositories and `videos_root`.
     fn layout_migrator(
