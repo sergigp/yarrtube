@@ -182,6 +182,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_delete_a_legacy_per_video_folder() {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
+            video_file_repository.clone(),
+            "/videos",
+        ));
+
+        let result = run(
+            &task,
+            &payload_for(Some("My Video/My Video.mp4"), Some("My Video/My Video.jpg")),
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *video_file_repository.deleted_calls.lock().unwrap(),
+            vec![deleted("My Video"), deleted("My Video")]
+        );
+    }
+
     fn payload_for(filename: Option<&str>, thumbnail_filename: Option<&str>) -> String {
         Task::DeleteVideoFile {
             filename: filename.map(str::to_string),
