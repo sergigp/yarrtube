@@ -25,7 +25,7 @@
 - [x] 2.15 `it_should_protect_files_sharing_the_base_name_of_an_in_progress_numbered_video` — nfo of an in-progress numbered video kept
 - [x] 2.16 `it_should_relocate_a_legacy_video_when_its_metadata_is_recovered` — legacy folder moved into the season folder, `movie.nfo` removed, empty folder removed, filenames and number recorded from `published_at`
 - [x] 2.17 `it_should_leave_a_legacy_video_in_place_when_its_metadata_is_still_unavailable` — no move, no reset
-- [ ] 2.18 `it_should_reset_a_numbered_video_whose_file_is_missing_without_dropping_its_number` — PENDING, filenames cleared, number kept
+- [x] 2.18 `it_should_reset_a_numbered_video_whose_file_is_missing_without_dropping_its_number` — PENDING, filenames cleared, number kept
 - [ ] 2.19 `it_should_delete_an_episodes_media_thumbnail_and_nfo` — delete task removes the three files, show files untouched
 - [ ] 2.20 `it_should_delete_a_legacy_per_video_folder` — delete task removes the whole legacy folder
 - [ ] 2.21 `it_should_scan_the_show_folder_in_every_section_containing_it` — scan subscriber scans `output_dir` in the containing section only
