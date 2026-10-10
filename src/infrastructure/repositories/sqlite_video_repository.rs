@@ -322,7 +322,19 @@ impl VideoRepository for SqliteVideoRepository {
     }
 
     fn list_downloaded(&self) -> anyhow::Result<Vec<Video>> {
-        Ok(Vec::new())
+        let conn = self.db.read()?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {VIDEO_COLUMNS} FROM videos WHERE status = ?1 ORDER BY rowid ASC"
+            ))
+            .context("failed to prepare list downloaded videos")?;
+        stmt.query_map(params![VideoStatus::Downloaded.as_str()], Self::read_row)
+            .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+            .inspect_err(|e| tracing::error!(error = %e, "failed to list downloaded videos"))
+            .context("failed to list downloaded videos")?
+            .into_iter()
+            .map(Self::row_to_video)
+            .collect()
     }
 }
 
@@ -914,6 +926,27 @@ mod tests {
             ],
             [Some(saved), Some(updated)]
         );
+    }
+
+    #[test]
+    fn it_should_list_downloaded_videos() {
+        let repo = repo();
+        let pending = video("Pending", fixed_timestamp());
+        let downloaded = video("Downloaded", fixed_timestamp())
+            .start_download(fixed_timestamp())
+            .mark_downloaded(
+                Quality::High,
+                "Season 2026/S2026E031501 - Downloaded.mp4",
+                None,
+                None,
+                fixed_timestamp(),
+            );
+        let errored = video("Errored", fixed_timestamp()).mark_errored(fixed_timestamp());
+        [&pending, &downloaded, &errored].map(|video| repo.save(video).unwrap());
+
+        let listed = repo.list_downloaded();
+
+        assert_eq!(listed.unwrap(), vec![downloaded]);
     }
 
     fn link_to_playlist(db: &TestDatabase, video: &Video, playlist_id: &str) {

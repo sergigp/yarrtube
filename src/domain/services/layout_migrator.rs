@@ -3,7 +3,7 @@ use crate::domain::playlist::{Playlist, PlaylistPath};
 use crate::domain::services::{
     Relocation, ShowFileWriter, ShowFileWriterApi, SkipReason, VideoRelocator, VideoRelocatorApi,
 };
-use crate::domain::video::{Video, VideoRecordId, VideoStatus, resolve_output_dir};
+use crate::domain::video::{Video, VideoRecordId, resolve_output_dir};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -76,14 +76,15 @@ pub trait LayoutMigratorApi: Send + Sync {
 
 impl LayoutMigratorApi for LayoutMigrator {
     fn migrate(&self, dry_run: bool) -> anyhow::Result<MigrationReport> {
+        let legacy = self.legacy_videos()?;
         let playlists = self.playlist_repository.list()?;
         let channels = self.channel_repository.list()?;
         let playlist_reports = playlists
             .iter()
-            .map(|playlist| self.migrate_playlist(playlist, dry_run));
+            .map(|playlist| self.migrate_playlist(playlist, &legacy, dry_run));
         let channel_reports = channels
             .iter()
-            .map(|channel| self.migrate_channel(channel, dry_run));
+            .map(|channel| self.migrate_channel(channel, &legacy, dry_run));
         playlist_reports
             .chain(channel_reports)
             .try_fold(MigrationReport::default(), |report, source_report| {
@@ -96,6 +97,7 @@ impl LayoutMigrator {
     fn migrate_playlist(
         &self,
         playlist: &Playlist,
+        legacy: &[Video],
         dry_run: bool,
     ) -> anyhow::Result<MigrationReport> {
         if !dry_run {
@@ -107,10 +109,15 @@ impl LayoutMigrator {
             .into_iter()
             .map(|playlist_video| playlist_video.video_id)
             .collect::<Vec<_>>();
-        self.migrate_videos(&playlist.path, &video_ids, dry_run)
+        self.migrate_videos(&playlist.path, &video_ids, legacy, dry_run)
     }
 
-    fn migrate_channel(&self, channel: &Channel, dry_run: bool) -> anyhow::Result<MigrationReport> {
+    fn migrate_channel(
+        &self,
+        channel: &Channel,
+        legacy: &[Video],
+        dry_run: bool,
+    ) -> anyhow::Result<MigrationReport> {
         if !dry_run {
             self.show_file_writer.write_channel_show(channel)?;
         }
@@ -120,7 +127,7 @@ impl LayoutMigrator {
             .into_iter()
             .map(|channel_video| channel_video.video_id)
             .collect::<Vec<_>>();
-        self.migrate_videos(&channel.path, &video_ids, dry_run)
+        self.migrate_videos(&channel.path, &video_ids, legacy, dry_run)
     }
 
     /// Relocates a source's legacy videos in publish-time order, so the
@@ -129,10 +136,12 @@ impl LayoutMigrator {
         &self,
         path: &PlaylistPath,
         video_ids: &[VideoRecordId],
+        legacy: &[Video],
         dry_run: bool,
     ) -> anyhow::Result<MigrationReport> {
         let output_dir = resolve_output_dir(&self.videos_path, path.as_str());
-        let (report, _) = self.legacy_videos_by_publish_time(video_ids)?.iter().fold(
+        let videos = self.by_publish_time(legacy, video_ids)?;
+        let (report, _) = videos.iter().fold(
             (MigrationReport::default(), Vec::new()),
             |(report, planned), (video, published_at)| {
                 let relocation = if dry_run {
@@ -151,23 +160,32 @@ impl LayoutMigrator {
         Ok(report)
     }
 
-    /// The downloaded videos among `video_ids` still in the legacy layout,
-    /// each with its recorded publish time, earliest first.
-    fn legacy_videos_by_publish_time(
+    /// Every downloaded video still in the legacy layout.
+    fn legacy_videos(&self) -> anyhow::Result<Vec<Video>> {
+        Ok(self
+            .video_repository
+            .list_downloaded()?
+            .into_iter()
+            .filter(Video::is_in_legacy_layout)
+            .collect())
+    }
+
+    /// The `legacy` videos among `video_ids`, each with its recorded publish
+    /// time, earliest first.
+    fn by_publish_time(
         &self,
+        legacy: &[Video],
         video_ids: &[VideoRecordId],
     ) -> anyhow::Result<Vec<(Video, Option<DateTime<Utc>>)>> {
-        let mut videos = self
-            .video_repository
-            .find_many(video_ids)?
-            .into_iter()
-            .filter(|video| video.status == VideoStatus::Downloaded && video.is_in_legacy_layout())
+        let mut videos = legacy
+            .iter()
+            .filter(|video| video_ids.contains(&video.id))
             .map(|video| {
                 let published_at = self
                     .video_metadata_repository
                     .find(&video.id)?
                     .map(|metadata| metadata.published_at);
-                Ok((video, published_at))
+                Ok((video.clone(), published_at))
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
         videos.sort_by_key(|(_, published_at)| *published_at);
