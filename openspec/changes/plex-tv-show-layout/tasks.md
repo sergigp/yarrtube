@@ -14,7 +14,7 @@
 - [x] 2.4 `it_should_reuse_the_number_recorded_by_the_thumbnail_fetch` — download lands next to the prefetched jpg under the same base name
 - [x] 2.5 `it_should_number_from_the_upload_date_when_no_timestamp_is_reported` — number derived from `upload_date` only
 - [x] 2.6 `it_should_download_under_its_episode_name_without_metadata` — Data API failing twice: file placed, no nfo, no metadata row
-- [ ] 2.7 `it_should_discard_the_staging_dir_when_the_download_fails` — staging gone, season folder untouched
+- [x] 2.7 `it_should_discard_the_staging_dir_when_the_download_fails` — staging gone, season folder untouched
 - [ ] 2.8 `it_should_discard_the_download_when_the_video_was_deleted_meanwhile` — staging gone, nothing recorded, show dir untouched
 - [ ] 2.9 `it_should_place_a_prefetched_thumbnail_as_the_episode_image` — thumbnail task: jpg at episode path, number and thumbnail recorded, status untouched
 - [ ] 2.10 `it_should_leave_the_video_untouched_when_the_thumbnail_fetch_fails` — staging removed, no number, no thumbnail

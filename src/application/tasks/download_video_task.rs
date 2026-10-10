@@ -43,7 +43,7 @@ mod tests {
     use crate::domain::video::EpisodeNumber;
     use crate::domain::video::Video;
     use crate::domain::video::VideoDownloaded;
-    use crate::domain::video::{VideoId, VideoStatus};
+    use crate::domain::video::VideoId;
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
         FakeVideoFileRepository, FilesystemVideoFileRepository, VideoFileRepository,
@@ -52,7 +52,7 @@ mod tests {
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
-        MOVIE_NFO_FILENAME, SqliteVideoMetadataRepository, VideoMetadataRepository,
+        SqliteVideoMetadataRepository, VideoMetadataRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
@@ -448,6 +448,41 @@ mod tests {
                 ),
             ]
         );
+        assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
+        assert_eq!(folder_entries(output_dir.path()), Vec::<String>::new());
+    }
+
+    #[test]
+    fn it_should_discard_the_staging_dir_when_the_download_fails() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let output_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::new(false)),
+            video_file_repository.clone(),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            video_metadata_repository.clone(),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(
+            result,
+            Err(format!("yt-dlp failed to download video {}", video.id))
+        );
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![PathBuf::from("/videos/.downloads/yt1")]
+        );
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
         assert_eq!(folder_entries(output_dir.path()), Vec::<String>::new());
     }
@@ -994,38 +1029,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.7"]
-    fn it_should_remove_the_fresh_folder_if_download_fails() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
-        let video = my_video();
-        video_repository.save(&video).unwrap();
-        let task = DownloadVideoTask::new(video_downloader(
-            &db,
-            video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::new(false)),
-            video_file_repository.clone(),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
-            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-        ));
-
-        let result = run(&task, &payload_for(video.id.as_str()), false);
-
-        assert_eq!(
-            result,
-            Err(format!("yt-dlp failed to download video {}", video.id))
-        );
-        assert_eq!(
-            *video_file_repository.deleted_calls.lock().unwrap(),
-            vec![(
-                PathBuf::from("/videos/my-playlist"),
-                FAKE_FRESH_FOLDER.to_string()
-            )]
-        );
-    }
-
-    #[test]
     fn it_should_use_the_sanitized_title_as_filename() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1338,38 +1341,6 @@ mod tests {
                 &published_episode()
             )
         );
-    }
-
-    #[test]
-    #[ignore = "plex-tv-show-layout: replaced by task 2.7"]
-    fn it_should_remove_movie_nfo_if_download_fails() {
-        let db = TestDatabase::new();
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
-        let output_dir = tempfile::tempdir().unwrap();
-        let video_dir = output_dir.path().join("My Video");
-        std::fs::create_dir_all(&video_dir).unwrap();
-        let video = my_video().with_thumbnail("My Video/My Video.jpg", fixed_timestamp());
-        video_repository.save(&video).unwrap();
-        let task = DownloadVideoTask::new(video_downloader(
-            &db,
-            video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::new(false)),
-            Arc::new(FakeVideoFileRepository::default()),
-            Arc::new(FakeYoutubeMetadataRepository {
-                metadata: Some(youtube_metadata()),
-            }),
-            video_metadata_repository.clone(),
-        ));
-
-        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
-
-        assert_eq!(
-            result,
-            Err(format!("yt-dlp failed to download video {}", video.id))
-        );
-        assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
-        assert_eq!(folder_entries(&video_dir), Vec::<String>::new());
     }
 
     #[test]
