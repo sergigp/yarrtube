@@ -1,5 +1,5 @@
 use crate::domain::video::video_filename::episode_relative_path;
-use crate::domain::video::{EpisodeNumber, Video, top_level_entry};
+use crate::domain::video::{EpisodeNumber, Video, nfo_path_for, top_level_entry};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::MOVIE_NFO_FILENAME;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
@@ -94,6 +94,7 @@ impl VideoRelocatorApi for VideoRelocator {
             .assign_episode_number(&video.id, published_at)?;
         let files = RelocatedFiles::new(video, &from, &number);
         self.move_files(video, &files, output_dir)?;
+        self.rewrite_nfo(video, &files, &number, output_dir)?;
         self.discard_legacy_folder(&from, output_dir)?;
         self.record_relocated(video, &files, number)?;
         Ok(Relocation::Moved {
@@ -116,6 +117,32 @@ impl VideoRelocator {
             self.video_file_repository
                 .move_file(&output_dir.join(from), &output_dir.join(to))
         })
+    }
+
+    /// Records the video's metadata again as an episode NFO next to its
+    /// relocated media, referencing the relocated thumbnail. A video with
+    /// no recorded metadata yet has no NFO to rewrite.
+    fn rewrite_nfo(
+        &self,
+        video: &Video,
+        files: &RelocatedFiles,
+        number: &EpisodeNumber,
+        output_dir: &Path,
+    ) -> anyhow::Result<()> {
+        let Some(metadata) = self.video_metadata_repository.find(&video.id)? else {
+            return Ok(());
+        };
+        let thumb = files
+            .thumbnail_filename
+            .as_deref()
+            .and_then(|f| Path::new(f).file_name())
+            .map(|f| f.to_string_lossy().into_owned());
+        self.video_metadata_repository.save(
+            &video.id,
+            &metadata.with_thumb(thumb),
+            number,
+            &output_dir.join(nfo_path_for(&files.filename)),
+        )
     }
 
     /// Removes the legacy per-video folder's `movie.nfo`, then the folder
