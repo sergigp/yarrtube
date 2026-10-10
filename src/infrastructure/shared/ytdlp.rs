@@ -107,6 +107,12 @@ fn parse_duration_seconds(line: &str) -> Option<i64> {
     trimmed.parse::<f64>().ok().map(|seconds| seconds as i64)
 }
 
+/// The `<media stem>.jpg` `--write-thumbnail --convert-thumbnails jpg` left
+/// next to the staged media, when it is there.
+fn staged_thumbnail(media_path: &Path) -> Option<PathBuf> {
+    Some(media_path.with_extension("jpg")).filter(|thumbnail| thumbnail.is_file())
+}
+
 /// The printed line `back` lines before the last one, when printed.
 fn line_before_last<'a>(lines: &[&'a str], back: usize) -> Option<&'a str> {
     lines
@@ -235,9 +241,10 @@ pub fn download_video(
     let duration_seconds = line_before_last(&lines, 1).and_then(parse_duration_seconds);
     let published_at = parse_published_at(line_before_last(&lines, 3), line_before_last(&lines, 2));
 
+    let media_path = staging_dir.join(filename);
     Ok(DownloadAttempt::Succeeded(DownloadedVideo {
-        media_path: staging_dir.join(filename),
-        thumbnail_path: None,
+        thumbnail_path: staged_thumbnail(&media_path),
+        media_path,
         duration_seconds,
         published_at,
         sabr_notice,
@@ -1043,6 +1050,28 @@ mod tests {
                 .any(|pair| pair == ["-o", "%(id)s.%(ext)s"]),
             true
         );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_report_the_staged_thumbnail_written_next_to_the_download() {
+        use test_support::{FakeYtDlp, unique_temp_dir};
+
+        let staging_dir = unique_temp_dir("ytdlp-staged-thumbnail");
+        let fake = FakeYtDlp::with_downloaded_files("yt1.mp4", &["yt1.mp4", "yt1.jpg"]);
+
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                Quality::High,
+                &staging_dir,
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(result.thumbnail_path, Some(staging_dir.join("yt1.jpg")));
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
 

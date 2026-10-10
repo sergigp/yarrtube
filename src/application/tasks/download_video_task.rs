@@ -1348,47 +1348,56 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    #[ignore = "plex-tv-show-layout: needs yt-dlp to report the staged thumbnail path (no task yet)"]
     fn it_should_detect_a_real_thumbnail_file_written_by_yt_dlp_alongside_the_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let output_dir = unique_temp_dir("download-video-task-thumbnail-e2e");
-        let fake_yt_dlp =
-            FakeYtDlp::with_downloaded_files("My Video.mp4", &["My Video.mp4", "My Video.jpg"]);
+        let videos_root = unique_temp_dir("download-video-task-thumbnail-e2e");
+        let output_dir = videos_root.join("playlists/my-playlist");
+        let fake_yt_dlp = FakeYtDlp::with_downloaded_files("yt1.mp4", &["yt1.mp4", "yt1.jpg"]);
         let video = my_video();
         video_repository.save(&video).unwrap();
-        let task = DownloadVideoTask::new(video_downloader(
-            &db,
+        let task = DownloadVideoTask::new(VideoDownloader::new(
             video_repository.clone(),
             Arc::new(YtDlpVideoDownloaderRepository::new(
                 fake_yt_dlp.path.clone(),
             )),
             Arc::new(FilesystemVideoFileRepository),
-            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            videos_root.to_string_lossy(),
         ));
-        let payload = Task::DownloadVideo {
-            video_id: video.id.as_str().to_string(),
-            quality: "high".to_string(),
-            output_dir: output_dir.to_string_lossy().to_string(),
-        }
-        .payload()
-        .to_string();
 
-        let result = run(&task, &payload, false);
+        let result = run(&task, &output_dir_payload(&video, &output_dir), false);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_repository.list().unwrap(),
-            vec![video.start_download(fixed_timestamp()).mark_downloaded(
-                Quality::High,
-                "My Video/My Video.mp4",
-                Some("My Video/My Video.jpg".to_string()),
-                None,
-                fixed_timestamp(),
-            )]
+            vec![
+                video
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "Season 2023/S2023E111401 - My Video.mp4",
+                        Some("Season 2023/S2023E111401 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+                    .with_episode_number(
+                        EpisodeNumber::new(2023, 111401).unwrap(),
+                        fixed_timestamp()
+                    )
+            ]
         );
-        std::fs::remove_dir_all(&output_dir).unwrap();
+        std::fs::remove_dir_all(&videos_root).unwrap();
     }
 
     /// Builds a downloader around the ports a test seeds, configures or
