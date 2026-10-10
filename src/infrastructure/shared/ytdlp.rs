@@ -116,6 +116,14 @@ fn line_before_last<'a>(lines: &[&'a str], back: usize) -> Option<&'a str> {
         .copied()
 }
 
+/// The publish time from `yt-dlp`'s printed timestamp, else from its
+/// printed upload date.
+fn parse_published_at(timestamp: Option<&str>, upload_date: Option<&str>) -> Option<DateTime<Utc>> {
+    timestamp
+        .and_then(parse_timestamp)
+        .or_else(|| upload_date.and_then(parse_upload_date))
+}
+
 /// Parses `yt-dlp`'s `--print %(timestamp)s` line (Unix seconds) into the
 /// publish time; `NA` or anything unparsable is unknown.
 fn parse_timestamp(line: &str) -> Option<DateTime<Utc>> {
@@ -225,9 +233,7 @@ pub fn download_video(
         }
     };
     let duration_seconds = line_before_last(&lines, 1).and_then(parse_duration_seconds);
-    let published_at = line_before_last(&lines, 3)
-        .and_then(parse_timestamp)
-        .or_else(|| line_before_last(&lines, 2).and_then(parse_upload_date));
+    let published_at = parse_published_at(line_before_last(&lines, 3), line_before_last(&lines, 2));
 
     Ok(DownloadAttempt::Succeeded(DownloadedVideo {
         media_path: staging_dir.join(filename),
@@ -288,12 +294,18 @@ pub fn fetch_thumbnail(
     ensure_output_dir(staging_dir)?;
     let mut cmd = Command::new(ytdlp_path);
     cmd.args([
+        "-o",
+        STAGED_OUTPUT_TEMPLATE,
         "--skip-download",
         "--write-thumbnail",
         "--convert-thumbnails",
         "jpg",
         "--quiet",
         "--no-warnings",
+        "--print",
+        "%(timestamp)s",
+        "--print",
+        "%(upload_date)s",
         "--print",
         "after_video:thumbnails.-1.filepath",
     ])
@@ -320,7 +332,8 @@ pub fn fetch_thumbnail(
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let printed = stdout.lines().next_back().map(|s| s.trim());
+    let lines: Vec<&str> = stdout.lines().collect();
+    let printed = lines.last().map(|s| s.trim());
     let filename = match printed {
         Some(printed) if !printed.is_empty() && !printed.eq_ignore_ascii_case("na") => {
             Path::new(printed)
@@ -334,7 +347,10 @@ pub fn fetch_thumbnail(
     Ok(match filename {
         Some(filename) => ThumbnailFetch::Fetched(FetchedThumbnail {
             path: staging_dir.join(filename),
-            published_at: None,
+            published_at: parse_published_at(
+                line_before_last(&lines, 2),
+                line_before_last(&lines, 1),
+            ),
         }),
         None => ThumbnailFetch::Unavailable { reason: None },
     })
@@ -1001,6 +1017,37 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn it_should_report_the_written_thumbnail_path() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-thumbnail-staging");
+        let fake = test_support::FakeYtDlp::with_stdout(&format!(
+            "1773568800\n20260315\n{}\n",
+            staging_dir.join("yt1.jpg").display()
+        ));
+
+        let result = fetch_thumbnail(&fake.path, "https://example.com/video", &staging_dir);
+
+        assert_eq!(
+            result.unwrap(),
+            ThumbnailFetch::Fetched(FetchedThumbnail {
+                path: staging_dir.join("yt1.jpg"),
+                published_at: Some(
+                    DateTime::parse_from_rfc3339("2026-03-15T10:00:00Z")
+                        .unwrap()
+                        .to_utc()
+                ),
+            })
+        );
+        assert_eq!(
+            fake.captured_args()
+                .windows(2)
+                .any(|pair| pair == ["-o", "%(id)s.%(ext)s"]),
+            true
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn it_should_truncate_a_fractional_duration_to_whole_seconds() {
         let fake = test_support::FakeYtDlp::with_stdout("223.9\nMy Video.mp4\n");
         let output_dir = test_support::unique_temp_dir("ytdlp-output-duration-fractional");
@@ -1355,12 +1402,18 @@ mod tests {
         fetch_thumbnail(&fake.path, "https://example.com/video", &output_dir).unwrap();
 
         let expected = vec![
+            "-o".to_string(),
+            "%(id)s.%(ext)s".to_string(),
             "--skip-download".to_string(),
             "--write-thumbnail".to_string(),
             "--convert-thumbnails".to_string(),
             "jpg".to_string(),
             "--quiet".to_string(),
             "--no-warnings".to_string(),
+            "--print".to_string(),
+            "%(timestamp)s".to_string(),
+            "--print".to_string(),
+            "%(upload_date)s".to_string(),
             "--print".to_string(),
             "after_video:thumbnails.-1.filepath".to_string(),
             "https://example.com/video".to_string(),

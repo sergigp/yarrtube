@@ -45,7 +45,7 @@
 - [x] 3.1 ytdlp: `it_should_download_into_the_staging_dir_with_the_video_id_as_name` — `-o "%(id)s.%(ext)s"`, cwd = staging dir
 - [x] 3.2 ytdlp: `it_should_report_the_publish_timestamp_printed_by_ytdlp` — `--print %(timestamp)s` parsed to UTC
 - [x] 3.3 ytdlp: `it_should_fall_back_to_the_upload_date_when_the_timestamp_is_na` — `upload_date` → midnight UTC
-- [ ] 3.4 ytdlp: `it_should_report_the_written_thumbnail_path` — thumbnail fetch returns the staged jpg path and timestamp
+- [x] 3.4 ytdlp: `it_should_report_the_written_thumbnail_path` — thumbnail fetch returns the staged jpg path and timestamp
 - [ ] 3.5 ytdlp: `it_should_report_the_staged_thumbnail_written_next_to_the_download` — after a successful download, `thumbnail_path` is the `<media stem>.jpg` in the staging dir when present, `None` otherwise; also rewrite and un-ignore the download task's `it_should_detect_a_real_thumbnail_file_written_by_yt_dlp_alongside_the_video` (real fake-yt-dlp script, episode paths)
 - [ ] 3.6 FilesystemVideoFileRepository: `it_should_list_top_level_entries_and_season_files` — `Season 2026/<file>` entries plus legacy top-level entries, temp files excluded
 - [ ] 3.7 FilesystemVideoFileRepository: `it_should_move_a_file_creating_its_parent` — rename into a not-yet-existing season folder
