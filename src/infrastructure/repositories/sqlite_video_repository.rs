@@ -72,6 +72,13 @@ pub trait VideoRepository: Send + Sync {
     ) -> anyhow::Result<EpisodeNumber>;
     /// Every `Downloaded` video, across all playlists and channels.
     fn list_downloaded(&self) -> anyhow::Result<Vec<Video>>;
+    /// The number `assign_episode_number` would return right now, without
+    /// recording it.
+    fn next_episode_number(
+        &self,
+        id: &VideoRecordId,
+        published_at: DateTime<Utc>,
+    ) -> anyhow::Result<EpisodeNumber>;
 }
 
 pub struct SqliteVideoRepository {
@@ -286,11 +293,7 @@ impl VideoRepository for SqliteVideoRepository {
         if let Some(recorded) = Self::recorded_episode_number(&conn, id)? {
             return Ok(recorded);
         }
-        let first = EpisodeNumber::first_of_day(published_at);
-        let number = match Self::last_sibling_episode_of_day(&conn, id, &first)? {
-            Some(last) => EpisodeNumber::new(first.season(), last + 1)?,
-            None => first,
-        };
+        let number = Self::next_free_episode_number(&conn, id, published_at)?;
         conn.execute(
             "UPDATE videos SET season = ?2, episode = ?3 WHERE id = ?1",
             params![id.as_str(), number.season(), number.episode()],
@@ -300,6 +303,18 @@ impl VideoRepository for SqliteVideoRepository {
         )
         .context("failed to record the episode number")?;
         Ok(number)
+    }
+
+    fn next_episode_number(
+        &self,
+        id: &VideoRecordId,
+        published_at: DateTime<Utc>,
+    ) -> anyhow::Result<EpisodeNumber> {
+        let conn = self.db.read()?;
+        match Self::recorded_episode_number(&conn, id)? {
+            Some(recorded) => Ok(recorded),
+            None => Self::next_free_episode_number(&conn, id, published_at),
+        }
     }
 
     fn list_downloaded(&self) -> anyhow::Result<Vec<Video>> {
@@ -326,6 +341,20 @@ impl SqliteVideoRepository {
             .zip(episode)
             .map(|(season, episode)| EpisodeNumber::new(season, episode).map_err(Into::into))
             .transpose()
+    }
+
+    /// The next free same-day index on `published_at`'s day among the videos
+    /// sharing a playlist or channel with `id`.
+    fn next_free_episode_number(
+        conn: &Connection,
+        id: &VideoRecordId,
+        published_at: DateTime<Utc>,
+    ) -> anyhow::Result<EpisodeNumber> {
+        let first = EpisodeNumber::first_of_day(published_at);
+        match Self::last_sibling_episode_of_day(conn, id, &first)? {
+            Some(last) => Ok(EpisodeNumber::new(first.season(), last + 1)?),
+            None => Ok(first),
+        }
     }
 
     /// The highest episode recorded on `first`'s day among the videos sharing

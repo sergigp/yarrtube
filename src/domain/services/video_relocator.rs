@@ -12,10 +12,12 @@ use std::sync::Arc;
 /// What relocating one video did, or would do on a dry run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Relocation {
-    /// The video's media moved from one recorded path to another.
+    /// The video's media moved from one recorded path to another, under
+    /// its episode number.
     Moved {
         from: String,
         to: String,
+        number: EpisodeNumber,
     },
     /// The video already sits in its season folder.
     AlreadyInPlace,
@@ -60,14 +62,23 @@ impl VideoRelocator {
 pub trait VideoRelocatorApi: Send + Sync {
     /// Assigns the number from `published_at` if absent, moves
     /// media/thumbnail/nfo into the season folder, rewrites the NFO, records
-    /// the new filenames. On a dry run, reports what it would do and changes
-    /// nothing.
+    /// the new filenames.
     fn relocate(
         &self,
         video: &Video,
         published_at: Option<DateTime<Utc>>,
         output_dir: &Path,
-        dry_run: bool,
+    ) -> anyhow::Result<Relocation>;
+
+    /// Dry run: what `relocate` would do, numbered from the video's next
+    /// episode number and past the numbers already `planned` this run;
+    /// changes nothing.
+    fn plan(
+        &self,
+        video: &Video,
+        published_at: Option<DateTime<Utc>>,
+        output_dir: &Path,
+        planned: &[EpisodeNumber],
     ) -> anyhow::Result<Relocation>;
 }
 
@@ -77,21 +88,11 @@ impl VideoRelocatorApi for VideoRelocator {
         video: &Video,
         published_at: Option<DateTime<Utc>>,
         output_dir: &Path,
-        _dry_run: bool,
     ) -> anyhow::Result<Relocation> {
-        let Some(from) = video
-            .filename
-            .clone()
-            .filter(|_| video.is_in_legacy_layout())
-        else {
-            return Ok(Relocation::AlreadyInPlace);
+        let (from, published_at) = match self.placeable(video, published_at, output_dir) {
+            Ok(placeable) => placeable,
+            Err(outcome) => return Ok(outcome),
         };
-        let Some(published_at) = published_at else {
-            return Ok(Relocation::Skipped(SkipReason::NoPublishTimestamp));
-        };
-        if !self.video_file_repository.file_exists(output_dir, &from) {
-            return Ok(Relocation::Skipped(SkipReason::FileMissing));
-        }
         let number = self
             .video_repository
             .assign_episode_number(&video.id, published_at)?;
@@ -103,11 +104,55 @@ impl VideoRelocatorApi for VideoRelocator {
         Ok(Relocation::Moved {
             from,
             to: files.filename,
+            number,
         })
+    }
+
+    fn plan(
+        &self,
+        video: &Video,
+        published_at: Option<DateTime<Utc>>,
+        output_dir: &Path,
+        planned: &[EpisodeNumber],
+    ) -> anyhow::Result<Relocation> {
+        let (from, published_at) = match self.placeable(video, published_at, output_dir) {
+            Ok(placeable) => placeable,
+            Err(outcome) => return Ok(outcome),
+        };
+        let next = self
+            .video_repository
+            .next_episode_number(&video.id, published_at)?;
+        let number = past_planned(next, planned)?;
+        let to = RelocatedFiles::new(video, &from, &number).filename;
+        Ok(Relocation::Moved { from, to, number })
     }
 }
 
 impl VideoRelocator {
+    /// The legacy video's recorded file and publish time when it can be
+    /// relocated, else the outcome to report instead.
+    fn placeable(
+        &self,
+        video: &Video,
+        published_at: Option<DateTime<Utc>>,
+        output_dir: &Path,
+    ) -> Result<(String, DateTime<Utc>), Relocation> {
+        let Some(from) = video
+            .filename
+            .clone()
+            .filter(|_| video.is_in_legacy_layout())
+        else {
+            return Err(Relocation::AlreadyInPlace);
+        };
+        let Some(published_at) = published_at else {
+            return Err(Relocation::Skipped(SkipReason::NoPublishTimestamp));
+        };
+        if !self.video_file_repository.file_exists(output_dir, &from) {
+            return Err(Relocation::Skipped(SkipReason::FileMissing));
+        }
+        Ok((from, published_at))
+    }
+
     fn move_files(
         &self,
         video: &Video,
@@ -174,6 +219,22 @@ impl VideoRelocator {
             self.clock.now(),
         );
         self.video_repository.update(&relocated)
+    }
+}
+
+/// `next`, or the index after the last one `planned` on the same day when
+/// that is later: what assigning would give once those were recorded.
+fn past_planned(next: EpisodeNumber, planned: &[EpisodeNumber]) -> anyhow::Result<EpisodeNumber> {
+    let last_planned = planned
+        .iter()
+        .filter(|number| {
+            number.season() == next.season() && number.same_day_prefix() == next.same_day_prefix()
+        })
+        .map(EpisodeNumber::episode)
+        .max();
+    match last_planned {
+        Some(last) if last >= next.episode() => Ok(EpisodeNumber::new(next.season(), last + 1)?),
+        _ => Ok(next),
     }
 }
 

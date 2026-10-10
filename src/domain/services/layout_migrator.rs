@@ -98,7 +98,9 @@ impl LayoutMigrator {
         playlist: &Playlist,
         dry_run: bool,
     ) -> anyhow::Result<MigrationReport> {
-        self.show_file_writer.write_playlist_show(playlist)?;
+        if !dry_run {
+            self.show_file_writer.write_playlist_show(playlist)?;
+        }
         let video_ids = self
             .playlist_video_repository
             .list_for_playlist(&playlist.id)?
@@ -109,7 +111,9 @@ impl LayoutMigrator {
     }
 
     fn migrate_channel(&self, channel: &Channel, dry_run: bool) -> anyhow::Result<MigrationReport> {
-        self.show_file_writer.write_channel_show(channel)?;
+        if !dry_run {
+            self.show_file_writer.write_channel_show(channel)?;
+        }
         let video_ids = self
             .channel_video_repository
             .list_for_channel(&channel.id)?
@@ -128,15 +132,23 @@ impl LayoutMigrator {
         dry_run: bool,
     ) -> anyhow::Result<MigrationReport> {
         let output_dir = resolve_output_dir(&self.videos_path, path.as_str());
-        Ok(self.legacy_videos_by_publish_time(video_ids)?.iter().fold(
-            MigrationReport::default(),
-            |report, (video, published_at)| {
-                let relocation =
+        let (report, _) = self.legacy_videos_by_publish_time(video_ids)?.iter().fold(
+            (MigrationReport::default(), Vec::new()),
+            |(report, planned), (video, published_at)| {
+                let relocation = if dry_run {
                     self.relocator
-                        .relocate(video, *published_at, &output_dir, dry_run);
-                report.record(path, video, relocation)
+                        .plan(video, *published_at, &output_dir, &planned)
+                } else {
+                    self.relocator.relocate(video, *published_at, &output_dir)
+                };
+                let planned = match &relocation {
+                    Ok(Relocation::Moved { number, .. }) => [planned, vec![*number]].concat(),
+                    _ => planned,
+                };
+                (report.record(path, video, relocation), planned)
             },
-        ))
+        );
+        Ok(report)
     }
 
     /// The downloaded videos among `video_ids` still in the legacy layout,
@@ -183,7 +195,7 @@ impl MigrationReport {
         let in_source = |relative: &str| format!("{}/{relative}", path.as_str());
         let recorded = in_source(video.filename.as_deref().unwrap_or_default());
         match relocation {
-            Ok(Relocation::Moved { from, to }) => {
+            Ok(Relocation::Moved { from, to, .. }) => {
                 self.moved.push((in_source(&from), in_source(&to)))
             }
             Ok(Relocation::Skipped(reason)) => self.skipped.push((recorded, reason)),
@@ -215,13 +227,12 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn it_should_migrate_a_legacy_library_into_the_tv_layout() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::with_file_exists(true));
         let show_file_repository = Arc::new(FakeShowFileRepository::default());
         let videos_root = tempfile::tempdir().unwrap();
@@ -666,6 +677,95 @@ mod tests {
                     fixed_timestamp(),
                 ),
             ]
+        );
+    }
+
+    #[test]
+    fn it_should_change_nothing_on_a_dry_run() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_file_exists(true));
+        let show_file_repository = Arc::new(FakeShowFileRepository::default());
+        let videos_root = tempfile::tempdir().unwrap();
+        let playlist_dir = videos_root.path().join("playlists/kids");
+        let channel_dir = videos_root.path().join("channels/somechannel");
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&my_playlist())
+            .unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        let alpha = legacy_video("yt1", "Alpha", "Alpha/Alpha.mp4", Some("Alpha/Alpha.jpg"));
+        let beta = legacy_video("yt2", "Beta", "Beta [yt2]/Beta [yt2].mp4", None);
+        let gamma = legacy_video("yt3", "Gamma", "Gamma/Gamma.mp4", None);
+        seed_playlist_video(&db, &alpha, 0);
+        seed_playlist_video(&db, &beta, 1);
+        seed_channel_video(&db, &gamma);
+        seed_metadata(
+            &db,
+            &alpha,
+            published("2026-03-15T10:00:00Z"),
+            &playlist_dir.join("Alpha"),
+        );
+        seed_metadata(
+            &db,
+            &beta,
+            published("2026-03-15T11:00:00Z"),
+            &playlist_dir.join("Beta [yt2]"),
+        );
+        seed_metadata(
+            &db,
+            &gamma,
+            published("2026-03-15T09:00:00Z"),
+            &channel_dir.join("Gamma"),
+        );
+        let migrator = layout_migrator(
+            &db,
+            video_file_repository.clone(),
+            show_file_repository.clone(),
+            videos_root.path(),
+        );
+
+        let result = migrator.migrate(true);
+
+        assert_eq!(
+            result.unwrap(),
+            MigrationReport {
+                moved: vec![
+                    moved(
+                        "playlists/kids/Alpha/Alpha.mp4",
+                        "playlists/kids/Season 2026/S2026E031501 - Alpha.mp4"
+                    ),
+                    moved(
+                        "playlists/kids/Beta [yt2]/Beta [yt2].mp4",
+                        "playlists/kids/Season 2026/S2026E031502 - Beta.mp4"
+                    ),
+                    moved(
+                        "channels/somechannel/Gamma/Gamma.mp4",
+                        "channels/somechannel/Season 2026/S2026E031501 - Gamma.mp4"
+                    ),
+                ],
+                skipped: vec![],
+                failed: vec![],
+            }
+        );
+        assert_eq!(video_repository.list().unwrap(), vec![alpha, beta, gamma]);
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(
+            *video_file_repository.removed_if_empty.lock().unwrap(),
+            Vec::<PathBuf>::new()
+        );
+        assert_eq!(*show_file_repository.show_nfos.lock().unwrap(), vec![]);
+        assert_eq!(*show_file_repository.posters.lock().unwrap(), vec![]);
+        assert_eq!(
+            [
+                playlist_dir.join("Alpha/movie.nfo"),
+                playlist_dir.join("Beta [yt2]/movie.nfo"),
+                channel_dir.join("Gamma/movie.nfo"),
+                playlist_dir.join("Season 2026"),
+            ]
+            .map(|path| path.exists()),
+            [true, true, true, false]
         );
     }
 

@@ -280,7 +280,7 @@ impl InternalVideoReconciler {
         }
         match self
             .video_relocator
-            .relocate(video, Some(metadata.published_at), output_dir, false)
+            .relocate(video, Some(metadata.published_at), output_dir)
         {
             Ok(Relocation::Moved { .. }) => self.video_repository.find(&video.id).ok().flatten(),
             Ok(_) => None,
