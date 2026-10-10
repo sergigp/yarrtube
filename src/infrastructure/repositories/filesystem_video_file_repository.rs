@@ -106,8 +106,19 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
         output_dir.join(filename).is_file()
     }
 
-    fn move_file(&self, _from: &Path, _to: &Path) -> anyhow::Result<()> {
-        Ok(())
+    fn move_file(&self, from: &Path, to: &Path) -> anyhow::Result<()> {
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)
+                .inspect_err(
+                    |e| tracing::error!(dir = ?parent, error = %e, "failed to create directory"),
+                )
+                .map_err(|e| anyhow::anyhow!("failed to create directory {parent:?}: {e}"))?;
+        }
+        std::fs::rename(from, to)
+            .inspect_err(
+                |e| tracing::error!(from = ?from, to = ?to, error = %e, "failed to move file"),
+            )
+            .map_err(|e| anyhow::anyhow!("failed to move {from:?} to {to:?}: {e}"))
     }
 
     fn remove_if_empty(&self, _dir: &Path) -> anyhow::Result<()> {
@@ -371,6 +382,22 @@ mod tests {
                 "tvshow.nfo".to_string(),
             ]
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_move_a_file_creating_its_parent() {
+        let dir = unique_temp_dir("video-file-repository-move");
+        std::fs::create_dir_all(dir.join(".downloads/yt1")).unwrap();
+        std::fs::write(dir.join(".downloads/yt1/yt1.mp4"), b"media").unwrap();
+        let to = dir.join("show/Season 2026/S2026E031501 - One.mp4");
+
+        FilesystemVideoFileRepository
+            .move_file(&dir.join(".downloads/yt1/yt1.mp4"), &to)
+            .unwrap();
+
+        assert_eq!(std::fs::read(&to).ok(), Some(b"media".to_vec()));
+        assert_eq!(dir.join(".downloads/yt1/yt1.mp4").exists(), false);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

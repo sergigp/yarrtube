@@ -48,7 +48,7 @@
 - [x] 3.4 ytdlp: `it_should_report_the_written_thumbnail_path` — thumbnail fetch returns the staged jpg path and timestamp
 - [x] 3.5 ytdlp: `it_should_report_the_staged_thumbnail_written_next_to_the_download` — after a successful download, `thumbnail_path` is the `<media stem>.jpg` in the staging dir when present, `None` otherwise; also rewrite and un-ignore the download task's `it_should_detect_a_real_thumbnail_file_written_by_yt_dlp_alongside_the_video` (real fake-yt-dlp script, episode paths)
 - [x] 3.6 FilesystemVideoFileRepository: `it_should_list_top_level_entries_and_season_files` — `Season 2026/<file>` entries plus legacy top-level entries, temp files excluded
-- [ ] 3.7 FilesystemVideoFileRepository: `it_should_move_a_file_creating_its_parent` — rename into a not-yet-existing season folder
+- [x] 3.7 FilesystemVideoFileRepository: `it_should_move_a_file_creating_its_parent` — rename into a not-yet-existing season folder
 - [ ] 3.8 FilesystemVideoFileRepository: `it_should_remove_an_empty_dir_only` — non-empty dir left alone
 - [ ] 3.9 FilesystemVideoFileRepository: `it_should_delete_a_file_or_a_dir_by_relative_path` — episode file and legacy folder
 - [ ] 3.10 FilesystemShowFileRepository: `it_should_write_the_show_nfo_and_copy_the_poster` — bytes equal the source avatar
