@@ -474,6 +474,7 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::video::PlaylistEpisodeNumber;
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
     };
@@ -931,6 +932,19 @@ mod tests {
             ],
             [Some(saved), Some(updated)]
         );
+    }
+
+    #[test]
+    fn it_should_persist_and_read_a_playlist_episode_number() {
+        let repo = repo();
+        let video = video("Playlist video", fixed_timestamp()).with_episode_number(
+            PlaylistEpisodeNumber::new(7).unwrap().into(),
+            fixed_timestamp(),
+        );
+
+        repo.save(&video).unwrap();
+
+        assert_eq!(repo.find(&video.id).unwrap(), Some(video));
     }
 
     #[test]
