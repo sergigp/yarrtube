@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Per-Playlist Output Directory
-The system SHALL save a downloaded video's file inside the `Season <season>` folder of its show directory, the show directory being determined by its owning playlist's or channel's configured storage path within a single configured root directory. A storage path may contain multiple segments, producing nested subdirectories. The file's name SHALL be the video's episode base name (see `video-naming` and `tv-show-layout`) with the media extension, so the video's file, its thumbnail, and its metadata file sit next to each other under one base name. The download SHALL assign the video's episode number when it has none yet, and SHALL reuse the number already recorded by an earlier thumbnail-ahead fetch (see `video-thumbnails`).
+The system SHALL save a downloaded video's file inside the `Season <season>` folder of its show directory, the show directory being determined by its owning playlist's or channel's configured storage path within a single configured root directory. A storage path may contain multiple segments, producing nested subdirectories. The file's name SHALL be the video's episode base name (see `video-naming` and `tv-show-layout`) with the media extension, so the video's file, its thumbnail, and its metadata file sit next to each other under one base name. The download SHALL reuse the episode number already recorded on the video (a playlist video's from when it was first stored, or one recorded by an earlier thumbnail-ahead fetch, see `video-thumbnails`), and SHALL assign a channel video's number when it has none yet.
 
 #### Scenario: Video downloaded
 - **WHEN** a video belonging to a playlist finishes downloading
@@ -24,16 +24,20 @@ The system SHALL save a downloaded video's file inside the `Season <season>` fol
 - **THEN** the system saves the video's file under that same episode base name, next to the thumbnail
 
 #### Scenario: Video has no pre-fetched thumbnail
-- **WHEN** a video's full download runs and that video has no recorded episode number
+- **WHEN** a channel video's full download runs and that video has no recorded episode number
 - **THEN** the system assigns its number from the publish timestamp the downloader reports and saves the file under the resulting episode base name
+
+#### Scenario: Playlist video downloaded
+- **WHEN** a playlist video's full download runs
+- **THEN** the system saves the file under the episode number recorded when the playlist first stored the video, whatever the reported publish timestamp
 
 ### Requirement: Concurrent Downloads Use Distinct Folders
 The system SHALL give every video its own episode base name even when
 downloads of different videos run at the same time. Two videos downloading
 concurrently into the same show SHALL NOT end up sharing a base name, even
 when their titles are identical and they were published on the same day,
-because same-day indexes are assigned from the recorded numbers and never
-reused.
+because a channel's same-day indexes are assigned from the recorded numbers
+and a playlist's numbers from its never-reused counter.
 
 #### Scenario: Two videos with the same title download at the same time
 - **WHEN** two different videos with the same title and publish day, in the same playlist or channel, are downloaded concurrently

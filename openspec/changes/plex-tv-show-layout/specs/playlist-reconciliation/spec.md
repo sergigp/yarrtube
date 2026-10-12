@@ -59,9 +59,10 @@ The system SHALL, for every playlist, regenerate a downloaded video's
 metadata during a reconcile pass whenever that video is recorded as
 successfully downloaded but has no metadata recorded as populated for it,
 without re-downloading the video's file. When such a video is still stored
-in the previous layout (a per-video folder or flat file) and its publish
-timestamp is now known, the pass SHALL also assign its episode number and
-move its file set into the TV-show layout, recording the new filenames, so
+in the previous layout (a per-video folder or flat file), the pass SHALL
+also move its file set into the TV-show layout under its recorded episode
+number (a playlist video is numbered in playlist order when first stored,
+see `tv-show-layout`), recording the new filenames, so
 videos the `migrate-layout` subcommand skipped converge on their own.
 
 #### Scenario: Downloaded video has no recorded metadata
@@ -73,8 +74,8 @@ videos the `migrate-layout` subcommand skipped converge on their own.
 - **THEN** the system does not attempt to regenerate its metadata
 
 #### Scenario: Recovered video still in the previous layout
-- **WHEN** a reconcile pass regenerates the metadata of a downloaded video whose recorded file is still in a per-video folder, and the metadata carries its publish timestamp
-- **THEN** the pass assigns the video's episode number, moves its file, thumbnail and NFO under the episode base name in the season folder, removes the empty per-video folder, and records the new filenames
+- **WHEN** a reconcile pass regenerates the metadata of a downloaded video whose recorded file is still in a per-video folder
+- **THEN** the pass moves its file, thumbnail and NFO under the episode base name in the season folder, removes the empty per-video folder, and records the new filenames
 
 ### Requirement: Initial Reconcile After Playlist Creation
 The system SHALL run one reconcile pass for a playlist as soon as practical

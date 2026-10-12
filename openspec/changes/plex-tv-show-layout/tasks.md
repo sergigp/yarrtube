@@ -73,3 +73,28 @@
 - [x] 4.1 Rewrite `doc/PLEX.md` for the TV Shows library (NFO Series agent, Seasons setting, local assets, partial auto-scan, the three scan env vars, the migration procedure with dry run, deleting the old Movies library, watch history caveat, troubleshooting); update `doc/INSTALLATION.md` (env table: remove section ids and reconcile interval, describe `migrate-layout`), `doc/ARCHITECTURE.md`, `README.md`, `CLAUDE.md` ("keeps Plex collections in sync" → TV layout + scan trigger), `.env.example`, `scripts/run-local.sh`; verify by reading them and `bash -n scripts/run-local.sh`
 - [x] 4.2 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --locked`, `npm run check` in `web/`; all must pass
 - [ ] 4.3 Manual check with `scripts/run-local.sh` on a copy of a legacy `videos/` dir: run `migrate-layout --dry-run` then the real run, start the daemon, add a channel, confirm the show files, a new episode in its season folder, playback in the SPA, and the Plex scan log line when the Plex vars are set
+
+## 5. Playlist episode numbers in playlist order (TDD)
+
+- [ ] 5.1 Walking skeleton: split `EpisodeNumber` into `ChannelEpisodeNumber` + `PlaylistEpisodeNumber` behind `enum EpisodeNumber` (design.md decision 10 and Types & Signatures); `Playlist.last_episode` with `next_episode_number`/`with_last_episode`; edit `0008_episode_numbers.sql` in place (`playlists.last_episode`, playlist videos numbered by position); all existing tests compile and pass unchanged
+- [ ] 5.2 VO: `PlaylistEpisodeNumber` `it_should_reject_episode_zero`
+- [ ] 5.3 VO: `PlaylistEpisodeNumber` `it_should_give_the_next_number`
+- [ ] 5.4 VO: `EpisodeNumber` `it_should_render_a_playlist_code_padded_to_three_digits` — `S01E007`, `Season 1`
+- [ ] 5.5 VO: `EpisodeNumber` `it_should_widen_a_playlist_code_past_999` — `S01E1000`
+- [ ] 5.6 VO: `EpisodeNumber` `it_should_decode_season_one_as_a_playlist_number`
+- [ ] 5.7 sqlite_migrations: `it_should_number_existing_playlist_videos_by_position` — ties by insertion, channel videos untouched, `last_episode` = count, `NULL` for an empty playlist
+- [ ] 5.8 SqlitePlaylistRepository: `it_should_persist_the_last_episode`
+- [ ] 5.9 SqliteVideoRepository: `it_should_persist_and_read_a_playlist_episode_number`
+- [ ] 5.10 SqliteVideoRepository: same-day siblings via `channel_videos` only — revise 3.13's playlist sibling case so a playlist link no longer counts
+- [ ] 5.11 `it_should_number_new_playlist_videos_in_playlist_order` — playlist created: positions 0..2 with publish times in another order → episodes 1..3, `last_episode` 3
+- [ ] 5.12 `it_should_number_a_video_added_to_the_playlist_after_the_last_one` — reconcile playlist task: `last_episode` 5, new item at position 0 → 6
+- [ ] 5.13 `it_should_not_reuse_the_number_of_a_removed_video` — the video holding 6 leaves, next new item → 7
+- [ ] 5.14 `it_should_keep_episode_numbers_when_the_playlist_is_reordered` — positions swap, numbers and filenames unchanged
+- [ ] 5.15 `it_should_save_a_playlist_video_under_its_playlist_episode_number` — download task: `Season 1/S01E007 - Title.*` despite a 2014 publish time
+- [ ] 5.16 `it_should_move_legacy_playlist_videos_under_their_recorded_numbers` — migrate-layout: publish order reversed, moved by position number
+- [ ] 5.17 `it_should_move_a_playlist_video_without_metadata` — migrate-layout: numbered, no metadata → moved without NFO, not skipped
+
+## 6. Docs and verification for playlist numbering
+
+- [ ] 6.1 Update `doc/PLEX.md` (layout example and numbering paragraph for playlists), `doc/INSTALLATION.md` and `doc/ARCHITECTURE.md` "Videos on disk", `CLAUDE.md` layout line
+- [ ] 6.2 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --locked`, `npm run check` in `web/`; all must pass

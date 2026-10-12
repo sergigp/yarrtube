@@ -11,8 +11,12 @@ The system SHALL NOT include the video's YouTube ID in the episode base name der
 - **WHEN** a video numbered `2026`/`031501` and titled `Some: Title?` is named
 - **THEN** its episode base name is `S2026E031501 - Some- Title-`, without the video ID
 
+#### Scenario: Playlist episode base name
+- **WHEN** a playlist video numbered season `1` episode `7` and titled `Some: Title?` is named
+- **THEN** its episode base name is `S01E007 - Some- Title-`
+
 ## REMOVED Requirements
 
 ### Requirement: Collision Fallback Appends Video ID
-**Reason**: The episode number is unique within a show (the same-day index guarantees it), so two videos can no longer derive the same name and no collision fallback is needed.
+**Reason**: The episode number is unique within a show (a channel's same-day index and a playlist's never-reused counter guarantee it), so two videos can no longer derive the same name and no collision fallback is needed.
 **Migration**: None; existing folders carrying a `[<video id>]` suffix are renamed by `migrate-layout` like any other.

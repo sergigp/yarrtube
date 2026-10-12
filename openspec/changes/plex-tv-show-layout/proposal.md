@@ -15,14 +15,20 @@ before collections. Issue #89 asks for exactly this.
 - **BREAKING** On-disk layout becomes a Plex/Kodi TV-show layout, for every
   player and with no layout flag: each tracked channel or playlist directory
   is a show (`tvshow.nfo`, `poster.jpg` from the channel avatar) and each
-  video is an episode in a `Season <year>` folder named
-  `S<year>E<MMDDii> - <title>.mp4` with its `.nfo` and `.jpg` next to it. The
-  per-video folder and `movie.nfo` go away.
-- Episodes are numbered from the video's publish timestamp: season = publish
-  year, episode = publish month and day plus a two-digit same-day index.
-  Channels and playlists use the same rule; the number is assigned once and
-  never changes, so files never rename after they exist and Plex watch state
-  (keyed by show + season + episode) stays on the right video.
+  video is an episode in a season folder (`Season <year>/S<year>E<MMDDii> -
+  <title>.mp4` for a channel, `Season 1/S01E<nnn> - <title>.mp4` for a
+  playlist) with its `.nfo` and `.jpg` next to it. The per-video folder and
+  `movie.nfo` go away.
+- Channel episodes are numbered from the video's publish timestamp: season =
+  publish year, episode = publish month and day plus a two-digit same-day
+  index. Playlist episodes are numbered in playlist order instead, because a
+  playlist is a curated sequence whose order upload dates do not follow:
+  every playlist is one `Season 1`, and each video gets the playlist's next
+  number when the playlist reconcile first stores it (so a first sync numbers
+  the whole playlist in its YouTube order and later additions are appended).
+  Either way a number is assigned once and never changes or gets reused, so
+  files never rename after they exist and Plex watch state (keyed by show +
+  season + episode) stays on the right video.
 - **BREAKING** The Plex collections integration is removed: no sync task, no
   matching/re-matching, no collection deletion, and the
   `YARRTUBE_PLEX_PLAYLIST_SECTION_ID`, `YARRTUBE_PLEX_CHANNEL_SECTION_ID` and
@@ -49,8 +55,8 @@ before collections. Issue #89 asks for exactly this.
 
 ### New Capabilities
 
-- `tv-show-layout`: the show/season/episode directory layout, the episode
-  numbering rule, the show NFO and poster, and what happens when a video's
+- `tv-show-layout`: the show/season/episode directory layout, the channel
+  and playlist episode numbering rules, the show NFO and poster, and what happens when a video's
   number cannot be assigned yet.
 - `layout-migration`: the `migrate-layout` subcommand: dry run, what it
   moves, what it skips, idempotence and resumability.
@@ -98,9 +104,11 @@ before collections. Issue #89 asks for exactly this.
   `plex_collection_deleter`, the two `delete_plex_collection_on_*`
   subscribers, `domain/plex` collection types and the collection half of
   `plex_collection_repository`.
-- Database: a migration adding the episode number columns to `videos`.
+- Database: a migration adding the episode number columns to `videos` and a
+  last-assigned episode counter to `playlists`, numbering the videos of
+  already tracked playlists in their stored playlist order.
 - API: unchanged shapes; `filename` and `thumbnail_filename` now contain
-  `Season <year>/<base>.<ext>`.
+  `Season <season>/<base>.<ext>`.
 - Web: `VideoDetail` path line only.
 - Users: must run `migrate-layout` once after upgrading, then create a TV
   Shows library in Plex (Plex NFO Series agent) and delete the old Movies
