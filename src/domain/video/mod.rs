@@ -6,7 +6,6 @@ pub mod home_video_view;
 pub mod home_videos;
 pub mod playback_position;
 pub mod sourced_video;
-pub mod thumbnail_filename;
 #[allow(clippy::module_inception)]
 pub mod video;
 pub mod video_duration;

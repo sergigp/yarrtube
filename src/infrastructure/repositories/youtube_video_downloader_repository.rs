@@ -135,17 +135,6 @@ impl FakeVideoDownloaderRepository {
         }
     }
 
-    /// Succeeds with `duration_seconds` recorded alongside the fake filename.
-    pub fn with_duration(duration_seconds: i64) -> Self {
-        Self::with_result(DownloadAttempt::Succeeded(DownloadedVideo {
-            media_path: PathBuf::from("fake-output.mp4"),
-            thumbnail_path: None,
-            duration_seconds: Some(duration_seconds),
-            published_at: None,
-            sabr_notice: None,
-        }))
-    }
-
     /// Succeeds with `downloaded`, its paths relative to the staging dir.
     pub fn succeeding_with(downloaded: DownloadedVideo) -> Self {
         Self::with_result(DownloadAttempt::Succeeded(downloaded))

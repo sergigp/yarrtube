@@ -1,6 +1,6 @@
 use crate::domain::channel::Channel;
 use crate::domain::playlist::Playlist;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// A tracked playlist or channel seen as a TV show: what its `tvshow.nfo`
 /// says and where its `poster.jpg` is copied from (a channel's avatar; a
@@ -13,14 +13,12 @@ pub struct Show {
 }
 
 impl Show {
-    pub fn from_channel(channel: &Channel, avatars_dir: &Path) -> Self {
+    /// `poster_source` is the channel's stored avatar, when it has one.
+    pub fn from_channel(channel: &Channel, poster_source: Option<PathBuf>) -> Self {
         Self {
             title: channel.name.clone(),
             uniqueid: channel.youtube_channel_id.clone(),
-            poster_source: channel
-                .avatar_filename
-                .as_ref()
-                .map(|avatar| avatars_dir.join(avatar)),
+            poster_source,
         }
     }
 

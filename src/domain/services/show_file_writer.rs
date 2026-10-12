@@ -3,8 +3,8 @@ use crate::domain::playlist::{Playlist, PlaylistPath};
 use crate::domain::show::Show;
 use crate::domain::video::resolve_output_dir;
 use crate::domain::video_metadata::render_show_nfo;
+use crate::infrastructure::repositories::filesystem_channel_avatar_repository::ChannelAvatarRepository;
 use crate::infrastructure::repositories::filesystem_show_file_repository::ShowFileRepository;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Writes a tracked playlist's or channel's show files (`tvshow.nfo`, and
@@ -13,19 +13,19 @@ use std::sync::Arc;
 /// deletion all converge without a dedicated event.
 pub struct ShowFileWriter {
     show_file_repository: Arc<dyn ShowFileRepository>,
-    avatars_dir: PathBuf,
+    channel_avatar_repository: Arc<dyn ChannelAvatarRepository>,
     videos_path: String,
 }
 
 impl ShowFileWriter {
     pub fn new(
         show_file_repository: Arc<dyn ShowFileRepository>,
-        avatars_dir: impl Into<PathBuf>,
+        channel_avatar_repository: Arc<dyn ChannelAvatarRepository>,
         videos_path: impl Into<String>,
     ) -> Self {
         Self {
             show_file_repository,
-            avatars_dir: avatars_dir.into(),
+            channel_avatar_repository,
             videos_path: videos_path.into(),
         }
     }
@@ -42,10 +42,11 @@ pub trait ShowFileWriterApi: Send + Sync {
 
 impl ShowFileWriterApi for ShowFileWriter {
     fn write_channel_show(&self, channel: &Channel) -> anyhow::Result<()> {
-        self.write_show(
-            &Show::from_channel(channel, &self.avatars_dir),
-            &channel.path,
-        )
+        let poster_source = channel
+            .avatar_filename
+            .as_deref()
+            .map(|avatar| self.channel_avatar_repository.path_of(avatar));
+        self.write_show(&Show::from_channel(channel, poster_source), &channel.path)
     }
 
     fn write_playlist_show(&self, playlist: &Playlist) -> anyhow::Result<()> {

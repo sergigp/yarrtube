@@ -33,10 +33,6 @@ impl VideoFilename {
         let collapsed = sanitized.split_whitespace().collect::<Vec<_>>().join(" ");
         Self(truncate_at_char_boundary(&collapsed, MAX_FILENAME_BYTES))
     }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 
 impl fmt::Display for VideoFilename {
@@ -89,28 +85,28 @@ mod tests {
     #[test]
     fn it_should_collapse_repeated_and_surrounding_whitespace() {
         let filename = VideoFilename::from_title("  My   Video   Title  ");
-        assert_eq!(filename.as_str(), "My Video Title");
+        assert_eq!(filename.to_string(), "My Video Title");
     }
 
     #[test]
     fn it_should_replace_filesystem_unsafe_characters_with_a_safe_separator() {
         let filename = VideoFilename::from_title(r#"a/b\c:d*e?f"g<h>i|j"#);
-        assert_eq!(filename.as_str(), "a-b-c-d-e-f-g-h-i-j");
+        assert_eq!(filename.to_string(), "a-b-c-d-e-f-g-h-i-j");
         for unsafe_char in FILESYSTEM_UNSAFE_CHARS {
-            assert!(!filename.as_str().contains(*unsafe_char));
+            assert!(!filename.to_string().contains(*unsafe_char));
         }
     }
 
     #[test]
     fn it_should_strip_emoji_and_decorative_symbols() {
         let filename = VideoFilename::from_title("🎉 Party Time 🎉 ★彡");
-        assert_eq!(filename.as_str(), "Party Time 彡");
+        assert_eq!(filename.to_string(), "Party Time 彡");
     }
 
     #[test]
     fn it_should_preserve_accented_and_non_ascii_letters() {
         let filename = VideoFilename::from_title("Café à Montréal");
-        assert_eq!(filename.as_str(), "Café à Montréal");
+        assert_eq!(filename.to_string(), "Café à Montréal");
     }
 
     #[test]
@@ -118,19 +114,19 @@ mod tests {
         let title = "é".repeat(200);
         let filename = VideoFilename::from_title(&title);
 
-        assert!(filename.as_str().len() <= MAX_FILENAME_BYTES);
-        assert!(filename.as_str().len() > MAX_FILENAME_BYTES - "é".len());
+        assert!(filename.to_string().len() <= MAX_FILENAME_BYTES);
+        assert!(filename.to_string().len() > MAX_FILENAME_BYTES - "é".len());
         // Every remaining character parses back cleanly (no split code point).
         assert_eq!(
-            filename.as_str().chars().count(),
-            filename.as_str().len() / "é".len()
+            filename.to_string().chars().count(),
+            filename.to_string().len() / "é".len()
         );
     }
 
     #[test]
     fn it_should_sanitize_a_combination_of_rules_together() {
         let filename = VideoFilename::from_title("  My: Café  Trip?  🎉  ");
-        assert_eq!(filename.as_str(), "My- Café Trip-");
+        assert_eq!(filename.to_string(), "My- Café Trip-");
     }
 
     #[test]
@@ -139,13 +135,13 @@ mod tests {
             "9 AI Concepts Explained in 7 minutes: AI Agents, RAGs, Tokenization, RLHF...",
         );
         assert_eq!(
-            filename.as_str(),
+            filename.to_string(),
             "9 AI Concepts Explained in 7 minutes- AI Agents, RAGs, Tokenization, RLHF..."
         );
-        assert!(!filename.as_str().contains(':'));
-        assert!(filename.as_str().contains("AI"));
-        assert!(filename.as_str().contains("RAGs"));
-        assert!(filename.as_str().contains("RLHF"));
+        assert!(!filename.to_string().contains(':'));
+        assert!(filename.to_string().contains("AI"));
+        assert!(filename.to_string().contains("RAGs"));
+        assert!(filename.to_string().contains("RLHF"));
     }
 
     #[test]
@@ -154,17 +150,17 @@ mod tests {
 
         assert!(
             !filename
-                .as_str()
+                .to_string()
                 .chars()
                 .any(|c| c == '\u{FF02}' || c == '\u{FF1F}')
         );
-        assert!(filename.as_str().contains("Got any hobbies"));
+        assert!(filename.to_string().contains("Got any hobbies"));
     }
 
     #[test]
     fn it_should_sanitize_a_title_with_a_math_symbol_slash_lookalike() {
         let filename = VideoFilename::from_title("New Skills! v1.2 brings \u{29F8}wait-what...");
 
-        assert_eq!(filename.as_str(), "New Skills! v1.2 brings wait-what...");
+        assert_eq!(filename.to_string(), "New Skills! v1.2 brings wait-what...");
     }
 }

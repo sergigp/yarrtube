@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 const VIDEOS_URL: &str = "https://www.googleapis.com/youtube/v3/videos";
 
-/// A video's full YouTube snippet, fetched for `movie.nfo` generation.
+/// A video's full YouTube snippet, fetched for episode NFO generation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct YoutubeMetadata {
     pub title: String,

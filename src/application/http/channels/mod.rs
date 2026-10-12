@@ -1634,7 +1634,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1683,7 +1683,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),

@@ -14,12 +14,12 @@ pub const SHOW_NFO_FILENAME: &str = "tvshow.nfo";
 pub const SHOW_POSTER_FILENAME: &str = "poster.jpg";
 
 /// Returns the first path component of a stored `filename`/`thumbnail_filename`:
-/// the video's own output folder name for a new-style `"folder/file.ext"` path
-/// (one video per folder, alongside its thumbnail and `movie.nfo`), or the bare
-/// filename unchanged for a legacy flat path with no `/` (downloaded before
-/// per-video folders were introduced). Either way, this is "the entry that
-/// owns this stored path, at the container's output directory level" — what
-/// deletion and reconciliation need to delete or protect as a unit.
+/// a legacy video's own folder name for a `"folder/file.ext"` path (one video
+/// per folder, alongside its thumbnail and `movie.nfo`), or the bare filename
+/// unchanged for a legacy flat path with no `/`. Either way, this is "the
+/// entry that owns this stored path, at the container's output directory
+/// level" — what deletion and reconciliation delete or protect as a unit for
+/// a video not yet in the TV-show layout.
 pub fn top_level_entry(relative_path: &str) -> &str {
     relative_path
         .split_once('/')

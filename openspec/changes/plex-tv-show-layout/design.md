@@ -203,7 +203,7 @@ pub const SHOW_POSTER_FILENAME: &str = "poster.jpg";
 // src/domain/show/show.rs
 pub struct Show { pub title: String, pub uniqueid: String, pub poster_source: Option<PathBuf> }
 impl Show {
-    pub fn from_channel(channel: &Channel, avatars_dir: &Path) -> Self;
+    pub fn from_channel(channel: &Channel, poster_source: Option<PathBuf>) -> Self;   // poster_source = ChannelAvatarRepository::path_of(avatar)
     pub fn from_playlist(playlist: &Playlist) -> Self;
 }
 
@@ -213,7 +213,7 @@ pub fn render_show_nfo(show: &Show) -> String;
 // removed: render_movie_nfo
 
 // src/domain/services/show_file_writer.rs
-pub struct ShowFileWriter { show_file_repository: Arc<dyn ShowFileRepository>, avatars_dir: PathBuf, videos_path: String }
+pub struct ShowFileWriter { show_file_repository: Arc<dyn ShowFileRepository>, channel_avatar_repository: Arc<dyn ChannelAvatarRepository>, videos_path: String }
 pub trait ShowFileWriterApi {
     fn write_channel_show(&self, channel: &Channel) -> anyhow::Result<()>;
     fn write_playlist_show(&self, playlist: &Playlist) -> anyhow::Result<()>;
@@ -356,7 +356,7 @@ export function storageLocation(basePath: string, filename: string | null): stri
 → `place_thumbnail`: `assign_episode_number(id, fetched.published_at)` → `move_file(fetched.path, output_dir/episode_relative_path(.., "jpg"))` → `VideoRepository::update_thumbnail(id, relative_path, now)`; on any failure `delete_dir_recursive(staging_dir)`.
 
 **Reconcile (channel or playlist)**
-`ReconcileChannelTask::handle` / `ReconcileOnChannelCreated::handle` → `ChannelVideoReconciler::reconcile*` → `find_channel` → `ShowFileWriter::write_channel_show(channel)` (`render_show_nfo(Show::from_channel(..))` → `ShowFileRepository::write_show_nfo`, `copy_poster(show_dir, avatars_dir/avatar)`) → existing membership sync → `InternalVideoReconciler::reconcile(desired, delta)`:
+`ReconcileChannelTask::handle` / `ReconcileOnChannelCreated::handle` → `ChannelVideoReconciler::reconcile*` → `find_channel` → `ShowFileWriter::write_channel_show(channel)` (`render_show_nfo(Show::from_channel(..))` → `ShowFileRepository::write_show_nfo`, `copy_poster(show_dir, ChannelAvatarRepository::path_of(avatar))`) → existing membership sync → `InternalVideoReconciler::reconcile(desired, delta)`:
   `read_actual_state` uses `VideoFileRepository::list` (top-level + season entries) and `protected_entries(videos)` = `tvshow.nfo`, `poster.jpg`, `Season *` dirs, recorded filename/thumbnail, `nfo_path_for(filename)`, every `Season <s>/<base>.*` of videos with a number, legacy top-level entries
   → `generate_missing_metadata` → for a video with `is_in_legacy_layout()` and metadata now present: `VideoRelocator::relocate(video, Some(metadata.published_at), output_dir, false)`
   → `delete_orphaned_files` deletes the rest.

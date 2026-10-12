@@ -5,7 +5,7 @@ use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
 use tracing::warn;
 
-/// Builds a video's `movie.nfo` metadata from YouTube, the one place the
+/// Builds a video's episode NFO metadata from YouTube, the one place the
 /// `sorttitle` rule is applied. Shared by `VideoDownloader` (at download
 /// time) and `InternalVideoReconciler` (repairing missing metadata).
 pub struct MetadataGenerator {

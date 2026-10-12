@@ -1,4 +1,3 @@
-use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater};
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::{
     ChannelAvatarRepository, FilesystemChannelAvatarRepository,
@@ -98,9 +97,6 @@ pub struct InfrastructureContainer {
     pub channel_avatar_repository: Arc<dyn ChannelAvatarRepository>,
     pub directory_repository: Arc<dyn DirectoryRepository>,
     pub ytdlp_updater: Arc<dyn YtdlpUpdater>,
-    /// `<videos root>/.downloads`: where downloads and thumbnail fetches are
-    /// staged before being moved into their show.
-    pub staging_root: PathBuf,
 }
 
 impl InfrastructureContainer {
@@ -114,7 +110,6 @@ impl InfrastructureContainer {
         // itself) plus a read connection that, being distinct, reads
         // concurrently with an in-progress write under WAL.
         let db = sqlite_connection::Database::open(db_path)?;
-        let staging_root = settings.videos_path.join(STAGING_DIRNAME);
 
         Ok(Self {
             playlist_repository: Arc::new(SqlitePlaylistRepository::new(db.clone())),
@@ -153,7 +148,6 @@ impl InfrastructureContainer {
                 settings.videos_path,
             )),
             ytdlp_updater: Arc::new(RealYtdlpUpdater),
-            staging_root,
             clock,
         })
     }

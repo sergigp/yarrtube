@@ -234,6 +234,7 @@ mod tests {
     use crate::domain::shared::Quality;
     use crate::domain::video::{EpisodeNumber, Video, VideoId};
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
+    use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
@@ -813,7 +814,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 show_file_repository,
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 videos_path.clone(),
             )),
             videos_path,

@@ -44,6 +44,7 @@ mod tests {
     use crate::domain::video::Video;
     use crate::domain::video::{EpisodeNumber, VideoId, VideoRecordId};
     use crate::domain::video_metadata::VideoMetadata;
+    use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
@@ -555,7 +556,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -794,7 +795,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -898,7 +899,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1032,7 +1033,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1088,7 +1089,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),

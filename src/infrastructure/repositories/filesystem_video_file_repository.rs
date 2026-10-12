@@ -14,7 +14,7 @@ const IN_PROGRESS_EXTENSIONS: &[&str] = &["part", "ytdl"];
 /// listing, and removal.
 pub trait VideoFileRepository: Send + Sync {
     /// Deletes the entry in `output_dir` named exactly `filename`, if any —
-    /// a whole directory (a new-style video's own folder) is removed
+    /// a whole directory (a legacy video's own folder) is removed
     /// recursively, a file is removed directly. Returns whether an entry was
     /// found and deleted. A missing `output_dir` or a missing entry is
     /// "nothing to delete" (`Ok(false)`), not an error.
@@ -410,7 +410,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(std::fs::read(&to).ok(), Some(b"media".to_vec()));
-        assert_eq!(dir.join(".downloads/yt1/yt1.mp4").exists(), false);
+        assert!(!dir.join(".downloads/yt1/yt1.mp4").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

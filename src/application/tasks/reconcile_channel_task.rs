@@ -45,6 +45,7 @@ mod tests {
     use crate::domain::video::Video;
     use crate::domain::video::{EpisodeNumber, VideoId, VideoRecordId, VideoStatus};
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
+    use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -628,7 +629,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 show_file_repository.clone(),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -875,7 +876,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -911,7 +912,7 @@ mod tests {
             *relocated_files.removed_if_empty.lock().unwrap(),
             vec![show_dir.join("My Video")]
         );
-        assert_eq!(show_dir.join("My Video/movie.nfo").exists(), false);
+        assert!(!show_dir.join("My Video/movie.nfo").exists());
         assert_eq!(
             video_metadata_repository.find(&video.id).unwrap(),
             Some(recovered_metadata())
@@ -986,7 +987,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1062,7 +1063,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1196,7 +1197,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
@@ -1252,7 +1253,7 @@ mod tests {
             )),
             Arc::new(ShowFileWriter::new(
                 Arc::new(FakeShowFileRepository::default()),
-                "avatars",
+                Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),

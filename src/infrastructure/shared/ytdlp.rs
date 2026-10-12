@@ -813,12 +813,11 @@ mod tests {
         );
 
         assert_eq!(result.media_path, staging_dir.join("yt1.mp4"));
-        assert_eq!(staging_dir.join("yt1.mp4").is_file(), true);
-        assert_eq!(
+        assert!(staging_dir.join("yt1.mp4").is_file());
+        assert!(
             fake.captured_args()
                 .windows(2)
-                .any(|pair| pair == ["-o", "%(id)s.%(ext)s"]),
-            true
+                .any(|pair| pair == ["-o", "%(id)s.%(ext)s"])
         );
         std::fs::remove_dir_all(staging_dir.parent().unwrap()).unwrap();
     }
@@ -986,11 +985,10 @@ mod tests {
                 sabr_notice: None,
             }
         );
-        assert_eq!(
+        assert!(
             fake.captured_args()
                 .windows(4)
-                .any(|args| args == ["--print", "%(timestamp)s", "--print", "%(upload_date)s"]),
-            true
+                .any(|args| args == ["--print", "%(timestamp)s", "--print", "%(upload_date)s"])
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
@@ -1044,11 +1042,10 @@ mod tests {
                 ),
             })
         );
-        assert_eq!(
+        assert!(
             fake.captured_args()
                 .windows(2)
-                .any(|pair| pair == ["-o", "%(id)s.%(ext)s"]),
-            true
+                .any(|pair| pair == ["-o", "%(id)s.%(ext)s"])
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }

@@ -193,8 +193,9 @@ impl ChannelAvatarRepository for FakeChannelAvatarRepository {
         Ok(())
     }
 
-    fn path_of(&self, _filename: &str) -> PathBuf {
-        PathBuf::new()
+    /// The fake's avatars directory is `avatars`.
+    fn path_of(&self, filename: &str) -> PathBuf {
+        PathBuf::from("avatars").join(filename)
     }
 }
 

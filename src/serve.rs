@@ -424,7 +424,7 @@ fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> Channel
 fn show_file_writer(infrastructure: &InfrastructureContainer) -> Arc<ShowFileWriter> {
     Arc::new(ShowFileWriter::new(
         infrastructure.show_file_repository.clone(),
-        avatars_path(),
+        infrastructure.channel_avatar_repository.clone(),
         videos_path(),
     ))
 }
@@ -985,7 +985,7 @@ mod tests {
         let handlers = task_handlers(&infrastructure);
         let subscribers = event_subscribers(&infrastructure, plex);
 
-        assert_eq!(handlers.contains_key("reconcile_plex_collections"), false);
+        assert!(!handlers.contains_key("reconcile_plex_collections"));
         assert_eq!(
             ["playlist_deleted", "channel_deleted"]
                 .map(|event_type| subscribers.get(event_type).map(Vec::len)),
