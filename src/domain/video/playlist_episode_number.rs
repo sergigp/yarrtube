@@ -12,6 +12,11 @@ impl PlaylistEpisodeNumber {
     pub const SEASON: i32 = 1;
 
     pub fn new(episode: u32) -> Result<Self, ValidationError> {
+        if episode == 0 {
+            return Err(ValidationError(format!(
+                "Playlist episode number must be at least 1 (got {episode})"
+            )));
+        }
         Ok(Self { episode })
     }
 
@@ -22,5 +27,24 @@ impl PlaylistEpisodeNumber {
     /// The number after this one.
     pub fn next(&self) -> Result<Self, ValidationError> {
         Ok(*self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_reject_episode_zero() {
+        assert_eq!(
+            PlaylistEpisodeNumber::new(0),
+            Err(ValidationError(
+                "Playlist episode number must be at least 1 (got 0)".to_string()
+            ))
+        );
+        assert_eq!(
+            PlaylistEpisodeNumber::new(1),
+            Ok(PlaylistEpisodeNumber { episode: 1 })
+        );
     }
 }
