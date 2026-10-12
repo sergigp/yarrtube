@@ -89,7 +89,7 @@
 - [x] 5.11 `it_should_number_new_playlist_videos_in_playlist_order` — playlist created: positions 0..2 with publish times in another order → episodes 1..3, `last_episode` 3
 - [x] 5.12 `it_should_number_a_video_added_to_the_playlist_after_the_last_one` — reconcile playlist task: `last_episode` 5, new item at position 0 → 6
 - [x] 5.13 `it_should_not_reuse_the_number_of_a_removed_video` — the video holding 6 leaves, next new item → 7
-- [ ] 5.14 `it_should_keep_episode_numbers_when_the_playlist_is_reordered` — positions swap, numbers and filenames unchanged
+- [x] 5.14 `it_should_keep_episode_numbers_when_the_playlist_is_reordered` — positions swap, numbers and filenames unchanged
 - [ ] 5.15 `it_should_save_a_playlist_video_under_its_playlist_episode_number` — download task: `Season 1/S01E007 - Title.*` despite a 2014 publish time
 - [ ] 5.16 `it_should_move_legacy_playlist_videos_under_their_recorded_numbers` — migrate-layout: publish order reversed, moved by position number
 - [ ] 5.17 `it_should_move_a_playlist_video_without_metadata` — migrate-layout: numbered, no metadata → moved without NFO, not skipped

@@ -446,6 +446,78 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_episode_numbers_when_the_playlist_is_reordered() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
+            "Season 1/S01E001 - One.mp4".to_string(),
+            "Season 1/S01E001 - One.jpg".to_string(),
+            "Season 1/S01E002 - Two.mp4".to_string(),
+            "Season 1/S01E002 - Two.jpg".to_string(),
+        ]));
+        playlist_repository
+            .insert(&Playlist {
+                last_episode: Some(PlaylistEpisodeNumber::new(2).unwrap()),
+                ..playlist("PL1")
+            })
+            .unwrap();
+        let one = downloaded_playlist_episode("vid1", "One", 1);
+        let two = downloaded_playlist_episode("vid2", "Two", 2);
+        let one_playlist_video = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &one,
+            0,
+        );
+        let two_playlist_video = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &two,
+            1,
+        );
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            vec![
+                playlist_item("vid2", "Two", 0),
+                playlist_item("vid1", "One", 1),
+            ],
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![one, two]);
+        assert_eq!(
+            playlist_video_repository
+                .list_for_playlist(&playlist_id())
+                .unwrap(),
+            vec![
+                PlaylistVideo {
+                    position: 0,
+                    ..two_playlist_video
+                },
+                PlaylistVideo {
+                    position: 1,
+                    ..one_playlist_video
+                },
+            ]
+        );
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_remove_videos_gone_from_youtube() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -1286,6 +1358,20 @@ mod tests {
         Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp())
             .with_episode_number(
                 PlaylistEpisodeNumber::new(episode).unwrap().into(),
+                fixed_timestamp(),
+            )
+    }
+
+    /// A playlist video numbered `episode`, downloaded in the TV-show layout.
+    fn downloaded_playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
+        let base = format!("Season 1/S01E{episode:03} - {title}");
+        playlist_episode(youtube_id, title, episode)
+            .start_download(fixed_timestamp())
+            .mark_downloaded(
+                Quality::High,
+                format!("{base}.mp4"),
+                Some(format!("{base}.jpg")),
+                None,
                 fixed_timestamp(),
             )
     }
