@@ -83,7 +83,7 @@
 - [x] 5.5 VO: `EpisodeNumber` `it_should_widen_a_playlist_code_past_999` — `S01E1000`
 - [x] 5.6 VO: `EpisodeNumber` `it_should_decode_season_one_as_a_playlist_number`
 - [x] 5.7 sqlite_migrations: `it_should_number_existing_playlist_videos_by_position` — ties by insertion, channel videos untouched, `last_episode` = count, `NULL` for an empty playlist
-- [ ] 5.8 SqlitePlaylistRepository: `it_should_persist_the_last_episode`
+- [x] 5.8 SqlitePlaylistRepository: `it_should_persist_the_last_episode`
 - [ ] 5.9 SqliteVideoRepository: `it_should_persist_and_read_a_playlist_episode_number`
 - [ ] 5.10 SqliteVideoRepository: same-day siblings via `channel_videos` only — revise 3.13's playlist sibling case so a playlist link no longer counts
 - [ ] 5.11 `it_should_number_new_playlist_videos_in_playlist_order` — playlist created: positions 0..2 with publish times in another order → episodes 1..3, `last_episode` 3
