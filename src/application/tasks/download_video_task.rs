@@ -36,9 +36,9 @@ impl TaskHandler for DownloadVideoTask {
 mod tests {
     use super::*;
     use crate::application::tasks::log_capture::captured_log_messages;
+    use crate::domain::channel::ChannelHandle;
+    use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
-    use crate::domain::playlist::PlaylistId;
-    use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::video::EpisodeNumber;
     use crate::domain::video::Video;
@@ -48,9 +48,10 @@ mod tests {
     use crate::infrastructure::repositories::filesystem_video_file_repository::{
         FakeVideoFileRepository, FilesystemVideoFileRepository, VideoFileRepository,
     };
-    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
-        PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, SqliteChannelVideoRepository,
     };
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
         SqliteVideoMetadataRepository, VideoMetadataRepository,
     };
@@ -214,7 +215,7 @@ mod tests {
     fn it_should_number_two_same_day_videos_of_one_show_consecutively() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
         let output_dir = tempfile::tempdir().unwrap();
         let first = Video::create(
             VideoId::new("yt0").unwrap(),
@@ -233,17 +234,17 @@ mod tests {
         video_repository.save(&first).unwrap();
         video_repository.update(&first).unwrap();
         video_repository.save(&video).unwrap();
-        playlist_video_repository
-            .save(&PlaylistVideo::create(
-                my_playlist_id(),
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                my_channel_id(),
                 first.id.clone(),
                 1,
                 fixed_timestamp(),
             ))
             .unwrap();
-        playlist_video_repository
-            .save(&PlaylistVideo::create(
-                my_playlist_id(),
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                my_channel_id(),
                 video.id.clone(),
                 2,
                 fixed_timestamp(),
@@ -1460,8 +1461,8 @@ mod tests {
         )
     }
 
-    fn my_playlist_id() -> PlaylistId {
-        PlaylistId::new("PL1").unwrap()
+    fn my_channel_id() -> ChannelHandle {
+        ChannelHandle::new("@somechannel").unwrap()
     }
 
     fn my_video() -> Video {

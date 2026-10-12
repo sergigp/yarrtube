@@ -364,7 +364,7 @@ impl SqliteVideoRepository {
     }
 
     /// The next free same-day index on `published_at`'s day among the videos
-    /// sharing a playlist or channel with `id`.
+    /// sharing a channel with `id`.
     fn next_free_episode_number(
         conn: &Connection,
         id: &VideoRecordId,
@@ -378,7 +378,7 @@ impl SqliteVideoRepository {
     }
 
     /// The highest episode recorded on `first`'s day among the videos sharing
-    /// a playlist or channel with `id`.
+    /// a channel with `id`.
     fn last_sibling_episode_of_day(
         conn: &Connection,
         id: &VideoRecordId,
@@ -387,9 +387,6 @@ impl SqliteVideoRepository {
         conn.query_row(
             "SELECT MAX(episode) FROM videos
              WHERE season = ?2 AND episode / 100 = ?3 AND id IN (
-                 SELECT video_id FROM playlist_videos WHERE playlist_id IN (
-                     SELECT playlist_id FROM playlist_videos WHERE video_id = ?1)
-                 UNION
                  SELECT video_id FROM channel_videos WHERE channel_id IN (
                      SELECT channel_id FROM channel_videos WHERE video_id = ?1))",
             params![id.as_str(), first.season(), first.same_day_prefix()],
@@ -847,31 +844,31 @@ mod tests {
     fn it_should_assign_the_next_free_index_within_the_same_show_and_day() {
         let db = TestDatabase::new();
         let repo = SqliteVideoRepository::new(db.database());
-        let playlist_sibling = video("Playlist sibling", fixed_timestamp());
-        let playlist_video = video("Playlist video", fixed_timestamp());
         let channel_sibling = video("Channel sibling", fixed_timestamp());
         let channel_video = video("Channel video", fixed_timestamp());
+        let playlist_sibling = video("Playlist sibling", fixed_timestamp());
+        let playlist_video = video("Playlist video", fixed_timestamp());
         [
-            &playlist_sibling,
-            &playlist_video,
             &channel_sibling,
             &channel_video,
+            &playlist_sibling,
+            &playlist_video,
         ]
         .into_iter()
         .for_each(|video| repo.save(video).unwrap());
-        let _ = numbered(&repo, playlist_sibling.clone(), episode(31501));
         let _ = numbered(&repo, channel_sibling.clone(), episode(31503));
-        link_to_playlist(&db, &playlist_sibling, "PL1");
-        link_to_playlist(&db, &playlist_video, "PL1");
+        let _ = numbered(&repo, playlist_sibling.clone(), episode(31501));
         link_to_channel(&db, &channel_sibling, "@somechannel");
         link_to_channel(&db, &channel_video, "@somechannel");
+        link_to_playlist(&db, &playlist_sibling, "PL1");
+        link_to_playlist(&db, &playlist_video, "PL1");
 
-        let numbers = [&playlist_video, &channel_video].map(|video| {
+        let numbers = [&channel_video, &playlist_video].map(|video| {
             repo.assign_episode_number(&video.id, published_at())
                 .unwrap()
         });
 
-        assert_eq!(numbers, [episode(31502), episode(31504)]);
+        assert_eq!(numbers, [episode(31504), episode(31501)]);
     }
 
     #[test]
@@ -979,8 +976,8 @@ mod tests {
         repo.save(&sibling).unwrap();
         repo.save(&video).unwrap();
         let _ = numbered(&repo, sibling.clone(), episode(31501));
-        link_to_playlist(&db, &sibling, "PL1");
-        link_to_playlist(&db, &video, "PL1");
+        link_to_channel(&db, &sibling, "@somechannel");
+        link_to_channel(&db, &video, "@somechannel");
 
         let number = repo.next_episode_number(&video.id, published_at());
 

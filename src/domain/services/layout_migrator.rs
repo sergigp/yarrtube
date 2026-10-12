@@ -407,33 +407,33 @@ mod tests {
     fn it_should_number_a_same_day_batch_in_publish_time_order() {
         let db = TestDatabase::new();
         let videos_root = tempfile::tempdir().unwrap();
-        let playlist_dir = videos_root.path().join("playlists/kids");
-        SqlitePlaylistRepository::new(db.database())
-            .insert(&my_playlist())
+        let channel_dir = videos_root.path().join("channels/somechannel");
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
             .unwrap();
         let latest = legacy_video("yt1", "Latest", "Latest/Latest.mp4", None);
         let middle = legacy_video("yt2", "Middle", "Middle/Middle.mp4", None);
         let earliest = legacy_video("yt3", "Earliest", "Earliest/Earliest.mp4", None);
-        seed_playlist_video(&db, &latest, 0);
-        seed_playlist_video(&db, &middle, 1);
-        seed_playlist_video(&db, &earliest, 2);
+        seed_channel_video(&db, &latest);
+        seed_channel_video(&db, &middle);
+        seed_channel_video(&db, &earliest);
         seed_metadata(
             &db,
             &latest,
             published("2026-03-15T10:00:02Z"),
-            &playlist_dir.join("Latest"),
+            &channel_dir.join("Latest"),
         );
         seed_metadata(
             &db,
             &middle,
             published("2026-03-15T10:00:01Z"),
-            &playlist_dir.join("Middle"),
+            &channel_dir.join("Middle"),
         );
         seed_metadata(
             &db,
             &earliest,
             published("2026-03-15T10:00:00Z"),
-            &playlist_dir.join("Earliest"),
+            &channel_dir.join("Earliest"),
         );
         let migrator = layout_migrator(
             &db,
@@ -449,16 +449,16 @@ mod tests {
             MigrationReport {
                 moved: vec![
                     moved(
-                        "playlists/kids/Earliest/Earliest.mp4",
-                        "playlists/kids/Season 2026/S2026E031501 - Earliest.mp4"
+                        "channels/somechannel/Earliest/Earliest.mp4",
+                        "channels/somechannel/Season 2026/S2026E031501 - Earliest.mp4"
                     ),
                     moved(
-                        "playlists/kids/Middle/Middle.mp4",
-                        "playlists/kids/Season 2026/S2026E031502 - Middle.mp4"
+                        "channels/somechannel/Middle/Middle.mp4",
+                        "channels/somechannel/Season 2026/S2026E031502 - Middle.mp4"
                     ),
                     moved(
-                        "playlists/kids/Latest/Latest.mp4",
-                        "playlists/kids/Season 2026/S2026E031503 - Latest.mp4"
+                        "channels/somechannel/Latest/Latest.mp4",
+                        "channels/somechannel/Season 2026/S2026E031503 - Latest.mp4"
                     ),
                 ],
                 skipped: vec![],
