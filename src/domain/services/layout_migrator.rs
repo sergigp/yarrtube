@@ -232,7 +232,9 @@ mod tests {
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::Quality;
-    use crate::domain::video::{ChannelEpisodeNumber, EpisodeNumber, Video, VideoId};
+    use crate::domain::video::{
+        ChannelEpisodeNumber, EpisodeNumber, PlaylistEpisodeNumber, Video, VideoId,
+    };
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
@@ -464,6 +466,78 @@ mod tests {
                 skipped: vec![],
                 failed: vec![],
             }
+        );
+    }
+
+    #[test]
+    fn it_should_move_legacy_playlist_videos_under_their_recorded_numbers() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let videos_root = tempfile::tempdir().unwrap();
+        let playlist_dir = videos_root.path().join("playlists/kids");
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&my_playlist())
+            .unwrap();
+        let first = legacy_video("yt1", "First", "First/First.mp4", None)
+            .with_episode_number(playlist_episode(1), fixed_timestamp());
+        let second = legacy_video("yt2", "Second", "Second/Second.mp4", None)
+            .with_episode_number(playlist_episode(2), fixed_timestamp());
+        seed_playlist_video(&db, &first, 0);
+        seed_playlist_video(&db, &second, 1);
+        seed_metadata(
+            &db,
+            &first,
+            published("2026-03-16T10:00:00Z"),
+            &playlist_dir.join("First"),
+        );
+        seed_metadata(
+            &db,
+            &second,
+            published("2014-06-01T10:00:00Z"),
+            &playlist_dir.join("Second"),
+        );
+        let migrator = layout_migrator(
+            &db,
+            Arc::new(FakeVideoFileRepository::with_file_exists(true)),
+            Arc::new(FakeShowFileRepository::default()),
+            videos_root.path(),
+        );
+
+        let result = migrator.migrate(false);
+
+        assert_eq!(
+            result.unwrap(),
+            MigrationReport {
+                moved: vec![
+                    moved(
+                        "playlists/kids/Second/Second.mp4",
+                        "playlists/kids/Season 1/S01E002 - Second.mp4"
+                    ),
+                    moved(
+                        "playlists/kids/First/First.mp4",
+                        "playlists/kids/Season 1/S01E001 - First.mp4"
+                    ),
+                ],
+                skipped: vec![],
+                failed: vec![],
+            }
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                first.clone().relocate_to_episode(
+                    playlist_episode(1),
+                    "Season 1/S01E001 - First.mp4",
+                    None,
+                    fixed_timestamp(),
+                ),
+                second.clone().relocate_to_episode(
+                    playlist_episode(2),
+                    "Season 1/S01E002 - Second.mp4",
+                    None,
+                    fixed_timestamp(),
+                ),
+            ]
         );
     }
 
@@ -928,6 +1002,10 @@ mod tests {
 
     fn moved(from: &str, to: &str) -> (String, String) {
         (from.to_string(), to.to_string())
+    }
+
+    fn playlist_episode(episode: u32) -> EpisodeNumber {
+        PlaylistEpisodeNumber::new(episode).unwrap().into()
     }
 
     fn episode(season: i32, episode: u32) -> EpisodeNumber {
