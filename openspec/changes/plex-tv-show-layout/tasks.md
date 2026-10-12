@@ -78,7 +78,7 @@
 
 - [x] 5.1 Walking skeleton: split `EpisodeNumber` into `ChannelEpisodeNumber` + `PlaylistEpisodeNumber` behind `enum EpisodeNumber` (design.md decision 10 and Types & Signatures); `Playlist.last_episode` with `next_episode_number`/`with_last_episode`; edit `0008_episode_numbers.sql` in place (`playlists.last_episode`, playlist videos numbered by position); all existing tests compile and pass unchanged
 - [x] 5.2 VO: `PlaylistEpisodeNumber` `it_should_reject_episode_zero`
-- [ ] 5.3 VO: `PlaylistEpisodeNumber` `it_should_give_the_next_number`
+- [x] 5.3 VO: `PlaylistEpisodeNumber` `it_should_give_the_next_number`
 - [ ] 5.4 VO: `EpisodeNumber` `it_should_render_a_playlist_code_padded_to_three_digits` — `S01E007`, `Season 1`
 - [ ] 5.5 VO: `EpisodeNumber` `it_should_widen_a_playlist_code_past_999` — `S01E1000`
 - [ ] 5.6 VO: `EpisodeNumber` `it_should_decode_season_one_as_a_playlist_number`

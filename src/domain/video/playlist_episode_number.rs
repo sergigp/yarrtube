@@ -26,7 +26,7 @@ impl PlaylistEpisodeNumber {
 
     /// The number after this one.
     pub fn next(&self) -> Result<Self, ValidationError> {
-        Ok(*self)
+        Self::new(self.episode + 1)
     }
 }
 
@@ -45,6 +45,14 @@ mod tests {
         assert_eq!(
             PlaylistEpisodeNumber::new(1),
             Ok(PlaylistEpisodeNumber { episode: 1 })
+        );
+    }
+
+    #[test]
+    fn it_should_give_the_next_number() {
+        assert_eq!(
+            PlaylistEpisodeNumber::new(6).unwrap().next(),
+            PlaylistEpisodeNumber::new(7)
         );
     }
 }
