@@ -14,18 +14,34 @@ channels/Some Channel/              <- one show per playlist or channel
 └── Season 2026/
     ├── S2026E031501 - First video of 15 March.{mp4,jpg,nfo}
     └── S2026E031502 - Second video of 15 March.{mp4,jpg,nfo}
+
+playlists/Some Playlist/
+├── tvshow.nfo
+└── Season 1/
+    ├── S01E001 - First video of the playlist.{mp4,jpg,nfo}
+    └── S01E002 - Second video of the playlist.{mp4,jpg,nfo}
 ```
 
 In Plex this gives you one tile per playlist/channel with a real poster,
 16:9 episode thumbnails, Continue Watching, On Deck and "play next
 episode", none of which a collection offers.
 
-Episodes are numbered from the video's YouTube publish time: the season is
-the publish year, the episode is the month and day followed by a two-digit
-index for videos of the same show published that day (`S2026E031502` is
-the second video of 15 March 2026). A number is assigned once and never
-changes, so files never rename and Plex keeps watch state on the right
-episode.
+A channel's episodes are numbered from the video's YouTube publish time:
+the season is the publish year, the episode is the month and day followed
+by a two-digit index for videos of the channel published that day
+(`S2026E031502` is the second video of 15 March 2026).
+
+A playlist is a curated sequence, so its episodes are numbered in playlist
+order instead: every playlist is a single `Season 1`, and each video gets
+the playlist's next number when yarrtube first sees it in the playlist. The
+first sync numbers the whole playlist in its YouTube order (`S01E001`,
+`S01E002`, ...); videos added later get the numbers after the last one,
+wherever YouTube puts them. A removed video's number is never reused.
+
+Either way a number is assigned once and never changes, so files never
+rename and Plex keeps watch state on the right episode. A playlist that is
+reordered on YouTube keeps its original numbering in Plex (the web UI
+follows the live order).
 
 Nothing below is required to *use* the layout: any player that reads TV
 show folders picks it up. The optional part is the **scan trigger**, which

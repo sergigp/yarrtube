@@ -6,8 +6,9 @@ Yarrtube tracks YouTube playlists and channels and downloads their videos to
 a local directory via `yt-dlp`. It's packaged as a Docker image meant to run
 continuously (e.g. on a NAS): a `serve` daemon exposes an HTTP API plus an
 embedded React web UI, syncs tracked sources on an interval, lays each
-tracked source out as a TV show (`Season <year>/S<year>E<MMDDii> - <title>.*`
-with NFO metadata) for Plex/Kodi/Jellyfin, and optionally asks Plex to scan a
+tracked source out as a TV show (channels: `Season <year>/S<year>E<MMDDii> -
+<title>.*` by publish date; playlists: `Season 1/S01E<nnn> - <title>.*` in
+playlist order; with NFO metadata) for Plex/Kodi/Jellyfin, and optionally asks Plex to scan a
 show folder after each download. `yarrtube migrate-layout` moves a library
 from the old per-video-folder layout.
 

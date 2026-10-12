@@ -88,9 +88,11 @@ Environment variables read by Yarrtube are listed below. Every variable except `
 
 Every tracked playlist and channel is stored as a TV show under its storage
 path: a `tvshow.nfo` (and, for a channel, a `poster.jpg` from its avatar)
-plus one `Season <year>` folder per publish year, each video saved there as
-`S<year>E<MMDDii> - <title>.mp4` next to its `.jpg` thumbnail and `.nfo`
-metadata. Plex, Kodi and Jellyfin read this layout natively as TV shows.
+plus its season folders, each video saved there next to its `.jpg`
+thumbnail and `.nfo` metadata. A channel has one `Season <year>` folder per
+publish year, with videos named `S<year>E<MMDDii> - <title>.mp4` after their
+publish date; a playlist is a single `Season 1` folder, with videos named
+`S01E<nnn> - <title>.mp4` in playlist order. Plex, Kodi and Jellyfin read this layout natively as TV shows.
 Downloads are staged in a hidden `.downloads` folder under the videos root
 and moved into place once complete, so the videos root must be a single
 filesystem.

@@ -96,5 +96,5 @@
 
 ## 6. Docs and verification for playlist numbering
 
-- [ ] 6.1 Update `doc/PLEX.md` (layout example and numbering paragraph for playlists), `doc/INSTALLATION.md` and `doc/ARCHITECTURE.md` "Videos on disk", `CLAUDE.md` layout line
+- [x] 6.1 Update `doc/PLEX.md` (layout example and numbering paragraph for playlists), `doc/INSTALLATION.md` and `doc/ARCHITECTURE.md` "Videos on disk", `CLAUDE.md` layout line
 - [ ] 6.2 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --locked`, `npm run check` in `web/`; all must pass

@@ -115,16 +115,25 @@ Each tracked playlist or channel is a TV show under its storage path:
 <storage path>/
 ├── tvshow.nfo                                  ShowFileWriter, on every sync
 ├── poster.jpg                                  channels only (avatar copy)
-└── Season <year>/
-    └── S<year>E<MMDDii> - <title>.{mp4,jpg,nfo}
+└── Season <year>/                              Season 1/ for a playlist
+    └── S<year>E<MMDDii> - <title>.{mp4,jpg,nfo}  S01E<nnn> - <title>.* for a playlist
 ```
 
-- **Episode number** (`EpisodeNumber`): season = publish year, episode =
-  publish month and day plus a two-digit index among the show's videos
-  published that day. It is assigned once in the database
-  (`VideoRepository::assign_episode_number`, by whichever of the thumbnail
-  fetch or the download needs it first), stored on the video and never
-  recomputed, so files never rename.
+- **Episode number** (`EpisodeNumber`, one of two value objects), assigned
+  once, stored on the video and never recomputed, so files never rename:
+  - `ChannelEpisodeNumber`: season = publish year, episode = publish month
+    and day plus a two-digit index among the channel's videos published
+    that day. Assigned in the database
+    (`VideoRepository::assign_episode_number`, by whichever of the
+    thumbnail fetch or the download needs it first).
+  - `PlaylistEpisodeNumber`: season 1, episode = the playlist's next
+    number (`Playlist::last_episode` + 1), assigned by
+    `PlaylistVideoReconciler` when it first stores the video, in playlist
+    position order. The counter guarantees a removed video's number is
+    never reused. Migration `0008` numbered the videos of playlists
+    tracked before this existed by their stored position.
+
+  A stored season of `1` decodes as a playlist number.
 - **Staging**: `yt-dlp` writes into `.downloads/<youtube id>`; the NFO is
   written at its final path first, then media and thumbnail are renamed
   into the season folder, so players never see a partial file.

@@ -33,7 +33,7 @@ Yarrtube is designed to run on your NAS via Docker alongside the rest of your me
 - Track entire channels and download new videos when they are published!
 - Minimalistic webapp to see the videos from the browser in both desktop and mobile.
 - Basic support for Plex, Kodi and Jellyfin.
-- Every playlist and channel is stored as a TV show (`Season <year>/S<year>E<MMDDii> - <title>.mp4` with NFO metadata and a poster), so Plex, Kodi and Jellyfin show it with episode thumbnails, Continue Watching and play-next. Optionally yarrtube asks Plex to scan new episodes right away. See the [Plex guide](doc/PLEX.md).
+- Every playlist and channel is stored as a TV show (channels as `Season <year>/S<year>E<MMDDii> - <title>.mp4` by publish date, playlists as `Season 1/S01E<nnn> - <title>.mp4` in playlist order, with NFO metadata and a poster), so Plex, Kodi and Jellyfin show it with episode thumbnails, Continue Watching and play-next. Optionally yarrtube asks Plex to scan new episodes right away. See the [Plex guide](doc/PLEX.md).
 
 <p align="center">
   <img src="doc/screenshot_mobile.png" alt="Yarrtube mobile UI screenshot" width="150"/>
