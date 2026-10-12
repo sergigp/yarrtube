@@ -78,4 +78,11 @@ mod tests {
             ("S01E007".to_string(), "Season 1".to_string())
         );
     }
+
+    #[test]
+    fn it_should_widen_a_playlist_code_past_999() {
+        let number = EpisodeNumber::from(PlaylistEpisodeNumber::new(1000).unwrap());
+
+        assert_eq!(number.code(), "S01E1000");
+    }
 }
