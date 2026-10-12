@@ -16,7 +16,10 @@ impl EpisodeNumber {
     /// Decodes the stored `season`/`episode` columns: season `1` is a
     /// playlist number, any other season a channel's publish year.
     pub fn from_columns(season: i32, episode: u32) -> Result<Self, ValidationError> {
-        Ok(Self::Channel(ChannelEpisodeNumber::new(season, episode)?))
+        match season {
+            PlaylistEpisodeNumber::SEASON => Ok(PlaylistEpisodeNumber::new(episode)?.into()),
+            _ => Ok(ChannelEpisodeNumber::new(season, episode)?.into()),
+        }
     }
 
     pub fn season(&self) -> i32 {
@@ -84,5 +87,21 @@ mod tests {
         let number = EpisodeNumber::from(PlaylistEpisodeNumber::new(1000).unwrap());
 
         assert_eq!(number.code(), "S01E1000");
+    }
+
+    #[test]
+    fn it_should_decode_season_one_as_a_playlist_number() {
+        assert_eq!(
+            EpisodeNumber::from_columns(1, 7),
+            Ok(EpisodeNumber::Playlist(
+                PlaylistEpisodeNumber::new(7).unwrap()
+            ))
+        );
+        assert_eq!(
+            EpisodeNumber::from_columns(2026, 31501),
+            Ok(EpisodeNumber::Channel(
+                ChannelEpisodeNumber::new(2026, 31501).unwrap()
+            ))
+        );
     }
 }
