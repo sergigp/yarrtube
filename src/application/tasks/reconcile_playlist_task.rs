@@ -42,7 +42,7 @@ mod tests {
     use crate::domain::shared::Quality;
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
-    use crate::domain::video::{EpisodeNumber, VideoId, VideoRecordId};
+    use crate::domain::video::{EpisodeNumber, PlaylistEpisodeNumber, VideoId, VideoRecordId};
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
@@ -163,7 +163,7 @@ mod tests {
             videos,
             vec![Video {
                 id: video_id.clone(),
-                ..Video::create(VideoId::new("vid1").unwrap(), "One", fixed_timestamp())
+                ..playlist_episode("vid1", "One", 1)
             }]
         );
         assert_eq!(
@@ -226,7 +226,7 @@ mod tests {
             videos,
             vec![Video {
                 id: video_id.clone(),
-                ..Video::create(VideoId::new("vid1").unwrap(), "One", fixed_timestamp())
+                ..playlist_episode("vid1", "One", 1)
             }]
         );
         assert_eq!(
@@ -922,11 +922,11 @@ mod tests {
             vec![
                 Video {
                     id: first_id.clone(),
-                    ..Video::create(VideoId::new("vid1").unwrap(), "One", fixed_timestamp())
+                    ..playlist_episode("vid1", "One", 1)
                 },
                 Video {
                     id: second_id.clone(),
-                    ..Video::create(VideoId::new("vid2").unwrap(), "Two", fixed_timestamp())
+                    ..playlist_episode("vid2", "Two", 2)
                 },
             ]
         );
@@ -1175,6 +1175,15 @@ mod tests {
             EpisodeNumber::from_columns(2026, 31501).unwrap(),
             fixed_timestamp(),
         )
+    }
+
+    /// A newly stored playlist video numbered `episode`.
+    fn playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
+        Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp())
+            .with_episode_number(
+                PlaylistEpisodeNumber::new(episode).unwrap().into(),
+                fixed_timestamp(),
+            )
     }
 
     fn playlist_item(video_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {

@@ -134,6 +134,7 @@ mod tests {
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::services::VideoRelocator;
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
+    use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::Video;
     use crate::domain::video::VideoId;
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
@@ -1118,7 +1119,7 @@ mod tests {
             videos,
             vec![Video {
                 id: video_id.clone(),
-                ..Video::create(VideoId::new("vid1").unwrap(), "One", fixed_timestamp())
+                ..playlist_episode("vid1", "One", 1)
             }]
         );
         assert_eq!(
@@ -1652,6 +1653,15 @@ mod tests {
 
     fn playlist_id(id: &str) -> PlaylistId {
         PlaylistId::new(id).unwrap()
+    }
+
+    /// A newly stored playlist video numbered `episode`.
+    fn playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
+        Video::create(VideoId::new(youtube_id).unwrap(), title, fixed_timestamp())
+            .with_episode_number(
+                PlaylistEpisodeNumber::new(episode).unwrap().into(),
+                fixed_timestamp(),
+            )
     }
 
     fn playlist(id: &str, path: &str) -> Playlist {

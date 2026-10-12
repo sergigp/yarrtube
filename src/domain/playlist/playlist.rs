@@ -51,10 +51,16 @@ impl Playlist {
     /// The number the next video stored in the playlist gets: one past the
     /// highest ever assigned, `1` for a playlist that has assigned none.
     pub fn next_episode_number(&self) -> Result<PlaylistEpisodeNumber, ValidationError> {
-        PlaylistEpisodeNumber::new(1)
+        match self.last_episode {
+            Some(last) => last.next(),
+            None => PlaylistEpisodeNumber::new(1),
+        }
     }
 
-    pub fn with_last_episode(self, _number: PlaylistEpisodeNumber) -> Self {
-        self
+    pub fn with_last_episode(self, number: PlaylistEpisodeNumber) -> Self {
+        Self {
+            last_episode: Some(number),
+            ..self
+        }
     }
 }

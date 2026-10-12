@@ -179,11 +179,13 @@ impl PlaylistVideoReconciler {
             })
             .collect();
         let mut delta = MembershipDelta::default();
-        for current in &current_videos {
+        let mut numbering = playlist.clone();
+        for current in Self::in_position_order(&current_videos) {
             match known_videos.get(&current.video_id) {
                 None => {
                     let youtube_id = VideoId::new(&current.video_id)?;
-                    let added = self.add_video(playlist, youtube_id, current, now)?;
+                    let (numbered, added) = self.add_video(numbering, youtube_id, current, now)?;
+                    numbering = numbered;
                     delta.added_ids.push(added.1.id.clone());
                     known_videos.insert(current.video_id.clone(), added);
                 }
@@ -263,22 +265,29 @@ impl PlaylistVideoReconciler {
 
     /// Stores a newly seen video as `PENDING` at its playlist position and
     /// announces it, which is what triggers its download and thumbnail.
+    /// Stores a video new to the playlist under the playlist's next episode
+    /// number, returning the playlist with that number recorded as its last.
     fn add_video(
         &self,
-        playlist: &Playlist,
+        playlist: Playlist,
         youtube_id: VideoId,
         current: &YoutubePlaylistItem,
         now: DateTime<Utc>,
-    ) -> anyhow::Result<(PlaylistVideo, Video)> {
-        let video = Video::create(youtube_id, current.title.clone(), now);
+    ) -> anyhow::Result<(Playlist, (PlaylistVideo, Video))> {
+        let number = playlist.next_episode_number()?;
+        let video = Video::create(youtube_id, current.title.clone(), now)
+            .with_episode_number(number.into(), now);
         self.video_repository.save(&video)?;
         let playlist_video =
             PlaylistVideo::create(playlist.id.clone(), video.id.clone(), current.position, now);
         self.playlist_video_repository.save(&playlist_video)?;
+        let playlist = playlist.with_last_episode(number);
+        self.playlist_repository.update(&playlist)?;
         info!(
             playlist_id = %playlist.id,
             video_id = %video.youtube_id,
             title = %current.title,
+            episode = number.episode(),
             "added video to playlist"
         );
         self.event_publisher
@@ -287,11 +296,9 @@ impl PlaylistVideoReconciler {
                 video_id: video.id.as_str().to_string(),
             }))?;
 
-        Ok((playlist_video, video))
+        Ok((playlist, (playlist_video, video)))
     }
 
-    /// Follows a known video's title and playlist position on YouTube.
-    /// Returns the video's previous title when it was renamed.
     fn refresh_known_video(
         &self,
         existing: &PlaylistVideo,
@@ -352,6 +359,14 @@ impl PlaylistVideoReconciler {
     }
 
     /// What the database says the playlist's folder should contain.
+    /// The listed items by playlist position, so new videos are numbered in
+    /// playlist order.
+    fn in_position_order(items: &[YoutubePlaylistItem]) -> Vec<&YoutubePlaylistItem> {
+        let mut ordered: Vec<&YoutubePlaylistItem> = items.iter().collect();
+        ordered.sort_by_key(|item| item.position);
+        ordered
+    }
+
     fn desired_state(&self, playlist: &Playlist) -> anyhow::Result<DesiredState> {
         let playlist_videos = self
             .playlist_video_repository
