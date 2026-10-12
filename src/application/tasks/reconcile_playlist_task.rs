@@ -401,6 +401,51 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_reuse_the_number_of_a_removed_video() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let playlist_after_removal = Playlist {
+            last_episode: Some(PlaylistEpisodeNumber::new(6).unwrap()),
+            ..playlist("PL1")
+        };
+        playlist_repository.insert(&playlist_after_removal).unwrap();
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository.clone(),
+            video_repository.clone(),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            vec![playlist_item("vid7", "Seven", 0)],
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        let videos = video_repository.list().unwrap();
+        let added_id = videos[0].id.clone();
+        assert_eq!(
+            videos,
+            vec![Video {
+                id: added_id,
+                ..playlist_episode("vid7", "Seven", 7)
+            }]
+        );
+        assert_eq!(
+            playlist_repository.find(&playlist_id()).unwrap(),
+            Some(Playlist {
+                last_episode: Some(PlaylistEpisodeNumber::new(7).unwrap()),
+                ..playlist_after_removal
+            })
+        );
+    }
+
+    #[test]
     fn it_should_remove_videos_gone_from_youtube() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
