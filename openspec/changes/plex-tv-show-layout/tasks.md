@@ -87,7 +87,7 @@
 - [x] 5.9 SqliteVideoRepository: `it_should_persist_and_read_a_playlist_episode_number`
 - [x] 5.10 SqliteVideoRepository: same-day siblings via `channel_videos` only — revise 3.13's playlist sibling case so a playlist link no longer counts
 - [x] 5.11 `it_should_number_new_playlist_videos_in_playlist_order` — playlist created: positions 0..2 with publish times in another order → episodes 1..3, `last_episode` 3
-- [ ] 5.12 `it_should_number_a_video_added_to_the_playlist_after_the_last_one` — reconcile playlist task: `last_episode` 5, new item at position 0 → 6
+- [x] 5.12 `it_should_number_a_video_added_to_the_playlist_after_the_last_one` — reconcile playlist task: `last_episode` 5, new item at position 0 → 6
 - [ ] 5.13 `it_should_not_reuse_the_number_of_a_removed_video` — the video holding 6 leaves, next new item → 7
 - [ ] 5.14 `it_should_keep_episode_numbers_when_the_playlist_is_reordered` — positions swap, numbers and filenames unchanged
 - [ ] 5.15 `it_should_save_a_playlist_video_under_its_playlist_episode_number` — download task: `Season 1/S01E007 - Title.*` despite a 2014 publish time
