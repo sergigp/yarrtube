@@ -229,7 +229,7 @@ fn run_startup_youtube_api_key_check() {
 
 /// Applies pending schema migrations once at startup, before any repository
 /// opens its own connection (see `build_infrastructure`).
-fn run_startup_migrations() -> Result<()> {
+pub(crate) fn run_startup_migrations() -> Result<()> {
     let mut conn =
         sqlite_connection::open(&db_path()).context("failed to open database for migrations")?;
     sqlite_migrations::apply(&mut conn)

@@ -6,6 +6,12 @@ use std::process::ExitCode;
 /// Runs the layout migration once, printing one line per move, skip and
 /// failure plus a summary. Exits non-zero when any video failed to move.
 pub fn run(dry_run: bool) -> ExitCode {
+    // The database may predate the episode number columns when the
+    // migration runs right after an upgrade, before `serve` ever started.
+    if let Err(e) = serve::run_startup_migrations() {
+        eprintln!("Error: failed to apply database migrations: {e}");
+        return ExitCode::FAILURE;
+    }
     let infrastructure = match serve::build_infrastructure() {
         Ok(infrastructure) => infrastructure,
         Err(e) => {
