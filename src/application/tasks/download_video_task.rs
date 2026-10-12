@@ -41,6 +41,7 @@ mod tests {
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::services::MetadataGenerator;
     use crate::domain::video::EpisodeNumber;
+    use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::Video;
     use crate::domain::video::VideoDownloaded;
     use crate::domain::video::VideoId;
@@ -340,6 +341,68 @@ mod tests {
                     output_dir
                         .path()
                         .join("Season 2026/S2026E031503 - My Video.jpg"),
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_save_a_playlist_video_under_its_playlist_episode_number() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let output_dir = tempfile::tempdir().unwrap();
+        let video = my_video().with_episode_number(
+            PlaylistEpisodeNumber::new(7).unwrap().into(),
+            fixed_timestamp(),
+        );
+        video_repository.save(&video).unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    published_at: Some(
+                        DateTime::parse_from_rfc3339("2014-06-01T10:00:00Z")
+                            .unwrap()
+                            .to_utc(),
+                    ),
+                    ..staged_download()
+                },
+            )),
+            video_file_repository.clone(),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "Season 1/S01E007 - My Video.mp4",
+                        Some("Season 1/S01E007 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+            ]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![
+                (
+                    PathBuf::from("/videos/.downloads/yt1/yt1.mp4"),
+                    output_dir.path().join("Season 1/S01E007 - My Video.mp4"),
+                ),
+                (
+                    PathBuf::from("/videos/.downloads/yt1/yt1.jpg"),
+                    output_dir.path().join("Season 1/S01E007 - My Video.jpg"),
                 ),
             ]
         );
