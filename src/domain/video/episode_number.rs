@@ -37,16 +37,19 @@ impl EpisodeNumber {
     pub fn code(&self) -> String {
         match self {
             Self::Channel(number) => format!("S{}E{:06}", number.season(), number.episode()),
-            Self::Playlist(_) => String::new(),
+            Self::Playlist(number) => {
+                format!(
+                    "S{:02}E{:03}",
+                    PlaylistEpisodeNumber::SEASON,
+                    number.episode()
+                )
+            }
         }
     }
 
     /// The season folder name, e.g. `Season 2026` or `Season 1`.
     pub fn season_folder(&self) -> String {
-        match self {
-            Self::Channel(number) => format!("Season {}", number.season()),
-            Self::Playlist(_) => String::new(),
-        }
+        format!("Season {}", self.season())
     }
 }
 
@@ -59,5 +62,20 @@ impl From<ChannelEpisodeNumber> for EpisodeNumber {
 impl From<PlaylistEpisodeNumber> for EpisodeNumber {
     fn from(number: PlaylistEpisodeNumber) -> Self {
         Self::Playlist(number)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_render_a_playlist_code_padded_to_three_digits() {
+        let number = EpisodeNumber::from(PlaylistEpisodeNumber::new(7).unwrap());
+
+        assert_eq!(
+            (number.code(), number.season_folder()),
+            ("S01E007".to_string(), "Season 1".to_string())
+        );
     }
 }
