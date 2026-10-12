@@ -171,7 +171,7 @@ impl LayoutMigrator {
     }
 
     /// The `legacy` videos among `video_ids`, each with its recorded publish
-    /// time, earliest first.
+    /// time, earliest first and unknown last.
     fn by_publish_time(
         &self,
         legacy: &[Video],
@@ -188,7 +188,7 @@ impl LayoutMigrator {
                 Ok((video.clone(), published_at))
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
-        videos.sort_by_key(|(_, published_at)| *published_at);
+        videos.sort_by_key(|(_, published_at)| (published_at.is_none(), *published_at));
         Ok(videos)
     }
 }
@@ -265,8 +265,14 @@ mod tests {
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
-        let alpha = legacy_video("yt1", "Alpha", "Alpha/Alpha.mp4", Some("Alpha/Alpha.jpg"));
-        let beta = legacy_video("yt2", "Beta", "Beta [yt2]/Beta [yt2].mp4", None);
+        let alpha = legacy_playlist_video(
+            "yt1",
+            "Alpha",
+            "Alpha/Alpha.mp4",
+            Some("Alpha/Alpha.jpg"),
+            1,
+        );
+        let beta = legacy_playlist_video("yt2", "Beta", "Beta [yt2]/Beta [yt2].mp4", None, 2);
         let gamma = legacy_video("yt3", "Gamma", "Gamma/Gamma.mp4", Some("Gamma/Gamma.jpg"));
         seed_playlist_video(&db, &alpha, 0);
         seed_playlist_video(&db, &beta, 1);
@@ -304,11 +310,11 @@ mod tests {
                 moved: vec![
                     moved(
                         "playlists/kids/Alpha/Alpha.mp4",
-                        "playlists/kids/Season 2026/S2026E031501 - Alpha.mp4"
+                        "playlists/kids/Season 1/S01E001 - Alpha.mp4"
                     ),
                     moved(
                         "playlists/kids/Beta [yt2]/Beta [yt2].mp4",
-                        "playlists/kids/Season 2026/S2026E031601 - Beta.mp4"
+                        "playlists/kids/Season 1/S01E002 - Beta.mp4"
                     ),
                     moved(
                         "channels/somechannel/Gamma/Gamma.mp4",
@@ -323,14 +329,14 @@ mod tests {
             video_repository.list().unwrap(),
             vec![
                 alpha.clone().relocate_to_episode(
-                    episode(2026, 31501),
-                    "Season 2026/S2026E031501 - Alpha.mp4",
-                    Some("Season 2026/S2026E031501 - Alpha.jpg".to_string()),
+                    playlist_episode(1),
+                    "Season 1/S01E001 - Alpha.mp4",
+                    Some("Season 1/S01E001 - Alpha.jpg".to_string()),
                     fixed_timestamp(),
                 ),
                 beta.clone().relocate_to_episode(
-                    episode(2026, 31601),
-                    "Season 2026/S2026E031601 - Beta.mp4",
+                    playlist_episode(2),
+                    "Season 1/S01E002 - Beta.mp4",
                     None,
                     fixed_timestamp(),
                 ),
@@ -347,15 +353,15 @@ mod tests {
             vec![
                 (
                     playlist_dir.join("Alpha/Alpha.mp4"),
-                    playlist_dir.join("Season 2026/S2026E031501 - Alpha.mp4")
+                    playlist_dir.join("Season 1/S01E001 - Alpha.mp4")
                 ),
                 (
                     playlist_dir.join("Alpha/Alpha.jpg"),
-                    playlist_dir.join("Season 2026/S2026E031501 - Alpha.jpg")
+                    playlist_dir.join("Season 1/S01E001 - Alpha.jpg")
                 ),
                 (
                     playlist_dir.join("Beta [yt2]/Beta [yt2].mp4"),
-                    playlist_dir.join("Season 2026/S2026E031601 - Beta.mp4")
+                    playlist_dir.join("Season 1/S01E002 - Beta.mp4")
                 ),
                 (
                     channel_dir.join("Gamma/Gamma.mp4"),
@@ -385,12 +391,11 @@ mod tests {
             [false, false, false]
         );
         assert_eq!(
-            std::fs::read_to_string(playlist_dir.join("Season 2026/S2026E031501 - Alpha.nfo"))
-                .unwrap(),
+            std::fs::read_to_string(playlist_dir.join("Season 1/S01E001 - Alpha.nfo")).unwrap(),
             render_episode_nfo(
                 &metadata_of(&alpha, published("2026-03-15T10:00:00Z"))
-                    .with_thumb(Some("S2026E031501 - Alpha.jpg".to_string())),
-                &episode(2026, 31501)
+                    .with_thumb(Some("S01E001 - Alpha.jpg".to_string())),
+                &playlist_episode(1)
             )
         );
         assert_eq!(
@@ -478,10 +483,8 @@ mod tests {
         SqlitePlaylistRepository::new(db.database())
             .insert(&my_playlist())
             .unwrap();
-        let first = legacy_video("yt1", "First", "First/First.mp4", None)
-            .with_episode_number(playlist_episode(1), fixed_timestamp());
-        let second = legacy_video("yt2", "Second", "Second/Second.mp4", None)
-            .with_episode_number(playlist_episode(2), fixed_timestamp());
+        let first = legacy_playlist_video("yt1", "First", "First/First.mp4", None, 1);
+        let second = legacy_playlist_video("yt2", "Second", "Second/Second.mp4", None, 2);
         seed_playlist_video(&db, &first, 0);
         seed_playlist_video(&db, &second, 1);
         seed_metadata(
@@ -551,8 +554,8 @@ mod tests {
         SqlitePlaylistRepository::new(db.database())
             .insert(&my_playlist())
             .unwrap();
-        let video = legacy_video("yt1", "Unpublished", "Unpublished/Unpublished.mp4", None)
-            .with_episode_number(playlist_episode(3), fixed_timestamp());
+        let video =
+            legacy_playlist_video("yt1", "Unpublished", "Unpublished/Unpublished.mp4", None, 3);
         seed_playlist_video(&db, &video, 2);
         let migrator = layout_migrator(
             &db,
@@ -599,6 +602,54 @@ mod tests {
     }
 
     #[test]
+    fn it_should_move_videos_without_a_publish_time_last() {
+        let db = TestDatabase::new();
+        let videos_root = tempfile::tempdir().unwrap();
+        let playlist_dir = videos_root.path().join("playlists/kids");
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&my_playlist())
+            .unwrap();
+        let unpublished =
+            legacy_playlist_video("yt1", "Unpublished", "Unpublished/Unpublished.mp4", None, 1);
+        let published_video =
+            legacy_playlist_video("yt2", "Published", "Published/Published.mp4", None, 2);
+        seed_playlist_video(&db, &unpublished, 0);
+        seed_playlist_video(&db, &published_video, 1);
+        seed_metadata(
+            &db,
+            &published_video,
+            published("2026-03-15T10:00:00Z"),
+            &playlist_dir.join("Published"),
+        );
+        let migrator = layout_migrator(
+            &db,
+            Arc::new(FakeVideoFileRepository::with_file_exists(true)),
+            Arc::new(FakeShowFileRepository::default()),
+            videos_root.path(),
+        );
+
+        let result = migrator.migrate(false);
+
+        assert_eq!(
+            result.unwrap(),
+            MigrationReport {
+                moved: vec![
+                    moved(
+                        "playlists/kids/Published/Published.mp4",
+                        "playlists/kids/Season 1/S01E002 - Published.mp4"
+                    ),
+                    moved(
+                        "playlists/kids/Unpublished/Unpublished.mp4",
+                        "playlists/kids/Season 1/S01E001 - Unpublished.mp4"
+                    ),
+                ],
+                skipped: vec![],
+                failed: vec![],
+            }
+        );
+    }
+
+    #[test]
     fn it_should_skip_videos_without_metadata_or_without_a_file() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -611,12 +662,15 @@ mod tests {
         SqlitePlaylistRepository::new(db.database())
             .insert(&my_playlist())
             .unwrap();
-        let present = legacy_video("yt1", "Present", "Present/Present.mp4", None);
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        let present = legacy_playlist_video("yt1", "Present", "Present/Present.mp4", None, 1);
         let unpublished = legacy_video("yt2", "Unpublished", "Unpublished/Unpublished.mp4", None);
-        let missing = legacy_video("yt3", "Missing", "Missing/Missing.mp4", None);
+        let missing = legacy_playlist_video("yt3", "Missing", "Missing/Missing.mp4", None, 2);
         seed_playlist_video(&db, &present, 0);
-        seed_playlist_video(&db, &unpublished, 1);
-        seed_playlist_video(&db, &missing, 2);
+        seed_channel_video(&db, &unpublished);
+        seed_playlist_video(&db, &missing, 1);
         seed_metadata(
             &db,
             &present,
@@ -643,16 +697,16 @@ mod tests {
             MigrationReport {
                 moved: vec![moved(
                     "playlists/kids/Present/Present.mp4",
-                    "playlists/kids/Season 2026/S2026E031501 - Present.mp4"
+                    "playlists/kids/Season 1/S01E001 - Present.mp4"
                 )],
                 skipped: vec![
                     (
-                        "playlists/kids/Unpublished/Unpublished.mp4".to_string(),
-                        SkipReason::NoPublishTimestamp
-                    ),
-                    (
                         "playlists/kids/Missing/Missing.mp4".to_string(),
                         SkipReason::FileMissing
+                    ),
+                    (
+                        "channels/somechannel/Unpublished/Unpublished.mp4".to_string(),
+                        SkipReason::NoPublishTimestamp
                     ),
                 ],
                 failed: vec![],
@@ -662,8 +716,8 @@ mod tests {
             video_repository.list().unwrap(),
             vec![
                 present.clone().relocate_to_episode(
-                    episode(2026, 31501),
-                    "Season 2026/S2026E031501 - Present.mp4",
+                    playlist_episode(1),
+                    "Season 1/S01E001 - Present.mp4",
                     None,
                     fixed_timestamp(),
                 ),
@@ -675,7 +729,7 @@ mod tests {
             *video_file_repository.moved.lock().unwrap(),
             vec![(
                 playlist_dir.join("Present/Present.mp4"),
-                playlist_dir.join("Season 2026/S2026E031501 - Present.mp4")
+                playlist_dir.join("Season 1/S01E001 - Present.mp4")
             )]
         );
     }
@@ -691,7 +745,7 @@ mod tests {
         SqlitePlaylistRepository::new(db.database())
             .insert(&my_playlist())
             .unwrap();
-        let alpha = legacy_video("yt1", "Alpha", "Alpha/Alpha.mp4", None);
+        let alpha = legacy_playlist_video("yt1", "Alpha", "Alpha/Alpha.mp4", None, 1);
         seed_playlist_video(&db, &alpha, 0);
         seed_metadata(
             &db,
@@ -713,8 +767,8 @@ mod tests {
         assert_eq!(
             video_repository.list().unwrap(),
             vec![alpha.relocate_to_episode(
-                episode(2026, 31501),
-                "Season 2026/S2026E031501 - Alpha.mp4",
+                playlist_episode(1),
+                "Season 1/S01E001 - Alpha.mp4",
                 None,
                 fixed_timestamp(),
             )]
@@ -723,7 +777,7 @@ mod tests {
             *video_file_repository.moved.lock().unwrap(),
             vec![(
                 playlist_dir.join("Alpha/Alpha.mp4"),
-                playlist_dir.join("Season 2026/S2026E031501 - Alpha.mp4")
+                playlist_dir.join("Season 1/S01E001 - Alpha.mp4")
             )]
         );
         assert_eq!(
@@ -743,37 +797,37 @@ mod tests {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let videos_root = tempfile::tempdir().unwrap();
-        let playlist_dir = videos_root.path().join("playlists/kids");
+        let channel_dir = videos_root.path().join("channels/somechannel");
         let video_file_repository = Arc::new(
             FakeVideoFileRepository::with_file_exists(true)
-                .with_failing_move(playlist_dir.join("Beta/Beta.mp4")),
+                .with_failing_move(channel_dir.join("Beta/Beta.mp4")),
         );
-        SqlitePlaylistRepository::new(db.database())
-            .insert(&my_playlist())
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
             .unwrap();
         let alpha = legacy_video("yt1", "Alpha", "Alpha/Alpha.mp4", None);
         let beta = legacy_video("yt2", "Beta", "Beta/Beta.mp4", None);
         let gamma = legacy_video("yt3", "Gamma", "Gamma/Gamma.mp4", None);
-        seed_playlist_video(&db, &alpha, 0);
-        seed_playlist_video(&db, &beta, 1);
-        seed_playlist_video(&db, &gamma, 2);
+        seed_channel_video(&db, &alpha);
+        seed_channel_video(&db, &beta);
+        seed_channel_video(&db, &gamma);
         seed_metadata(
             &db,
             &alpha,
             published("2026-03-15T10:00:00Z"),
-            &playlist_dir.join("Alpha"),
+            &channel_dir.join("Alpha"),
         );
         seed_metadata(
             &db,
             &beta,
             published("2026-03-16T10:00:00Z"),
-            &playlist_dir.join("Beta"),
+            &channel_dir.join("Beta"),
         );
         seed_metadata(
             &db,
             &gamma,
             published("2026-03-17T10:00:00Z"),
-            &playlist_dir.join("Gamma"),
+            &channel_dir.join("Gamma"),
         );
         let migrator = layout_migrator(
             &db,
@@ -789,20 +843,20 @@ mod tests {
             MigrationReport {
                 moved: vec![
                     moved(
-                        "playlists/kids/Alpha/Alpha.mp4",
-                        "playlists/kids/Season 2026/S2026E031501 - Alpha.mp4"
+                        "channels/somechannel/Alpha/Alpha.mp4",
+                        "channels/somechannel/Season 2026/S2026E031501 - Alpha.mp4"
                     ),
                     moved(
-                        "playlists/kids/Gamma/Gamma.mp4",
-                        "playlists/kids/Season 2026/S2026E031701 - Gamma.mp4"
+                        "channels/somechannel/Gamma/Gamma.mp4",
+                        "channels/somechannel/Season 2026/S2026E031701 - Gamma.mp4"
                     ),
                 ],
                 skipped: vec![],
                 failed: vec![(
-                    "playlists/kids/Beta/Beta.mp4".to_string(),
+                    "channels/somechannel/Beta/Beta.mp4".to_string(),
                     format!(
                         "permission denied moving {:?}",
-                        playlist_dir.join("Beta/Beta.mp4")
+                        channel_dir.join("Beta/Beta.mp4")
                     )
                 )],
             }
@@ -845,12 +899,20 @@ mod tests {
         SqliteChannelRepository::new(db.database())
             .insert(&my_channel())
             .unwrap();
-        let alpha = legacy_video("yt1", "Alpha", "Alpha/Alpha.mp4", Some("Alpha/Alpha.jpg"));
-        let beta = legacy_video("yt2", "Beta", "Beta [yt2]/Beta [yt2].mp4", None);
+        let alpha = legacy_playlist_video(
+            "yt1",
+            "Alpha",
+            "Alpha/Alpha.mp4",
+            Some("Alpha/Alpha.jpg"),
+            1,
+        );
+        let beta = legacy_playlist_video("yt2", "Beta", "Beta [yt2]/Beta [yt2].mp4", None, 2);
         let gamma = legacy_video("yt3", "Gamma", "Gamma/Gamma.mp4", None);
+        let delta = legacy_video("yt4", "Delta", "Delta/Delta.mp4", None);
         seed_playlist_video(&db, &alpha, 0);
         seed_playlist_video(&db, &beta, 1);
         seed_channel_video(&db, &gamma);
+        seed_channel_video(&db, &delta);
         seed_metadata(
             &db,
             &alpha,
@@ -860,7 +922,7 @@ mod tests {
         seed_metadata(
             &db,
             &beta,
-            published("2026-03-15T11:00:00Z"),
+            published("2014-06-01T10:00:00Z"),
             &playlist_dir.join("Beta [yt2]"),
         );
         seed_metadata(
@@ -868,6 +930,12 @@ mod tests {
             &gamma,
             published("2026-03-15T09:00:00Z"),
             &channel_dir.join("Gamma"),
+        );
+        seed_metadata(
+            &db,
+            &delta,
+            published("2026-03-15T08:00:00Z"),
+            &channel_dir.join("Delta"),
         );
         let migrator = layout_migrator(
             &db,
@@ -883,23 +951,30 @@ mod tests {
             MigrationReport {
                 moved: vec![
                     moved(
-                        "playlists/kids/Alpha/Alpha.mp4",
-                        "playlists/kids/Season 2026/S2026E031501 - Alpha.mp4"
+                        "playlists/kids/Beta [yt2]/Beta [yt2].mp4",
+                        "playlists/kids/Season 1/S01E002 - Beta.mp4"
                     ),
                     moved(
-                        "playlists/kids/Beta [yt2]/Beta [yt2].mp4",
-                        "playlists/kids/Season 2026/S2026E031502 - Beta.mp4"
+                        "playlists/kids/Alpha/Alpha.mp4",
+                        "playlists/kids/Season 1/S01E001 - Alpha.mp4"
+                    ),
+                    moved(
+                        "channels/somechannel/Delta/Delta.mp4",
+                        "channels/somechannel/Season 2026/S2026E031501 - Delta.mp4"
                     ),
                     moved(
                         "channels/somechannel/Gamma/Gamma.mp4",
-                        "channels/somechannel/Season 2026/S2026E031501 - Gamma.mp4"
+                        "channels/somechannel/Season 2026/S2026E031502 - Gamma.mp4"
                     ),
                 ],
                 skipped: vec![],
                 failed: vec![],
             }
         );
-        assert_eq!(video_repository.list().unwrap(), vec![alpha, beta, gamma]);
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![alpha, beta, gamma, delta]
+        );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(
             *video_file_repository.removed_if_empty.lock().unwrap(),
@@ -912,10 +987,12 @@ mod tests {
                 playlist_dir.join("Alpha/movie.nfo"),
                 playlist_dir.join("Beta [yt2]/movie.nfo"),
                 channel_dir.join("Gamma/movie.nfo"),
-                playlist_dir.join("Season 2026"),
+                channel_dir.join("Delta/movie.nfo"),
+                playlist_dir.join("Season 1"),
+                channel_dir.join("Season 2026"),
             ]
             .map(|path| path.exists()),
-            [true, true, true, false]
+            [true, true, true, true, false, false]
         );
     }
 
@@ -993,6 +1070,19 @@ mod tests {
                 None,
                 fixed_timestamp(),
             )
+    }
+
+    /// A playlist video downloaded in the per-video-folder layout, numbered
+    /// `episode` as the playlist reconcile (or migration `0008`) records it.
+    fn legacy_playlist_video(
+        youtube_id: &str,
+        title: &str,
+        filename: &str,
+        thumbnail_filename: Option<&str>,
+        episode: u32,
+    ) -> Video {
+        legacy_video(youtube_id, title, filename, thumbnail_filename)
+            .with_episode_number(playlist_episode(episode), fixed_timestamp())
     }
 
     fn seed_playlist_video(db: &TestDatabase, video: &Video, position: i64) {
