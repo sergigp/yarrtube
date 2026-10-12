@@ -27,7 +27,7 @@ use axum::Router;
 use axum::http::{StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -61,7 +61,7 @@ fn port() -> u16 {
         .unwrap_or(DEFAULT_PORT)
 }
 
-fn db_path() -> PathBuf {
+pub(crate) fn db_path() -> PathBuf {
     std::env::var("YARRTUBE_DB_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_DB_PATH))
@@ -227,17 +227,18 @@ fn run_startup_youtube_api_key_check() {
     }
 }
 
-/// Applies pending schema migrations once at startup, before any repository
-/// opens its own connection (see `build_infrastructure`).
-pub(crate) fn run_startup_migrations() -> Result<()> {
+/// Applies pending schema migrations to the database at `db_path` once at
+/// startup, before any repository opens its own connection (see
+/// `build_infrastructure`).
+pub(crate) fn run_startup_migrations(db_path: &Path) -> Result<()> {
     let mut conn =
-        sqlite_connection::open(&db_path()).context("failed to open database for migrations")?;
+        sqlite_connection::open(db_path).context("failed to open database for migrations")?;
     sqlite_migrations::apply(&mut conn)
 }
 
-pub(crate) fn build_infrastructure() -> Result<InfrastructureContainer> {
+pub(crate) fn build_infrastructure(db_path: PathBuf) -> Result<InfrastructureContainer> {
     InfrastructureContainer::new(InfrastructureSettings {
-        db_path: db_path(),
+        db_path,
         youtube_api_key: youtube_api_key(),
         videos_path: PathBuf::from(videos_path()),
         avatars_path: avatars_path(),
@@ -640,12 +641,12 @@ pub fn run() -> ExitCode {
     run_startup_storage_directories_check();
     run_startup_staging_directory_check();
 
-    if let Err(e) = run_startup_migrations() {
+    if let Err(e) = run_startup_migrations(&db_path()) {
         error!(error = %e, "failed to apply database migrations");
         return ExitCode::FAILURE;
     }
 
-    let infrastructure = match build_infrastructure() {
+    let infrastructure = match build_infrastructure(db_path()) {
         Ok(infrastructure) => infrastructure,
         Err(e) => {
             error!(error = %e, "failed to initialize infrastructure");

@@ -25,6 +25,29 @@ pub fn open(path: &Path) -> anyhow::Result<Connection> {
     Ok(conn)
 }
 
+/// Copies the database at `source`, with its write-ahead log when there is
+/// one, into a new file at `target` by plain file reads, so nothing is
+/// written next to `source` (SQLite would create `-wal`/`-shm` files even for
+/// a read-only connection): a dry run migrates and reads the copy instead.
+pub fn snapshot(source: &Path, target: &Path) -> anyhow::Result<()> {
+    std::fs::copy(source, target)
+        .with_context(|| format!("failed to copy database {source:?} to {target:?}"))?;
+    let source_wal = with_suffix(source, "-wal");
+    if source_wal.exists() {
+        std::fs::copy(&source_wal, with_suffix(target, "-wal"))
+            .with_context(|| format!("failed to copy database log {source_wal:?}"))?;
+    }
+    Ok(())
+}
+
+/// `path` with `suffix` appended to its file name, as SQLite names a
+/// database's companion files.
+fn with_suffix(path: &Path, suffix: &str) -> std::path::PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(suffix);
+    name.into()
+}
+
 /// The process's database access, injected into every repository. It holds two
 /// connections: a single `write` connection, through which every write
 /// serializes (one writer, so the process can never lock itself out), and a
@@ -140,6 +163,93 @@ mod tests {
     use crate::infrastructure::shared::system_clock::{Clock, FixedClock};
     use chrono::{DateTime, Utc};
     use std::sync::Arc;
+
+    #[test]
+    fn it_should_snapshot_a_database_without_writing_to_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("yarrtube.sqlite3");
+        let target = dir.path().join("snapshot.sqlite3");
+        let tasks = {
+            let mut conn = open(&source).unwrap();
+            crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+            let repository = SqliteTaskRepository::new(
+                Database::single(conn),
+                Arc::new(FixedClock(snapshot_timestamp())),
+            );
+            repository
+                .schedule(&Task::UpdateYtdlp, snapshot_timestamp())
+                .unwrap();
+            repository.list_non_completed().unwrap()
+        };
+        let source_bytes = std::fs::read(&source).unwrap();
+
+        let result = snapshot(&source, &target);
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            (
+                std::fs::read(&source).unwrap() == source_bytes,
+                dir_entries(dir.path()),
+            ),
+            (
+                true,
+                vec![
+                    "snapshot.sqlite3".to_string(),
+                    "yarrtube.sqlite3".to_string()
+                ]
+            )
+        );
+        assert_eq!(
+            SqliteTaskRepository::new(
+                Database::open(&target).unwrap(),
+                Arc::new(FixedClock(snapshot_timestamp())),
+            )
+            .list_non_completed()
+            .unwrap(),
+            tasks
+        );
+    }
+
+    #[test]
+    fn it_should_snapshot_changes_still_in_the_write_ahead_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("yarrtube.sqlite3");
+        let target = dir.path().join("snapshot.sqlite3");
+        let mut conn = open(&source).unwrap();
+        crate::infrastructure::shared::sqlite_migrations::apply(&mut conn).unwrap();
+        conn.pragma_update(None, "wal_autocheckpoint", 0).unwrap();
+        let repository = SqliteTaskRepository::new(
+            Database::single(conn),
+            Arc::new(FixedClock(snapshot_timestamp())),
+        );
+        repository
+            .schedule(&Task::UpdateYtdlp, snapshot_timestamp())
+            .unwrap();
+        let source_files = [
+            std::fs::read(&source).unwrap(),
+            std::fs::read(with_suffix(&source, "-wal")).unwrap(),
+        ];
+
+        let result = snapshot(&source, &target);
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            [
+                std::fs::read(&source).unwrap(),
+                std::fs::read(with_suffix(&source, "-wal")).unwrap(),
+            ],
+            source_files
+        );
+        assert_eq!(
+            SqliteTaskRepository::new(
+                Database::open(&target).unwrap(),
+                Arc::new(FixedClock(snapshot_timestamp())),
+            )
+            .list_non_completed()
+            .unwrap(),
+            repository.list_non_completed().unwrap()
+        );
+    }
 
     #[test]
     fn it_should_share_one_migrated_database_across_its_connections() {
@@ -264,5 +374,19 @@ mod tests {
 
     fn fixed_now() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn snapshot_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    /// The names of the files directly inside `dir`, sorted.
+    fn dir_entries(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
     }
 }
