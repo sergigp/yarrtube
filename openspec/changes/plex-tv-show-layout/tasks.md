@@ -92,7 +92,7 @@
 - [x] 5.14 `it_should_keep_episode_numbers_when_the_playlist_is_reordered` — positions swap, numbers and filenames unchanged
 - [x] 5.15 `it_should_save_a_playlist_video_under_its_playlist_episode_number` — download task: `Season 1/S01E007 - Title.*` despite a 2014 publish time
 - [x] 5.16 `it_should_move_legacy_playlist_videos_under_their_recorded_numbers` — migrate-layout: publish order reversed, moved by position number
-- [ ] 5.17 `it_should_move_a_playlist_video_without_metadata` — migrate-layout: numbered, no metadata → moved without NFO, not skipped
+- [x] 5.17 `it_should_move_a_playlist_video_without_metadata` — migrate-layout: numbered, no metadata → moved without NFO, not skipped
 
 ## 6. Docs and verification for playlist numbering
 

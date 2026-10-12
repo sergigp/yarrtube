@@ -29,7 +29,8 @@ pub enum Relocation {
 /// Why a video could not be relocated; reconcile heals it later.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkipReason {
-    /// No publish time is known (no metadata), so no number can be assigned.
+    /// No number is recorded and no publish time is known (no metadata), so
+    /// no number can be assigned.
     NoPublishTimestamp,
     /// The recorded media file is not on disk.
     FileMissing,
@@ -62,9 +63,9 @@ impl VideoRelocator {
 }
 
 pub trait VideoRelocatorApi: Send + Sync {
-    /// Assigns the number from `published_at` if absent, moves
-    /// media/thumbnail/nfo into the season folder, rewrites the NFO, records
-    /// the new filenames.
+    /// Uses the recorded number, else assigns one from `published_at`
+    /// (skipping when neither exists), moves media/thumbnail/nfo into the
+    /// season folder, rewrites the NFO, records the new filenames.
     fn relocate(
         &self,
         video: &Video,
@@ -72,9 +73,9 @@ pub trait VideoRelocatorApi: Send + Sync {
         output_dir: &Path,
     ) -> anyhow::Result<Relocation>;
 
-    /// Dry run: what `relocate` would do, numbered from the video's next
-    /// episode number and past the numbers already `planned` this run;
-    /// changes nothing.
+    /// Dry run: what `relocate` would do, under the recorded number, else
+    /// the video's next episode number past the numbers already `planned`
+    /// this run; changes nothing.
     fn plan(
         &self,
         video: &Video,
@@ -91,13 +92,16 @@ impl VideoRelocatorApi for VideoRelocator {
         published_at: Option<DateTime<Utc>>,
         output_dir: &Path,
     ) -> anyhow::Result<Relocation> {
-        let (from, published_at) = match self.placeable(video, published_at, output_dir) {
+        let (from, numbering) = match self.placeable(video, published_at, output_dir) {
             Ok(placeable) => placeable,
             Err(outcome) => return Ok(outcome),
         };
-        let number = self
-            .video_repository
-            .assign_episode_number(&video.id, published_at)?;
+        let number = match numbering {
+            Numbering::Recorded(number) => number,
+            Numbering::FromPublishTime(published_at) => self
+                .video_repository
+                .assign_episode_number(&video.id, published_at)?,
+        };
         let files = RelocatedFiles::new(video, &from, &number);
         self.move_files(video, &files, output_dir)?;
         self.rewrite_nfo(video, &files, &number, output_dir)?;
@@ -117,28 +121,32 @@ impl VideoRelocatorApi for VideoRelocator {
         output_dir: &Path,
         planned: &[EpisodeNumber],
     ) -> anyhow::Result<Relocation> {
-        let (from, published_at) = match self.placeable(video, published_at, output_dir) {
+        let (from, numbering) = match self.placeable(video, published_at, output_dir) {
             Ok(placeable) => placeable,
             Err(outcome) => return Ok(outcome),
         };
-        let next = self
-            .video_repository
-            .next_episode_number(&video.id, published_at)?;
-        let number = past_planned(next, planned)?;
+        let number = match numbering {
+            Numbering::Recorded(number) => number,
+            Numbering::FromPublishTime(published_at) => past_planned(
+                self.video_repository
+                    .next_episode_number(&video.id, published_at)?,
+                planned,
+            )?,
+        };
         let to = RelocatedFiles::new(video, &from, &number).filename;
         Ok(Relocation::Moved { from, to, number })
     }
 }
 
 impl VideoRelocator {
-    /// The legacy video's recorded file and publish time when it can be
-    /// relocated, else the outcome to report instead.
+    /// The legacy video's recorded file and how it gets its number when it
+    /// can be relocated, else the outcome to report instead.
     fn placeable(
         &self,
         video: &Video,
         published_at: Option<DateTime<Utc>>,
         output_dir: &Path,
-    ) -> Result<(String, DateTime<Utc>), Relocation> {
+    ) -> Result<(String, Numbering), Relocation> {
         let Some(from) = video
             .filename
             .clone()
@@ -146,13 +154,15 @@ impl VideoRelocator {
         else {
             return Err(Relocation::AlreadyInPlace);
         };
-        let Some(published_at) = published_at else {
-            return Err(Relocation::Skipped(SkipReason::NoPublishTimestamp));
+        let numbering = match (video.episode_number, published_at) {
+            (Some(number), _) => Numbering::Recorded(number),
+            (None, Some(published_at)) => Numbering::FromPublishTime(published_at),
+            (None, None) => return Err(Relocation::Skipped(SkipReason::NoPublishTimestamp)),
         };
         if !self.video_file_repository.file_exists(output_dir, &from) {
             return Err(Relocation::Skipped(SkipReason::FileMissing));
         }
-        Ok((from, published_at))
+        Ok((from, numbering))
     }
 
     fn move_files(
@@ -248,6 +258,14 @@ fn past_planned(next: EpisodeNumber, planned: &[EpisodeNumber]) -> anyhow::Resul
         }
         _ => Ok(next.into()),
     }
+}
+
+/// Where a relocated video's episode number comes from: the one already
+/// recorded (always, for a playlist video), else one assigned from its
+/// publish time.
+enum Numbering {
+    Recorded(EpisodeNumber),
+    FromPublishTime(DateTime<Utc>),
 }
 
 /// A legacy video's media and thumbnail paths in its season folder,

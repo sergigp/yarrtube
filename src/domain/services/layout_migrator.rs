@@ -542,6 +542,63 @@ mod tests {
     }
 
     #[test]
+    fn it_should_move_a_playlist_video_without_metadata() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_file_exists(true));
+        let videos_root = tempfile::tempdir().unwrap();
+        let playlist_dir = videos_root.path().join("playlists/kids");
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&my_playlist())
+            .unwrap();
+        let video = legacy_video("yt1", "Unpublished", "Unpublished/Unpublished.mp4", None)
+            .with_episode_number(playlist_episode(3), fixed_timestamp());
+        seed_playlist_video(&db, &video, 2);
+        let migrator = layout_migrator(
+            &db,
+            video_file_repository.clone(),
+            Arc::new(FakeShowFileRepository::default()),
+            videos_root.path(),
+        );
+
+        let result = migrator.migrate(false);
+
+        assert_eq!(
+            result.unwrap(),
+            MigrationReport {
+                moved: vec![moved(
+                    "playlists/kids/Unpublished/Unpublished.mp4",
+                    "playlists/kids/Season 1/S01E003 - Unpublished.mp4"
+                )],
+                skipped: vec![],
+                failed: vec![],
+            }
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.clone().relocate_to_episode(
+                playlist_episode(3),
+                "Season 1/S01E003 - Unpublished.mp4",
+                None,
+                fixed_timestamp(),
+            )]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![(
+                playlist_dir.join("Unpublished/Unpublished.mp4"),
+                playlist_dir.join("Season 1/S01E003 - Unpublished.mp4")
+            )]
+        );
+        assert_eq!(
+            SqliteVideoMetadataRepository::new(db.database())
+                .find(&video.id)
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
     fn it_should_skip_videos_without_metadata_or_without_a_file() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
