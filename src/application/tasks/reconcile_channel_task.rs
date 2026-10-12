@@ -1334,7 +1334,7 @@ mod tests {
 
     /// The episode `my_video()` gets from `youtube_metadata()`'s publish time.
     fn recovered_episode() -> EpisodeNumber {
-        EpisodeNumber::new(2023, 111401).unwrap()
+        EpisodeNumber::from_columns(2023, 111401).unwrap()
     }
 
     /// The metadata reconcile recovers for `my_video()` once relocated.

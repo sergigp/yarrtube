@@ -232,7 +232,7 @@ mod tests {
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::Quality;
-    use crate::domain::video::{EpisodeNumber, Video, VideoId};
+    use crate::domain::video::{ChannelEpisodeNumber, EpisodeNumber, Video, VideoId};
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
@@ -904,7 +904,7 @@ mod tests {
             .save(
                 &video.id,
                 &metadata_of(video, published_at),
-                &EpisodeNumber::first_of_day(published_at),
+                &ChannelEpisodeNumber::first_of_day(published_at).into(),
                 &video_dir.join("movie.nfo"),
             )
             .unwrap();
@@ -931,7 +931,7 @@ mod tests {
     }
 
     fn episode(season: i32, episode: u32) -> EpisodeNumber {
-        EpisodeNumber::new(season, episode).unwrap()
+        EpisodeNumber::from_columns(season, episode).unwrap()
     }
 
     fn published(timestamp: &str) -> DateTime<Utc> {

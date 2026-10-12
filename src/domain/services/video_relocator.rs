@@ -1,5 +1,7 @@
 use crate::domain::video::video_filename::episode_relative_path;
-use crate::domain::video::{EpisodeNumber, Video, nfo_path_for, top_level_entry};
+use crate::domain::video::{
+    ChannelEpisodeNumber, EpisodeNumber, Video, nfo_path_for, top_level_entry,
+};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::MOVIE_NFO_FILENAME;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
@@ -223,18 +225,28 @@ impl VideoRelocator {
 }
 
 /// `next`, or the index after the last one `planned` on the same day when
-/// that is later: what assigning would give once those were recorded.
+/// that is later: what assigning would give once those were recorded. A
+/// playlist number is recorded already, so it is never bumped.
 fn past_planned(next: EpisodeNumber, planned: &[EpisodeNumber]) -> anyhow::Result<EpisodeNumber> {
+    let EpisodeNumber::Channel(next) = next else {
+        return Ok(next);
+    };
     let last_planned = planned
         .iter()
+        .filter_map(|number| match number {
+            EpisodeNumber::Channel(number) => Some(number),
+            EpisodeNumber::Playlist(_) => None,
+        })
         .filter(|number| {
             number.season() == next.season() && number.same_day_prefix() == next.same_day_prefix()
         })
-        .map(EpisodeNumber::episode)
+        .map(ChannelEpisodeNumber::episode)
         .max();
     match last_planned {
-        Some(last) if last >= next.episode() => Ok(EpisodeNumber::new(next.season(), last + 1)?),
-        _ => Ok(next),
+        Some(last) if last >= next.episode() => {
+            Ok(ChannelEpisodeNumber::new(next.season(), last + 1)?.into())
+        }
+        _ => Ok(next.into()),
     }
 }
 

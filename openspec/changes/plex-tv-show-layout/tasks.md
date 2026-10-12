@@ -76,7 +76,7 @@
 
 ## 5. Playlist episode numbers in playlist order (TDD)
 
-- [ ] 5.1 Walking skeleton: split `EpisodeNumber` into `ChannelEpisodeNumber` + `PlaylistEpisodeNumber` behind `enum EpisodeNumber` (design.md decision 10 and Types & Signatures); `Playlist.last_episode` with `next_episode_number`/`with_last_episode`; edit `0008_episode_numbers.sql` in place (`playlists.last_episode`, playlist videos numbered by position); all existing tests compile and pass unchanged
+- [x] 5.1 Walking skeleton: split `EpisodeNumber` into `ChannelEpisodeNumber` + `PlaylistEpisodeNumber` behind `enum EpisodeNumber` (design.md decision 10 and Types & Signatures); `Playlist.last_episode` with `next_episode_number`/`with_last_episode`; edit `0008_episode_numbers.sql` in place (`playlists.last_episode`, playlist videos numbered by position); all existing tests compile and pass unchanged
 - [ ] 5.2 VO: `PlaylistEpisodeNumber` `it_should_reject_episode_zero`
 - [ ] 5.3 VO: `PlaylistEpisodeNumber` `it_should_give_the_next_number`
 - [ ] 5.4 VO: `EpisodeNumber` `it_should_render_a_playlist_code_padded_to_three_digits` — `S01E007`, `Season 1`

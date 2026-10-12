@@ -286,7 +286,7 @@ mod tests {
             .save(
                 &video.id,
                 &video_metadata(),
-                &EpisodeNumber::new(2024, 10101).unwrap(),
+                &EpisodeNumber::from_columns(2024, 10101).unwrap(),
                 &video_dir.path().join("S2024E010101 - My Video.nfo"),
             )
             .unwrap();
@@ -635,7 +635,7 @@ mod tests {
             .save(
                 &video.id,
                 &video_metadata(),
-                &EpisodeNumber::new(2024, 10101).unwrap(),
+                &EpisodeNumber::from_columns(2024, 10101).unwrap(),
                 &video_dir.path().join("S2024E010101 - My Video.nfo"),
             )
             .unwrap();

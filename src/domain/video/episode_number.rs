@@ -1,51 +1,63 @@
+use super::channel_episode_number::ChannelEpisodeNumber;
+use super::playlist_episode_number::PlaylistEpisodeNumber;
 use crate::domain::shared::ValidationError;
-use chrono::{DateTime, Datelike, Utc};
 
-/// A video's TV-show episode number within its show: the season is the
-/// publish year and the episode is the publish month and day followed by a
-/// two-digit same-day index (`MMDD * 100 + index`). Assigned once and never
-/// changed, so Plex watch state (keyed by show + season + episode) stays on
-/// the right video.
+/// A video's TV-show episode number within its show, by that show's rule: a
+/// channel's from the publish date, a playlist's from playlist order.
+/// Assigned once and never changed, so Plex watch state (keyed by show +
+/// season + episode) stays on the right video.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct EpisodeNumber {
-    season: i32,
-    episode: u32,
+pub enum EpisodeNumber {
+    Channel(ChannelEpisodeNumber),
+    Playlist(PlaylistEpisodeNumber),
 }
 
 impl EpisodeNumber {
-    pub fn new(season: i32, episode: u32) -> Result<Self, ValidationError> {
-        Ok(Self { season, episode })
-    }
-
-    /// The day's first episode (index `01`) for a video published at
-    /// `published_at`.
-    pub fn first_of_day(published_at: DateTime<Utc>) -> Self {
-        Self {
-            season: published_at.year(),
-            episode: (published_at.month() * 100 + published_at.day()) * 100 + 1,
-        }
+    /// Decodes the stored `season`/`episode` columns: season `1` is a
+    /// playlist number, any other season a channel's publish year.
+    pub fn from_columns(season: i32, episode: u32) -> Result<Self, ValidationError> {
+        Ok(Self::Channel(ChannelEpisodeNumber::new(season, episode)?))
     }
 
     pub fn season(&self) -> i32 {
-        self.season
+        match self {
+            Self::Channel(number) => number.season(),
+            Self::Playlist(_) => PlaylistEpisodeNumber::SEASON,
+        }
     }
 
     pub fn episode(&self) -> u32 {
-        self.episode
+        match self {
+            Self::Channel(number) => number.episode(),
+            Self::Playlist(number) => number.episode(),
+        }
     }
 
-    /// The publish month and day (`MMDD`) shared by every episode of a day.
-    pub fn same_day_prefix(&self) -> u32 {
-        self.episode / 100
-    }
-
-    /// The `S<season>E<MMDDii>` code, e.g. `S2026E031501`.
+    /// The `S<season>E<episode>` code, e.g. `S2026E031501` or `S01E007`.
     pub fn code(&self) -> String {
-        format!("S{}E{:06}", self.season, self.episode)
+        match self {
+            Self::Channel(number) => format!("S{}E{:06}", number.season(), number.episode()),
+            Self::Playlist(_) => String::new(),
+        }
     }
 
-    /// The season folder name, e.g. `Season 2026`.
+    /// The season folder name, e.g. `Season 2026` or `Season 1`.
     pub fn season_folder(&self) -> String {
-        format!("Season {}", self.season)
+        match self {
+            Self::Channel(number) => format!("Season {}", number.season()),
+            Self::Playlist(_) => String::new(),
+        }
+    }
+}
+
+impl From<ChannelEpisodeNumber> for EpisodeNumber {
+    fn from(number: ChannelEpisodeNumber) -> Self {
+        Self::Channel(number)
+    }
+}
+
+impl From<PlaylistEpisodeNumber> for EpisodeNumber {
+    fn from(number: PlaylistEpisodeNumber) -> Self {
+        Self::Playlist(number)
     }
 }

@@ -238,7 +238,7 @@ mod tests {
     const NFO: &str = "S2024E010201 - My Video.nfo";
 
     fn number() -> EpisodeNumber {
-        EpisodeNumber::new(2024, 10201).unwrap()
+        EpisodeNumber::from_columns(2024, 10201).unwrap()
     }
 
     fn repo() -> SqliteVideoMetadataRepository {

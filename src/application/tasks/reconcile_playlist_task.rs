@@ -705,7 +705,10 @@ mod tests {
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = my_video()
             .start_download(fixed_timestamp())
-            .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), fixed_timestamp());
+            .with_episode_number(
+                EpisodeNumber::from_columns(2026, 31501).unwrap(),
+                fixed_timestamp(),
+            );
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -745,7 +748,10 @@ mod tests {
         std::fs::create_dir_all(videos_root.path().join("my-playlist/Season 2026")).unwrap();
         playlist_repository.insert(&playlist("PL1")).unwrap();
         let video = downloaded_video("Season 2026/S2026E031501 - My Video.mp4", None)
-            .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), fixed_timestamp());
+            .with_episode_number(
+                EpisodeNumber::from_columns(2026, 31501).unwrap(),
+                fixed_timestamp(),
+            );
         save_playlist_video(
             video_repository.as_ref(),
             playlist_video_repository.as_ref(),
@@ -1165,7 +1171,10 @@ mod tests {
             "Season 2026/S2026E031501 - My Video.mp4",
             Some("Season 2026/S2026E031501 - My Video.jpg"),
         )
-        .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), fixed_timestamp())
+        .with_episode_number(
+            EpisodeNumber::from_columns(2026, 31501).unwrap(),
+            fixed_timestamp(),
+        )
     }
 
     fn playlist_item(video_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {

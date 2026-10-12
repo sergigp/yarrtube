@@ -94,7 +94,7 @@ mod tests {
             video_repository.list().unwrap(),
             vec![
                 video
-                    .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), later())
+                    .with_episode_number(EpisodeNumber::from_columns(2026, 31501).unwrap(), later())
                     .with_thumbnail("Season 2026/S2026E031501 - My Video.jpg", later())
             ]
         );

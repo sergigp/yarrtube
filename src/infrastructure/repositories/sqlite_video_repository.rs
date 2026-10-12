@@ -1,5 +1,7 @@
 use crate::domain::shared::Quality;
-use crate::domain::video::{EpisodeNumber, PlaybackPosition, Video, VideoStatus};
+use crate::domain::video::{
+    ChannelEpisodeNumber, EpisodeNumber, PlaybackPosition, Video, VideoStatus,
+};
 use crate::domain::video::{VideoId, VideoRecordId};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -355,7 +357,9 @@ impl SqliteVideoRepository {
             .context("failed to read the episode number")?;
         season
             .zip(episode)
-            .map(|(season, episode)| EpisodeNumber::new(season, episode).map_err(Into::into))
+            .map(|(season, episode)| {
+                EpisodeNumber::from_columns(season, episode).map_err(Into::into)
+            })
             .transpose()
     }
 
@@ -366,10 +370,10 @@ impl SqliteVideoRepository {
         id: &VideoRecordId,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<EpisodeNumber> {
-        let first = EpisodeNumber::first_of_day(published_at);
+        let first = ChannelEpisodeNumber::first_of_day(published_at);
         match Self::last_sibling_episode_of_day(conn, id, &first)? {
-            Some(last) => Ok(EpisodeNumber::new(first.season(), last + 1)?),
-            None => Ok(first),
+            Some(last) => Ok(ChannelEpisodeNumber::new(first.season(), last + 1)?.into()),
+            None => Ok(first.into()),
         }
     }
 
@@ -378,7 +382,7 @@ impl SqliteVideoRepository {
     fn last_sibling_episode_of_day(
         conn: &Connection,
         id: &VideoRecordId,
-        first: &EpisodeNumber,
+        first: &ChannelEpisodeNumber,
     ) -> anyhow::Result<Option<u32>> {
         conn.query_row(
             "SELECT MAX(episode) FROM videos
@@ -451,7 +455,7 @@ impl SqliteVideoRepository {
             episode_number: row
                 .season
                 .zip(row.episode)
-                .map(|(season, episode)| EpisodeNumber::new(season, episode))
+                .map(|(season, episode)| EpisodeNumber::from_columns(season, episode))
                 .transpose()?,
         })
     }
@@ -1000,7 +1004,7 @@ mod tests {
     }
 
     fn episode(episode: u32) -> EpisodeNumber {
-        EpisodeNumber::new(2026, episode).unwrap()
+        EpisodeNumber::from_columns(2026, episode).unwrap()
     }
 
     fn published_at() -> DateTime<Utc> {

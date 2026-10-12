@@ -1161,7 +1161,10 @@ mod tests {
         let videos_root = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(videos_root.path().join("my-playlist/Season 2026")).unwrap();
         let video = downloaded_video("Season 2026/S2026E031501 - My Video.mp4", None)
-            .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), fixed_timestamp());
+            .with_episode_number(
+                EpisodeNumber::from_columns(2026, 31501).unwrap(),
+                fixed_timestamp(),
+            );
         video_repository.save(&video).unwrap();
         video_repository.update(&video).unwrap();
         let reconciler = InternalVideoReconciler::new(
@@ -1243,7 +1246,10 @@ mod tests {
         let videos_root = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(videos_root.path().join("my-playlist/Season 2026")).unwrap();
         let video = downloaded_video("Season 2026/S2026E031501 - My Video.mp4", None)
-            .with_episode_number(EpisodeNumber::new(2026, 31501).unwrap(), fixed_timestamp());
+            .with_episode_number(
+                EpisodeNumber::from_columns(2026, 31501).unwrap(),
+                fixed_timestamp(),
+            );
         video_repository.save(&video).unwrap();
         video_repository.update(&video).unwrap();
         let reconciler = InternalVideoReconciler::new(
@@ -1349,7 +1355,7 @@ mod tests {
             .save(
                 &video.id,
                 &existing_metadata,
-                &EpisodeNumber::new(2024, 10101).unwrap(),
+                &EpisodeNumber::from_columns(2024, 10101).unwrap(),
                 &video_dir.join("movie.nfo"),
             )
             .unwrap();

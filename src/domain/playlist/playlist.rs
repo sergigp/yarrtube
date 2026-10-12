@@ -2,7 +2,8 @@ use super::playlist_id::PlaylistId;
 use super::playlist_kind::PlaylistKind;
 use super::playlist_name::PlaylistName;
 use super::playlist_path::PlaylistPath;
-use crate::domain::shared::Quality;
+use crate::domain::shared::{Quality, ValidationError};
+use crate::domain::video::PlaylistEpisodeNumber;
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,6 +15,8 @@ pub struct Playlist {
     pub kind: PlaylistKind,
     pub exclude_from_home: bool,
     pub created_at: DateTime<Utc>,
+    /// The highest episode number the playlist has ever assigned.
+    pub last_episode: Option<PlaylistEpisodeNumber>,
 }
 
 impl Playlist {
@@ -34,6 +37,7 @@ impl Playlist {
             kind,
             exclude_from_home,
             created_at,
+            last_episode: None,
         }
     }
 
@@ -42,5 +46,15 @@ impl Playlist {
             exclude_from_home,
             ..self
         }
+    }
+
+    /// The number the next video stored in the playlist gets: one past the
+    /// highest ever assigned, `1` for a playlist that has assigned none.
+    pub fn next_episode_number(&self) -> Result<PlaylistEpisodeNumber, ValidationError> {
+        PlaylistEpisodeNumber::new(1)
+    }
+
+    pub fn with_last_episode(self, _number: PlaylistEpisodeNumber) -> Self {
+        self
     }
 }

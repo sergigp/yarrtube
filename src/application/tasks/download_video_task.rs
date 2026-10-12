@@ -277,7 +277,7 @@ mod tests {
                         fixed_timestamp(),
                     )
                     .with_episode_number(
-                        EpisodeNumber::new(2026, 31502).unwrap(),
+                        EpisodeNumber::from_columns(2026, 31502).unwrap(),
                         fixed_timestamp()
                     )
             ]
@@ -290,7 +290,7 @@ mod tests {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let output_dir = tempfile::tempdir().unwrap();
-        let prefetched_number = EpisodeNumber::new(2026, 31503).unwrap();
+        let prefetched_number = EpisodeNumber::from_columns(2026, 31503).unwrap();
         let video = my_video()
             .with_thumbnail("Season 2026/S2026E031503 - My Video.jpg", fixed_timestamp())
             .with_episode_number(prefetched_number, fixed_timestamp());
@@ -385,7 +385,7 @@ mod tests {
                         fixed_timestamp(),
                     )
                     .with_episode_number(
-                        EpisodeNumber::new(2026, 31601).unwrap(),
+                        EpisodeNumber::from_columns(2026, 31601).unwrap(),
                         fixed_timestamp()
                     )
             ]
@@ -1392,7 +1392,7 @@ mod tests {
                         fixed_timestamp(),
                     )
                     .with_episode_number(
-                        EpisodeNumber::new(2023, 111401).unwrap(),
+                        EpisodeNumber::from_columns(2023, 111401).unwrap(),
                         fixed_timestamp()
                     )
             ]
@@ -1497,7 +1497,7 @@ mod tests {
 
     /// The first episode of `staged_download()`'s publish day.
     fn published_episode() -> EpisodeNumber {
-        EpisodeNumber::new(2026, 31501).unwrap()
+        EpisodeNumber::from_columns(2026, 31501).unwrap()
     }
 
     /// The metadata a download of `my_video()` generates from
