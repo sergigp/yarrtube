@@ -252,6 +252,77 @@ mod tests {
     }
 
     #[test]
+    fn it_should_number_existing_playlist_videos_by_position() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+            M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+            M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
+        ])
+        .to_latest(&mut conn)
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO playlists (id, name, path, quality, kind, created_at)
+             VALUES ('PL1', 'Full', 'full', 'high', 'youtube_linked', '2024-01-01T00:00:00+00:00');
+             INSERT INTO playlists (id, name, path, quality, kind, created_at)
+             VALUES ('PL2', 'Empty', 'empty', 'high', 'youtube_linked', '2024-01-01T00:00:00+00:00');
+             INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec1', 'yt1', 'Last', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00');
+             INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec2', 'yt2', 'Tied first', 'PENDING', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00');
+             INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec3', 'yt3', 'Tied second', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00');
+             INSERT INTO videos (id, youtube_id, title, status, created_at, updated_at)
+             VALUES ('rec4', 'yt4', 'Channel video', 'DOWNLOADED', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00');
+             INSERT INTO playlist_videos (playlist_id, video_id, position, created_at)
+             VALUES ('PL1', 'rec1', 1, '2024-01-01T00:00:00+00:00');
+             INSERT INTO playlist_videos (playlist_id, video_id, position, created_at)
+             VALUES ('PL1', 'rec2', 0, '2024-01-01T00:00:00+00:00');
+             INSERT INTO playlist_videos (playlist_id, video_id, position, created_at)
+             VALUES ('PL1', 'rec3', 0, '2024-01-01T00:00:00+00:00');
+             INSERT INTO channel_videos (channel_id, video_id, position, created_at)
+             VALUES ('UC1', 'rec4', 0, '2024-01-01T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let mut videos = conn
+            .prepare("SELECT id, season, episode FROM videos ORDER BY id")
+            .unwrap();
+        let episode_numbers: Vec<(String, Option<i64>, Option<i64>)> = videos
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            episode_numbers,
+            vec![
+                ("rec1".to_string(), Some(1), Some(3)),
+                ("rec2".to_string(), Some(1), Some(1)),
+                ("rec3".to_string(), Some(1), Some(2)),
+                ("rec4".to_string(), None, None),
+            ]
+        );
+        let mut playlists = conn
+            .prepare("SELECT id, last_episode FROM playlists ORDER BY id")
+            .unwrap();
+        let last_episodes: Vec<(String, Option<i64>)> = playlists
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            last_episodes,
+            vec![("PL1".to_string(), Some(3)), ("PL2".to_string(), None)]
+        );
+    }
+
+    #[test]
     fn it_should_default_existing_videos_to_unwatched_when_migrating() {
         let mut conn = Connection::open_in_memory().unwrap();
         Migrations::new(vec![M::up(BASELINE_SQL)])
