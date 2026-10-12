@@ -82,6 +82,14 @@ See proposal.md for why. Current state that shapes the approach:
    same show, season and day + 1)`. Its plan equals the real run's, a
    same-day batch included, without any write. Playlist videos carry their
    recorded number, so the dry run plans them as is.
+   The plan needs the current schema (on a database from before this change,
+   `0008` is what numbers the playlist videos), but migrating is a write. So
+   a dry run copies the database file, and its `-wal` when present, into a
+   temp dir by plain file reads (`sqlite_connection::snapshot`; even a
+   read-only SQLite connection would create `-wal`/`-shm` files next to the
+   database), migrates and plans against the copy, then deletes it. The
+   real database and its folder stay byte-identical. The real run migrates
+   the real database first, as `serve` does.
 9. **Playlist videos are numbered when first stored, from a per-playlist
    counter.** `Playlist` gains `last_episode` (highest number ever
    assigned). `PlaylistVideoReconciler::add_video` takes
@@ -201,8 +209,9 @@ None that change the specs or the task list.
 - `src/domain/task/task.rs` — `ReconcilePlexCollections` variant removed (and its payload/decoder); `web/src/lib/tasks.ts` label removed.
 - `src/application/subscribers/delete_plex_collection_on_{playlist,channel}_deleted.rs` — deleted; `subscribers/mod.rs` registry arg removed.
 - `src/application/subscribers/scan_plex_folder_on_video_downloaded.rs` — scans `output_dir`.
-- `src/application/cli/mod.rs`, `src/application/cli/migrate_layout.rs`, `src/main.rs` — subcommand.
-- `src/serve.rs` — Plex wiring reduced to URL/token/videos path; `.downloads` created at startup; show file writer, relocator wired.
+- `src/application/cli/mod.rs`, `src/application/cli/migrate_layout.rs`, `src/main.rs` — subcommand; a dry run plans against a database copy.
+- `src/infrastructure/shared/sqlite_connection.rs` — `snapshot` (copy of the database file and its WAL for a dry run).
+- `src/serve.rs` — Plex wiring reduced to URL/token/videos path; `.downloads` created at startup; show file writer, relocator wired; startup migrations and infrastructure take the database path.
 - `src/infrastructure/infrastructure_container.rs` — `show_file_repository`, `staging_root`.
 - `src/infrastructure/shared/ytdlp.rs` — staging output template, timestamp printing, `prepare_video_dir`/collision code removed.
 - `src/infrastructure/repositories/youtube_video_downloader_repository.rs` — new port signatures + fake.
@@ -398,12 +407,19 @@ pub trait ChannelAvatarRepository { /* existing */ fn path_of(&self, filename: &
 pub enum Commands { Serve, UpdateYtdlp, MigrateLayout { #[arg(long)] dry_run: bool } }
 // src/application/cli/migrate_layout.rs
 pub fn run(dry_run: bool) -> ExitCode;   // prints one line per move/skip/failure + summary; non-zero on any failure
+fn migrate(db_path: PathBuf, dry_run: bool) -> ExitCode;   // migrate schema at db_path -> build infrastructure -> LayoutMigrator::migrate
+
+// src/infrastructure/shared/sqlite_connection.rs
+pub fn snapshot(source: &Path, target: &Path) -> anyhow::Result<()>;   // fs::copy of the file and its "-wal" when present; never opens source
 
 // src/serve.rs
 struct PlexIntegration { repository: Arc<dyn PlexLibraryRepository>, plex_videos_path: String }
 fn plex_integration() -> Option<PlexIntegration>;   // URL + token + videos path, warn on partial
 fn show_file_writer(infra) -> Arc<ShowFileWriter>;
 fn video_relocator(infra) -> Arc<VideoRelocator>;
+pub(crate) fn db_path() -> PathBuf;
+pub(crate) fn run_startup_migrations(db_path: &Path) -> anyhow::Result<()>;
+pub(crate) fn build_infrastructure(db_path: PathBuf) -> anyhow::Result<InfrastructureContainer>;
 ```
 
 ```sql
@@ -460,7 +476,8 @@ Playlist path identical via `PlaylistVideoReconciler` and `write_playlist_show`,
 `ScanPlexFolderOnVideoDownloaded::handle(payload)` → `PlexFolderScanner::scan_folder(Path::new(payload.output_dir))` → `plex_folder_path(videos_root, plex_videos_root, folder)` → `PlexLibraryRepository::list_sections()` → for each section containing it `scan_path(section.id, plex_path)`.
 
 **Migrate layout**
-`main` → `cli::migrate_layout::run(dry_run)` → `build_infrastructure` → `LayoutMigrator::migrate(dry_run)`:
+`main` → `cli::migrate_layout::run(dry_run)` → real run: `migrate(db_path())`; dry run: `sqlite_connection::snapshot(db_path(), <temp dir>/yarrtube.sqlite3)` → `migrate(<copy>)` → temp dir removed.
+`migrate(db_path)` → `run_startup_migrations(db_path)` → `build_infrastructure(db_path)` → `LayoutMigrator::migrate(dry_run)`:
 for each source (`PlaylistRepository::list`, `ChannelRepository::list`): `ShowFileWriter::write_*_show` (skipped on dry run) → its downloaded videos (`list_downloaded` joined via link repositories) in legacy layout, with `VideoMetadataRepository::find` → sorted by `published_at` (unknown last) → real run: `VideoRelocator::relocate(video, published_at, output_dir)`; dry run: `VideoRelocator::plan(video, published_at, output_dir, planned)` with the numbers of this source's earlier `Moved` plans; no recorded number and `None` metadata (a channel video) → `Skipped(NoPublishTimestamp)`; missing file → `Skipped(FileMissing)`; error → `failed`.
 `relocate`: recorded number, else `assign_episode_number` → `move_file` media → `move_file` thumbnail → `VideoMetadataRepository::save` at the new NFO path (thumb renamed) when metadata is recorded, `remove_nfo(old movie.nfo)` → `remove_if_empty(old folder)` → `VideoRepository::update(video.relocate_to_episode(..))`.
 `plan`: recorded number, else `next_episode_number` → bumped past `planned` numbers of the same season and day → `Moved` with the would-be paths; no write.
@@ -518,6 +535,7 @@ Infrastructure tests:
 - `FilesystemShowFileRepository`: `it_should_write_the_show_nfo_and_copy_the_poster`, `it_should_overwrite_an_existing_poster`.
 - `SqliteVideoRepository`: `it_should_assign_the_first_index_of_the_day`, `it_should_assign_the_next_free_index_within_the_same_show_and_day` (siblings via `channel_videos` only), `it_should_persist_and_read_a_playlist_episode_number`, `it_should_number_copies_in_different_shows_independently`, `it_should_return_the_existing_number_when_already_assigned`, `it_should_persist_and_read_the_episode_number`, `it_should_list_downloaded_videos`, `it_should_peek_the_next_episode_number_without_recording_it`.
 - `SqliteVideoMetadataRepository`: `it_should_write_an_episode_nfo_with_season_episode_and_aired`, `it_should_write_the_nfo_at_the_given_path`, `it_should_remove_the_nfo_at_the_given_path`.
+- `sqlite_connection`: `it_should_snapshot_a_database_without_writing_to_it` (closed database: source bytes unchanged, no file created next to it, copy holds the data), `it_should_snapshot_changes_still_in_the_write_ahead_log` (pending WAL changes reach the copy, source files unchanged).
 - `sqlite_migrations`: `it_should_add_the_episode_number_columns`, `it_should_number_existing_playlist_videos_by_position` (ties by insertion, channel videos untouched, `last_episode` = count, `NULL` for an empty playlist).
 - `SqlitePlaylistRepository`: `it_should_persist_the_last_episode`.
 - Value objects: `PlaylistEpisodeNumber` (`it_should_reject_episode_zero`, `it_should_give_the_next_number`), `EpisodeNumber` (`it_should_render_a_playlist_code_padded_to_three_digits`, `it_should_widen_a_playlist_code_past_999`, `it_should_decode_season_one_as_a_playlist_number`).
