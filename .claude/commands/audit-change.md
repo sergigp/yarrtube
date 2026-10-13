@@ -68,23 +68,36 @@ Always announce: "Auditing change: <name>" and how to override.
    (`trigger, likelihood, impact, self_heals, consequence`) — they have the context;
    `confidence` is set later by step 5, not self-reported.
 
-   a. **Contract-adherence** — compare the actual code's types, method signatures,
+   **Model and effort per subagent** (pass them explicitly on every `Agent` call;
+   subagents otherwise inherit the parent model):
+
+   | pass | model | effort | why |
+   |---|---|---|---|
+   | a contract | sonnet | medium | mechanical comparison against design.md |
+   | b convention | sonnet | high | checklist against a long skill; attention, not insight |
+   | c correctness | opus | high | where bugs are found |
+   | d simplify | sonnet | medium | noisy suggestions are filtered by the gates |
+   | 5 verify | opus | high | the false-positive filter |
+   | 6 auto-test | opus | default | tests must follow the strict testing conventions |
+   | 6 auto-fix | sonnet | default | mechanical edits, gate 4 catches breakage |
+
+   a. **Contract-adherence** (sonnet, medium) — compare the actual code's types, method signatures,
    and call flow against `design.md`'s `## Types & Signatures` and `## Call Stack`.
    Flag: signatures that don't match, calls that don't happen, calls that happen
    but aren't in the call stack, types missing or renamed without the design being
    updated. `category: contract`.
 
-   b. **Convention-adherence** — invoke the `/rust-architect` skill's rules and check
+   b. **Convention-adherence** (sonnet, high) — invoke the `/rust-architect` skill's rules and check
    the changed files against them (layering, naming, fn ordering, port/repository
    conventions, functional style, deliberate-deviations list). `category:
    convention`.
 
-   c. **Correctness** — invoke the `/code-review` skill at high effort, targeting the
+   c. **Correctness** (opus, high) — invoke the `/code-review` skill at high effort, targeting the
    explicit range from step 2 (e.g. `<merge-base>...HEAD`, or the uncommitted
    working tree) — never let it default to "the current diff," which is empty once
    the change is committed or merged. `category: correctness`.
 
-   d. **Simplification / efficiency** — invoke the `/simplify` skill, targeting the
+   d. **Simplification / efficiency** (sonnet, medium) — invoke the `/simplify` skill, targeting the
    same explicit range from step 2, in review-only mode (do not let it apply fixes
    itself — step 6 owns the apply step and its gates). `category: simplification`.
 
@@ -167,8 +180,8 @@ Always announce: "Auditing change: <name>" and how to override.
 
 5. **Verify the decide lane independently.** The pass that found an issue is the
    worst judge of whether it's real. For every decide finding (after dropping `low`),
-   launch a fresh subagent in parallel, one per finding, with the finding, the patch
-   file path and the artifacts, and this brief: *adversarially check the trigger —
+   launch a fresh subagent (opus, high effort) in parallel, one per finding, with the
+   finding, the patch file path and the artifacts, and this brief: *adversarially check the trigger —
    trace the actual code path from `given` to `then`, or write (not commit) a failing
    test; report `confirmed` with the evidence, or `plausible` with what you could not
    establish, or `false-positive` with why.* Apply the result: `false-positive` is
@@ -179,7 +192,8 @@ Always announce: "Auditing change: <name>" and how to override.
    behaviour-preserving, test-protected diffs, which is why they don't wait for the
    user. Do not commit anything; the user reviews with `git diff`.
 
-   **Auto-test first** (it raises the coverage the auto-fix gates rely on). For each
+   **Auto-test first** (it raises the coverage the auto-fix gates rely on). Delegate
+   the test writing to an opus subagent with `/rust-architect` loaded. For each
    `test-gap` finding:
    - Mutants on logging, trivial getters or similar non-behaviour: drop.
    - Check the behaviour the mutant touches against `design.md`. Matches → write a test
@@ -187,8 +201,10 @@ Always announce: "Auditing change: <name>" and how to override.
    - Doesn't match → do **not** pin it: reclassify as `correctness`, fill the risk
      template, decide lane.
 
-   **Auto-fix next.** Each `convention` / `simplification` finding is applied only if
-   all four gates pass; the first failing gate is recorded and the finding is skipped:
+   **Auto-fix next.** Delegate the edits to a sonnet subagent with `/rust-architect`
+   loaded; the orchestrator runs the gates. Each `convention` / `simplification`
+   finding is applied only if all four gates pass; the first failing gate is recorded
+   and the finding is skipped:
    1. **Protected by tests**: no surviving mutant (from step 3e, before the auto-tests
       above) in the code being changed. Unprotected code is never refactored
       automatically.
