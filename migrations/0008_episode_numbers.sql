@@ -15,3 +15,6 @@ UPDATE videos SET season = 1, episode = (
 WHERE id IN (SELECT video_id FROM playlist_videos);
 UPDATE playlists SET last_episode = (
     SELECT NULLIF(COUNT(*), 0) FROM playlist_videos WHERE playlist_id = playlists.id);
+-- The Plex collections reconcile is gone (shows replace collections); drop
+-- its queued runs so they don't fail with no handler registered.
+DELETE FROM tasks WHERE task_type = 'reconcile_plex_collections';

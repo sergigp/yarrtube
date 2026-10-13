@@ -221,6 +221,39 @@ mod tests {
     }
 
     #[test]
+    fn it_should_drop_queued_plex_collection_reconciles_when_migrating() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+            M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+            M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
+        ])
+        .to_latest(&mut conn)
+        .unwrap();
+        conn.execute(
+            "INSERT INTO tasks (task_type, payload, status, run_at, created_at, updated_at)
+             VALUES ('reconcile_plex_collections', '{}', 'pending', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00'),
+                    ('reconcile_channel', '{}', 'pending', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00', '2024-01-01T00:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let mut stmt = conn.prepare("SELECT task_type FROM tasks").unwrap();
+        let task_types: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(task_types, vec!["reconcile_channel"]);
+    }
+
+    #[test]
     fn it_should_add_the_episode_number_columns() {
         let mut conn = Connection::open_in_memory().unwrap();
         Migrations::new(vec![
