@@ -83,17 +83,34 @@ impl ChannelAvatarRestorer {
             })
     }
 
-    /// Only a filename different from the recorded one is saved. A failed
+    /// Only a filename different from the recorded one is saved, onto the
+    /// channel as stored now rather than as read at the start of the pass, so
+    /// a settings change made during the download isn't overwritten. A failed
     /// save still returns the updated channel: its file is on disk, and the
     /// next pass downloads it again and retries the save.
     fn record_avatar(&self, channel: Channel, avatar_filename: String) -> Channel {
         if channel.avatar_filename.as_deref() == Some(avatar_filename.as_str()) {
             return channel;
         }
-        let channel = channel.with_avatar_filename(Some(avatar_filename));
+        let channel = self
+            .current_channel(channel)
+            .with_avatar_filename(Some(avatar_filename));
         if let Err(e) = self.channel_repository.update(&channel) {
             warn!(channel_id = %channel.id, error = %e, "failed to record restored channel avatar");
         }
         channel
+    }
+
+    /// The channel as stored now, falling back to `channel` when it can't be
+    /// read or no longer exists.
+    fn current_channel(&self, channel: Channel) -> Channel {
+        match self.channel_repository.find(&channel.id) {
+            Ok(Some(current)) => current,
+            Ok(None) => channel,
+            Err(e) => {
+                warn!(channel_id = %channel.id, error = %e, "failed to re-read channel before recording its avatar");
+                channel
+            }
+        }
     }
 }

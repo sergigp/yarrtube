@@ -65,7 +65,7 @@ mod tests {
         SqliteVideoRepository, VideoRepository,
     };
     use crate::infrastructure::repositories::youtube_channel_repository::{
-        FakeYoutubeChannelRepository, ResolvedChannel,
+        FakeYoutubeChannelRepository, ResolvedChannel, YoutubeChannelRepository,
     };
     use crate::infrastructure::repositories::youtube_channel_videos_repository::{
         ChannelVideoListing, FakeChannelVideosRepository,
@@ -931,6 +931,102 @@ mod tests {
         assert_eq!(
             channel_repository.list().unwrap(),
             vec![Channel {
+                avatar_filename: Some("@somechannel.jpg".to_string()),
+                ..channel("@somechannel")
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_keep_settings_changed_while_restoring_a_channel_avatar() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let show_file_repository = Arc::new(FakeShowFileRepository::default());
+        let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
+            channel_repository.clone(),
+            video_repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            task_repository.clone(),
+            Arc::new(InternalVideoReconciler::new(
+                video_repository.clone(),
+                Arc::new(MetadataGenerator::new(
+                    Arc::new(FakeYoutubeMetadataRepository::default()),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    Arc::new(FakeVideoDownloaderRepository::default()),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                    "/videos",
+                )),
+                Arc::new(VideoRelocator::new(
+                    video_repository.clone(),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
+            )),
+            Arc::new(ShowFileWriter::new(
+                show_file_repository.clone(),
+                avatar_repository.clone(),
+                "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository.clone(),
+                Arc::new(SettingsEditingYoutubeChannelRepository {
+                    channel_repository: channel_repository.clone(),
+                    edited: Channel {
+                        video_limit: VideoLimit::new(50).unwrap(),
+                        ..channel("@somechannel")
+                    },
+                    resolved: resolved_channel(Some("https://yt3.example/avatar.jpg")),
+                }),
+                avatar_repository.clone(),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            avatar_repository.avatars(),
+            vec![(
+                "@somechannel.jpg".to_string(),
+                "https://yt3.example/avatar.jpg".to_string()
+            )]
+        );
+        assert_eq!(
+            *show_file_repository.posters.lock().unwrap(),
+            vec![(
+                PathBuf::from("/videos/creators/somechannel"),
+                PathBuf::from("avatars/@somechannel.jpg")
+            )]
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![Channel {
+                video_limit: VideoLimit::new(50).unwrap(),
                 avatar_filename: Some("@somechannel.jpg".to_string()),
                 ..channel("@somechannel")
             }]
@@ -1826,6 +1922,21 @@ mod tests {
             None,
             fixed_timestamp(),
         )
+    }
+
+    /// Saves `edited` over the stored channel while resolving it, the way a
+    /// settings change landing mid-restore would, then resolves to `resolved`.
+    struct SettingsEditingYoutubeChannelRepository {
+        channel_repository: Arc<SqliteChannelRepository>,
+        edited: Channel,
+        resolved: ResolvedChannel,
+    }
+
+    impl YoutubeChannelRepository for SettingsEditingYoutubeChannelRepository {
+        fn resolve(&self, _handle: &ChannelHandle) -> anyhow::Result<Option<ResolvedChannel>> {
+            self.channel_repository.update(&self.edited)?;
+            Ok(Some(self.resolved.clone()))
+        }
     }
 
     fn resolved_channel(avatar_url: Option<&str>) -> ResolvedChannel {
