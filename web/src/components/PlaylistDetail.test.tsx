@@ -200,4 +200,27 @@ describe('PlaylistDetail', () => {
     expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'Edit settings' })).not.toBeInTheDocument()
   })
+
+  it('keeps the player when refreshing the playlist list fails after it loaded', async () => {
+    const playlist = aPlaylist({ id: 'PL1', name: 'The Playlist' })
+    let playlistLoads = 0
+    const { queryClient } = renderPlaylist(
+      {
+        'GET /api/playlists': () => {
+          playlistLoads += 1
+          return playlistLoads === 1 ? [playlist] : { status: 500, error: 'database is locked' }
+        },
+        'GET /api/playlists/PL1/videos': [aVideo({ title: 'First Video', filename: 'first.mp4' })],
+      },
+      '/playlists/PL1',
+    )
+    await screen.findByRole('heading', { name: 'First Video' })
+    const player = document.querySelector('video')
+
+    await queryClient.refetchQueries({ queryKey: ['playlists'], exact: true })
+
+    await waitFor(() => expect(playlistLoads).toBe(2))
+    expect(screen.queryByText(/Failed to load playlist/)).not.toBeInTheDocument()
+    expect(document.querySelector('video')).toBe(player)
+  })
 })

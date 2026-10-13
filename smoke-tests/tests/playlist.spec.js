@@ -98,6 +98,29 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   // Sync from the sidebar completes without an error dialog/alert.
   await syncItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
 
+  // Playing past the watched threshold marks the video watched without
+  // interrupting playback: once the list shows it watched, the player is
+  // still playing where it was, not rewound and paused.
+  await page.locator('h3:text-is("Playlists") ~ ul').getByRole('link', { name: PLAYLIST_NAME }).click()
+  await assertVideoPlays(page)
+  const player = page.locator('video')
+  const markedWatched = page.waitForResponse(
+    async (response) =>
+      response.url().endsWith('/progress') &&
+      response.request().method() === 'POST' &&
+      (await response.json()).watched === true,
+    { timeout: 30_000 },
+  )
+  const nearEnd = await player.evaluate(async (el) => {
+    el.currentTime = el.duration * 0.92
+    await el.play()
+    return el.currentTime
+  })
+  await markedWatched
+  await expect(page.locator('main ul li').getByLabel('Watched')).toBeVisible({ timeout: 10_000 })
+  expect(await player.evaluate((el) => el.paused)).toBe(false)
+  expect(await player.evaluate((el) => el.currentTime)).toBeGreaterThan(nearEnd)
+
   // Adding the same playlist again is caught in the dialog, before
   // submission: the notice names what it was added as and the submit button
   // stays disabled.

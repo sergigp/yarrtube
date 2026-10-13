@@ -32,7 +32,8 @@ export function PlaylistDetail() {
   useWatchProgress(videoElement, selectedVideo)
   const playbackSpeed = usePlaybackSpeed(videoElement, selectedVideo?.id ?? null)
 
-  if (playlistsError) {
+  // A failed background refresh keeps the loaded playlist, and its player, on screen.
+  if (playlistsError && !playlists) {
     return (
       <p className="text-sm text-destructive">Failed to load playlist: {playlistsError.message}</p>
     )

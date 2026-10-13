@@ -19,10 +19,14 @@ const REPORT_INTERVAL_MS = 15000
  * follow a video crossing the watched threshold without refetching on every
  * report.
  * Playback is tracked in sessions: one begins when a video attaches, and
- * every report states whether the video was watched then. When `video`'s
- * watched state changes under a session (e.g. it was marked watched), a new
- * session begins: the player pauses and rewinds, and the held position is
- * dropped, so a position from before the change is never reported.
+ * every report states whether the video was watched then. A report that
+ * changes the watched state (playback crossing the watched threshold, or a
+ * rewatch resetting it) carries the session on under the new state. When
+ * `video`'s watched state changes under a session otherwise (e.g. it was
+ * marked watched), a new session begins: the player pauses and rewinds, and
+ * the held position is dropped, so a position from before the change is
+ * never reported. A change seen while a report is pending waits for its
+ * answer, since the list may show the report's own change first.
  */
 export function useWatchProgress(videoElement: HTMLVideoElement | null, video: Video | null): void {
   const queryClient = useQueryClient()
@@ -50,6 +54,7 @@ export function useWatchProgress(videoElement: HTMLVideoElement | null, video: V
       // already have switched to another video's source.
       progress: null,
       lastReportedPosition: null,
+      pendingReport: null,
     }
     sessionRef.current = session
     let lastReportAt = Date.now()
@@ -76,14 +81,21 @@ export function useWatchProgress(videoElement: HTMLVideoElement | null, video: V
         beaconVideoProgress(videoId, progress)
         return
       }
-      recordVideoProgress(videoId, progress)
+      const pendingReport = recordVideoProgress(videoId, progress)
         .then(({ watched: nowWatched }) => {
           if (nowWatched !== session.lastWatched) {
+            session.watched = nowWatched
             session.lastWatched = nowWatched
             queryClient.invalidateQueries({ queryKey: queryKeys.channels, exact: true })
           }
         })
         .catch(() => {})
+        .finally(() => {
+          if (session.pendingReport === pendingReport) {
+            session.pendingReport = null
+          }
+        })
+      session.pendingReport = pendingReport
     }
 
     const resume = () => {
@@ -135,28 +147,41 @@ export function useWatchProgress(videoElement: HTMLVideoElement | null, video: V
     if (!videoElement || !session || session.watched === watched) {
       return
     }
-    // A new session: the held position predates the change, so it's dropped
-    // and playback rewinds to a start that is never reported on its own. The
-    // rewind comes before the pause, so the pause reports nothing.
-    session.watched = watched
-    session.lastWatched = watched
-    session.progress = null
-    session.lastReportedPosition = 0
-    seekTo(videoElement, 0)
-    videoElement.pause()
+    const restart = () => {
+      const nowWatched = Boolean(latestVideo.current?.watched)
+      if (sessionRef.current !== session || session.watched === nowWatched) {
+        return
+      }
+      // A new session: the held position predates the change, so it's dropped
+      // and playback rewinds to a start that is never reported on its own. The
+      // rewind comes before the pause, so the pause reports nothing.
+      session.watched = nowWatched
+      session.lastWatched = nowWatched
+      session.progress = null
+      session.lastReportedPosition = 0
+      seekTo(videoElement, 0)
+      videoElement.pause()
+    }
+    if (session.pendingReport) {
+      session.pendingReport.then(restart)
+    } else {
+      restart()
+    }
   }, [videoElement, watched])
 }
 
 /**
  * What a playback session tracks: whether the video was `watched` when it
- * began (sent with every report), the watched state last known from a
- * report, the position held for the next report and the last one reported.
+ * began or since its own reports changed that (sent with every report), the
+ * watched state last known from a report, the position held for the next
+ * report, the last one reported and the report still awaiting its answer.
  */
 interface PlaybackSession {
   watched: boolean
   lastWatched: boolean
   progress: VideoProgress | null
   lastReportedPosition: number | null
+  pendingReport: Promise<void> | null
 }
 
 function seekTo(element: HTMLVideoElement, seconds: number): void {

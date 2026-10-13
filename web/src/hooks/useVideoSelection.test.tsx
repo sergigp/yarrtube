@@ -81,4 +81,28 @@ describe('useVideoSelection', () => {
 
     expect(result.current.selectedVideo).toEqual({ ...videos[1]!, watched: true })
   })
+
+  it('keeps the default video selected when a newer video arrives at the top', () => {
+    const videos = [aVideo({ id: 'first' }), aVideo({ id: 'second' })]
+    const { result, rerender } = renderHook(
+      ({ list }: { list: Video[] }) => useVideoSelection(list),
+      { wrapper: routerAt('/'), initialProps: { list: videos } },
+    )
+
+    rerender({ list: [aVideo({ id: 'brand-new' }), ...videos] })
+
+    expect(result.current.selectedVideo?.id).toBe('first')
+  })
+
+  it('falls back to the first video once the default one leaves the list', () => {
+    const videos = [aVideo({ id: 'first' }), aVideo({ id: 'second' })]
+    const { result, rerender } = renderHook(
+      ({ list }: { list: Video[] }) => useVideoSelection(list),
+      { wrapper: routerAt('/'), initialProps: { list: videos } },
+    )
+
+    rerender({ list: [videos[1]!] })
+
+    expect(result.current.selectedVideo?.id).toBe('second')
+  })
 })

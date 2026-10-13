@@ -15,11 +15,14 @@ export interface VideoSelection {
  * Which of a detail view's `videos` is selected: an explicit pick from the
  * list wins, then the `?video=` deep link, then the first (latest) video.
  * The selection is kept as an ID and resolved against the current list, so
- * a poll refreshing `videos` never resets it.
+ * a poll refreshing `videos` never resets it. That includes the default: it
+ * stays on the video first shown, even once a sync lists a newer one above
+ * it, until that video leaves the list.
  */
 export function useVideoSelection(videos: Video[] | undefined): VideoSelection {
   const [searchParams] = useSearchParams()
   const [manualSelectionId, setManualSelectionId] = useState<string | null>(null)
+  const [defaultVideoId, setDefaultVideoId] = useState<string | null>(null)
 
   const manualSelection = manualSelectionId
     ? (videos?.find((video) => video.id === manualSelectionId) ?? null)
@@ -29,7 +32,13 @@ export function useVideoSelection(videos: Video[] | undefined): VideoSelection {
     !manualSelection && initialVideoId
       ? (videos?.find((video) => video.id === initialVideoId) ?? null)
       : null
-  const defaultVideo = !manualSelection && !deepLinkedVideo ? (videos?.[0] ?? null) : null
+  const defaultVideo =
+    !manualSelection && !deepLinkedVideo
+      ? (videos?.find((video) => video.id === defaultVideoId) ?? videos?.[0] ?? null)
+      : null
+  if (defaultVideo && defaultVideo.id !== defaultVideoId) {
+    setDefaultVideoId(defaultVideo.id)
+  }
   const selectedVideo = manualSelection ?? deepLinkedVideo ?? defaultVideo
   const autoplay = selectedVideo !== null && selectedVideo === deepLinkedVideo
 

@@ -8,14 +8,14 @@ import { aChannel, aVideo, mockApi, renderWithProviders, type Routes as ApiRoute
 
 function renderChannel(routes: ApiRoutes, route: string) {
   const fetchMock = mockApi(routes)
-  renderWithProviders(
+  const { queryClient } = renderWithProviders(
     <Routes>
       <Route path="/channels/:id" element={<ChannelDetail />} />
       <Route path="/" element={<p>home page</p>} />
     </Routes>,
     { route },
   )
-  return { fetchMock }
+  return { fetchMock, queryClient }
 }
 
 /** The JSON bodies the page sent with `method` to `path`, in order. */
@@ -339,5 +339,28 @@ describe('ChannelDetail', () => {
     )
     expect(sentBodies(fetchMock, 'PATCH', '/api/channels/chan')).toEqual([{ video_limit: 20 }])
     expect(dialog).not.toBeInTheDocument()
+  })
+
+  it('keeps the player when refreshing the channel list fails after it loaded', async () => {
+    const channel = aChannel({ id: 'chan', name: 'The Channel' })
+    let channelLoads = 0
+    const { queryClient } = renderChannel(
+      {
+        'GET /api/channels': () => {
+          channelLoads += 1
+          return channelLoads === 1 ? [channel] : { status: 500, error: 'database is locked' }
+        },
+        'GET /api/channels/chan/videos': [aVideo({ title: 'First Video', filename: 'first.mp4' })],
+      },
+      '/channels/chan',
+    )
+    await screen.findByRole('heading', { name: 'First Video' })
+    const player = document.querySelector('video')
+
+    await queryClient.refetchQueries({ queryKey: ['channels'], exact: true })
+
+    await waitFor(() => expect(channelLoads).toBe(2))
+    expect(screen.queryByText(/Failed to load channel/)).not.toBeInTheDocument()
+    expect(document.querySelector('video')).toBe(player)
   })
 })

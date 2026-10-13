@@ -34,7 +34,8 @@ export function ChannelDetail() {
   useWatchProgress(videoElement, selectedVideo)
   const playbackSpeed = usePlaybackSpeed(videoElement, selectedVideo?.id ?? null)
 
-  if (channelsError) {
+  // A failed background refresh keeps the loaded channel, and its player, on screen.
+  if (channelsError && !channels) {
     return (
       <p className="text-sm text-destructive">Failed to load channel: {channelsError.message}</p>
     )

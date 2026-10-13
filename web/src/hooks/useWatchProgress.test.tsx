@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useWatchProgress } from './useWatchProgress'
 import { aVideo, mockApi } from '@/test/helpers'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.useRealTimers()
 })
 
 /**
@@ -35,6 +36,29 @@ function fakeVideoElement({ currentTime = 0, duration = 300, paused = true } = {
     }
   }
   return element
+}
+
+/**
+ * Plays on for the 15s the hook waits between reports while playing, so the
+ * next 'timeupdate' sends one.
+ */
+function playUntilNextReport(element: HTMLVideoElement) {
+  vi.setSystemTime(Date.now() + 15000)
+  element.dispatchEvent(new Event('timeupdate'))
+}
+
+/** Lets every pending request and response handler settle. */
+function settle() {
+  return act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+}
+
+/** A response the test sends when it chooses to. */
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
 }
 
 function Wrapper({ children }: { children: ReactNode }) {
@@ -162,6 +186,122 @@ describe('useWatchProgress', () => {
       duration_seconds: 100,
       was_watched: true,
     })
+  })
+
+  it('keeps playing when its own report marks the video watched', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    mockApi({ 'POST /api/videos/abc/progress': { watched: true } })
+    const element = fakeVideoElement({ currentTime: 95, duration: 100, paused: false })
+    const video = aVideo({ id: 'abc', watched: false })
+    const { rerender } = renderHook(({ current }) => useWatchProgress(element, current), {
+      wrapper: Wrapper,
+      initialProps: { current: video },
+    })
+    playUntilNextReport(element)
+    await settle()
+
+    rerender({ current: { ...video, watched: true } })
+    await settle()
+
+    expect(element.paused).toBe(false)
+    expect(element.currentTime).toBe(95)
+  })
+
+  it('stays at the end when finishing the video marks it watched', async () => {
+    mockApi({ 'POST /api/videos/abc/progress': { watched: true } })
+    const element = fakeVideoElement({ currentTime: 100, duration: 100, paused: true })
+    const video = aVideo({ id: 'abc', watched: false })
+    const { rerender } = renderHook(({ current }) => useWatchProgress(element, current), {
+      wrapper: Wrapper,
+      initialProps: { current: video },
+    })
+    element.dispatchEvent(new Event('ended'))
+    await settle()
+
+    rerender({ current: { ...video, watched: true } })
+    await settle()
+
+    expect(element.currentTime).toBe(100)
+  })
+
+  it('keeps playing when the list shows its own report marking the video watched before the report answers', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const response = deferred<{ watched: boolean }>()
+    mockApi({ 'POST /api/videos/abc/progress': () => response.promise })
+    const element = fakeVideoElement({ currentTime: 95, duration: 100, paused: false })
+    const video = aVideo({ id: 'abc', watched: false })
+    const { rerender } = renderHook(({ current }) => useWatchProgress(element, current), {
+      wrapper: Wrapper,
+      initialProps: { current: video },
+    })
+    playUntilNextReport(element)
+
+    rerender({ current: { ...video, watched: true } })
+    response.resolve({ watched: true })
+    await settle()
+
+    expect(element.paused).toBe(false)
+    expect(element.currentTime).toBe(95)
+  })
+
+  it('keeps playing when its own report turns a rewatched video unwatched', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    mockApi({ 'POST /api/videos/abc/progress': { watched: false } })
+    const element = fakeVideoElement({ currentTime: 20, duration: 100, paused: false })
+    const video = aVideo({ id: 'abc', watched: true })
+    const { rerender } = renderHook(({ current }) => useWatchProgress(element, current), {
+      wrapper: Wrapper,
+      initialProps: { current: video },
+    })
+    playUntilNextReport(element)
+    await settle()
+
+    rerender({ current: { ...video, watched: false } })
+    await settle()
+
+    expect(element.paused).toBe(false)
+    expect(element.currentTime).toBe(20)
+  })
+
+  it('reports was_watched true once its own report marked the video watched', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const fetchMock = mockApi({ 'POST /api/videos/abc/progress': { watched: true } })
+    const element = fakeVideoElement({ currentTime: 95, duration: 100, paused: false })
+    const video = aVideo({ id: 'abc', watched: false })
+    renderHook(() => useWatchProgress(element, video), { wrapper: Wrapper })
+    playUntilNextReport(element)
+    await settle()
+
+    element.currentTime = 98
+    element.dispatchEvent(new Event('pause'))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    const [, init] = fetchMock.mock.calls[1] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({
+      position_seconds: 98,
+      duration_seconds: 100,
+      was_watched: true,
+    })
+  })
+
+  it('still rewinds once a pending report answers unwatched while the video was marked watched', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const response = deferred<{ watched: boolean }>()
+    mockApi({ 'POST /api/videos/abc/progress': () => response.promise })
+    const element = fakeVideoElement({ currentTime: 40, duration: 100, paused: false })
+    const video = aVideo({ id: 'abc', watched: false })
+    const { rerender } = renderHook(({ current }) => useWatchProgress(element, current), {
+      wrapper: Wrapper,
+      initialProps: { current: video },
+    })
+    playUntilNextReport(element)
+
+    rerender({ current: { ...video, watched: true } })
+    response.resolve({ watched: false })
+    await settle()
+
+    expect(element.paused).toBe(true)
+    expect(element.currentTime).toBe(0)
   })
 
   it('reports through a beacon when the page hides', () => {
