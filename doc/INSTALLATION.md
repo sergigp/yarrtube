@@ -86,16 +86,10 @@ Environment variables read by Yarrtube are listed below. Every variable except `
 
 ## Videos on disk
 
-Every tracked playlist and channel is stored as a TV show under its storage
-path: a `tvshow.nfo` (and, for a channel, a `poster.jpg` from its avatar)
-plus its season folders, each video saved there next to its `.jpg`
-thumbnail and `.nfo` metadata. A channel has one `Season <year>` folder per
-publish year, with videos named `S<year>E<MMDDii> - <title>.mp4` after their
-publish date; a playlist is a single `Season 1` folder, with videos named
-`S01E<nnn> - <title>.mp4` in playlist order. Plex, Kodi and Jellyfin read this layout natively as TV shows.
-Downloads are staged in a hidden `.downloads` folder under the videos root
-and moved into place once complete, so the videos root must be a single
-filesystem.
+Each playlist and channel is saved as a TV show (layout in
+[PLEX.md](PLEX.md#what-you-get)). Keep the videos root on a single
+filesystem: downloads are staged in a hidden `.downloads` folder there and
+moved into place when complete.
 
 ## Plex
 
@@ -105,13 +99,12 @@ folders. Optionally, set `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN` and
 show's folder as soon as one of its videos is downloaded. The library setup
 and the scan trigger are covered step by step in [PLEX.md](PLEX.md).
 
-## Upgrading from 0.8.x or older
-
-0.9.0 moved the library to a TV show layout and changed the Plex settings.
-Coming from an older version, follow [UPGRADING-TO-0.9.0.md](UPGRADING-TO-0.9.0.md)
-once.
-
 ## Updating
+
+> [!NOTE]
+> Updating from 0.8.x or older? 0.9.0 moved the library to a TV show layout
+> and changed the Plex settings. Follow
+> [UPGRADING-TO-0.9.0.md](UPGRADING-TO-0.9.0.md) once instead.
 
 With `docker run`:
 

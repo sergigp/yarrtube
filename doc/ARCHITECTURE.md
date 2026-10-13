@@ -119,32 +119,17 @@ Each tracked playlist or channel is a TV show under its storage path:
     └── S<year>E<MMDDii> - <title>.{mp4,jpg,nfo}  S01E<nnn> - <title>.* for a playlist
 ```
 
-- **Episode number** (`EpisodeNumber`, one of two value objects), assigned
-  once, stored on the video and never recomputed, so files never rename:
-  - `ChannelEpisodeNumber`: season = publish year, episode = publish month
-    and day plus a two-digit index among the channel's videos published
-    that day. Assigned in the database
-    (`VideoRepository::assign_episode_number`, by whichever of the
-    thumbnail fetch or the download needs it first).
-  - `PlaylistEpisodeNumber`: season 1, episode = the playlist's next
-    number (`Playlist::last_episode` + 1), assigned by
-    `PlaylistVideoReconciler` when it first stores the video, in playlist
-    position order. The counter guarantees a removed video's number is
-    never reused. Migration `0008` numbered the videos of playlists
-    tracked before this existed by their stored position.
-
-  A stored season of `1` decodes as a playlist number.
-- **Staging**: `yt-dlp` writes into `.downloads/<youtube id>`; the NFO is
-  written at its final path first, then media and thumbnail are renamed
-  into the season folder, so players never see a partial file.
-- **Reconcile** sweeps orphans by path: show files, season folders and
-  every file under a numbered video's base name are protected.
-- **Legacy layout**: a recorded filename not under `Season ` is a per-video
-  folder from older versions. It keeps being served; `VideoRelocator`
-  moves it into the TV layout, either from the `migrate-layout`
-  subcommand (`LayoutMigrator`, with a `--dry-run` that plans numbers
-  without writing them) or from reconcile once the video's metadata can be
-  fetched.
+- **Episode number** (`ChannelEpisodeNumber` / `PlaylistEpisodeNumber`) is
+  assigned once and stored on the video, so files never rename. Channels:
+  publish date plus a per-day index, assigned in the database
+  (`VideoRepository::assign_episode_number`). Playlists: the next number
+  from `Playlist::last_episode`, assigned by `PlaylistVideoReconciler`, so
+  a removed video's number is never reused.
+- **Staging**: `yt-dlp` writes into `.downloads/<youtube id>`, then files
+  are moved into the season folder, so players never see a partial file.
+- **Legacy layout** (per-video folders from 0.8.x) is still served;
+  `VideoRelocator` moves it into the TV layout via `migrate-layout` or
+  reconcile.
 
 ## Testing
 

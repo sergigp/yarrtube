@@ -1,5 +1,9 @@
 [
   {
+    "id": "2026-10-release-0.9.0",
+    "text": "🏴‍☠️ Yarrtube 0.9.0 has set sail! Shaped by your feedback and loaded with bug fixes. Thanks to everyone who reported, tested and contributed! [See what's new](https://github.com/sergigp/yarrtube/blob/main/CHANGELOG.md) · [Upgrade guide](https://github.com/sergigp/yarrtube/blob/main/doc/UPGRADING-TO-0.9.0.md)"
+  },
+  {
     "id": "2026-10-feedback-welcome",
     "text": "🏴‍☠️ Yarrtube is built in the open, and your feedback steers the ship! Spotted a bug or dreaming up a feature? [Open an issue on GitHub](https://github.com/sergigp/yarrtube/issues)"
   }
