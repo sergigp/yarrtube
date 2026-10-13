@@ -1,9 +1,9 @@
 use crate::domain::task::Task;
+use crate::domain::video::EpisodePaths;
 use crate::domain::video::Video;
 use crate::domain::video::VideoRecordId;
 use crate::domain::video::VideoStatus;
 use crate::domain::video::staging_dir;
-use crate::domain::video::video_filename::episode_relative_path;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -82,9 +82,8 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
             return;
         }
 
-        if !self.fetch_and_place(video, output_dir) {
-            self.discard_staging(video);
-        }
+        self.fetch_and_place(video, output_dir);
+        self.discard_staging(video);
     }
 
     fn schedule_missing(
@@ -106,21 +105,19 @@ impl ThumbnailFetcherApi for ThumbnailFetcher {
 }
 
 impl ThumbnailFetcher {
-    /// Whether a thumbnail was fetched and placed; every other outcome is
-    /// logged.
-    fn fetch_and_place(&self, video: &Video, output_dir: &Path) -> bool {
+    /// Fetches and places the thumbnail; every failure is logged.
+    fn fetch_and_place(&self, video: &Video, output_dir: &Path) {
         match self.fetch_thumbnail(video, output_dir) {
-            Ok(ThumbnailFetch::Fetched(fetched)) => self
-                .place_thumbnail(video, fetched, output_dir)
-                .inspect_err(|e| warn!(video_id = %video.id, error = %e, "failed to place fetched thumbnail"))
-                .is_ok(),
+            Ok(ThumbnailFetch::Fetched(fetched)) => {
+                if let Err(e) = self.place_thumbnail(video, fetched, output_dir) {
+                    warn!(video_id = %video.id, error = %e, "failed to place fetched thumbnail");
+                }
+            }
             Ok(ThumbnailFetch::Unavailable { reason }) => {
                 warn!(video_id = %video.id, reason = reason.as_deref(), "no thumbnail available for video");
-                false
             }
             Err(e) => {
                 warn!(video_id = %video.id, error = %e, "failed to fetch video thumbnail");
-                false
             }
         }
     }
@@ -128,7 +125,7 @@ impl ThumbnailFetcher {
     fn fetch_thumbnail(&self, video: &Video, _output_dir: &Path) -> anyhow::Result<ThumbnailFetch> {
         self.video_downloader_repository.fetch_thumbnail(
             &video.youtube_id.to_url(),
-            &staging_dir(&self.videos_path, &video.youtube_id),
+            &staging_dir(&self.videos_path, &video.id),
         )
     }
 
@@ -155,7 +152,7 @@ impl ThumbnailFetcher {
         let number = self
             .video_repository
             .assign_episode_number(&video.id, published_at)?;
-        let thumbnail_filename = episode_relative_path(&number, &video.title, "jpg");
+        let thumbnail_filename = EpisodePaths::new(&number, &video.title).thumbnail();
         self.video_file_repository
             .move_file(&fetched.path, &output_dir.join(&thumbnail_filename))?;
         self.video_repository
@@ -165,7 +162,7 @@ impl ThumbnailFetcher {
     /// Best-effort: a leftover staging dir is harmless, Plex and Kodi ignore
     /// the staging root.
     fn discard_staging(&self, video: &Video) {
-        let dir = staging_dir(&self.videos_path, &video.youtube_id);
+        let dir = staging_dir(&self.videos_path, &video.id);
         if let Err(e) = self.video_file_repository.delete_dir_recursive(&dir) {
             warn!(video_id = %video.id, error = %e, "failed to discard the staging dir");
         }

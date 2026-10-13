@@ -69,7 +69,6 @@ mod tests {
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use crate::infrastructure::shared::system_clock::SystemClock;
     use chrono::{DateTime, Utc};
     use rusqlite::Connection;
     use std::path::PathBuf;
@@ -306,7 +305,7 @@ mod tests {
                     Arc::new(SqliteVideoRepository::new(db.database())),
                     Arc::new(FakeVideoFileRepository::default()),
                     Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                    Arc::new(SystemClock),
+                    Arc::new(FixedClock(fixed_timestamp())),
                 )),
                 Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
@@ -394,7 +393,7 @@ mod tests {
                     Arc::new(SqliteVideoRepository::new(db.database())),
                     Arc::new(FakeVideoFileRepository::default()),
                     Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                    Arc::new(SystemClock),
+                    Arc::new(FixedClock(fixed_timestamp())),
                 )),
                 Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
@@ -450,7 +449,7 @@ mod tests {
                     Arc::new(SqliteVideoRepository::new(unused_connection())),
                     Arc::new(FakeVideoFileRepository::default()),
                     Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
-                    Arc::new(SystemClock),
+                    Arc::new(FixedClock(fixed_timestamp())),
                 )),
                 Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",

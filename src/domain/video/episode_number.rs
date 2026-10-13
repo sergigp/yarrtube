@@ -1,5 +1,6 @@
 use super::channel_episode_number::ChannelEpisodeNumber;
 use super::playlist_episode_number::PlaylistEpisodeNumber;
+use super::video_output_entry::SEASON_FOLDER_PREFIX;
 use crate::domain::shared::ValidationError;
 
 /// A video's TV-show episode number within its show, by that show's rule: a
@@ -52,7 +53,7 @@ impl EpisodeNumber {
 
     /// The season folder name, e.g. `Season 2026` or `Season 1`.
     pub fn season_folder(&self) -> String {
-        format!("Season {}", self.season())
+        format!("{SEASON_FOLDER_PREFIX}{}", self.season())
     }
 }
 

@@ -1,5 +1,6 @@
 pub mod channel_episode_number;
 pub mod episode_number;
+pub mod episode_paths;
 pub mod errors;
 pub mod events;
 pub mod home_limits;
@@ -20,6 +21,7 @@ pub mod video_view;
 
 pub use channel_episode_number::ChannelEpisodeNumber;
 pub use episode_number::EpisodeNumber;
+pub use episode_paths::EpisodePaths;
 pub use errors::{ListVideosError, UpdateWatchStateError};
 pub use events::VideoDownloaded;
 pub use home_limits::HomeLimits;

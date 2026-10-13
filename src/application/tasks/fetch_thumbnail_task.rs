@@ -45,8 +45,13 @@ impl TaskHandler for FetchThumbnailTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::channel::ChannelHandle;
+    use crate::domain::channel_video::ChannelVideo;
     use crate::domain::video::{EpisodeNumber, Video, VideoId};
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, SqliteChannelVideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::{
@@ -72,6 +77,14 @@ mod tests {
         );
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = FetchThumbnailTask::new(
             video_repository.clone(),
             Arc::new(ThumbnailFetcher::new(
@@ -94,6 +107,7 @@ mod tests {
             video_repository.list().unwrap(),
             vec![
                 video
+                    .clone()
                     .with_episode_number(EpisodeNumber::from_columns(2026, 31501).unwrap(), later())
                     .with_thumbnail("Season 2026/S2026E031501 - My Video.jpg", later())
             ]
@@ -101,13 +115,20 @@ mod tests {
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
             vec![(
-                PathBuf::from("/videos/.downloads/yt1/yt1.jpg"),
+                PathBuf::from(format!("/videos/.downloads/{}/yt1.jpg", video.id.as_str())),
                 PathBuf::from("/videos/my-playlist/Season 2026/S2026E031501 - My Video.jpg"),
             )]
         );
         assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![PathBuf::from(format!(
+                "/videos/.downloads/{}",
+                video.id.as_str()
+            ))]
+        );
+        assert_eq!(
             *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![thumbnail_call()]
+            vec![thumbnail_call(&video)]
         );
     }
 
@@ -278,16 +299,23 @@ mod tests {
         let result = run(&task, &payload_for(video.id.as_str()));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
-            vec![PathBuf::from("/videos/.downloads/yt1")]
+            vec![PathBuf::from(format!(
+                "/videos/.downloads/{}",
+                video.id.as_str()
+            ))]
         );
         assert_eq!(
             *video_downloader_repository.thumbnail_calls.lock().unwrap(),
-            vec![thumbnail_call()]
+            vec![thumbnail_call(&video)]
         );
+    }
+
+    fn my_channel_id() -> ChannelHandle {
+        ChannelHandle::new("@somechannel").unwrap()
     }
 
     fn my_video() -> Video {
@@ -295,11 +323,11 @@ mod tests {
     }
 
     /// One call as `FakeVideoDownloaderRepository` records it, for the `yt1`
-    /// video with no recorded folder.
-    fn thumbnail_call() -> (String, PathBuf) {
+    /// video, staged under its record id.
+    fn thumbnail_call(video: &Video) -> (String, PathBuf) {
         (
             "https://www.youtube.com/watch?v=yt1".to_string(),
-            PathBuf::from("/videos/.downloads/yt1"),
+            PathBuf::from(format!("/videos/.downloads/{}", video.id.as_str())),
         )
     }
 

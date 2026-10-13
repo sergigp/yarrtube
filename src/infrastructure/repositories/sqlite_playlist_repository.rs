@@ -12,7 +12,16 @@ use rusqlite::{OptionalExtension, Row, params};
 pub trait PlaylistRepository: Send + Sync {
     fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>>;
     fn insert(&self, playlist: &Playlist) -> anyhow::Result<()>;
+    /// Writes every field but `last_episode`: a full-row write from a stale
+    /// read (e.g. the home-visibility toggle racing a reconcile that numbers
+    /// new videos) must not move the counter back and reuse an episode.
     fn update(&self, playlist: &Playlist) -> anyhow::Result<()>;
+    /// Raises the playlist's episode counter to `number`; never lowers it.
+    fn record_last_episode(
+        &self,
+        id: &PlaylistId,
+        number: PlaylistEpisodeNumber,
+    ) -> anyhow::Result<()>;
     fn delete(&self, id: &PlaylistId) -> anyhow::Result<()>;
     fn list(&self) -> anyhow::Result<Vec<Playlist>>;
 }
@@ -65,7 +74,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
     fn update(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE playlists SET name = ?2, path = ?3, quality = ?4, kind = ?5, exclude_from_home = ?6, created_at = ?7, last_episode = ?8 WHERE id = ?1",
+            "UPDATE playlists SET name = ?2, path = ?3, quality = ?4, kind = ?5, exclude_from_home = ?6, created_at = ?7 WHERE id = ?1",
             params![
                 playlist.id.as_str(),
                 playlist.name.as_str(),
@@ -74,11 +83,27 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                 playlist.kind.as_str(),
                 playlist.exclude_from_home,
                 playlist.created_at.to_rfc3339(),
-                playlist.last_episode.map(|number| number.episode())
             ],
         )
         .inspect_err(|e| tracing::error!(playlist_id = %playlist.id, error = %e, "failed to update playlist"))
         .context("failed to update playlist")?;
+        Ok(())
+    }
+
+    fn record_last_episode(
+        &self,
+        id: &PlaylistId,
+        number: PlaylistEpisodeNumber,
+    ) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "UPDATE playlists SET last_episode = MAX(COALESCE(last_episode, 0), ?2) WHERE id = ?1",
+            params![id.as_str(), number.episode()],
+        )
+        .inspect_err(
+            |e| tracing::error!(playlist_id = %id, error = %e, "failed to record the last episode"),
+        )
+        .context("failed to record the last episode")?;
         Ok(())
     }
 
@@ -227,23 +252,60 @@ mod tests {
     }
 
     #[test]
-    fn it_should_persist_the_last_episode() {
+    fn it_should_raise_the_last_episode() {
         let repo = repo();
         let inserted = Playlist {
             last_episode: Some(PlaylistEpisodeNumber::new(3).unwrap()),
             ..playlist("PL1", "First")
         };
         repo.insert(&inserted).unwrap();
-        let updated = Playlist {
+
+        repo.record_last_episode(&inserted.id, PlaylistEpisodeNumber::new(5).unwrap())
+            .unwrap();
+
+        let raised = Playlist {
             last_episode: Some(PlaylistEpisodeNumber::new(5).unwrap()),
             ..inserted
         };
+        assert_eq!(
+            (repo.find(&raised.id).unwrap(), repo.list().unwrap()),
+            (Some(raised.clone()), vec![raised])
+        );
+    }
 
-        repo.update(&updated).unwrap();
+    #[test]
+    fn it_should_never_lower_the_last_episode() {
+        let repo = repo();
+        let inserted = Playlist {
+            last_episode: Some(PlaylistEpisodeNumber::new(5).unwrap()),
+            ..playlist("PL1", "First")
+        };
+        repo.insert(&inserted).unwrap();
+
+        repo.record_last_episode(&inserted.id, PlaylistEpisodeNumber::new(4).unwrap())
+            .unwrap();
+
+        assert_eq!(repo.find(&inserted.id).unwrap(), Some(inserted));
+    }
+
+    #[test]
+    fn it_should_keep_the_last_episode_when_updating_from_a_stale_read() {
+        let repo = repo();
+        let stale = playlist("PL1", "First");
+        repo.insert(&stale).unwrap();
+        repo.record_last_episode(&stale.id, PlaylistEpisodeNumber::new(6).unwrap())
+            .unwrap();
+
+        repo.update(&stale.clone().with_exclude_from_home(true))
+            .unwrap();
 
         assert_eq!(
-            (repo.find(&updated.id).unwrap(), repo.list().unwrap()),
-            (Some(updated.clone()), vec![updated])
+            repo.find(&stale.id).unwrap(),
+            Some(Playlist {
+                exclude_from_home: true,
+                last_episode: Some(PlaylistEpisodeNumber::new(6).unwrap()),
+                ..stale
+            })
         );
     }
 

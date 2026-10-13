@@ -6,10 +6,9 @@ use crate::domain::services::{
 use crate::domain::shared::Quality;
 use crate::domain::task::{ScheduledTask, Task};
 use crate::domain::video::VideoRecordId;
-use crate::domain::video::video_filename::episode_base_name;
 use crate::domain::video::{
-    SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, Video, VideoStatus, is_episode_path, is_season_folder,
-    nfo_path_for, owning_entry, resolve_output_dir,
+    EpisodePaths, SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, Video, VideoStatus, is_episode_path,
+    is_season_folder, nfo_path_for, owning_entry, resolve_output_dir,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -472,13 +471,8 @@ fn numbered_episode_paths(videos: &[Video]) -> HashSet<String> {
     videos
         .iter()
         .filter_map(|v| {
-            v.episode_number.map(|number| {
-                format!(
-                    "{}/{}",
-                    number.season_folder(),
-                    episode_base_name(&number, &v.title)
-                )
-            })
+            v.episode_number
+                .map(|number| EpisodePaths::new(&number, &v.title).stem())
         })
         .collect()
 }
@@ -500,7 +494,7 @@ mod tests {
     };
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
-    use crate::infrastructure::shared::system_clock::{FixedClock, SystemClock};
+    use crate::infrastructure::shared::system_clock::FixedClock;
     use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
     use chrono::Duration;
     use std::sync::Mutex;
@@ -1190,7 +1184,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                Arc::new(SystemClock),
+                Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             videos_root.path().to_string_lossy(),
@@ -1275,7 +1269,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                Arc::new(SystemClock),
+                Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             videos_root.path().to_string_lossy(),
@@ -1382,7 +1376,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                Arc::new(SystemClock),
+                Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             videos_root.path().to_string_lossy(),
@@ -1450,7 +1444,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                Arc::new(SystemClock),
+                Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             videos_root.path().to_string_lossy(),
@@ -1518,7 +1512,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                Arc::new(SystemClock),
+                Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
@@ -1583,7 +1577,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                Arc::new(SystemClock),
+                Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
@@ -1645,7 +1639,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                Arc::new(SystemClock),
+                Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
@@ -1751,7 +1745,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                Arc::new(SystemClock),
+                Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
@@ -1804,7 +1798,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                Arc::new(SystemClock),
+                Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
@@ -1895,7 +1889,7 @@ mod tests {
                 Arc::new(SqliteVideoRepository::new(db.database())),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                Arc::new(SystemClock),
+                Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",

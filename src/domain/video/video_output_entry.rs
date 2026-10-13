@@ -1,4 +1,4 @@
-use crate::domain::video::VideoId;
+use crate::domain::video::VideoRecordId;
 use std::path::{Path, PathBuf};
 
 /// Where downloads are staged under the videos root; dot-prefixed so Plex
@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 pub const STAGING_DIRNAME: &str = ".downloads";
 
 /// What every season folder's name starts with, e.g. `Season 2026`.
-const SEASON_FOLDER_PREFIX: &str = "Season ";
+pub(crate) const SEASON_FOLDER_PREFIX: &str = "Season ";
 
 /// A show's NFO, at the root of its playlist's or channel's directory.
 pub const SHOW_NFO_FILENAME: &str = "tvshow.nfo";
@@ -69,11 +69,13 @@ pub fn nfo_path_for(relative_path: &str) -> String {
 }
 
 /// Where a video's download or thumbnail fetch is staged before being moved
-/// into its show: `<videos root>/.downloads/<youtube id>`.
-pub fn staging_dir(videos_path: &str, youtube_id: &VideoId) -> PathBuf {
+/// into its show: `<videos root>/.downloads/<video record id>`. Keyed by the
+/// record, not the YouTube id: the same YouTube video tracked by two shows is
+/// two records that may download at once, and each discards its own dir.
+pub fn staging_dir(videos_path: &str, video_id: &VideoRecordId) -> PathBuf {
     Path::new(videos_path)
         .join(STAGING_DIRNAME)
-        .join(youtube_id.as_str())
+        .join(video_id.as_str())
 }
 
 #[cfg(test)]

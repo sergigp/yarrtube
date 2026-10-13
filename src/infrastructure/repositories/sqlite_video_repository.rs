@@ -65,8 +65,10 @@ pub trait VideoRepository: Send + Sync {
     /// Every stored copy of a YouTube video, across all playlists/channels.
     fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>>;
     /// The video's episode number: the one already recorded, if any, else the
-    /// next free same-day index among the videos of the same playlist or
-    /// channel published on `published_at`'s day, recorded in one write.
+    /// next free same-day index among the videos of the same channel
+    /// published on `published_at`'s day, recorded in one write. Fails for an
+    /// unnumbered video in no channel: a playlist video is numbered when it is
+    /// added to its playlist, never by publish date.
     fn assign_episode_number(
         &self,
         id: &VideoRecordId,
@@ -370,11 +372,28 @@ impl SqliteVideoRepository {
         id: &VideoRecordId,
         published_at: DateTime<Utc>,
     ) -> anyhow::Result<EpisodeNumber> {
+        if !Self::is_channel_video(conn, id)? {
+            anyhow::bail!(
+                "video {id} has no episode number and is in no channel: only a channel video is numbered by publish date"
+            );
+        }
         let first = ChannelEpisodeNumber::first_of_day(published_at);
         match Self::last_sibling_episode_of_day(conn, id, &first)? {
             Some(last) => Ok(ChannelEpisodeNumber::new(first.season(), last + 1)?.into()),
             None => Ok(first.into()),
         }
+    }
+
+    fn is_channel_video(conn: &Connection, id: &VideoRecordId) -> anyhow::Result<bool> {
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM channel_videos WHERE video_id = ?1)",
+            params![id.as_str()],
+            |row| row.get(0),
+        )
+        .inspect_err(|e| {
+            tracing::error!(video_id = %id, error = %e, "failed to read the video's channel membership")
+        })
+        .context("failed to read the video's channel membership")
     }
 
     /// The highest episode recorded on `first`'s day among the videos sharing
@@ -826,7 +845,7 @@ mod tests {
         let repo = SqliteVideoRepository::new(db.database());
         let video = video("First", fixed_timestamp());
         repo.save(&video).unwrap();
-        link_to_playlist(&db, &video, "PL1");
+        link_to_channel(&db, &video, "@somechannel");
 
         let number = repo.assign_episode_number(&video.id, published_at());
 
@@ -841,48 +860,58 @@ mod tests {
     }
 
     #[test]
-    fn it_should_assign_the_next_free_index_within_the_same_show_and_day() {
+    fn it_should_assign_the_next_free_index_within_the_same_channel_and_day() {
         let db = TestDatabase::new();
         let repo = SqliteVideoRepository::new(db.database());
-        let channel_sibling = video("Channel sibling", fixed_timestamp());
-        let channel_video = video("Channel video", fixed_timestamp());
-        let playlist_sibling = video("Playlist sibling", fixed_timestamp());
-        let playlist_video = video("Playlist video", fixed_timestamp());
-        [
-            &channel_sibling,
-            &channel_video,
-            &playlist_sibling,
-            &playlist_video,
-        ]
-        .into_iter()
-        .for_each(|video| repo.save(video).unwrap());
-        let _ = numbered(&repo, channel_sibling.clone(), episode(31503));
-        let _ = numbered(&repo, playlist_sibling.clone(), episode(31501));
-        link_to_channel(&db, &channel_sibling, "@somechannel");
-        link_to_channel(&db, &channel_video, "@somechannel");
-        link_to_playlist(&db, &playlist_sibling, "PL1");
-        link_to_playlist(&db, &playlist_video, "PL1");
+        let sibling = video("Sibling", fixed_timestamp());
+        let other_channel_video = video("Other channel video", fixed_timestamp());
+        let video = video("Video", fixed_timestamp());
+        [&sibling, &other_channel_video, &video]
+            .into_iter()
+            .for_each(|video| repo.save(video).unwrap());
+        let _ = numbered(&repo, sibling.clone(), episode(31503));
+        let _ = numbered(&repo, other_channel_video.clone(), episode(31507));
+        link_to_channel(&db, &sibling, "@somechannel");
+        link_to_channel(&db, &other_channel_video, "@otherchannel");
+        link_to_channel(&db, &video, "@somechannel");
 
-        let numbers = [&channel_video, &playlist_video].map(|video| {
-            repo.assign_episode_number(&video.id, published_at())
-                .unwrap()
-        });
+        let number = repo.assign_episode_number(&video.id, published_at());
 
-        assert_eq!(numbers, [episode(31504), episode(31501)]);
+        assert_eq!(number.unwrap(), episode(31504));
+    }
+
+    #[test]
+    fn it_should_fail_to_number_an_unnumbered_playlist_video_by_publish_date() {
+        let db = TestDatabase::new();
+        let repo = SqliteVideoRepository::new(db.database());
+        let video = video("Playlist video", fixed_timestamp());
+        repo.save(&video).unwrap();
+        link_to_playlist(&db, &video, "PL1");
+
+        let number = repo.assign_episode_number(&video.id, published_at());
+
+        assert_eq!(
+            number.map_err(|e| e.to_string()),
+            Err(format!(
+                "video {} has no episode number and is in no channel: only a channel video is numbered by publish date",
+                video.id
+            ))
+        );
+        assert_eq!(repo.find(&video.id).unwrap(), Some(video));
     }
 
     #[test]
     fn it_should_number_copies_in_different_shows_independently() {
         let db = TestDatabase::new();
         let repo = SqliteVideoRepository::new(db.database());
-        let playlist_copy = video("Copy", fixed_timestamp());
-        let channel_copy = video("Copy", fixed_timestamp());
-        repo.save(&playlist_copy).unwrap();
-        repo.save(&channel_copy).unwrap();
-        link_to_playlist(&db, &playlist_copy, "PL1");
-        link_to_channel(&db, &channel_copy, "@somechannel");
+        let first_copy = video("Copy", fixed_timestamp());
+        let second_copy = video("Copy", fixed_timestamp());
+        repo.save(&first_copy).unwrap();
+        repo.save(&second_copy).unwrap();
+        link_to_channel(&db, &first_copy, "@somechannel");
+        link_to_channel(&db, &second_copy, "@otherchannel");
 
-        let numbers = [&playlist_copy, &channel_copy].map(|video| {
+        let numbers = [&first_copy, &second_copy].map(|video| {
             repo.assign_episode_number(&video.id, published_at())
                 .unwrap()
         });

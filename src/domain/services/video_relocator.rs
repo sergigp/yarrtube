@@ -1,6 +1,5 @@
-use crate::domain::video::video_filename::episode_relative_path;
 use crate::domain::video::{
-    ChannelEpisodeNumber, EpisodeNumber, Video, nfo_path_for, top_level_entry,
+    ChannelEpisodeNumber, EpisodeNumber, EpisodePaths, Video, top_level_entry,
 };
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::MOVIE_NFO_FILENAME;
@@ -159,10 +158,31 @@ impl VideoRelocator {
             (None, Some(published_at)) => Numbering::FromPublishTime(published_at),
             (None, None) => return Err(Relocation::Skipped(SkipReason::NoPublishTimestamp)),
         };
-        if !self.video_file_repository.file_exists(output_dir, &from) {
+        if !self.video_file_repository.file_exists(output_dir, &from)
+            && !self.is_half_moved(video, &from, &numbering, output_dir)
+        {
             return Err(Relocation::Skipped(SkipReason::FileMissing));
         }
         Ok((from, numbering))
+    }
+
+    /// Whether an earlier run moved the media to its episode path but stopped
+    /// before recording it: the number was recorded before any move, so the
+    /// target is known and the rest of the set is completed, not re-downloaded.
+    fn is_half_moved(
+        &self,
+        video: &Video,
+        from: &str,
+        numbering: &Numbering,
+        output_dir: &Path,
+    ) -> bool {
+        match numbering {
+            Numbering::Recorded(number) => self.video_file_repository.file_exists(
+                output_dir,
+                &RelocatedFiles::new(video, from, number).filename,
+            ),
+            Numbering::FromPublishTime(_) => false,
+        }
     }
 
     fn move_files(
@@ -173,10 +193,19 @@ impl VideoRelocator {
     ) -> anyhow::Result<()> {
         let from = video.filename.iter().chain(&video.thumbnail_filename);
         let to = std::iter::once(&files.filename).chain(&files.thumbnail_filename);
-        from.zip(to).try_for_each(|(from, to)| {
-            self.video_file_repository
-                .move_file(&output_dir.join(from), &output_dir.join(to))
-        })
+        from.zip(to)
+            .filter(|(from, to)| !self.already_moved(from, to, output_dir))
+            .try_for_each(|(from, to)| {
+                self.video_file_repository
+                    .move_file(&output_dir.join(from), &output_dir.join(to))
+            })
+    }
+
+    /// A file an interrupted earlier run already moved: gone from `from`,
+    /// present at `to`.
+    fn already_moved(&self, from: &str, to: &str, output_dir: &Path) -> bool {
+        !self.video_file_repository.file_exists(output_dir, from)
+            && self.video_file_repository.file_exists(output_dir, to)
     }
 
     /// Records the video's metadata again as an episode NFO next to its
@@ -192,16 +221,11 @@ impl VideoRelocator {
         let Some(metadata) = self.video_metadata_repository.find(&video.id)? else {
             return Ok(());
         };
-        let thumb = files
-            .thumbnail_filename
-            .as_deref()
-            .and_then(|f| Path::new(f).file_name())
-            .map(|f| f.to_string_lossy().into_owned());
         self.video_metadata_repository.save(
             &video.id,
-            &metadata.with_thumb(thumb),
+            &metadata.with_thumb(files.thumb.clone()),
             number,
-            &output_dir.join(nfo_path_for(&files.filename)),
+            &output_dir.join(&files.nfo_filename),
         )
     }
 
@@ -268,11 +292,14 @@ enum Numbering {
     FromPublishTime(DateTime<Utc>),
 }
 
-/// A legacy video's media and thumbnail paths in its season folder,
-/// relative to the show directory.
+/// A legacy video's media, thumbnail and NFO paths in its season folder,
+/// relative to the show directory, and the thumbnail's name as the NFO
+/// references it.
 struct RelocatedFiles {
     filename: String,
     thumbnail_filename: Option<String>,
+    nfo_filename: String,
+    thumb: Option<String>,
 }
 
 impl RelocatedFiles {
@@ -281,12 +308,13 @@ impl RelocatedFiles {
             .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("mp4");
+        let paths = EpisodePaths::new(number, &video.title);
+        let has_thumbnail = video.thumbnail_filename.is_some();
         Self {
-            filename: episode_relative_path(number, &video.title, extension),
-            thumbnail_filename: video
-                .thumbnail_filename
-                .as_ref()
-                .map(|_| episode_relative_path(number, &video.title, "jpg")),
+            filename: paths.media(extension),
+            thumbnail_filename: has_thumbnail.then(|| paths.thumbnail()),
+            nfo_filename: paths.nfo(),
+            thumb: has_thumbnail.then(|| paths.thumb()),
         }
     }
 }

@@ -89,6 +89,14 @@ mod tests {
         let output_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
@@ -125,13 +133,13 @@ mod tests {
             *video_file_repository.moved.lock().unwrap(),
             vec![
                 (
-                    PathBuf::from("/videos/.downloads/yt1/yt1.mp4"),
+                    PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str())),
                     output_dir
                         .path()
                         .join("Season 2026/S2026E031501 - My Video.mp4"),
                 ),
                 (
-                    PathBuf::from("/videos/.downloads/yt1/yt1.jpg"),
+                    PathBuf::from(format!("/videos/.downloads/{}/yt1.jpg", video.id.as_str())),
                     output_dir
                         .path()
                         .join("Season 2026/S2026E031501 - My Video.jpg"),
@@ -152,7 +160,10 @@ mod tests {
         );
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
-            vec![PathBuf::from("/videos/.downloads/yt1")]
+            vec![PathBuf::from(format!(
+                "/videos/.downloads/{}",
+                video.id.as_str()
+            ))]
         );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
@@ -187,6 +198,14 @@ mod tests {
         ));
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
@@ -331,13 +350,13 @@ mod tests {
             *video_file_repository.moved.lock().unwrap(),
             vec![
                 (
-                    PathBuf::from("/videos/.downloads/yt1/yt1.mp4"),
+                    PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str())),
                     output_dir
                         .path()
                         .join("Season 2026/S2026E031503 - My Video.mp4"),
                 ),
                 (
-                    PathBuf::from("/videos/.downloads/yt1/yt1.jpg"),
+                    PathBuf::from(format!("/videos/.downloads/{}/yt1.jpg", video.id.as_str())),
                     output_dir
                         .path()
                         .join("Season 2026/S2026E031503 - My Video.jpg"),
@@ -397,11 +416,11 @@ mod tests {
             *video_file_repository.moved.lock().unwrap(),
             vec![
                 (
-                    PathBuf::from("/videos/.downloads/yt1/yt1.mp4"),
+                    PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str())),
                     output_dir.path().join("Season 1/S01E007 - My Video.mp4"),
                 ),
                 (
-                    PathBuf::from("/videos/.downloads/yt1/yt1.jpg"),
+                    PathBuf::from(format!("/videos/.downloads/{}/yt1.jpg", video.id.as_str())),
                     output_dir.path().join("Season 1/S01E007 - My Video.jpg"),
                 ),
             ]
@@ -415,6 +434,14 @@ mod tests {
         let output_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
@@ -465,6 +492,14 @@ mod tests {
         let output_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
@@ -499,13 +534,13 @@ mod tests {
             *video_file_repository.moved.lock().unwrap(),
             vec![
                 (
-                    PathBuf::from("/videos/.downloads/yt1/yt1.mp4"),
+                    PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str())),
                     output_dir
                         .path()
                         .join("Season 2026/S2026E031501 - My Video.mp4"),
                 ),
                 (
-                    PathBuf::from("/videos/.downloads/yt1/yt1.jpg"),
+                    PathBuf::from(format!("/videos/.downloads/{}/yt1.jpg", video.id.as_str())),
                     output_dir
                         .path()
                         .join("Season 2026/S2026E031501 - My Video.jpg"),
@@ -544,7 +579,10 @@ mod tests {
         );
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
-            vec![PathBuf::from("/videos/.downloads/yt1")]
+            vec![PathBuf::from(format!(
+                "/videos/.downloads/{}",
+                video.id.as_str()
+            ))]
         );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(video_metadata_repository.find(&video.id).unwrap(), None);
@@ -621,6 +659,14 @@ mod tests {
         let output_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
@@ -1089,7 +1135,10 @@ mod tests {
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
         assert_eq!(
             *video_file_repository.deleted_dirs.lock().unwrap(),
-            vec![PathBuf::from("/videos/.downloads/yt1")]
+            vec![PathBuf::from(format!(
+                "/videos/.downloads/{}",
+                video.id.as_str()
+            ))]
         );
         assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(folder_entries(output_dir.path()), Vec::<String>::new());
@@ -1106,6 +1155,14 @@ mod tests {
             fixed_timestamp(),
         );
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
@@ -1162,6 +1219,14 @@ mod tests {
         let output_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
@@ -1198,7 +1263,7 @@ mod tests {
         assert_eq!(
             *video_file_repository.moved.lock().unwrap(),
             vec![(
-                PathBuf::from("/videos/.downloads/yt1/yt1.mp4"),
+                PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str())),
                 output_dir
                     .path()
                     .join("Season 2026/S2026E031501 - My Video.mp4"),
@@ -1213,6 +1278,14 @@ mod tests {
         let output_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
@@ -1255,6 +1328,14 @@ mod tests {
         let output_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let earlier = DateTime::<Utc>::from_timestamp(1_600_000_000, 0).unwrap();
         video_metadata_repository
             .save(
@@ -1311,6 +1392,14 @@ mod tests {
         let output_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
@@ -1340,6 +1429,14 @@ mod tests {
         let output_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
@@ -1378,6 +1475,14 @@ mod tests {
         let output_dir = tempfile::tempdir().unwrap();
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(video_downloader(
             &db,
             video_repository.clone(),
@@ -1420,6 +1525,14 @@ mod tests {
         let fake_yt_dlp = FakeYtDlp::with_downloaded_files("yt1.mp4", &["yt1.mp4", "yt1.jpg"]);
         let video = my_video();
         video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
         let task = DownloadVideoTask::new(VideoDownloader::new(
             video_repository.clone(),
             Arc::new(YtDlpVideoDownloaderRepository::new(

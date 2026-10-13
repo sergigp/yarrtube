@@ -1,8 +1,9 @@
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{MetadataGenerator, MetadataGeneratorApi};
 use crate::domain::shared::Quality;
-use crate::domain::video::video_filename::{episode_base_name, episode_relative_path};
-use crate::domain::video::{EpisodeNumber, Video, VideoDownloaded, VideoRecordId, staging_dir};
+use crate::domain::video::{
+    EpisodeNumber, EpisodePaths, Video, VideoDownloaded, VideoRecordId, staging_dir,
+};
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
@@ -182,7 +183,7 @@ impl VideoDownloader {
         self.video_downloader_repository.download(
             &video.youtube_id.to_url(),
             quality,
-            &staging_dir(&self.videos_path, &video.youtube_id),
+            &staging_dir(&self.videos_path, &video.id),
         )
     }
 
@@ -340,7 +341,7 @@ impl VideoDownloader {
     /// or thumbnail fetch left in it; a leftover is harmless, Plex and Kodi
     /// ignore the staging root.
     fn discard_staging(&self, video: &Video) {
-        let dir = staging_dir(&self.videos_path, &video.youtube_id);
+        let dir = staging_dir(&self.videos_path, &video.id);
         if let Err(e) = self.video_file_repository.delete_dir_recursive(&dir) {
             warn!(video_id = %video.id, error = %e, "failed to discard the staging dir");
         }
@@ -473,11 +474,12 @@ impl EpisodeFiles {
             .and_then(|ext| ext.to_str())
             .unwrap_or("mp4");
         let has_thumbnail = downloaded.thumbnail_path.is_some();
+        let paths = EpisodePaths::new(number, title);
         Self {
-            filename: episode_relative_path(number, title, extension),
-            thumbnail_filename: has_thumbnail.then(|| episode_relative_path(number, title, "jpg")),
-            nfo_path: output_dir.join(episode_relative_path(number, title, "nfo")),
-            thumb: has_thumbnail.then(|| format!("{}.jpg", episode_base_name(number, title))),
+            filename: paths.media(extension),
+            thumbnail_filename: has_thumbnail.then(|| paths.thumbnail()),
+            nfo_path: output_dir.join(paths.nfo()),
+            thumb: has_thumbnail.then(|| paths.thumb()),
         }
     }
 }

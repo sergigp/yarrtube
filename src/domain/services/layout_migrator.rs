@@ -100,16 +100,21 @@ impl LayoutMigrator {
         legacy: &[Video],
         dry_run: bool,
     ) -> anyhow::Result<MigrationReport> {
-        if !dry_run {
-            self.show_file_writer.write_playlist_show(playlist)?;
-        }
+        let shows = if dry_run {
+            MigrationReport::default()
+        } else {
+            MigrationReport::default().record_show_files(
+                &playlist.path,
+                self.show_file_writer.write_playlist_show(playlist),
+            )
+        };
         let video_ids = self
             .playlist_video_repository
             .list_for_playlist(&playlist.id)?
             .into_iter()
             .map(|playlist_video| playlist_video.video_id)
             .collect::<Vec<_>>();
-        self.migrate_videos(&playlist.path, &video_ids, legacy, dry_run)
+        Ok(shows.merge(self.migrate_videos(&playlist.path, &video_ids, legacy, dry_run)?))
     }
 
     fn migrate_channel(
@@ -118,16 +123,21 @@ impl LayoutMigrator {
         legacy: &[Video],
         dry_run: bool,
     ) -> anyhow::Result<MigrationReport> {
-        if !dry_run {
-            self.show_file_writer.write_channel_show(channel)?;
-        }
+        let shows = if dry_run {
+            MigrationReport::default()
+        } else {
+            MigrationReport::default().record_show_files(
+                &channel.path,
+                self.show_file_writer.write_channel_show(channel),
+            )
+        };
         let video_ids = self
             .channel_video_repository
             .list_for_channel(&channel.id)?
             .into_iter()
             .map(|channel_video| channel_video.video_id)
             .collect::<Vec<_>>();
-        self.migrate_videos(&channel.path, &video_ids, legacy, dry_run)
+        Ok(shows.merge(self.migrate_videos(&channel.path, &video_ids, legacy, dry_run)?))
     }
 
     /// Relocates a source's legacy videos in publish-time order, so the
@@ -200,6 +210,15 @@ impl MigrationReport {
             skipped: [self.skipped, other.skipped].concat(),
             failed: [self.failed, other.failed].concat(),
         }
+    }
+
+    /// Adds a failure to write the show files of the source at `path`, keyed
+    /// by the source's directory; its videos are still migrated.
+    fn record_show_files(mut self, path: &PlaylistPath, written: anyhow::Result<()>) -> Self {
+        if let Err(e) = written {
+            self.failed.push((path.as_str().to_string(), e.to_string()));
+        }
+        self
     }
 
     /// Adds what relocating `video` of the source at `path` did, keyed by
@@ -602,6 +621,122 @@ mod tests {
     }
 
     #[test]
+    fn it_should_complete_a_video_whose_media_an_interrupted_run_already_moved() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(vec![
+            "Season 1/S01E001 - First.mp4".to_string(),
+            "First/First.jpg".to_string(),
+        ]));
+        let videos_root = tempfile::tempdir().unwrap();
+        let playlist_dir = videos_root.path().join("playlists/kids");
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&my_playlist())
+            .unwrap();
+        let video = legacy_playlist_video(
+            "yt1",
+            "First",
+            "First/First.mp4",
+            Some("First/First.jpg"),
+            1,
+        );
+        seed_playlist_video(&db, &video, 0);
+        let migrator = layout_migrator(
+            &db,
+            video_file_repository.clone(),
+            Arc::new(FakeShowFileRepository::default()),
+            videos_root.path(),
+        );
+
+        let result = migrator.migrate(false);
+
+        assert_eq!(
+            result.unwrap(),
+            MigrationReport {
+                moved: vec![moved(
+                    "playlists/kids/First/First.mp4",
+                    "playlists/kids/Season 1/S01E001 - First.mp4"
+                )],
+                skipped: vec![],
+                failed: vec![],
+            }
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.clone().relocate_to_episode(
+                playlist_episode(1),
+                "Season 1/S01E001 - First.mp4",
+                Some("Season 1/S01E001 - First.jpg".to_string()),
+                fixed_timestamp(),
+            )]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![(
+                playlist_dir.join("First/First.jpg"),
+                playlist_dir.join("Season 1/S01E001 - First.jpg")
+            )]
+        );
+        assert_eq!(
+            *video_file_repository.removed_if_empty.lock().unwrap(),
+            vec![playlist_dir.join("First")]
+        );
+    }
+
+    #[test]
+    fn it_should_report_show_files_it_cannot_write_and_still_move_the_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_file_exists(true));
+        let videos_root = tempfile::tempdir().unwrap();
+        let playlist_dir = videos_root.path().join("playlists/kids");
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&my_playlist())
+            .unwrap();
+        let video = legacy_playlist_video("yt1", "First", "First/First.mp4", None, 1);
+        seed_playlist_video(&db, &video, 0);
+        let migrator = layout_migrator(
+            &db,
+            video_file_repository.clone(),
+            Arc::new(FakeShowFileRepository::failing()),
+            videos_root.path(),
+        );
+
+        let result = migrator.migrate(false);
+
+        assert_eq!(
+            result.unwrap(),
+            MigrationReport {
+                moved: vec![moved(
+                    "playlists/kids/First/First.mp4",
+                    "playlists/kids/Season 1/S01E001 - First.mp4"
+                )],
+                skipped: vec![],
+                failed: vec![(
+                    "playlists/kids".to_string(),
+                    format!("permission denied writing {playlist_dir:?}")
+                )],
+            }
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.clone().relocate_to_episode(
+                playlist_episode(1),
+                "Season 1/S01E001 - First.mp4",
+                None,
+                fixed_timestamp(),
+            )]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![(
+                playlist_dir.join("First/First.mp4"),
+                playlist_dir.join("Season 1/S01E001 - First.mp4")
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_move_videos_without_a_publish_time_last() {
         let db = TestDatabase::new();
         let videos_root = tempfile::tempdir().unwrap();
@@ -881,6 +1016,122 @@ mod tests {
                     fixed_timestamp(),
                 ),
             ]
+        );
+    }
+
+    #[test]
+    fn it_should_plan_the_same_day_of_different_years_independently_on_a_dry_run() {
+        let db = TestDatabase::new();
+        let videos_root = tempfile::tempdir().unwrap();
+        let channel_dir = videos_root.path().join("channels/somechannel");
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        let older = legacy_video("yt1", "Older", "Older/Older.mp4", None);
+        let newer = legacy_video("yt2", "Newer", "Newer/Newer.mp4", None);
+        seed_channel_video(&db, &older);
+        seed_channel_video(&db, &newer);
+        seed_metadata(
+            &db,
+            &older,
+            published("2025-03-15T10:00:00Z"),
+            &channel_dir.join("Older"),
+        );
+        seed_metadata(
+            &db,
+            &newer,
+            published("2026-03-15T10:00:00Z"),
+            &channel_dir.join("Newer"),
+        );
+        let migrator = layout_migrator(
+            &db,
+            Arc::new(FakeVideoFileRepository::with_file_exists(true)),
+            Arc::new(FakeShowFileRepository::default()),
+            videos_root.path(),
+        );
+
+        let result = migrator.migrate(true);
+
+        assert_eq!(
+            result.unwrap(),
+            MigrationReport {
+                moved: vec![
+                    moved(
+                        "channels/somechannel/Older/Older.mp4",
+                        "channels/somechannel/Season 2025/S2025E031501 - Older.mp4"
+                    ),
+                    moved(
+                        "channels/somechannel/Newer/Newer.mp4",
+                        "channels/somechannel/Season 2026/S2026E031501 - Newer.mp4"
+                    ),
+                ],
+                skipped: vec![],
+                failed: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_plan_past_a_later_number_already_recorded_that_day_on_a_dry_run() {
+        let db = TestDatabase::new();
+        let videos_root = tempfile::tempdir().unwrap();
+        let channel_dir = videos_root.path().join("channels/somechannel");
+        SqliteChannelRepository::new(db.database())
+            .insert(&my_channel())
+            .unwrap();
+        let numbered = legacy_video("yt1", "Numbered", "Numbered/Numbered.mp4", None)
+            .with_episode_number(episode(2026, 31501), fixed_timestamp());
+        let in_place = Video::create(VideoId::new("yt2").unwrap(), "In Place", fixed_timestamp())
+            .start_download(fixed_timestamp())
+            .mark_downloaded(
+                Quality::High,
+                "Season 2026/S2026E031502 - In Place.mp4",
+                None,
+                None,
+                fixed_timestamp(),
+            )
+            .with_episode_number(episode(2026, 31502), fixed_timestamp());
+        let unnumbered = legacy_video("yt3", "Unnumbered", "Unnumbered/Unnumbered.mp4", None);
+        seed_channel_video(&db, &numbered);
+        seed_channel_video(&db, &in_place);
+        seed_channel_video(&db, &unnumbered);
+        seed_metadata(
+            &db,
+            &numbered,
+            published("2026-03-15T08:00:00Z"),
+            &channel_dir.join("Numbered"),
+        );
+        seed_metadata(
+            &db,
+            &unnumbered,
+            published("2026-03-15T10:00:00Z"),
+            &channel_dir.join("Unnumbered"),
+        );
+        let migrator = layout_migrator(
+            &db,
+            Arc::new(FakeVideoFileRepository::with_file_exists(true)),
+            Arc::new(FakeShowFileRepository::default()),
+            videos_root.path(),
+        );
+
+        let result = migrator.migrate(true);
+
+        assert_eq!(
+            result.unwrap(),
+            MigrationReport {
+                moved: vec![
+                    moved(
+                        "channels/somechannel/Numbered/Numbered.mp4",
+                        "channels/somechannel/Season 2026/S2026E031501 - Numbered.mp4"
+                    ),
+                    moved(
+                        "channels/somechannel/Unnumbered/Unnumbered.mp4",
+                        "channels/somechannel/Season 2026/S2026E031503 - Unnumbered.mp4"
+                    ),
+                ],
+                skipped: vec![],
+                failed: vec![],
+            }
         );
     }
 

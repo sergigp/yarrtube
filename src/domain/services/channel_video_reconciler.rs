@@ -141,7 +141,11 @@ impl ChannelVideoReconciler {
         let _span = info_span!("reconcile_channel", channel_id = %channel.id).entered();
         info!(channel_id = %channel.id, "reconciling channel");
 
-        self.show_file_writer.write_channel_show(channel)?;
+        // Best effort: a show file that can't be written must not stop the
+        // source from syncing; the next pass tries again.
+        if let Err(e) = self.show_file_writer.write_channel_show(channel) {
+            warn!(channel_id = %channel.id, error = %e, "failed to write show files");
+        }
         let delta = self.sync_membership_with_youtube(channel, on_listing_failure)?;
         let desired = self.desired_state(channel)?;
         self.internal_video_reconciler.reconcile(&desired, &delta)
