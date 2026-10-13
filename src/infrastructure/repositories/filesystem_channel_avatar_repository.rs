@@ -103,8 +103,8 @@ impl ChannelAvatarRepository for FilesystemChannelAvatarRepository {
         self.avatars_dir.join(filename)
     }
 
-    fn exists(&self, _filename: &str) -> anyhow::Result<bool> {
-        Ok(true)
+    fn exists(&self, filename: &str) -> anyhow::Result<bool> {
+        Ok(self.avatars_dir.join(filename).try_exists()?)
     }
 }
 
@@ -337,5 +337,15 @@ mod tests {
 
         assert!(exists);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_report_an_avatar_as_missing_if_its_directory_is_gone() {
+        let dir = unique_temp_dir("channel-avatar-exists-missing-dir");
+        let repo = FilesystemChannelAvatarRepository::new(dir);
+
+        let exists = repo.exists("@somechannel.jpg").unwrap();
+
+        assert!(!exists);
     }
 }
