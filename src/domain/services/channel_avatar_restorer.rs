@@ -39,8 +39,10 @@ pub trait ChannelAvatarRestorerApi: Send + Sync {
 
 impl ChannelAvatarRestorerApi for ChannelAvatarRestorer {
     fn restore_missing(&self, channel: Channel) -> Channel {
-        self.download_avatar(&channel);
-        channel
+        let Some(avatar_filename) = self.download_avatar(&channel) else {
+            return channel;
+        };
+        self.record_avatar(channel, avatar_filename)
     }
 }
 
@@ -50,5 +52,15 @@ impl ChannelAvatarRestorer {
         self.avatar_repository
             .store(&channel.id, &avatar_url)
             .ok()?
+    }
+
+    /// Only a filename different from the recorded one is saved.
+    fn record_avatar(&self, channel: Channel, avatar_filename: String) -> Channel {
+        if channel.avatar_filename.as_deref() == Some(avatar_filename.as_str()) {
+            return channel;
+        }
+        let channel = channel.with_avatar_filename(Some(avatar_filename));
+        let _ = self.channel_repository.update(&channel);
+        channel
     }
 }
