@@ -50,4 +50,11 @@ impl Channel {
             ..self
         }
     }
+
+    pub fn with_avatar_filename(self, avatar_filename: Option<String>) -> Self {
+        Self {
+            avatar_filename,
+            ..self
+        }
+    }
 }

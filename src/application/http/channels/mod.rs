@@ -150,6 +150,7 @@ mod tests {
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::services::ChannelAvatarRestorer;
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::ShowFileWriter;
@@ -1606,7 +1607,7 @@ mod tests {
             "/videos",
         ));
         ChannelVideoReconciler::new(
-            channel_repository,
+            channel_repository.clone(),
             video_repository.clone(),
             channel_video_repository,
             Arc::new(FakeChannelVideosRepository::with_videos(listed_videos)),
@@ -1635,6 +1636,11 @@ mod tests {
                 Arc::new(FakeShowFileRepository::default()),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository,
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
@@ -1684,6 +1690,11 @@ mod tests {
                 Arc::new(FakeShowFileRepository::default()),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                Arc::new(SqliteChannelRepository::new(unused_connection())),
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,

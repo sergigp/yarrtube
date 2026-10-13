@@ -1,3 +1,4 @@
+pub mod channel_avatar_restorer;
 pub mod channel_creator;
 pub mod channel_deleter;
 pub mod channel_previewer;
@@ -24,6 +25,7 @@ pub mod video_relocator;
 pub mod video_searcher;
 pub mod video_watch_state_updater;
 
+pub use channel_avatar_restorer::{ChannelAvatarRestorer, ChannelAvatarRestorerApi};
 pub use channel_creator::{ChannelCreator, ChannelCreatorApi, CreateChannelOutcome};
 pub use channel_deleter::{ChannelDeleter, ChannelDeleterApi};
 pub use channel_previewer::{ChannelPreviewer, ChannelPreviewerApi};

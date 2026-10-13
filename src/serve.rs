@@ -1,12 +1,12 @@
 use crate::application::http::{self, ApiServices, VideosRoot};
 use crate::application::{subscribers, tasks};
 use crate::domain::services::{
-    ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler,
-    ChannelViewSearcher, DirectorySearcher, InternalVideoReconciler, LayoutMigrator,
-    MetadataGenerator, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher,
-    PlaylistUpdater, PlaylistVideoReconciler, PlexFolderScanner, ShowFileWriter, TaskViewSearcher,
-    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoRelocator, VideoSearcher,
-    VideoWatchStateUpdater,
+    ChannelAvatarRestorer, ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelUpdater,
+    ChannelVideoReconciler, ChannelViewSearcher, DirectorySearcher, InternalVideoReconciler,
+    LayoutMigrator, MetadataGenerator, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer,
+    PlaylistSearcher, PlaylistUpdater, PlaylistVideoReconciler, PlexFolderScanner, ShowFileWriter,
+    TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoRelocator,
+    VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -503,6 +503,11 @@ fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> Channel
         infrastructure.task_repository.clone(),
         internal_video_reconciler(infrastructure),
         show_file_writer(infrastructure),
+        Arc::new(ChannelAvatarRestorer::new(
+            infrastructure.channel_repository.clone(),
+            infrastructure.youtube_channel_repository.clone(),
+            infrastructure.channel_avatar_repository.clone(),
+        )),
         infrastructure.clock.clone(),
         reconcile_interval_seconds(),
     )

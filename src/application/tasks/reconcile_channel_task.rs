@@ -35,6 +35,7 @@ mod tests {
     use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::PlaylistPath;
+    use crate::domain::services::ChannelAvatarRestorer;
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::ShowFileWriter;
@@ -63,6 +64,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
     use crate::infrastructure::repositories::youtube_channel_videos_repository::{
         ChannelVideoListing, FakeChannelVideosRepository,
     };
@@ -591,7 +593,7 @@ mod tests {
             })
             .unwrap();
         let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
-            channel_repository,
+            channel_repository.clone(),
             video_repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
@@ -630,6 +632,11 @@ mod tests {
                 show_file_repository.clone(),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository,
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
@@ -673,7 +680,7 @@ mod tests {
         let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
-            channel_repository,
+            channel_repository.clone(),
             video_repository.clone(),
             channel_video_repository.clone(),
             Arc::new(FakeChannelVideosRepository::with_videos(vec![
@@ -714,6 +721,11 @@ mod tests {
                 show_file_repository.clone(),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository,
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
@@ -932,7 +944,7 @@ mod tests {
             &video,
         );
         let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
-            channel_repository,
+            channel_repository.clone(),
             video_repository.clone(),
             channel_video_repository,
             Arc::new(FakeChannelVideosRepository::with_videos(vec![
@@ -975,6 +987,11 @@ mod tests {
                 Arc::new(FakeShowFileRepository::default()),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository,
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
@@ -1045,7 +1062,7 @@ mod tests {
             &video,
         );
         let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
-            channel_repository,
+            channel_repository.clone(),
             video_repository.clone(),
             channel_video_repository,
             Arc::new(FakeChannelVideosRepository::with_videos(vec![
@@ -1087,6 +1104,11 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
             )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository,
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
         ));
@@ -1120,7 +1142,7 @@ mod tests {
         );
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
-            channel_repository,
+            channel_repository.clone(),
             video_repository.clone(),
             channel_video_repository,
             Arc::new(FakeChannelVideosRepository::with_videos(vec![
@@ -1162,6 +1184,11 @@ mod tests {
                 Arc::new(FakeShowFileRepository::default()),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository,
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
@@ -1264,7 +1291,7 @@ mod tests {
             "/videos",
         ));
         ChannelVideoReconciler::new(
-            channel_repository,
+            channel_repository.clone(),
             video_repository.clone(),
             channel_video_repository,
             channel_videos_repository,
@@ -1296,6 +1323,11 @@ mod tests {
                 Arc::new(FakeShowFileRepository::default()),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository,
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
@@ -1352,6 +1384,11 @@ mod tests {
                 Arc::new(FakeShowFileRepository::default()),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                Arc::new(SqliteChannelRepository::new(unused_connection())),
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,

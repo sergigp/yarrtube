@@ -3,8 +3,8 @@ use crate::domain::channel_video::ChannelVideo;
 use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{
-    DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
-    ShowFileWriter, ShowFileWriterApi,
+    ChannelAvatarRestorer, ChannelAvatarRestorerApi, DesiredState, InternalVideoReconciler,
+    InternalVideoReconcilerApi, MembershipDelta, ShowFileWriter, ShowFileWriterApi,
 };
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
@@ -37,6 +37,7 @@ pub struct ChannelVideoReconciler {
     task_repository: Arc<dyn TaskRepository>,
     internal_video_reconciler: Arc<InternalVideoReconciler>,
     show_file_writer: Arc<ShowFileWriter>,
+    channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
     clock: Arc<dyn Clock>,
     reconcile_interval_seconds: i64,
 }
@@ -52,6 +53,7 @@ impl ChannelVideoReconciler {
         task_repository: Arc<dyn TaskRepository>,
         internal_video_reconciler: Arc<InternalVideoReconciler>,
         show_file_writer: Arc<ShowFileWriter>,
+        channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
         clock: Arc<dyn Clock>,
         reconcile_interval_seconds: i64,
     ) -> Self {
@@ -64,6 +66,7 @@ impl ChannelVideoReconciler {
             task_repository,
             internal_video_reconciler,
             show_file_writer,
+            channel_avatar_restorer,
             clock,
             reconcile_interval_seconds,
         }
@@ -98,7 +101,7 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
             return Ok(());
         };
 
-        self.reconcile_channel(&channel, ListingFailure::SkipMembership)?;
+        self.reconcile_channel(channel, ListingFailure::SkipMembership)?;
         self.schedule_next_reconcile(&id)
     }
 
@@ -107,7 +110,7 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
             return Ok(());
         };
 
-        self.reconcile_channel(&channel, ListingFailure::FailPass)?;
+        self.reconcile_channel(channel, ListingFailure::FailPass)?;
         self.schedule_next_reconcile(&id)
     }
 
@@ -116,7 +119,7 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
             return Ok(());
         };
 
-        self.reconcile_channel(&channel, ListingFailure::SkipMembership)
+        self.reconcile_channel(channel, ListingFailure::SkipMembership)
     }
 }
 
@@ -129,18 +132,19 @@ impl ChannelVideoReconciler {
         Ok(channel)
     }
 
-    /// One reconcile pass: brings the database in line with YouTube (the
-    /// channel's membership), then the channel's folder in line with the
-    /// database. Everything the pass logs, `InternalVideoReconciler`'s steps
+    /// One reconcile pass: restores the channel's avatar if its file is
+    /// missing, brings the database in line with YouTube (the channel's
+    /// membership), then the channel's folder in line with the database. Everything the pass logs, `InternalVideoReconciler`'s steps
     /// included, carries the channel id through the pass's span.
     fn reconcile_channel(
         &self,
-        channel: &Channel,
+        channel: Channel,
         on_listing_failure: ListingFailure,
     ) -> anyhow::Result<()> {
         let _span = info_span!("reconcile_channel", channel_id = %channel.id).entered();
         info!(channel_id = %channel.id, "reconciling channel");
 
+        let channel = &self.channel_avatar_restorer.restore_missing(channel);
         // Best effort: a show file that can't be written must not stop the
         // source from syncing; the next pass tries again.
         if let Err(e) = self.show_file_writer.write_channel_show(channel) {

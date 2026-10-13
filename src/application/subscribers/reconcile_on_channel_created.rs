@@ -38,6 +38,7 @@ mod tests {
     use super::*;
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::playlist::PlaylistPath;
+    use crate::domain::services::ChannelAvatarRestorer;
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::ShowFileWriter;
@@ -57,6 +58,7 @@ mod tests {
     };
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
+    use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
     use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
     use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
@@ -120,7 +122,7 @@ mod tests {
             })
             .unwrap();
         let subscriber = ReconcileOnChannelCreated::new(ChannelVideoReconciler::new(
-            channel_repository,
+            channel_repository.clone(),
             video_repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelVideosRepository::default()),
@@ -156,6 +158,11 @@ mod tests {
                 show_file_repository.clone(),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository,
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
@@ -197,7 +204,7 @@ mod tests {
         let event_repository = SqliteEventRepository::new(db.database());
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let subscriber = ReconcileOnChannelCreated::new(ChannelVideoReconciler::new(
-            channel_repository,
+            channel_repository.clone(),
             video_repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelVideosRepository::failing()),
@@ -233,6 +240,11 @@ mod tests {
                 Arc::new(FakeShowFileRepository::default()),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository,
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
@@ -292,7 +304,7 @@ mod tests {
             "/videos",
         ));
         ChannelVideoReconciler::new(
-            channel_repository,
+            channel_repository.clone(),
             video_repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelVideosRepository::default()),
@@ -321,6 +333,11 @@ mod tests {
                 Arc::new(FakeShowFileRepository::default()),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository,
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,
@@ -377,6 +394,11 @@ mod tests {
                 Arc::new(FakeShowFileRepository::default()),
                 Arc::new(FakeChannelAvatarRepository::default()),
                 "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                Arc::new(SqliteChannelRepository::new(unused_connection())),
+                Arc::new(FakeYoutubeChannelRepository { resolved: None }),
+                Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             3600,

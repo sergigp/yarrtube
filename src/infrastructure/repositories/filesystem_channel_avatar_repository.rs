@@ -24,6 +24,9 @@ pub trait ChannelAvatarRepository: Send + Sync {
 
     /// The local path of a stored avatar file.
     fn path_of(&self, filename: &str) -> PathBuf;
+
+    /// Whether a previously stored avatar file is still present.
+    fn exists(&self, filename: &str) -> anyhow::Result<bool>;
 }
 
 pub struct FilesystemChannelAvatarRepository {
@@ -98,6 +101,10 @@ impl ChannelAvatarRepository for FilesystemChannelAvatarRepository {
 
     fn path_of(&self, filename: &str) -> PathBuf {
         self.avatars_dir.join(filename)
+    }
+
+    fn exists(&self, _filename: &str) -> anyhow::Result<bool> {
+        Ok(true)
     }
 }
 
@@ -196,6 +203,15 @@ impl ChannelAvatarRepository for FakeChannelAvatarRepository {
     /// The fake's avatars directory is `avatars`.
     fn path_of(&self, filename: &str) -> PathBuf {
         PathBuf::from("avatars").join(filename)
+    }
+
+    fn exists(&self, filename: &str) -> anyhow::Result<bool> {
+        Ok(self
+            .avatars
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(stored, _)| stored == filename))
     }
 }
 
