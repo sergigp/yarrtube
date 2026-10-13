@@ -39,15 +39,16 @@ The system SHALL truncate a derived filename so that, together with its file ext
 - **THEN** the derived filename is truncated to fit within the limit while remaining valid text
 
 ### Requirement: Video ID Omitted By Default
-The system SHALL NOT include the video's YouTube ID in the folder or filenames derived from its title.
+The system SHALL NOT include the video's YouTube ID in the episode base name derived for it. The episode base name SHALL be `S<season>E<episode> - <sanitized title>`, where the season and episode come from the video's recorded episode number (see `tv-show-layout`) and the sanitized title follows the rules above.
 
 #### Scenario: No naming collision
-- **WHEN** a video is downloaded and its sanitized title does not collide with an entry already present in the container's output directory
-- **THEN** the video's own output folder, and the file saved inside it, are named based solely on the sanitized title, without the video ID
+- **WHEN** a video is downloaded
+- **THEN** its file, thumbnail and NFO are named from its episode number and sanitized title alone, without the video ID
 
-### Requirement: Collision Fallback Appends Video ID
-The system SHALL detect when a derived folder name already matches an entry (file or folder) present in the container's output directory, and in that case SHALL append the video's YouTube ID to that folder name to disambiguate it.
+#### Scenario: Episode base name
+- **WHEN** a video numbered `2026`/`031501` and titled `Some: Title?` is named
+- **THEN** its episode base name is `S2026E031501 - Some- Title-`, without the video ID
 
-#### Scenario: Two videos sanitize to the same filename in one playlist
-- **WHEN** a video's sanitized title matches the name of an entry already present in the same playlist's or channel's output directory
-- **THEN** the system appends the video's YouTube ID to its own output folder's name before saving into it, so the two videos' folders do not collide
+#### Scenario: Playlist episode base name
+- **WHEN** a playlist video numbered season `1` episode `7` and titled `Some: Title?` is named
+- **THEN** its episode base name is `S01E007 - Some- Title-`

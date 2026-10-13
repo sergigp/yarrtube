@@ -84,10 +84,12 @@ See proposal.md for why. Current state that shapes the approach:
    `FilesystemShowFileRepository` leaves `tvshow.nfo` / `poster.jpg`
    untouched when their contents are unchanged, so passes don't wake the
    disk or bump mtimes.
-6. **Legacy detection by path shape.** A recorded filename whose first
-   segment starts with `Season ` is new-layout; anything else is legacy
-   (per-video folder or flat file) and keeps today's top-level-entry handling
-   for delete and sweep.
+6. **Legacy detection by path shape.** A recorded filename is new-layout
+   only when its first segment is `Season <digits>` and its file name starts
+   with an `S<digits>E<digits> - ` episode code; anything else is legacy
+   (per-video folder or flat file), including a per-video folder whose title
+   starts with `Season ` (e.g. `Season 2 Finale/`), and keeps today's
+   top-level-entry handling for delete and sweep.
 7. **`VideoDownloaded` keeps its shape**; the scanner scans `output_dir` (the
    show) and ignores `folder`.
 8. **Dry run plans numbers in memory.** `assign_episode_number` is a write,
@@ -180,7 +182,8 @@ See proposal.md for why. Current state that shapes the approach:
   lowers it.
 - [More than 99 videos of one channel on one day] → numbering the 100th
   fails with a validation error (visible, retried) instead of spilling into
-  the next day's prefix.
+  the next day's prefix; the video is marked errored like a failed
+  download, never left in progress.
 - [A test library already laid out by this branch] → no back-compat: wipe the
   database and `videos/`, then sync again.
 
@@ -322,7 +325,8 @@ impl EpisodePaths {
 // src/domain/video/video_output_entry.rs
 pub fn top_level_entry(relative_path: &str) -> &str;            // kept for legacy
 pub fn resolve_output_dir(videos_path: &str, path: &str) -> PathBuf;
-pub fn is_episode_path(relative_path: &str) -> bool;            // first segment starts with "Season "
+pub fn is_episode_path(relative_path: &str) -> bool;            // "Season <digits>/S<digits>E<digits> - …"
+pub fn is_season_folder(entry: &str) -> bool;                   // "Season " + digits only
 pub fn nfo_path_for(relative_path: &str) -> String;             // ".nfo" sibling for episode paths
 pub fn staging_dir(videos_path: &str, video_id: &VideoRecordId) -> PathBuf; // "<root>/.downloads/<record id>"
 pub const SHOW_NFO_FILENAME: &str = "tvshow.nfo";
@@ -494,6 +498,7 @@ export function storageLocation(basePath: string, filename: string | null): stri
   → `VideoFileRepository::move_file(downloaded.media_path, output_dir/paths.media(ext))`, same for thumbnail (`paths.thumbnail()`)
   → `VideoRepository::update(video.mark_downloaded(...))` → `save_metadata` (`VideoMetadataRepository::save`, re-fetching the metadata when the first fetch failed)
   → `discard_staging(video)` → `EventPublisher::publish(VideoDownloaded { video_id, output_dir, folder: season folder })` (`folder` unread)
+→ placing fails (assign, move or record): `record_placement_errored` → `discard_staging(video)`, re-read the video (keeps a number already assigned), `record_errored(.., is_last_attempt)`; a video deleted meanwhile gets nothing recorded.
 → on `Failed`: `discard_staging(video)` (`delete_dir_recursive(staging_dir)`), then today's failure handling.
 → video or source deleted meanwhile: `discard_staging`, no record.
 
@@ -553,7 +558,7 @@ Behaviour tests (application layer):
 27. `it_should_change_nothing_on_a_dry_run` — same fixtures, including a same-day batch planned `01..03`: report equal to the real plan, filesystem and rows untouched.
 28. `it_should_move_nothing_on_a_second_run` — rerun reports zero moves, rewrites show files.
 29. `it_should_report_a_failed_move_and_continue` — failing file repository for one video: that row unchanged, others moved, report has one failure.
-30. `it_should_exit_non_zero_when_a_move_failed` — CLI run returns failure code.
+30. `it_should_fail_if_a_video_failed_to_move` — CLI run returns failure code.
 31. `it_should_not_register_the_collections_task_or_subscribers` — serve: `reconcile_plex_collections` absent from handlers, no deletion subscribers.
 
 Playlist numbering (decisions 9–11):
@@ -573,6 +578,10 @@ Audit fixes:
 41. `it_should_sync_the_channel_even_if_its_show_files_cannot_be_written` — reconcile channel task: failing show file repository → new video stored, next reconcile scheduled.
 42. `it_should_plan_the_same_day_of_different_years_independently_on_a_dry_run` — 2025-03-15 and 2026-03-15 both plan index `01`.
 43. `it_should_plan_past_a_later_number_already_recorded_that_day_on_a_dry_run` — planned `031501`, recorded `031502` → plans `031503`.
+44. `it_should_mark_errored_if_the_download_cannot_be_moved_into_place_on_the_last_attempt` — download task: media move fails → video `Errored` with its assigned number kept, staging dir discarded, no `VideoDownloaded`.
+45. `it_should_recognize_an_episode_file_in_its_season_folder` — `Season 2026/S2026E031501 - X.mp4`, `Season 1/S01E007 - X.jpg` are episode paths.
+46. `it_should_treat_a_legacy_folder_titled_like_a_season_as_legacy` — `Season 2 Finale/Season 2 Finale.mp4`, `Season 2/Season 2.mp4` are legacy.
+47. `it_should_only_take_a_season_and_number_as_a_season_folder` — `Season 2026`, `Season 1` yes; `Season 2 Finale`, `Season Finale` no.
 
 Infrastructure tests:
 

@@ -37,7 +37,7 @@
 - [x] 2.27 `it_should_change_nothing_on_a_dry_run` — report equals the real plan (a same-day batch planned `01..03`), filesystem and rows untouched
 - [x] 2.28 `it_should_move_nothing_on_a_second_run` — zero moves, show files rewritten
 - [x] 2.29 `it_should_report_a_failed_move_and_continue` — one failing move: that row unchanged, others moved, one failure in the report
-- [x] 2.30 `it_should_exit_non_zero_when_a_move_failed` — CLI returns a failure exit code
+- [x] 2.30 `it_should_fail_if_a_video_failed_to_move` — CLI returns a failure exit code
 - [x] 2.31 `it_should_not_register_the_collections_task_or_subscribers` — handler registry has no `reconcile_plex_collections`, no deletion subscribers
 
 ## 3. Infrastructure adapters (TDD)
@@ -116,3 +116,10 @@
 - [x] 7.13 `FilesystemShowFileRepository` skips unchanged writes: `it_should_leave_unchanged_show_files_untouched`, `it_should_overwrite_a_changed_show_nfo`
 - [x] 7.14 Tests wire `VideoRelocator` with `FixedClock`; misplaced doc comments in `playlist_video_reconciler.rs` fixed
 - [x] 7.15 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --locked`, `npm run check` in `web/`, `scripts/run-smoke-tests.sh` (24/24); `cargo mutants` over the fixes: no missed mutants
+
+## 8. Second audit fixes
+
+- [x] 8.1 A finished download that cannot be placed (numbering, move or record failing) discards its staging dir and errors the video like a failed download, keeping an assigned number: `it_should_mark_errored_if_the_download_cannot_be_moved_into_place_on_the_last_attempt`
+- [x] 8.2 Strict layout detection: `Season <digits>` folders and `S<digits>E<digits> - ` episode files only: `it_should_recognize_an_episode_file_in_its_season_folder`, `it_should_treat_a_legacy_folder_titled_like_a_season_as_legacy`, `it_should_only_take_a_season_and_number_as_a_season_folder`
+- [x] 8.3 Audit automatic lanes: behaviour-preserving cleanups (convention/simplification) and mutant-killing tests
+- [x] 8.4 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --locked`

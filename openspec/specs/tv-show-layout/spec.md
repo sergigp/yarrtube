@@ -1,8 +1,10 @@
+# tv-show-layout Specification
+
 ## Purpose
 
 Lays every tracked channel and playlist out on disk as a TV show that Plex, Kodi and Jellyfin read natively: a show directory with its own metadata and poster, and every video as an episode in a season folder: a channel's numbered by publish date, a playlist's numbered in playlist order.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Tracked Source Directory Is A Show
 The system SHALL treat each tracked playlist's and channel's output directory (its configured storage path under the videos root) as one show. The show directory SHALL contain a `tvshow.nfo` describing the show and, for a channel with a stored avatar, a `poster.jpg` copy of that avatar. The show NFO SHALL carry the show's title (the playlist's or channel's name as shown in yarrtube), its studio (the same name), a `uniqueid` of type `youtube` holding the YouTube channel ID or playlist ID, and the status `Continuing`. The show files SHALL be written when the source is created and written again on every reconcile pass of that source whenever missing or different (an unchanged file is left untouched), so a renamed source or a changed avatar propagates and a deleted show file reappears. A failure to write them SHALL NOT stop the pass; the next pass tries again.
@@ -112,3 +114,7 @@ The system SHALL NOT write any new file in the previous per-video-folder layout.
 #### Scenario: Unmigrated video
 - **WHEN** a reconcile pass finds a downloaded video whose recorded filename is not under a `Season <season>` folder
 - **THEN** the pass leaves its files where they are and does not reset it for redownload
+
+#### Scenario: Legacy folder titled like a season
+- **WHEN** a legacy video's per-video folder is named after a title starting with `Season ` (e.g. `Season 2 Finale`)
+- **THEN** it is treated as legacy: the migration subcommand reports and moves it, and reconcile never sweeps its files

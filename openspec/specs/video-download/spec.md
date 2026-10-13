@@ -95,31 +95,39 @@ The system SHALL mark a video excluded, instead of errored, when the diagnosed r
 - **THEN** the system marks the video errored (retrying or permanently, per the retry policy) and does not exclude it
 
 ### Requirement: Per-Playlist Output Directory
-The system SHALL save a downloaded video's file inside a dedicated per-video folder, itself located under a directory determined by its owning playlist's or channel's configured storage path, within a single configured root directory. A storage path may contain multiple segments, producing nested subdirectories. The per-video folder's name SHALL be derived the same way the video's filename is derived (its sanitized title, disambiguated on collision — see the `video-naming` capability), so the video's file, its thumbnail, and its metadata file all live together in one folder per video. When a thumbnail was already fetched for the video ahead of its download (see `video-thumbnails`), the download SHALL reuse that same per-video folder rather than deciding a new one.
+The system SHALL save a downloaded video's file inside the `Season <season>` folder of its show directory, the show directory being determined by its owning playlist's or channel's configured storage path within a single configured root directory. A storage path may contain multiple segments, producing nested subdirectories. The file's name SHALL be the video's episode base name (see `video-naming` and `tv-show-layout`) with the media extension, so the video's file, its thumbnail, and its metadata file sit next to each other under one base name. The download SHALL reuse the episode number already recorded on the video (a playlist video's from when it was first stored, or one recorded by an earlier thumbnail-ahead fetch, see `video-thumbnails`), and SHALL assign a channel video's number when it has none yet.
 
 #### Scenario: Video downloaded
 - **WHEN** a video belonging to a playlist finishes downloading
-- **THEN** its file is saved in its own folder, under the configured root directory, in the subdirectory (or nested subdirectories) identified by its playlist's storage path
+- **THEN** its file is saved as `Season <season>/<episode base>.mp4` under the configured root directory, in the subdirectory (or nested subdirectories) identified by its playlist's storage path
 
 #### Scenario: Video downloaded for a channel
 - **WHEN** a video belonging to a channel finishes downloading
-- **THEN** its file is saved in its own folder, under the configured root directory, in the subdirectory (or nested subdirectories) identified by its channel's storage path
+- **THEN** its file is saved as `Season <season>/<episode base>.mp4` under the configured root directory, in the subdirectory (or nested subdirectories) identified by its channel's storage path
 
 #### Scenario: Root directory not configured
 - **WHEN** no root output directory has been explicitly configured
 - **THEN** the system uses a default root directory
 
 #### Scenario: Video downloaded under a legacy flat layout
-- **WHEN** a video was downloaded before per-video folders were introduced, and its recorded file still exists at its original flat location directly under the playlist's or channel's output directory
-- **THEN** the system continues to treat that file as valid and does not require it to be moved into a per-video folder
+- **WHEN** a video was downloaded before the TV-show layout was introduced and its recorded file still exists at its original location (a per-video folder or a flat file under the source directory)
+- **THEN** the system continues to treat that file as valid, keeps serving it, and leaves moving it to the `migrate-layout` subcommand
 
 #### Scenario: Video's thumbnail was already fetched ahead of its download
-- **WHEN** a video's full download runs and that video already has a recorded thumbnail filename from an earlier thumbnail-only fetch
-- **THEN** the system saves the video's file into that thumbnail's own folder instead of resolving a new folder name
+- **WHEN** a video's full download runs and that video already has a recorded episode number and thumbnail filename from an earlier thumbnail-only fetch
+- **THEN** the system saves the video's file under that same episode base name, next to the thumbnail
 
 #### Scenario: Video has no pre-fetched thumbnail
-- **WHEN** a video's full download runs and that video has no recorded thumbnail filename
-- **THEN** the system resolves its folder name the same way it always has, including disambiguating a naming collision
+- **WHEN** a channel video's full download runs and that video has no recorded episode number
+- **THEN** the system assigns its number from the publish timestamp the downloader reports and saves the file under the resulting episode base name
+
+#### Scenario: Playlist video downloaded
+- **WHEN** a playlist video's full download runs
+- **THEN** the system saves the file under the episode number recorded when the playlist first stored the video, whatever the reported publish timestamp
+
+#### Scenario: Finished download cannot be placed
+- **WHEN** numbering, moving or recording a finished download fails
+- **THEN** the system discards the staged files and marks the video errored like a failed download (retrying, or errored on the last attempt), keeping any episode number already assigned
 
 ### Requirement: Download Skipped For a Deleted Playlist
 The system SHALL NOT attempt to download a video, or treat it as an error, when the download is attempted after the video's owning playlist or channel no longer exists.
@@ -256,34 +264,35 @@ The system SHALL record, on the video itself, the time its download last succeed
 - **THEN** each of those videos gets its last update time as its recorded sync time, and every other video has none
 
 ### Requirement: Concurrent Downloads Use Distinct Folders
-The system SHALL give every video its own per-video folder even when
+The system SHALL give every video its own episode base name even when
 downloads of different videos run at the same time. Two videos downloading
-concurrently into the same playlist's or channel's output directory SHALL
-NOT end up sharing a folder, even when their titles produce the same folder
-name. The collision SHALL be resolved the same way as any other folder name
-collision (see `video-naming`).
+concurrently into the same show SHALL NOT end up sharing a base name, even
+when their titles are identical and they were published on the same day,
+because a channel's same-day indexes are assigned from the recorded numbers
+and a playlist's numbers from its never-reused counter.
 
 #### Scenario: Two videos with the same title download at the same time
-- **WHEN** two different videos with the same title, in the same playlist or channel, are downloaded concurrently and neither has a pre-fetched thumbnail folder
-- **THEN** each video's file, thumbnail, and metadata are saved in a different folder, and each video's recorded filename points into its own folder
+- **WHEN** two different videos with the same title and publish day, in the same playlist or channel, are downloaded concurrently
+- **THEN** each video's file, thumbnail, and metadata are saved under a different episode base name, and each video's recorded filename points at its own file
 
 ### Requirement: Download Finished For a Deleted Video Leaves No Files
-The system SHALL remove the per-video folder a download created when, by the
-time that download finishes, the video's record (or its owning playlist or
-channel) no longer exists. A deletion that happens while a download is
-running SHALL NOT leave behind a folder that no stored video accounts for.
+The system SHALL remove the files a download created (its media file,
+thumbnail and NFO) when, by the time that download finishes, the video's
+record (or its owning playlist or channel) no longer exists. A deletion that
+happens while a download is running SHALL NOT leave behind files that no
+stored video accounts for. Season folders and show files are left alone.
 
 #### Scenario: Playlist deleted while one of its videos is downloading
 - **WHEN** a playlist is deleted, and its output directory removed, while one of its videos is still downloading
-- **THEN** once that download finishes, the system removes the folder the download wrote, and does not record the download on any video
+- **THEN** once that download finishes, the system removes the files the download wrote, and does not record the download on any video
 
 #### Scenario: Video removed from its playlist while downloading
 - **WHEN** a video's record is removed while that video is still downloading
-- **THEN** once that download finishes, the system removes the folder the download wrote
+- **THEN** once that download finishes, the system removes the files the download wrote
 
 #### Scenario: Video still exists when its download finishes
 - **WHEN** a download finishes and the video's record still exists
-- **THEN** the system records the download as usual and keeps its folder
+- **THEN** the system records the download as usual and keeps its files
 
 ### Requirement: SABR-Only Streaming Is Surfaced
 The system SHALL detect, during a video download attempt, when `yt-dlp`

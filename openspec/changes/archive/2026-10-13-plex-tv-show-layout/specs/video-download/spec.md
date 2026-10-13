@@ -31,6 +31,10 @@ The system SHALL save a downloaded video's file inside the `Season <season>` fol
 - **WHEN** a playlist video's full download runs
 - **THEN** the system saves the file under the episode number recorded when the playlist first stored the video, whatever the reported publish timestamp
 
+#### Scenario: Finished download cannot be placed
+- **WHEN** numbering, moving or recording a finished download fails
+- **THEN** the system discards the staged files and marks the video errored like a failed download (retrying, or errored on the last attempt), keeping any episode number already assigned
+
 ### Requirement: Concurrent Downloads Use Distinct Folders
 The system SHALL give every video its own episode base name even when
 downloads of different videos run at the same time. Two videos downloading
