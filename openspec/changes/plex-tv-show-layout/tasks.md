@@ -83,7 +83,7 @@
 - [x] 5.5 VO: `EpisodeNumber` `it_should_widen_a_playlist_code_past_999` — `S01E1000`
 - [x] 5.6 VO: `EpisodeNumber` `it_should_decode_season_one_as_a_playlist_number`
 - [x] 5.7 sqlite_migrations: `it_should_number_existing_playlist_videos_by_position` — ties by insertion, channel videos untouched, `last_episode` = count, `NULL` for an empty playlist
-- [x] 5.8 SqlitePlaylistRepository: `it_should_persist_the_last_episode`
+- [x] 5.8 SqlitePlaylistRepository: `it_should_raise_the_last_episode`, `it_should_never_lower_the_last_episode`, `it_should_keep_the_last_episode_when_updating_from_a_stale_read` (were `it_should_persist_the_last_episode`; revised in 7.6)
 - [x] 5.9 SqliteVideoRepository: `it_should_persist_and_read_a_playlist_episode_number`
 - [x] 5.10 SqliteVideoRepository: same-day siblings via `channel_videos` only — revise 3.13's playlist sibling case so a playlist link no longer counts
 - [x] 5.11 `it_should_number_new_playlist_videos_in_playlist_order` — playlist created: positions 0..2 with publish times in another order → episodes 1..3, `last_episode` 3
@@ -98,3 +98,21 @@
 
 - [x] 6.1 Update `doc/PLEX.md` (layout example and numbering paragraph for playlists), `doc/INSTALLATION.md` and `doc/ARCHITECTURE.md` "Videos on disk", `CLAUDE.md` layout line
 - [x] 6.2 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --locked`, `npm run check` in `web/`; all must pass
+
+## 7. Audit fixes
+
+- [x] 7.1 Mobile sidebar: re-measure its top while open via `ResizeObserver` on the announcement slot (`web/src/App.tsx`); smoke `mobile sidebar stays closable when the announcement appears after it opened`
+- [x] 7.2 Staging dir keyed by video record id; the download and thumbnail tests assert `.downloads/<record id>`
+- [x] 7.3 Thumbnail fetch discards its staging dir after success too; `it_should_place_a_prefetched_thumbnail_as_the_episode_image` asserts it
+- [x] 7.4 `VideoRelocator` completes a half-moved set: `it_should_complete_a_video_whose_media_an_interrupted_run_already_moved`
+- [x] 7.5 Show files best effort: `it_should_sync_the_channel_even_if_its_show_files_cannot_be_written`, `it_should_report_show_files_it_cannot_write_and_still_move_the_videos`
+- [x] 7.6 Playlist counter written only by `PlaylistRepository::record_last_episode` (never lowered); `update` no longer writes it
+- [x] 7.7 Dry run without a database copy: `snapshot` removed, `migrate_layout::run` migrates the schema then plans; `doc/PLEX.md`, `doc/INSTALLATION.md` updated
+- [x] 7.8 Dry-run numbering tests: `it_should_plan_the_same_day_of_different_years_independently_on_a_dry_run`, `it_should_plan_past_a_later_number_already_recorded_that_day_on_a_dry_run`
+- [x] 7.9 `0008` deletes queued `reconcile_plex_collections` tasks: `it_should_drop_queued_plex_collection_reconciles_when_migrating`
+- [x] 7.10 `assign_episode_number` fails for an unnumbered video in no channel: `it_should_fail_to_number_an_unnumbered_playlist_video_by_publish_date`; repository tests rewritten around channel siblings
+- [x] 7.11 `ChannelEpisodeNumber::new` validates season, MMDD and index 01..=99, with value-object tests
+- [x] 7.12 `EpisodePaths` replaces `episode_base_name` / `episode_relative_path` at every call site; `season_folder()` uses `SEASON_FOLDER_PREFIX`
+- [x] 7.13 `FilesystemShowFileRepository` skips unchanged writes: `it_should_leave_unchanged_show_files_untouched`, `it_should_overwrite_a_changed_show_nfo`
+- [x] 7.14 Tests wire `VideoRelocator` with `FixedClock`; misplaced doc comments in `playlist_video_reconciler.rs` fixed
+- [x] 7.15 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --locked`, `npm run check` in `web/`, `scripts/run-smoke-tests.sh` (24/24); `cargo mutants` over the fixes: no missed mutants

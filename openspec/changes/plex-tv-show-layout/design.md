@@ -49,7 +49,11 @@ See proposal.md for why. Current state that shapes the approach:
    Plex and Kodi ignore dot-prefixed directories, so partial files, `.part`
    and `.fNNN` intermediates never reach the library, and the reconciler no
    longer needs title-derived "in-flight folder" protection. The same
-   staging serves the thumbnail-ahead fetch.
+   staging serves the thumbnail-ahead fetch. The staging dir is keyed by the
+   video's record id, not its YouTube id: the same YouTube video tracked by
+   two shows is two records that may download at once, and each discards
+   only its own dir. A thumbnail fetch discards its staging dir after
+   success as well as failure.
 2. **Publish timestamp from yt-dlp, not the Data API.** Both yt-dlp
    invocations already run per video; the Data API is best effort and
    quota-bound. The migration, which runs no yt-dlp, uses
@@ -60,7 +64,13 @@ See proposal.md for why. Current state that shapes the approach:
    videos linked to the same channel with the same season and month-day.
    No filesystem probing, no race between concurrent downloads. A playlist
    video always has its number already (decision 9), so for it this just
-   returns the recorded one.
+   returns the recorded one; an unnumbered video in no channel fails instead
+   of getting a date-based number, so a playlist video can never land in
+   `Season <year>`. The value rules (first of day, `+1`, index `01`..`99`)
+   live in `ChannelEpisodeNumber`; the repository only does the atomic "max
+   then write". A deliberate deviation from "no logic in repositories"
+   (listed in rust-architect): a find-then-update race would record
+   permanent duplicate numbers.
 4. **One relocation service.** `VideoRelocator::relocate` (assign number from
    a given timestamp, move file set, rewrite NFO, record filenames) is used
    by the `migrate-layout` subcommand and by missing-metadata recovery for
@@ -68,7 +78,12 @@ See proposal.md for why. Current state that shapes the approach:
 5. **Show files written by the source reconcilers.** `ShowFileWriter` runs at
    the start of every channel/playlist reconcile (initial and recurring), so
    creation, rename, avatar change and hand deletion all converge without a
-   new event.
+   new event. Best effort: a write failure is logged and the pass carries on
+   (the next pass retries); the migrator records it in `failed` under the
+   source dir and still moves that source's videos.
+   `FilesystemShowFileRepository` leaves `tvshow.nfo` / `poster.jpg`
+   untouched when their contents are unchanged, so passes don't wake the
+   disk or bump mtimes.
 6. **Legacy detection by path shape.** A recorded filename whose first
    segment starts with `Season ` is new-layout; anything else is legacy
    (per-video folder or flat file) and keeps today's top-level-entry handling
@@ -83,18 +98,18 @@ See proposal.md for why. Current state that shapes the approach:
    same-day batch included, without any write. Playlist videos carry their
    recorded number, so the dry run plans them as is.
    The plan needs the current schema (on a database from before this change,
-   `0008` is what numbers the playlist videos), but migrating is a write. So
-   a dry run copies the database file, and its `-wal` when present, into a
-   temp dir by plain file reads (`sqlite_connection::snapshot`; even a
-   read-only SQLite connection would create `-wal`/`-shm` files next to the
-   database), migrates and plans against the copy, then deletes it. The
-   real database and its folder stay byte-identical. The real run migrates
-   the real database first, as `serve` does.
+   `0008` is what numbers the playlist videos), so a dry run applies pending
+   migrations to the real database first, exactly as `serve` does on its
+   next start; beyond that it writes nothing.
 9. **Playlist videos are numbered when first stored, from a per-playlist
    counter.** `Playlist` gains `last_episode` (highest number ever
    assigned). `PlaylistVideoReconciler::add_video` takes
    `playlist.next_episode_number()`, creates the video with that number,
-   saves it, and saves the playlist `with_last_episode(number)`; a pass adds
+   saves it, and records the counter with `PlaylistRepository::
+   record_last_episode(id, number)`, which raises it (`MAX`) and never
+   lowers it; `PlaylistRepository::update` does not write `last_episode`, so
+   a full-row write from a stale read (the home-visibility toggle) can't move
+   it back. A pass adds
    its new videos in YouTube position order, so a first pass numbers the
    playlist in its order and later additions append. The counter, not
    `MAX(episode)`, guarantees a removed highest number is never reused (Plex
@@ -116,6 +131,13 @@ See proposal.md for why. Current state that shapes the approach:
     count. So pending playlist videos download under the right number even
     before `migrate-layout` runs, and the migration never needs a publish
     time for a playlist video: one without metadata is moved, not skipped.
+    It also deletes queued `reconcile_plex_collections` task rows, whose
+    handler is gone.
+12. **`EpisodePaths` names every episode file.** Stem
+    `Season <s>/<code> - <title>`; `media(ext)`, `thumbnail()`, `nfo()`, and
+    `thumb()` (the thumbnail's name as the NFO references it). The
+    downloader, relocator, thumbnail fetcher and orphan sweep all build from
+    it, so they can't drift.
 
 ## Risks / Trade-offs
 
@@ -138,7 +160,9 @@ See proposal.md for why. Current state that shapes the approach:
   its row updated last; a rerun sees either the legacy path (redo) or the
   new path (skip). A half-moved set (media moved, row not updated) is
   detected by the media existing at the target and is completed, not
-  duplicated.
+  duplicated: the number was recorded before any move, so the target is
+  known (`is_half_moved`), and each move skips a file already at its target
+  (`already_moved`).
 - [Media move fails after the number is assigned] → the number stays
   recorded while paths and status are unchanged; a rerun reuses it, so
   numbering stays stable.
@@ -151,10 +175,12 @@ See proposal.md for why. Current state that shapes the approach:
 - [Two passes of one playlist store the same new videos concurrently] → both
   could read the same `last_episode`; the same race already exists for the
   added rows themselves, so it is accepted, as the DDD rule on find-then-save
-  races says. The same holds for an HTTP playlist edit (`find` → `update`)
-  overlapping a pass: its `update` could write back a stale `last_episode`,
-  so the next new video could reuse a number; accepted as the same rare
-  window.
+  races says. An HTTP playlist edit overlapping a pass is not a risk:
+  `update` doesn't write `last_episode`, and `record_last_episode` never
+  lowers it.
+- [More than 99 videos of one channel on one day] → numbering the 100th
+  fails with a validation error (visible, retried) instead of spilling into
+  the next day's prefix.
 - [A test library already laid out by this branch] → no back-compat: wipe the
   database and `videos/`, then sync again.
 
@@ -183,12 +209,14 @@ None that change the specs or the task list.
 - `src/domain/video/channel_episode_number.rs` — date-based value object (was `EpisodeNumber`).
 - `src/domain/video/playlist_episode_number.rs` — playlist-order value object.
 - `src/domain/playlist/playlist.rs` — `last_episode` field, `next_episode_number`, `with_last_episode`.
-- `src/infrastructure/repositories/sqlite_playlist_repository.rs` — persist `last_episode`.
+- `src/infrastructure/repositories/sqlite_playlist_repository.rs` — persist `last_episode` on insert; `update` doesn't write it; `record_last_episode` raises it.
 - `src/domain/services/playlist_video_reconciler.rs` — number new videos in `add_video`.
 - `src/domain/video/video.rs` — `episode_number` field + transition.
-- `src/domain/video/video_filename.rs` — episode base name; collision helpers removed.
+- `src/domain/video/video_filename.rs` — collision helpers and episode-name helpers removed (see `episode_paths.rs`).
+- `src/domain/video/episode_paths.rs` — `EpisodePaths`, the one source of episode file names.
+- `src/domain/video/thumbnail_filename.rs` — deleted.
 - `src/domain/video/video_output_entry.rs` — layout helpers (season folder, nfo path, legacy detection).
-- `src/domain/video/events.rs` — unchanged shape, doc only.
+- `src/domain/video/events.rs` — unchanged; `VideoDownloaded.folder` no longer read.
 - `src/domain/video/mod.rs` — exports.
 - `src/domain/video_metadata/nfo.rs` — `render_episode_nfo`, `render_show_nfo`.
 - `src/domain/video_metadata/mapping.rs` — `resolve_sorttitle` kept (DB column), no NFO use.
@@ -209,19 +237,21 @@ None that change the specs or the task list.
 - `src/domain/task/task.rs` — `ReconcilePlexCollections` variant removed (and its payload/decoder); `web/src/lib/tasks.ts` label removed.
 - `src/application/subscribers/delete_plex_collection_on_{playlist,channel}_deleted.rs` — deleted; `subscribers/mod.rs` registry arg removed.
 - `src/application/subscribers/scan_plex_folder_on_video_downloaded.rs` — scans `output_dir`.
-- `src/application/cli/mod.rs`, `src/application/cli/migrate_layout.rs`, `src/main.rs` — subcommand; a dry run plans against a database copy.
-- `src/infrastructure/shared/sqlite_connection.rs` — `snapshot` (copy of the database file and its WAL for a dry run).
-- `src/serve.rs` — Plex wiring reduced to URL/token/videos path; `.downloads` created at startup; show file writer, relocator wired; startup migrations and infrastructure take the database path.
-- `src/infrastructure/infrastructure_container.rs` — `show_file_repository`, `staging_root`.
+- `src/application/cli/mod.rs`, `src/application/cli/migrate_layout.rs`, `src/main.rs` — subcommand; a dry run migrates the schema, then plans.
+- `src/serve.rs` — Plex wiring reduced to URL/token/videos path; `.downloads` created at startup; show file writer, relocator wired.
+- `src/infrastructure/infrastructure_container.rs` — `show_file_repository`.
 - `src/infrastructure/shared/ytdlp.rs` — staging output template, timestamp printing, `prepare_video_dir`/collision code removed.
 - `src/infrastructure/repositories/youtube_video_downloader_repository.rs` — new port signatures + fake.
 - `src/infrastructure/repositories/filesystem_video_file_repository.rs` — recursive list, move, delete set + fake.
-- `src/infrastructure/repositories/filesystem_show_file_repository.rs` — new port + adapter + fake.
+- `src/infrastructure/repositories/filesystem_show_file_repository.rs` — new port + adapter (no write when unchanged) + fake (with a failing variant).
 - `src/infrastructure/repositories/sqlite_video_repository.rs` — columns, `assign_episode_number`, `list_downloaded`.
 - `src/infrastructure/repositories/sqlite_video_metadata_repository.rs` — NFO path instead of dir; episode rendering.
 - `src/infrastructure/repositories/plex_collection_repository.rs` — renamed `plex_library_repository.rs`, trait trimmed to `list_sections` + `scan_path`, fake trimmed.
 - `src/infrastructure/repositories/filesystem_channel_avatar_repository.rs` — `path_of(filename)`.
-- `web/src/components/VideoDetail.tsx` (+ test) — storage location line.
+- `web/src/components/VideoDetail.tsx` (+ test), `web/src/lib/storageLocation.ts` (+ test) — storage location line.
+- `web/src/App.tsx` — mobile sidebar top re-measured while open (the announcement bar may appear after it opened); `smoke-tests/tests/mobile-sidebar.spec.js` — late-announcement case.
+- `src/domain/video_metadata/mod.rs` — re-exports `render_episode_nfo`, `render_show_nfo`; `src/domain/services/metadata_generator.rs`, `src/domain/video_metadata/video_metadata.rs`, `src/infrastructure/repositories/youtube_metadata_repository.rs` — doc comments only.
+- Test-only: `src/application/http/{channels,playlists,tasks,videos}/mod.rs`, `src/application/subscribers/reconcile_on_{channel,playlist}_created.rs`, `src/application/tasks/{download_video,fetch_thumbnail,delete_video_file,reconcile_channel,reconcile_playlist}_task.rs` (behaviour tests and wiring); `src/application/tasks/log_capture.rs` (rebuilds the tracing interest cache).
 - `web/src/lib/tasks.ts` (+ test), `web/src/components/TasksView.test.tsx` — drop the collections task label.
 - `doc/PLEX.md`, `doc/INSTALLATION.md`, `doc/ARCHITECTURE.md`, `README.md`, `CLAUDE.md`, `.env.example`, `scripts/run-local.sh` — docs and config.
 
@@ -232,7 +262,7 @@ None that change the specs or the task list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ChannelEpisodeNumber { season: i32, episode: u32 }   // episode = MMDD * 100 + index
 impl ChannelEpisodeNumber {
-    pub fn new(season: i32, episode: u32) -> Result<Self, ValidationError>;
+    pub fn new(season: i32, episode: u32) -> Result<Self, ValidationError>; // 4-digit year, valid MMDD, index 01..=99
     pub fn first_of_day(published_at: DateTime<Utc>) -> Self;          // index 01
     pub fn season(&self) -> i32;
     pub fn episode(&self) -> u32;
@@ -277,17 +307,24 @@ impl Video {
     pub fn is_in_legacy_layout(&self) -> bool;   // recorded filename not under "Season "
 }
 
-// src/domain/video/video_filename.rs
-pub fn episode_base_name(number: &EpisodeNumber, title: &str) -> String;        // "S2026E031501 - <sanitized>"
-pub fn episode_relative_path(number: &EpisodeNumber, title: &str, ext: &str) -> String; // "Season 2026/<base>.<ext>"
-// removed: video_folder_candidates, collision_suffixed_folder
+// src/domain/video/episode_paths.rs
+pub struct EpisodePaths { season_folder: String, base_name: String }
+impl EpisodePaths {
+    pub fn new(number: &EpisodeNumber, title: &str) -> Self;
+    pub fn stem(&self) -> String;                  // "Season 2026/S2026E031501 - <sanitized>"
+    pub fn media(&self, extension: &str) -> String;
+    pub fn thumbnail(&self) -> String;             // stem + ".jpg"
+    pub fn nfo(&self) -> String;                   // stem + ".nfo"
+    pub fn thumb(&self) -> String;                 // "<base>.jpg", as the NFO references it
+}
+// src/domain/video/video_filename.rs — removed: video_folder_candidates, collision_suffixed_folder
 
 // src/domain/video/video_output_entry.rs
 pub fn top_level_entry(relative_path: &str) -> &str;            // kept for legacy
 pub fn resolve_output_dir(videos_path: &str, path: &str) -> PathBuf;
 pub fn is_episode_path(relative_path: &str) -> bool;            // first segment starts with "Season "
 pub fn nfo_path_for(relative_path: &str) -> String;             // ".nfo" sibling for episode paths
-pub fn staging_dir(videos_path: &str, youtube_id: &VideoId) -> PathBuf; // "<root>/.downloads/<id>"
+pub fn staging_dir(videos_path: &str, video_id: &VideoRecordId) -> PathBuf; // "<root>/.downloads/<record id>"
 pub const SHOW_NFO_FILENAME: &str = "tvshow.nfo";
 pub const SHOW_POSTER_FILENAME: &str = "poster.jpg";
 
@@ -372,7 +409,7 @@ pub trait VideoFileRepository {
 }
 
 // src/infrastructure/repositories/filesystem_show_file_repository.rs
-pub trait ShowFileRepository {
+pub trait ShowFileRepository {   // both leave an identical existing file untouched
     fn write_show_nfo(&self, show_dir: &Path, nfo: &str) -> anyhow::Result<()>;
     fn copy_poster(&self, show_dir: &Path, source: &Path) -> anyhow::Result<()>;
 }
@@ -380,9 +417,14 @@ pub struct FilesystemShowFileRepository;
 
 // src/infrastructure/repositories/sqlite_video_repository.rs
 pub trait VideoRepository { /* existing */
-    fn assign_episode_number(&self, id: &VideoRecordId, published_at: DateTime<Utc>) -> anyhow::Result<EpisodeNumber>;
+    fn assign_episode_number(&self, id: &VideoRecordId, published_at: DateTime<Utc>) -> anyhow::Result<EpisodeNumber>; // fails for an unnumbered video in no channel
     fn list_downloaded(&self) -> anyhow::Result<Vec<Video>>;
     fn next_episode_number(&self, id: &VideoRecordId, published_at: DateTime<Utc>) -> anyhow::Result<EpisodeNumber>; // read-only peek, same rule as assign
+}
+
+// src/infrastructure/repositories/sqlite_playlist_repository.rs
+pub trait PlaylistRepository { /* existing; update no longer writes last_episode */
+    fn record_last_episode(&self, id: &PlaylistId, number: PlaylistEpisodeNumber) -> anyhow::Result<()>; // MAX, never lowers
 }
 
 // src/infrastructure/repositories/sqlite_video_metadata_repository.rs
@@ -406,20 +448,15 @@ pub trait ChannelAvatarRepository { /* existing */ fn path_of(&self, filename: &
 // src/application/cli/mod.rs
 pub enum Commands { Serve, UpdateYtdlp, MigrateLayout { #[arg(long)] dry_run: bool } }
 // src/application/cli/migrate_layout.rs
-pub fn run(dry_run: bool) -> ExitCode;   // prints one line per move/skip/failure + summary; non-zero on any failure
-fn migrate(db_path: PathBuf, dry_run: bool) -> ExitCode;   // migrate schema at db_path -> build infrastructure -> LayoutMigrator::migrate
-
-// src/infrastructure/shared/sqlite_connection.rs
-pub fn snapshot(source: &Path, target: &Path) -> anyhow::Result<()>;   // fs::copy of the file and its "-wal" when present; never opens source
+pub fn run(dry_run: bool) -> ExitCode;   // migrate schema -> build infrastructure -> LayoutMigrator::migrate; one line per move/skip/failure + summary; non-zero on any failure
 
 // src/serve.rs
 struct PlexIntegration { repository: Arc<dyn PlexLibraryRepository>, plex_videos_path: String }
 fn plex_integration() -> Option<PlexIntegration>;   // URL + token + videos path, warn on partial
 fn show_file_writer(infra) -> Arc<ShowFileWriter>;
 fn video_relocator(infra) -> Arc<VideoRelocator>;
-pub(crate) fn db_path() -> PathBuf;
-pub(crate) fn run_startup_migrations(db_path: &Path) -> anyhow::Result<()>;
-pub(crate) fn build_infrastructure(db_path: PathBuf) -> anyhow::Result<InfrastructureContainer>;
+pub(crate) fn run_startup_migrations() -> anyhow::Result<()>;
+pub(crate) fn build_infrastructure() -> anyhow::Result<InfrastructureContainer>;
 ```
 
 ```sql
@@ -434,6 +471,7 @@ UPDATE videos SET season = 1, episode = (
 WHERE id IN (SELECT video_id FROM playlist_videos);
 UPDATE playlists SET last_episode = (
     SELECT NULLIF(COUNT(*), 0) FROM playlist_videos WHERE playlist_id = playlists.id);
+DELETE FROM tasks WHERE task_type = 'reconcile_plex_collections';
 ```
 
 ```ts
@@ -448,26 +486,27 @@ export function storageLocation(basePath: string, filename: string | null): stri
 **Download**
 `DownloadVideoTask::handle(payload)` → `VideoDownloader::download(video_id, quality, output_dir, is_last_attempt)`
 → `fetch_metadata(video)` (Data API, best effort)
-→ `VideoDownloaderRepository::download(url, quality, staging_dir(videos_path, youtube_id))` → `ytdlp::download_video`
+→ `VideoDownloaderRepository::download(url, quality, staging_dir(videos_path, video.id))` → `ytdlp::download_video`
 → on `Succeeded(downloaded)`: `place_download(video, downloaded, quality, output_dir, metadata)`:
   `VideoRepository::assign_episode_number(id, downloaded.published_at or now)` (returns existing if set)
-  → `VideoMetadataRepository::write_nfo(metadata, number, output_dir/episode_relative_path(.., "nfo"))` when metadata
-  → `VideoFileRepository::move_file(downloaded.media_path, output_dir/episode_relative_path(.., "mp4"))`, same for thumbnail
-  → `VideoMetadataRepository::save(..)` when metadata → `VideoRepository::update(video.mark_downloaded(...))`
-  → `EventPublisher::publish(VideoDownloaded { video_id, output_dir, folder: season folder })`
+  → paths from `EpisodePaths::new(number, title)`
+  → `VideoMetadataRepository::write_nfo(metadata, number, output_dir/paths.nfo())` when metadata
+  → `VideoFileRepository::move_file(downloaded.media_path, output_dir/paths.media(ext))`, same for thumbnail (`paths.thumbnail()`)
+  → `VideoRepository::update(video.mark_downloaded(...))` → `save_metadata` (`VideoMetadataRepository::save`, re-fetching the metadata when the first fetch failed)
+  → `discard_staging(video)` → `EventPublisher::publish(VideoDownloaded { video_id, output_dir, folder: season folder })` (`folder` unread)
 → on `Failed`: `discard_staging(video)` (`delete_dir_recursive(staging_dir)`), then today's failure handling.
 → video or source deleted meanwhile: `discard_staging`, no record.
 
 **Thumbnail ahead**
 `FetchThumbnailTask::handle` → `ThumbnailFetcher::fetch(video, output_dir)` → `VideoDownloaderRepository::fetch_thumbnail(url, staging_dir)`
-→ `place_thumbnail`: `assign_episode_number(id, fetched.published_at)` → `move_file(fetched.path, output_dir/episode_relative_path(.., "jpg"))` → `VideoRepository::update_thumbnail(id, relative_path, now)`; on any failure `delete_dir_recursive(staging_dir)`.
+→ `place_thumbnail`: `assign_episode_number(id, fetched.published_at)` → `move_file(fetched.path, output_dir/EpisodePaths::new(..).thumbnail())` → `VideoRepository::update_thumbnail(id, relative_path, now)`; then, whatever the outcome, `delete_dir_recursive(staging_dir)`.
 
 **Reconcile (channel or playlist)**
-`ReconcileChannelTask::handle` / `ReconcileOnChannelCreated::handle` → `ChannelVideoReconciler::reconcile*` → `find_channel` → `ShowFileWriter::write_channel_show(channel)` (`render_show_nfo(Show::from_channel(..))` → `ShowFileRepository::write_show_nfo`, `copy_poster(show_dir, ChannelAvatarRepository::path_of(avatar))`) → existing membership sync → `InternalVideoReconciler::reconcile(desired, delta)`:
-  `read_actual_state` uses `VideoFileRepository::list` (top-level + season entries) and `protected_entries(videos)` = `tvshow.nfo`, `poster.jpg`, `Season *` dirs, recorded filename/thumbnail, `nfo_path_for(filename)`, every `Season <s>/<base>.*` of videos with a number, legacy top-level entries
-  → `generate_missing_metadata` → for a video with `is_in_legacy_layout()` and metadata now present: `VideoRelocator::relocate(video, Some(metadata.published_at), output_dir, false)`
+`ReconcileChannelTask::handle` / `ReconcileOnChannelCreated::handle` → `ChannelVideoReconciler::reconcile*` → `find_channel` → `ShowFileWriter::write_channel_show(channel)`, a failure logged and the pass continuing (`render_show_nfo(Show::from_channel(..))` → `ShowFileRepository::write_show_nfo`, `copy_poster(show_dir, ChannelAvatarRepository::path_of(avatar))`) → existing membership sync → `InternalVideoReconciler::reconcile(desired, delta)`:
+  `read_actual_state` uses `VideoFileRepository::list` (top-level + season entries) and `protected_entries(videos)` = `tvshow.nfo`, `poster.jpg`, `Season *` dirs, recorded filename/thumbnail, `nfo_path_for(filename)`, every `<EpisodePaths::stem()>.*` of videos with a number, legacy top-level entries
+  → `generate_missing_metadata` → for a video with `is_in_legacy_layout()` and metadata now present: `VideoRelocator::relocate(video, Some(metadata.published_at), output_dir)`
   → `delete_orphaned_files` deletes the rest.
-Playlist path identical via `PlaylistVideoReconciler` and `write_playlist_show`, except new videos: for each new item in YouTube position order, `add_video(playlist, ..)` → `number = playlist.next_episode_number()` → `VideoRepository::save(Video::create(..).with_episode_number(number.into(), now))` → `PlaylistVideoRepository::save` → `PlaylistRepository::update(playlist.with_last_episode(number))`, the updated playlist threaded into the next `add_video`.
+Playlist path identical via `PlaylistVideoReconciler` and `write_playlist_show`, except new videos: for each new item in YouTube position order, `add_video(playlist, ..)` → `number = playlist.next_episode_number()` → `VideoRepository::save(Video::create(..).with_episode_number(number.into(), now))` → `PlaylistVideoRepository::save` → `PlaylistRepository::record_last_episode(playlist.id, number)`, `playlist.with_last_episode(number)` threaded into the next `add_video`.
 
 **Delete video files**
 `DeleteVideoFileTask::handle(filename, thumbnail_filename, output_dir)` → `VideoFileDeleter::delete_video_file` → if `is_episode_path(filename)`: `delete(output_dir, filename)`, `delete(output_dir, nfo_path_for(filename))`, `delete(output_dir, thumbnail)`; else `delete(output_dir, top_level_entry(filename))` as today.
@@ -476,10 +515,9 @@ Playlist path identical via `PlaylistVideoReconciler` and `write_playlist_show`,
 `ScanPlexFolderOnVideoDownloaded::handle(payload)` → `PlexFolderScanner::scan_folder(Path::new(payload.output_dir))` → `plex_folder_path(videos_root, plex_videos_root, folder)` → `PlexLibraryRepository::list_sections()` → for each section containing it `scan_path(section.id, plex_path)`.
 
 **Migrate layout**
-`main` → `cli::migrate_layout::run(dry_run)` → real run: `migrate(db_path())`; dry run: `sqlite_connection::snapshot(db_path(), <temp dir>/yarrtube.sqlite3)` → `migrate(<copy>)` → temp dir removed.
-`migrate(db_path)` → `run_startup_migrations(db_path)` → `build_infrastructure(db_path)` → `LayoutMigrator::migrate(dry_run)`:
-for each source (`PlaylistRepository::list`, `ChannelRepository::list`): `ShowFileWriter::write_*_show` (skipped on dry run) → its downloaded videos (`list_downloaded` joined via link repositories) in legacy layout, with `VideoMetadataRepository::find` → sorted by `published_at` (unknown last) → real run: `VideoRelocator::relocate(video, published_at, output_dir)`; dry run: `VideoRelocator::plan(video, published_at, output_dir, planned)` with the numbers of this source's earlier `Moved` plans; no recorded number and `None` metadata (a channel video) → `Skipped(NoPublishTimestamp)`; missing file → `Skipped(FileMissing)`; error → `failed`.
-`relocate`: recorded number, else `assign_episode_number` → `move_file` media → `move_file` thumbnail → `VideoMetadataRepository::save` at the new NFO path (thumb renamed) when metadata is recorded, `remove_nfo(old movie.nfo)` → `remove_if_empty(old folder)` → `VideoRepository::update(video.relocate_to_episode(..))`.
+`main` → `cli::migrate_layout::run(dry_run)` → `run_startup_migrations()` (dry run too) → `build_infrastructure()` → `LayoutMigrator::migrate(dry_run)`:
+for each source (`PlaylistRepository::list`, `ChannelRepository::list`): `ShowFileWriter::write_*_show` (skipped on dry run; an error goes to `failed` under the source path and the source's videos are still processed) → its downloaded videos (`list_downloaded` joined via link repositories) in legacy layout, with `VideoMetadataRepository::find` → sorted by `published_at` (unknown last) → real run: `VideoRelocator::relocate(video, published_at, output_dir)`; dry run: `VideoRelocator::plan(video, published_at, output_dir, planned)` with the numbers of this source's earlier `Moved` plans; no recorded number and `None` metadata (a channel video) → `Skipped(NoPublishTimestamp)`; missing file → `Skipped(FileMissing)`; error → `failed`.
+`relocate`: legacy file missing → `Skipped(FileMissing)` unless the media already sits at the recorded number's target (`is_half_moved`), which is completed; recorded number, else `assign_episode_number` → `move_file` media → `move_file` thumbnail (each skipped when already at its target) → `VideoMetadataRepository::save` at the new NFO path (thumb renamed) when metadata is recorded, `remove_nfo(old movie.nfo)` → `remove_if_empty(old folder)` → `VideoRepository::update(video.relocate_to_episode(..))`.
 `plan`: recorded number, else `next_episode_number` → bumped past `planned` numbers of the same season and day → `Moved` with the would-be paths; no write.
 
 ## Test Plan
@@ -528,17 +566,25 @@ Playlist numbering (decisions 9–11):
 37. `it_should_move_legacy_playlist_videos_under_their_recorded_numbers` — migrate-layout: playlist videos numbered by position, publish order reversed → moved to `S01E001`/`S01E002` by position.
 38. `it_should_move_a_playlist_video_without_metadata` — migrate-layout: numbered playlist video, no metadata → moved, no NFO, not skipped.
 
+Audit fixes:
+
+39. `it_should_complete_a_video_whose_media_an_interrupted_run_already_moved` — migrate-layout: media already at `S01E001`, jpg still legacy → only the jpg moves, row relocated, old folder removed.
+40. `it_should_report_show_files_it_cannot_write_and_still_move_the_videos` — migrate-layout: failing show file repository → failure keyed by the source dir, video moved.
+41. `it_should_sync_the_channel_even_if_its_show_files_cannot_be_written` — reconcile channel task: failing show file repository → new video stored, next reconcile scheduled.
+42. `it_should_plan_the_same_day_of_different_years_independently_on_a_dry_run` — 2025-03-15 and 2026-03-15 both plan index `01`.
+43. `it_should_plan_past_a_later_number_already_recorded_that_day_on_a_dry_run` — planned `031501`, recorded `031502` → plans `031503`.
+
 Infrastructure tests:
 
 - `ytdlp`: `it_should_download_into_the_staging_dir_with_the_video_id_as_name`, `it_should_report_the_publish_timestamp_printed_by_ytdlp`, `it_should_fall_back_to_the_upload_date_when_the_timestamp_is_na`, `it_should_report_the_staged_thumbnail_written_next_to_the_download`, `it_should_report_the_written_thumbnail_path` (thumbnail fetch).
 - `FilesystemVideoFileRepository`: `it_should_list_top_level_entries_and_season_files`, `it_should_move_a_file_creating_its_parent`, `it_should_remove_an_empty_dir_only`, `it_should_delete_a_file_or_a_dir_by_relative_path`.
-- `FilesystemShowFileRepository`: `it_should_write_the_show_nfo_and_copy_the_poster`, `it_should_overwrite_an_existing_poster`.
-- `SqliteVideoRepository`: `it_should_assign_the_first_index_of_the_day`, `it_should_assign_the_next_free_index_within_the_same_show_and_day` (siblings via `channel_videos` only), `it_should_persist_and_read_a_playlist_episode_number`, `it_should_number_copies_in_different_shows_independently`, `it_should_return_the_existing_number_when_already_assigned`, `it_should_persist_and_read_the_episode_number`, `it_should_list_downloaded_videos`, `it_should_peek_the_next_episode_number_without_recording_it`.
+- `FilesystemShowFileRepository`: `it_should_write_the_show_nfo_and_copy_the_poster`, `it_should_overwrite_an_existing_poster`, `it_should_leave_unchanged_show_files_untouched`, `it_should_overwrite_a_changed_show_nfo`.
+- `SqliteVideoRepository`: `it_should_assign_the_first_index_of_the_day`, `it_should_assign_the_next_free_index_within_the_same_channel_and_day` (siblings via `channel_videos` only), `it_should_fail_to_number_an_unnumbered_playlist_video_by_publish_date`, `it_should_persist_and_read_a_playlist_episode_number`, `it_should_number_copies_in_different_shows_independently`, `it_should_return_the_existing_number_when_already_assigned`, `it_should_persist_and_read_the_episode_number`, `it_should_list_downloaded_videos`, `it_should_peek_the_next_episode_number_without_recording_it`.
 - `SqliteVideoMetadataRepository`: `it_should_write_an_episode_nfo_with_season_episode_and_aired`, `it_should_write_the_nfo_at_the_given_path`, `it_should_remove_the_nfo_at_the_given_path`.
-- `sqlite_connection`: `it_should_snapshot_a_database_without_writing_to_it` (closed database: source bytes unchanged, no file created next to it, copy holds the data), `it_should_snapshot_changes_still_in_the_write_ahead_log` (pending WAL changes reach the copy, source files unchanged).
-- `sqlite_migrations`: `it_should_add_the_episode_number_columns`, `it_should_number_existing_playlist_videos_by_position` (ties by insertion, channel videos untouched, `last_episode` = count, `NULL` for an empty playlist).
-- `SqlitePlaylistRepository`: `it_should_persist_the_last_episode`.
-- Value objects: `PlaylistEpisodeNumber` (`it_should_reject_episode_zero`, `it_should_give_the_next_number`), `EpisodeNumber` (`it_should_render_a_playlist_code_padded_to_three_digits`, `it_should_widen_a_playlist_code_past_999`, `it_should_decode_season_one_as_a_playlist_number`).
+- `sqlite_migrations`: `it_should_drop_queued_plex_collection_reconciles_when_migrating`, `it_should_add_the_episode_number_columns`, `it_should_number_existing_playlist_videos_by_position` (ties by insertion, channel videos untouched, `last_episode` = count, `NULL` for an empty playlist).
+- `SqlitePlaylistRepository`: `it_should_raise_the_last_episode`, `it_should_never_lower_the_last_episode`, `it_should_keep_the_last_episode_when_updating_from_a_stale_read`.
+- Value objects: `PlaylistEpisodeNumber` (`it_should_reject_episode_zero`, `it_should_give_the_next_number`), `EpisodeNumber` (`it_should_render_a_playlist_code_padded_to_three_digits`, `it_should_widen_a_playlist_code_past_999`, `it_should_decode_season_one_as_a_playlist_number`), `ChannelEpisodeNumber` (`it_should_accept_a_day_and_index_within_range`, `it_should_fail_if_the_season_is_not_a_four_digit_year`, `it_should_fail_if_the_episode_is_not_a_day_and_index`, `it_should_fail_to_number_past_the_99th_video_of_a_day`, `it_should_start_the_day_at_index_one`), `EpisodePaths` (`it_should_name_every_file_of_a_channel_episode_after_its_stem`, `it_should_name_a_playlist_episode_in_season_one`).
 - `HttpPlexLibraryRepository`: existing `list_sections` and `scan_path` tests kept; collection tests removed.
 - `FilesystemChannelAvatarRepository`: `it_should_resolve_the_path_of_a_stored_avatar`.
 - web `VideoDetail.test.tsx`: `shows the season folder as the storage location`, `shows the source path when the video has no file`; `storageLocation.test.ts` for the pure function.
+- smoke `mobile-sidebar.spec.js`: `mobile sidebar stays closable when the announcement appears after it opened`.
