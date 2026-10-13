@@ -16,5 +16,5 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
-- [ ] 4.2 Manual check with `scripts/run-local.sh`: delete a channel's avatar file from `avatars/`, force a reconcile of that channel, and confirm the avatar file and the show's `poster.jpg` come back.
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
+- [x] 4.2 Manual check with `scripts/run-local.sh`: delete a channel's avatar file from `avatars/`, force a reconcile of that channel, and confirm the avatar file and the show's `poster.jpg` come back.
