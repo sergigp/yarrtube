@@ -64,7 +64,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
-    use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
+    use crate::infrastructure::repositories::youtube_channel_repository::{
+        FakeYoutubeChannelRepository, ResolvedChannel,
+    };
     use crate::infrastructure::repositories::youtube_channel_videos_repository::{
         ChannelVideoListing, FakeChannelVideosRepository,
     };
@@ -664,6 +666,94 @@ mod tests {
                 PathBuf::from("avatars/@somechannel.jpg")
             )]
         );
+    }
+
+    #[test]
+    fn it_should_restore_a_missing_channel_avatar() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let show_file_repository = Arc::new(FakeShowFileRepository::default());
+        let avatar_repository = Arc::new(FakeChannelAvatarRepository::default());
+        let stored_channel = Channel {
+            avatar_filename: Some("@somechannel.jpg".to_string()),
+            ..channel("@somechannel")
+        };
+        channel_repository.insert(&stored_channel).unwrap();
+        let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
+            channel_repository.clone(),
+            video_repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            task_repository.clone(),
+            Arc::new(InternalVideoReconciler::new(
+                video_repository.clone(),
+                Arc::new(MetadataGenerator::new(
+                    Arc::new(FakeYoutubeMetadataRepository::default()),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    Arc::new(FakeVideoDownloaderRepository::default()),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                    "/videos",
+                )),
+                Arc::new(VideoRelocator::new(
+                    video_repository.clone(),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
+            )),
+            Arc::new(ShowFileWriter::new(
+                show_file_repository.clone(),
+                avatar_repository.clone(),
+                "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository.clone(),
+                Arc::new(FakeYoutubeChannelRepository {
+                    resolved: Some(resolved_channel(Some("https://yt3.example/avatar.jpg"))),
+                }),
+                avatar_repository.clone(),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            avatar_repository.avatars(),
+            vec![(
+                "@somechannel.jpg".to_string(),
+                "https://yt3.example/avatar.jpg".to_string()
+            )]
+        );
+        assert_eq!(
+            *show_file_repository.posters.lock().unwrap(),
+            vec![(
+                PathBuf::from("/videos/creators/somechannel"),
+                PathBuf::from("avatars/@somechannel.jpg")
+            )]
+        );
+        assert_eq!(channel_repository.list().unwrap(), vec![stored_channel]);
     }
 
     #[test]
@@ -1444,6 +1534,14 @@ mod tests {
             None,
             fixed_timestamp(),
         )
+    }
+
+    fn resolved_channel(avatar_url: Option<&str>) -> ResolvedChannel {
+        ResolvedChannel {
+            youtube_channel_id: "UC123".to_string(),
+            title: "Some Channel".to_string(),
+            avatar_url: avatar_url.map(str::to_string),
+        }
     }
 
     fn watched_timestamp() -> DateTime<Utc> {

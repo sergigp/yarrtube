@@ -39,6 +39,16 @@ pub trait ChannelAvatarRestorerApi: Send + Sync {
 
 impl ChannelAvatarRestorerApi for ChannelAvatarRestorer {
     fn restore_missing(&self, channel: Channel) -> Channel {
+        self.download_avatar(&channel);
         channel
+    }
+}
+
+impl ChannelAvatarRestorer {
+    fn download_avatar(&self, channel: &Channel) -> Option<String> {
+        let avatar_url = self.lookup.resolve(&channel.id).ok()??.avatar_url?;
+        self.avatar_repository
+            .store(&channel.id, &avatar_url)
+            .ok()?
     }
 }
