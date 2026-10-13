@@ -757,6 +757,97 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_a_stored_channel_avatar() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let show_file_repository = Arc::new(FakeShowFileRepository::default());
+        let avatar_repository = Arc::new(FakeChannelAvatarRepository::with_avatars(&[(
+            "@somechannel.jpg",
+            "https://yt3.example/original.jpg",
+        )]));
+        let stored_channel = Channel {
+            avatar_filename: Some("@somechannel.jpg".to_string()),
+            ..channel("@somechannel")
+        };
+        channel_repository.insert(&stored_channel).unwrap();
+        let task = ReconcileChannelTask::new(ChannelVideoReconciler::new(
+            channel_repository.clone(),
+            video_repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            task_repository.clone(),
+            Arc::new(InternalVideoReconciler::new(
+                video_repository.clone(),
+                Arc::new(MetadataGenerator::new(
+                    Arc::new(FakeYoutubeMetadataRepository::default()),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                task_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(ThumbnailFetcher::new(
+                    video_repository.clone(),
+                    Arc::new(FakeVideoDownloaderRepository::default()),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                    "/videos",
+                )),
+                Arc::new(VideoRelocator::new(
+                    video_repository.clone(),
+                    Arc::new(FakeVideoFileRepository::default()),
+                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(FixedClock(fixed_timestamp())),
+                "/videos",
+            )),
+            Arc::new(ShowFileWriter::new(
+                show_file_repository.clone(),
+                avatar_repository.clone(),
+                "/videos",
+            )),
+            Arc::new(ChannelAvatarRestorer::new(
+                channel_repository.clone(),
+                Arc::new(FakeYoutubeChannelRepository {
+                    resolved: Some(resolved_channel(Some("https://yt3.example/avatar.jpg"))),
+                }),
+                avatar_repository.clone(),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            3600,
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            avatar_repository.avatars(),
+            vec![(
+                "@somechannel.jpg".to_string(),
+                "https://yt3.example/original.jpg".to_string()
+            )]
+        );
+        assert_eq!(
+            *show_file_repository.posters.lock().unwrap(),
+            vec![(
+                PathBuf::from("/videos/creators/somechannel"),
+                PathBuf::from("avatars/@somechannel.jpg")
+            )]
+        );
+        assert_eq!(channel_repository.list().unwrap(), vec![stored_channel]);
+    }
+
+    #[test]
     fn it_should_record_a_restored_avatar_for_a_channel_without_one() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));

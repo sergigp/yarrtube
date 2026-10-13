@@ -39,6 +39,9 @@ pub trait ChannelAvatarRestorerApi: Send + Sync {
 
 impl ChannelAvatarRestorerApi for ChannelAvatarRestorer {
     fn restore_missing(&self, channel: Channel) -> Channel {
+        if self.has_stored_avatar(&channel) {
+            return channel;
+        }
         let Some(avatar_filename) = self.download_avatar(&channel) else {
             return channel;
         };
@@ -47,6 +50,19 @@ impl ChannelAvatarRestorerApi for ChannelAvatarRestorer {
 }
 
 impl ChannelAvatarRestorer {
+    /// A file whose presence can't be checked counts as stored, so a
+    /// transient filesystem error doesn't trigger a download every pass.
+    fn has_stored_avatar(&self, channel: &Channel) -> bool {
+        channel
+            .avatar_filename
+            .as_deref()
+            .is_some_and(|avatar_filename| {
+                self.avatar_repository
+                    .exists(avatar_filename)
+                    .unwrap_or(true)
+            })
+    }
+
     fn download_avatar(&self, channel: &Channel) -> Option<String> {
         let avatar_url = self.lookup.resolve(&channel.id).ok()??.avatar_url?;
         self.avatar_repository
