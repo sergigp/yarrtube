@@ -325,4 +325,17 @@ mod tests {
 
         assert_eq!(path, PathBuf::from("/data/avatars/@somechannel.jpg"));
     }
+
+    #[test]
+    fn it_should_report_a_stored_avatar_file_as_existing() {
+        let dir = unique_temp_dir("channel-avatar-exists");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("@somechannel.jpg"), b"fake image bytes").unwrap();
+        let repo = FilesystemChannelAvatarRepository::new(dir.clone());
+
+        let exists = repo.exists("@somechannel.jpg").unwrap();
+
+        assert!(exists);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

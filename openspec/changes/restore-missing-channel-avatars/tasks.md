@@ -11,7 +11,7 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 `FilesystemChannelAvatarRepository`, `it_should_report_a_stored_avatar_file_as_existing`: verify with `cargo test it_should_report_a_stored_avatar_file_as_existing`.
+- [x] 3.1 `FilesystemChannelAvatarRepository`, `it_should_report_a_stored_avatar_file_as_existing`: verify with `cargo test it_should_report_a_stored_avatar_file_as_existing`.
 - [ ] 3.2 `FilesystemChannelAvatarRepository`, `it_should_report_an_avatar_as_missing_if_its_directory_is_gone`: verify with `cargo test it_should_report_an_avatar_as_missing_if_its_directory_is_gone`.
 
 ## 4. Verification
