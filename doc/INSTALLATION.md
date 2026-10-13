@@ -116,7 +116,8 @@ docker compose run --rm yarrtube yarrtube migrate-layout --dry-run   # preview
 docker compose run --rm yarrtube yarrtube migrate-layout
 ```
 
-The dry run prints each move and skip and changes nothing. The real run
+The dry run prints each move and skip and moves no files (it only upgrades
+the database schema, as the daemon would on start). The real run
 moves every downloaded video's files into its season folder, writes the
 show files, and exits non-zero if any video failed to move. It is safe to
 run again. See [PLEX.md](PLEX.md#2-migrating-a-library-downloaded-by-an-older-yarrtube)

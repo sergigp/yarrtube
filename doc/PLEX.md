@@ -85,7 +85,8 @@ old ones stay playable where they are until you migrate them once.
 1. Back up your videos folder and database.
 2. Stop the daemon.
 3. Preview the migration. It prints every move (`from -> to`), every
-   skipped video with its reason, and a summary, and changes nothing:
+   skipped video with its reason, and a summary. It moves no files; it
+   only upgrades the database schema, as the daemon does on its next start:
 
    ```bash
    docker compose run --rm yarrtube yarrtube migrate-layout --dry-run

@@ -1,44 +1,21 @@
 use crate::domain::services::{LayoutMigratorApi, MigrationReport, SkipReason};
-use crate::infrastructure::shared::sqlite_connection;
 use crate::serve;
 use std::io::Write;
-use std::path::PathBuf;
 use std::process::ExitCode;
 
 /// Runs the layout migration once, printing one line per move, skip and
-/// failure plus a summary. Exits non-zero when any video failed to move. A
-/// dry run plans against a throwaway copy of the database, so it writes
-/// nothing, not even the schema migrations the plan needs.
+/// failure plus a summary. Exits non-zero when any video failed to move.
 pub fn run(dry_run: bool) -> ExitCode {
-    if !dry_run {
-        return migrate(serve::db_path(), false);
-    }
-    let scratch_dir =
-        std::env::temp_dir().join(format!("yarrtube-dry-run-{}", uuid::Uuid::new_v4()));
-    let snapshot_path = scratch_dir.join("yarrtube.sqlite3");
-    let exit_code = match std::fs::create_dir_all(&scratch_dir)
-        .map_err(anyhow::Error::from)
-        .and_then(|()| sqlite_connection::snapshot(&serve::db_path(), &snapshot_path))
-    {
-        Ok(()) => migrate(snapshot_path, true),
-        Err(e) => {
-            eprintln!("Error: failed to copy the database for the dry run: {e:#}");
-            ExitCode::FAILURE
-        }
-    };
-    let _ = std::fs::remove_dir_all(&scratch_dir);
-    exit_code
-}
-
-/// Migrates the schema of the database at `db_path` (it may predate the
-/// episode number columns when run right after an upgrade, before `serve`
-/// ever started), then relocates the videos it records.
-fn migrate(db_path: PathBuf, dry_run: bool) -> ExitCode {
-    if let Err(e) = serve::run_startup_migrations(&db_path) {
+    // The database may predate the episode number columns when the
+    // migration runs right after an upgrade, before `serve` ever started.
+    // Applied on a dry run too: `serve` applies them on its next start
+    // anyway, and the plan needs them; the dry run moves and records nothing
+    // else.
+    if let Err(e) = serve::run_startup_migrations() {
         eprintln!("Error: failed to apply database migrations: {e}");
         return ExitCode::FAILURE;
     }
-    let infrastructure = match serve::build_infrastructure(db_path) {
+    let infrastructure = match serve::build_infrastructure() {
         Ok(infrastructure) => infrastructure,
         Err(e) => {
             eprintln!("Error: failed to initialize infrastructure: {e}");
