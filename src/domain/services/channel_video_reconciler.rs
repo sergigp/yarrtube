@@ -134,8 +134,9 @@ impl ChannelVideoReconciler {
 
     /// One reconcile pass: restores the channel's avatar if its file is
     /// missing, brings the database in line with YouTube (the channel's
-    /// membership), then the channel's folder in line with the database. Everything the pass logs, `InternalVideoReconciler`'s steps
-    /// included, carries the channel id through the pass's span.
+    /// membership), then the channel's folder in line with the database.
+    /// Everything the pass logs, `InternalVideoReconciler`'s steps included,
+    /// carries the channel id through the pass's span.
     fn reconcile_channel(
         &self,
         channel: Channel,
