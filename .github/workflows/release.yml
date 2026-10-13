@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - "v*.*.*"
+  # Manual run publishes a pre-release test image (:edge + :sha-<short>) from
+  # the selected ref without touching :latest or any semver tag.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -104,7 +107,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
+            type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=sha,enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Create and push multi-arch manifest
         working-directory: ${{ runner.temp }}/digests
