@@ -5,11 +5,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-pub fn ensure_output_dir(output_path: &Path) -> Result<()> {
-    std::fs::create_dir_all(output_path)
-        .map_err(|e| anyhow!("Failed to create output directory {output_path:?}: {e}"))
-}
-
 /// Runs `cmd`, retrying briefly on a transient "text file busy" error. The
 /// `yt-dlp` binary can be mid-replacement by a concurrent `update-ytdlp` run
 /// (which swaps it in via an atomic rename, but the exec of the old inode
@@ -105,47 +100,6 @@ fn parse_duration_seconds(line: &str) -> Option<i64> {
         return None;
     }
     trimmed.parse::<f64>().ok().map(|seconds| seconds as i64)
-}
-
-/// The `<media stem>.jpg` `--write-thumbnail --convert-thumbnails jpg` left
-/// next to the staged media, when it is there.
-fn staged_thumbnail(media_path: &Path) -> Option<PathBuf> {
-    Some(media_path.with_extension("jpg")).filter(|thumbnail| thumbnail.is_file())
-}
-
-/// The printed line `back` lines before the last one, when printed.
-fn line_before_last<'a>(lines: &[&'a str], back: usize) -> Option<&'a str> {
-    lines
-        .len()
-        .checked_sub(back + 1)
-        .and_then(|idx| lines.get(idx))
-        .copied()
-}
-
-/// The publish time from `yt-dlp`'s printed timestamp, else from its
-/// printed upload date.
-fn parse_published_at(timestamp: Option<&str>, upload_date: Option<&str>) -> Option<DateTime<Utc>> {
-    timestamp
-        .and_then(parse_timestamp)
-        .or_else(|| upload_date.and_then(parse_upload_date))
-}
-
-/// Parses `yt-dlp`'s `--print %(timestamp)s` line (Unix seconds) into the
-/// publish time; `NA` or anything unparsable is unknown.
-fn parse_timestamp(line: &str) -> Option<DateTime<Utc>> {
-    line.trim()
-        .parse::<i64>()
-        .ok()
-        .and_then(|seconds| DateTime::from_timestamp(seconds, 0))
-}
-
-/// Parses `yt-dlp`'s `--print %(upload_date)s` line (`YYYYMMDD`) into
-/// midnight UTC of that day, the publish time when no timestamp is known.
-fn parse_upload_date(line: &str) -> Option<DateTime<Utc>> {
-    chrono::NaiveDate::parse_from_str(line.trim(), "%Y%m%d")
-        .ok()
-        .and_then(|date| date.and_hms_opt(0, 0, 0))
-        .map(|midnight| midnight.and_utc())
 }
 
 /// Names every staged file after the video's YouTube id, so the media and
@@ -595,6 +549,52 @@ fn run(
     }
 
     Ok(RunOutcome::Success(output))
+}
+
+fn ensure_output_dir(output_path: &Path) -> Result<()> {
+    std::fs::create_dir_all(output_path)
+        .map_err(|e| anyhow!("Failed to create output directory {output_path:?}: {e}"))
+}
+
+/// The `<media stem>.jpg` `--write-thumbnail --convert-thumbnails jpg` left
+/// next to the staged media, when it is there.
+fn staged_thumbnail(media_path: &Path) -> Option<PathBuf> {
+    Some(media_path.with_extension("jpg")).filter(|thumbnail| thumbnail.is_file())
+}
+
+/// The printed line `back` lines before the last one, when printed.
+fn line_before_last<'a>(lines: &[&'a str], back: usize) -> Option<&'a str> {
+    lines
+        .len()
+        .checked_sub(back + 1)
+        .and_then(|idx| lines.get(idx))
+        .copied()
+}
+
+/// The publish time from `yt-dlp`'s printed timestamp, else from its
+/// printed upload date.
+fn parse_published_at(timestamp: Option<&str>, upload_date: Option<&str>) -> Option<DateTime<Utc>> {
+    timestamp
+        .and_then(parse_timestamp)
+        .or_else(|| upload_date.and_then(parse_upload_date))
+}
+
+/// Parses `yt-dlp`'s `--print %(timestamp)s` line (Unix seconds) into the
+/// publish time; `NA` or anything unparsable is unknown.
+fn parse_timestamp(line: &str) -> Option<DateTime<Utc>> {
+    line.trim()
+        .parse::<i64>()
+        .ok()
+        .and_then(|seconds| DateTime::from_timestamp(seconds, 0))
+}
+
+/// Parses `yt-dlp`'s `--print %(upload_date)s` line (`YYYYMMDD`) into
+/// midnight UTC of that day, the publish time when no timestamp is known.
+fn parse_upload_date(line: &str) -> Option<DateTime<Utc>> {
+    chrono::NaiveDate::parse_from_str(line.trim(), "%Y%m%d")
+        .ok()
+        .and_then(|date| date.and_hms_opt(0, 0, 0))
+        .map(|midnight| midnight.and_utc())
 }
 
 #[cfg(test)]
@@ -1151,6 +1151,56 @@ mod tests {
         );
 
         assert!(result.is_err());
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_fail_with_an_install_hint_if_no_binary_exists() {
+        use test_support::unique_temp_dir;
+
+        let output_dir = unique_temp_dir("ytdlp-output-missing-binary-message");
+        let missing_path = output_dir.join("does-not-exist");
+
+        let result = download_video(
+            &missing_path,
+            "https://example.com/video",
+            Quality::High,
+            &output_dir,
+        );
+
+        assert_eq!(
+            result.map(|_| ()).map_err(|e| e.to_string()),
+            Err(format!(
+                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
+                missing_path.display()
+            ))
+        );
+        std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn it_should_fail_to_run_if_the_binary_is_not_executable() {
+        use test_support::unique_temp_dir;
+
+        let output_dir = unique_temp_dir("ytdlp-output-non-executable-binary");
+        let non_executable_path = output_dir.join("yt-dlp");
+        std::fs::write(&non_executable_path, "#!/bin/sh\nexit 0\n").unwrap();
+
+        let result = download_video(
+            &non_executable_path,
+            "https://example.com/video",
+            Quality::High,
+            &output_dir,
+        );
+
+        assert_eq!(
+            result.map(|_| ()).map_err(|e| e.to_string()),
+            Err(
+                "Failed to run yt-dlp for https://example.com/video: Permission denied (os error 13)"
+                    .to_string()
+            )
+        );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 

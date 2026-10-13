@@ -194,13 +194,7 @@ impl PlaylistVideoReconciler {
                     known_videos.insert(current.video_id.clone(), added);
                 }
                 Some((existing, video)) => {
-                    if let Some(previous_title) =
-                        self.refresh_known_video(existing, video, current, now)?
-                    {
-                        delta
-                            .previous_titles
-                            .insert(video.id.clone(), previous_title);
-                    }
+                    self.refresh_known_video(existing, video, current, now)?
                 }
             }
         }
@@ -305,16 +299,14 @@ impl PlaylistVideoReconciler {
     }
 
     /// Follows a known video's title and playlist position on YouTube.
-    /// Returns the video's previous title when it was renamed.
     fn refresh_known_video(
         &self,
         existing: &PlaylistVideo,
         video: &Video,
         current: &YoutubePlaylistItem,
         now: DateTime<Utc>,
-    ) -> anyhow::Result<Option<String>> {
-        let renamed = video.title != current.title;
-        if renamed {
+    ) -> anyhow::Result<()> {
+        if video.title != current.title {
             self.video_repository
                 .update_title(&video.id, &current.title, now)?;
         }
@@ -326,7 +318,7 @@ impl PlaylistVideoReconciler {
             })?;
         }
 
-        Ok(renamed.then(|| video.title.clone()))
+        Ok(())
     }
 
     /// Deletes every stored video whose YouTube id is not in

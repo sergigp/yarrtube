@@ -436,6 +436,41 @@ mod tests {
     }
 
     #[test]
+    fn it_should_fail_to_remove_a_dir_it_cannot_read() {
+        let dir = unique_temp_dir("video-file-repository-remove-if-empty-unreadable");
+        let not_a_dir = dir.join("leftover.mp4");
+        std::fs::write(&not_a_dir, b"").unwrap();
+
+        let result = FilesystemVideoFileRepository.remove_if_empty(&not_a_dir);
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(format!(
+                "failed to read directory {not_a_dir:?}: Not a directory (os error 20)"
+            ))
+        );
+        assert!(not_a_dir.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_fail_to_list_an_output_directory_it_cannot_read() {
+        let dir = unique_temp_dir("video-file-repository-list-unreadable");
+        let not_a_dir = dir.join("leftover.mp4");
+        std::fs::write(&not_a_dir, b"").unwrap();
+
+        let result = FilesystemVideoFileRepository.list(&not_a_dir);
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(format!(
+                "failed to read output directory {not_a_dir:?}: Not a directory (os error 20)"
+            ))
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn it_should_delete_a_file_or_a_dir_by_relative_path() {
         let dir = unique_temp_dir("video-file-repository-delete-relative");
         std::fs::create_dir_all(dir.join("Season 2026")).unwrap();

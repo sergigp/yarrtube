@@ -12,6 +12,9 @@ pub(crate) const SEASON_FOLDER_PREFIX: &str = "Season ";
 pub const SHOW_NFO_FILENAME: &str = "tvshow.nfo";
 /// A show's poster, at the root of its playlist's or channel's directory.
 pub const SHOW_POSTER_FILENAME: &str = "poster.jpg";
+/// The per-video-folder NFO of the legacy layout, removed when a legacy
+/// video is relocated into its season folder.
+pub const MOVIE_NFO_FILENAME: &str = "movie.nfo";
 
 /// Returns the first path component of a stored `filename`/`thumbnail_filename`:
 /// a legacy video's own folder name for a `"folder/file.ext"` path (one video
@@ -45,18 +48,21 @@ pub fn resolve_output_dir(videos_path: &str, path: &str) -> PathBuf {
 }
 
 /// Whether a recorded `filename`/`thumbnail_filename` is in the TV-show
-/// layout: its first segment is a `Season ` folder. Anything else is a legacy
-/// per-video folder or flat file.
+/// layout: an `S<season>E<episode> - ` file in a `Season <number>` folder.
+/// Anything else is a legacy per-video folder or flat file, including one
+/// whose video title happens to start with `Season `.
 pub fn is_episode_path(relative_path: &str) -> bool {
     relative_path
         .split_once('/')
-        .is_some_and(|(first, _)| is_season_folder(first))
+        .is_some_and(|(first, rest)| is_season_folder(first) && is_episode_file_name(rest))
 }
 
-/// Whether a top-level entry of a show directory is one of its `Season `
-/// folders.
+/// Whether a top-level entry of a show directory is one of its season
+/// folders: `Season ` followed by the season number only.
 pub fn is_season_folder(entry: &str) -> bool {
-    !entry.contains('/') && entry.starts_with(SEASON_FOLDER_PREFIX)
+    entry
+        .strip_prefix(SEASON_FOLDER_PREFIX)
+        .is_some_and(is_number)
 }
 
 /// The episode NFO sitting next to an episode file: the same path with a
@@ -78,6 +84,19 @@ pub fn staging_dir(videos_path: &str, video_id: &VideoRecordId) -> PathBuf {
         .join(video_id.as_str())
 }
 
+/// Whether a file name starts with an episode code: `S<season>E<episode> - `.
+fn is_episode_file_name(file_name: &str) -> bool {
+    file_name
+        .split_once(" - ")
+        .and_then(|(code, _)| code.strip_prefix('S'))
+        .and_then(|code| code.split_once('E'))
+        .is_some_and(|(season, episode)| is_number(season) && is_number(episode))
+}
+
+fn is_number(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,6 +109,46 @@ mod tests {
     #[test]
     fn it_should_return_the_filename_unchanged_for_a_legacy_flat_path() {
         assert_eq!(top_level_entry("My Video.mp4"), "My Video.mp4");
+    }
+
+    #[test]
+    fn it_should_recognize_an_episode_file_in_its_season_folder() {
+        assert_eq!(
+            [
+                "Season 2026/S2026E031501 - My Video.mp4",
+                "Season 1/S01E007 - My Video.jpg",
+            ]
+            .map(is_episode_path),
+            [true, true]
+        );
+    }
+
+    #[test]
+    fn it_should_treat_a_legacy_folder_titled_like_a_season_as_legacy() {
+        assert_eq!(
+            [
+                "Season 2 Finale/Season 2 Finale.mp4",
+                "Season 2/Season 2.mp4",
+                "Season Finale/Season Finale.mp4",
+            ]
+            .map(is_episode_path),
+            [false, false, false]
+        );
+    }
+
+    #[test]
+    fn it_should_only_take_a_season_and_number_as_a_season_folder() {
+        assert_eq!(
+            [
+                "Season 2026",
+                "Season 1",
+                "Season 2 Finale",
+                "Season Finale",
+                "Season "
+            ]
+            .map(is_season_folder),
+            [true, true, false, false, false]
+        );
     }
 
     #[test]

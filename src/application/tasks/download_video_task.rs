@@ -590,6 +590,63 @@ mod tests {
     }
 
     #[test]
+    fn it_should_mark_errored_if_the_download_cannot_be_moved_into_place_on_the_last_attempt() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let output_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        let staged_media =
+            PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str()));
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_failing_move(staged_media.clone()));
+        video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                staged_download(),
+            )),
+            video_file_repository.clone(),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), true);
+
+        assert_eq!(
+            result,
+            Err(format!("permission denied moving {staged_media:?}"))
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_errored(fixed_timestamp())
+                    .with_episode_number(published_episode(), fixed_timestamp())
+            ]
+        );
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![PathBuf::from(format!(
+                "/videos/.downloads/{}",
+                video.id.as_str()
+            ))]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_retry_a_failed_download() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

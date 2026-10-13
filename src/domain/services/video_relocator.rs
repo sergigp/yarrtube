@@ -1,8 +1,7 @@
 use crate::domain::video::{
-    ChannelEpisodeNumber, EpisodeNumber, EpisodePaths, Video, top_level_entry,
+    ChannelEpisodeNumber, EpisodeNumber, EpisodePaths, MOVIE_NFO_FILENAME, Video, top_level_entry,
 };
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
-use crate::infrastructure::repositories::sqlite_video_metadata_repository::MOVIE_NFO_FILENAME;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;

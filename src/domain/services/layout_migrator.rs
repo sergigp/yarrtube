@@ -11,6 +11,7 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use chrono::{DateTime, Utc};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 /// What a `migrate-layout` run moved, skipped and failed, each keyed by the
@@ -100,21 +101,20 @@ impl LayoutMigrator {
         legacy: &[Video],
         dry_run: bool,
     ) -> anyhow::Result<MigrationReport> {
-        let shows = if dry_run {
-            MigrationReport::default()
-        } else {
-            MigrationReport::default().record_show_files(
-                &playlist.path,
-                self.show_file_writer.write_playlist_show(playlist),
-            )
-        };
-        let video_ids = self
-            .playlist_video_repository
-            .list_for_playlist(&playlist.id)?
-            .into_iter()
-            .map(|playlist_video| playlist_video.video_id)
-            .collect::<Vec<_>>();
-        Ok(shows.merge(self.migrate_videos(&playlist.path, &video_ids, legacy, dry_run)?))
+        self.migrate_source(
+            &playlist.path,
+            || self.show_file_writer.write_playlist_show(playlist),
+            || {
+                Ok(self
+                    .playlist_video_repository
+                    .list_for_playlist(&playlist.id)?
+                    .into_iter()
+                    .map(|playlist_video| playlist_video.video_id)
+                    .collect())
+            },
+            legacy,
+            dry_run,
+        )
     }
 
     fn migrate_channel(
@@ -123,21 +123,39 @@ impl LayoutMigrator {
         legacy: &[Video],
         dry_run: bool,
     ) -> anyhow::Result<MigrationReport> {
+        self.migrate_source(
+            &channel.path,
+            || self.show_file_writer.write_channel_show(channel),
+            || {
+                Ok(self
+                    .channel_video_repository
+                    .list_for_channel(&channel.id)?
+                    .into_iter()
+                    .map(|channel_video| channel_video.video_id)
+                    .collect())
+            },
+            legacy,
+            dry_run,
+        )
+    }
+
+    /// Writes the show files of the source at `path` (not on a dry run),
+    /// then relocates its legacy videos among `list_video_ids`.
+    fn migrate_source(
+        &self,
+        path: &PlaylistPath,
+        write_show: impl FnOnce() -> anyhow::Result<()>,
+        list_video_ids: impl FnOnce() -> anyhow::Result<Vec<VideoRecordId>>,
+        legacy: &[Video],
+        dry_run: bool,
+    ) -> anyhow::Result<MigrationReport> {
         let shows = if dry_run {
             MigrationReport::default()
         } else {
-            MigrationReport::default().record_show_files(
-                &channel.path,
-                self.show_file_writer.write_channel_show(channel),
-            )
+            MigrationReport::default().record_show_files(path, write_show())
         };
-        let video_ids = self
-            .channel_video_repository
-            .list_for_channel(&channel.id)?
-            .into_iter()
-            .map(|channel_video| channel_video.video_id)
-            .collect::<Vec<_>>();
-        Ok(shows.merge(self.migrate_videos(&channel.path, &video_ids, legacy, dry_run)?))
+        let video_ids = list_video_ids()?;
+        Ok(shows.merge(self.migrate_videos(path, &video_ids, legacy, dry_run)?))
     }
 
     /// Relocates a source's legacy videos in publish-time order, so the
@@ -187,6 +205,7 @@ impl LayoutMigrator {
         legacy: &[Video],
         video_ids: &[VideoRecordId],
     ) -> anyhow::Result<Vec<(Video, Option<DateTime<Utc>>)>> {
+        let video_ids = video_ids.iter().collect::<HashSet<_>>();
         let mut videos = legacy
             .iter()
             .filter(|video| video_ids.contains(&video.id))
@@ -214,32 +233,41 @@ impl MigrationReport {
 
     /// Adds a failure to write the show files of the source at `path`, keyed
     /// by the source's directory; its videos are still migrated.
-    fn record_show_files(mut self, path: &PlaylistPath, written: anyhow::Result<()>) -> Self {
-        if let Err(e) = written {
-            self.failed.push((path.as_str().to_string(), e.to_string()));
+    fn record_show_files(self, path: &PlaylistPath, written: anyhow::Result<()>) -> Self {
+        match written {
+            Ok(()) => self,
+            Err(e) => self.merge(MigrationReport {
+                failed: vec![(path.as_str().to_string(), e.to_string())],
+                ..Default::default()
+            }),
         }
-        self
     }
 
     /// Adds what relocating `video` of the source at `path` did, keyed by
     /// paths relative to the videos root.
     fn record(
-        mut self,
+        self,
         path: &PlaylistPath,
         video: &Video,
         relocation: anyhow::Result<Relocation>,
     ) -> Self {
         let in_source = |relative: &str| format!("{}/{relative}", path.as_str());
         let recorded = in_source(video.filename.as_deref().unwrap_or_default());
-        match relocation {
-            Ok(Relocation::Moved { from, to, .. }) => {
-                self.moved.push((in_source(&from), in_source(&to)))
-            }
-            Ok(Relocation::Skipped(reason)) => self.skipped.push((recorded, reason)),
-            Ok(Relocation::AlreadyInPlace) => {}
-            Err(e) => self.failed.push((recorded, e.to_string())),
-        }
-        self
+        self.merge(match relocation {
+            Ok(Relocation::Moved { from, to, .. }) => MigrationReport {
+                moved: vec![(in_source(&from), in_source(&to))],
+                ..Default::default()
+            },
+            Ok(Relocation::Skipped(reason)) => MigrationReport {
+                skipped: vec![(recorded, reason)],
+                ..Default::default()
+            },
+            Ok(Relocation::AlreadyInPlace) => MigrationReport::default(),
+            Err(e) => MigrationReport {
+                failed: vec![(recorded, e.to_string())],
+                ..Default::default()
+            },
+        })
     }
 }
 

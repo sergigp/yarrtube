@@ -8,10 +8,6 @@ use rusqlite::Connection;
 use rusqlite::{OptionalExtension, Row, params};
 use std::path::Path;
 
-/// The per-video-folder NFO of the legacy layout, removed when a legacy
-/// video is relocated into its season folder.
-pub const MOVIE_NFO_FILENAME: &str = "movie.nfo";
-
 /// Persists a video's generated metadata: writing its episode NFO at
 /// `nfo_path` first, and only recording a `video_metadata` row once that
 /// write succeeds. The row is the sole source of truth for "has this
@@ -65,20 +61,6 @@ pub struct SqliteVideoMetadataRepository {
 impl SqliteVideoMetadataRepository {
     pub fn new(db: Database) -> Self {
         Self { db }
-    }
-
-    /// Writes the episode NFO, creating its season folder first.
-    fn write_episode_nfo(
-        metadata: &VideoMetadata,
-        number: &EpisodeNumber,
-        nfo_path: &Path,
-    ) -> anyhow::Result<()> {
-        if let Some(season_dir) = nfo_path.parent() {
-            std::fs::create_dir_all(season_dir)
-                .map_err(|e| anyhow::anyhow!("failed to create {season_dir:?}: {e}"))?;
-        }
-        std::fs::write(nfo_path, render_episode_nfo(metadata, number))
-            .map_err(|e| anyhow::anyhow!("failed to write {nfo_path:?}: {e}"))
     }
 }
 
@@ -170,6 +152,20 @@ impl VideoMetadataRepository for SqliteVideoMetadataRepository {
 }
 
 impl SqliteVideoMetadataRepository {
+    /// Writes the episode NFO, creating its season folder first.
+    fn write_episode_nfo(
+        metadata: &VideoMetadata,
+        number: &EpisodeNumber,
+        nfo_path: &Path,
+    ) -> anyhow::Result<()> {
+        if let Some(season_dir) = nfo_path.parent() {
+            std::fs::create_dir_all(season_dir)
+                .map_err(|e| anyhow::anyhow!("failed to create {season_dir:?}: {e}"))?;
+        }
+        std::fs::write(nfo_path, render_episode_nfo(metadata, number))
+            .map_err(|e| anyhow::anyhow!("failed to write {nfo_path:?}: {e}"))
+    }
+
     fn read_row(row: &Row<'_>) -> rusqlite::Result<VideoMetadataRow> {
         Ok(VideoMetadataRow {
             title: row.get(0)?,
@@ -215,7 +211,7 @@ impl SqliteVideoMetadataRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::video::VideoId;
+    use crate::domain::video::{MOVIE_NFO_FILENAME, VideoId};
 
     fn metadata() -> VideoMetadata {
         VideoMetadata::new(
@@ -412,6 +408,24 @@ mod tests {
         let result = repo.remove_nfo(&video_dir.join(NFO));
 
         assert!(result.is_ok());
+        std::fs::remove_dir_all(&video_dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_fail_to_remove_an_nfo_it_cannot_reach() {
+        let repo = repo();
+        let video_dir = unique_temp_dir("video-metadata-remove-unreachable-nfo");
+        std::fs::write(video_dir.join("not-a-folder"), "file").unwrap();
+        let nfo_path = video_dir.join("not-a-folder").join(NFO);
+
+        let result = repo.remove_nfo(&nfo_path);
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(format!(
+                "failed to remove {nfo_path:?}: Not a directory (os error 20)"
+            ))
+        );
         std::fs::remove_dir_all(&video_dir).unwrap();
     }
 

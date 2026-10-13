@@ -357,12 +357,7 @@ impl SqliteVideoRepository {
                 tracing::error!(video_id = %id, error = %e, "failed to read the episode number")
             })
             .context("failed to read the episode number")?;
-        season
-            .zip(episode)
-            .map(|(season, episode)| {
-                EpisodeNumber::from_columns(season, episode).map_err(Into::into)
-            })
-            .transpose()
+        Self::decode_episode_number(season, episode)
     }
 
     /// The next free same-day index on `published_at`'s day among the videos
@@ -468,11 +463,7 @@ impl SqliteVideoRepository {
                 .last_played_at
                 .map(|p| Self::parse_timestamp(&p, "last_played_at"))
                 .transpose()?,
-            episode_number: row
-                .season
-                .zip(row.episode)
-                .map(|(season, episode)| EpisodeNumber::from_columns(season, episode))
-                .transpose()?,
+            episode_number: Self::decode_episode_number(row.season, row.episode)?,
         })
     }
 
@@ -480,6 +471,20 @@ impl SqliteVideoRepository {
         Ok(DateTime::parse_from_rfc3339(value)
             .with_context(|| format!("failed to parse stored {column}"))?
             .with_timezone(&Utc))
+    }
+
+    /// The episode number recorded in a row's `season`/`episode` columns,
+    /// none unless both are set.
+    fn decode_episode_number(
+        season: Option<i32>,
+        episode: Option<u32>,
+    ) -> anyhow::Result<Option<EpisodeNumber>> {
+        season
+            .zip(episode)
+            .map(|(season, episode)| {
+                EpisodeNumber::from_columns(season, episode).map_err(Into::into)
+            })
+            .transpose()
     }
 }
 

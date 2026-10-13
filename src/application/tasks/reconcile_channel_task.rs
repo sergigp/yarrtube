@@ -668,6 +668,7 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
+        let event_repository = SqliteEventRepository::new(db.database());
         let show_file_repository = Arc::new(FakeShowFileRepository::failing());
         let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
@@ -743,6 +744,16 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![next_reconcile(1)]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoAddedToChannel(VideoAddedToChannel {
+                    channel_id: "@somechannel".to_string(),
+                    video_id: videos[0].id.as_str().to_string(),
+                })
+            )]
         );
     }
 

@@ -34,8 +34,8 @@ pub use video::Video;
 pub use video_duration::VideoDuration;
 pub use video_id::VideoId;
 pub use video_output_entry::{
-    SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, STAGING_DIRNAME, is_episode_path, is_season_folder,
-    nfo_path_for, owning_entry, resolve_output_dir, staging_dir, top_level_entry,
+    MOVIE_NFO_FILENAME, SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, STAGING_DIRNAME, is_episode_path,
+    is_season_folder, nfo_path_for, owning_entry, resolve_output_dir, staging_dir, top_level_entry,
 };
 pub use video_record_id::VideoRecordId;
 pub use video_status::VideoStatus;

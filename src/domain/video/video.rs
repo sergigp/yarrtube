@@ -489,6 +489,49 @@ mod tests {
     }
 
     #[test]
+    fn it_should_record_its_episode_number() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let number = EpisodeNumber::from_columns(1, 3).unwrap();
+        let video = video();
+
+        let numbered = video.clone().with_episode_number(number, now);
+
+        assert_eq!(
+            numbered,
+            Video {
+                episode_number: Some(number),
+                updated_at: now,
+                ..video
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_record_its_files_when_relocated_to_an_episode() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let number = EpisodeNumber::from_columns(1, 3).unwrap();
+        let video = video();
+
+        let relocated = video.clone().relocate_to_episode(
+            number,
+            "Season 1/S01E003 - My Video.mp4",
+            Some("Season 1/S01E003 - My Video.jpg".to_string()),
+            now,
+        );
+
+        assert_eq!(
+            relocated,
+            Video {
+                filename: Some("Season 1/S01E003 - My Video.mp4".to_string()),
+                thumbnail_filename: Some("Season 1/S01E003 - My Video.jpg".to_string()),
+                episode_number: Some(number),
+                updated_at: now,
+                ..video
+            }
+        );
+    }
+
+    #[test]
     fn it_should_keep_when_it_last_errored_when_reset_for_redownload() {
         let errored_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();

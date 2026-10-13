@@ -154,7 +154,14 @@ impl VideoDownloaderApi for VideoDownloader {
         match self.run_download(&started, quality, output_dir) {
             Ok(DownloadAttempt::Succeeded(downloaded)) => {
                 log_sabr(&started, downloaded.sabr_notice.as_deref());
-                self.record_unless_deleted(started, downloaded, quality, output_dir, metadata)
+                self.record_unless_deleted(
+                    started.clone(),
+                    downloaded,
+                    quality,
+                    output_dir,
+                    metadata,
+                )
+                .or_else(|e| self.record_placement_errored(started, e, is_last_attempt))
             }
             Ok(DownloadAttempt::Failed {
                 stderr,
@@ -420,6 +427,24 @@ impl VideoDownloader {
         self.mark_errored(started, is_last_attempt)?;
         error!(video_id = %video_id, error = %error, "video download errored");
         Err(error)
+    }
+
+    /// Placing a successful download failed (numbering, moving or recording
+    /// it): discards the staging dir and errors the video like a failed
+    /// download, so it settles as errored instead of staying in progress.
+    /// Re-reads the video so a number assigned before the failure is kept; a
+    /// video deleted meanwhile gets nothing recorded.
+    fn record_placement_errored(
+        &self,
+        started: Video,
+        error: anyhow::Error,
+        is_last_attempt: bool,
+    ) -> anyhow::Result<()> {
+        self.discard_staging(&started);
+        match self.video_repository.find(&started.id)? {
+            Some(current) => self.record_errored(current, error, is_last_attempt),
+            None => Err(error),
+        }
     }
 
     fn mark_errored(&self, started: Video, is_last_attempt: bool) -> anyhow::Result<()> {

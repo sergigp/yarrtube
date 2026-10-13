@@ -41,13 +41,19 @@ impl ShowFileRepository for FilesystemShowFileRepository {
     }
 }
 
-/// Whether both files exist with the same bytes; any read error counts as
-/// different, so the copy runs and reports it.
+/// Whether both files exist with the same bytes, read only once their
+/// sizes match; any metadata or read error counts as different, so the copy
+/// runs and reports it.
 fn same_contents(a: &Path, b: &Path) -> bool {
-    match (std::fs::read(a), std::fs::read(b)) {
-        (Ok(a), Ok(b)) => a == b,
+    let same_size = match (std::fs::metadata(a), std::fs::metadata(b)) {
+        (Ok(a), Ok(b)) => a.len() == b.len(),
         _ => false,
-    }
+    };
+    same_size
+        && match (std::fs::read(a), std::fs::read(b)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        }
 }
 
 fn create_show_dir(show_dir: &Path) -> anyhow::Result<()> {

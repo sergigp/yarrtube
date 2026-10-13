@@ -75,7 +75,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_should_exit_non_zero_when_a_move_failed() {
+    fn it_should_fail_if_a_video_failed_to_move() {
         let report = MigrationReport {
             moved: vec![(
                 "playlists/kids/Alpha/Alpha.mp4".to_string(),

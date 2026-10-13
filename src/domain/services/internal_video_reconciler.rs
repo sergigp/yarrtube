@@ -43,9 +43,6 @@ pub struct MembershipDelta {
     /// Videos added by the sync: their download and thumbnail come from their
     /// own video-added event, not from this reconciler's recoveries.
     pub added_ids: Vec<VideoRecordId>,
-    /// The title each renamed video had before the sync: a download started
-    /// before the rename is still writing into the folder named after it.
-    pub previous_titles: HashMap<VideoRecordId, String>,
 }
 
 /// Reconciles our database with our filesystem: brings a playlist's or
@@ -107,7 +104,7 @@ pub trait InternalVideoReconcilerApi: Send + Sync {
 
 impl InternalVideoReconcilerApi for InternalVideoReconciler {
     fn reconcile(&self, desired: &DesiredState, delta: &MembershipDelta) -> anyhow::Result<()> {
-        let actual = self.read_actual_state(desired, delta)?;
+        let actual = self.read_actual_state(desired)?;
 
         let redownloaded = self.redownload_broken_files(desired, &actual)?;
         self.generate_missing_metadata(desired, &actual)?;
@@ -135,11 +132,7 @@ impl InternalVideoReconciler {
     /// same picture taken before any of them changes something. The videos
     /// are read last: a download that completes between these reads is then
     /// seen as `Downloaded`, never as unsettled with no download in flight.
-    fn read_actual_state(
-        &self,
-        desired: &DesiredState,
-        _delta: &MembershipDelta,
-    ) -> anyhow::Result<ActualState> {
+    fn read_actual_state(&self, desired: &DesiredState) -> anyhow::Result<ActualState> {
         let downloads_in_flight = self.video_ids_with_download_in_flight()?;
         let output_dir = resolve_output_dir(&self.videos_path, desired.path.as_str());
         let files = self.video_file_repository.list(&output_dir)?;
@@ -241,9 +234,7 @@ impl InternalVideoReconciler {
     /// a `Downloaded` video's status is never touched by this, and a repeated
     /// failure simply tries again on the next reconcile pass.
     fn generate_metadata(&self, video: &Video, output_dir: &Path, sort_position: Option<i64>) {
-        let Some(video_metadata) =
-            self.metadata_generator
-                .generate(video, sort_position, thumbnail_basename(video))
+        let Some(video_metadata) = self.metadata_generator.generate(video, sort_position, None)
         else {
             return;
         };
@@ -1850,7 +1841,6 @@ mod tests {
         let desired = desired_state(vec![(added.clone(), 0)]);
         let delta = MembershipDelta {
             added_ids: vec![added.id.clone()],
-            ..MembershipDelta::default()
         };
 
         let result = reconcile(&reconciler, &desired, &delta);

@@ -54,6 +54,112 @@ const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const BACKGROUND_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
+pub fn run() -> ExitCode {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
+
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            error!(error = %e, "failed to start async runtime");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // Listen for shutdown signals before the blocking startup work below, so
+    // a stop that arrives during startup (e.g. while yt-dlp updates) exits
+    // right away instead of being ignored until SIGKILL. Nothing has started
+    // downloading yet, so exiting the process there is safe.
+    let startup_done = Arc::new(AtomicBool::new(false));
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    runtime.spawn({
+        let startup_done = Arc::clone(&startup_done);
+        async move {
+            shutdown_signal().await;
+            if !startup_done.load(Ordering::SeqCst) {
+                info!("shutdown signal received during startup, exiting");
+                std::process::exit(0);
+            }
+            let _ = shutdown_tx.send(());
+        }
+    });
+
+    // These use a blocking HTTP client, so they run on this thread outside the
+    // tokio runtime rather than inside it (a blocking client can't run on a
+    // tokio worker thread).
+    run_startup_ytdlp_update();
+    run_startup_database_check();
+    run_startup_youtube_api_key_check();
+    run_startup_storage_directories_check();
+    run_startup_staging_directory_check();
+
+    if let Err(e) = run_startup_migrations() {
+        error!(error = %e, "failed to apply database migrations");
+        return ExitCode::FAILURE;
+    }
+
+    let infrastructure = match build_infrastructure() {
+        Ok(infrastructure) => infrastructure,
+        Err(e) => {
+            error!(error = %e, "failed to initialize infrastructure");
+            return ExitCode::FAILURE;
+        }
+    };
+    let plex = plex_integration();
+    let task_executor = Arc::new(task_executor(&infrastructure));
+    if let Err(e) = prepare_task_queue(&infrastructure, &task_executor) {
+        error!(error = %e, "failed to prepare the task queue");
+        return ExitCode::FAILURE;
+    }
+
+    startup_done.store(true, Ordering::SeqCst);
+    let exit_code = runtime.block_on(run_async(infrastructure, task_executor, plex, shutdown_rx));
+    // Don't wait on blocking work such as a download in progress: a task
+    // left running is recovered and retried on the next start.
+    runtime.shutdown_timeout(SHUTDOWN_TIMEOUT);
+    exit_code
+}
+
+/// Applies pending schema migrations once at startup, before any repository
+/// opens its own connection (see `build_infrastructure`).
+pub(crate) fn run_startup_migrations() -> Result<()> {
+    let mut conn =
+        sqlite_connection::open(&db_path()).context("failed to open database for migrations")?;
+    sqlite_migrations::apply(&mut conn)
+}
+
+pub(crate) fn build_infrastructure() -> Result<InfrastructureContainer> {
+    InfrastructureContainer::new(InfrastructureSettings {
+        db_path: db_path(),
+        youtube_api_key: youtube_api_key(),
+        videos_path: PathBuf::from(videos_path()),
+        avatars_path: avatars_path(),
+        ytdlp_path: target_path(),
+    })
+}
+
+pub(crate) fn layout_migrator(infrastructure: &InfrastructureContainer) -> LayoutMigrator {
+    LayoutMigrator::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.playlist_repository.clone(),
+        infrastructure.channel_repository.clone(),
+        infrastructure.playlist_video_repository.clone(),
+        infrastructure.channel_video_repository.clone(),
+        infrastructure.video_metadata_repository.clone(),
+        video_relocator(infrastructure),
+        show_file_writer(infrastructure),
+        videos_path(),
+    )
+}
+
 fn port() -> u16 {
     std::env::var("YARRTUBE_PORT")
         .ok()
@@ -174,7 +280,6 @@ fn run_startup_staging_directory_check() {
 /// for unset variables). Library sections are discovered, not configured.
 /// When absent, nothing Plex-related is wired and the daemon behaves exactly
 /// as without the integration; a partial configuration is warned about.
-#[derive(Clone)]
 struct PlexIntegration {
     repository: Arc<dyn PlexLibraryRepository>,
     plex_videos_path: String,
@@ -225,24 +330,6 @@ fn run_startup_youtube_api_key_check() {
     if youtube_api_key().is_empty() {
         warn!("YOUTUBE_API_KEY is not set; POST /playlists will fail its YouTube lookup");
     }
-}
-
-/// Applies pending schema migrations once at startup, before any repository
-/// opens its own connection (see `build_infrastructure`).
-pub(crate) fn run_startup_migrations() -> Result<()> {
-    let mut conn =
-        sqlite_connection::open(&db_path()).context("failed to open database for migrations")?;
-    sqlite_migrations::apply(&mut conn)
-}
-
-pub(crate) fn build_infrastructure() -> Result<InfrastructureContainer> {
-    InfrastructureContainer::new(InfrastructureSettings {
-        db_path: db_path(),
-        youtube_api_key: youtube_api_key(),
-        videos_path: PathBuf::from(videos_path()),
-        avatars_path: avatars_path(),
-        ytdlp_path: target_path(),
-    })
 }
 
 /// Must run before the task executor starts polling: requeues tasks a
@@ -429,20 +516,6 @@ fn show_file_writer(infrastructure: &InfrastructureContainer) -> Arc<ShowFileWri
     ))
 }
 
-pub(crate) fn layout_migrator(infrastructure: &InfrastructureContainer) -> LayoutMigrator {
-    LayoutMigrator::new(
-        infrastructure.video_repository.clone(),
-        infrastructure.playlist_repository.clone(),
-        infrastructure.channel_repository.clone(),
-        infrastructure.playlist_video_repository.clone(),
-        infrastructure.channel_video_repository.clone(),
-        infrastructure.video_metadata_repository.clone(),
-        video_relocator(infrastructure),
-        show_file_writer(infrastructure),
-        videos_path(),
-    )
-}
-
 fn video_relocator(infrastructure: &InfrastructureContainer) -> Arc<VideoRelocator> {
     Arc::new(VideoRelocator::new(
         infrastructure.video_repository.clone(),
@@ -591,80 +664,6 @@ async fn shutdown_signal() {
         _ = tokio::signal::ctrl_c() => {}
         () = terminate => {}
     }
-}
-
-pub fn run() -> ExitCode {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
-        .init();
-
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(rt) => rt,
-        Err(e) => {
-            error!(error = %e, "failed to start async runtime");
-            return ExitCode::FAILURE;
-        }
-    };
-
-    // Listen for shutdown signals before the blocking startup work below, so
-    // a stop that arrives during startup (e.g. while yt-dlp updates) exits
-    // right away instead of being ignored until SIGKILL. Nothing has started
-    // downloading yet, so exiting the process there is safe.
-    let startup_done = Arc::new(AtomicBool::new(false));
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
-    runtime.spawn({
-        let startup_done = Arc::clone(&startup_done);
-        async move {
-            shutdown_signal().await;
-            if !startup_done.load(Ordering::SeqCst) {
-                info!("shutdown signal received during startup, exiting");
-                std::process::exit(0);
-            }
-            let _ = shutdown_tx.send(());
-        }
-    });
-
-    // These use a blocking HTTP client, so they run on this thread outside the
-    // tokio runtime rather than inside it (a blocking client can't run on a
-    // tokio worker thread).
-    run_startup_ytdlp_update();
-    run_startup_database_check();
-    run_startup_youtube_api_key_check();
-    run_startup_storage_directories_check();
-    run_startup_staging_directory_check();
-
-    if let Err(e) = run_startup_migrations() {
-        error!(error = %e, "failed to apply database migrations");
-        return ExitCode::FAILURE;
-    }
-
-    let infrastructure = match build_infrastructure() {
-        Ok(infrastructure) => infrastructure,
-        Err(e) => {
-            error!(error = %e, "failed to initialize infrastructure");
-            return ExitCode::FAILURE;
-        }
-    };
-    let plex = plex_integration();
-    let task_executor = Arc::new(task_executor(&infrastructure));
-    if let Err(e) = prepare_task_queue(&infrastructure, &task_executor) {
-        error!(error = %e, "failed to prepare the task queue");
-        return ExitCode::FAILURE;
-    }
-
-    startup_done.store(true, Ordering::SeqCst);
-    let exit_code = runtime.block_on(run_async(infrastructure, task_executor, plex, shutdown_rx));
-    // Don't wait on blocking work such as a download in progress: a task
-    // left running is recovered and retried on the next start.
-    runtime.shutdown_timeout(SHUTDOWN_TIMEOUT);
-    exit_code
 }
 
 #[cfg(test)]
