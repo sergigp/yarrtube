@@ -105,23 +105,11 @@ folders. Optionally, set `YARRTUBE_PLEX_URL`, `YARRTUBE_PLEX_TOKEN` and
 show's folder as soon as one of its videos is downloaded. The library setup
 and the scan trigger are covered step by step in [PLEX.md](PLEX.md).
 
-## Migrating from the per-video-folder layout
+## Upgrading from 0.8.x or older
 
-Libraries downloaded by older versions kept each video in its own folder
-with a `movie.nfo`. They stay playable, but run the `migrate-layout`
-subcommand once, with the daemon stopped, to move them into the TV layout:
-
-```bash
-docker compose run --rm yarrtube yarrtube migrate-layout --dry-run   # preview
-docker compose run --rm yarrtube yarrtube migrate-layout
-```
-
-The dry run prints each move and skip and moves no files (it only upgrades
-the database schema, as the daemon would on start). The real run
-moves every downloaded video's files into its season folder, writes the
-show files, and exits non-zero if any video failed to move. It is safe to
-run again. See [PLEX.md](PLEX.md#2-migrating-a-library-downloaded-by-an-older-yarrtube)
-for the full procedure, including the Plex side.
+0.9.0 moved the library to a TV show layout and changed the Plex settings.
+Coming from an older version, follow [UPGRADING-TO-0.9.0.md](UPGRADING-TO-0.9.0.md)
+once.
 
 ## Updating
 

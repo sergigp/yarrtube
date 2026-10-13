@@ -14,7 +14,8 @@ from the old per-video-folder layout.
 
 Docs: `doc/INSTALLATION.md` (Docker, Compose, every environment variable),
 `doc/DEVELOPMENT.md` (building from source), `doc/PLEX.md` (Plex TV Shows
-library, scan trigger, migration), `doc/ARCHITECTURE.md`. Releases are cut by pushing a `vX.Y.Z`
+library, scan trigger), `doc/UPGRADING-TO-0.9.0.md` (layout migration
+from 0.8.x, temporary), `doc/ARCHITECTURE.md`. Releases are cut by pushing a `vX.Y.Z`
 tag, which triggers `.github/workflows/release.yml` to publish the
 multi-arch image to `ghcr.io`.
 

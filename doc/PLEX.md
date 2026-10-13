@@ -76,49 +76,7 @@ Optionally enable _Settings → Library → Scan my library automatically_ and
 _Run a partial scan when changes are detected_: Plex then imports new
 episodes on its own, and the scan trigger below just makes it immediate.
 
-## 2. Migrating a library downloaded by an older yarrtube
-
-Older versions stored each video in its own folder with a `movie.nfo`.
-Upgrading does not move those files: new downloads land in the TV layout,
-old ones stay playable where they are until you migrate them once.
-
-1. Back up your videos folder and database.
-2. Stop the daemon.
-3. Preview the migration. It prints every move (`from -> to`), every
-   skipped video with its reason, and a summary. It moves no files; it
-   only upgrades the database schema, as the daemon does on its next start:
-
-   ```bash
-   docker compose run --rm yarrtube yarrtube migrate-layout --dry-run
-   ```
-
-4. Run it for real:
-
-   ```bash
-   docker compose run --rm yarrtube yarrtube migrate-layout
-   ```
-
-   It writes every show's `tvshow.nfo` and `poster.jpg`, moves each
-   downloaded video's file, thumbnail and NFO into its season folder under
-   its episode name, rewrites the NFO as an episode NFO and removes the old
-   per-video folders. It exits non-zero if any video failed to move; the
-   others are migrated anyway. Running it again is safe: it only moves what
-   is still in the old layout.
-
-5. Start the daemon again.
-6. In Plex, create the TV Shows library described above on the same folders
-   and delete the old Movies library.
-
-Videos the migration skips are healed by the daemon later: one with no
-recorded metadata (so no publish time) is moved into its season folder as
-soon as a reconcile pass manages to fetch its metadata, and one whose file
-is missing is downloaded again.
-
-**Watch history does not carry over** from the old Movies library: Plex
-keys it by library item, and the episodes in the new library are new
-items.
-
-## 3. Scan trigger (optional)
+## 2. Scan trigger (optional)
 
 With the scan trigger on, yarrtube asks Plex to scan a show's folder as soon
 as one of its videos finishes downloading, in every library whose folders
