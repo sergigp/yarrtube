@@ -3,6 +3,7 @@ use crate::infrastructure::repositories::filesystem_channel_avatar_repository::C
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::youtube_channel_repository::YoutubeChannelRepository;
 use std::sync::Arc;
+use tracing::{info, warn};
 
 /// Downloads a channel's avatar again when its file is missing (e.g. lost
 /// with the container-local avatars directory older images used), so the
@@ -45,6 +46,8 @@ impl ChannelAvatarRestorerApi for ChannelAvatarRestorer {
         let Some(avatar_filename) = self.download_avatar(&channel) else {
             return channel;
         };
+
+        info!(channel_id = %channel.id, avatar = %avatar_filename, "restored missing channel avatar");
         self.record_avatar(channel, avatar_filename)
     }
 }
@@ -53,30 +56,44 @@ impl ChannelAvatarRestorer {
     /// A file whose presence can't be checked counts as stored, so a
     /// transient filesystem error doesn't trigger a download every pass.
     fn has_stored_avatar(&self, channel: &Channel) -> bool {
-        channel
-            .avatar_filename
-            .as_deref()
-            .is_some_and(|avatar_filename| {
-                self.avatar_repository
-                    .exists(avatar_filename)
-                    .unwrap_or(true)
+        let Some(avatar_filename) = &channel.avatar_filename else {
+            return false;
+        };
+        self.avatar_repository
+            .exists(avatar_filename)
+            .unwrap_or_else(|e| {
+                warn!(channel_id = %channel.id, error = %e, "failed to check channel avatar file");
+                true
             })
     }
 
     fn download_avatar(&self, channel: &Channel) -> Option<String> {
-        let avatar_url = self.lookup.resolve(&channel.id).ok()??.avatar_url?;
+        let avatar_url = match self.lookup.resolve(&channel.id) {
+            Ok(resolved) => resolved.and_then(|resolved| resolved.avatar_url)?,
+            Err(e) => {
+                warn!(channel_id = %channel.id, error = %e, "failed to look up channel avatar");
+                return None;
+            }
+        };
         self.avatar_repository
             .store(&channel.id, &avatar_url)
-            .ok()?
+            .unwrap_or_else(|e| {
+                warn!(channel_id = %channel.id, error = %e, "failed to store channel avatar");
+                None
+            })
     }
 
-    /// Only a filename different from the recorded one is saved.
+    /// Only a filename different from the recorded one is saved. A failed
+    /// save still returns the updated channel: its file is on disk, and the
+    /// next pass downloads it again and retries the save.
     fn record_avatar(&self, channel: Channel, avatar_filename: String) -> Channel {
         if channel.avatar_filename.as_deref() == Some(avatar_filename.as_str()) {
             return channel;
         }
         let channel = channel.with_avatar_filename(Some(avatar_filename));
-        let _ = self.channel_repository.update(&channel);
+        if let Err(e) = self.channel_repository.update(&channel) {
+            warn!(channel_id = %channel.id, error = %e, "failed to record restored channel avatar");
+        }
         channel
     }
 }
