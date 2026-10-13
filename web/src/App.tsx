@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
 import { Home } from './components/Home'
 import { PlaylistDetail } from './components/PlaylistDetail'
@@ -26,15 +26,25 @@ export function AppShell() {
   const closeSidebar = () => setSidebarOpen(false)
   // The mobile sidebar opens right below the header, wherever it sits: an
   // announcement bar above it pushes it down until scrolled away. The page
-  // can't scroll while the sidebar is open, so measuring once holds.
+  // can't scroll while the sidebar is open, but the bar can still appear
+  // (it loads asynchronously), reflow or be dismissed, so the header's bottom
+  // is re-measured whenever the bar's slot changes size.
   const headerRef = useRef<HTMLElement>(null)
+  const announcementRef = useRef<HTMLDivElement>(null)
   const [sidebarTop, setSidebarTop] = useState(0)
-  const toggleSidebar = () => {
+  useLayoutEffect(() => {
     if (!sidebarOpen) {
-      setSidebarTop(headerRef.current?.getBoundingClientRect().bottom ?? 0)
+      return
     }
-    setSidebarOpen(!sidebarOpen)
-  }
+    const measure = () => setSidebarTop(headerRef.current?.getBoundingClientRect().bottom ?? 0)
+    measure()
+    const observer = new ResizeObserver(measure)
+    if (announcementRef.current) {
+      observer.observe(announcementRef.current)
+    }
+    return () => observer.disconnect()
+  }, [sidebarOpen])
+  const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
 
   // Any navigation closes the mobile sidebar, whatever triggered it.
   const { pathname } = useLocation()
@@ -46,7 +56,9 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-dvh flex-col md:h-dvh">
-      <AnnouncementBar />
+      <div ref={announcementRef} className="shrink-0">
+        <AnnouncementBar />
+      </div>
       <header
         ref={headerRef}
         className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center gap-4 border-b border-border bg-background px-4 sm:px-6"
