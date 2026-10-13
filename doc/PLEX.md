@@ -2,50 +2,34 @@
 
 ## What you get
 
-Yarrtube lays every tracked playlist and channel out on disk as a **TV
-show**, the layout Plex, Kodi and Jellyfin read natively:
+Every tracked playlist and channel shows up in Plex (and Kodi or Jellyfin)
+as a **TV show**: one tile per playlist/channel, episode thumbnails,
+Continue Watching, On Deck and "play next episode".
 
 ```
-channels/Some Channel/              <- one show per playlist or channel
-├── tvshow.nfo                      <- show title, YouTube id
-├── poster.jpg                      <- the channel's avatar (channels only)
+channels/Some Channel/
+├── poster.jpg
 ├── Season 2025/
-│   └── S2025E120101 - A video.{mp4,jpg,nfo}
+│   └── S2025E120101 - A video.mp4
 └── Season 2026/
-    ├── S2026E031501 - First video of 15 March.{mp4,jpg,nfo}
-    └── S2026E031502 - Second video of 15 March.{mp4,jpg,nfo}
+    ├── S2026E031501 - First video of 15 March.mp4
+    └── S2026E031502 - Second video of 15 March.mp4
 
 playlists/Some Playlist/
-├── tvshow.nfo
 └── Season 1/
-    ├── S01E001 - First video of the playlist.{mp4,jpg,nfo}
-    └── S01E002 - Second video of the playlist.{mp4,jpg,nfo}
+    ├── S01E001 - First video of the playlist.mp4
+    └── S01E002 - Second video of the playlist.mp4
 ```
 
-In Plex this gives you one tile per playlist/channel with a real poster,
-16:9 episode thumbnails, Continue Watching, On Deck and "play next
-episode", none of which a collection offers.
+- **Channels** get one season per year, with episodes ordered by publish
+  date.
+- **Playlists** are a single season in playlist order. New videos are added
+  at the end.
 
-A channel's episodes are numbered from the video's YouTube publish time:
-the season is the publish year, the episode is the month and day followed
-by a two-digit index for videos of the channel published that day
-(`S2026E031502` is the second video of 15 March 2026).
+Episode numbers never change, so Plex keeps your watch progress.
 
-A playlist is a curated sequence, so its episodes are numbered in playlist
-order instead: every playlist is a single `Season 1`, and each video gets
-the playlist's next number when yarrtube first sees it in the playlist. The
-first sync numbers the whole playlist in its YouTube order (`S01E001`,
-`S01E002`, ...); videos added later get the numbers after the last one,
-wherever YouTube puts them. A removed video's number is never reused.
-
-Either way a number is assigned once and never changes, so files never
-rename and Plex keeps watch state on the right episode. A playlist that is
-reordered on YouTube keeps its original numbering in Plex (the web UI
-follows the live order).
-
-Nothing below is required to *use* the layout: any player that reads TV
-show folders picks it up. The optional part is the **scan trigger**, which
-asks Plex to import a new episode as soon as it is downloaded.
+Only step 1 is required. Step 2 is optional and makes new episodes show up
+in Plex right after they download.
 
 ## 1. Set up a TV Shows library
 
@@ -54,12 +38,9 @@ Create a **TV Shows** library over the folders holding yarrtube's videos
 `/videos/channels`), and in its _Advanced_ settings:
 
 - **Scanner**: Plex TV Series.
-- **Agent**: **Plex NFO Series** (reads `tvshow.nfo` and each episode's
-  `.nfo`, matching videos by their YouTube id).
-- **Seasons**: _Hide for single-season series_, so a channel that only
-  published this year opens straight onto its episodes.
-- **Use local assets**: on, so `poster.jpg` and each episode's `.jpg` are
-  used.
+- **Agent**: **Plex NFO Series**.
+- **Seasons**: _Hide for single-season series_.
+- **Use local assets**: on, for posters and thumbnails.
 
 The Plex NFO agents need Plex Media Server 1.43.1 or newer. If **Plex NFO
 Series** is missing from the agent list:
@@ -78,9 +59,8 @@ episodes on its own, and the scan trigger below just makes it immediate.
 
 ## 2. Scan trigger (optional)
 
-With the scan trigger on, yarrtube asks Plex to scan a show's folder as soon
-as one of its videos finishes downloading, in every library whose folders
-contain it. You need:
+With the scan trigger on, yarrtube asks Plex to scan a show as soon as one
+of its videos finishes downloading. You need:
 
 - A Plex token (`X-Plex-Token`) to authenticate yarrtube's requests.
 - The path at which the Plex server sees yarrtube's videos root.
@@ -119,28 +99,18 @@ environment:
   - YARRTUBE_PLEX_VIDEOS_PATH=<HOST_PATH_MOUNTED_AT_/videos>
 ```
 
-The trigger is **off unless all three are set**; with only some of them
-yarrtube logs a warning at startup and never contacts Plex. Libraries are
-discovered, not configured: yarrtube lists the server's libraries and scans
-the show folder in each one whose folders contain it.
+All three are required: with only some of them set, yarrtube logs a
+warning and never contacts Plex.
 
-`YARRTUBE_PLEX_URL` must be reachable from inside the yarrtube container.
-`localhost` there is the container itself, not the machine running Docker,
-so `http://localhost:32400` only works if the container uses host
-networking. If Plex runs on the same machine, either use the machine's LAN
-IP (e.g. `http://192.168.1.10:32400`) or run yarrtube with
-`network_mode: host`. With host networking, `ports:` is ignored, so set
-`YARRTUBE_PORT` to choose the port the web UI listens on.
-
-A failed scan request never affects the download: it is logged and retried
-a few times.
+`localhost` inside the container is not your Docker host. If Plex runs on
+the same machine, use its LAN IP (e.g. `http://192.168.1.10:32400`) or run
+yarrtube with `network_mode: host` (then set `YARRTUBE_PORT` for the web
+UI, since `ports:` is ignored).
 
 ## Troubleshooting
 
-- **A show is missing its poster**: only channels have one (a copy of the
-  channel's avatar); playlists have none. Show files are rewritten on every
-  sync of their playlist or channel, so a deleted `tvshow.nfo` or
-  `poster.jpg` comes back on the next pass.
+- **A playlist has no poster**: expected, only channels have one (their
+  avatar).
 - **Episodes show as "Episode 31502" without their title**: the library is
   not using the **Plex NFO Series** agent, or _Use local assets_ is off.
 - **New episodes don't appear until Plex's next scheduled scan**: check the
@@ -149,8 +119,6 @@ a few times.
   `YARRTUBE_PLEX_VIDEOS_PATH` doesn't match the folders your TV Shows
   library points at.
 - **`error sending request for url (http://.../library/sections)`** in the
-  log: yarrtube can't open a connection to Plex at all. A wrong token gives
-  a 401 instead. Unless yarrtube uses host networking, check that
-  `YARRTUBE_PLEX_URL` isn't `localhost` (see
-  [Configure yarrtube](#configure-yarrtube)) and that no firewall on the
-  Plex machine blocks port 32400 from Docker's network.
+  log: yarrtube can't reach Plex. Check that `YARRTUBE_PLEX_URL` isn't
+  `localhost` (see [Configure yarrtube](#configure-yarrtube)) and that no
+  firewall blocks port 32400.
