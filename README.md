@@ -34,6 +34,17 @@ Yarrtube is designed to run on your NAS via Docker alongside the rest of your me
 - Minimalistic webapp to see the videos from the browser in both desktop and mobile.
 - Support for Plex, Kodi and Jellyfin. See the [Plex guide](doc/PLEX.md).
 
+## Development
+
+Build and test locally:
+
+```bash
+cargo build --release
+cargo test --locked
+cargo clippy --all-targets --all-features -- -D warnings
+cd web && npm run check
+```
+
 <p align="center">
   <img src="doc/screenshot_mobile.png" alt="Yarrtube mobile UI screenshot" width="150"/>
   <img src="doc/screenshot_plex.jpeg" alt="Yarrtube Plex Integration screenshot" width="520"/>
