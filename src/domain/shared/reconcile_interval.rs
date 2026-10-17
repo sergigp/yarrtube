@@ -39,4 +39,14 @@ mod tests {
     fn it_should_accept_one_minute() {
         assert_eq!(ReconcileInterval::new(1), Ok(ReconcileInterval(1)));
     }
+
+    #[test]
+    fn it_should_reject_zero() {
+        assert_eq!(
+            ReconcileInterval::new(0),
+            Err(ValidationError(
+                "Reconcile interval must be at least 1 minute (got 0)".to_string()
+            ))
+        );
+    }
 }
