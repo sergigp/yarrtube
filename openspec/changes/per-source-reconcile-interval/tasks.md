@@ -19,7 +19,7 @@ Channel HTTP:
 - [x] 2.10 `it_should_keep_the_interval_of_an_existing_channel_on_duplicate_create`.
 - [x] 2.11 `it_should_update_a_channels_interval`: response + stored channel 60, other fields unchanged.
 - [x] 2.12 `it_should_bring_the_next_reconcile_forward_if_interval_shortened` (channels): pending at `now + 20h`, update to 60 → `run_at = now + 60 min`, `updated_at = now`.
-- [ ] 2.13 `it_should_keep_the_next_reconcile_if_interval_lengthened` (channels): pending at `now + 30 min`, update to 1440 → task unchanged.
+- [x] 2.13 `it_should_keep_the_next_reconcile_if_interval_lengthened` (channels): pending at `now + 30 min`, update to 1440 → task unchanged.
 - [ ] 2.14 `it_should_fail_to_update_if_invalid_interval_provided` (channels): 0 → 400.
 - [ ] 2.15 `it_should_fail_to_update_if_nothing_to_update` (channels, updated): new message naming all three settings.
 - [ ] 2.16 `it_should_list_channels_with_their_interval`.

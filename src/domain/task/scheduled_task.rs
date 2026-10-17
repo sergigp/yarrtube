@@ -104,6 +104,9 @@ impl ScheduledTask {
 
     /// Runs no later than `run_at`; a task already due earlier keeps its time.
     pub fn bring_forward(self, run_at: DateTime<Utc>, now: DateTime<Utc>) -> Self {
+        if self.run_at <= run_at {
+            return self;
+        }
         Self {
             run_at,
             updated_at: now,
