@@ -15,7 +15,12 @@ impl ReconcileInterval {
                 "Reconcile interval must be at least 1 minute (got {minutes})"
             )));
         }
-        Ok(Self(minutes as u32))
+        u32::try_from(minutes).map(Self).map_err(|_| {
+            ValidationError(format!(
+                "Reconcile interval must be at most {} minutes (got {minutes})",
+                u32::MAX
+            ))
+        })
     }
 
     pub fn default_interval() -> Self {
@@ -56,6 +61,17 @@ mod tests {
             ReconcileInterval::new(-5),
             Err(ValidationError(
                 "Reconcile interval must be at least 1 minute (got -5)".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_an_interval_too_large_for_32_bits() {
+        assert_eq!(
+            ReconcileInterval::new(4_294_967_296),
+            Err(ValidationError(
+                "Reconcile interval must be at most 4294967295 minutes (got 4294967296)"
+                    .to_string()
             ))
         );
     }
