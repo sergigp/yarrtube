@@ -44,7 +44,7 @@ Value object `ReconcileInterval`:
 
 Web (Vitest):
 - [x] 2.31 `lib/reconcileInterval`: `intervalForm` shows 180 as 3 hours and 90 as 90 minutes.
-- [ ] 2.32 `lib/reconcileInterval`: `intervalMinutes` converts 6 hours to 360, and returns `null` for `''`, `'0'` and `'1.5'`.
+- [x] 2.32 `lib/reconcileInterval`: `intervalMinutes` converts 6 hours to 360, and returns `null` for `''`, `'0'` and `'1.5'`.
 - [ ] 2.33 `EditChannelDialog`: opens with the interval showing 3 hours; changing only the interval sends `{ reconcile_interval_minutes: 30 }` and no reconcile.
 - [ ] 2.34 `EditChannelDialog`: an invalid interval flags the field and sends nothing.
 - [ ] 2.35 `EditPlaylistDialog`: opens titled "Edit Lofi beats settings" showing 3 hours.

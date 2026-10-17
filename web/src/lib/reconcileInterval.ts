@@ -17,5 +17,7 @@ export function intervalForm(minutes: number): IntervalForm {
 
 /** The entered interval in minutes; `null` when it is not a whole number of at least 1. */
 export function intervalMinutes(form: IntervalForm): number | null {
-  return Number(form.amount)
+  const amount = Number(form.amount)
+  if (form.amount.trim() === '' || !Number.isInteger(amount) || amount < 1) return null
+  return form.unit === 'hours' ? amount * 60 : amount
 }

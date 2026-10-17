@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { intervalForm } from './reconcileInterval'
+import { intervalForm, intervalMinutes } from './reconcileInterval'
 
 describe('intervalForm', () => {
   it('shows a whole number of hours in hours', () => {
@@ -8,5 +8,17 @@ describe('intervalForm', () => {
 
   it('shows any other interval in minutes', () => {
     expect(intervalForm(90)).toEqual({ amount: '90', unit: 'minutes' })
+  })
+})
+
+describe('intervalMinutes', () => {
+  it('converts hours to minutes', () => {
+    expect(intervalMinutes({ amount: '6', unit: 'hours' })).toBe(360)
+  })
+
+  it('is null for an empty, zero or fractional amount', () => {
+    expect(intervalMinutes({ amount: '', unit: 'minutes' })).toBeNull()
+    expect(intervalMinutes({ amount: '0', unit: 'minutes' })).toBeNull()
+    expect(intervalMinutes({ amount: '1.5', unit: 'hours' })).toBeNull()
   })
 })
