@@ -49,4 +49,14 @@ mod tests {
             ))
         );
     }
+
+    #[test]
+    fn it_should_reject_a_negative_interval() {
+        assert_eq!(
+            ReconcileInterval::new(-5),
+            Err(ValidationError(
+                "Reconcile interval must be at least 1 minute (got -5)".to_string()
+            ))
+        );
+    }
 }
