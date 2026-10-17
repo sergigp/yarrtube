@@ -73,5 +73,5 @@ Migrations:
 
 - [x] 4.1 Remove `YARRTUBE_RECONCILE_INTERVAL_SECONDS` from `doc/INSTALLATION.md`, `doc/ARCHITECTURE.md` and `.env.example`, documenting the per-source setting instead; verify with `grep -rn RECONCILE_INTERVAL_SECONDS` returning nothing outside `openspec/` and `doc/UPGRADING-*`.
 - [x] 4.2 Add a smoke test in `smoke-tests/tests/playlist.spec.js` that edits a playlist's interval through the dialog (exercises `PATCH /api/playlists/{id}`).
-- [ ] 4.3 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `npm run check` all pass.
+- [x] 4.3 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `npm run check` all pass.
 - [ ] 4.4 Run `scripts/run-smoke-test.sh`, then `scripts/run-local.sh` against an existing database: sources show 3 hours, editing a playlist and a channel interval brings their next reconcile forward in the Tasks view.
