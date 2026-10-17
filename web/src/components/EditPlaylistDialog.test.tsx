@@ -37,4 +37,30 @@ describe('EditPlaylistDialog', () => {
     expect(onSave).toHaveBeenCalledExactlyOnceWith({ reconcile_interval_minutes: 30 })
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
+
+  it('sends nothing and closes when nothing changed', async () => {
+    const { onSave, onOpenChange } = renderDialog(aPlaylist({ reconcile_interval_minutes: 180 }))
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).not.toHaveBeenCalled()
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('keeps the dialog open and shows the error when saving fails', async () => {
+    const onSave = vi.fn(async () => {
+      throw new Error('playlist PL1 not found')
+    })
+    const { onOpenChange } = renderDialog(aPlaylist({ reconcile_interval_minutes: 180 }), onSave)
+    const user = userEvent.setup()
+    const amount = screen.getByLabelText('Check for new videos every')
+
+    await user.clear(amount)
+    await user.type(amount, '6')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('playlist PL1 not found')).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
 })

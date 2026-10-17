@@ -50,19 +50,35 @@ function EditPlaylistForm({ playlist, onSave, onClose }: EditPlaylistFormProps) 
     intervalForm(playlist.reconcile_interval_minutes),
   )
 
+  const [error, setError] = useState<Error | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const minutes = intervalMinutes(interval)
     if (minutes === null) return
-    await onSave({ reconcile_interval_minutes: minutes })
-    onClose()
+    if (minutes === playlist.reconcile_interval_minutes) {
+      onClose()
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onSave({ reconcile_interval_minutes: minutes })
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
     <form className="flex min-w-0 flex-col gap-5" onSubmit={handleSubmit}>
       <ReconcileIntervalField id="edit-playlist-interval" value={interval} onChange={changeInterval} />
-      <Button type="submit" className="self-start">
-        Save
+      {error && <p className="text-sm text-destructive">{error.message}</p>}
+      <Button type="submit" disabled={submitting} className="self-start">
+        {submitting ? 'Saving…' : 'Save'}
       </Button>
     </form>
   )
