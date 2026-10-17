@@ -72,7 +72,6 @@ Environment variables read by Yarrtube are listed below. Every variable except `
 | `PUID`                                | `0` (root)            | Numeric user ID the daemon runs as and that owns downloaded files                                                                                                                                             |
 | `PGID`                                | `0` (root)            | Numeric group ID the daemon runs as and that owns downloaded files                                                                                                                                            |
 | `YARRTUBE_PORT`                       | `8080`                | HTTP port to listen on                                                                                                                                                                                        |
-| `YARRTUBE_RECONCILE_INTERVAL_SECONDS` | `3600`                | How often each tracked playlist or channel is reconciled                                                                                                                                                      |
 | `YARRTUBE_DB_PATH`                    | `/config/yarrtube.db` | Path to the SQLite database (inside the container)                                                                                                                                                            |
 | `YARRTUBE_VIDEOS_PATH`                | `/videos`             | Root directory downloaded videos are saved under (inside the container)                                                                                                                                       |
 | `YARRTUBE_DOWNLOAD_CONCURRENCY`       | `2`                   | How many videos download at the same time. Higher values download faster but make YouTube more likely to throttle or bot-check you                                                                            |
@@ -83,6 +82,11 @@ Environment variables read by Yarrtube are listed below. Every variable except `
 | `YARRTUBE_PLEX_URL`                   | —                     | Base URL of your Plex server (e.g. `http://192.168.1.10:32400`). With the token and `YARRTUBE_PLEX_VIDEOS_PATH`, enables the [Plex scan trigger](#plex)                                                       |
 | `YARRTUBE_PLEX_TOKEN`                 | —                     | Plex authentication token (`X-Plex-Token`)                                                                                                                                                                    |
 | `YARRTUBE_PLEX_VIDEOS_PATH`           | —                     | Where the Plex server sees yarrtube's videos root (`YARRTUBE_VIDEOS_PATH`), e.g. the host path `/volume1/data/media/yarrtube` mounted at `/videos`. Plex is asked to scan a show's folder after each download |
+
+How often each channel and playlist is checked for new videos is not an
+environment variable: it is set per source in the web UI ("Check for new
+videos every" under "Advanced options" when adding it, or "Edit settings"
+afterwards), 3 hours by default.
 
 ## Videos on disk
 

@@ -61,7 +61,8 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    - It saves each new video as `PENDING` and publishes one
      `VideoAddedToChannel` domain event per video.
    - It schedules the next `ReconcileChannel` task one reconcile interval
-     later (`YARRTUBE_RECONCILE_INTERVAL_SECONDS`, default 1 hour).
+     later: the channel's own interval as stored when the sync finishes
+     (3 hours by default, editable per channel and playlist from the web UI).
 3. For each `VideoAddedToChannel`, two asynchronous subscribers schedule a task each:
    - `FetchThumbnailOnVideoAddedToChannel` schedules a `FetchThumbnail`
      task.
@@ -73,7 +74,7 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    arrives first, so the UI can show it while the video is still downloading.
    A finished download publishes `VideoDownloaded`, which asks Plex to scan
    the show folder when the scan trigger is configured.
-5. Every hour, the `ReconcileChannel` task runs the sync again and schedules
+5. Every interval, the `ReconcileChannel` task runs the sync again and schedules
    the next one. New uploads repeat steps 3–4. The sync also schedules a
    `FetchThumbnail` for any video still missing its thumbnail.
 
