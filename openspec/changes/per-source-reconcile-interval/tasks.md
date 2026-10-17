@@ -67,7 +67,7 @@ Web (Vitest):
 - [x] 3.5 `it_should_round_trip_the_playlists_reconcile_interval`.
 
 Migrations:
-- [ ] 3.6 `it_should_give_existing_channels_and_playlists_the_default_interval`: rows inserted before 0009 read back with 180.
+- [x] 3.6 `it_should_give_existing_channels_and_playlists_the_default_interval`: rows inserted before 0009 read back with 180.
 
 ## 4. Verification
 

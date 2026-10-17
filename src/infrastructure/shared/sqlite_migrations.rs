@@ -359,6 +359,40 @@ mod tests {
     }
 
     #[test]
+    fn it_should_give_existing_channels_and_playlists_the_default_interval() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+            M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+            M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
+            M::up(EPISODE_NUMBERS_SQL),
+        ])
+        .to_latest(&mut conn)
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, created_at)
+             VALUES ('@somechannel', 'Some Channel', 'UC123', 'high', 10, 'creators/somechannel', '2024-01-01T00:00:00+00:00');
+             INSERT INTO playlists (id, name, path, quality, kind, created_at)
+             VALUES ('PL1', 'My Playlist', 'my-playlist', 'high', 'youtube_linked', '2024-01-01T00:00:00+00:00');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let intervals = conn.query_row(
+            "SELECT (SELECT reconcile_interval_minutes FROM channels WHERE id = '@somechannel'),
+                    (SELECT reconcile_interval_minutes FROM playlists WHERE id = 'PL1')",
+            [],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        );
+        assert_eq!(intervals, Ok((180, 180)));
+    }
+
+    #[test]
     fn it_should_default_existing_videos_to_unwatched_when_migrating() {
         let mut conn = Connection::open_in_memory().unwrap();
         Migrations::new(vec![M::up(BASELINE_SQL)])
