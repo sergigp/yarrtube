@@ -536,6 +536,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_the_interval_of_an_existing_playlist_on_duplicate_create() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let existing = playlist("PL1", DEFAULT_PATH)
+            .with_reconcile_interval(ReconcileInterval::new(60).unwrap());
+        playlist_repository.insert(&existing).unwrap();
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let request = CreatePlaylistRequest {
+            reconcile_interval_minutes: Some(30),
+            ..create_request("PL1")
+        };
+
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::OK,
+                PlaylistResponse {
+                    reconcile_interval_minutes: 60,
+                    ..playlist_response("PL1", DEFAULT_PATH)
+                }
+            ))
+        );
+        assert_eq!(playlist_repository.list().unwrap(), vec![existing]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_keep_exclude_from_home_of_an_existing_playlist_on_duplicate_create() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));

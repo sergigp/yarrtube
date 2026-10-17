@@ -28,7 +28,7 @@ Playlist HTTP:
 - [x] 2.17 `it_should_create_a_playlist_with_the_default_interval`.
 - [x] 2.18 `it_should_create_a_playlist_with_its_interval`.
 - [x] 2.19 `it_should_fail_to_create_if_invalid_interval_provided` (playlists).
-- [ ] 2.20 `it_should_keep_the_interval_of_an_existing_playlist_on_duplicate_create`.
+- [x] 2.20 `it_should_keep_the_interval_of_an_existing_playlist_on_duplicate_create`.
 - [ ] 2.21 `it_should_update_a_playlists_interval`: `exclude_from_home` absent keeps its value.
 - [ ] 2.22 `it_should_bring_the_next_reconcile_forward_if_interval_shortened` (playlists).
 - [ ] 2.23 `it_should_keep_the_next_reconcile_if_interval_lengthened` (playlists).
