@@ -56,7 +56,7 @@ function EditChannelForm({ channel, onSave, onClose }: EditChannelFormProps) {
       const value = event.target.value
       setForm((prev) => ({ ...prev, [field]: value }))
     }
-  const setInterval = (interval: IntervalForm) => setForm((prev) => ({ ...prev, interval }))
+  const changeInterval = (interval: IntervalForm) => setForm((prev) => ({ ...prev, interval }))
 
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -121,7 +121,7 @@ function EditChannelForm({ channel, onSave, onClose }: EditChannelFormProps) {
       <ReconcileIntervalField
         id="edit-channel-interval"
         value={form.interval}
-        onChange={setInterval}
+        onChange={changeInterval}
       />
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
