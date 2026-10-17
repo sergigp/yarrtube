@@ -30,3 +30,13 @@ impl ReconcileInterval {
         Duration::minutes(i64::from(self.0))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_accept_one_minute() {
+        assert_eq!(ReconcileInterval::new(1), Ok(ReconcileInterval(1)));
+    }
+}

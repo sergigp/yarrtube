@@ -37,7 +37,7 @@ Playlist HTTP:
 - [x] 2.26 `it_should_list_playlists_with_their_interval`.
 
 Value object `ReconcileInterval`:
-- [ ] 2.27 `it_should_accept_one_minute`.
+- [x] 2.27 `it_should_accept_one_minute`.
 - [ ] 2.28 `it_should_reject_zero`: exact message "Reconcile interval must be at least 1 minute (got 0)".
 - [ ] 2.29 `it_should_reject_a_negative_interval`.
 - [ ] 2.30 `it_should_reject_an_interval_too_large_for_32_bits`.
