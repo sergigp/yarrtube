@@ -60,7 +60,7 @@ impl PlaylistCreatorApi for PlaylistCreator {
         path: PlaylistPath,
         quality: Quality,
         exclude_from_home: bool,
-        _reconcile_interval: ReconcileInterval,
+        reconcile_interval: ReconcileInterval,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError> {
         if let Some(existing) = self.find_existing(&id)? {
             return Ok(CreatePlaylistOutcome::AlreadyExisted(existing));
@@ -76,7 +76,7 @@ impl PlaylistCreatorApi for PlaylistCreator {
             quality,
             PlaylistKind::YoutubeLinked,
             exclude_from_home,
-            ReconcileInterval::default_interval(),
+            reconcile_interval,
             now,
         );
         self.insert_playlist(&playlist)?;

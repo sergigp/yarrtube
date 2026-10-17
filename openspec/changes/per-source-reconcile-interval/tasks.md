@@ -26,7 +26,7 @@ Channel HTTP:
 
 Playlist HTTP:
 - [x] 2.17 `it_should_create_a_playlist_with_the_default_interval`.
-- [ ] 2.18 `it_should_create_a_playlist_with_its_interval`.
+- [x] 2.18 `it_should_create_a_playlist_with_its_interval`.
 - [ ] 2.19 `it_should_fail_to_create_if_invalid_interval_provided` (playlists).
 - [ ] 2.20 `it_should_keep_the_interval_of_an_existing_playlist_on_duplicate_create`.
 - [ ] 2.21 `it_should_update_a_playlists_interval`: `exclude_from_home` absent keeps its value.

@@ -33,7 +33,11 @@ pub async fn create_playlist(
     let path = PlaylistPath::new(required(request.path, MISSING_PATH)?)?;
     let quality = Quality::new(required(request.quality, MISSING_QUALITY)?)?;
     let exclude_from_home = request.exclude_from_home.unwrap_or(false);
-    let reconcile_interval = ReconcileInterval::default_interval();
+    let reconcile_interval = request
+        .reconcile_interval_minutes
+        .map(ReconcileInterval::new)
+        .transpose()?
+        .unwrap_or_else(ReconcileInterval::default_interval);
 
     let outcome = run_blocking(move || {
         playlist_creator.create(id, path, quality, exclude_from_home, reconcile_interval)
@@ -241,6 +245,49 @@ mod tests {
             vec![
                 playlist("PL1", DEFAULT_PATH)
                     .with_reconcile_interval(ReconcileInterval::new(180).unwrap())
+            ]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, playlist_created("PL1"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_create_a_playlist_with_its_interval() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let request = CreatePlaylistRequest {
+            reconcile_interval_minutes: Some(720),
+            ..create_request("PL1")
+        };
+        let response = create(playlist_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                PlaylistResponse {
+                    reconcile_interval_minutes: 720,
+                    ..playlist_response("PL1", DEFAULT_PATH)
+                }
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![
+                playlist("PL1", DEFAULT_PATH)
+                    .with_reconcile_interval(ReconcileInterval::new(720).unwrap())
             ]
         );
         assert_eq!(
