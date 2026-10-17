@@ -674,6 +674,45 @@ mod tests {
     }
 
     #[test]
+    fn it_should_schedule_the_next_reconcile_after_the_playlists_interval() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        playlist_repository
+            .insert(&playlist("PL1").with_reconcile_interval(ReconcileInterval::new(720).unwrap()))
+            .unwrap();
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository.clone(),
+            Vec::new(),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::ReconcilePlaylist {
+                    playlist_id: "PL1".to_string(),
+                },
+                fixed_timestamp() + chrono::Duration::minutes(720),
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_keep_videos_if_listing_fails() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
