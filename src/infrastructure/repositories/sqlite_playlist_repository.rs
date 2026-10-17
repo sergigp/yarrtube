@@ -245,6 +245,19 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_the_playlists_reconcile_interval() {
+        let repo = repo();
+        let playlist =
+            playlist("PL1", "First").with_reconcile_interval(ReconcileInterval::new(30).unwrap());
+        repo.insert(&playlist).unwrap();
+        let updated = playlist.with_reconcile_interval(ReconcileInterval::new(1440).unwrap());
+
+        repo.update(&updated).unwrap();
+
+        assert_eq!(repo.find(&updated.id).unwrap(), Some(updated));
+    }
+
+    #[test]
     fn it_should_update_an_existing_playlist() {
         let repo = repo();
         let original = playlist("PL1", "First");
