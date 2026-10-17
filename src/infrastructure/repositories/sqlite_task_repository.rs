@@ -715,6 +715,18 @@ mod tests {
     }
 
     #[test]
+    fn it_should_find_the_pending_task_with_the_same_type_and_payload() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let run_at = now + chrono::Duration::hours(1);
+        repo.schedule(&task(), run_at).unwrap();
+
+        let found = repo.find_pending(&task()).unwrap();
+
+        assert_eq!(found, Some(pending_task(1, &task(), run_at, now)));
+    }
+
+    #[test]
     fn it_should_claim_a_pending_task() {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         let later = now + chrono::Duration::seconds(30);

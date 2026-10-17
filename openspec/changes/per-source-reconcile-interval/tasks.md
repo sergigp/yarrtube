@@ -58,7 +58,7 @@ Web (Vitest):
 ## 3. Infrastructure adapters (TDD)
 
 `SqliteTaskRepository`:
-- [ ] 3.1 `it_should_find_the_pending_task_with_the_same_type_and_payload`.
+- [x] 3.1 `it_should_find_the_pending_task_with_the_same_type_and_payload`.
 - [ ] 3.2 `it_should_not_find_a_running_or_completed_task_as_pending`.
 - [ ] 3.3 `it_should_not_find_a_pending_task_of_another_source`: same type, different payload → `None`.
 
