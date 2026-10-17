@@ -579,6 +579,47 @@ mod tests {
     }
 
     #[test]
+    fn it_should_schedule_the_next_reconcile_after_the_channels_interval() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        channel_repository
+            .insert(
+                &channel("@somechannel").with_reconcile_interval(ReconcileInterval::new(30).unwrap()),
+            )
+            .unwrap();
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::ReconcileChannel {
+                    channel_id: "@somechannel".to_string(),
+                },
+                fixed_timestamp() + chrono::Duration::minutes(30),
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_rewrite_missing_show_files_on_a_recurring_reconcile() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
