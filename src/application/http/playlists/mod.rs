@@ -1304,6 +1304,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_the_next_reconcile_if_interval_lengthened() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        task_repository
+            .schedule(
+                &reconcile_task("PL1"),
+                fixed_timestamp() + chrono::Duration::minutes(30),
+            )
+            .unwrap();
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let request = UpdatePlaylistRequest {
+            exclude_from_home: None,
+            reconcile_interval_minutes: Some(1440),
+        };
+        let response = update(playlist_updater, "PL1", request).await;
+
+        assert_eq!(
+            response,
+            Ok(PlaylistResponse {
+                reconcile_interval_minutes: 1440,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            })
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &reconcile_task("PL1"),
+                fixed_timestamp() + chrono::Duration::minutes(30),
+            )]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_update_an_unknown_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
