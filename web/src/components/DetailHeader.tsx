@@ -29,7 +29,7 @@ interface DetailHeaderProps {
   /** Playlists only: whether the playlist is excluded from home. */
   excludedFromHome?: boolean
   onSetExcludedFromHome?: (excluded: boolean) => Promise<void>
-  /** Channels only: opens the edit channel dialog, which the caller owns. */
+  /** Opens the edit channel or playlist dialog, which the caller owns. */
   onEditRequest?: () => void
   onDelete: () => Promise<void>
   deleteDescription: string

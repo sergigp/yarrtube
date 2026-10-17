@@ -185,20 +185,41 @@ describe('PlaylistDetail', () => {
     expect(screen.getByRole('button', { name: 'Playback speed' })).toHaveTextContent('1x')
   })
 
-  it('offers no Edit settings item', async () => {
+  it("edits the playlist's settings from its page header menu", async () => {
+    let playlist = aPlaylist({ id: 'PL1', name: 'The Playlist', reconcile_interval_minutes: 180 })
+    const update = vi.fn(() => {
+      playlist = { ...playlist, reconcile_interval_minutes: 30 }
+      return playlist
+    })
     renderPlaylist(
       {
-        'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'The Playlist' })],
+        'GET /api/playlists': () => [playlist],
         'GET /api/playlists/PL1/videos': [],
+        'PATCH /api/playlists/PL1': update,
       },
       '/playlists/PL1',
     )
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'More actions for The Playlist' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit settings' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit The Playlist settings' })
+    const amount = within(dialog).getByLabelText('Check for new videos every')
+    await user.clear(amount)
+    await user.type(amount, '30')
+    await user.click(within(dialog).getByRole('combobox', { name: 'Interval unit' }))
+    await user.click(await screen.findByRole('option', { name: 'minutes' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: 'Edit settings' })).not.toBeInTheDocument()
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    expect(update).toHaveBeenCalledOnce()
+    await user.click(screen.getByRole('button', { name: 'More actions for The Playlist' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit settings' }))
+    expect(
+      within(await screen.findByRole('dialog', { name: 'Edit The Playlist settings' })).getByLabelText(
+        'Check for new videos every',
+      ),
+    ).toHaveValue(30)
   })
 
   it('keeps the player when refreshing the playlist list fails after it loaded', async () => {

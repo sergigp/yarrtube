@@ -7,6 +7,7 @@ import {
   usePlaylistVideos,
   useRemoveQuery,
   useSetPlaylistExcludedFromHome,
+  useUpdatePlaylistSettings,
 } from '@/api/queries'
 import { reconcilePlaylist, deletePlaylist } from '@/api/client'
 import { useWatchProgress } from '@/hooks/useWatchProgress'
@@ -16,6 +17,7 @@ import { VideoPlayer } from './VideoPlayer'
 import { VideoDetail } from './VideoDetail'
 import { VideoListPane } from './VideoListPane'
 import { DetailHeader } from './DetailHeader'
+import { EditPlaylistDialog } from './EditPlaylistDialog'
 
 export function PlaylistDetail() {
   const { id = '' } = useParams()
@@ -24,6 +26,8 @@ export function PlaylistDetail() {
   const refreshing = useLibraryAction()
   const removeQuery = useRemoveQuery()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
+  const updatePlaylistSettings = useUpdatePlaylistSettings()
+  const [editing, setEditing] = useState(false)
   const playlist = playlists?.find((item) => item.id === id) ?? null
 
   const { data: videos, error } = usePlaylistVideos(id)
@@ -55,12 +59,19 @@ export function PlaylistDetail() {
         onSync={refreshing(() => reconcilePlaylist(id))}
         excludedFromHome={playlist.exclude_from_home}
         onSetExcludedFromHome={(excluded) => setPlaylistExcludedFromHome(id, excluded)}
+        onEditRequest={() => setEditing(true)}
         onDelete={refreshing(async () => {
           await deletePlaylist(id)
           removeQuery(queryKeys.playlistVideos(id))
           navigate('/')
         })}
         deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
+      />
+      <EditPlaylistDialog
+        playlist={playlist}
+        open={editing}
+        onOpenChange={setEditing}
+        onSave={(changes) => updatePlaylistSettings(id, changes)}
       />
       <div className="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_360px] md:items-start md:gap-6 md:overflow-hidden">
         <div className="contents md:flex md:h-full md:min-w-0 md:flex-col md:gap-4 md:overflow-y-auto">
