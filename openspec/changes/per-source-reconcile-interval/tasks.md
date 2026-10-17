@@ -63,7 +63,7 @@ Web (Vitest):
 - [x] 3.3 `it_should_not_find_a_pending_task_of_another_source`: same type, different payload → `None`.
 
 `SqliteChannelRepository` / `SqlitePlaylistRepository`:
-- [ ] 3.4 `it_should_round_trip_the_channels_reconcile_interval`.
+- [x] 3.4 `it_should_round_trip_the_channels_reconcile_interval`.
 - [ ] 3.5 `it_should_round_trip_the_playlists_reconcile_interval`.
 
 Migrations:
