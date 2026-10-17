@@ -26,7 +26,8 @@ use dto::{
 
 const MISSING_VIDEO_LIMIT: &str = "Video limit must be a positive integer (missing)";
 const MISSING_PATH: &str = "Channel path must not be empty";
-const NOTHING_TO_UPDATE: &str = "Request must change the quality or the video limit";
+const NOTHING_TO_UPDATE: &str =
+    "Request must change the quality, the video limit or the reconcile interval";
 
 pub async fn create_channel(
     State(channel_creator): State<ChannelCreator>,
@@ -1305,7 +1306,12 @@ mod tests {
     async fn it_should_fail_to_update_if_nothing_to_update() {
         let response = update(any_channel_updater(), "@somechannel", update_request()).await;
 
-        assert_eq!(response, Err(ApiError::bad_request(NOTHING_TO_UPDATE)));
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Request must change the quality, the video limit or the reconcile interval"
+            ))
+        );
     }
 
     #[tokio::test]
