@@ -15,7 +15,7 @@ Reconcile tasks:
 Channel HTTP:
 - [x] 2.7 `it_should_create_a_channel_with_the_default_interval`: response and stored channel have 180.
 - [x] 2.8 `it_should_create_a_channel_with_its_interval`: request 30 → response/stored 30.
-- [ ] 2.9 `it_should_fail_to_create_if_invalid_interval_provided`: 0 → 400 with the VO's exact message.
+- [x] 2.9 `it_should_fail_to_create_if_invalid_interval_provided`: 0 → 400 with the VO's exact message.
 - [ ] 2.10 `it_should_keep_the_interval_of_an_existing_channel_on_duplicate_create`.
 - [ ] 2.11 `it_should_update_a_channels_interval`: response + stored channel 60, other fields unchanged.
 - [ ] 2.12 `it_should_bring_the_next_reconcile_forward_if_interval_shortened` (channels): pending at `now + 20h`, update to 60 → `run_at = now + 60 min`, `updated_at = now`.

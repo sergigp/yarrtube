@@ -10,6 +10,11 @@ pub struct ReconcileInterval(u32);
 
 impl ReconcileInterval {
     pub fn new(minutes: i64) -> Result<Self, ValidationError> {
+        if minutes < 1 {
+            return Err(ValidationError(format!(
+                "Reconcile interval must be at least 1 minute (got {minutes})"
+            )));
+        }
         Ok(Self(minutes as u32))
     }
 

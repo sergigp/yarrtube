@@ -581,6 +581,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_create_if_invalid_interval_provided() {
+        let request = CreateChannelRequest {
+            reconcile_interval_minutes: Some(0),
+            ..create_request("@somechannel")
+        };
+
+        let response = create(any_channel_creator(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Reconcile interval must be at least 1 minute (got 0)"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_create_if_quality_missing() {
         let request = CreateChannelRequest {
             quality: None,
