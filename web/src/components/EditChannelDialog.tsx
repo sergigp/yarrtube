@@ -6,6 +6,8 @@ import {
   lowersVideoLimit,
   type ChannelSettingsForm,
 } from '@/lib/channelSettings'
+import { intervalForm, type IntervalForm } from '@/lib/reconcileInterval'
+import { ReconcileIntervalField } from './ReconcileIntervalField'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -26,7 +28,7 @@ export function EditChannelDialog({ channel, open, onOpenChange, onSave }: EditC
       <DialogContent className="gap-5 p-6 sm:max-w-md">
         <DialogTitle>Edit {channel.name} settings</DialogTitle>
         <DialogDescription className="sr-only">
-          Change the video quality and video limit of {channel.name}.
+          Change the video quality, video limit and check interval of {channel.name}.
         </DialogDescription>
         {/* The form unmounts with the dialog, so every open starts from the
             channel's current settings. */}
@@ -46,12 +48,15 @@ function EditChannelForm({ channel, onSave, onClose }: EditChannelFormProps) {
   const [form, setForm] = useState<ChannelSettingsForm>({
     quality: channel.quality,
     video_limit: String(channel.video_limit),
+    interval: intervalForm(channel.reconcile_interval_minutes),
   })
 
-  const setField = (field: keyof ChannelSettingsForm) => (event: { target: { value: string } }) => {
-    const value = event.target.value
-    setForm((prev) => ({ ...prev, [field]: value }))
-  }
+  const setField =
+    (field: 'quality' | 'video_limit') => (event: { target: { value: string } }) => {
+      const value = event.target.value
+      setForm((prev) => ({ ...prev, [field]: value }))
+    }
+  const setInterval = (interval: IntervalForm) => setForm((prev) => ({ ...prev, interval }))
 
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -112,6 +117,12 @@ function EditChannelForm({ channel, onSave, onClose }: EditChannelFormProps) {
           </p>
         )}
       </div>
+
+      <ReconcileIntervalField
+        id="edit-channel-interval"
+        value={form.interval}
+        onChange={setInterval}
+      />
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
       <Button type="submit" disabled={submitting} className="self-start">

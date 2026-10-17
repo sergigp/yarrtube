@@ -22,6 +22,28 @@ describe('EditChannelDialog', () => {
     expect(screen.getByRole('combobox', { name: /Video quality/ })).toHaveTextContent('Mid')
     expect(screen.getByLabelText('Video limit')).toHaveValue(5)
   })
+
+  it("opens with the channel's interval in hours", () => {
+    renderDialog(aChannel({ reconcile_interval_minutes: 180 }))
+
+    expect(screen.getByLabelText('Check for new videos every')).toHaveValue(3)
+    expect(screen.getByRole('combobox', { name: 'Interval unit' })).toHaveTextContent('hours')
+  })
+
+  it('sends only the changed interval, in minutes', async () => {
+    const { onSave, onOpenChange } = renderDialog(aChannel({ reconcile_interval_minutes: 180 }))
+    const user = userEvent.setup()
+    const amount = screen.getByLabelText('Check for new videos every')
+
+    await user.clear(amount)
+    await user.type(amount, '30')
+    await user.click(screen.getByRole('combobox', { name: 'Interval unit' }))
+    await user.click(await screen.findByRole('option', { name: 'minutes' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ reconcile_interval_minutes: 30 })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
   it('sends only the changed quality', async () => {
     const { onSave, onOpenChange } = renderDialog(aChannel({ quality: 'high', video_limit: 5 }))
     const user = userEvent.setup()

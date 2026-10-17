@@ -1,27 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import { channelSettingsChanges, lowersVideoLimit } from './channelSettings'
 
-const current = { quality: 'high', video_limit: 10 } as const
+const current = { quality: 'high', video_limit: 10, reconcile_interval_minutes: 180 } as const
+const interval = { amount: '3', unit: 'hours' } as const
 
 describe('channelSettingsChanges', () => {
   it('returns nothing when no setting changed', () => {
-    expect(channelSettingsChanges(current, { quality: 'high', video_limit: '10' })).toEqual({})
+    expect(channelSettingsChanges(current, { quality: 'high', video_limit: '10', interval })).toEqual({})
   })
 
   it('returns only a changed quality', () => {
-    expect(channelSettingsChanges(current, { quality: 'low', video_limit: '10' })).toEqual({
+    expect(channelSettingsChanges(current, { quality: 'low', video_limit: '10', interval })).toEqual({
       quality: 'low',
     })
   })
 
   it('returns only a changed video limit, as a number', () => {
-    expect(channelSettingsChanges(current, { quality: 'high', video_limit: '25' })).toEqual({
+    expect(channelSettingsChanges(current, { quality: 'high', video_limit: '25', interval })).toEqual({
       video_limit: 25,
     })
   })
 
   it('returns both settings when both changed', () => {
-    expect(channelSettingsChanges(current, { quality: 'mid', video_limit: '3' })).toEqual({
+    expect(channelSettingsChanges(current, { quality: 'mid', video_limit: '3', interval })).toEqual({
       quality: 'mid',
       video_limit: 3,
     })
