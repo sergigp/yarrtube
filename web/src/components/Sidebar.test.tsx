@@ -161,7 +161,7 @@ describe('Sidebar', () => {
     expect(markWatched).toHaveBeenCalledOnce()
   })
 
-  it('does not offer mark-all-watched for playlists', async () => {
+  it('a playlist row menu offers no mark-all-watched item', async () => {
     renderSidebar({
       'GET /api/channels': [],
       'GET /api/playlists': [aPlaylist({ name: 'List B' })],
@@ -170,9 +170,44 @@ describe('Sidebar', () => {
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Actions for List B' }))
 
-    expect(await screen.findByRole('menuitem', { name: 'Sync' })).toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: 'Mark all watched' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: 'Edit settings' })).not.toBeInTheDocument()
+    expect(
+      (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
+    ).toEqual(['Sync', 'Exclude from home', 'Edit settings', 'Delete'])
+  })
+
+  it("edits a playlist's settings from its row menu", async () => {
+    let playlist = aPlaylist({ id: 'PL1', name: 'Lofi beats', reconcile_interval_minutes: 180 })
+    const update = vi.fn(() => {
+      playlist = { ...playlist, reconcile_interval_minutes: 30 }
+      return playlist
+    })
+    const fetchMock = mockApi({
+      'GET /api/channels': [],
+      'GET /api/playlists': () => [playlist],
+      'PATCH /api/playlists/PL1': update,
+    })
+    renderWithProviders(
+      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+    )
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Lofi beats' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit settings' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Lofi beats settings' })
+    const amount = within(dialog).getByLabelText('Check for new videos every')
+    await user.clear(amount)
+    await user.type(amount, '30')
+    await user.click(within(dialog).getByRole('combobox', { name: 'Interval unit' }))
+    await user.click(await screen.findByRole('option', { name: 'minutes' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    expect(update).toHaveBeenCalledOnce()
+    const patchCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PATCH',
+    ) as [string, RequestInit]
+    expect(JSON.parse(patchCall[1].body as string)).toEqual({ reconcile_interval_minutes: 30 })
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/playlists/PL1/reconcile')).toBe(false)
   })
 
   it('excludes a playlist from home from its row menu', async () => {

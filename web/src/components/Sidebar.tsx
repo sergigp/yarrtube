@@ -8,6 +8,7 @@ import {
   usePlaylists,
   useRemoveQuery,
   useSetPlaylistExcludedFromHome,
+  useUpdatePlaylistSettings,
 } from '@/api/queries'
 import {
   reconcileChannel,
@@ -28,6 +29,7 @@ import {
 } from '@/lib/sidebarSections'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EditChannelDialog } from './EditChannelDialog'
+import { EditPlaylistDialog } from './EditPlaylistDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { Thumbnail } from './Thumbnail'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
@@ -384,6 +386,10 @@ export function Sidebar({
   const saveChannelSettings = useSaveChannelSettings()
   const [editingChannelId, setEditingChannelId] = useState<string | null>(null)
   const editingChannel = channels?.find((channel) => channel.id === editingChannelId) ?? null
+  const updatePlaylistSettings = useUpdatePlaylistSettings()
+  const [editingPlaylistId, setEditingPlaylistId] = useState<string | null>(null)
+  const editingPlaylist =
+    playlists?.find((playlist) => playlist.id === editingPlaylistId) ?? null
   const [search, setSearch] = useState('')
   const [channelsExpanded, toggleChannelsExpanded] = useExpandedState('channels')
   const [playlistsExpanded, togglePlaylistsExpanded] = useExpandedState('playlists')
@@ -514,6 +520,7 @@ export function Sidebar({
             onNavigate={onClose}
             onSync={refreshing(reconcilePlaylist)}
             onSetExcludedFromHome={setPlaylistExcludedFromHome}
+            onEditRequest={setEditingPlaylistId}
             onDelete={refreshing(async (id: string) => {
               await deletePlaylist(id)
               removeQuery(queryKeys.playlistVideos(id))
@@ -535,6 +542,18 @@ export function Sidebar({
             }
           }}
           onSave={(changes) => saveChannelSettings(editingChannel, changes)}
+        />
+      )}
+      {editingPlaylist && (
+        <EditPlaylistDialog
+          playlist={editingPlaylist}
+          open
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setEditingPlaylistId(null)
+            }
+          }}
+          onSave={(changes) => updatePlaylistSettings(editingPlaylist.id, changes)}
         />
       )}
     </>

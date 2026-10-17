@@ -50,7 +50,7 @@ Web (Vitest):
 - [x] 2.35 `EditPlaylistDialog`: opens titled "Edit Lofi beats settings" showing 3 hours.
 - [x] 2.36 `EditPlaylistDialog`: saving 30 minutes sends PATCH `{ reconcile_interval_minutes: 30 }`, no reconcile, and the dialog closes.
 - [x] 2.37 `EditPlaylistDialog`: saving unchanged sends nothing; a failed save keeps the dialog open with the error.
-- [ ] 2.38 `Sidebar`: the playlist row menu lists Sync, Exclude from home, Edit settings, Delete; choosing Edit settings opens the dialog.
+- [x] 2.38 `Sidebar`: the playlist row menu lists Sync, Exclude from home, Edit settings, Delete; choosing Edit settings opens the dialog.
 - [ ] 2.39 `PlaylistDetail`: the header menu offers Edit settings and opens the dialog.
 - [ ] 2.40 `AddChannelDialog`: submits `reconcile_interval_minutes` 180 by default and 30 when set to 30 minutes under "Advanced options".
 - [ ] 2.41 `AddPlaylistDialog`: same as 2.40.
