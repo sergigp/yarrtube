@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import type { UpdatePlaylistRequest } from '@/api/client'
 import type { PlaylistListItem } from '@/api/types'
-import { intervalForm, type IntervalForm } from '@/lib/reconcileInterval'
+import { intervalForm, intervalMinutes, type IntervalForm } from '@/lib/reconcileInterval'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 
 interface EditPlaylistDialogProps {
   playlist: PlaylistListItem
@@ -13,7 +14,12 @@ interface EditPlaylistDialogProps {
   onSave: (changes: UpdatePlaylistRequest) => Promise<void>
 }
 
-export function EditPlaylistDialog({ playlist, open, onOpenChange }: EditPlaylistDialogProps) {
+export function EditPlaylistDialog({
+  playlist,
+  open,
+  onOpenChange,
+  onSave,
+}: EditPlaylistDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-5 p-6 sm:max-w-md">
@@ -23,7 +29,11 @@ export function EditPlaylistDialog({ playlist, open, onOpenChange }: EditPlaylis
         </DialogDescription>
         {/* The form unmounts with the dialog, so every open starts from the
             playlist's current settings. */}
-        <EditPlaylistForm playlist={playlist} />
+        <EditPlaylistForm
+          playlist={playlist}
+          onSave={onSave}
+          onClose={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -31,16 +41,29 @@ export function EditPlaylistDialog({ playlist, open, onOpenChange }: EditPlaylis
 
 interface EditPlaylistFormProps {
   playlist: PlaylistListItem
+  onSave: (changes: UpdatePlaylistRequest) => Promise<void>
+  onClose: () => void
 }
 
-function EditPlaylistForm({ playlist }: EditPlaylistFormProps) {
+function EditPlaylistForm({ playlist, onSave, onClose }: EditPlaylistFormProps) {
   const [interval, changeInterval] = useState<IntervalForm>(
     intervalForm(playlist.reconcile_interval_minutes),
   )
 
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const minutes = intervalMinutes(interval)
+    if (minutes === null) return
+    await onSave({ reconcile_interval_minutes: minutes })
+    onClose()
+  }
+
   return (
-    <form className="flex min-w-0 flex-col gap-5">
+    <form className="flex min-w-0 flex-col gap-5" onSubmit={handleSubmit}>
       <ReconcileIntervalField id="edit-playlist-interval" value={interval} onChange={changeInterval} />
+      <Button type="submit" className="self-start">
+        Save
+      </Button>
     </form>
   )
 }
