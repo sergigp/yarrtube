@@ -43,7 +43,7 @@ Value object `ReconcileInterval`:
 - [x] 2.30 `it_should_reject_an_interval_too_large_for_32_bits`.
 
 Web (Vitest):
-- [ ] 2.31 `lib/reconcileInterval`: `intervalForm` shows 180 as 3 hours and 90 as 90 minutes.
+- [x] 2.31 `lib/reconcileInterval`: `intervalForm` shows 180 as 3 hours and 90 as 90 minutes.
 - [ ] 2.32 `lib/reconcileInterval`: `intervalMinutes` converts 6 hours to 360, and returns `null` for `''`, `'0'` and `'1.5'`.
 - [ ] 2.33 `EditChannelDialog`: opens with the interval showing 3 hours; changing only the interval sends `{ reconcile_interval_minutes: 30 }` and no reconcile.
 - [ ] 2.34 `EditChannelDialog`: an invalid interval flags the field and sends nothing.
