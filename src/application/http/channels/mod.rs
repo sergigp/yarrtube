@@ -36,7 +36,11 @@ pub async fn create_channel(
     let quality = Quality::new(required(request.quality, MISSING_QUALITY)?)?;
     let video_limit = VideoLimit::new(required(request.video_limit, MISSING_VIDEO_LIMIT)?)?;
     let path = PlaylistPath::new(required(request.path, MISSING_PATH)?)?;
-    let reconcile_interval = ReconcileInterval::default_interval();
+    let reconcile_interval = request
+        .reconcile_interval_minutes
+        .map(ReconcileInterval::new)
+        .transpose()?
+        .unwrap_or_else(ReconcileInterval::default_interval);
 
     let outcome = run_blocking(move || {
         channel_creator.create(id, quality, video_limit, reconcile_interval, path)
@@ -263,6 +267,48 @@ mod tests {
             vec![
                 channel("@somechannel")
                     .with_reconcile_interval(ReconcileInterval::new(180).unwrap())
+            ]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, channel_created("@somechannel"))]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_create_a_channel_with_its_interval() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let channel_creator = ChannelCreator::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let request = CreateChannelRequest {
+            reconcile_interval_minutes: Some(30),
+            ..create_request("@somechannel")
+        };
+        let response = create(channel_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                ChannelResponse {
+                    reconcile_interval_minutes: 30,
+                    ..some_channel_response()
+                }
+            ))
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![
+                channel("@somechannel")
+                    .with_reconcile_interval(ReconcileInterval::new(30).unwrap())
             ]
         );
         assert_eq!(

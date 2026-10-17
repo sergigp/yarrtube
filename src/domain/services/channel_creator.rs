@@ -65,7 +65,7 @@ impl ChannelCreatorApi for ChannelCreator {
         id: ChannelHandle,
         quality: Quality,
         video_limit: VideoLimit,
-        _reconcile_interval: ReconcileInterval,
+        reconcile_interval: ReconcileInterval,
         path: PlaylistPath,
     ) -> Result<CreateChannelOutcome, CreateChannelError> {
         if let Some(existing) = self.find_existing(&id)? {
@@ -80,7 +80,7 @@ impl ChannelCreatorApi for ChannelCreator {
             resolved.youtube_channel_id,
             quality,
             video_limit,
-            ReconcileInterval::default_interval(),
+            reconcile_interval,
             path,
             avatar_filename,
             self.clock.now(),
