@@ -251,7 +251,7 @@ impl TaskRepository for SqliteTaskRepository {
     fn find_pending(&self, task: &Task) -> anyhow::Result<Option<ScheduledTask>> {
         let conn = self.db.read()?;
         conn.query_row(
-            &format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE task_type = ?1 ORDER BY id LIMIT 1"),
+            &format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE task_type = ?1 AND status = 'pending' ORDER BY id LIMIT 1"),
             params![task.task_type()],
             row_to_scheduled_task,
         )
@@ -724,6 +724,20 @@ mod tests {
         let found = repo.find_pending(&task()).unwrap();
 
         assert_eq!(found, Some(pending_task(1, &task(), run_at, now)));
+    }
+
+    #[test]
+    fn it_should_not_find_a_running_or_completed_task_as_pending() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&task(), now).unwrap();
+        repo.schedule(&task(), now).unwrap();
+        repo.claim(1, now).unwrap();
+        repo.delete(2).unwrap();
+
+        let found = repo.find_pending(&task()).unwrap();
+
+        assert_eq!(found, None);
     }
 
     #[test]
