@@ -32,7 +32,7 @@ Playlist HTTP:
 - [x] 2.21 `it_should_update_a_playlists_interval`: `exclude_from_home` absent keeps its value.
 - [x] 2.22 `it_should_bring_the_next_reconcile_forward_if_interval_shortened` (playlists).
 - [x] 2.23 `it_should_keep_the_next_reconcile_if_interval_lengthened` (playlists).
-- [ ] 2.24 `it_should_fail_to_update_if_nothing_to_update` (playlists): replaces `it_should_fail_to_update_if_exclude_from_home_missing`.
+- [x] 2.24 `it_should_fail_to_update_if_nothing_to_update` (playlists): replaces `it_should_fail_to_update_if_exclude_from_home_missing`.
 - [ ] 2.25 `it_should_fail_to_update_if_invalid_interval_provided` (playlists).
 - [ ] 2.26 `it_should_list_playlists_with_their_interval`.
 

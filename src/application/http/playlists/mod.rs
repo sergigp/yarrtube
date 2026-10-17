@@ -2,7 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
-use super::validation::{MISSING_EXCLUDE_FROM_HOME, MISSING_QUALITY, required};
+use super::validation::{MISSING_QUALITY, required};
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{
     CreatePlaylistError, DeletePlaylistError, PlaylistPath, PreviewPlaylistError,
@@ -24,6 +24,7 @@ use dto::{
 };
 
 const MISSING_PATH: &str = "Playlist path must not be empty";
+const NOTHING_TO_UPDATE: &str = "Request must change exclude from home or the reconcile interval";
 
 pub async fn create_playlist(
     State(playlist_creator): State<PlaylistCreator>,
@@ -92,14 +93,14 @@ pub async fn update_playlist(
     Json(request): Json<UpdatePlaylistRequest>,
 ) -> Result<Json<PlaylistResponse>, ApiError> {
     let id = PlaylistId::new(id)?;
+    let exclude_from_home = request.exclude_from_home;
     let reconcile_interval = request
         .reconcile_interval_minutes
         .map(ReconcileInterval::new)
         .transpose()?;
-    if request.exclude_from_home.is_none() && reconcile_interval.is_none() {
-        return Err(ApiError::bad_request(MISSING_EXCLUDE_FROM_HOME));
+    if exclude_from_home.is_none() && reconcile_interval.is_none() {
+        return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
     }
-    let exclude_from_home = request.exclude_from_home;
 
     match run_blocking(move || {
         playlist_updater.update_settings(id, exclude_from_home, reconcile_interval)
@@ -1382,7 +1383,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_fail_to_update_if_exclude_from_home_missing() {
+    async fn it_should_fail_to_update_if_nothing_to_update() {
         let request = UpdatePlaylistRequest {
             exclude_from_home: None,
             reconcile_interval_minutes: None,
@@ -1393,7 +1394,7 @@ mod tests {
         assert_eq!(
             response,
             Err(ApiError::bad_request(
-                "Whether the playlist is excluded from home must be stated (missing)"
+                "Request must change exclude from home or the reconcile interval"
             ))
         );
     }
