@@ -1,5 +1,6 @@
 use crate::domain::channel::{Channel, ChannelHandle, UpdateChannelError, VideoLimit};
 use crate::domain::shared::{Quality, ReconcileInterval};
+use crate::domain::task::Task;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -58,6 +59,9 @@ impl ChannelUpdaterApi for ChannelUpdater {
             reconcile_interval,
         );
         self.update_channel(&channel)?;
+        if let Some(reconcile_interval) = reconcile_interval {
+            self.bring_forward_next_reconcile(&id, reconcile_interval)?;
+        }
         info!(
             channel_id = %id,
             quality = channel.quality.as_str(),
@@ -101,6 +105,29 @@ impl ChannelUpdater {
     fn update_channel(&self, channel: &Channel) -> Result<(), UpdateChannelError> {
         self.repository
             .update(channel)
+            .map_err(UpdateChannelError::Repository)
+    }
+
+    /// A shorter interval applies right away: the pending reconcile moves to
+    /// `now + interval`.
+    fn bring_forward_next_reconcile(
+        &self,
+        id: &ChannelHandle,
+        reconcile_interval: ReconcileInterval,
+    ) -> Result<(), UpdateChannelError> {
+        let task = Task::ReconcileChannel {
+            channel_id: id.as_str().to_string(),
+        };
+        let Some(pending) = self
+            .task_repository
+            .find_pending(&task)
+            .map_err(UpdateChannelError::Repository)?
+        else {
+            return Ok(());
+        };
+        let now = self.clock.now();
+        self.task_repository
+            .update(&pending.bring_forward(now + reconcile_interval.duration(), now))
             .map_err(UpdateChannelError::Repository)
     }
 }

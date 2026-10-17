@@ -171,6 +171,7 @@ mod tests {
     use crate::domain::services::ShowFileWriter;
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::services::VideoRelocator;
+    use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::VideoId;
     use crate::domain::video::{PlaybackPosition, Video};
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
@@ -1110,6 +1111,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_bring_the_next_reconcile_forward_if_interval_shortened() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        task_repository
+            .schedule(
+                &reconcile_task("@somechannel"),
+                fixed_timestamp() + chrono::Duration::hours(20),
+            )
+            .unwrap();
+        let channel_updater = ChannelUpdater::new(
+            channel_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let request = UpdateChannelRequest {
+            reconcile_interval_minutes: Some(60),
+            ..update_request()
+        };
+        let response = update(channel_updater, "@somechannel", request).await;
+
+        assert_eq!(
+            response,
+            Ok(ChannelResponse {
+                reconcile_interval_minutes: 60,
+                ..some_channel_response()
+            })
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &reconcile_task("@somechannel"),
+                fixed_timestamp() + chrono::Duration::minutes(60),
+            )]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_update_both_settings_of_a_channel() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -1991,6 +2036,26 @@ mod tests {
 
     fn watched_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_800_000_000, 0).unwrap()
+    }
+
+    fn reconcile_task(channel_handle: &str) -> Task {
+        Task::ReconcileChannel {
+            channel_id: channel_handle.to_string(),
+        }
+    }
+
+    fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
+        ScheduledTask {
+            id,
+            task_type: task.task_type().to_string(),
+            payload: task.payload().to_string(),
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
     }
 
     fn fixed_timestamp() -> DateTime<Utc> {

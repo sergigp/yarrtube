@@ -248,8 +248,16 @@ impl TaskRepository for SqliteTaskRepository {
         self.list_where("status IN ('pending', 'running')")
     }
 
-    fn find_pending(&self, _task: &Task) -> anyhow::Result<Option<ScheduledTask>> {
-        Ok(None)
+    fn find_pending(&self, task: &Task) -> anyhow::Result<Option<ScheduledTask>> {
+        let conn = self.db.read()?;
+        conn.query_row(
+            &format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE task_type = ?1 ORDER BY id LIMIT 1"),
+            params![task.task_type()],
+            row_to_scheduled_task,
+        )
+        .optional()
+        .inspect_err(|e| tracing::error!(error = %e, "failed to find pending task"))
+        .context("failed to find pending task")
     }
 
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {
