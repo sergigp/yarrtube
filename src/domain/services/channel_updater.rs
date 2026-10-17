@@ -49,14 +49,20 @@ impl ChannelUpdaterApi for ChannelUpdater {
         id: ChannelHandle,
         quality: Option<Quality>,
         video_limit: Option<VideoLimit>,
-        _reconcile_interval: Option<ReconcileInterval>,
+        reconcile_interval: Option<ReconcileInterval>,
     ) -> Result<Channel, UpdateChannelError> {
-        let channel = Self::apply_settings(self.find_channel(&id)?, quality, video_limit);
+        let channel = Self::apply_settings(
+            self.find_channel(&id)?,
+            quality,
+            video_limit,
+            reconcile_interval,
+        );
         self.update_channel(&channel)?;
         info!(
             channel_id = %id,
             quality = channel.quality.as_str(),
             video_limit = channel.video_limit.value(),
+            reconcile_interval_minutes = channel.reconcile_interval.minutes(),
             "updated channel settings"
         );
         Ok(channel)
@@ -76,13 +82,18 @@ impl ChannelUpdater {
         channel: Channel,
         quality: Option<Quality>,
         video_limit: Option<VideoLimit>,
+        reconcile_interval: Option<ReconcileInterval>,
     ) -> Channel {
         let channel = match quality {
             Some(quality) => channel.with_quality(quality),
             None => channel,
         };
-        match video_limit {
+        let channel = match video_limit {
             Some(video_limit) => channel.with_video_limit(video_limit),
+            None => channel,
+        };
+        match reconcile_interval {
+            Some(reconcile_interval) => channel.with_reconcile_interval(reconcile_interval),
             None => channel,
         }
     }

@@ -96,12 +96,18 @@ pub async fn update_channel(
     let id = ChannelHandle::new(handle)?;
     let quality = request.quality.map(Quality::new).transpose()?;
     let video_limit = request.video_limit.map(VideoLimit::new).transpose()?;
-    if quality.is_none() && video_limit.is_none() {
+    let reconcile_interval = request
+        .reconcile_interval_minutes
+        .map(ReconcileInterval::new)
+        .transpose()?;
+    if quality.is_none() && video_limit.is_none() && reconcile_interval.is_none() {
         return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
     }
 
-    match run_blocking(move || channel_updater.update_settings(id, quality, video_limit, None))
-        .await?
+    match run_blocking(move || {
+        channel_updater.update_settings(id, quality, video_limit, reconcile_interval)
+    })
+    .await?
     {
         Ok(channel) => Ok(Json(ChannelResponse::from(channel))),
         Err(e @ UpdateChannelError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
@@ -1063,6 +1069,44 @@ mod tests {
             channel_repository.list().unwrap(),
             vec![channel("@somechannel").with_video_limit(VideoLimit::new(20).unwrap())]
         );
+    }
+
+    #[tokio::test]
+    async fn it_should_update_a_channels_interval() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let channel_updater = ChannelUpdater::new(
+            channel_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let request = UpdateChannelRequest {
+            reconcile_interval_minutes: Some(60),
+            ..update_request()
+        };
+        let response = update(channel_updater, "@somechannel", request).await;
+
+        assert_eq!(
+            response,
+            Ok(ChannelResponse {
+                reconcile_interval_minutes: 60,
+                ..some_channel_response()
+            })
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![
+                channel("@somechannel")
+                    .with_reconcile_interval(ReconcileInterval::new(60).unwrap())
+            ]
+        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
     #[tokio::test]
