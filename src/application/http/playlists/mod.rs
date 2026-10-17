@@ -1400,6 +1400,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_update_if_invalid_interval_provided() {
+        let request = UpdatePlaylistRequest {
+            exclude_from_home: None,
+            reconcile_interval_minutes: Some(0),
+        };
+
+        let response = update(any_playlist_updater(), "PL1", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Reconcile interval must be at least 1 minute (got 0)"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_update_if_invalid_id_provided() {
         let response = update(any_playlist_updater(), " ", update_request(true)).await;
 
