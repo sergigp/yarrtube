@@ -251,8 +251,8 @@ impl TaskRepository for SqliteTaskRepository {
     fn find_pending(&self, task: &Task) -> anyhow::Result<Option<ScheduledTask>> {
         let conn = self.db.read()?;
         conn.query_row(
-            &format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE task_type = ?1 AND status = 'pending' ORDER BY id LIMIT 1"),
-            params![task.task_type()],
+            &format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE task_type = ?1 AND payload = ?2 AND status = 'pending' ORDER BY id LIMIT 1"),
+            params![task.task_type(), task.payload().to_string()],
             row_to_scheduled_task,
         )
         .optional()
@@ -736,6 +736,21 @@ mod tests {
         repo.delete(2).unwrap();
 
         let found = repo.find_pending(&task()).unwrap();
+
+        assert_eq!(found, None);
+    }
+
+    #[test]
+    fn it_should_not_find_a_pending_task_of_another_source() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&task(), now).unwrap();
+
+        let found = repo
+            .find_pending(&Task::ReconcilePlaylist {
+                playlist_id: "PL2".to_string(),
+            })
+            .unwrap();
 
         assert_eq!(found, None);
     }
