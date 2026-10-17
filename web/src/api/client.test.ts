@@ -78,6 +78,7 @@ describe('mutations', () => {
       path: 'playlists/mix',
       quality: 'high',
       exclude_from_home: false,
+      reconcile_interval_minutes: 180,
     })
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
@@ -87,6 +88,7 @@ describe('mutations', () => {
       path: 'playlists/mix',
       quality: 'high',
       exclude_from_home: false,
+      reconcile_interval_minutes: 180,
     })
   })
 

@@ -90,7 +90,7 @@ export interface CreatePlaylistRequest {
   path: string
   quality: string
   exclude_from_home: boolean
-  reconcile_interval_minutes?: number
+  reconcile_interval_minutes: number
 }
 
 export function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistListItem> {

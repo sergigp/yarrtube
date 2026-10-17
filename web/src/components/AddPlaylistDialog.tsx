@@ -5,9 +5,11 @@ import type { PlaylistListItem, PlaylistPreview } from '@/api/types'
 import { useLookup, type Lookup } from '@/hooks/useLookup'
 import { useSaveLocation, type LocationValue } from '@/hooks/useSaveLocation'
 import { playlistNoticeLead } from '@/lib/noticeLead'
+import { DEFAULT_INTERVAL_FORM, intervalMinutes, type IntervalForm } from '@/lib/reconcileInterval'
 import { DestinationNotice, DestinationPath } from './DestinationNotice'
 import { lookupNotice } from './lookupNotice'
 import { FolderNameField } from './FolderNameField'
+import { ReconcileIntervalField } from './ReconcileIntervalField'
 import { SaveToField } from './SaveToField'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -79,6 +81,7 @@ export function AddPlaylistDialog({ open, onOpenChange }: AddPlaylistDialogProps
 function AddPlaylistForm({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ playlist: '', quality: 'high' })
   const [excludeFromHome, setExcludeFromHome] = useState(false)
+  const [interval, changeInterval] = useState<IntervalForm>(DEFAULT_INTERVAL_FORM)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -98,7 +101,8 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!canSubmit) {
+    const reconcileIntervalMinutes = intervalMinutes(interval)
+    if (!canSubmit || reconcileIntervalMinutes === null) {
       return
     }
     setSubmitting(true)
@@ -109,6 +113,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
         path: location.value.path,
         quality: form.quality,
         exclude_from_home: excludeFromHome,
+        reconcile_interval_minutes: reconcileIntervalMinutes,
       })
       location.remember()
       invalidateLibrary()
@@ -155,6 +160,11 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
             id="add-playlist-quality"
             value={form.quality}
             onChange={setField('quality')}
+          />
+          <ReconcileIntervalField
+            id="add-playlist-interval"
+            value={interval}
+            onChange={changeInterval}
           />
           <div className="flex items-start gap-2">
             <input

@@ -243,6 +243,38 @@ describe('AddPlaylistDialog', () => {
       path: 'playlists/my-mix',
       quality: 'high',
       exclude_from_home: false,
+      reconcile_interval_minutes: 180,
+    })
+  })
+
+  it('creates the playlist with the interval set under advanced options', async () => {
+    const { fetchMock, onOpenChange } = renderDialog({
+      'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
+      'POST /api/playlists': aPlaylist(),
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
+    await user.click(screen.getByRole('button', { name: /Advanced options/ }))
+    const amount = screen.getByLabelText('Check for new videos every')
+    await user.clear(amount)
+    await user.type(amount, '30')
+    await user.click(screen.getByRole('combobox', { name: 'Interval unit' }))
+    await user.click(await screen.findByRole('option', { name: 'minutes' }))
+    const submit = screen.getByRole('button', { name: 'Create Playlist' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    const createCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+    ) as [string, RequestInit]
+    expect(JSON.parse(createCall[1].body as string)).toEqual({
+      playlist: 'PL1',
+      path: 'playlists/my-mix',
+      quality: 'high',
+      exclude_from_home: false,
+      reconcile_interval_minutes: 30,
     })
   })
 
