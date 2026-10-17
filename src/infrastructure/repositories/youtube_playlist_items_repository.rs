@@ -184,6 +184,13 @@ impl YoutubePlaylistItemsRepository for YoutubeApiPlaylistItemsRepository {
 pub struct FakeYoutubePlaylistItemsRepository {
     pub(crate) videos: std::sync::Mutex<Vec<YoutubePlaylistItem>>,
     fails: bool,
+    /// Deletes the listed playlist from this repository, as if a user deleted
+    /// it while the reconcile was running.
+    deletes_from: Option<
+        std::sync::Arc<
+            dyn crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository,
+        >,
+    >,
 }
 
 #[cfg(test)]
@@ -192,6 +199,7 @@ impl FakeYoutubePlaylistItemsRepository {
         Self {
             videos: std::sync::Mutex::new(videos),
             fails: false,
+            deletes_from: None,
         }
     }
 
@@ -199,6 +207,18 @@ impl FakeYoutubePlaylistItemsRepository {
         Self {
             videos: std::sync::Mutex::new(Vec::new()),
             fails: true,
+            deletes_from: None,
+        }
+    }
+
+    pub fn deleting_the_playlist_from(
+        repository: std::sync::Arc<
+            dyn crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository,
+        >,
+    ) -> Self {
+        Self {
+            deletes_from: Some(repository),
+            ..Self::default()
         }
     }
 }
@@ -207,8 +227,11 @@ impl FakeYoutubePlaylistItemsRepository {
 impl YoutubePlaylistItemsRepository for FakeYoutubePlaylistItemsRepository {
     fn list_current_videos(
         &self,
-        _playlist_id: &PlaylistId,
+        playlist_id: &PlaylistId,
     ) -> anyhow::Result<Vec<YoutubePlaylistItem>> {
+        if let Some(repository) = &self.deletes_from {
+            repository.delete(playlist_id)?;
+        }
         if self.fails {
             anyhow::bail!("YouTube API failed to list playlist items");
         }

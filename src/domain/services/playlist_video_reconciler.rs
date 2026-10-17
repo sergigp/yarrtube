@@ -7,7 +7,6 @@ use crate::domain::services::{
     DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
     ShowFileWriter, ShowFileWriterApi,
 };
-use crate::domain::shared::ReconcileInterval;
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -100,7 +99,7 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
         };
 
         self.reconcile_playlist(&playlist, ListingFailure::SkipMembership)?;
-        self.schedule_next_reconcile(&id, playlist.reconcile_interval)
+        self.schedule_next_reconcile(&id)
     }
 
     fn initial_reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
@@ -109,7 +108,7 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
         };
 
         self.reconcile_playlist(&playlist, ListingFailure::FailPass)?;
-        self.schedule_next_reconcile(&id, playlist.reconcile_interval)
+        self.schedule_next_reconcile(&id)
     }
 
     fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
@@ -383,12 +382,14 @@ impl PlaylistVideoReconciler {
         })
     }
 
-    fn schedule_next_reconcile(
-        &self,
-        id: &PlaylistId,
-        reconcile_interval: ReconcileInterval,
-    ) -> anyhow::Result<()> {
-        let next_run_at = self.clock.now() + reconcile_interval.duration();
+    /// Re-reads the playlist so an interval changed, or a playlist deleted,
+    /// while the pass ran is honoured.
+    fn schedule_next_reconcile(&self, id: &PlaylistId) -> anyhow::Result<()> {
+        let Some(playlist) = self.playlist_repository.find(id)? else {
+            info!(playlist_id = %id, "playlist deleted during reconcile, not scheduling the next one");
+            return Ok(());
+        };
+        let next_run_at = self.clock.now() + playlist.reconcile_interval.duration();
         self.task_repository.schedule(
             &Task::ReconcilePlaylist {
                 playlist_id: id.as_str().to_string(),
