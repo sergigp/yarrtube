@@ -5,9 +5,9 @@
 ## 2. Behaviour (TDD)
 
 Reconcile tasks:
-- [ ] 2.1 `reconcile_channel_task::it_should_always_schedule_the_next_reconcile` (updated): next reconcile at `now + 180 min` for a default-interval channel.
-- [ ] 2.2 `reconcile_channel_task::it_should_schedule_the_next_reconcile_after_the_channels_interval`: 30 min channel → pending task at `now + 30 min`.
-- [ ] 2.3 `reconcile_channel_task::it_should_not_schedule_the_next_reconcile_if_channel_deleted_during_the_pass`: re-read at scheduling time; `None` → nothing scheduled.
+- [x] 2.1 `reconcile_channel_task::it_should_always_schedule_the_next_reconcile` (updated): next reconcile at `now + 180 min` for a default-interval channel.
+- [x] 2.2 `reconcile_channel_task::it_should_schedule_the_next_reconcile_after_the_channels_interval`: 30 min channel → pending task at `now + 30 min`.
+- [x] 2.3 `reconcile_channel_task::it_should_not_schedule_the_next_reconcile_if_channel_deleted_during_the_pass`: re-read at scheduling time; `None` → nothing scheduled.
 - [ ] 2.4 `reconcile_playlist_task::it_should_always_schedule_the_next_reconcile` (updated): `now + 180 min`.
 - [ ] 2.5 `reconcile_playlist_task::it_should_schedule_the_next_reconcile_after_the_playlists_interval`: 720 min → `now + 720 min`.
 - [ ] 2.6 `reconcile_playlist_task::it_should_not_schedule_the_next_reconcile_if_playlist_deleted_during_the_pass`.

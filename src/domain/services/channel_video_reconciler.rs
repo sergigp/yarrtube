@@ -6,7 +6,6 @@ use crate::domain::services::{
     ChannelAvatarRestorer, ChannelAvatarRestorerApi, DesiredState, InternalVideoReconciler,
     InternalVideoReconcilerApi, MembershipDelta, ShowFileWriter, ShowFileWriterApi,
 };
-use crate::domain::shared::ReconcileInterval;
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -99,9 +98,8 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
             return Ok(());
         };
 
-        let reconcile_interval = channel.reconcile_interval;
         self.reconcile_channel(channel, ListingFailure::SkipMembership)?;
-        self.schedule_next_reconcile(&id, reconcile_interval)
+        self.schedule_next_reconcile(&id)
     }
 
     fn initial_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
@@ -109,9 +107,8 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
             return Ok(());
         };
 
-        let reconcile_interval = channel.reconcile_interval;
         self.reconcile_channel(channel, ListingFailure::FailPass)?;
-        self.schedule_next_reconcile(&id, reconcile_interval)
+        self.schedule_next_reconcile(&id)
     }
 
     fn force_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
@@ -363,12 +360,14 @@ impl ChannelVideoReconciler {
         })
     }
 
-    fn schedule_next_reconcile(
-        &self,
-        id: &ChannelHandle,
-        reconcile_interval: ReconcileInterval,
-    ) -> anyhow::Result<()> {
-        let next_run_at = self.clock.now() + reconcile_interval.duration();
+    /// Re-reads the channel so an interval changed, or a channel deleted,
+    /// while the pass ran is honoured.
+    fn schedule_next_reconcile(&self, id: &ChannelHandle) -> anyhow::Result<()> {
+        let Some(channel) = self.channel_repository.find(id)? else {
+            info!(channel_id = %id, "channel deleted during reconcile, not scheduling the next one");
+            return Ok(());
+        };
+        let next_run_at = self.clock.now() + channel.reconcile_interval.duration();
         self.task_repository.schedule(
             &Task::ReconcileChannel {
                 channel_id: id.as_str().to_string(),
