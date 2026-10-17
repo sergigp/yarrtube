@@ -109,7 +109,7 @@ impl ChannelUpdater {
     }
 
     /// A shorter interval applies right away: the pending reconcile moves to
-    /// `now + interval`.
+    /// `now + interval` when it was due later.
     fn bring_forward_next_reconcile(
         &self,
         id: &ChannelHandle,

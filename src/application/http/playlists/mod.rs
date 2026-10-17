@@ -1258,6 +1258,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_bring_the_next_reconcile_forward_if_interval_shortened() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        task_repository
+            .schedule(
+                &reconcile_task("PL1"),
+                fixed_timestamp() + chrono::Duration::hours(20),
+            )
+            .unwrap();
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let request = UpdatePlaylistRequest {
+            exclude_from_home: None,
+            reconcile_interval_minutes: Some(60),
+        };
+        let response = update(playlist_updater, "PL1", request).await;
+
+        assert_eq!(
+            response,
+            Ok(PlaylistResponse {
+                reconcile_interval_minutes: 60,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            })
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &reconcile_task("PL1"),
+                fixed_timestamp() + chrono::Duration::minutes(60),
+            )]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_update_an_unknown_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -1865,6 +1911,12 @@ mod tests {
 
     /// The row `SqliteTaskRepository::schedule` writes for `task`, as read
     /// back before the executor has picked it up.
+    fn reconcile_task(playlist_id: &str) -> Task {
+        Task::ReconcilePlaylist {
+            playlist_id: playlist_id.to_string(),
+        }
+    }
+
     fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,

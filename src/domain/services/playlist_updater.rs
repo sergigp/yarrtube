@@ -2,6 +2,7 @@ use crate::domain::playlist::Playlist;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::errors::UpdatePlaylistError;
 use crate::domain::shared::ReconcileInterval;
+use crate::domain::task::Task;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -57,6 +58,9 @@ impl PlaylistUpdaterApi for PlaylistUpdater {
             reconcile_interval,
         );
         self.update_playlist(&playlist)?;
+        if let Some(reconcile_interval) = reconcile_interval {
+            self.bring_forward_next_reconcile(&id, reconcile_interval)?;
+        }
         info!(
             playlist_id = %id,
             exclude_from_home = playlist.exclude_from_home,
@@ -94,6 +98,29 @@ impl PlaylistUpdater {
     fn update_playlist(&self, playlist: &Playlist) -> Result<(), UpdatePlaylistError> {
         self.repository
             .update(playlist)
+            .map_err(UpdatePlaylistError::Repository)
+    }
+
+    /// A shorter interval applies right away: the pending reconcile moves to
+    /// `now + interval` when it was due later.
+    fn bring_forward_next_reconcile(
+        &self,
+        id: &PlaylistId,
+        reconcile_interval: ReconcileInterval,
+    ) -> Result<(), UpdatePlaylistError> {
+        let task = Task::ReconcilePlaylist {
+            playlist_id: id.as_str().to_string(),
+        };
+        let Some(pending) = self
+            .task_repository
+            .find_pending(&task)
+            .map_err(UpdatePlaylistError::Repository)?
+        else {
+            return Ok(());
+        };
+        let now = self.clock.now();
+        self.task_repository
+            .update(&pending.bring_forward(now + reconcile_interval.duration(), now))
             .map_err(UpdatePlaylistError::Repository)
     }
 }
