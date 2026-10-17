@@ -49,13 +49,18 @@ impl PlaylistUpdaterApi for PlaylistUpdater {
         &self,
         id: PlaylistId,
         exclude_from_home: Option<bool>,
-        _reconcile_interval: Option<ReconcileInterval>,
+        reconcile_interval: Option<ReconcileInterval>,
     ) -> Result<Playlist, UpdatePlaylistError> {
-        let playlist = Self::apply_settings(self.find_playlist(&id)?, exclude_from_home);
+        let playlist = Self::apply_settings(
+            self.find_playlist(&id)?,
+            exclude_from_home,
+            reconcile_interval,
+        );
         self.update_playlist(&playlist)?;
         info!(
             playlist_id = %id,
             exclude_from_home = playlist.exclude_from_home,
+            reconcile_interval_minutes = playlist.reconcile_interval.minutes(),
             "updated playlist"
         );
         Ok(playlist)
@@ -71,9 +76,17 @@ impl PlaylistUpdater {
         }
     }
 
-    fn apply_settings(playlist: Playlist, exclude_from_home: Option<bool>) -> Playlist {
-        match exclude_from_home {
+    fn apply_settings(
+        playlist: Playlist,
+        exclude_from_home: Option<bool>,
+        reconcile_interval: Option<ReconcileInterval>,
+    ) -> Playlist {
+        let playlist = match exclude_from_home {
             Some(exclude_from_home) => playlist.with_exclude_from_home(exclude_from_home),
+            None => playlist,
+        };
+        match reconcile_interval {
+            Some(reconcile_interval) => playlist.with_reconcile_interval(reconcile_interval),
             None => playlist,
         }
     }

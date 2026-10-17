@@ -92,10 +92,19 @@ pub async fn update_playlist(
     Json(request): Json<UpdatePlaylistRequest>,
 ) -> Result<Json<PlaylistResponse>, ApiError> {
     let id = PlaylistId::new(id)?;
-    let exclude_from_home = required(request.exclude_from_home, MISSING_EXCLUDE_FROM_HOME)?;
+    let reconcile_interval = request
+        .reconcile_interval_minutes
+        .map(ReconcileInterval::new)
+        .transpose()?;
+    if request.exclude_from_home.is_none() && reconcile_interval.is_none() {
+        return Err(ApiError::bad_request(MISSING_EXCLUDE_FROM_HOME));
+    }
+    let exclude_from_home = request.exclude_from_home;
 
-    match run_blocking(move || playlist_updater.update_settings(id, Some(exclude_from_home), None))
-        .await?
+    match run_blocking(move || {
+        playlist_updater.update_settings(id, exclude_from_home, reconcile_interval)
+    })
+    .await?
     {
         Ok(playlist) => Ok(Json(PlaylistResponse::from(playlist))),
         Err(e @ UpdatePlaylistError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
@@ -1206,6 +1215,46 @@ mod tests {
             })
         );
         assert_eq!(playlist_repository.list().unwrap(), vec![excluded]);
+    }
+
+    #[tokio::test]
+    async fn it_should_update_a_playlists_interval() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let excluded = Playlist {
+            exclude_from_home: true,
+            ..playlist("PL1", DEFAULT_PATH)
+        };
+        playlist_repository.insert(&excluded).unwrap();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let request = UpdatePlaylistRequest {
+            exclude_from_home: None,
+            reconcile_interval_minutes: Some(60),
+        };
+        let response = update(playlist_updater, "PL1", request).await;
+
+        assert_eq!(
+            response,
+            Ok(PlaylistResponse {
+                exclude_from_home: true,
+                reconcile_interval_minutes: 60,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            })
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![excluded.with_reconcile_interval(ReconcileInterval::new(60).unwrap())]
+        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
     #[tokio::test]
