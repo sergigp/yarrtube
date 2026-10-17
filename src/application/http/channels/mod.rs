@@ -1341,6 +1341,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_update_if_invalid_interval_provided() {
+        let request = UpdateChannelRequest {
+            reconcile_interval_minutes: Some(0),
+            ..update_request()
+        };
+        let response = update(any_channel_updater(), "@somechannel", request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Reconcile interval must be at least 1 minute (got 0)"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_update_if_invalid_handle_provided() {
         let request = UpdateChannelRequest {
             quality: Some("low".to_string()),
