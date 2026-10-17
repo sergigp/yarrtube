@@ -90,6 +90,7 @@ export interface CreatePlaylistRequest {
   path: string
   quality: string
   exclude_from_home: boolean
+  reconcile_interval_minutes?: number
 }
 
 export function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistListItem> {
@@ -108,11 +109,14 @@ export function previewChannel(channel: string): Promise<ChannelPreview> {
   return request(`/channels/preview?channel=${encodeURIComponent(channel)}`)
 }
 
-/** Changes whether a playlist's videos are left out of the home view. */
-export function updatePlaylist(
-  id: string,
-  body: { exclude_from_home: boolean },
-): Promise<PlaylistListItem> {
+/** Only the settings to change; an absent one keeps its stored value. */
+export interface UpdatePlaylistRequest {
+  exclude_from_home?: boolean
+  reconcile_interval_minutes?: number
+}
+
+/** Changes whether a playlist's videos are left out of the home view and/or its reconcile interval. */
+export function updatePlaylist(id: string, body: UpdatePlaylistRequest): Promise<PlaylistListItem> {
   return request(`/playlists/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body,
@@ -154,6 +158,7 @@ export interface CreateChannelRequest {
   quality: string
   video_limit: number
   path: string
+  reconcile_interval_minutes?: number
 }
 
 export function createChannel(body: CreateChannelRequest): Promise<CreatedChannel> {
@@ -164,9 +169,10 @@ export function createChannel(body: CreateChannelRequest): Promise<CreatedChanne
 export interface UpdateChannelRequest {
   quality?: string
   video_limit?: number
+  reconcile_interval_minutes?: number
 }
 
-/** Changes a channel's quality and/or video limit, applied from its next sync. */
+/** Changes a channel's quality, video limit and/or reconcile interval. */
 export function updateChannel(handle: string, body: UpdateChannelRequest): Promise<CreatedChannel> {
   return request(`/channels/${encodeURIComponent(handle)}`, {
     method: 'PATCH',

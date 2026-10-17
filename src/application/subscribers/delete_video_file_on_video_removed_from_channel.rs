@@ -76,7 +76,7 @@ mod tests {
     use super::*;
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::playlist::PlaylistPath;
-    use crate::domain::shared::Quality;
+    use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
@@ -207,6 +207,7 @@ mod tests {
             "UC123",
             Quality::High,
             VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
             PlaylistPath::new("creators/somechannel").unwrap(),
             None,
             fixed_timestamp(),

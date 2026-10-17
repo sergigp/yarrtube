@@ -12,6 +12,8 @@ pub struct CreateChannelRequest {
     pub video_limit: Option<i64>,
     #[serde(default)]
     pub path: Option<String>,
+    #[serde(default)]
+    pub reconcile_interval_minutes: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -20,6 +22,8 @@ pub struct UpdateChannelRequest {
     pub quality: Option<String>,
     #[serde(default)]
     pub video_limit: Option<i64>,
+    #[serde(default)]
+    pub reconcile_interval_minutes: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,6 +39,7 @@ pub struct ChannelResponse {
     pub youtube_channel_id: String,
     pub quality: String,
     pub video_limit: u32,
+    pub reconcile_interval_minutes: u32,
     pub path: String,
     pub avatar_filename: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -48,6 +53,7 @@ impl From<Channel> for ChannelResponse {
             youtube_channel_id: channel.youtube_channel_id,
             quality: channel.quality.as_str().to_string(),
             video_limit: channel.video_limit.value(),
+            reconcile_interval_minutes: channel.reconcile_interval.minutes(),
             path: channel.path.as_str().to_string(),
             avatar_filename: channel.avatar_filename,
             created_at: channel.created_at,
@@ -62,6 +68,7 @@ pub struct ChannelListItemResponse {
     pub path: String,
     pub quality: String,
     pub video_limit: u32,
+    pub reconcile_interval_minutes: u32,
     pub avatar_filename: Option<String>,
     pub unwatched_count: usize,
 }
@@ -74,6 +81,7 @@ impl From<ChannelView> for ChannelListItemResponse {
             path: channel.path.as_str().to_string(),
             quality: channel.quality.as_str().to_string(),
             video_limit: channel.video_limit.value(),
+            reconcile_interval_minutes: channel.reconcile_interval.minutes(),
             avatar_filename: channel.avatar_filename,
             unwatched_count: channel.unwatched_count,
         }

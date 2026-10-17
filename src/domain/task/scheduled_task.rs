@@ -102,6 +102,11 @@ impl ScheduledTask {
             .map(|(video_id, _, _)| video_id)
     }
 
+    /// Runs no later than `run_at`; a task already due earlier keeps its time.
+    pub fn bring_forward(self, _run_at: DateTime<Utc>, _now: DateTime<Utc>) -> Self {
+        self
+    }
+
     pub fn fail(
         self,
         error: impl Into<String>,

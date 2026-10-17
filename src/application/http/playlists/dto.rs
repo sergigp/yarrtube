@@ -11,12 +11,16 @@ pub struct CreatePlaylistRequest {
     pub quality: Option<String>,
     #[serde(default)]
     pub exclude_from_home: Option<bool>,
+    #[serde(default)]
+    pub reconcile_interval_minutes: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdatePlaylistRequest {
     #[serde(default)]
     pub exclude_from_home: Option<bool>,
+    #[serde(default)]
+    pub reconcile_interval_minutes: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -33,6 +37,7 @@ pub struct PlaylistResponse {
     pub quality: String,
     pub kind: String,
     pub exclude_from_home: bool,
+    pub reconcile_interval_minutes: u32,
     pub created_at: DateTime<Utc>,
 }
 
@@ -45,6 +50,7 @@ impl From<Playlist> for PlaylistResponse {
             quality: playlist.quality.as_str().to_string(),
             kind: playlist.kind.as_str().to_string(),
             exclude_from_home: playlist.exclude_from_home,
+            reconcile_interval_minutes: playlist.reconcile_interval.minutes(),
             created_at: playlist.created_at,
         }
     }

@@ -25,7 +25,7 @@ mod tests {
     use crate::domain::playlist::PlaylistId;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::shared::Quality;
+    use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::Task;
     use crate::domain::video::{PlaybackPosition, Video, VideoStatus};
     use crate::domain::video::{VideoId, VideoRecordId};
@@ -664,6 +664,7 @@ mod tests {
             Quality::High,
             PlaylistKind::YoutubeLinked,
             false,
+            ReconcileInterval::default_interval(),
             fixed_timestamp(),
         )
     }
@@ -675,6 +676,7 @@ mod tests {
             "UC123",
             Quality::High,
             VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
             PlaylistPath::new("creators/somechannel").unwrap(),
             None,
             fixed_timestamp(),

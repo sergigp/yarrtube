@@ -1,7 +1,7 @@
 use super::channel_handle::ChannelHandle;
 use super::video_limit::VideoLimit;
 use crate::domain::playlist::PlaylistPath;
-use crate::domain::shared::Quality;
+use crate::domain::shared::{Quality, ReconcileInterval};
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,6 +11,7 @@ pub struct Channel {
     pub youtube_channel_id: String,
     pub quality: Quality,
     pub video_limit: VideoLimit,
+    pub reconcile_interval: ReconcileInterval,
     pub path: PlaylistPath,
     pub avatar_filename: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -24,6 +25,7 @@ impl Channel {
         youtube_channel_id: impl Into<String>,
         quality: Quality,
         video_limit: VideoLimit,
+        reconcile_interval: ReconcileInterval,
         path: PlaylistPath,
         avatar_filename: Option<String>,
         created_at: DateTime<Utc>,
@@ -34,6 +36,7 @@ impl Channel {
             youtube_channel_id: youtube_channel_id.into(),
             quality,
             video_limit,
+            reconcile_interval,
             path,
             avatar_filename,
             created_at,
@@ -47,6 +50,13 @@ impl Channel {
     pub fn with_video_limit(self, video_limit: VideoLimit) -> Self {
         Self {
             video_limit,
+            ..self
+        }
+    }
+
+    pub fn with_reconcile_interval(self, reconcile_interval: ReconcileInterval) -> Self {
+        Self {
+            reconcile_interval,
             ..self
         }
     }

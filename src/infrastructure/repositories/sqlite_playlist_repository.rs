@@ -1,6 +1,6 @@
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
-use crate::domain::shared::Quality;
+use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::domain::video::PlaylistEpisodeNumber;
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
@@ -54,7 +54,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
     fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO playlists (id, name, path, quality, kind, exclude_from_home, created_at, last_episode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO playlists (id, name, path, quality, kind, exclude_from_home, created_at, last_episode, reconcile_interval_minutes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 playlist.id.as_str(),
                 playlist.name.as_str(),
@@ -63,7 +63,8 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                 playlist.kind.as_str(),
                 playlist.exclude_from_home,
                 playlist.created_at.to_rfc3339(),
-                playlist.last_episode.map(|number| number.episode())
+                playlist.last_episode.map(|number| number.episode()),
+                playlist.reconcile_interval.minutes()
             ],
         )
         .inspect_err(|e| tracing::error!(playlist_id = %playlist.id, error = %e, "failed to insert playlist"))
@@ -74,7 +75,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
     fn update(&self, playlist: &Playlist) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE playlists SET name = ?2, path = ?3, quality = ?4, kind = ?5, exclude_from_home = ?6, created_at = ?7 WHERE id = ?1",
+            "UPDATE playlists SET name = ?2, path = ?3, quality = ?4, kind = ?5, exclude_from_home = ?6, created_at = ?7, reconcile_interval_minutes = ?8 WHERE id = ?1",
             params![
                 playlist.id.as_str(),
                 playlist.name.as_str(),
@@ -83,6 +84,7 @@ impl PlaylistRepository for SqlitePlaylistRepository {
                 playlist.kind.as_str(),
                 playlist.exclude_from_home,
                 playlist.created_at.to_rfc3339(),
+                playlist.reconcile_interval.minutes(),
             ],
         )
         .inspect_err(|e| tracing::error!(playlist_id = %playlist.id, error = %e, "failed to update playlist"))
@@ -150,6 +152,7 @@ impl SqlitePlaylistRepository {
             exclude_from_home: row.get(5)?,
             created_at: row.get(6)?,
             last_episode: row.get(7)?,
+            reconcile_interval: row.get(8)?,
         })
     }
 
@@ -161,6 +164,7 @@ impl SqlitePlaylistRepository {
             quality: Quality::new(row.quality)?,
             kind: PlaylistKind::new(row.kind)?,
             exclude_from_home: row.exclude_from_home,
+            reconcile_interval: ReconcileInterval::new(row.reconcile_interval)?,
             created_at: DateTime::parse_from_rfc3339(&row.created_at)
                 .context("failed to parse stored created_at")?
                 .with_timezone(&Utc),
@@ -172,8 +176,7 @@ impl SqlitePlaylistRepository {
     }
 }
 
-const PLAYLIST_COLUMNS: &str =
-    "id, name, path, quality, kind, exclude_from_home, created_at, last_episode";
+const PLAYLIST_COLUMNS: &str = "id, name, path, quality, kind, exclude_from_home, created_at, last_episode, reconcile_interval_minutes";
 
 struct PlaylistRow {
     id: String,
@@ -184,6 +187,7 @@ struct PlaylistRow {
     exclude_from_home: bool,
     created_at: String,
     last_episode: Option<u32>,
+    reconcile_interval: i64,
 }
 
 #[cfg(test)]
@@ -204,6 +208,7 @@ mod tests {
             Quality::High,
             PlaylistKind::YoutubeLinked,
             false,
+            ReconcileInterval::default_interval(),
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         )
     }

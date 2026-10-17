@@ -2,7 +2,7 @@ use crate::domain::channel::ChannelCreated;
 use crate::domain::channel::{Channel, ChannelHandle, CreateChannelError, VideoLimit};
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::PlaylistPath;
-use crate::domain::shared::Quality;
+use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::ChannelAvatarRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::youtube_channel_repository::{
@@ -54,6 +54,7 @@ pub trait ChannelCreatorApi: Send + Sync {
         id: ChannelHandle,
         quality: Quality,
         video_limit: VideoLimit,
+        reconcile_interval: ReconcileInterval,
         path: PlaylistPath,
     ) -> Result<CreateChannelOutcome, CreateChannelError>;
 }
@@ -64,6 +65,7 @@ impl ChannelCreatorApi for ChannelCreator {
         id: ChannelHandle,
         quality: Quality,
         video_limit: VideoLimit,
+        _reconcile_interval: ReconcileInterval,
         path: PlaylistPath,
     ) -> Result<CreateChannelOutcome, CreateChannelError> {
         if let Some(existing) = self.find_existing(&id)? {
@@ -78,6 +80,7 @@ impl ChannelCreatorApi for ChannelCreator {
             resolved.youtube_channel_id,
             quality,
             video_limit,
+            ReconcileInterval::default_interval(),
             path,
             avatar_filename,
             self.clock.now(),

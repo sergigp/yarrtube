@@ -14,6 +14,7 @@ import {
   updateChannel,
   updatePlaylist,
   type UpdateChannelRequest,
+  type UpdatePlaylistRequest,
 } from './client'
 import type {
   Announcement,
@@ -215,6 +216,24 @@ export function useUpdateChannelSettings(): (
   return useCallback(
     async (handle: string, changes: UpdateChannelRequest) => {
       await updateChannel(handle, changes)
+      await invalidateLibrary()
+    },
+    [invalidateLibrary],
+  )
+}
+
+/**
+ * Returns a function that changes a playlist's settings, then refetches the
+ * channel and playlist lists.
+ */
+export function useUpdatePlaylistSettings(): (
+  id: string,
+  changes: UpdatePlaylistRequest,
+) => Promise<void> {
+  const invalidateLibrary = useInvalidateLibrary()
+  return useCallback(
+    async (id: string, changes: UpdatePlaylistRequest) => {
+      await updatePlaylist(id, changes)
       await invalidateLibrary()
     },
     [invalidateLibrary],

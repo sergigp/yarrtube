@@ -41,7 +41,7 @@ mod tests {
     use crate::domain::services::ShowFileWriter;
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::services::VideoRelocator;
-    use crate::domain::shared::Quality;
+    use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
     use crate::domain::video::{EpisodeNumber, VideoId, VideoRecordId, VideoStatus};
@@ -641,7 +641,6 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -733,7 +732,6 @@ mod tests {
                 avatar_repository.clone(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -824,7 +822,6 @@ mod tests {
                 avatar_repository.clone(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -908,7 +905,6 @@ mod tests {
                 avatar_repository.clone(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1003,7 +999,6 @@ mod tests {
                 avatar_repository.clone(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1098,7 +1093,6 @@ mod tests {
                 avatar_repository.clone(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1206,7 +1200,6 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1472,7 +1465,6 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1588,7 +1580,6 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1669,7 +1660,6 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1808,7 +1798,6 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         )
     }
 
@@ -1869,7 +1858,6 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ))
     }
 
@@ -1918,6 +1906,7 @@ mod tests {
             "UC123",
             Quality::High,
             VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
             PlaylistPath::new("creators/somechannel").unwrap(),
             None,
             fixed_timestamp(),
@@ -2022,7 +2011,7 @@ mod tests {
             &Task::ReconcileChannel {
                 channel_id: "@somechannel".to_string(),
             },
-            fixed_timestamp() + chrono::Duration::seconds(3600),
+            fixed_timestamp() + chrono::Duration::minutes(180),
         )
     }
 

@@ -2,7 +2,7 @@ use super::playlist_id::PlaylistId;
 use super::playlist_kind::PlaylistKind;
 use super::playlist_name::PlaylistName;
 use super::playlist_path::PlaylistPath;
-use crate::domain::shared::{Quality, ValidationError};
+use crate::domain::shared::{Quality, ReconcileInterval, ValidationError};
 use crate::domain::video::PlaylistEpisodeNumber;
 use chrono::{DateTime, Utc};
 
@@ -14,12 +14,14 @@ pub struct Playlist {
     pub quality: Quality,
     pub kind: PlaylistKind,
     pub exclude_from_home: bool,
+    pub reconcile_interval: ReconcileInterval,
     pub created_at: DateTime<Utc>,
     /// The highest episode number the playlist has ever assigned.
     pub last_episode: Option<PlaylistEpisodeNumber>,
 }
 
 impl Playlist {
+    #[allow(clippy::too_many_arguments)]
     pub fn create(
         id: PlaylistId,
         name: PlaylistName,
@@ -27,6 +29,7 @@ impl Playlist {
         quality: Quality,
         kind: PlaylistKind,
         exclude_from_home: bool,
+        reconcile_interval: ReconcileInterval,
         created_at: DateTime<Utc>,
     ) -> Self {
         Self {
@@ -36,6 +39,7 @@ impl Playlist {
             quality,
             kind,
             exclude_from_home,
+            reconcile_interval,
             created_at,
             last_episode: None,
         }
@@ -44,6 +48,13 @@ impl Playlist {
     pub fn with_exclude_from_home(self, exclude_from_home: bool) -> Self {
         Self {
             exclude_from_home,
+            ..self
+        }
+    }
+
+    pub fn with_reconcile_interval(self, reconcile_interval: ReconcileInterval) -> Self {
+        Self {
+            reconcile_interval,
             ..self
         }
     }

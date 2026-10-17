@@ -3,7 +3,7 @@ use crate::domain::playlist::PlaylistCreated;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::errors::CreatePlaylistError;
 use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
-use crate::domain::shared::Quality;
+use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::youtube_playlist_repository::YoutubePlaylistRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
@@ -49,6 +49,7 @@ pub trait PlaylistCreatorApi: Send + Sync {
         path: PlaylistPath,
         quality: Quality,
         exclude_from_home: bool,
+        reconcile_interval: ReconcileInterval,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError>;
 }
 
@@ -59,6 +60,7 @@ impl PlaylistCreatorApi for PlaylistCreator {
         path: PlaylistPath,
         quality: Quality,
         exclude_from_home: bool,
+        _reconcile_interval: ReconcileInterval,
     ) -> Result<CreatePlaylistOutcome, CreatePlaylistError> {
         if let Some(existing) = self.find_existing(&id)? {
             return Ok(CreatePlaylistOutcome::AlreadyExisted(existing));
@@ -74,6 +76,7 @@ impl PlaylistCreatorApi for PlaylistCreator {
             quality,
             PlaylistKind::YoutubeLinked,
             exclude_from_home,
+            ReconcileInterval::default_interval(),
             now,
         );
         self.insert_playlist(&playlist)?;

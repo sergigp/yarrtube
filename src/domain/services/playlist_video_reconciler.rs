@@ -7,6 +7,7 @@ use crate::domain::services::{
     DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
     ShowFileWriter, ShowFileWriterApi,
 };
+use crate::domain::shared::ReconcileInterval;
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -38,7 +39,6 @@ pub struct PlaylistVideoReconciler {
     internal_video_reconciler: Arc<InternalVideoReconciler>,
     show_file_writer: Arc<ShowFileWriter>,
     clock: Arc<dyn Clock>,
-    reconcile_interval_seconds: i64,
 }
 
 impl PlaylistVideoReconciler {
@@ -53,7 +53,6 @@ impl PlaylistVideoReconciler {
         internal_video_reconciler: Arc<InternalVideoReconciler>,
         show_file_writer: Arc<ShowFileWriter>,
         clock: Arc<dyn Clock>,
-        reconcile_interval_seconds: i64,
     ) -> Self {
         Self {
             playlist_repository,
@@ -65,7 +64,6 @@ impl PlaylistVideoReconciler {
             internal_video_reconciler,
             show_file_writer,
             clock,
-            reconcile_interval_seconds,
         }
     }
 }
@@ -102,7 +100,7 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
         };
 
         self.reconcile_playlist(&playlist, ListingFailure::SkipMembership)?;
-        self.schedule_next_reconcile(&id)
+        self.schedule_next_reconcile(&id, playlist.reconcile_interval)
     }
 
     fn initial_reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
@@ -111,7 +109,7 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
         };
 
         self.reconcile_playlist(&playlist, ListingFailure::FailPass)?;
-        self.schedule_next_reconcile(&id)
+        self.schedule_next_reconcile(&id, playlist.reconcile_interval)
     }
 
     fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
@@ -385,9 +383,12 @@ impl PlaylistVideoReconciler {
         })
     }
 
-    fn schedule_next_reconcile(&self, id: &PlaylistId) -> anyhow::Result<()> {
-        let now = self.clock.now();
-        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
+    fn schedule_next_reconcile(
+        &self,
+        id: &PlaylistId,
+        reconcile_interval: ReconcileInterval,
+    ) -> anyhow::Result<()> {
+        let next_run_at = self.clock.now() + reconcile_interval.duration();
         self.task_repository.schedule(
             &Task::ReconcilePlaylist {
                 playlist_id: id.as_str().to_string(),

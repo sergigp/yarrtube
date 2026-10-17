@@ -6,6 +6,7 @@ use crate::domain::services::{
     ChannelAvatarRestorer, ChannelAvatarRestorerApi, DesiredState, InternalVideoReconciler,
     InternalVideoReconcilerApi, MembershipDelta, ShowFileWriter, ShowFileWriterApi,
 };
+use crate::domain::shared::ReconcileInterval;
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -39,7 +40,6 @@ pub struct ChannelVideoReconciler {
     show_file_writer: Arc<ShowFileWriter>,
     channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
     clock: Arc<dyn Clock>,
-    reconcile_interval_seconds: i64,
 }
 
 impl ChannelVideoReconciler {
@@ -55,7 +55,6 @@ impl ChannelVideoReconciler {
         show_file_writer: Arc<ShowFileWriter>,
         channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
         clock: Arc<dyn Clock>,
-        reconcile_interval_seconds: i64,
     ) -> Self {
         Self {
             channel_repository,
@@ -68,7 +67,6 @@ impl ChannelVideoReconciler {
             show_file_writer,
             channel_avatar_restorer,
             clock,
-            reconcile_interval_seconds,
         }
     }
 }
@@ -101,8 +99,9 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
             return Ok(());
         };
 
+        let reconcile_interval = channel.reconcile_interval;
         self.reconcile_channel(channel, ListingFailure::SkipMembership)?;
-        self.schedule_next_reconcile(&id)
+        self.schedule_next_reconcile(&id, reconcile_interval)
     }
 
     fn initial_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
@@ -110,8 +109,9 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
             return Ok(());
         };
 
+        let reconcile_interval = channel.reconcile_interval;
         self.reconcile_channel(channel, ListingFailure::FailPass)?;
-        self.schedule_next_reconcile(&id)
+        self.schedule_next_reconcile(&id, reconcile_interval)
     }
 
     fn force_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
@@ -363,9 +363,12 @@ impl ChannelVideoReconciler {
         })
     }
 
-    fn schedule_next_reconcile(&self, id: &ChannelHandle) -> anyhow::Result<()> {
-        let now = self.clock.now();
-        let next_run_at = now + chrono::Duration::seconds(self.reconcile_interval_seconds);
+    fn schedule_next_reconcile(
+        &self,
+        id: &ChannelHandle,
+        reconcile_interval: ReconcileInterval,
+    ) -> anyhow::Result<()> {
+        let next_run_at = self.clock.now() + reconcile_interval.duration();
         self.task_repository.schedule(
             &Task::ReconcileChannel {
                 channel_id: id.as_str().to_string(),

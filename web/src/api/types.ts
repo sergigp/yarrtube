@@ -17,6 +17,7 @@ export interface ChannelListItem {
   path: string
   quality: VideoQuality
   video_limit: number
+  reconcile_interval_minutes: number
   avatar_filename: string | null
   unwatched_count: number
 }
@@ -29,6 +30,7 @@ export interface PlaylistListItem {
   quality: string
   kind: string
   exclude_from_home: boolean
+  reconcile_interval_minutes: number
   created_at: string
 }
 
@@ -112,6 +114,7 @@ export interface CreatedChannel {
   youtube_channel_id: string
   quality: string
   video_limit: number
+  reconcile_interval_minutes: number
   path: string
   avatar_filename: string | null
   created_at: string

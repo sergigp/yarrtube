@@ -114,7 +114,7 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::shared::Quality;
+    use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{EpisodeNumber, Video};
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
@@ -2841,6 +2841,7 @@ mod tests {
             Quality::High,
             PlaylistKind::YoutubeLinked,
             false,
+            ReconcileInterval::default_interval(),
             fixed_timestamp(),
         )
     }
@@ -2852,6 +2853,7 @@ mod tests {
             "UC123",
             Quality::High,
             VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
             PlaylistPath::new("creators/somechannel").unwrap(),
             avatar_filename.map(str::to_string),
             fixed_timestamp(),

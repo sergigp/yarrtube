@@ -15,7 +15,7 @@ use crate::domain::services::{
     ChannelVideoReconcilerApi, ChannelViewSearcher, ChannelViewSearcherApi, CreateChannelOutcome,
     VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
-use crate::domain::shared::Quality;
+use crate::domain::shared::{Quality, ReconcileInterval};
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -36,9 +36,12 @@ pub async fn create_channel(
     let quality = Quality::new(required(request.quality, MISSING_QUALITY)?)?;
     let video_limit = VideoLimit::new(required(request.video_limit, MISSING_VIDEO_LIMIT)?)?;
     let path = PlaylistPath::new(required(request.path, MISSING_PATH)?)?;
+    let reconcile_interval = ReconcileInterval::default_interval();
 
-    let outcome =
-        run_blocking(move || channel_creator.create(id, quality, video_limit, path)).await?;
+    let outcome = run_blocking(move || {
+        channel_creator.create(id, quality, video_limit, reconcile_interval, path)
+    })
+    .await?;
 
     match outcome {
         Ok(CreateChannelOutcome::Created(channel)) => {
@@ -93,7 +96,9 @@ pub async fn update_channel(
         return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
     }
 
-    match run_blocking(move || channel_updater.update_settings(id, quality, video_limit)).await? {
+    match run_blocking(move || channel_updater.update_settings(id, quality, video_limit, None))
+        .await?
+    {
         Ok(channel) => Ok(Json(ChannelResponse::from(channel))),
         Err(e @ UpdateChannelError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
         Err(e @ UpdateChannelError::Repository(_)) => Err(ApiError::internal(e)),
@@ -856,7 +861,15 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let channel_updater = ChannelUpdater::new(channel_repository.clone());
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let channel_updater = ChannelUpdater::new(
+            channel_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
         let request = UpdateChannelRequest {
             quality: Some("low".to_string()),
@@ -882,7 +895,15 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let channel_updater = ChannelUpdater::new(channel_repository.clone());
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let channel_updater = ChannelUpdater::new(
+            channel_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
         let request = UpdateChannelRequest {
             video_limit: Some(20),
@@ -908,11 +929,20 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let channel_updater = ChannelUpdater::new(channel_repository.clone());
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let channel_updater = ChannelUpdater::new(
+            channel_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
         let request = UpdateChannelRequest {
             quality: Some("mid".to_string()),
             video_limit: Some(3),
+            ..update_request()
         };
         let response = update(channel_updater, "@somechannel", request).await;
 
@@ -939,11 +969,20 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let channel_updater = ChannelUpdater::new(channel_repository.clone());
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let channel_updater = ChannelUpdater::new(
+            channel_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
         let request = UpdateChannelRequest {
             quality: Some("high".to_string()),
             video_limit: Some(10),
+            ..update_request()
         };
         let response = update(channel_updater, "@somechannel", request).await;
 
@@ -959,7 +998,15 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let channel_updater = ChannelUpdater::new(channel_repository.clone());
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let channel_updater = ChannelUpdater::new(
+            channel_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
         let request = UpdateChannelRequest {
             quality: Some("low".to_string()),
@@ -1584,7 +1631,14 @@ mod tests {
     }
 
     fn any_channel_updater() -> ChannelUpdater {
-        ChannelUpdater::new(Arc::new(SqliteChannelRepository::new(unused_connection())))
+        ChannelUpdater::new(
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            Arc::new(SqliteTaskRepository::new(
+                unused_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )
     }
 
     /// Builds a reconciler around the repositories a test seeds and asserts;
@@ -1643,7 +1697,6 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         )
     }
 
@@ -1697,7 +1750,6 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         )
     }
 
@@ -1790,6 +1842,7 @@ mod tests {
             "UC123",
             Quality::High,
             VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
             PlaylistPath::new("creators/somechannel").unwrap(),
             None,
             fixed_timestamp(),
@@ -1891,6 +1944,7 @@ mod tests {
             quality: Some("high".to_string()),
             video_limit: Some(10),
             path: Some("creators/somechannel".to_string()),
+            reconcile_interval_minutes: None,
         }
     }
 
@@ -1912,6 +1966,7 @@ mod tests {
         UpdateChannelRequest {
             quality: None,
             video_limit: None,
+            reconcile_interval_minutes: None,
         }
     }
 
@@ -1922,6 +1977,7 @@ mod tests {
             youtube_channel_id: "UC123".to_string(),
             quality: "high".to_string(),
             video_limit: 10,
+            reconcile_interval_minutes: 180,
             path: "creators/somechannel".to_string(),
             avatar_filename: None,
             created_at: fixed_timestamp(),
@@ -1935,6 +1991,7 @@ mod tests {
             path: "creators/somechannel".to_string(),
             quality: "high".to_string(),
             video_limit: 10,
+            reconcile_interval_minutes: 180,
             avatar_filename: None,
             unwatched_count: 0,
         }

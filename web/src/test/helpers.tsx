@@ -92,6 +92,7 @@ export function aChannel(overrides: Partial<ChannelListItem> = {}): ChannelListI
     path: `channels/channel-${uniqueId}`,
     quality: 'high',
     video_limit: 3,
+    reconcile_interval_minutes: 180,
     avatar_filename: null,
     unwatched_count: 0,
     ...overrides,
@@ -107,6 +108,7 @@ export function aPlaylist(overrides: Partial<PlaylistListItem> = {}): PlaylistLi
     quality: 'high',
     kind: 'playlist',
     exclude_from_home: false,
+    reconcile_interval_minutes: 180,
     created_at: '2026-01-01T00:00:00Z',
     ...overrides,
   }

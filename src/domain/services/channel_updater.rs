@@ -1,6 +1,8 @@
 use crate::domain::channel::{Channel, ChannelHandle, UpdateChannelError, VideoLimit};
-use crate::domain::shared::Quality;
+use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
+use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
+use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
 use tracing::info;
 
@@ -8,23 +10,36 @@ use tracing::info;
 #[derive(Clone)]
 pub struct ChannelUpdater {
     repository: Arc<dyn ChannelRepository>,
+    task_repository: Arc<dyn TaskRepository>,
+    clock: Arc<dyn Clock>,
 }
 
 impl ChannelUpdater {
-    pub fn new(repository: Arc<dyn ChannelRepository>) -> Self {
-        Self { repository }
+    pub fn new(
+        repository: Arc<dyn ChannelRepository>,
+        task_repository: Arc<dyn TaskRepository>,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
+        Self {
+            repository,
+            task_repository,
+            clock,
+        }
     }
 }
 
 pub trait ChannelUpdaterApi: Send + Sync {
-    /// Sets the channel's quality and/or video limit, returning the channel
-    /// as stored. `None` keeps the stored value; they apply from the
-    /// channel's next sync.
+    /// Sets the channel's quality, video limit and/or reconcile interval,
+    /// returning the channel as stored. `None` keeps the stored value; quality
+    /// and video limit apply from the channel's next sync. A new interval
+    /// brings the pending reconcile forward when it would now run later than
+    /// `now + interval`.
     fn update_settings(
         &self,
         id: ChannelHandle,
         quality: Option<Quality>,
         video_limit: Option<VideoLimit>,
+        reconcile_interval: Option<ReconcileInterval>,
     ) -> Result<Channel, UpdateChannelError>;
 }
 
@@ -34,6 +49,7 @@ impl ChannelUpdaterApi for ChannelUpdater {
         id: ChannelHandle,
         quality: Option<Quality>,
         video_limit: Option<VideoLimit>,
+        _reconcile_interval: Option<ReconcileInterval>,
     ) -> Result<Channel, UpdateChannelError> {
         let channel = Self::apply_settings(self.find_channel(&id)?, quality, video_limit);
         self.update_channel(&channel)?;

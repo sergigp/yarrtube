@@ -14,7 +14,7 @@ use crate::domain::services::{
     PlaylistSearcherApi, PlaylistUpdater, PlaylistUpdaterApi, PlaylistVideoReconciler,
     PlaylistVideoReconcilerApi,
 };
-use crate::domain::shared::Quality;
+use crate::domain::shared::{Quality, ReconcileInterval};
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -33,9 +33,12 @@ pub async fn create_playlist(
     let path = PlaylistPath::new(required(request.path, MISSING_PATH)?)?;
     let quality = Quality::new(required(request.quality, MISSING_QUALITY)?)?;
     let exclude_from_home = request.exclude_from_home.unwrap_or(false);
+    let reconcile_interval = ReconcileInterval::default_interval();
 
-    let outcome =
-        run_blocking(move || playlist_creator.create(id, path, quality, exclude_from_home)).await?;
+    let outcome = run_blocking(move || {
+        playlist_creator.create(id, path, quality, exclude_from_home, reconcile_interval)
+    })
+    .await?;
 
     match outcome {
         Ok(CreatePlaylistOutcome::Created(playlist)) => {
@@ -87,7 +90,7 @@ pub async fn update_playlist(
     let id = PlaylistId::new(id)?;
     let exclude_from_home = required(request.exclude_from_home, MISSING_EXCLUDE_FROM_HOME)?;
 
-    match run_blocking(move || playlist_updater.update_exclude_from_home(id, exclude_from_home))
+    match run_blocking(move || playlist_updater.update_settings(id, Some(exclude_from_home), None))
         .await?
     {
         Ok(playlist) => Ok(Json(PlaylistResponse::from(playlist))),
@@ -973,7 +976,15 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
-        let playlist_updater = PlaylistUpdater::new(playlist_repository.clone());
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
         let response = update(playlist_updater, "PL1", update_request(true)).await;
 
@@ -1003,7 +1014,15 @@ mod tests {
                 ..playlist("PL1", DEFAULT_PATH)
             })
             .unwrap();
-        let playlist_updater = PlaylistUpdater::new(playlist_repository.clone());
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
         let response = update(playlist_updater, "PL1", update_request(false)).await;
 
@@ -1023,7 +1042,15 @@ mod tests {
             ..playlist("PL1", DEFAULT_PATH)
         };
         playlist_repository.insert(&excluded).unwrap();
-        let playlist_updater = PlaylistUpdater::new(playlist_repository.clone());
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
         let response = update(playlist_updater, "PL1", update_request(true)).await;
 
@@ -1044,7 +1071,15 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
-        let playlist_updater = PlaylistUpdater::new(playlist_repository.clone());
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
 
         let response = update(playlist_updater, "PL404", update_request(true)).await;
 
@@ -1065,6 +1100,7 @@ mod tests {
     async fn it_should_fail_to_update_if_exclude_from_home_missing() {
         let request = UpdatePlaylistRequest {
             exclude_from_home: None,
+            reconcile_interval_minutes: None,
         };
 
         let response = update(any_playlist_updater(), "PL1", request).await;
@@ -1355,7 +1391,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         );
 
         let response = reconcile(playlist_video_reconciler, "PL1").await;
@@ -1470,7 +1505,14 @@ mod tests {
     /// An updater for tests whose request is rejected before reaching it (see
     /// `any_playlist_creator`).
     fn any_playlist_updater() -> PlaylistUpdater {
-        PlaylistUpdater::new(Arc::new(SqlitePlaylistRepository::new(unused_connection())))
+        PlaylistUpdater::new(
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            Arc::new(SqliteTaskRepository::new(
+                unused_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )
     }
 
     /// Builds a reconciler around the repositories a test seeds and asserts;
@@ -1526,7 +1568,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         )
     }
 
@@ -1577,7 +1618,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         )
     }
 
@@ -1671,6 +1711,7 @@ mod tests {
             Quality::High,
             PlaylistKind::YoutubeLinked,
             false,
+            ReconcileInterval::default_interval(),
             fixed_timestamp(),
         )
     }
@@ -1732,12 +1773,14 @@ mod tests {
             path: Some(DEFAULT_PATH.to_string()),
             quality: Some("high".to_string()),
             exclude_from_home: None,
+            reconcile_interval_minutes: None,
         }
     }
 
     fn update_request(exclude_from_home: bool) -> UpdatePlaylistRequest {
         UpdatePlaylistRequest {
             exclude_from_home: Some(exclude_from_home),
+            reconcile_interval_minutes: None,
         }
     }
 
@@ -1763,6 +1806,7 @@ mod tests {
             quality: "high".to_string(),
             kind: "youtube_linked".to_string(),
             exclude_from_home: false,
+            reconcile_interval_minutes: 180,
             created_at: fixed_timestamp(),
         }
     }

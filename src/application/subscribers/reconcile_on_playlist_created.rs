@@ -43,7 +43,7 @@ mod tests {
     use crate::domain::services::ShowFileWriter;
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::services::VideoRelocator;
-    use crate::domain::shared::Quality;
+    use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::{PlaylistEpisodeNumber, Video, VideoId, VideoRecordId};
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
@@ -100,7 +100,7 @@ mod tests {
                 &Task::ReconcilePlaylist {
                     playlist_id: "PL1".to_string(),
                 },
-                fixed_timestamp() + chrono::Duration::seconds(3600),
+                fixed_timestamp() + chrono::Duration::minutes(180),
             )]
         );
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
@@ -159,7 +159,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = handle(&subscriber, r#"{"playlist_id": "PL1"}"#);
@@ -245,7 +244,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = handle(&subscriber, r#"{"playlist_id": "PL1"}"#);
@@ -316,7 +314,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = handle(&subscriber, r#"{"playlist_id": "PL1"}"#);
@@ -404,7 +401,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         )
     }
 
@@ -460,7 +456,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ))
     }
 
@@ -472,6 +467,7 @@ mod tests {
             Quality::High,
             PlaylistKind::YoutubeLinked,
             false,
+            ReconcileInterval::default_interval(),
             fixed_timestamp(),
         )
     }

@@ -1,0 +1,77 @@
+## 1. Walking skeleton
+
+- [x] 1.1 Create every file, type and signature from design.md (## Files, ## Types & Signatures) across all layers: migration 0009 registered, `ReconcileInterval` (constructor accepts any value, `default_interval()` returns 180), new `reconcile_interval` fields on `Channel`/`ChannelView`/`Playlist` with repositories mapping the column, `ScheduledTask::bring_forward` returning `self`, `TaskRepository::find_pending` returning `Ok(None)`, new creator/updater/reconciler signatures (updaters ignore the interval, reconcilers schedule `now + entity.reconcile_interval` from the loaded entity), DTO fields, `serve.rs` wiring without `reconcile_interval_seconds()`; web types, builders, client, `useUpdatePlaylistSettings`, `lib/reconcileInterval.ts` stubs, `ReconcileIntervalField`, `EditPlaylistDialog` rendering nothing, unwired. Done when `cargo build`, `cargo test --locked` and `npm run check` pass with no new tests.
+
+## 2. Behaviour (TDD)
+
+Reconcile tasks:
+- [ ] 2.1 `reconcile_channel_task::it_should_always_schedule_the_next_reconcile` (updated): next reconcile at `now + 180 min` for a default-interval channel.
+- [ ] 2.2 `reconcile_channel_task::it_should_schedule_the_next_reconcile_after_the_channels_interval`: 30 min channel → pending task at `now + 30 min`.
+- [ ] 2.3 `reconcile_channel_task::it_should_not_schedule_the_next_reconcile_if_channel_deleted_during_the_pass`: re-read at scheduling time; `None` → nothing scheduled.
+- [ ] 2.4 `reconcile_playlist_task::it_should_always_schedule_the_next_reconcile` (updated): `now + 180 min`.
+- [ ] 2.5 `reconcile_playlist_task::it_should_schedule_the_next_reconcile_after_the_playlists_interval`: 720 min → `now + 720 min`.
+- [ ] 2.6 `reconcile_playlist_task::it_should_not_schedule_the_next_reconcile_if_playlist_deleted_during_the_pass`.
+
+Channel HTTP:
+- [ ] 2.7 `it_should_create_a_channel_with_the_default_interval`: response and stored channel have 180.
+- [ ] 2.8 `it_should_create_a_channel_with_its_interval`: request 30 → response/stored 30.
+- [ ] 2.9 `it_should_fail_to_create_if_invalid_interval_provided`: 0 → 400 with the VO's exact message.
+- [ ] 2.10 `it_should_keep_the_interval_of_an_existing_channel_on_duplicate_create`.
+- [ ] 2.11 `it_should_update_a_channels_interval`: response + stored channel 60, other fields unchanged.
+- [ ] 2.12 `it_should_bring_the_next_reconcile_forward_if_interval_shortened` (channels): pending at `now + 20h`, update to 60 → `run_at = now + 60 min`, `updated_at = now`.
+- [ ] 2.13 `it_should_keep_the_next_reconcile_if_interval_lengthened` (channels): pending at `now + 30 min`, update to 1440 → task unchanged.
+- [ ] 2.14 `it_should_fail_to_update_if_invalid_interval_provided` (channels): 0 → 400.
+- [ ] 2.15 `it_should_fail_to_update_if_nothing_to_update` (channels, updated): new message naming all three settings.
+- [ ] 2.16 `it_should_list_channels_with_their_interval`.
+
+Playlist HTTP:
+- [ ] 2.17 `it_should_create_a_playlist_with_the_default_interval`.
+- [ ] 2.18 `it_should_create_a_playlist_with_its_interval`.
+- [ ] 2.19 `it_should_fail_to_create_if_invalid_interval_provided` (playlists).
+- [ ] 2.20 `it_should_keep_the_interval_of_an_existing_playlist_on_duplicate_create`.
+- [ ] 2.21 `it_should_update_a_playlists_interval`: `exclude_from_home` absent keeps its value.
+- [ ] 2.22 `it_should_bring_the_next_reconcile_forward_if_interval_shortened` (playlists).
+- [ ] 2.23 `it_should_keep_the_next_reconcile_if_interval_lengthened` (playlists).
+- [ ] 2.24 `it_should_fail_to_update_if_nothing_to_update` (playlists): replaces `it_should_fail_to_update_if_exclude_from_home_missing`.
+- [ ] 2.25 `it_should_fail_to_update_if_invalid_interval_provided` (playlists).
+- [ ] 2.26 `it_should_list_playlists_with_their_interval`.
+
+Value object `ReconcileInterval`:
+- [ ] 2.27 `it_should_accept_one_minute`.
+- [ ] 2.28 `it_should_reject_zero`: exact message "Reconcile interval must be at least 1 minute (got 0)".
+- [ ] 2.29 `it_should_reject_a_negative_interval`.
+- [ ] 2.30 `it_should_reject_an_interval_too_large_for_32_bits`.
+
+Web (Vitest):
+- [ ] 2.31 `lib/reconcileInterval`: `intervalForm` shows 180 as 3 hours and 90 as 90 minutes.
+- [ ] 2.32 `lib/reconcileInterval`: `intervalMinutes` converts 6 hours to 360, and returns `null` for `''`, `'0'` and `'1.5'`.
+- [ ] 2.33 `EditChannelDialog`: opens with the interval showing 3 hours; changing only the interval sends `{ reconcile_interval_minutes: 30 }` and no reconcile.
+- [ ] 2.34 `EditChannelDialog`: an invalid interval flags the field and sends nothing.
+- [ ] 2.35 `EditPlaylistDialog`: opens titled "Edit Lofi beats settings" showing 3 hours.
+- [ ] 2.36 `EditPlaylistDialog`: saving 30 minutes sends PATCH `{ reconcile_interval_minutes: 30 }`, no reconcile, and the dialog closes.
+- [ ] 2.37 `EditPlaylistDialog`: saving unchanged sends nothing; a failed save keeps the dialog open with the error.
+- [ ] 2.38 `Sidebar`: the playlist row menu lists Sync, Exclude from home, Edit settings, Delete; choosing Edit settings opens the dialog.
+- [ ] 2.39 `PlaylistDetail`: the header menu offers Edit settings and opens the dialog.
+- [ ] 2.40 `AddChannelDialog`: submits `reconcile_interval_minutes` 180 by default and 30 when set to 30 minutes under "Advanced options".
+- [ ] 2.41 `AddPlaylistDialog`: same as 2.40.
+
+## 3. Infrastructure adapters (TDD)
+
+`SqliteTaskRepository`:
+- [ ] 3.1 `it_should_find_the_pending_task_with_the_same_type_and_payload`.
+- [ ] 3.2 `it_should_not_find_a_running_or_completed_task_as_pending`.
+- [ ] 3.3 `it_should_not_find_a_pending_task_of_another_source`: same type, different payload → `None`.
+
+`SqliteChannelRepository` / `SqlitePlaylistRepository`:
+- [ ] 3.4 `it_should_round_trip_the_channels_reconcile_interval`.
+- [ ] 3.5 `it_should_round_trip_the_playlists_reconcile_interval`.
+
+Migrations:
+- [ ] 3.6 `it_should_give_existing_channels_and_playlists_the_default_interval`: rows inserted before 0009 read back with 180.
+
+## 4. Verification
+
+- [ ] 4.1 Remove `YARRTUBE_RECONCILE_INTERVAL_SECONDS` from `doc/INSTALLATION.md`, `doc/ARCHITECTURE.md` and `.env.example`, documenting the per-source setting instead; verify with `grep -rn RECONCILE_INTERVAL_SECONDS` returning nothing outside `openspec/` and `doc/UPGRADING-*`.
+- [ ] 4.2 Add a smoke test in `smoke-tests/tests/playlist.spec.js` that edits a playlist's interval through the dialog (exercises `PATCH /api/playlists/{id}`).
+- [ ] 4.3 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `npm run check` all pass.
+- [ ] 4.4 Run `scripts/run-smoke-test.sh`, then `scripts/run-local.sh` against an existing database: sources show 3 hours, editing a playlist and a channel interval brings their next reconcile forward in the Tasks view.

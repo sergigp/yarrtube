@@ -73,7 +73,7 @@ impl EventSubscriber for DownloadVideoOnVideoAddedToPlaylist {
 mod tests {
     use super::*;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
-    use crate::domain::shared::Quality;
+    use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
@@ -181,6 +181,7 @@ mod tests {
             Quality::High,
             PlaylistKind::YoutubeLinked,
             false,
+            ReconcileInterval::default_interval(),
             fixed_timestamp(),
         )
     }

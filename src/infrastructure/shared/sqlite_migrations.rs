@@ -13,6 +13,8 @@ const PLAYLIST_VIDEO_POSITION_REQUIRED_SQL: &str =
 const PLAYLIST_EXCLUDE_FROM_HOME_SQL: &str =
     include_str!("../../../migrations/0007_playlist_exclude_from_home.sql");
 const EPISODE_NUMBERS_SQL: &str = include_str!("../../../migrations/0008_episode_numbers.sql");
+const RECONCILE_INTERVAL_SQL: &str =
+    include_str!("../../../migrations/0009_reconcile_interval.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -24,6 +26,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
         M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
         M::up(EPISODE_NUMBERS_SQL),
+        M::up(RECONCILE_INTERVAL_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))

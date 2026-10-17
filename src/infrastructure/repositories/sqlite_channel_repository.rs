@@ -1,6 +1,6 @@
 use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
 use crate::domain::playlist::PlaylistPath;
-use crate::domain::shared::Quality;
+use crate::domain::shared::{Quality, ReconcileInterval};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -30,7 +30,7 @@ impl ChannelRepository for SqliteChannelRepository {
     fn find(&self, id: &ChannelHandle) -> anyhow::Result<Option<Channel>> {
         let conn = self.db.read()?;
         conn.query_row(
-            "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at FROM channels WHERE id = ?1",
+            "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes FROM channels WHERE id = ?1",
             params![id.as_str()],
             |row| {
                 Ok((
@@ -42,6 +42,7 @@ impl ChannelRepository for SqliteChannelRepository {
                     row.get::<_, String>(5)?,
                     row.get::<_, Option<String>>(6)?,
                     row.get::<_, String>(7)?,
+                    row.get::<_, i64>(8)?,
                 ))
             },
         )
@@ -49,7 +50,17 @@ impl ChannelRepository for SqliteChannelRepository {
         .inspect_err(|e| tracing::error!(channel_id = %id, error = %e, "failed to query channel"))
         .context("failed to query channel")?
         .map(
-            |(id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at)| {
+            |(
+                id,
+                name,
+                youtube_channel_id,
+                quality,
+                video_limit,
+                path,
+                avatar_filename,
+                created_at,
+                reconcile_interval,
+            )| {
                 Self::row_to_channel(
                     id,
                     name,
@@ -59,6 +70,7 @@ impl ChannelRepository for SqliteChannelRepository {
                     path,
                     avatar_filename,
                     created_at,
+                    reconcile_interval,
                 )
             },
         )
@@ -68,7 +80,7 @@ impl ChannelRepository for SqliteChannelRepository {
     fn insert(&self, channel: &Channel) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO channels (id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 channel.id.as_str(),
                 channel.name,
@@ -77,7 +89,8 @@ impl ChannelRepository for SqliteChannelRepository {
                 channel.video_limit.value(),
                 channel.path.as_str(),
                 channel.avatar_filename,
-                channel.created_at.to_rfc3339()
+                channel.created_at.to_rfc3339(),
+                channel.reconcile_interval.minutes()
             ],
         )
         .inspect_err(|e| tracing::error!(channel_id = %channel.id, error = %e, "failed to insert channel"))
@@ -88,7 +101,7 @@ impl ChannelRepository for SqliteChannelRepository {
     fn update(&self, channel: &Channel) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE channels SET name = ?2, youtube_channel_id = ?3, quality = ?4, video_limit = ?5, path = ?6, avatar_filename = ?7, created_at = ?8 WHERE id = ?1",
+            "UPDATE channels SET name = ?2, youtube_channel_id = ?3, quality = ?4, video_limit = ?5, path = ?6, avatar_filename = ?7, created_at = ?8, reconcile_interval_minutes = ?9 WHERE id = ?1",
             params![
                 channel.id.as_str(),
                 channel.name,
@@ -97,7 +110,8 @@ impl ChannelRepository for SqliteChannelRepository {
                 channel.video_limit.value(),
                 channel.path.as_str(),
                 channel.avatar_filename,
-                channel.created_at.to_rfc3339()
+                channel.created_at.to_rfc3339(),
+                channel.reconcile_interval.minutes()
             ],
         )
         .inspect_err(
@@ -121,7 +135,7 @@ impl ChannelRepository for SqliteChannelRepository {
         let conn = self.db.read()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at FROM channels ORDER BY name COLLATE NOCASE, rowid",
+                "SELECT id, name, youtube_channel_id, quality, video_limit, path, avatar_filename, created_at, reconcile_interval_minutes FROM channels ORDER BY name COLLATE NOCASE, rowid",
             )
             .inspect_err(|e| tracing::error!(error = %e, "failed to prepare list query"))
             .context("failed to prepare list query")?;
@@ -136,6 +150,7 @@ impl ChannelRepository for SqliteChannelRepository {
                     row.get::<_, String>(5)?,
                     row.get::<_, Option<String>>(6)?,
                     row.get::<_, String>(7)?,
+                    row.get::<_, i64>(8)?,
                 ))
             })
             .inspect_err(|e| tracing::error!(error = %e, "failed to list channels"))
@@ -151,6 +166,7 @@ impl ChannelRepository for SqliteChannelRepository {
                 path,
                 avatar_filename,
                 created_at,
+                reconcile_interval,
             ) = row
                 .inspect_err(|e| tracing::error!(error = %e, "failed to read channel row"))
                 .context("failed to read channel row")?;
@@ -163,6 +179,7 @@ impl ChannelRepository for SqliteChannelRepository {
                 path,
                 avatar_filename,
                 created_at,
+                reconcile_interval,
             )
         })
         .collect()
@@ -180,11 +197,13 @@ impl SqliteChannelRepository {
         path: String,
         avatar_filename: Option<String>,
         created_at: String,
+        reconcile_interval: i64,
     ) -> anyhow::Result<Channel> {
         let id = ChannelHandle::new(id)?;
         let quality = Quality::new(quality)?;
         let video_limit = VideoLimit::new(video_limit)?;
         let path = PlaylistPath::new(path)?;
+        let reconcile_interval = ReconcileInterval::new(reconcile_interval)?;
         let created_at = DateTime::parse_from_rfc3339(&created_at)
             .context("failed to parse stored created_at")?
             .with_timezone(&Utc);
@@ -194,6 +213,7 @@ impl SqliteChannelRepository {
             youtube_channel_id,
             quality,
             video_limit,
+            reconcile_interval,
             path,
             avatar_filename,
             created_at,
@@ -218,6 +238,7 @@ mod tests {
             "UC123",
             Quality::High,
             VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
             PlaylistPath::new("creators/somechannel").unwrap(),
             None,
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
@@ -262,6 +283,7 @@ mod tests {
             "UC123",
             Quality::High,
             VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
             PlaylistPath::new("creators/somechannel").unwrap(),
             Some("@somechannel.jpg".to_string()),
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),

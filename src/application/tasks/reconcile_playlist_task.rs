@@ -39,7 +39,7 @@ mod tests {
     use crate::domain::services::ShowFileWriter;
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::services::VideoRelocator;
-    use crate::domain::shared::Quality;
+    use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::Video;
     use crate::domain::video::{EpisodeNumber, PlaylistEpisodeNumber, VideoId, VideoRecordId};
@@ -735,7 +735,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("PL1"));
@@ -980,7 +979,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("PL1"));
@@ -1084,7 +1082,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ));
 
         let result = run(&task, &payload_for("PL1"));
@@ -1218,7 +1215,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         )
     }
 
@@ -1274,7 +1270,6 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
-            3600,
         ))
     }
 
@@ -1315,6 +1310,7 @@ mod tests {
             Quality::High,
             PlaylistKind::YoutubeLinked,
             false,
+            ReconcileInterval::default_interval(),
             fixed_timestamp(),
         )
     }
@@ -1414,7 +1410,7 @@ mod tests {
             &Task::ReconcilePlaylist {
                 playlist_id: "PL1".to_string(),
             },
-            fixed_timestamp() + chrono::Duration::seconds(3600),
+            fixed_timestamp() + chrono::Duration::minutes(180),
         )
     }
 
