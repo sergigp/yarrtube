@@ -93,6 +93,42 @@ describe('AddChannelDialog', () => {
       quality: 'high',
       video_limit: 3,
       path: 'channels/chan',
+      reconcile_interval_minutes: 180,
+    })
+  })
+
+  it('creates the channel with the interval set under advanced options', async () => {
+    const { fetchMock, onOpenChange } = renderDialog({
+      'GET /api/channels/preview?channel=%40chan': {
+        id: '@chan',
+        title: 'The Channel',
+        avatar_url: null,
+      },
+      'POST /api/channels': aChannel(),
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Channel Handle or URL'), '@chan')
+    await user.click(screen.getByRole('button', { name: /Advanced options/ }))
+    const amount = screen.getByLabelText('Check for new videos every')
+    await user.clear(amount)
+    await user.type(amount, '30')
+    await user.click(screen.getByRole('combobox', { name: 'Interval unit' }))
+    await user.click(await screen.findByRole('option', { name: 'minutes' }))
+    const submit = screen.getByRole('button', { name: 'Create Channel' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    const createCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+    ) as [string, RequestInit]
+    expect(JSON.parse(createCall[1].body as string)).toEqual({
+      channel: '@chan',
+      quality: 'high',
+      video_limit: 3,
+      path: 'channels/chan',
+      reconcile_interval_minutes: 30,
     })
   })
 

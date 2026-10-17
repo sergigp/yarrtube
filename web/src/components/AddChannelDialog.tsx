@@ -5,10 +5,12 @@ import type { ChannelListItem, ChannelPreview } from '@/api/types'
 import { useLookup, type Lookup } from '@/hooks/useLookup'
 import { useSaveLocation, type LocationValue } from '@/hooks/useSaveLocation'
 import { deriveChannelPathSegment } from '@/lib/channelHandle'
+import { DEFAULT_INTERVAL_FORM, intervalMinutes, type IntervalForm } from '@/lib/reconcileInterval'
 import { channelNoticeLead } from '@/lib/noticeLead'
 import { DestinationNotice, DestinationPath } from './DestinationNotice'
 import { lookupNotice } from './lookupNotice'
 import { FolderNameField } from './FolderNameField'
+import { ReconcileIntervalField } from './ReconcileIntervalField'
 import { SaveToField } from './SaveToField'
 import { Thumbnail } from './Thumbnail'
 import { VideoQualityField } from './VideoQualityField'
@@ -88,6 +90,7 @@ export function AddChannelDialog({ open, onOpenChange }: AddChannelDialogProps) 
 
 function AddChannelForm({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ channel: '', quality: 'high', video_limit: '3' })
+  const [interval, changeInterval] = useState<IntervalForm>(DEFAULT_INTERVAL_FORM)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -107,7 +110,8 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!canSubmit) {
+    const reconcileIntervalMinutes = intervalMinutes(interval)
+    if (!canSubmit || reconcileIntervalMinutes === null) {
       return
     }
     setSubmitting(true)
@@ -118,6 +122,7 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
         quality: form.quality,
         video_limit: Number(form.video_limit),
         path: location.value.path,
+        reconcile_interval_minutes: reconcileIntervalMinutes,
       })
       location.remember()
       invalidateLibrary()
@@ -181,6 +186,11 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
               required
             />
           </div>
+          <ReconcileIntervalField
+            id="add-channel-interval"
+            value={interval}
+            onChange={changeInterval}
+          />
         </div>
       </div>
 

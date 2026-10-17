@@ -158,7 +158,7 @@ export interface CreateChannelRequest {
   quality: string
   video_limit: number
   path: string
-  reconcile_interval_minutes?: number
+  reconcile_interval_minutes: number
 }
 
 export function createChannel(body: CreateChannelRequest): Promise<CreatedChannel> {
