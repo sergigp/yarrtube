@@ -1085,6 +1085,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_playlists_with_their_interval() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(
+                &playlist("PL1", DEFAULT_PATH)
+                    .with_reconcile_interval(ReconcileInterval::new(720).unwrap()),
+            )
+            .unwrap();
+        let playlist_searcher = PlaylistSearcher::new(playlist_repository);
+
+        let response = list(playlist_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![PlaylistResponse {
+                reconcile_interval_minutes: 720,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlists_sorted_by_name_ignoring_case() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
