@@ -22,7 +22,7 @@ Channel HTTP:
 - [x] 2.13 `it_should_keep_the_next_reconcile_if_interval_lengthened` (channels): pending at `now + 30 min`, update to 1440 → task unchanged.
 - [x] 2.14 `it_should_fail_to_update_if_invalid_interval_provided` (channels): 0 → 400.
 - [x] 2.15 `it_should_fail_to_update_if_nothing_to_update` (channels, updated): new message naming all three settings.
-- [ ] 2.16 `it_should_list_channels_with_their_interval`.
+- [x] 2.16 `it_should_list_channels_with_their_interval`.
 
 Playlist HTTP:
 - [ ] 2.17 `it_should_create_a_playlist_with_the_default_interval`.

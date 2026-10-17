@@ -1454,6 +1454,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_channels_with_their_interval() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository
+            .insert(
+                &channel("@somechannel")
+                    .with_reconcile_interval(ReconcileInterval::new(30).unwrap()),
+            )
+            .unwrap();
+        let channel_view_searcher = ChannelViewSearcher::new(
+            channel_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+        );
+
+        let response = list(channel_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![ChannelListItemResponse {
+                reconcile_interval_minutes: 30,
+                ..some_channel_list_item_response()
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_channels_sorted_by_name_ignoring_case() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
