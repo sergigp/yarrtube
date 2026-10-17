@@ -126,6 +126,20 @@ describe('EditChannelDialog', () => {
     expect(onOpenChange).not.toHaveBeenCalled()
   })
 
+  it('does not submit an invalid interval', async () => {
+    const { onSave, onOpenChange } = renderDialog(aChannel({ reconcile_interval_minutes: 180 }))
+    const user = userEvent.setup()
+    const amount = screen.getByLabelText('Check for new videos every')
+
+    await user.clear(amount)
+    await user.type(amount, '0')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(amount).toBeInvalid()
+    expect(onSave).not.toHaveBeenCalled()
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
   it('keeps the dialog open and shows the error when saving fails', async () => {
     const onSave = vi.fn(async () => {
       throw new Error('channel @x not found')
