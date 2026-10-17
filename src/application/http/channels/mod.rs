@@ -495,6 +495,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_keep_the_interval_of_an_existing_channel_on_duplicate_create() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let existing =
+            channel("@somechannel").with_reconcile_interval(ReconcileInterval::new(60).unwrap());
+        channel_repository.insert(&existing).unwrap();
+        let channel_creator = ChannelCreator::new(
+            channel_repository.clone(),
+            resolving(Some(resolved_channel())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+        let request = CreateChannelRequest {
+            reconcile_interval_minutes: Some(30),
+            ..create_request("@somechannel")
+        };
+
+        let response = create(channel_creator, request).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::OK,
+                ChannelResponse {
+                    reconcile_interval_minutes: 60,
+                    ..some_channel_response()
+                }
+            ))
+        );
+        assert_eq!(channel_repository.list().unwrap(), vec![existing]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_return_the_existing_channel_if_handle_differs_in_case() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
