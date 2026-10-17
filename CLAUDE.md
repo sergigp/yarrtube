@@ -15,9 +15,12 @@ from the old per-video-folder layout.
 Docs: `doc/INSTALLATION.md` (Docker, Compose, every environment variable),
 `doc/DEVELOPMENT.md` (building from source), `doc/PLEX.md` (Plex TV Shows
 library, scan trigger), `doc/UPGRADING-TO-0.9.0.md` (layout migration
-from 0.8.x, temporary), `doc/ARCHITECTURE.md`. Releases are cut by pushing a `vX.Y.Z`
-tag, which triggers `.github/workflows/release.yml` to publish the
-multi-arch image to `ghcr.io`.
+from 0.8.x, temporary), `doc/ARCHITECTURE.md`. Every merge to `main` that
+passes CI is tagged `vX.Y.Z` and released automatically: CI bumps the latest
+tag's patch number, or uses the `Cargo.toml` version when that's ahead (bump
+it in the PR to cut a minor/major release), then calls
+`.github/workflows/release.yml` to publish the multi-arch image to
+`ghcr.io`. Pushing a `vX.Y.Z` tag by hand still triggers a release too.
 
 ## Commands
 
