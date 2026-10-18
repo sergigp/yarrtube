@@ -21,31 +21,41 @@ pub struct CaptionTracks {
 
 impl CaptionTracks {
     /// Manual `<lang>`/`<lang>-*`, else automatic `<lang>-orig`, else
-    /// automatic `<lang>`; no language reported: the only automatic `*-orig`.
+    /// automatic `<lang>`, trying the reported language then its base
+    /// language (`es` for `es-US`); no language reported: the only automatic
+    /// `*-orig`.
     pub fn original(&self) -> Option<CaptionTrack> {
         match self.original_language.as_deref() {
-            Some(language) => self
-                .manual_in(language)
-                .or_else(|| self.automatic_in(language)),
+            Some(language) => {
+                let candidates = language_candidates(language);
+                candidates
+                    .iter()
+                    .find_map(|language| self.manual_in(language))
+                    .or_else(|| {
+                        candidates
+                            .iter()
+                            .find_map(|language| self.automatic_in(language))
+                    })
+            }
             None => self.only_original_automatic(),
         }
     }
 }
 
 impl CaptionTracks {
-    /// The uploaded track in `language`, else a regional variant of it
-    /// (e.g. `en-US` for `en`).
+    /// The uploaded track in `language`, else a regional or named variant
+    /// of it (e.g. `en-US`, `es-ES-7eCR4kqQbL4`), recorded as `language`.
     fn manual_in(&self, language: &str) -> Option<CaptionTrack> {
-        let regional_prefix = format!("{language}-");
+        let variant_prefix = format!("{language}-");
         self.manual
             .iter()
             .find(|key| key.as_str() == language)
             .or_else(|| {
                 self.manual
                     .iter()
-                    .find(|key| key.starts_with(&regional_prefix))
+                    .find(|key| key.starts_with(&variant_prefix))
             })
-            .and_then(|key| track(key, key, CaptionSource::Manual))
+            .and_then(|key| track(key, language, CaptionSource::Manual))
     }
 
     /// The auto-generated track yt-dlp marks as the original in `language`,
@@ -73,6 +83,15 @@ impl CaptionTracks {
     }
 }
 
+/// The reported language, then its base language when it is regional:
+/// YouTube reports e.g. `es-US` for a video whose tracks are `es`.
+fn language_candidates(language: &str) -> Vec<&str> {
+    match language.split_once('-') {
+        Some((base, _)) => vec![language, base],
+        None => vec![language],
+    }
+}
+
 fn track(key: &str, language: &str, source: CaptionSource) -> Option<CaptionTrack> {
     Some(CaptionTrack {
         key: key.to_string(),
@@ -97,7 +116,7 @@ mod tests {
     fn it_should_select_a_regional_uploaded_track_in_the_original_language() {
         assert_eq!(
             tracks(Some("en"), &["fr", "en-US"], &["en-orig"]).original(),
-            Some(track_of("en-US", "en-US", CaptionSource::Manual))
+            Some(track_of("en-US", "en", CaptionSource::Manual))
         );
     }
 
@@ -123,6 +142,27 @@ mod tests {
             tracks(Some("es"), &[], &["en", "es"]).original(),
             Some(track_of("es", "es", CaptionSource::Automatic))
         );
+    }
+
+    #[test]
+    fn it_should_fall_back_to_the_base_of_a_regional_original_language() {
+        assert_eq!(
+            tracks(Some("es-US"), &[], &["en-orig", "es-orig", "es", "en"]).original(),
+            Some(track_of("es-orig", "es", CaptionSource::Automatic))
+        );
+    }
+
+    #[test]
+    fn it_should_never_select_the_live_chat() {
+        assert_eq!(
+            tracks(Some("en"), &["live_chat"], &["en-orig"]).original(),
+            Some(track_of("en-orig", "en", CaptionSource::Automatic))
+        );
+    }
+
+    #[test]
+    fn it_should_select_nothing_when_no_language_is_reported_and_several_tracks_are_original() {
+        assert_eq!(tracks(None, &[], &["en-orig", "es-orig"]).original(), None);
     }
 
     #[test]

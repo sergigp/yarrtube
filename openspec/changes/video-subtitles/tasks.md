@@ -40,7 +40,7 @@
 ## 3. Infrastructure adapters (TDD)
 
 yt-dlp (`infrastructure/shared/ytdlp.rs`):
-- [ ] 3.1 Run real `yt-dlp -J --skip-download` against 3–4 videos (uploaded captions, auto-only, non-English, no speech); save trimmed info-JSON fixtures; confirm `language` and `-orig` behave as `CaptionTracks::original` assumes (adjust 2.26 if not)
+- [x] 3.1 Run real `yt-dlp -J --skip-download` against 3–4 videos (uploaded captions, auto-only, non-English, no speech); save trimmed info-JSON fixtures; confirm `language` and `-orig` behave as `CaptionTracks::original` assumes (adjust 2.26 if not)
 - [ ] 3.2 `it_should_parse_caption_tracks_and_language_from_the_info_json`
 - [ ] 3.3 `it_should_parse_the_publish_timestamp_from_the_info_json`
 - [ ] 3.4 `it_should_fail_the_probe_on_a_clean_failed_exit`
