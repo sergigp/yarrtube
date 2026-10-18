@@ -98,7 +98,9 @@ impl SubtitleFetcher {
             .probe_captions(&video.youtube_id.to_url(), &staging)?;
         match probe.tracks.original() {
             Some(track) => self.place_subtitles(video, &probe, &track, output_dir),
-            None => Ok(()),
+            None => self
+                .video_repository
+                .update_subtitles(&video.clone().mark_subtitles_unavailable(self.clock.now())),
         }
     }
 

@@ -302,8 +302,12 @@ impl Video {
 
     /// The video has no original-language captions: a terminal subtitle
     /// state.
-    pub fn mark_subtitles_unavailable(self, _now: DateTime<Utc>) -> Self {
-        self
+    pub fn mark_subtitles_unavailable(self, now: DateTime<Utc>) -> Self {
+        Self {
+            subtitle_state: SubtitleState::Unavailable,
+            updated_at: now,
+            ..self
+        }
     }
 
     /// Records the episode number assigned to this video.
