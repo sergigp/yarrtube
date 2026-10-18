@@ -1459,6 +1459,32 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn it_should_fail_when_no_srt_was_written() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-subtitles-staging");
+        std::fs::write(staging_dir.join("info.json"), "{}").unwrap();
+        let fake = test_support::FakeYtDlp::with_exit_code(0);
+        let probe = CaptionProbe {
+            tracks: CaptionTracks::default(),
+            published_at: None,
+            info_json: staging_dir.join("info.json"),
+        };
+
+        let result = fetch_subtitles(
+            &fake.path,
+            &probe,
+            &caption_track("en", "en", CaptionSource::Manual),
+            &staging_dir,
+        );
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err("yt-dlp wrote no SubRip file for the en subtitles".to_string())
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn it_should_report_the_staged_thumbnail_written_next_to_the_download() {
         use test_support::{FakeYtDlp, unique_temp_dir};
 
