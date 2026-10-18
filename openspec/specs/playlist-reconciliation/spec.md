@@ -16,7 +16,10 @@ reconcile attempt that runs to completion, after the playlist's own reconcile
 interval as stored when the attempt finishes, regardless of the playlist's
 kind, whether any videos were added or removed, or whether any file was
 healed. When the playlist no longer exists when the attempt finishes, the
-system SHALL schedule no further reconcile of it.
+system SHALL schedule no further reconcile of it. A playlist SHALL have at
+most one pending recurring reconcile: when a reconcile of the playlist is
+already pending when the attempt finishes, the system SHALL schedule no
+further one.
 
 #### Scenario: Reconcile finds no changes
 - **WHEN** a playlist reconcile completes and finds no membership or filesystem changes
@@ -37,6 +40,14 @@ system SHALL schedule no further reconcile of it.
 #### Scenario: Playlist deleted during a reconcile
 - **WHEN** a playlist is deleted while a reconcile of it is running
 - **THEN** that reconcile, when it completes, schedules no further reconcile of the playlist
+
+#### Scenario: Reconcile already pending
+- **WHEN** a reconcile of a playlist completes while another reconcile of the same playlist is already pending
+- **THEN** the system schedules no further reconcile, and the pending one keeps its time
+
+#### Scenario: Parallel reconcile chains converge
+- **WHEN** a playlist has several pending reconciles, left by a version without this rule
+- **THEN** each extra one, when it completes while another is pending, schedules no successor, until the playlist has a single pending reconcile
 
 ### Requirement: Only Watchable Items Count As Playlist Members (YouTube-Linked Playlists)
 The system SHALL treat an item of the source YouTube playlist as a member of

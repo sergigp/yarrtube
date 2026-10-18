@@ -42,7 +42,7 @@ The system SHALL run one reconcile pass for a channel as soon as practical after
 - **THEN** the system stores no video, publishes no event, schedules no recurring reconcile of the channel, and fails the `ChannelCreated` event's processing so it is retried
 
 ### Requirement: Recurring Channel Reconciliation
-The system SHALL schedule the next reconcile of a channel after every reconcile attempt that runs to completion, after the channel's own reconcile interval as stored when the attempt finishes, regardless of whether any videos were added or evicted. When the channel no longer exists when the attempt finishes, the system SHALL schedule no further reconcile of it.
+The system SHALL schedule the next reconcile of a channel after every reconcile attempt that runs to completion, after the channel's own reconcile interval as stored when the attempt finishes, regardless of whether any videos were added or evicted. When the channel no longer exists when the attempt finishes, the system SHALL schedule no further reconcile of it. A channel SHALL have at most one pending recurring reconcile: when a reconcile of the channel is already pending when the attempt finishes, the system SHALL schedule no further one.
 
 #### Scenario: Reconcile finds no changes
 - **WHEN** a channel reconcile completes and finds no membership changes
@@ -63,6 +63,14 @@ The system SHALL schedule the next reconcile of a channel after every reconcile 
 #### Scenario: Channel deleted during a reconcile
 - **WHEN** a channel is deleted while a reconcile of it is running
 - **THEN** that reconcile, when it completes, schedules no further reconcile of the channel
+
+#### Scenario: Reconcile already pending
+- **WHEN** a reconcile of a channel completes while another reconcile of the same channel is already pending
+- **THEN** the system schedules no further reconcile, and the pending one keeps its time
+
+#### Scenario: Parallel reconcile chains converge
+- **WHEN** a channel has several pending reconciles, left by a version without this rule
+- **THEN** each extra one, when it completes while another is pending, schedules no successor, until the channel has a single pending reconcile
 
 ### Requirement: New Video Persistence (Channels)
 The system SHALL store each video discovered for a channel that is not
