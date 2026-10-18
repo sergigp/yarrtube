@@ -13,7 +13,7 @@
 - [x] 2.5 `it_should_fall_back_to_the_creation_time_when_no_publish_time_is_reported`
 - [x] 2.6 `it_should_leave_subtitles_missing_when_the_probe_fails`
 - [x] 2.7 `it_should_leave_subtitles_missing_when_the_download_fails`
-- [ ] 2.8 `it_should_skip_if_subtitles_already_fetched`
+- [x] 2.8 `it_should_skip_if_subtitles_already_fetched`
 - [ ] 2.9 `it_should_skip_a_video_that_is_not_downloaded`
 - [x] 2.10 `it_should_skip_if_video_no_longer_exists`
 - [ ] 2.11 `it_should_keep_download_progress_while_recording_subtitles`
