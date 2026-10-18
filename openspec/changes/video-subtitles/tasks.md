@@ -11,11 +11,11 @@
 - [x] 2.3 `it_should_mark_an_old_video_without_captions_unavailable`
 - [x] 2.4 `it_should_keep_a_recent_video_without_captions_missing`
 - [x] 2.5 `it_should_fall_back_to_the_creation_time_when_no_publish_time_is_reported`
-- [ ] 2.6 `it_should_leave_subtitles_missing_when_the_probe_fails`
-- [ ] 2.7 `it_should_leave_subtitles_missing_when_the_download_fails`
+- [x] 2.6 `it_should_leave_subtitles_missing_when_the_probe_fails`
+- [x] 2.7 `it_should_leave_subtitles_missing_when_the_download_fails`
 - [ ] 2.8 `it_should_skip_if_subtitles_already_fetched`
 - [ ] 2.9 `it_should_skip_a_video_that_is_not_downloaded`
-- [ ] 2.10 `it_should_skip_if_video_no_longer_exists`
+- [x] 2.10 `it_should_skip_if_video_no_longer_exists`
 - [ ] 2.11 `it_should_keep_download_progress_while_recording_subtitles`
 - [ ] 2.12 `it_should_discard_the_staging_dir`
 - [ ] 2.13 `it_should_schedule_a_subtitle_fetch_for_a_downloaded_video_missing_subtitles` (channel reconcile)
