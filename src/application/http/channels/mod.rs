@@ -875,6 +875,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_remove_the_pending_reconcile_of_a_deleted_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        task_repository
+            .schedule(
+                &reconcile_task("@somechannel"),
+                fixed_timestamp() + chrono::Duration::hours(3),
+            )
+            .unwrap();
+        task_repository
+            .schedule(
+                &reconcile_task("@otherchannel"),
+                fixed_timestamp() + chrono::Duration::hours(3),
+            )
+            .unwrap();
+        let channel_deleter = ChannelDeleter::new(
+            channel_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            task_repository.clone(),
+        );
+
+        let response = delete(channel_deleter, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(channel_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                2,
+                &reconcile_task("@otherchannel"),
+                fixed_timestamp() + chrono::Duration::hours(3),
+            )]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, channel_deleted("@somechannel"))]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_delete_only_the_deleted_channel_videos() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));

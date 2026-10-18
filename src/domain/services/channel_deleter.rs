@@ -1,6 +1,7 @@
 use crate::domain::channel::ChannelDeleted;
 use crate::domain::channel::{Channel, ChannelHandle, DeleteChannelError};
 use crate::domain::event::DomainEvent;
+use crate::domain::task::Task;
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::ChannelAvatarRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -96,8 +97,20 @@ impl ChannelDeleter {
     }
 
     /// Removes every pending reconcile of the channel, so none outlives it.
-    fn remove_pending_reconciles(&self, _id: &ChannelHandle) -> Result<(), DeleteChannelError> {
-        Ok(())
+    fn remove_pending_reconciles(&self, id: &ChannelHandle) -> Result<(), DeleteChannelError> {
+        let task = Task::ReconcileChannel {
+            channel_id: id.as_str().to_string(),
+        };
+        let Some(pending) = self
+            .task_repository
+            .find_pending(&task)
+            .map_err(DeleteChannelError::Repository)?
+        else {
+            return Ok(());
+        };
+        self.task_repository
+            .delete(pending.id)
+            .map_err(DeleteChannelError::Repository)
     }
 
     fn delete_channel(&self, id: &ChannelHandle) -> Result<(), DeleteChannelError> {
