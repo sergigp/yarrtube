@@ -257,9 +257,9 @@ impl Task {
     }
 
     /// `Some("video:<id>")` for `download_video`, `fetch_thumbnail` and
-    /// `fetch_subtitles`: two
-    /// tasks sharing a key never run at the same time, and a task with a key
-    /// is not scheduled twice while one is pending or running.
+    /// `fetch_subtitles`: two tasks sharing a key never run at the same
+    /// time, and a task with a key is not scheduled twice while one is
+    /// pending or running.
     pub fn exclusivity_key(task_type: &str, payload: &str) -> Option<String> {
         let video_id = match task_type {
             "download_video" => Self::decode_download_video_payload(payload)
