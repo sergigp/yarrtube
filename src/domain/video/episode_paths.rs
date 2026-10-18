@@ -40,8 +40,8 @@ impl EpisodePaths {
     }
 
     /// `<stem>.<lang>.srt`, the episode's subtitle file in `language`.
-    pub fn subtitle(&self, _language: &CaptionLanguage) -> String {
-        String::new()
+    pub fn subtitle(&self, language: &CaptionLanguage) -> String {
+        self.media(&format!("{}.srt", language.as_str()))
     }
 
     /// The thumbnail's file name as the episode NFO references it: a sibling

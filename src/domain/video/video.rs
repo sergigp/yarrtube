@@ -291,12 +291,13 @@ impl Video {
     /// Records the fetched subtitle file: subtitle state Fetched. Touches
     /// only the subtitle fields and `updated_at`, stored through
     /// `VideoRepository::update_subtitles` only.
-    pub fn with_subtitles(
-        self,
-        _subtitle_filename: impl Into<String>,
-        _now: DateTime<Utc>,
-    ) -> Self {
-        self
+    pub fn with_subtitles(self, subtitle_filename: impl Into<String>, now: DateTime<Utc>) -> Self {
+        Self {
+            subtitle_state: SubtitleState::Fetched,
+            subtitle_filename: Some(subtitle_filename.into()),
+            updated_at: now,
+            ..self
+        }
     }
 
     /// The video has no original-language captions: a terminal subtitle

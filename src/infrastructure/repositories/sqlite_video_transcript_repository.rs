@@ -1,6 +1,11 @@
 use crate::domain::video::VideoRecordId;
-use crate::domain::video_transcript::VideoTranscript;
+use crate::domain::video_transcript::{
+    CaptionLanguage, CaptionSource, TranscriptText, VideoTranscript,
+};
 use crate::infrastructure::shared::sqlite_connection::Database;
+use anyhow::Context;
+use chrono::{DateTime, Utc};
+use rusqlite::{OptionalExtension, Row, params};
 
 /// Stores each video's plain-text transcript, at most one per video.
 pub trait VideoTranscriptRepository: Send + Sync {
@@ -10,8 +15,17 @@ pub trait VideoTranscriptRepository: Send + Sync {
     fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
 }
 
+/// A `video_transcripts` row as read, before its values are parsed into a
+/// `VideoTranscript`.
+struct VideoTranscriptRow {
+    video_id: String,
+    language: String,
+    source: String,
+    text: String,
+    created_at: String,
+}
+
 pub struct SqliteVideoTranscriptRepository {
-    #[allow(dead_code)]
     db: Database,
 }
 
@@ -22,15 +36,68 @@ impl SqliteVideoTranscriptRepository {
 }
 
 impl VideoTranscriptRepository for SqliteVideoTranscriptRepository {
-    fn save(&self, _transcript: &VideoTranscript) -> anyhow::Result<()> {
+    fn save(&self, transcript: &VideoTranscript) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "INSERT INTO video_transcripts (video_id, language, source, text, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                transcript.video_id.as_str(),
+                transcript.language.as_str(),
+                transcript.source.as_str(),
+                transcript.text.as_str(),
+                transcript.created_at.to_rfc3339(),
+            ],
+        )
+        .inspect_err(|e| {
+            tracing::error!(video_id = %transcript.video_id, error = %e, "failed to save video transcript")
+        })
+        .context("failed to save video transcript")?;
         Ok(())
     }
 
-    fn find(&self, _video_id: &VideoRecordId) -> anyhow::Result<Option<VideoTranscript>> {
-        Ok(None)
+    fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoTranscript>> {
+        let conn = self.db.read()?;
+        conn.query_row(
+            "SELECT video_id, language, source, text, created_at
+             FROM video_transcripts WHERE video_id = ?1",
+            params![video_id.as_str()],
+            Self::read_row,
+        )
+        .optional()
+        .inspect_err(
+            |e| tracing::error!(video_id = %video_id, error = %e, "failed to find video transcript"),
+        )
+        .context("failed to find video transcript")?
+        .map(Self::row_to_video_transcript)
+        .transpose()
     }
 
     fn delete(&self, _video_id: &VideoRecordId) -> anyhow::Result<()> {
         Ok(())
+    }
+}
+
+impl SqliteVideoTranscriptRepository {
+    fn read_row(row: &Row<'_>) -> rusqlite::Result<VideoTranscriptRow> {
+        Ok(VideoTranscriptRow {
+            video_id: row.get(0)?,
+            language: row.get(1)?,
+            source: row.get(2)?,
+            text: row.get(3)?,
+            created_at: row.get(4)?,
+        })
+    }
+
+    fn row_to_video_transcript(row: VideoTranscriptRow) -> anyhow::Result<VideoTranscript> {
+        Ok(VideoTranscript {
+            video_id: VideoRecordId::new(row.video_id)?,
+            language: CaptionLanguage::new(&row.language)?,
+            source: CaptionSource::parse(&row.source)?,
+            text: TranscriptText::new(&row.text),
+            created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                .context("failed to parse stored created_at")?
+                .with_timezone(&Utc),
+        })
     }
 }

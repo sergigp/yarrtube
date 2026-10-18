@@ -235,7 +235,8 @@ impl FakeVideoDownloaderRepository {
         }
     }
 
-    /// Configures what `fetch_subtitles` returns.
+    /// Configures what `fetch_subtitles` returns, its path relative to the
+    /// staging dir.
     pub fn with_subtitles_result(self, result: anyhow::Result<FetchedSubtitles>) -> Self {
         Self {
             subtitles_result: std::sync::Mutex::new(Some(result)),
@@ -359,7 +360,7 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
         &self,
         _probe: &CaptionProbe,
         _track: &CaptionTrack,
-        _staging_dir: &Path,
+        staging_dir: &Path,
     ) -> anyhow::Result<FetchedSubtitles> {
         *self.caption_calls.lock().unwrap() += 1;
         self.subtitles_result
@@ -367,6 +368,10 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
             .unwrap()
             .take()
             .unwrap_or_else(|| Err(anyhow::anyhow!("no fake subtitles configured")))
+            .map(|fetched| FetchedSubtitles {
+                path: staging_dir.join(&fetched.path),
+                ..fetched
+            })
     }
 }
 

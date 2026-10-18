@@ -1,3 +1,5 @@
+use super::caption_language::CaptionLanguage;
+use super::caption_source::CaptionSource;
 use super::caption_track::CaptionTrack;
 
 /// The caption tracks yt-dlp's info JSON lists for a video.
@@ -17,6 +19,18 @@ impl CaptionTracks {
     /// Manual `<lang>`/`<lang>-*`, else automatic `<lang>-orig`, else
     /// automatic `<lang>`; no language reported: the only automatic `*-orig`.
     pub fn original(&self) -> Option<CaptionTrack> {
-        None
+        let language = self.original_language.as_deref()?;
+        self.manual
+            .iter()
+            .find(|key| key.as_str() == language)
+            .and_then(|key| track(key, language, CaptionSource::Manual))
     }
+}
+
+fn track(key: &str, language: &str, source: CaptionSource) -> Option<CaptionTrack> {
+    Some(CaptionTrack {
+        key: key.to_string(),
+        language: CaptionLanguage::new(language).ok()?,
+        source,
+    })
 }

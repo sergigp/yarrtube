@@ -11,10 +11,19 @@ pub enum SubtitleState {
 
 impl SubtitleState {
     pub fn as_str(&self) -> &'static str {
-        "MISSING"
+        match self {
+            Self::Missing => "MISSING",
+            Self::Fetched => "FETCHED",
+            Self::Unavailable => "UNAVAILABLE",
+        }
     }
 
-    pub fn parse(_value: &str) -> Result<Self, ValidationError> {
-        Ok(Self::Missing)
+    pub fn parse(value: &str) -> Result<Self, ValidationError> {
+        match value {
+            "MISSING" => Ok(Self::Missing),
+            "FETCHED" => Ok(Self::Fetched),
+            "UNAVAILABLE" => Ok(Self::Unavailable),
+            other => Err(ValidationError(format!("unknown subtitle state '{other}'"))),
+        }
     }
 }

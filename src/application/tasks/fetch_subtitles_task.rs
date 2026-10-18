@@ -1,12 +1,14 @@
-use crate::domain::services::SubtitleFetcher;
+use crate::domain::services::{SubtitleFetcher, SubtitleFetcherApi};
+use crate::domain::task::Task;
+use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
+use std::path::Path;
 use std::sync::Arc;
 
 /// Fetches one downloaded video's subtitles, scheduled by the reconcilers'
 /// missing-subtitles recovery. Best-effort: always succeeds, so the queue
 /// never retries it; the next reconcile pass reschedules it instead.
-#[allow(dead_code)]
 pub struct FetchSubtitlesTask {
     video_repository: Arc<dyn VideoRepository>,
     subtitle_fetcher: Arc<SubtitleFetcher>,
@@ -25,7 +27,168 @@ impl FetchSubtitlesTask {
 }
 
 impl TaskHandler for FetchSubtitlesTask {
-    fn handle(&self, _payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
+    fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
+        let (video_id, output_dir) = Task::decode_fetch_subtitles_payload(payload)?;
+        let video_id = VideoRecordId::new(video_id)?;
+        let Some(video) = self.video_repository.find(&video_id)? else {
+            return Ok(());
+        };
+        self.subtitle_fetcher.fetch(&video, Path::new(&output_dir));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::shared::Quality;
+    use crate::domain::video::{EpisodeNumber, Video, VideoId};
+    use crate::domain::video_transcript::{
+        CaptionLanguage, CaptionSource, CaptionTracks, TranscriptText, VideoTranscript,
+    };
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
+    use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
+        SqliteVideoTranscriptRepository, VideoTranscriptRepository,
+    };
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::{
+        CaptionProbe, FakeVideoDownloaderRepository, FetchedSubtitles,
+    };
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use chrono::{DateTime, Utc};
+    use std::path::PathBuf;
+
+    #[test]
+    fn it_should_fetch_the_original_language_subtitles() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default()
+                .with_caption_probe(Ok(caption_probe(CaptionTracks {
+                    original_language: Some("en".to_string()),
+                    manual: vec!["en".to_string(), "fr".to_string()],
+                    automatic: vec!["en-orig".to_string(), "en".to_string()],
+                })))
+                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        );
+        let video = downloaded_video();
+        video_repository.save(&video).unwrap();
+        let task = FetchSubtitlesTask::new(
+            video_repository.clone(),
+            Arc::new(SubtitleFetcher::new(
+                video_repository.clone(),
+                video_transcript_repository.clone(),
+                video_downloader_repository.clone(),
+                video_file_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(FixedClock(now())),
+                "/videos",
+            )),
+        );
+
+        let result = run(&task, &payload_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                video
+                    .clone()
+                    .with_subtitles("Season 2026/S2026E031501 - Title.en.srt", now())
+            ]
+        );
+        assert_eq!(
+            *video_file_repository.moved.lock().unwrap(),
+            vec![(
+                staging_dir(&video).join("yt1.en.srt"),
+                PathBuf::from("/videos/my-channel/Season 2026/S2026E031501 - Title.en.srt"),
+            )]
+        );
+        assert_eq!(
+            video_transcript_repository.find(&video.id).unwrap(),
+            Some(VideoTranscript {
+                video_id: video.id.clone(),
+                language: CaptionLanguage::new("en").unwrap(),
+                source: CaptionSource::Manual,
+                text: TranscriptText::new("Hello there\nGeneral Kenobi"),
+                created_at: now(),
+            })
+        );
+    }
+
+    /// A downloaded channel episode numbered `2026`/`031501`, its subtitles
+    /// still missing.
+    fn downloaded_video() -> Video {
+        Video::create(VideoId::new("yt1").unwrap(), "Title", fixed_timestamp())
+            .with_episode_number(
+                EpisodeNumber::from_columns(2026, 31501).unwrap(),
+                fixed_timestamp(),
+            )
+            .mark_downloaded(
+                Quality::High,
+                "Season 2026/S2026E031501 - Title.mp4",
+                None,
+                None,
+                fixed_timestamp(),
+            )
+    }
+
+    fn caption_probe(tracks: CaptionTracks) -> CaptionProbe {
+        CaptionProbe {
+            tracks,
+            published_at: Some(fixed_timestamp()),
+            info_json: PathBuf::from("yt1.info.json"),
+        }
+    }
+
+    /// Subtitles staged at `path`, relative to the staging dir.
+    fn fetched_subtitles(path: &str) -> FetchedSubtitles {
+        FetchedSubtitles {
+            path: PathBuf::from(path),
+            srt: SRT.to_string(),
+        }
+    }
+
+    const SRT: &str = "1\n00:00:00,000 --> 00:00:02,000\nHello there\n\n2\n00:00:02,000 --> 00:00:04,000\nGeneral Kenobi\n";
+
+    fn staging_dir(video: &Video) -> PathBuf {
+        PathBuf::from(format!(
+            "/videos/.downloads/{}-subtitles",
+            video.id.as_str()
+        ))
+    }
+
+    fn payload_for(video_id: &str) -> String {
+        Task::FetchSubtitles {
+            video_id: video_id.to_string(),
+            output_dir: "/videos/my-channel".to_string(),
+        }
+        .payload()
+        .to_string()
+    }
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339("2026-03-15T10:00:00Z")
+            .unwrap()
+            .to_utc()
+    }
+
+    /// When the fetch runs: 30 days after `fixed_timestamp`.
+    fn now() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339("2026-04-14T10:00:00Z")
+            .unwrap()
+            .to_utc()
+    }
+
+    fn run(task: &FetchSubtitlesTask, payload: &str) -> Result<(), String> {
+        task.handle(payload, false).map_err(|e| e.to_string())
     }
 }

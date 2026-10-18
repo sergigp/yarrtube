@@ -10,10 +10,17 @@ pub enum CaptionSource {
 
 impl CaptionSource {
     pub fn as_str(&self) -> &'static str {
-        "MANUAL"
+        match self {
+            Self::Manual => "MANUAL",
+            Self::Automatic => "AUTOMATIC",
+        }
     }
 
-    pub fn parse(_value: &str) -> Result<Self, ValidationError> {
-        Ok(Self::Manual)
+    pub fn parse(value: &str) -> Result<Self, ValidationError> {
+        match value {
+            "MANUAL" => Ok(Self::Manual),
+            "AUTOMATIC" => Ok(Self::Automatic),
+            other => Err(ValidationError(format!("unknown caption source '{other}'"))),
+        }
     }
 }
