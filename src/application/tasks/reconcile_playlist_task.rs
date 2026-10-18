@@ -710,6 +710,47 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_schedule_the_next_reconcile_if_one_is_already_pending() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let pending_reconcile = Task::ReconcilePlaylist {
+            playlist_id: "PL1".to_string(),
+        };
+        task_repository
+            .schedule(
+                &pending_reconcile,
+                fixed_timestamp() + chrono::Duration::minutes(5),
+            )
+            .unwrap();
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Vec::new(),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &pending_reconcile,
+                fixed_timestamp() + chrono::Duration::minutes(5),
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_not_schedule_the_next_reconcile_if_playlist_deleted_during_the_pass() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
