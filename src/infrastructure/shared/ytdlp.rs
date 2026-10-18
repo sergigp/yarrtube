@@ -1224,6 +1224,25 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn it_should_fail_the_probe_on_a_clean_failed_exit() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-captions-staging");
+        let ytdlp = fake_ytdlp_writing_stderr(
+            "ytdlp-captions-failing",
+            "ERROR: [youtube] yt1: HTTP Error 429: Too Many Requests",
+            1,
+        );
+
+        let result = probe_captions(&ytdlp, "https://example.com/video", &staging_dir);
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err("yt-dlp failed to probe captions for https://example.com/video: ERROR: [youtube] yt1: HTTP Error 429: Too Many Requests".to_string())
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn it_should_report_the_staged_thumbnail_written_next_to_the_download() {
         use test_support::{FakeYtDlp, unique_temp_dir};
 
