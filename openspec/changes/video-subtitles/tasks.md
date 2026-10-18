@@ -7,7 +7,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `it_should_fetch_the_original_language_subtitles`: places `<stem>.en.srt`, records Fetched + filename, stores the transcript
-- [ ] 2.2 `it_should_record_auto_generated_captions_as_automatic`
+- [x] 2.2 `it_should_record_auto_generated_captions_as_automatic`
 - [ ] 2.3 `it_should_mark_an_old_video_without_captions_unavailable`
 - [ ] 2.4 `it_should_keep_a_recent_video_without_captions_missing`
 - [ ] 2.5 `it_should_fall_back_to_the_creation_time_when_no_publish_time_is_reported`

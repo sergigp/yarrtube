@@ -2,6 +2,10 @@ use super::caption_language::CaptionLanguage;
 use super::caption_source::CaptionSource;
 use super::caption_track::CaptionTrack;
 
+/// What yt-dlp appends to the key of the auto-generated track in the
+/// video's original language, e.g. `en-orig`.
+const ORIGINAL_MARKER: &str = "-orig";
+
 /// The caption tracks yt-dlp's info JSON lists for a video.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CaptionTracks {
@@ -20,10 +24,21 @@ impl CaptionTracks {
     /// automatic `<lang>`; no language reported: the only automatic `*-orig`.
     pub fn original(&self) -> Option<CaptionTrack> {
         let language = self.original_language.as_deref()?;
-        self.manual
+        let original_key = format!("{language}{ORIGINAL_MARKER}");
+        let manual = self
+            .manual
             .iter()
             .find(|key| key.as_str() == language)
-            .and_then(|key| track(key, language, CaptionSource::Manual))
+            .map(|key| (key, CaptionSource::Manual));
+        let automatic = || {
+            self.automatic
+                .iter()
+                .find(|key| **key == original_key)
+                .map(|key| (key, CaptionSource::Automatic))
+        };
+        manual
+            .or_else(automatic)
+            .and_then(|(key, source)| track(key, language, source))
     }
 }
 
