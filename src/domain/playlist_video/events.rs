@@ -17,6 +17,7 @@ pub struct VideoRemovedFromPlaylist {
     pub title: String,
     pub filename: Option<String>,
     pub thumbnail_filename: Option<String>,
+    pub subtitle_filename: Option<String>,
     pub was_downloaded: bool,
 }
 

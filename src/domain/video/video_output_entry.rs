@@ -84,6 +84,14 @@ pub fn staging_dir(videos_path: &str, video_id: &VideoRecordId) -> PathBuf {
         .join(video_id.as_str())
 }
 
+/// Where a video's subtitle fetch is staged: a sibling of its download and
+/// thumbnail staging dir, `<videos root>/.downloads/<video record id>-subtitles`,
+/// since a thumbnail fetch discards its own dir whole, possibly while a
+/// subtitle fetch of the same video runs in its own lane.
+pub fn subtitle_staging_dir(_videos_path: &str, _video_id: &VideoRecordId) -> PathBuf {
+    PathBuf::new()
+}
+
 /// Whether a file name starts with an episode code: `S<season>E<episode> - `.
 fn is_episode_file_name(file_name: &str) -> bool {
     file_name

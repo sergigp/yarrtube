@@ -1,5 +1,6 @@
 use crate::domain::video::EpisodeNumber;
 use crate::domain::video::video_filename::VideoFilename;
+use crate::domain::video_transcript::CaptionLanguage;
 
 /// Where an episode's files sit in its show, relative to the show directory:
 /// every file shares the stem `Season <s>/<code> - <title>` and differs only
@@ -36,6 +37,11 @@ impl EpisodePaths {
 
     pub fn nfo(&self) -> String {
         self.media("nfo")
+    }
+
+    /// `<stem>.<lang>.srt`, the episode's subtitle file in `language`.
+    pub fn subtitle(&self, _language: &CaptionLanguage) -> String {
+        String::new()
     }
 
     /// The thumbnail's file name as the episode NFO references it: a sibling

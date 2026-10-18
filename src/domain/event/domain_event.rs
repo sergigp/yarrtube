@@ -126,6 +126,7 @@ mod tests {
             title: "My Video".to_string(),
             filename: Some("My Video.mp4".to_string()),
             thumbnail_filename: Some("My Video.jpg".to_string()),
+            subtitle_filename: None,
             was_downloaded: true,
         });
 
@@ -138,6 +139,7 @@ mod tests {
                 "title": "My Video",
                 "filename": "My Video.mp4",
                 "thumbnail_filename": "My Video.jpg",
+                "subtitle_filename": null,
                 "was_downloaded": true,
             })
         );
@@ -151,6 +153,7 @@ mod tests {
             title: "My Video".to_string(),
             filename: None,
             thumbnail_filename: None,
+            subtitle_filename: None,
             was_downloaded: false,
         });
 
@@ -162,6 +165,7 @@ mod tests {
                 "title": "My Video",
                 "filename": null,
                 "thumbnail_filename": null,
+                "subtitle_filename": null,
                 "was_downloaded": false,
             })
         );
@@ -218,6 +222,7 @@ mod tests {
             title: "My Video".to_string(),
             filename: Some("My Video.mp4".to_string()),
             thumbnail_filename: Some("My Video.jpg".to_string()),
+            subtitle_filename: None,
             was_downloaded: true,
         });
 
@@ -230,6 +235,7 @@ mod tests {
                 "title": "My Video",
                 "filename": "My Video.mp4",
                 "thumbnail_filename": "My Video.jpg",
+                "subtitle_filename": null,
                 "was_downloaded": true,
             })
         );

@@ -32,6 +32,9 @@ use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
 use crate::infrastructure::repositories::sqlite_video_repository::{
     SqliteVideoRepository, VideoRepository,
 };
+use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
+    SqliteVideoTranscriptRepository, VideoTranscriptRepository,
+};
 use crate::infrastructure::repositories::youtube_channel_repository::{
     YoutubeApiChannelRepository, YoutubeChannelRepository,
 };
@@ -83,6 +86,7 @@ pub struct InfrastructureContainer {
     pub playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     pub channel_video_repository: Arc<dyn ChannelVideoRepository>,
     pub video_metadata_repository: Arc<dyn VideoMetadataRepository>,
+    pub video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
     pub task_repository: Arc<dyn TaskRepository>,
     pub event_publisher: Arc<dyn EventPublisher>,
     pub event_repository: Arc<dyn EventRepository>,
@@ -118,6 +122,7 @@ impl InfrastructureContainer {
             playlist_video_repository: Arc::new(SqlitePlaylistVideoRepository::new(db.clone())),
             channel_video_repository: Arc::new(SqliteChannelVideoRepository::new(db.clone())),
             video_metadata_repository: Arc::new(SqliteVideoMetadataRepository::new(db.clone())),
+            video_transcript_repository: Arc::new(SqliteVideoTranscriptRepository::new(db.clone())),
             task_repository: Arc::new(SqliteTaskRepository::new(db.clone(), clock.clone())),
             event_publisher: Arc::new(SqliteEventPublisher::new(db.clone(), clock.clone())),
             event_repository: Arc::new(SqliteEventRepository::new(db.clone())),

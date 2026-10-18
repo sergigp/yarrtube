@@ -15,6 +15,7 @@ const PLAYLIST_EXCLUDE_FROM_HOME_SQL: &str =
 const EPISODE_NUMBERS_SQL: &str = include_str!("../../../migrations/0008_episode_numbers.sql");
 const RECONCILE_INTERVAL_SQL: &str =
     include_str!("../../../migrations/0009_reconcile_interval.sql");
+const VIDEO_SUBTITLES_SQL: &str = include_str!("../../../migrations/0010_video_subtitles.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -27,6 +28,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
         M::up(EPISODE_NUMBERS_SQL),
         M::up(RECONCILE_INTERVAL_SQL),
+        M::up(VIDEO_SUBTITLES_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
@@ -68,6 +70,7 @@ mod tests {
                 "tasks",
                 "tasks_dead_letter",
                 "video_metadata",
+                "video_transcripts",
                 "videos",
             ]
         );

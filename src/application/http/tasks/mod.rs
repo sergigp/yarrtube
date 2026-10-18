@@ -27,7 +27,7 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::Task;
-    use crate::domain::video::{PlaybackPosition, Video, VideoStatus};
+    use crate::domain::video::{PlaybackPosition, SubtitleState, Video, VideoStatus};
     use crate::domain::video::{VideoId, VideoRecordId};
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
@@ -476,6 +476,7 @@ mod tests {
                 &Task::DeleteVideoFile {
                     filename: Some("My Video.mp4".to_string()),
                     thumbnail_filename: Some("My Video.jpg".to_string()),
+                    subtitle_filename: None,
                     output_dir: "/videos/music".to_string(),
                 },
                 fixed_timestamp(),
@@ -513,6 +514,7 @@ mod tests {
                 &Task::DeleteVideoFile {
                     filename: None,
                     thumbnail_filename: None,
+                    subtitle_filename: None,
                     output_dir: "/videos/music".to_string(),
                 },
                 fixed_timestamp(),
@@ -701,6 +703,8 @@ mod tests {
             last_errored_at: None,
             last_played_at: None,
             episode_number: None,
+            subtitle_state: SubtitleState::Missing,
+            subtitle_filename: None,
         }
     }
 

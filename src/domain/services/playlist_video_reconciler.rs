@@ -13,6 +13,7 @@ use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRep
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::{
     YoutubePlaylistItem, YoutubePlaylistItemsRepository,
 };
@@ -31,6 +32,7 @@ use tracing::{debug, info, info_span, warn};
 pub struct PlaylistVideoReconciler {
     playlist_repository: Arc<dyn PlaylistRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     youtube_playlist_items_repository: Arc<dyn YoutubePlaylistItemsRepository>,
     event_publisher: Arc<dyn EventPublisher>,
@@ -45,6 +47,7 @@ impl PlaylistVideoReconciler {
     pub fn new(
         playlist_repository: Arc<dyn PlaylistRepository>,
         video_repository: Arc<dyn VideoRepository>,
+        video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         youtube_playlist_items_repository: Arc<dyn YoutubePlaylistItemsRepository>,
         event_publisher: Arc<dyn EventPublisher>,
@@ -56,6 +59,7 @@ impl PlaylistVideoReconciler {
         Self {
             playlist_repository,
             video_repository,
+            video_transcript_repository,
             playlist_video_repository,
             youtube_playlist_items_repository,
             event_publisher,
@@ -340,6 +344,7 @@ impl PlaylistVideoReconciler {
                 self.playlist_video_repository
                     .delete(&playlist.id, &video.youtube_id)?;
                 self.video_repository.delete(&video.id)?;
+                self.video_transcript_repository.delete(&video.id)?;
                 self.event_publisher
                     .publish(&DomainEvent::VideoRemovedFromPlaylist(
                         VideoRemovedFromPlaylist {
@@ -348,6 +353,7 @@ impl PlaylistVideoReconciler {
                             title: video.title.clone(),
                             filename: video.filename.clone(),
                             thumbnail_filename: video.thumbnail_filename.clone(),
+                            subtitle_filename: video.subtitle_filename.clone(),
                             was_downloaded: video.status == VideoStatus::Downloaded,
                         },
                     ))

@@ -2,6 +2,7 @@ pub mod delete_channel_files_task;
 pub mod delete_playlist_files_task;
 pub mod delete_video_file_task;
 pub mod download_video_task;
+pub mod fetch_subtitles_task;
 pub mod fetch_thumbnail_task;
 #[cfg(test)]
 pub(crate) mod log_capture;
@@ -10,8 +11,8 @@ pub mod reconcile_playlist_task;
 pub mod update_ytdlp_task;
 
 use crate::domain::services::{
-    ChannelVideoReconciler, PlaylistVideoReconciler, ThumbnailFetcher, VideoDownloader,
-    VideoFileDeleter,
+    ChannelVideoReconciler, PlaylistVideoReconciler, SubtitleFetcher, ThumbnailFetcher,
+    VideoDownloader, VideoFileDeleter,
 };
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -22,6 +23,7 @@ use delete_channel_files_task::DeleteChannelFilesTask;
 use delete_playlist_files_task::DeletePlaylistFilesTask;
 use delete_video_file_task::DeleteVideoFileTask;
 use download_video_task::DownloadVideoTask;
+use fetch_subtitles_task::FetchSubtitlesTask;
 use fetch_thumbnail_task::FetchThumbnailTask;
 use reconcile_channel_task::ReconcileChannelTask;
 use reconcile_playlist_task::ReconcilePlaylistTask;
@@ -38,6 +40,7 @@ pub fn registry(
     channel_video_reconciler: ChannelVideoReconciler,
     video_downloader: VideoDownloader,
     thumbnail_fetcher: Arc<ThumbnailFetcher>,
+    subtitle_fetcher: Arc<SubtitleFetcher>,
     video_repository: Arc<dyn VideoRepository>,
     video_file_deleter: VideoFileDeleter,
     task_repository: Arc<dyn TaskRepository>,
@@ -60,7 +63,14 @@ pub fn registry(
     );
     registry.insert(
         "fetch_thumbnail".to_string(),
-        Arc::new(FetchThumbnailTask::new(video_repository, thumbnail_fetcher)),
+        Arc::new(FetchThumbnailTask::new(
+            video_repository.clone(),
+            thumbnail_fetcher,
+        )),
+    );
+    registry.insert(
+        "fetch_subtitles".to_string(),
+        Arc::new(FetchSubtitlesTask::new(video_repository, subtitle_fetcher)),
     );
     registry.insert(
         "delete_video_file".to_string(),

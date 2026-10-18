@@ -11,3 +11,4 @@ pub mod show;
 pub mod task;
 pub mod video;
 pub mod video_metadata;
+pub mod video_transcript;

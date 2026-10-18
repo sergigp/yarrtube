@@ -42,6 +42,7 @@ pub trait VideoFileDeleterApi: Send + Sync {
         &self,
         filename: Option<String>,
         thumbnail_filename: Option<String>,
+        subtitle_filename: Option<String>,
         output_dir: &Path,
     ) -> anyhow::Result<()>;
 
@@ -72,6 +73,7 @@ impl VideoFileDeleterApi for VideoFileDeleter {
         &self,
         filename: Option<String>,
         thumbnail_filename: Option<String>,
+        _subtitle_filename: Option<String>,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
         self.delete_video_entry(filename, output_dir)?;
@@ -162,6 +164,7 @@ mod tests {
             .delete_video_file(
                 Some("My Video/My Video.mp4".to_string()),
                 Some("My Video/My Video.jpg".to_string()),
+                None,
                 Path::new("/videos/playlist"),
             )
             .unwrap();
@@ -184,6 +187,7 @@ mod tests {
             .delete_video_file(
                 Some("My Video.mp4".to_string()),
                 Some("My Video.jpg".to_string()),
+                None,
                 Path::new("/videos/playlist"),
             )
             .unwrap();
@@ -209,7 +213,7 @@ mod tests {
         let (deleter, repo) = deleter(FakeVideoFileRepository::default());
 
         deleter
-            .delete_video_file(None, None, Path::new("/videos/playlist"))
+            .delete_video_file(None, None, None, Path::new("/videos/playlist"))
             .unwrap();
 
         assert!(repo.deleted_calls.lock().unwrap().is_empty());

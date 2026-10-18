@@ -12,6 +12,7 @@ use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepos
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::repositories::youtube_channel_videos_repository::{
     ChannelVideoListing, ChannelVideosRepository,
 };
@@ -31,6 +32,7 @@ use tracing::{info, info_span, warn};
 pub struct ChannelVideoReconciler {
     channel_repository: Arc<dyn ChannelRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     channel_videos_repository: Arc<dyn ChannelVideosRepository>,
     event_publisher: Arc<dyn EventPublisher>,
@@ -46,6 +48,7 @@ impl ChannelVideoReconciler {
     pub fn new(
         channel_repository: Arc<dyn ChannelRepository>,
         video_repository: Arc<dyn VideoRepository>,
+        video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         channel_videos_repository: Arc<dyn ChannelVideosRepository>,
         event_publisher: Arc<dyn EventPublisher>,
@@ -58,6 +61,7 @@ impl ChannelVideoReconciler {
         Self {
             channel_repository,
             video_repository,
+            video_transcript_repository,
             channel_video_repository,
             channel_videos_repository,
             event_publisher,
@@ -330,6 +334,7 @@ impl ChannelVideoReconciler {
                 self.channel_video_repository
                     .delete(&channel.id, &video.youtube_id)?;
                 self.video_repository.delete(&video.id)?;
+                self.video_transcript_repository.delete(&video.id)?;
                 self.event_publisher
                     .publish(&DomainEvent::VideoRemovedFromChannel(
                         VideoRemovedFromChannel {
@@ -338,6 +343,7 @@ impl ChannelVideoReconciler {
                             title: video.title.clone(),
                             filename: video.filename.clone(),
                             thumbnail_filename: video.thumbnail_filename.clone(),
+                            subtitle_filename: video.subtitle_filename.clone(),
                             was_downloaded: video.status == VideoStatus::Downloaded,
                         },
                     ))

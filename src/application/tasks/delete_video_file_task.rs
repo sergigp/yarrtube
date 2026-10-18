@@ -19,11 +19,12 @@ impl DeleteVideoFileTask {
 
 impl TaskHandler for DeleteVideoFileTask {
     fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
-        let (filename, thumbnail_filename, output_dir) =
+        let (filename, thumbnail_filename, subtitle_filename, output_dir) =
             Task::decode_delete_video_file_payload(payload)?;
         self.video_file_deleter.delete_video_file(
             filename,
             thumbnail_filename,
+            subtitle_filename,
             Path::new(&output_dir),
         )
     }
@@ -206,6 +207,7 @@ mod tests {
         Task::DeleteVideoFile {
             filename: filename.map(str::to_string),
             thumbnail_filename: thumbnail_filename.map(str::to_string),
+            subtitle_filename: None,
             output_dir: "/videos/my-playlist".to_string(),
         }
         .payload()

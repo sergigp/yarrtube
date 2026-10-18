@@ -4,6 +4,7 @@
 pub enum TaskLane {
     Download,
     Thumbnail,
+    Subtitles,
     Light,
     Exclusive,
 }

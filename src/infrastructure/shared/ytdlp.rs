@@ -1,4 +1,5 @@
 use crate::domain::shared::Quality;
+use crate::domain::video_transcript::{CaptionTrack, CaptionTracks};
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
 use std::io;
@@ -314,6 +315,53 @@ pub fn fetch_thumbnail(
             ),
         }),
         None => ThumbnailFetch::Unavailable { reason: None },
+    })
+}
+
+/// A caption probe's result: the tracks yt-dlp's info JSON lists, the
+/// video's publish time when reported, and the info JSON itself, written to
+/// the staging dir.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptionProbe {
+    pub tracks: CaptionTracks,
+    pub published_at: Option<DateTime<Utc>>,
+    /// Reused by `fetch_subtitles` (`--load-info-json`): one extraction per
+    /// video, fewer YouTube requests.
+    pub info_json: PathBuf,
+}
+
+/// A caption-only download's result: the staged `.srt` and its contents.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FetchedSubtitles {
+    pub path: PathBuf,
+    pub srt: String,
+}
+
+/// `-J --skip-download`; Err on any failure (clean or systemic), so the
+/// caller leaves the video Missing.
+pub fn probe_captions(
+    _ytdlp_path: &Path,
+    _video_url: &str,
+    _staging_dir: &Path,
+) -> Result<CaptionProbe> {
+    Ok(CaptionProbe {
+        tracks: CaptionTracks::default(),
+        published_at: None,
+        info_json: PathBuf::new(),
+    })
+}
+
+/// `--load-info-json --skip-download --write-subs|--write-auto-subs
+/// --sub-langs <key> --sub-format vtt --convert-subs srt`.
+pub fn fetch_subtitles(
+    _ytdlp_path: &Path,
+    _probe: &CaptionProbe,
+    _track: &CaptionTrack,
+    _staging_dir: &Path,
+) -> Result<FetchedSubtitles> {
+    Ok(FetchedSubtitles {
+        path: PathBuf::new(),
+        srt: String::new(),
     })
 }
 

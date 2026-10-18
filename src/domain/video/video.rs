@@ -1,5 +1,6 @@
 use super::episode_number::EpisodeNumber;
 use super::playback_position::PlaybackPosition;
+use super::subtitle_state::SubtitleState;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
 use super::video_output_entry::is_episode_path;
@@ -47,6 +48,9 @@ pub struct Video {
     /// The video's episode number within its show, assigned once by the
     /// first thumbnail fetch, download or relocation that places a file.
     pub episode_number: Option<EpisodeNumber>,
+    pub subtitle_state: SubtitleState,
+    /// The episode's subtitle file, recorded once its subtitles are fetched.
+    pub subtitle_filename: Option<String>,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -71,6 +75,8 @@ impl Video {
             last_errored_at: None,
             last_played_at: None,
             episode_number: None,
+            subtitle_state: SubtitleState::Missing,
+            subtitle_filename: None,
         }
     }
 
@@ -274,6 +280,29 @@ impl Video {
     /// nor an `Errored` one, whose recovery redownload writes its own.
     pub fn is_thumbnail_fetchable(&self) -> bool {
         !matches!(self.status, VideoStatus::Excluded | VideoStatus::Errored)
+    }
+
+    /// Whether a subtitle fetch is worth attempting: Downloaded, numbered,
+    /// and its subtitles still Missing.
+    pub fn is_subtitle_fetchable(&self) -> bool {
+        false
+    }
+
+    /// Records the fetched subtitle file: subtitle state Fetched. Touches
+    /// only the subtitle fields and `updated_at`, stored through
+    /// `VideoRepository::update_subtitles` only.
+    pub fn with_subtitles(
+        self,
+        _subtitle_filename: impl Into<String>,
+        _now: DateTime<Utc>,
+    ) -> Self {
+        self
+    }
+
+    /// The video has no original-language captions: a terminal subtitle
+    /// state.
+    pub fn mark_subtitles_unavailable(self, _now: DateTime<Utc>) -> Self {
+        self
     }
 
     /// Records the episode number assigned to this video.

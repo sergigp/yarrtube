@@ -66,6 +66,7 @@ impl EventSubscriber for DeleteVideoFileOnVideoRemovedFromPlaylist {
             &Task::DeleteVideoFile {
                 filename: payload.filename,
                 thumbnail_filename: payload.thumbnail_filename,
+                subtitle_filename: None,
                 output_dir: output_dir.to_string_lossy().to_string(),
             },
             self.clock.now(),
@@ -115,6 +116,7 @@ mod tests {
                 &Task::DeleteVideoFile {
                     filename: Some("My Video.mp4".to_string()),
                     thumbnail_filename: Some("My Video.jpg".to_string()),
+                    subtitle_filename: None,
                     output_dir: "/videos/my-playlist".to_string(),
                 },
             )]

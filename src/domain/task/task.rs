@@ -19,6 +19,7 @@ pub enum Task {
     DeleteVideoFile {
         filename: Option<String>,
         thumbnail_filename: Option<String>,
+        subtitle_filename: Option<String>,
         output_dir: String,
     },
     DeletePlaylistFiles {
@@ -31,6 +32,10 @@ pub enum Task {
     },
     UpdateYtdlp,
     FetchThumbnail {
+        video_id: String,
+        output_dir: String,
+    },
+    FetchSubtitles {
         video_id: String,
         output_dir: String,
     },
@@ -57,6 +62,9 @@ struct DownloadVideoPayload {
 struct DeleteVideoFilePayload {
     filename: Option<String>,
     thumbnail_filename: Option<String>,
+    /// Absent from tasks queued before subtitles existed.
+    #[serde(default)]
+    subtitle_filename: Option<String>,
     output_dir: String,
 }
 
@@ -81,6 +89,12 @@ struct FetchThumbnailPayload {
     output_dir: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct FetchSubtitlesPayload {
+    video_id: String,
+    output_dir: String,
+}
+
 impl Task {
     pub fn task_type(&self) -> &'static str {
         match self {
@@ -92,6 +106,7 @@ impl Task {
             Self::DeleteChannelFiles { .. } => "delete_channel_files",
             Self::UpdateYtdlp => "update_ytdlp",
             Self::FetchThumbnail { .. } => "fetch_thumbnail",
+            Self::FetchSubtitles { .. } => "fetch_subtitles",
         }
     }
 
@@ -107,10 +122,12 @@ impl Task {
             Self::DeleteVideoFile {
                 filename,
                 thumbnail_filename,
+                subtitle_filename,
                 output_dir,
             } => json!({
                 "filename": filename,
                 "thumbnail_filename": thumbnail_filename,
+                "subtitle_filename": subtitle_filename,
                 "output_dir": output_dir,
             }),
             Self::DeletePlaylistFiles { playlist_id, path } => json!({
@@ -123,6 +140,10 @@ impl Task {
             }),
             Self::UpdateYtdlp => json!({}),
             Self::FetchThumbnail {
+                video_id,
+                output_dir,
+            } => json!({ "video_id": video_id, "output_dir": output_dir }),
+            Self::FetchSubtitles {
                 video_id,
                 output_dir,
             } => json!({ "video_id": video_id, "output_dir": output_dir }),
@@ -158,15 +179,18 @@ impl Task {
 
     /// Decodes a `delete_video_file` task's raw JSON payload, as handed to a
     /// `TaskHandler`, back into the recorded filename, recorded thumbnail
-    /// filename, and output directory it targets.
+    /// filename, recorded subtitle filename, and output directory it
+    /// targets.
+    #[allow(clippy::type_complexity)]
     pub fn decode_delete_video_file_payload(
         payload: &str,
-    ) -> Result<(Option<String>, Option<String>, String), TaskError> {
+    ) -> Result<(Option<String>, Option<String>, Option<String>, String), TaskError> {
         let parsed: DeleteVideoFilePayload = serde_json::from_str(payload)
             .map_err(|e| TaskError(format!("invalid delete_video_file payload: {e}")))?;
         Ok((
             parsed.filename,
             parsed.thumbnail_filename,
+            parsed.subtitle_filename,
             parsed.output_dir,
         ))
     }
@@ -211,12 +235,22 @@ impl Task {
         Ok((parsed.video_id, parsed.output_dir))
     }
 
+    /// Decodes a `fetch_subtitles` task's raw JSON payload, as handed to a
+    /// `TaskHandler`, back into the video's surrogate ID and the output
+    /// directory it targets.
+    pub fn decode_fetch_subtitles_payload(payload: &str) -> Result<(String, String), TaskError> {
+        let parsed: FetchSubtitlesPayload = serde_json::from_str(payload)
+            .map_err(|e| TaskError(format!("invalid fetch_subtitles payload: {e}")))?;
+        Ok((parsed.video_id, parsed.output_dir))
+    }
+
     /// The executor lane a task of `task_type` runs in. Unknown types fall
     /// into `Light`.
     pub fn lane_for(task_type: &str) -> TaskLane {
         match task_type {
             "download_video" => TaskLane::Download,
             "fetch_thumbnail" => TaskLane::Thumbnail,
+            "fetch_subtitles" => TaskLane::Subtitles,
             "update_ytdlp" => TaskLane::Exclusive,
             _ => TaskLane::Light,
         }
@@ -338,6 +372,7 @@ mod tests {
         let task = Task::DeleteVideoFile {
             filename: Some("My Video.mp4".to_string()),
             thumbnail_filename: Some("My Video.jpg".to_string()),
+            subtitle_filename: Some("My Video.en.srt".to_string()),
             output_dir: "/videos/music".to_string(),
         };
 
@@ -347,6 +382,7 @@ mod tests {
             json!({
                 "filename": "My Video.mp4",
                 "thumbnail_filename": "My Video.jpg",
+                "subtitle_filename": "My Video.en.srt",
                 "output_dir": "/videos/music",
             })
         );
@@ -357,14 +393,16 @@ mod tests {
         let task = Task::DeleteVideoFile {
             filename: Some("My Video.mp4".to_string()),
             thumbnail_filename: Some("My Video.jpg".to_string()),
+            subtitle_filename: Some("My Video.en.srt".to_string()),
             output_dir: "/videos/music".to_string(),
         };
 
-        let (filename, thumbnail_filename, output_dir) =
+        let (filename, thumbnail_filename, subtitle_filename, output_dir) =
             Task::decode_delete_video_file_payload(&task.payload().to_string()).unwrap();
 
         assert_eq!(filename, Some("My Video.mp4".to_string()));
         assert_eq!(thumbnail_filename, Some("My Video.jpg".to_string()));
+        assert_eq!(subtitle_filename, Some("My Video.en.srt".to_string()));
         assert_eq!(output_dir, "/videos/music");
     }
 
@@ -464,6 +502,7 @@ mod tests {
         let lanes: Vec<TaskLane> = [
             "download_video",
             "fetch_thumbnail",
+            "fetch_subtitles",
             "update_ytdlp",
             "reconcile_playlist",
             "reconcile_channel",
@@ -481,6 +520,7 @@ mod tests {
             vec![
                 TaskLane::Download,
                 TaskLane::Thumbnail,
+                TaskLane::Subtitles,
                 TaskLane::Exclusive,
                 TaskLane::Light,
                 TaskLane::Light,

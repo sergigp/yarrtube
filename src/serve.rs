@@ -5,8 +5,8 @@ use crate::domain::services::{
     ChannelVideoReconciler, ChannelViewSearcher, DirectorySearcher, InternalVideoReconciler,
     LayoutMigrator, MetadataGenerator, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer,
     PlaylistSearcher, PlaylistUpdater, PlaylistVideoReconciler, PlexFolderScanner, ShowFileWriter,
-    TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoRelocator,
-    VideoSearcher, VideoWatchStateUpdater,
+    SubtitleFetcher, TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter,
+    VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -473,6 +473,7 @@ fn task_handlers(infrastructure: &InfrastructureContainer) -> HandlerRegistry {
         channel_video_reconciler(infrastructure),
         video_downloader(infrastructure),
         thumbnail_fetcher(infrastructure),
+        subtitle_fetcher(infrastructure),
         infrastructure.video_repository.clone(),
         VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
         infrastructure.task_repository.clone(),
@@ -486,6 +487,7 @@ fn playlist_video_reconciler(infrastructure: &InfrastructureContainer) -> Playli
     PlaylistVideoReconciler::new(
         infrastructure.playlist_repository.clone(),
         infrastructure.video_repository.clone(),
+        infrastructure.video_transcript_repository.clone(),
         infrastructure.playlist_video_repository.clone(),
         infrastructure.youtube_playlist_items_repository.clone(),
         infrastructure.event_publisher.clone(),
@@ -500,6 +502,7 @@ fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> Channel
     ChannelVideoReconciler::new(
         infrastructure.channel_repository.clone(),
         infrastructure.video_repository.clone(),
+        infrastructure.video_transcript_repository.clone(),
         infrastructure.channel_video_repository.clone(),
         infrastructure.channel_videos_repository.clone(),
         infrastructure.event_publisher.clone(),
@@ -562,6 +565,7 @@ fn internal_video_reconciler(
         infrastructure.video_metadata_repository.clone(),
         infrastructure.task_repository.clone(),
         infrastructure.video_file_repository.clone(),
+        subtitle_fetcher(infrastructure),
         thumbnail_fetcher(infrastructure),
         video_relocator(infrastructure),
         infrastructure.clock.clone(),
@@ -572,6 +576,18 @@ fn internal_video_reconciler(
 fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailFetcher> {
     Arc::new(ThumbnailFetcher::new(
         infrastructure.video_repository.clone(),
+        infrastructure.video_downloader_repository.clone(),
+        infrastructure.video_file_repository.clone(),
+        infrastructure.task_repository.clone(),
+        infrastructure.clock.clone(),
+        videos_path(),
+    ))
+}
+
+fn subtitle_fetcher(infrastructure: &InfrastructureContainer) -> Arc<SubtitleFetcher> {
+    Arc::new(SubtitleFetcher::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.video_transcript_repository.clone(),
         infrastructure.video_downloader_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.task_repository.clone(),
@@ -911,6 +927,7 @@ mod tests {
                 "delete_playlist_files",
                 "delete_video_file",
                 "download_video",
+                "fetch_subtitles",
                 "fetch_thumbnail",
                 "reconcile_channel",
                 "reconcile_playlist",
