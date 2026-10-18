@@ -10,7 +10,7 @@ Channel HTTP:
 
 Playlist HTTP:
 - [x] 2.3 `it_should_remove_the_pending_reconcile_of_a_deleted_playlist`: pending reconcile of the playlist and of another playlist → only the other's remains.
-- [ ] 2.4 `it_should_remove_every_pending_reconcile_of_a_deleted_playlist`: two pending → none remain.
+- [x] 2.4 `it_should_remove_every_pending_reconcile_of_a_deleted_playlist`: two pending → none remain.
 
 Reconcile tasks:
 - [ ] 2.5 `reconcile_channel_task::it_should_not_schedule_the_next_reconcile_if_one_is_already_pending`: pending reconcile at `now + 5 min` → task list is exactly that one after the pass.

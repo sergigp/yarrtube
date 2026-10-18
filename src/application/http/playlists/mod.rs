@@ -980,6 +980,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_remove_every_pending_reconcile_of_a_deleted_playlist() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let event_repository = SqliteEventRepository::new(db.database());
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        task_repository
+            .schedule(
+                &reconcile_task("PL1"),
+                fixed_timestamp() + chrono::Duration::hours(1),
+            )
+            .unwrap();
+        task_repository
+            .schedule(
+                &reconcile_task("PL1"),
+                fixed_timestamp() + chrono::Duration::hours(3),
+            )
+            .unwrap();
+        let playlist_deleter = PlaylistDeleter::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            event_publisher(&db),
+            task_repository.clone(),
+        );
+
+        let response = delete(playlist_deleter, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(playlist_repository.list().unwrap(), vec![]);
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::PlaylistDeleted(PlaylistDeleted {
+                    playlist_id: "PL1".to_string(),
+                    name: "Lofi beats".to_string(),
+                    path: DEFAULT_PATH.to_string(),
+                })
+            )]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_delete_only_the_deleted_playlist_videos() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));

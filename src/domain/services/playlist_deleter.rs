@@ -82,7 +82,8 @@ impl PlaylistDeleter {
             .map_err(DeletePlaylistError::Repository)
     }
 
-    /// Removes every pending reconcile of the playlist, so none outlives it.
+    /// Removes every pending reconcile of the playlist, so none outlives it. A
+    /// database from before the one-pending-reconcile rule can hold several.
     fn remove_pending_reconciles(&self, id: &PlaylistId) -> Result<(), DeletePlaylistError> {
         let task = Task::ReconcilePlaylist {
             playlist_id: id.as_str().to_string(),
@@ -96,7 +97,8 @@ impl PlaylistDeleter {
         };
         self.task_repository
             .delete(pending.id)
-            .map_err(DeletePlaylistError::Repository)
+            .map_err(DeletePlaylistError::Repository)?;
+        self.remove_pending_reconciles(id)
     }
 
     fn delete_playlist(&self, id: &PlaylistId) -> Result<(), DeletePlaylistError> {
