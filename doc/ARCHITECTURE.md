@@ -76,7 +76,14 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    the show folder when the scan trigger is configured.
 5. Every interval, the `ReconcileChannel` task runs the sync again and schedules
    the next one. New uploads repeat steps 3–4. The sync also schedules a
-   `FetchThumbnail` for any video still missing its thumbnail.
+   `FetchThumbnail` for any video still missing its thumbnail, and a
+   `FetchSubtitles` for any downloaded video whose subtitles are still
+   `MISSING` (so an upgraded library is backfilled). `FetchSubtitles` runs
+   in its own lane, one at a time: it probes the video's caption tracks,
+   writes the original-language track as `<episode>.<lang>.srt` and stores
+   its plain-text transcript (`video_transcripts`). A video with no
+   original-language captions becomes `UNAVAILABLE` once it is 7 days old;
+   any failure leaves it `MISSING` for the next sync.
 
 ```mermaid
 sequenceDiagram
@@ -117,7 +124,7 @@ Each tracked playlist or channel is a TV show under its storage path:
 ├── tvshow.nfo                                  ShowFileWriter, on every sync
 ├── poster.jpg                                  channels only (avatar copy)
 └── Season <year>/                              Season 1/ for a playlist
-    └── S<year>E<MMDDii> - <title>.{mp4,jpg,nfo}  S01E<nnn> - <title>.* for a playlist
+    └── S<year>E<MMDDii> - <title>.{mp4,jpg,nfo,<lang>.srt}  S01E<nnn> - <title>.* for a playlist
 ```
 
 - **Episode number** (`ChannelEpisodeNumber` / `PlaylistEpisodeNumber`) is

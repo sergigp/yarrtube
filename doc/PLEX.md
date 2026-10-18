@@ -4,7 +4,7 @@
 
 Every tracked playlist and channel shows up in Plex (and Kodi or Jellyfin)
 as a **TV show**: one tile per playlist/channel, episode thumbnails,
-Continue Watching, On Deck and "play next episode".
+subtitles, Continue Watching, On Deck and "play next episode".
 
 ```
 channels/Some Channel/
@@ -27,6 +27,14 @@ playlists/Some Playlist/
   at the end.
 
 Episode numbers never change, so Plex keeps your watch progress.
+
+Once an episode is downloaded, yarrtube also fetches its captions in the
+video's original language (uploaded ones, else YouTube's auto-generated
+ones; never translations) and saves them next to it as
+`S2026E031501 - Title.en.srt`, which Plex picks up as an external subtitle.
+Videos without captions in their language get none. After upgrading, the
+first sync of each playlist and channel queues a subtitle fetch for every
+episode already downloaded; they run one at a time in the background.
 
 Only step 1 is required. Step 2 is optional and makes new episodes show up
 in Plex right after they download.
