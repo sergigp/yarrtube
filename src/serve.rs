@@ -357,6 +357,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.video_repository.clone(),
             infrastructure.playlist_video_repository.clone(),
             infrastructure.event_publisher.clone(),
+            infrastructure.task_repository.clone(),
         ),
         playlist_previewer: PlaylistPreviewer::new(
             infrastructure.youtube_playlist_repository.clone(),
@@ -398,6 +399,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_video_repository.clone(),
             infrastructure.channel_avatar_repository.clone(),
             infrastructure.event_publisher.clone(),
+            infrastructure.task_repository.clone(),
         ),
         channel_previewer: ChannelPreviewer::new(infrastructure.youtube_channel_repository.clone()),
         channel_updater: ChannelUpdater::new(

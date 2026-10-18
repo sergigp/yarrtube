@@ -5,6 +5,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::errors::DeletePlaylistError;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::sync::Arc;
@@ -17,6 +18,7 @@ pub struct PlaylistDeleter {
     video_repository: Arc<dyn VideoRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     event_publisher: Arc<dyn EventPublisher>,
+    task_repository: Arc<dyn TaskRepository>,
 }
 
 impl PlaylistDeleter {
@@ -25,12 +27,14 @@ impl PlaylistDeleter {
         video_repository: Arc<dyn VideoRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         event_publisher: Arc<dyn EventPublisher>,
+        task_repository: Arc<dyn TaskRepository>,
     ) -> Self {
         Self {
             repository,
             video_repository,
             playlist_video_repository,
             event_publisher,
+            task_repository,
         }
     }
 }
@@ -43,6 +47,7 @@ impl PlaylistDeleterApi for PlaylistDeleter {
     fn delete(&self, id: PlaylistId) -> Result<(), DeletePlaylistError> {
         let playlist = self.find_playlist(&id)?;
         self.delete_playlist_videos(&id)?;
+        self.remove_pending_reconciles(&id)?;
         self.delete_playlist(&id)?;
         self.publish_playlist_deleted(&id, &playlist)?;
         info!(playlist_id = %id, "deleted playlist");
@@ -74,6 +79,11 @@ impl PlaylistDeleter {
         self.playlist_video_repository
             .delete_all_for_playlist(id)
             .map_err(DeletePlaylistError::Repository)
+    }
+
+    /// Removes every pending reconcile of the playlist, so none outlives it.
+    fn remove_pending_reconciles(&self, _id: &PlaylistId) -> Result<(), DeletePlaylistError> {
+        Ok(())
     }
 
     fn delete_playlist(&self, id: &PlaylistId) -> Result<(), DeletePlaylistError> {

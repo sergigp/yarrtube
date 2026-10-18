@@ -899,6 +899,10 @@ mod tests {
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         );
 
         let response = delete(playlist_deleter, "PL1").await;
@@ -956,6 +960,10 @@ mod tests {
             video_repository.clone(),
             playlist_video_repository.clone(),
             event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         );
 
         let response = delete(playlist_deleter, "PL1").await;
@@ -993,6 +1001,10 @@ mod tests {
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         );
 
         let response = delete(playlist_deleter, "PL404").await;
@@ -1866,6 +1878,10 @@ mod tests {
             Arc::new(SqliteVideoRepository::new(unused_connection())),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
             unused_event_publisher(),
+            Arc::new(SqliteTaskRepository::new(
+                unused_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         )
     }
 

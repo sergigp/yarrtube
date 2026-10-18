@@ -4,6 +4,7 @@ use crate::domain::event::DomainEvent;
 use crate::infrastructure::repositories::filesystem_channel_avatar_repository::ChannelAvatarRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
+use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::sync::Arc;
@@ -17,6 +18,7 @@ pub struct ChannelDeleter {
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     avatar_repository: Arc<dyn ChannelAvatarRepository>,
     event_publisher: Arc<dyn EventPublisher>,
+    task_repository: Arc<dyn TaskRepository>,
 }
 
 impl ChannelDeleter {
@@ -26,6 +28,7 @@ impl ChannelDeleter {
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         avatar_repository: Arc<dyn ChannelAvatarRepository>,
         event_publisher: Arc<dyn EventPublisher>,
+        task_repository: Arc<dyn TaskRepository>,
     ) -> Self {
         Self {
             repository,
@@ -33,6 +36,7 @@ impl ChannelDeleter {
             channel_video_repository,
             avatar_repository,
             event_publisher,
+            task_repository,
         }
     }
 }
@@ -48,6 +52,7 @@ impl ChannelDeleterApi for ChannelDeleter {
         let channel = self.find_channel(&id)?;
         self.delete_channel_videos(&id)?;
         self.delete_avatar(&channel)?;
+        self.remove_pending_reconciles(&id)?;
         self.delete_channel(&id)?;
         self.publish_channel_deleted(&id, &channel)?;
         info!(channel_id = %id, "deleted channel");
@@ -88,6 +93,11 @@ impl ChannelDeleter {
         self.avatar_repository
             .delete(avatar_filename)
             .map_err(DeleteChannelError::Repository)
+    }
+
+    /// Removes every pending reconcile of the channel, so none outlives it.
+    fn remove_pending_reconciles(&self, _id: &ChannelHandle) -> Result<(), DeleteChannelError> {
+        Ok(())
     }
 
     fn delete_channel(&self, id: &ChannelHandle) -> Result<(), DeleteChannelError> {

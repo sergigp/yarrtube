@@ -857,6 +857,10 @@ mod tests {
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             avatar_repository.clone(),
             event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -907,6 +911,10 @@ mod tests {
             channel_video_repository.clone(),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -951,6 +959,10 @@ mod tests {
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             avatar_repository.clone(),
             event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -978,6 +990,10 @@ mod tests {
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         );
 
         let response = delete(channel_deleter, "@missing").await;
@@ -1992,6 +2008,10 @@ mod tests {
             Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
             Arc::new(FakeChannelAvatarRepository::default()),
             unused_event_publisher(),
+            Arc::new(SqliteTaskRepository::new(
+                unused_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
         )
     }
 
