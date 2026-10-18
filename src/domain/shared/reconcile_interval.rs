@@ -2,9 +2,10 @@ use super::errors::ValidationError;
 use chrono::Duration;
 
 pub const DEFAULT_RECONCILE_INTERVAL_MINUTES: u32 = 180;
+const MAX_RECONCILE_INTERVAL_MINUTES: i64 = 24 * 60;
 
 /// How long after one recurring reconcile of a source finishes the next one
-/// runs, in whole minutes (at least 1).
+/// runs, in whole minutes, from 1 minute to 24 hours.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReconcileInterval(u32);
 
@@ -15,12 +16,12 @@ impl ReconcileInterval {
                 "Reconcile interval must be at least 1 minute (got {minutes})"
             )));
         }
-        u32::try_from(minutes).map(Self).map_err(|_| {
-            ValidationError(format!(
-                "Reconcile interval must be at most {} minutes (got {minutes})",
-                u32::MAX
-            ))
-        })
+        if minutes > MAX_RECONCILE_INTERVAL_MINUTES {
+            return Err(ValidationError(format!(
+                "Reconcile interval must be at most {MAX_RECONCILE_INTERVAL_MINUTES} minutes (got {minutes})"
+            )));
+        }
+        Ok(Self(minutes as u32))
     }
 
     pub fn default_interval() -> Self {
@@ -66,12 +67,16 @@ mod tests {
     }
 
     #[test]
-    fn it_should_reject_an_interval_too_large_for_32_bits() {
+    fn it_should_accept_a_day() {
+        assert_eq!(ReconcileInterval::new(1440), Ok(ReconcileInterval(1440)));
+    }
+
+    #[test]
+    fn it_should_reject_more_than_a_day() {
         assert_eq!(
-            ReconcileInterval::new(4_294_967_296),
+            ReconcileInterval::new(1441),
             Err(ValidationError(
-                "Reconcile interval must be at most 4294967295 minutes (got 4294967296)"
-                    .to_string()
+                "Reconcile interval must be at most 1440 minutes (got 1441)".to_string()
             ))
         );
     }
