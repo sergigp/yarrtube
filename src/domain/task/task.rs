@@ -256,7 +256,8 @@ impl Task {
         }
     }
 
-    /// `Some("video:<id>")` for `download_video` and `fetch_thumbnail`: two
+    /// `Some("video:<id>")` for `download_video`, `fetch_thumbnail` and
+    /// `fetch_subtitles`: two
     /// tasks sharing a key never run at the same time, and a task with a key
     /// is not scheduled twice while one is pending or running.
     pub fn exclusivity_key(task_type: &str, payload: &str) -> Option<String> {
@@ -265,6 +266,9 @@ impl Task {
                 .ok()
                 .map(|(video_id, _, _)| video_id),
             "fetch_thumbnail" => Self::decode_fetch_thumbnail_payload(payload)
+                .ok()
+                .map(|(video_id, _)| video_id),
+            "fetch_subtitles" => Self::decode_fetch_subtitles_payload(payload)
                 .ok()
                 .map(|(video_id, _)| video_id),
             _ => None,
