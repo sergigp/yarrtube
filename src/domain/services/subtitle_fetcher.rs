@@ -112,10 +112,8 @@ impl SubtitleFetcher {
     /// a later reconcile pass to try again.
     fn mark_unavailable_if_old(&self, video: &Video, probe: &CaptionProbe) -> anyhow::Result<()> {
         let now = self.clock.now();
-        if !probe
-            .published_at
-            .is_some_and(|published_at| published_at <= now - UNAVAILABLE_AFTER)
-        {
+        let published_at = probe.published_at.unwrap_or(video.created_at);
+        if published_at > now - UNAVAILABLE_AFTER {
             return Ok(());
         }
         self.video_repository

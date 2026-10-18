@@ -267,8 +267,49 @@ mod tests {
         assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
     }
 
+    #[test]
+    fn it_should_fall_back_to_the_creation_time_when_no_publish_time_is_reported() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default().with_caption_probe(Ok(CaptionProbe {
+                published_at: None,
+                ..caption_probe(translations_only())
+            })),
+        );
+        let video = downloaded_video();
+        video_repository.save(&video).unwrap();
+        let task = FetchSubtitlesTask::new(
+            video_repository.clone(),
+            Arc::new(SubtitleFetcher::new(
+                video_repository.clone(),
+                video_transcript_repository.clone(),
+                video_downloader_repository.clone(),
+                video_file_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(FixedClock(now())),
+                "/videos",
+            )),
+        );
+
+        let result = run(&task, &payload_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.clone().mark_subtitles_unavailable(now())]
+        );
+        assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+    }
+
     /// A downloaded channel episode numbered `2026`/`031501`, its subtitles
-    /// still missing.
+    /// still missing, created 30 days before `now`.
     fn downloaded_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "Title", fixed_timestamp())
             .with_episode_number(
