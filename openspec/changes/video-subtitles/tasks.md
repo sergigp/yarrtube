@@ -25,8 +25,8 @@
 - [x] 2.17 `it_should_not_schedule_a_subtitle_fetch_for_a_video_being_redownloaded`
 - [x] 2.18 `it_should_keep_recorded_subtitle_files`: orphan sweep keeps recorded `.srt` and deletes a stray one
 - [x] 2.19 `it_should_delete_the_transcript_of_a_removed_video` (channel reconcile)
-- [ ] 2.20 `it_should_schedule_a_subtitle_fetch_for_a_downloaded_video_missing_subtitles` (playlist reconcile, wiring)
-- [ ] 2.21 `it_should_delete_the_transcript_of_a_removed_video` (playlist reconcile)
+- [x] 2.20 `it_should_schedule_a_subtitle_fetch_for_a_downloaded_video_missing_subtitles` (playlist reconcile, wiring)
+- [x] 2.21 `it_should_delete_the_transcript_of_a_removed_video` (playlist reconcile)
 - [ ] 2.22 `it_should_schedule_the_deletion_of_the_subtitle_file` in both delete-video-file subscribers
 - [ ] 2.23 `it_should_delete_an_episodes_subtitle_file` (delete video file task)
 - [ ] 2.24 `it_should_decode_a_payload_queued_without_a_subtitle_filename`
