@@ -53,8 +53,8 @@ SQLite transcript repository:
 - [x] 3.9 `it_should_delete_a_video_transcript`
 
 SQLite video repository:
-- [ ] 3.10 `it_should_update_only_the_subtitle_columns`
-- [ ] 3.11 `it_should_default_existing_videos_to_missing_subtitles`
+- [x] 3.10 `it_should_update_only_the_subtitle_columns`
+- [x] 3.11 `it_should_default_existing_videos_to_missing_subtitles`
 
 ## 4. Verification
 

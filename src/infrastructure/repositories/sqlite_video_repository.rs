@@ -792,6 +792,30 @@ mod tests {
     }
 
     #[test]
+    fn it_should_update_only_the_subtitle_columns() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let later = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let original = video("First", now).start_download(now);
+        repo.save(&original).unwrap();
+
+        repo.update_subtitles(
+            &Video {
+                title: "Renamed".to_string(),
+                status: VideoStatus::Errored,
+                ..original.clone()
+            }
+            .mark_subtitles_unavailable(later),
+        )
+        .unwrap();
+
+        assert_eq!(
+            repo.find(&original.id).unwrap(),
+            Some(original.mark_subtitles_unavailable(later))
+        );
+    }
+
+    #[test]
     fn it_should_round_trip_a_watched_video_with_a_playback_position() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
