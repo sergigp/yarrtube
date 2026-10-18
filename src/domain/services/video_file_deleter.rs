@@ -27,8 +27,8 @@ impl VideoFileDeleter {
 }
 
 pub trait VideoFileDeleterApi: Send + Sync {
-    /// Deletes a removed video's downloaded file, and its thumbnail file if
-    /// any, from disk, scheduled by
+    /// Deletes a removed video's downloaded file, and its thumbnail and
+    /// subtitle files if any, from disk, scheduled by
     /// `subscribers::delete_video_file_on_video_removed_from_playlist`/
     /// `..._channel` whenever a downloaded video is removed from its
     /// container. `output_dir` is the container's already-resolved output
@@ -73,11 +73,12 @@ impl VideoFileDeleterApi for VideoFileDeleter {
         &self,
         filename: Option<String>,
         thumbnail_filename: Option<String>,
-        _subtitle_filename: Option<String>,
+        subtitle_filename: Option<String>,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
         self.delete_video_entry(filename, output_dir)?;
-        self.delete_thumbnail_entry(thumbnail_filename, output_dir)
+        self.delete_sidecar_entry(thumbnail_filename, "thumbnail", output_dir)?;
+        self.delete_sidecar_entry(subtitle_filename, "subtitle", output_dir)
     }
 
     fn delete_playlist_video_files(
@@ -123,16 +124,22 @@ impl VideoFileDeleter {
             .try_for_each(|entry| self.delete_entry(output_dir, entry))
     }
 
-    fn delete_thumbnail_entry(
+    /// A file recorded next to the video's own, e.g. its thumbnail or
+    /// subtitle file.
+    fn delete_sidecar_entry(
         &self,
-        thumbnail_filename: Option<String>,
+        sidecar_filename: Option<String>,
+        kind: &str,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
-        let Some(thumbnail_filename) = thumbnail_filename else {
-            debug!("video has no recorded thumbnail filename, skipping file deletion");
+        let Some(sidecar_filename) = sidecar_filename else {
+            debug!(
+                kind,
+                "video has no recorded sidecar filename, skipping file deletion"
+            );
             return Ok(());
         };
-        self.delete_entry(output_dir, owning_entry(&thumbnail_filename))
+        self.delete_entry(output_dir, owning_entry(&sidecar_filename))
     }
 
     fn delete_entry(&self, output_dir: &Path, entry: &str) -> anyhow::Result<()> {

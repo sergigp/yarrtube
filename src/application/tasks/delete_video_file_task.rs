@@ -184,6 +184,37 @@ mod tests {
     }
 
     #[test]
+    fn it_should_delete_an_episodes_subtitle_file() {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
+            video_file_repository.clone(),
+            "/videos",
+        ));
+
+        let result = run(
+            &task,
+            &Task::DeleteVideoFile {
+                filename: Some("Season 2026/S2026E031501 - My Video.mp4".to_string()),
+                thumbnail_filename: None,
+                subtitle_filename: Some("Season 2026/S2026E031501 - My Video.en.srt".to_string()),
+                output_dir: "/videos/my-playlist".to_string(),
+            }
+            .payload()
+            .to_string(),
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *video_file_repository.deleted_calls.lock().unwrap(),
+            vec![
+                deleted("Season 2026/S2026E031501 - My Video.mp4"),
+                deleted("Season 2026/S2026E031501 - My Video.nfo"),
+                deleted("Season 2026/S2026E031501 - My Video.en.srt"),
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_delete_a_legacy_per_video_folder() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
