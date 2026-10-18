@@ -32,11 +32,11 @@ pub trait VideoFileDeleterApi: Send + Sync {
     /// `subscribers::delete_video_file_on_video_removed_from_playlist`/
     /// `..._channel` whenever a downloaded video is removed from its
     /// container. `output_dir` is the container's already-resolved output
-    /// directory. An episode's media file, its NFO and its thumbnail are
-    /// deleted from its season folder, leaving the show files and the
+    /// directory. An episode's media file, its NFO, its thumbnail and its
+    /// subtitle file are deleted from its season folder, leaving the show files and the
     /// folder in place; a legacy video's per-video folder is removed as one
     /// unit, a legacy flat video's file and thumbnail individually. No-ops
-    /// (without erroring) for either entry it has no recorded filename for,
+    /// (without erroring) for any entry it has no recorded filename for,
     /// or no matching entry is found, so the task is safe to retry.
     fn delete_video_file(
         &self,
