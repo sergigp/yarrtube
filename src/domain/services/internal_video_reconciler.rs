@@ -422,9 +422,10 @@ impl ActualState {
 }
 
 /// Entries of the output folder orphan cleanup must keep: the show files,
-/// every `Downloaded` video's file and episode NFO, and every stored video's
+/// every `Downloaded` video's file and episode NFO, every stored video's
 /// thumbnail (a `Pending`/`InProgress` video may already have one
-/// pre-fetched, see the `video-thumbnails` capability). An episode file is
+/// pre-fetched, see the `video-thumbnails` capability) and every stored
+/// video's subtitle file. An episode file is
 /// kept by its path in its season folder, a legacy video by its top-level
 /// folder or flat file.
 fn protected_entries(videos: &[Video]) -> HashSet<String> {
@@ -436,6 +437,7 @@ fn protected_entries(videos: &[Video]) -> HashSet<String> {
     let thumbnails = videos
         .iter()
         .filter_map(|v| v.thumbnail_filename.as_deref());
+    let subtitles = videos.iter().filter_map(|v| v.subtitle_filename.as_deref());
     let episode_nfos = downloaded_files
         .iter()
         .filter(|filename| is_episode_path(filename))
@@ -444,6 +446,7 @@ fn protected_entries(videos: &[Video]) -> HashSet<String> {
         .iter()
         .copied()
         .chain(thumbnails)
+        .chain(subtitles)
         .map(|path| owning_entry(path).to_string());
     [SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME]
         .map(str::to_string)

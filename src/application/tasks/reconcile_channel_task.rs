@@ -1743,6 +1743,60 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_recorded_subtitle_files() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::with_listing(
+            [
+                episode_files(),
+                vec![
+                    "Season 2023/S2023E111401 - My Video.en.srt".to_string(),
+                    "Season 2023/S2023E111401 - My Video.fr.srt".to_string(),
+                ],
+            ]
+            .concat(),
+        ));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = downloaded_episode().with_subtitles(
+            "Season 2023/S2023E111401 - My Video.en.srt",
+            fixed_timestamp(),
+        );
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &video,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *video_file_repository.deleted_calls.lock().unwrap(),
+            vec![(
+                PathBuf::from("/videos/creators/somechannel"),
+                "Season 2023/S2023E111401 - My Video.fr.srt".to_string(),
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_reset_a_numbered_video_whose_file_is_missing_without_dropping_its_number() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
