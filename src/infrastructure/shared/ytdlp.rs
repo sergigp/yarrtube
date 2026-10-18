@@ -318,6 +318,20 @@ pub fn fetch_thumbnail(
     })
 }
 
+/// Where `probe_captions` writes the video's info JSON in the staging dir.
+const INFO_JSON_FILENAME: &str = "info.json";
+
+/// The fields of yt-dlp's info JSON a caption probe reads. Track lists are
+/// keyed by yt-dlp's `--sub-langs` key, sorted; absent or `null` when the
+/// video has none.
+#[derive(serde::Deserialize)]
+struct CaptionInfo {
+    language: Option<String>,
+    timestamp: Option<i64>,
+    subtitles: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+    automatic_captions: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+}
+
 /// A caption probe's result: the tracks yt-dlp's info JSON lists, the
 /// video's publish time when reported, and the info JSON itself, written to
 /// the staging dir.
@@ -340,14 +354,56 @@ pub struct FetchedSubtitles {
 /// `-J --skip-download`; Err on any failure (clean or systemic), so the
 /// caller leaves the video Missing.
 pub fn probe_captions(
-    _ytdlp_path: &Path,
-    _video_url: &str,
-    _staging_dir: &Path,
+    ytdlp_path: &Path,
+    video_url: &str,
+    staging_dir: &Path,
 ) -> Result<CaptionProbe> {
+    ensure_output_dir(staging_dir)?;
+    let mut cmd = Command::new(ytdlp_path);
+    cmd.args(["-J", "--skip-download", "--no-warnings"])
+        .arg(video_url)
+        .current_dir(staging_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let output = match run(
+        &mut cmd,
+        || {
+            format!(
+                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
+                ytdlp_path.display()
+            )
+        },
+        |e| format!("Failed to run yt-dlp caption probe for {video_url}: {e}"),
+    )? {
+        RunOutcome::Success(output) => output,
+        RunOutcome::CleanFailure { stderr_raw } => {
+            let reason = reason_excluding_warnings(&stderr_raw)
+                .unwrap_or_else(|| "no error reported".to_string());
+            return Err(anyhow!(
+                "yt-dlp failed to probe captions for {video_url}: {reason}"
+            ));
+        }
+    };
+
+    let info_json = staging_dir.join(INFO_JSON_FILENAME);
+    std::fs::write(&info_json, &output.stdout)
+        .map_err(|e| anyhow!("Failed to write the info JSON to {info_json:?}: {e}"))?;
+    let info: CaptionInfo = serde_json::from_slice(&output.stdout)
+        .map_err(|e| anyhow!("failed to parse yt-dlp info JSON for {video_url}: {e}"))?;
     Ok(CaptionProbe {
-        tracks: CaptionTracks::default(),
-        published_at: None,
-        info_json: PathBuf::new(),
+        published_at: info
+            .timestamp
+            .and_then(|seconds| DateTime::from_timestamp(seconds, 0)),
+        tracks: CaptionTracks {
+            original_language: info.language,
+            manual: info.subtitles.unwrap_or_default().into_keys().collect(),
+            automatic: info
+                .automatic_captions
+                .unwrap_or_default()
+                .into_keys()
+                .collect(),
+        },
+        info_json,
     })
 }
 
@@ -802,6 +858,11 @@ pub(crate) mod test_support {
 mod tests {
     use super::*;
 
+    /// Trimmed `yt-dlp -J` output of real videos, captured to pin down how
+    /// it reports caption tracks and languages.
+    const AUTO_ONLY_SPANISH_INFO_JSON: &str =
+        include_str!("ytdlp_fixtures/auto_only_spanish.info.json");
+
     fn unwrap_succeeded(attempt: DownloadAttempt) -> DownloadedVideo {
         match attempt {
             DownloadAttempt::Succeeded(video) => video,
@@ -1094,6 +1155,35 @@ mod tests {
             fake.captured_args()
                 .windows(2)
                 .any(|pair| pair == ["-o", "%(id)s.%(ext)s"])
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_parse_caption_tracks_and_language_from_the_info_json() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-captions-staging");
+        let fake = test_support::FakeYtDlp::with_stdout(AUTO_ONLY_SPANISH_INFO_JSON);
+
+        let result = probe_captions(&fake.path, "https://example.com/video", &staging_dir);
+
+        assert_eq!(
+            result.unwrap(),
+            CaptionProbe {
+                tracks: CaptionTracks {
+                    original_language: Some("es-US".to_string()),
+                    manual: vec![],
+                    automatic: ["de", "en", "en-orig", "es", "es-orig", "fr", "ja"]
+                        .map(str::to_string)
+                        .to_vec(),
+                },
+                published_at: Some(DateTime::from_timestamp(1792267205, 0).unwrap()),
+                info_json: staging_dir.join("info.json"),
+            }
+        );
+        assert_eq!(
+            std::fs::read_to_string(staging_dir.join("info.json")).unwrap(),
+            AUTO_ONLY_SPANISH_INFO_JSON
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
