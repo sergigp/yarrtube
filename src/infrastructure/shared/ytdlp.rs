@@ -1,5 +1,5 @@
 use crate::domain::shared::Quality;
-use crate::domain::video_transcript::{CaptionTrack, CaptionTracks};
+use crate::domain::video_transcript::{CaptionSource, CaptionTrack, CaptionTracks};
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
 use std::io;
@@ -412,11 +412,60 @@ pub fn probe_captions(
 /// `--load-info-json --skip-download --write-subs|--write-auto-subs
 /// --sub-langs <key> --sub-format vtt --convert-subs srt`.
 pub fn fetch_subtitles(
-    _ytdlp_path: &Path,
-    _probe: &CaptionProbe,
-    _track: &CaptionTrack,
-    _staging_dir: &Path,
+    ytdlp_path: &Path,
+    probe: &CaptionProbe,
+    track: &CaptionTrack,
+    staging_dir: &Path,
 ) -> Result<FetchedSubtitles> {
+    let write_flag = match track.source {
+        CaptionSource::Manual => "--write-subs",
+        CaptionSource::Automatic => "--write-auto-subs",
+    };
+    let mut cmd = Command::new(ytdlp_path);
+    cmd.arg("--load-info-json")
+        .arg(&probe.info_json)
+        .args([
+            "-o",
+            STAGED_OUTPUT_TEMPLATE,
+            "--skip-download",
+            write_flag,
+            "--sub-langs",
+            &track.key,
+            "--sub-format",
+            "vtt",
+            "--convert-subs",
+            "srt",
+            "--quiet",
+            "--no-warnings",
+        ])
+        .current_dir(staging_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    match run(
+        &mut cmd,
+        || {
+            format!(
+                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
+                ytdlp_path.display()
+            )
+        },
+        |e| {
+            format!(
+                "Failed to run yt-dlp subtitle download for {}: {e}",
+                track.key
+            )
+        },
+    )? {
+        RunOutcome::Success(_) => {}
+        RunOutcome::CleanFailure { stderr_raw } => {
+            let reason = reason_excluding_warnings(&stderr_raw)
+                .unwrap_or_else(|| "no error reported".to_string());
+            return Err(anyhow!(
+                "yt-dlp failed to download the {} subtitles: {reason}",
+                track.key
+            ));
+        }
+    }
     Ok(FetchedSubtitles {
         path: PathBuf::new(),
         srt: String::new(),
@@ -859,6 +908,7 @@ pub(crate) mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::video_transcript::CaptionLanguage;
 
     /// Trimmed `yt-dlp -J` output of real videos, captured to pin down how
     /// it reports caption tracks and languages.
@@ -866,6 +916,14 @@ mod tests {
         include_str!("ytdlp_fixtures/uploaded_captions.info.json");
     const AUTO_ONLY_SPANISH_INFO_JSON: &str =
         include_str!("ytdlp_fixtures/auto_only_spanish.info.json");
+
+    fn caption_track(key: &str, language: &str, source: CaptionSource) -> CaptionTrack {
+        CaptionTrack {
+            key: key.to_string(),
+            language: CaptionLanguage::new(language).unwrap(),
+            source,
+        }
+    }
 
     fn unwrap_succeeded(attempt: DownloadAttempt) -> DownloadedVideo {
         match attempt {
@@ -1237,6 +1295,90 @@ mod tests {
         assert_eq!(
             result.map_err(|e| e.to_string()),
             Err("yt-dlp failed to probe captions for https://example.com/video: ERROR: [youtube] yt1: HTTP Error 429: Too Many Requests".to_string())
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_pass_manual_subtitle_flags_for_a_manual_track() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-subtitles-staging");
+        let fake = test_support::FakeYtDlp::with_downloaded_files("", &["yt1.en.srt"]);
+        let probe = CaptionProbe {
+            tracks: CaptionTracks::default(),
+            published_at: None,
+            info_json: staging_dir.join("info.json"),
+        };
+
+        fetch_subtitles(
+            &fake.path,
+            &probe,
+            &caption_track("en", "en", CaptionSource::Manual),
+            &staging_dir,
+        )
+        .unwrap();
+
+        assert_eq!(
+            fake.captured_args(),
+            [
+                "--load-info-json",
+                &staging_dir.join("info.json").to_string_lossy(),
+                "-o",
+                "%(id)s.%(ext)s",
+                "--skip-download",
+                "--write-subs",
+                "--sub-langs",
+                "en",
+                "--sub-format",
+                "vtt",
+                "--convert-subs",
+                "srt",
+                "--quiet",
+                "--no-warnings",
+            ]
+            .map(str::to_string)
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_pass_auto_subtitle_flags_for_an_automatic_track() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-subtitles-staging");
+        let fake = test_support::FakeYtDlp::with_downloaded_files("", &["yt1.en-orig.srt"]);
+        let probe = CaptionProbe {
+            tracks: CaptionTracks::default(),
+            published_at: None,
+            info_json: staging_dir.join("info.json"),
+        };
+
+        fetch_subtitles(
+            &fake.path,
+            &probe,
+            &caption_track("en-orig", "en", CaptionSource::Automatic),
+            &staging_dir,
+        )
+        .unwrap();
+
+        assert_eq!(
+            fake.captured_args(),
+            [
+                "--load-info-json",
+                &staging_dir.join("info.json").to_string_lossy(),
+                "-o",
+                "%(id)s.%(ext)s",
+                "--skip-download",
+                "--write-auto-subs",
+                "--sub-langs",
+                "en-orig",
+                "--sub-format",
+                "vtt",
+                "--convert-subs",
+                "srt",
+                "--quiet",
+                "--no-warnings",
+            ]
+            .map(str::to_string)
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
