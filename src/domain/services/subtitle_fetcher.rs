@@ -86,6 +86,7 @@ impl SubtitleFetcherApi for SubtitleFetcher {
         if let Err(e) = self.fetch_and_place(video, output_dir) {
             warn!(video_id = %video.id, error = %e, "failed to fetch video subtitles");
         }
+        self.discard_staging(video);
     }
 
     fn schedule_missing(
@@ -105,7 +106,7 @@ impl SubtitleFetcher {
             .video_downloader_repository
             .probe_captions(&video.youtube_id.to_url(), &staging)?;
         match probe.tracks.original() {
-            Some(track) => self.place_subtitles(video, &probe, &track, output_dir),
+            Some(track) => self.place_subtitles(video, &probe, &track, &staging, output_dir),
             None => self.mark_unavailable_if_old(video, &probe),
         }
     }
@@ -131,15 +132,15 @@ impl SubtitleFetcher {
         video: &Video,
         probe: &CaptionProbe,
         track: &CaptionTrack,
+        staging: &Path,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
         let Some(number) = video.episode_number else {
             return Ok(());
         };
-        let staging = subtitle_staging_dir(&self.videos_path, &video.id);
         let fetched = self
             .video_downloader_repository
-            .fetch_subtitles(probe, track, &staging)?;
+            .fetch_subtitles(probe, track, staging)?;
         let subtitle_filename = EpisodePaths::new(&number, &video.title).subtitle(&track.language);
         self.video_file_repository
             .move_file(&fetched.path, &output_dir.join(&subtitle_filename))?;
@@ -153,5 +154,14 @@ impl SubtitleFetcher {
             ))?;
         self.video_repository
             .update_subtitles(&video.clone().with_subtitles(subtitle_filename, now))
+    }
+
+    /// Best-effort: a leftover staging dir is harmless, Plex and Kodi ignore
+    /// the staging root.
+    fn discard_staging(&self, video: &Video) {
+        let dir = subtitle_staging_dir(&self.videos_path, &video.id);
+        if let Err(e) = self.video_file_repository.delete_dir_recursive(&dir) {
+            warn!(video_id = %video.id, error = %e, "failed to discard the subtitle staging dir");
+        }
     }
 }

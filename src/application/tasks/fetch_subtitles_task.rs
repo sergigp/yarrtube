@@ -565,6 +565,51 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_discard_the_staging_dir() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default()
+                .with_caption_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        );
+        let fetched = downloaded_video();
+        let failed = downloaded_video();
+        video_repository.save(&fetched).unwrap();
+        video_repository.save(&failed).unwrap();
+        let task = FetchSubtitlesTask::new(
+            video_repository.clone(),
+            Arc::new(SubtitleFetcher::new(
+                video_repository.clone(),
+                video_transcript_repository.clone(),
+                video_downloader_repository.clone(),
+                video_file_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(FixedClock(now())),
+                "/videos",
+            )),
+        );
+
+        // The fake's probe is used up by the first fetch: the second one fails.
+        let results = [
+            run(&task, &payload_for(fetched.id.as_str())),
+            run(&task, &payload_for(failed.id.as_str())),
+        ];
+
+        assert_eq!(results, [Ok(()), Ok(())]);
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![staging_dir(&fetched), staging_dir(&failed)]
+        );
+    }
+
     /// A downloaded channel episode numbered `2026`/`031501`, its subtitles
     /// still missing, created 30 days before `now`.
     fn downloaded_video() -> Video {
