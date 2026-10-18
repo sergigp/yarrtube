@@ -96,7 +96,8 @@ impl ChannelDeleter {
             .map_err(DeleteChannelError::Repository)
     }
 
-    /// Removes every pending reconcile of the channel, so none outlives it.
+    /// Removes every pending reconcile of the channel, so none outlives it. A
+    /// database from before the one-pending-reconcile rule can hold several.
     fn remove_pending_reconciles(&self, id: &ChannelHandle) -> Result<(), DeleteChannelError> {
         let task = Task::ReconcileChannel {
             channel_id: id.as_str().to_string(),
@@ -110,7 +111,8 @@ impl ChannelDeleter {
         };
         self.task_repository
             .delete(pending.id)
-            .map_err(DeleteChannelError::Repository)
+            .map_err(DeleteChannelError::Repository)?;
+        self.remove_pending_reconciles(id)
     }
 
     fn delete_channel(&self, id: &ChannelHandle) -> Result<(), DeleteChannelError> {
