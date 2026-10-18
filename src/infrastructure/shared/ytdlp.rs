@@ -466,10 +466,15 @@ pub fn fetch_subtitles(
             ));
         }
     }
-    Ok(FetchedSubtitles {
-        path: PathBuf::new(),
-        srt: String::new(),
-    })
+    let path = staged_srt(staging_dir)?.ok_or_else(|| {
+        anyhow!(
+            "yt-dlp wrote no SubRip file for the {} subtitles",
+            track.key
+        )
+    })?;
+    let srt = std::fs::read_to_string(&path)
+        .map_err(|e| anyhow!("Failed to read the staged subtitles {path:?}: {e}"))?;
+    Ok(FetchedSubtitles { path, srt })
 }
 
 /// Runs a simulate-only `yt-dlp` probe for `video_url`, forcing the
@@ -717,6 +722,15 @@ fn staged_thumbnail(media_path: &Path) -> Option<PathBuf> {
     Some(media_path.with_extension("jpg")).filter(|thumbnail| thumbnail.is_file())
 }
 
+/// The `.srt` `--convert-subs srt` left in `staging_dir`, when it is there.
+fn staged_srt(staging_dir: &Path) -> Result<Option<PathBuf>> {
+    let entries = std::fs::read_dir(staging_dir)
+        .map_err(|e| anyhow!("Failed to list the staging dir {staging_dir:?}: {e}"))?;
+    Ok(entries
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .find(|path| path.extension().is_some_and(|ext| ext == "srt")))
+}
+
 /// The printed line `back` lines before the last one, when printed.
 fn line_before_last<'a>(lines: &[&'a str], back: usize) -> Option<&'a str> {
     lines
@@ -882,6 +896,36 @@ pub(crate) mod test_support {
                     "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\ncat \"{}\"\nexit 0\n",
                     captured_args_path.display(),
                     stdout_path.display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
+
+            Self {
+                _bin_dir: bin_dir,
+                path: script_path,
+                captured_args_path,
+            }
+        }
+
+        /// A fake `yt-dlp` that exits 0 after writing `contents` to
+        /// `file_name` in the directory it's invoked in, copied from a file
+        /// so it's immune to shell quoting — stands in for `yt-dlp` writing
+        /// a converted subtitle file.
+        pub(crate) fn writing_file(file_name: &str, contents: &str) -> Self {
+            use std::os::unix::fs::PermissionsExt;
+
+            let bin_dir = unique_temp_dir("fake-ytdlp-bin");
+            let script_path = bin_dir.join("yt-dlp");
+            let captured_args_path = bin_dir.join("captured-args");
+            let contents_path = bin_dir.join("file-content");
+            fs::write(&contents_path, contents).unwrap();
+            fs::write(
+                &script_path,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\ncp \"{}\" \"{file_name}\"\nexit 0\n",
+                    captured_args_path.display(),
+                    contents_path.display()
                 ),
             )
             .unwrap();
@@ -1379,6 +1423,36 @@ mod tests {
                 "--no-warnings",
             ]
             .map(str::to_string)
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_return_the_written_srt_and_its_contents() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-subtitles-staging");
+        std::fs::write(staging_dir.join("info.json"), "{}").unwrap();
+        let srt = "1\n00:00:00,000 --> 00:00:02,000\nHello there\n";
+        let fake = test_support::FakeYtDlp::writing_file("yt1.en.srt", srt);
+        let probe = CaptionProbe {
+            tracks: CaptionTracks::default(),
+            published_at: None,
+            info_json: staging_dir.join("info.json"),
+        };
+
+        let result = fetch_subtitles(
+            &fake.path,
+            &probe,
+            &caption_track("en", "en", CaptionSource::Manual),
+            &staging_dir,
+        );
+
+        assert_eq!(
+            result.unwrap(),
+            FetchedSubtitles {
+                path: staging_dir.join("yt1.en.srt"),
+                srt: srt.to_string(),
+            }
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }

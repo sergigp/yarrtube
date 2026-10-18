@@ -45,7 +45,7 @@ yt-dlp (`infrastructure/shared/ytdlp.rs`):
 - [x] 3.3 `it_should_parse_the_publish_timestamp_from_the_info_json`
 - [x] 3.4 `it_should_fail_the_probe_on_a_clean_failed_exit`
 - [x] 3.5 `it_should_pass_manual_subtitle_flags_for_a_manual_track` and `it_should_pass_auto_subtitle_flags_for_an_automatic_track`
-- [ ] 3.6 `it_should_return_the_written_srt_and_its_contents`
+- [x] 3.6 `it_should_return_the_written_srt_and_its_contents`
 - [ ] 3.7 `it_should_fail_when_no_srt_was_written`
 
 SQLite transcript repository:
