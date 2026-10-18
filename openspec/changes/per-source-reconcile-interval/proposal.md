@@ -4,7 +4,7 @@ Every tracked channel and playlist is reconciled on one global interval (`YARRTU
 
 ## What Changes
 
-- Channels and playlists store their own reconcile interval in whole minutes (minimum 1). Existing rows and new sources default to 180 minutes (3 hours).
+- Channels and playlists store their own reconcile interval in whole minutes, from 1 to 1440 (24 hours). Existing rows and new sources default to 180 minutes (3 hours).
 - The recurring reconcile of a channel or playlist schedules its next run after that source's own interval, read when the pass finishes.
 - Creating a channel or playlist accepts an optional `reconcile_interval_minutes`; channel and playlist responses include it.
 - `PATCH /api/channels/{handle}` accepts `reconcile_interval_minutes` alongside quality and video limit.

@@ -40,9 +40,9 @@ Web:
 // domain/shared/reconcile_interval.rs
 pub const DEFAULT_RECONCILE_INTERVAL_MINUTES: u32 = 180;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ReconcileInterval(u32); // minutes, >= 1
+pub struct ReconcileInterval(u32); // minutes, 1..=1440 (24 hours)
 impl ReconcileInterval {
-    pub fn new(minutes: i64) -> Result<Self, ValidationError>; // "Reconcile interval must be at least 1 minute (got {minutes})"
+    pub fn new(minutes: i64) -> Result<Self, ValidationError>; // "Reconcile interval must be at least 1 minute (got {minutes})" / "…must be at most 1440 minutes (got {minutes})"
     pub fn default_interval() -> Self;                          // 180
     pub fn minutes(&self) -> u32;
     pub fn duration(&self) -> chrono::Duration;
@@ -194,7 +194,7 @@ Channel HTTP (`application/http/channels/mod.rs`):
 9. `it_should_fail_to_create_if_invalid_interval_provided`: 0 → 400 exact message (unmigrated DB).
 10. `it_should_keep_the_interval_of_an_existing_channel_on_duplicate_create`.
 11. `it_should_update_a_channels_interval`: response + stored channel with 60, other fields unchanged.
-12. `it_should_bring_the_next_reconcile_forward_if_interval_shortened`: pending reconcile at `now + 20h`, update to 60 → pending task `run_at = now + 60 min`, `updated_at = now`.
+12. `it_should_bring_the_next_reconcile_forward_if_interval_shortened`: pending reconcile at `now + 20h`, update to 60 → pending task `run_at = now + 60 min`, `updated_at = now`; `it_should_stamp_the_brought_forward_reconcile_with_the_update_time` schedules it under an earlier clock so `updated_at` differs from `created_at` (same pair for playlists, item 22).
 13. `it_should_keep_the_next_reconcile_if_interval_lengthened`: pending at `now + 30 min`, update to 1440 → task unchanged.
 14. `it_should_fail_to_update_if_invalid_interval_provided`: 0 → 400.
 15. `it_should_fail_to_update_if_nothing_to_update` (updated): request with no field, including no interval.
@@ -213,15 +213,15 @@ Playlist HTTP (`application/http/playlists/mod.rs`):
 26. `it_should_list_playlists_with_their_interval`.
 
 Value object (`domain/shared/reconcile_interval.rs`):
-27. `it_should_accept_one_minute`, `it_should_reject_zero`, `it_should_reject_a_negative_interval`, `it_should_reject_an_interval_too_large_for_32_bits` (one cycle each).
+27. `it_should_accept_one_minute`, `it_should_reject_zero`, `it_should_reject_a_negative_interval`, `it_should_accept_a_day`, `it_should_reject_more_than_a_day` (one cycle each).
 
 Web (Vitest, `mockApi`):
-28. `lib/reconcileInterval`: `intervalForm(180)` → 3 hours; `intervalForm(90)` → 90 minutes; `intervalMinutes({6,'hours'})` → 360; `intervalMinutes` → `null` for `''`, `'0'`, `'1.5'`.
+28. `lib/reconcileInterval`: `intervalForm(180)` → 3 hours; `intervalForm(90)` → 90 minutes; `intervalMinutes({6,'hours'})` → 360; `intervalMinutes` → `null` for `''`, `'0'`, `'1.5'` and above 24 hours (`25` hours, `1441` minutes).
 29. `EditChannelDialog`: prefilled with "3 hours"; changing only the interval sends `{ reconcile_interval_minutes: 30 }` and no reconcile.
 30. `EditChannelDialog`: invalid interval flags the field and sends nothing.
 31. `EditPlaylistDialog`: opens titled "Edit Lofi beats settings" prefilled with 3 hours.
 32. `EditPlaylistDialog`: saving 30 minutes sends PATCH `{ reconcile_interval_minutes: 30 }`, no reconcile, dialog closes.
-33. `EditPlaylistDialog`: saving unchanged sends nothing; save failure keeps the dialog open with the error.
+33. `EditPlaylistDialog`: saving unchanged sends nothing; save failure keeps the dialog open with the error; more than 24 hours flags the field and sends nothing.
 34. `Sidebar`: a playlist row menu lists Sync, Exclude from home, Edit settings, Delete; choosing Edit settings opens the dialog.
 35. `PlaylistDetail`: header menu offers Edit settings and opens the dialog.
 36. `AddChannelDialog`: submits `reconcile_interval_minutes: 180` by default and 30 when set to 30 minutes.

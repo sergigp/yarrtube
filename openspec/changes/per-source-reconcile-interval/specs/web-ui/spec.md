@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Reconcile Interval Field
-Wherever the application lets the user set how often a channel or playlist is checked, it SHALL show a field labeled "Check for new videos every" made of a whole-number input and a unit selector offering "minutes" and "hours". The value sent SHALL be the entered number converted to minutes. When showing a stored interval, the field SHALL use hours when the interval is a whole number of hours, and minutes otherwise. An entry that is empty, not a whole number, or below 1 minute SHALL be flagged as invalid, and the form SHALL NOT be submitted.
+Wherever the application lets the user set how often a channel or playlist is checked, it SHALL show a field labeled "Check for new videos every" made of a whole-number input and a unit selector offering "minutes" and "hours". The value sent SHALL be the entered number converted to minutes. When showing a stored interval, the field SHALL use hours when the interval is a whole number of hours, and minutes otherwise. An entry that is empty, not a whole number, below 1 minute or above 24 hours SHALL be flagged as invalid, and the form SHALL NOT be submitted.
 
 #### Scenario: Interval shown in hours
 - **WHEN** the field shows a stored interval of 180 minutes
@@ -16,7 +16,7 @@ Wherever the application lets the user set how often a channel or playlist is ch
 - **THEN** the application sends an interval of 360 minutes
 
 #### Scenario: Invalid interval
-- **WHEN** a user enters 0, a fractional number, or nothing in the field
+- **WHEN** a user enters 0, a fractional number, more than 24 hours, or nothing in the field
 - **THEN** the field is flagged as invalid and the form is not submitted
 
 ### Requirement: Edit Playlist Dialog

@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Playlist Reconcile Interval
-Every stored playlist SHALL have a reconcile interval: a whole number of minutes, at least 1, setting how long after one recurring reconcile of the playlist finishes the next one runs. Creating a playlist SHALL accept an optional `reconcile_interval_minutes`; when it is omitted the playlist is stored with 180 minutes (3 hours). Playlists stored before reconcile intervals existed SHALL have 180 minutes. The created playlist's response SHALL include its `reconcile_interval_minutes`.
+Every stored playlist SHALL have a reconcile interval: a whole number of minutes from 1 to 1440 (24 hours), setting how long after one recurring reconcile of the playlist finishes the next one runs. Creating a playlist SHALL accept an optional `reconcile_interval_minutes`; when it is omitted the playlist is stored with 180 minutes (3 hours). Playlists stored before reconcile intervals existed SHALL have 180 minutes. The created playlist's response SHALL include its `reconcile_interval_minutes`.
 
 #### Scenario: Creating a playlist without an interval
 - **WHEN** a valid creation request omits `reconcile_interval_minutes`
@@ -12,8 +12,8 @@ Every stored playlist SHALL have a reconcile interval: a whole number of minutes
 - **THEN** the system persists the playlist with a reconcile interval of 720 minutes, and returns it with `reconcile_interval_minutes` 720
 
 #### Scenario: Invalid interval on creation
-- **WHEN** a creation request supplies a `reconcile_interval_minutes` that is not a whole number of at least 1
-- **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request whose error description states the minimum of 1 minute and the value received
+- **WHEN** a creation request supplies a `reconcile_interval_minutes` that is not a whole number from 1 to 1440
+- **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request whose error description states the bound it breaks (at least 1 minute, at most 1440 minutes) and the value received
 
 #### Scenario: Duplicate playlist ID with a different interval
 - **WHEN** a request supplies a `playlist` value whose playlist ID already exists in storage, with a `reconcile_interval_minutes` different from the stored record's
@@ -67,7 +67,7 @@ The system SHALL provide an HTTP endpoint that changes whether a previously crea
 - **THEN** the system makes no change and rejects the request with a client error
 
 #### Scenario: Invalid interval
-- **WHEN** a request supplies a `reconcile_interval_minutes` that is not a whole number of at least 1
+- **WHEN** a request supplies a `reconcile_interval_minutes` that is not a whole number from 1 to 1440
 - **THEN** the system makes no change and returns a bad request with the same error description as on creation
 
 ## MODIFIED Requirements

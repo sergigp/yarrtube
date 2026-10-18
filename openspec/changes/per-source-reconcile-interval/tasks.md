@@ -40,7 +40,7 @@ Value object `ReconcileInterval`:
 - [x] 2.27 `it_should_accept_one_minute`.
 - [x] 2.28 `it_should_reject_zero`: exact message "Reconcile interval must be at least 1 minute (got 0)".
 - [x] 2.29 `it_should_reject_a_negative_interval`.
-- [x] 2.30 `it_should_reject_an_interval_too_large_for_32_bits`.
+- [x] 2.30 `it_should_accept_a_day` and `it_should_reject_more_than_a_day`: 1440 accepted, 1441 → "Reconcile interval must be at most 1440 minutes (got 1441)".
 
 Web (Vitest):
 - [x] 2.31 `lib/reconcileInterval`: `intervalForm` shows 180 as 3 hours and 90 as 90 minutes.
@@ -54,6 +54,9 @@ Web (Vitest):
 - [x] 2.39 `PlaylistDetail`: the header menu offers Edit settings and opens the dialog.
 - [x] 2.40 `AddChannelDialog`: submits `reconcile_interval_minutes` 180 by default and 30 when set to 30 minutes under "Advanced options".
 - [x] 2.41 `AddPlaylistDialog`: same as 2.40.
+- [x] 2.42 Web: `intervalMinutes` returns `null` above 24 hours, and `EditPlaylistDialog` flags more than 24 hours and sends nothing.
+- [x] 2.43 `it_should_stamp_the_brought_forward_reconcile_with_the_update_time` (channels): pending task scheduled under an earlier clock → `updated_at` is the update time.
+- [x] 2.44 `it_should_stamp_the_brought_forward_reconcile_with_the_update_time` (playlists).
 
 ## 3. Infrastructure adapters (TDD)
 

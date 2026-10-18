@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Channel Reconcile Interval
-Every stored channel SHALL have a reconcile interval: a whole number of minutes, at least 1, setting how long after one recurring reconcile of the channel finishes the next one runs. Creating a channel SHALL accept an optional `reconcile_interval_minutes`; when it is omitted the channel is stored with 180 minutes (3 hours). Channels stored before reconcile intervals existed SHALL have 180 minutes. The created channel's response SHALL include its `reconcile_interval_minutes`.
+Every stored channel SHALL have a reconcile interval: a whole number of minutes from 1 to 1440 (24 hours), setting how long after one recurring reconcile of the channel finishes the next one runs. Creating a channel SHALL accept an optional `reconcile_interval_minutes`; when it is omitted the channel is stored with 180 minutes (3 hours). Channels stored before reconcile intervals existed SHALL have 180 minutes. The created channel's response SHALL include its `reconcile_interval_minutes`.
 
 #### Scenario: Creating a channel without an interval
 - **WHEN** a valid creation request omits `reconcile_interval_minutes`
@@ -12,8 +12,8 @@ Every stored channel SHALL have a reconcile interval: a whole number of minutes,
 - **THEN** the system persists the channel with a reconcile interval of 30 minutes, and returns it with `reconcile_interval_minutes` 30
 
 #### Scenario: Invalid interval on creation
-- **WHEN** a creation request supplies a `reconcile_interval_minutes` that is not a whole number of at least 1
-- **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request whose error description states the minimum of 1 minute and the value received
+- **WHEN** a creation request supplies a `reconcile_interval_minutes` that is not a whole number from 1 to 1440
+- **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request whose error description states the bound it breaks (at least 1 minute, at most 1440 minutes) and the value received
 
 #### Scenario: Duplicate channel handle with a different interval
 - **WHEN** a request supplies a `channel` value whose handle already exists in storage, with a `reconcile_interval_minutes` different from the stored record's
@@ -84,7 +84,7 @@ The system SHALL provide an HTTP endpoint that changes the quality, video limit 
 - **THEN** the system rejects the request without changing storage and returns a bad request with a meaningful error description
 
 #### Scenario: Invalid quality or video limit
-- **WHEN** a request supplies a quality that is not `high`, `mid` or `low`, a video limit that is not an integer from 1 to 1000 inclusive, or a reconcile interval that is not a whole number of at least 1
+- **WHEN** a request supplies a quality that is not `high`, `mid` or `low`, a video limit that is not an integer from 1 to 1000 inclusive, or a reconcile interval that is not a whole number from 1 to 1440
 - **THEN** the system rejects the request without changing storage and returns a bad request with the same error description as on creation
 
 #### Scenario: Updating a nonexistent channel
