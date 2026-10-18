@@ -40,7 +40,12 @@ impl VideoTranscriptRepository for SqliteVideoTranscriptRepository {
         let conn = self.db.write()?;
         conn.execute(
             "INSERT INTO video_transcripts (video_id, language, source, text, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (video_id) DO UPDATE SET
+                language = excluded.language,
+                source = excluded.source,
+                text = excluded.text,
+                created_at = excluded.created_at",
             params![
                 transcript.video_id.as_str(),
                 transcript.language.as_str(),
@@ -108,5 +113,53 @@ impl SqliteVideoTranscriptRepository {
                 .context("failed to parse stored created_at")?
                 .with_timezone(&Utc),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::video_transcript::CaptionTrack;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+
+    #[test]
+    fn it_should_replace_the_transcript_of_a_video_on_save() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoTranscriptRepository::new(db.database());
+        let video_id = VideoRecordId::new("rec1").unwrap();
+        let replacement = transcript(&video_id, "es-orig", "es", CaptionSource::Automatic, "Hola");
+        repository
+            .save(&transcript(
+                &video_id,
+                "en",
+                "en",
+                CaptionSource::Manual,
+                "Hello",
+            ))
+            .unwrap();
+
+        let result = repository.save(&replacement);
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(repository.find(&video_id).unwrap(), Some(replacement));
+    }
+
+    fn transcript(
+        video_id: &VideoRecordId,
+        key: &str,
+        language: &str,
+        source: CaptionSource,
+        text: &str,
+    ) -> VideoTranscript {
+        VideoTranscript::create(
+            video_id.clone(),
+            &CaptionTrack {
+                key: key.to_string(),
+                language: CaptionLanguage::new(language).unwrap(),
+                source,
+            },
+            TranscriptText::new(text),
+            DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap(),
+        )
     }
 }

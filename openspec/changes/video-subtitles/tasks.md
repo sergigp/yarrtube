@@ -49,7 +49,7 @@ yt-dlp (`infrastructure/shared/ytdlp.rs`):
 - [x] 3.7 `it_should_fail_when_no_srt_was_written`
 
 SQLite transcript repository:
-- [ ] 3.8 `it_should_replace_the_transcript_of_a_video_on_save`
+- [x] 3.8 `it_should_replace_the_transcript_of_a_video_on_save`
 - [ ] 3.9 `it_should_delete_a_video_transcript`
 
 SQLite video repository:
