@@ -80,6 +80,7 @@ impl TaskViewSearcher {
             "reconcile_channel" => self.resolve_reconcile_channel(&task.payload),
             "download_video" => self.resolve_download_video(&task.payload),
             "fetch_thumbnail" => self.resolve_fetch_thumbnail(&task.payload),
+            "fetch_subtitles" => self.resolve_fetch_subtitles(&task.payload),
             "delete_video_file" => self.resolve_delete_video_file(&task.payload),
             "delete_playlist_files" => self.resolve_delete_playlist_files(&task.payload),
             "delete_channel_files" => self.resolve_delete_channel_files(&task.payload),
@@ -117,6 +118,11 @@ impl TaskViewSearcher {
 
     fn resolve_fetch_thumbnail(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
         let (video_id, _output_dir) = Task::decode_fetch_thumbnail_payload(payload)?;
+        self.resolve_video(VideoRecordId::new(video_id)?)
+    }
+
+    fn resolve_fetch_subtitles(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
+        let (video_id, _output_dir) = Task::decode_fetch_subtitles_payload(payload)?;
         self.resolve_video(VideoRecordId::new(video_id)?)
     }
 

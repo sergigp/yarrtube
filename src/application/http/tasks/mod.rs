@@ -393,6 +393,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_a_fetch_subtitles_task_with_video_and_playlist_names() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        task_repository
+            .schedule(
+                &Task::FetchSubtitles {
+                    video_id: "rec1".to_string(),
+                    output_dir: "/videos/my-playlist".to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        playlist_repository
+            .insert(&playlist("PL1", "My Playlist"))
+            .unwrap();
+        video_repository.save(&video("rec1", "My Video")).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                PlaylistId::new("PL1").unwrap(),
+                VideoRecordId::new("rec1").unwrap(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task_view_searcher = TaskViewSearcher::new(
+            task_repository,
+            playlist_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            video_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+        );
+
+        let response = list(task_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![pending_task(
+                "fetch_subtitles",
+                &[
+                    ("video_title", "My Video"),
+                    ("playlist_name", "My Playlist")
+                ]
+            )])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_include_video_and_channel_in_download_tasks() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
