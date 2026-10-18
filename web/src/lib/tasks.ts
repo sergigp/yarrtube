@@ -1,5 +1,13 @@
 import type { Task } from '@/api/types'
 
+/** The video a task targets and its playlist or channel, with placeholders for unresolved names. */
+function videoInContainer(payload: NonNullable<Task['payload']>): string {
+  const video = payload.video_title ?? 'a video'
+  const container =
+    payload.playlist_name ?? payload.channel_name ?? 'an unknown playlist or channel'
+  return `${video} in ${container}`
+}
+
 /** A short human sentence for what a queued task will do. */
 export function describeTask(task: Task): string {
   const payload = task.payload ?? {}
@@ -9,18 +17,12 @@ export function describeTask(task: Task): string {
       return `Syncing playlist ${payload.playlist_name ?? 'an unknown playlist'}`
     case 'reconcile_channel':
       return `Syncing channel ${payload.channel_name ?? 'an unknown channel'}`
-    case 'download_video': {
-      const video = payload.video_title ?? 'a video'
-      const container =
-        payload.playlist_name ?? payload.channel_name ?? 'an unknown playlist or channel'
-      return `Downloading ${video} in ${container}`
-    }
-    case 'fetch_thumbnail': {
-      const video = payload.video_title ?? 'a video'
-      const container =
-        payload.playlist_name ?? payload.channel_name ?? 'an unknown playlist or channel'
-      return `Fetching thumbnail of ${video} in ${container}`
-    }
+    case 'download_video':
+      return `Downloading ${videoInContainer(payload)}`
+    case 'fetch_thumbnail':
+      return `Fetching thumbnail of ${videoInContainer(payload)}`
+    case 'fetch_subtitles':
+      return `Fetching subtitles of ${videoInContainer(payload)}`
     case 'delete_video_file':
       return payload.filename ? `Removing file ${payload.filename}` : 'Removing a video file'
     default:
@@ -51,6 +53,7 @@ export const TASK_SEARCH_THRESHOLD = 15
 const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
   download_video: 'downloads',
   fetch_thumbnail: 'downloads',
+  fetch_subtitles: 'downloads',
   reconcile_playlist: 'syncs',
   reconcile_channel: 'syncs',
 }
@@ -82,6 +85,7 @@ export type TaskKind = 'download' | 'sync' | 'delete' | 'maintenance'
 const KIND_BY_TYPE: Record<string, TaskKind> = {
   download_video: 'download',
   fetch_thumbnail: 'download',
+  fetch_subtitles: 'download',
   reconcile_playlist: 'sync',
   reconcile_channel: 'sync',
   delete_video_file: 'delete',

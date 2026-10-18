@@ -34,7 +34,7 @@
 - [x] 2.26 `CaptionTracks::original` value tests (design Test Plan item 26) pass
 - [x] 2.27 `TranscriptText::from_srt` tests (item 27) pass
 - [x] 2.28 `SubtitleState`, `CaptionLanguage`, `EpisodePaths::subtitle` tests (item 28) pass
-- [ ] 2.29 `web/src/lib/tasks.ts` describes and categorizes `fetch_subtitles`; verify with `npm run check`
+- [x] 2.29 `web/src/lib/tasks.ts` describes and categorizes `fetch_subtitles`; verify with `npm run check`
 - [ ] 2.30 Document subtitle files and the post-upgrade backfill in `doc/PLEX.md` and `doc/ARCHITECTURE.md`
 
 ## 3. Infrastructure adapters (TDD)

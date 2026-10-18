@@ -56,6 +56,20 @@ describe('describeTask', () => {
     )
   })
 
+  it('describes subtitle fetches, falling back to placeholders for missing names', () => {
+    expect(
+      describeTask(
+        aTask({
+          task_type: 'fetch_subtitles',
+          payload: { video_title: 'Intro', channel_name: 'Chan' },
+        }),
+      ),
+    ).toBe('Fetching subtitles of Intro in Chan')
+    expect(describeTask(aTask({ task_type: 'fetch_subtitles', payload: {} }))).toBe(
+      'Fetching subtitles of a video in an unknown playlist or channel',
+    )
+  })
+
   it('describes file removals', () => {
     expect(
       describeTask(aTask({ task_type: 'delete_video_file', payload: { filename: 'a.mp4' } })),
@@ -123,6 +137,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
   it('maps each task type to downloads, syncs or other, and unknown types to other', () => {
     expect(taskFamily(aTask({ task_type: 'download_video' }))).toBe('downloads')
     expect(taskFamily(aTask({ task_type: 'fetch_thumbnail' }))).toBe('downloads')
+    expect(taskFamily(aTask({ task_type: 'fetch_subtitles' }))).toBe('downloads')
     expect(taskFamily(aTask({ task_type: 'reconcile_playlist' }))).toBe('syncs')
     expect(taskFamily(aTask({ task_type: 'reconcile_channel' }))).toBe('syncs')
     expect(taskFamily(aTask({ task_type: 'update_ytdlp' }))).toBe('other')
@@ -188,6 +203,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
   it('maps each task type to its icon kind', () => {
     expect(taskKind(aTask({ task_type: 'download_video' }))).toBe('download')
     expect(taskKind(aTask({ task_type: 'fetch_thumbnail' }))).toBe('download')
+    expect(taskKind(aTask({ task_type: 'fetch_subtitles' }))).toBe('download')
     expect(taskKind(aTask({ task_type: 'reconcile_playlist' }))).toBe('sync')
     expect(taskKind(aTask({ task_type: 'reconcile_channel' }))).toBe('sync')
     expect(taskKind(aTask({ task_type: 'delete_video_file' }))).toBe('delete')
