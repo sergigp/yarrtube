@@ -8,10 +8,15 @@ use crate::infrastructure::repositories::youtube_video_downloader_repository::{
     CaptionProbe, VideoDownloaderRepository,
 };
 use crate::infrastructure::shared::system_clock::Clock;
+use chrono::Duration;
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::warn;
+
+/// How old a video with no original-language captions must be before its
+/// subtitles are recorded Unavailable.
+const UNAVAILABLE_AFTER: Duration = Duration::days(7);
 
 /// Best-effort fetch of a downloaded video's original-language subtitles —
 /// see the `video-subtitles` capability. The fetch itself runs from the
@@ -98,10 +103,23 @@ impl SubtitleFetcher {
             .probe_captions(&video.youtube_id.to_url(), &staging)?;
         match probe.tracks.original() {
             Some(track) => self.place_subtitles(video, &probe, &track, output_dir),
-            None => self
-                .video_repository
-                .update_subtitles(&video.clone().mark_subtitles_unavailable(self.clock.now())),
+            None => self.mark_unavailable_if_old(video, &probe),
         }
+    }
+
+    /// Captions often appear days after an upload: only a video at least
+    /// `UNAVAILABLE_AFTER` old is given up on, a newer one stays Missing for
+    /// a later reconcile pass to try again.
+    fn mark_unavailable_if_old(&self, video: &Video, probe: &CaptionProbe) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        if !probe
+            .published_at
+            .is_some_and(|published_at| published_at <= now - UNAVAILABLE_AFTER)
+        {
+            return Ok(());
+        }
+        self.video_repository
+            .update_subtitles(&video.clone().mark_subtitles_unavailable(now))
     }
 
     /// Downloads `track`, moves it next to the episode, stores its
