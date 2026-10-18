@@ -12,6 +12,7 @@ import {
   sectionRows,
   unwatchedBadge,
 } from '../helpers/sidebar.js'
+import { expectPendingSync } from '../helpers/tasks.js'
 
 const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 const VIDEO_LIMIT = process.env.SMOKE_CHANNEL_VIDEO_LIMIT ?? '1'
@@ -94,7 +95,22 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
   await editDialog.waitFor({ state: 'hidden' })
   editDialog = await editChannel()
   await expect(editDialog.getByRole('combobox', { name: /Video quality/ })).toHaveText('Low')
-  await editDialog.getByRole('button', { name: 'Close' }).click()
+
+  // Shorten the check interval to 1 hour from the same dialog: the channel's
+  // next sync, due in 3 hours, is brought forward to about an hour.
+  const channelName = (await editDialog.getByRole('heading').innerText()).replace(
+    /^Edit (.+) settings$/,
+    '$1',
+  )
+  await expect(editDialog.getByLabel('Check for new videos every')).toHaveValue('3')
+  await editDialog.getByLabel('Check for new videos every').fill('1')
+  const intervalSaved = page.waitForResponse(
+    (response) => response.request().method() === 'PATCH' && response.url().includes('/channels/'),
+  )
+  await editDialog.getByRole('button', { name: 'Save' }).click()
+  expect((await intervalSaved).status()).toBe(200)
+  await editDialog.waitFor({ state: 'hidden' })
+  await expectPendingSync(page, { label: `Syncing channel ${channelName}`, due: /^in (59m|1h)$/ })
 
   // An invalid handle is explained in the notice and can't be submitted.
   await openAddChannelDialog(page)

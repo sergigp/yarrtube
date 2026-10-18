@@ -7,6 +7,7 @@ import {
 } from '../helpers/addDialog.js'
 import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
 import { syncItem, deleteItem, sectionRows, includeItemInHome } from '../helpers/sidebar.js'
+import { expectPendingSync } from '../helpers/tasks.js'
 
 const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
 const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
@@ -122,6 +123,10 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   await expect(editDialog.getByLabel('Check for new videos every')).toHaveValue('30')
   await expect(editDialog.getByRole('combobox', { name: 'Interval unit' })).toHaveText('minutes')
   await editDialog.getByRole('button', { name: 'Close' }).click()
+
+  // The shorter interval brought the playlist's next sync forward: it was
+  // due in 3 hours, now in about 30 minutes.
+  await expectPendingSync(page, { label: `Syncing playlist ${PLAYLIST_NAME}`, due: /^in (29|30)m$/ })
 
   // Playing past the watched threshold marks the video watched without
   // interrupting playback: once the list shows it watched, the player is
