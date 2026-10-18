@@ -19,10 +19,10 @@
 - [x] 2.11 `it_should_keep_download_progress_while_recording_subtitles`
 - [x] 2.12 `it_should_discard_the_staging_dir`
 - [x] 2.13 `it_should_schedule_a_subtitle_fetch_for_a_downloaded_video_missing_subtitles` (channel reconcile)
-- [ ] 2.14 `it_should_not_schedule_a_subtitle_fetch_for_fetched_or_unavailable_subtitles`
-- [ ] 2.15 `it_should_not_schedule_a_subtitle_fetch_for_a_video_not_downloaded`
+- [x] 2.14 `it_should_not_schedule_a_subtitle_fetch_for_fetched_or_unavailable_subtitles`
+- [x] 2.15 `it_should_not_schedule_a_subtitle_fetch_for_a_video_not_downloaded`
 - [ ] 2.16 `it_should_not_schedule_a_second_subtitle_fetch_if_one_is_queued`
-- [ ] 2.17 `it_should_not_schedule_a_subtitle_fetch_for_a_video_being_redownloaded`
+- [x] 2.17 `it_should_not_schedule_a_subtitle_fetch_for_a_video_being_redownloaded`
 - [ ] 2.18 `it_should_keep_recorded_subtitle_files`: orphan sweep keeps recorded `.srt` and deletes a stray one
 - [ ] 2.19 `it_should_delete_the_transcript_of_a_removed_video` (channel reconcile)
 - [ ] 2.20 `it_should_schedule_a_subtitle_fetch_for_a_downloaded_video_missing_subtitles` (playlist reconcile, wiring)
