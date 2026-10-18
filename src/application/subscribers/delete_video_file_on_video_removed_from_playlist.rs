@@ -14,6 +14,9 @@ struct VideoRemovedFromPlaylistPayload {
     playlist_id: String,
     filename: Option<String>,
     thumbnail_filename: Option<String>,
+    /// Absent from events published before subtitles existed.
+    #[serde(default)]
+    subtitle_filename: Option<String>,
     was_downloaded: bool,
 }
 
@@ -66,7 +69,7 @@ impl EventSubscriber for DeleteVideoFileOnVideoRemovedFromPlaylist {
             &Task::DeleteVideoFile {
                 filename: payload.filename,
                 thumbnail_filename: payload.thumbnail_filename,
-                subtitle_filename: None,
+                subtitle_filename: payload.subtitle_filename,
                 output_dir: output_dir.to_string_lossy().to_string(),
             },
             self.clock.now(),
@@ -117,6 +120,42 @@ mod tests {
                     filename: Some("My Video.mp4".to_string()),
                     thumbnail_filename: Some("My Video.jpg".to_string()),
                     subtitle_filename: None,
+                    output_dir: "/videos/my-playlist".to_string(),
+                },
+            )]
+        );
+    }
+
+    #[test]
+    fn it_should_schedule_the_deletion_of_the_subtitle_file() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let subscriber = DeleteVideoFileOnVideoRemovedFromPlaylist::new(
+            playlist_repository,
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        );
+
+        let result = handle(
+            &subscriber,
+            r#"{"playlist_id": "PL1", "video_id": "rec1", "title": "My Video", "filename": "My Video.mp4", "thumbnail_filename": "My Video.jpg", "subtitle_filename": "My Video.en.srt", "was_downloaded": true}"#,
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::DeleteVideoFile {
+                    filename: Some("My Video.mp4".to_string()),
+                    thumbnail_filename: Some("My Video.jpg".to_string()),
+                    subtitle_filename: Some("My Video.en.srt".to_string()),
                     output_dir: "/videos/my-playlist".to_string(),
                 },
             )]
