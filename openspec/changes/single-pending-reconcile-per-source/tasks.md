@@ -22,6 +22,6 @@ _None: no adapter changes._
 
 ## 4. Verification
 
-- [ ] 4.1 Tighten `smoke-tests/helpers/tasks.js` to expect exactly one pending sync per source label (the earlier specs delete and re-add the smoke playlist, so this exercises the re-add path), and drop its comment about leftover syncs.
-- [ ] 4.2 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `npm run check` all pass.
-- [ ] 4.3 Run `scripts/run-smoke-tests.sh`: all pass.
+- [x] 4.1 Tighten `smoke-tests/helpers/tasks.js` to expect exactly one pending sync per source label (the earlier specs delete and re-add the smoke playlist, so this exercises the re-add path), and drop its comment about leftover syncs.
+- [x] 4.2 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `npm run check` all pass.
+- [x] 4.3 Run `scripts/run-smoke-tests.sh`: all pass.
