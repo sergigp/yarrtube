@@ -1,6 +1,10 @@
 use crate::domain::channel::ChannelHandle;
+#[cfg(test)]
+use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::shared::ytdlp;
 use std::path::PathBuf;
+#[cfg(test)]
+use std::sync::Arc;
 
 /// One of a channel's current videos, as discovered by a fresh listing —
 /// `position` is the recency rank within that listing (`0` = most recent).
@@ -61,11 +65,7 @@ pub struct FakeChannelVideosRepository {
     pub(crate) fails: std::sync::Mutex<bool>,
     /// Deletes the listed channel from this repository, as if a user deleted
     /// it while the reconcile was running.
-    pub(crate) deletes_from: Option<
-        std::sync::Arc<
-            dyn crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository,
-        >,
-    >,
+    pub(crate) deletes_from: Option<Arc<dyn ChannelRepository>>,
 }
 
 #[cfg(test)]
@@ -86,11 +86,7 @@ impl FakeChannelVideosRepository {
         }
     }
 
-    pub fn deleting_the_channel_from(
-        repository: std::sync::Arc<
-            dyn crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository,
-        >,
-    ) -> Self {
+    pub fn deleting_the_channel_from(repository: Arc<dyn ChannelRepository>) -> Self {
         Self {
             deletes_from: Some(repository),
             ..Self::default()

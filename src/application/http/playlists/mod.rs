@@ -93,17 +93,16 @@ pub async fn update_playlist(
     Json(request): Json<UpdatePlaylistRequest>,
 ) -> Result<Json<PlaylistResponse>, ApiError> {
     let id = PlaylistId::new(id)?;
-    let exclude_from_home = request.exclude_from_home;
     let reconcile_interval = request
         .reconcile_interval_minutes
         .map(ReconcileInterval::new)
         .transpose()?;
-    if exclude_from_home.is_none() && reconcile_interval.is_none() {
+    if request.exclude_from_home.is_none() && reconcile_interval.is_none() {
         return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
     }
 
     match run_blocking(move || {
-        playlist_updater.update_settings(id, exclude_from_home, reconcile_interval)
+        playlist_updater.update_settings(id, request.exclude_from_home, reconcile_interval)
     })
     .await?
     {
@@ -1153,13 +1152,12 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
         let playlist_updater = PlaylistUpdater::new(
             playlist_repository.clone(),
-            task_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -1191,13 +1189,12 @@ mod tests {
                 ..playlist("PL1", DEFAULT_PATH)
             })
             .unwrap();
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
         let playlist_updater = PlaylistUpdater::new(
             playlist_repository.clone(),
-            task_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -1219,13 +1216,12 @@ mod tests {
             ..playlist("PL1", DEFAULT_PATH)
         };
         playlist_repository.insert(&excluded).unwrap();
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
         let playlist_updater = PlaylistUpdater::new(
             playlist_repository.clone(),
-            task_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -1261,8 +1257,8 @@ mod tests {
         );
 
         let request = UpdatePlaylistRequest {
-            exclude_from_home: None,
             reconcile_interval_minutes: Some(60),
+            ..empty_update_request()
         };
         let response = update(playlist_updater, "PL1", request).await;
 
@@ -1305,8 +1301,8 @@ mod tests {
         );
 
         let request = UpdatePlaylistRequest {
-            exclude_from_home: None,
             reconcile_interval_minutes: Some(60),
+            ..empty_update_request()
         };
         let response = update(playlist_updater, "PL1", request).await;
 
@@ -1324,6 +1320,55 @@ mod tests {
                 &reconcile_task("PL1"),
                 fixed_timestamp() + chrono::Duration::minutes(60),
             )]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_stamp_the_brought_forward_reconcile_with_the_update_time() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp() - chrono::Duration::hours(1))),
+        ));
+        task_repository
+            .schedule(
+                &reconcile_task("PL1"),
+                fixed_timestamp() + chrono::Duration::hours(20),
+            )
+            .unwrap();
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let request = UpdatePlaylistRequest {
+            reconcile_interval_minutes: Some(60),
+            ..empty_update_request()
+        };
+        let response = update(playlist_updater, "PL1", request).await;
+
+        assert_eq!(
+            response,
+            Ok(PlaylistResponse {
+                reconcile_interval_minutes: 60,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            })
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![ScheduledTask {
+                created_at: fixed_timestamp() - chrono::Duration::hours(1),
+                ..pending_task(
+                    1,
+                    &reconcile_task("PL1"),
+                    fixed_timestamp() + chrono::Duration::minutes(60),
+                )
+            }]
         );
     }
 
@@ -1351,8 +1396,8 @@ mod tests {
         );
 
         let request = UpdatePlaylistRequest {
-            exclude_from_home: None,
             reconcile_interval_minutes: Some(1440),
+            ..empty_update_request()
         };
         let response = update(playlist_updater, "PL1", request).await;
 
@@ -1380,13 +1425,12 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL1", DEFAULT_PATH))
             .unwrap();
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
         let playlist_updater = PlaylistUpdater::new(
             playlist_repository.clone(),
-            task_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -1407,10 +1451,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_fail_to_update_if_nothing_to_update() {
-        let request = UpdatePlaylistRequest {
-            exclude_from_home: None,
-            reconcile_interval_minutes: None,
-        };
+        let request = empty_update_request();
 
         let response = update(any_playlist_updater(), "PL1", request).await;
 
@@ -1425,8 +1466,8 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_update_if_invalid_interval_provided() {
         let request = UpdatePlaylistRequest {
-            exclude_from_home: None,
             reconcile_interval_minutes: Some(0),
+            ..empty_update_request()
         };
 
         let response = update(any_playlist_updater(), "PL1", request).await;
@@ -1996,14 +2037,14 @@ mod tests {
         }
     }
 
-    /// The row `SqliteTaskRepository::schedule` writes for `task`, as read
-    /// back before the executor has picked it up.
     fn reconcile_task(playlist_id: &str) -> Task {
         Task::ReconcilePlaylist {
             playlist_id: playlist_id.to_string(),
         }
     }
 
+    /// The row `SqliteTaskRepository::schedule` writes for `task`, as read
+    /// back before the executor has picked it up.
     fn pending_task(id: i64, task: &Task, run_at: DateTime<Utc>) -> ScheduledTask {
         ScheduledTask {
             id,
@@ -2104,6 +2145,13 @@ mod tests {
             playlist: playlist.to_string(),
             path: Some(DEFAULT_PATH.to_string()),
             quality: Some("high".to_string()),
+            exclude_from_home: None,
+            reconcile_interval_minutes: None,
+        }
+    }
+
+    fn empty_update_request() -> UpdatePlaylistRequest {
+        UpdatePlaylistRequest {
             exclude_from_home: None,
             reconcile_interval_minutes: None,
         }

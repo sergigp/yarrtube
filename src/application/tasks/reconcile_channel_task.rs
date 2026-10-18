@@ -582,13 +582,10 @@ mod tests {
     fn it_should_schedule_the_next_reconcile_after_the_channels_interval() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         channel_repository
             .insert(
                 &channel("@somechannel")
@@ -598,11 +595,11 @@ mod tests {
         let task = ReconcileChannelTask::new(channel_video_reconciler(
             &db,
             channel_repository,
-            video_repository.clone(),
-            channel_video_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelVideosRepository::with_videos(Vec::new())),
             task_repository.clone(),
-            video_file_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -624,24 +621,21 @@ mod tests {
     fn it_should_not_schedule_the_next_reconcile_if_channel_deleted_during_the_pass() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
-        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
         let task_repository = Arc::new(SqliteTaskRepository::new(
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let task = ReconcileChannelTask::new(channel_video_reconciler(
             &db,
             channel_repository.clone(),
-            video_repository.clone(),
-            channel_video_repository.clone(),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelVideosRepository::deleting_the_channel_from(
                 channel_repository.clone(),
             )),
             task_repository.clone(),
-            video_file_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));

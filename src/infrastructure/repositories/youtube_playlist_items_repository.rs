@@ -1,8 +1,12 @@
 use crate::domain::playlist::PlaylistId;
+#[cfg(test)]
+use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::youtube_api_key::YOUTUBE_API_KEY_HEADER;
 use anyhow::{Context, anyhow};
 use serde::Deserialize;
+#[cfg(test)]
+use std::sync::Arc;
 
 const PLAYLIST_ITEMS_URL: &str = "https://www.googleapis.com/youtube/v3/playlistItems";
 
@@ -186,11 +190,7 @@ pub struct FakeYoutubePlaylistItemsRepository {
     fails: bool,
     /// Deletes the listed playlist from this repository, as if a user deleted
     /// it while the reconcile was running.
-    deletes_from: Option<
-        std::sync::Arc<
-            dyn crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository,
-        >,
-    >,
+    deletes_from: Option<Arc<dyn PlaylistRepository>>,
 }
 
 #[cfg(test)]
@@ -211,11 +211,7 @@ impl FakeYoutubePlaylistItemsRepository {
         }
     }
 
-    pub fn deleting_the_playlist_from(
-        repository: std::sync::Arc<
-            dyn crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository,
-        >,
-    ) -> Self {
+    pub fn deleting_the_playlist_from(repository: Arc<dyn PlaylistRepository>) -> Self {
         Self {
             deletes_from: Some(repository),
             ..Self::default()

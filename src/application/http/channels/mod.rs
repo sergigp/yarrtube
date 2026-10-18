@@ -1010,13 +1010,12 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
         let channel_updater = ChannelUpdater::new(
             channel_repository.clone(),
-            task_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -1044,13 +1043,12 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
         let channel_updater = ChannelUpdater::new(
             channel_repository.clone(),
-            task_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -1156,6 +1154,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_stamp_the_brought_forward_reconcile_with_the_update_time() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp() - chrono::Duration::hours(1))),
+        ));
+        task_repository
+            .schedule(
+                &reconcile_task("@somechannel"),
+                fixed_timestamp() + chrono::Duration::hours(20),
+            )
+            .unwrap();
+        let channel_updater = ChannelUpdater::new(
+            channel_repository.clone(),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let request = UpdateChannelRequest {
+            reconcile_interval_minutes: Some(60),
+            ..update_request()
+        };
+        let response = update(channel_updater, "@somechannel", request).await;
+
+        assert_eq!(
+            response,
+            Ok(ChannelResponse {
+                reconcile_interval_minutes: 60,
+                ..some_channel_response()
+            })
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![ScheduledTask {
+                created_at: fixed_timestamp() - chrono::Duration::hours(1),
+                ..pending_task(
+                    1,
+                    &reconcile_task("@somechannel"),
+                    fixed_timestamp() + chrono::Duration::minutes(60),
+                )
+            }]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_keep_the_next_reconcile_if_interval_lengthened() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -1204,13 +1249,12 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
         let channel_updater = ChannelUpdater::new(
             channel_repository.clone(),
-            task_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -1244,13 +1288,12 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
         let channel_updater = ChannelUpdater::new(
             channel_repository.clone(),
-            task_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
@@ -1273,13 +1316,12 @@ mod tests {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         channel_repository.insert(&channel("@somechannel")).unwrap();
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
         let channel_updater = ChannelUpdater::new(
             channel_repository.clone(),
-            task_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
         );
 
