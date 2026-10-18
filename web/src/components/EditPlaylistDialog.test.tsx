@@ -63,4 +63,18 @@ describe('EditPlaylistDialog', () => {
     expect(await screen.findByText('playlist PL1 not found')).toBeInTheDocument()
     expect(onOpenChange).not.toHaveBeenCalled()
   })
+
+  it('does not submit more than 24 hours', async () => {
+    const { onSave, onOpenChange } = renderDialog(aPlaylist({ reconcile_interval_minutes: 180 }))
+    const user = userEvent.setup()
+    const amount = screen.getByLabelText('Check for new videos every')
+
+    await user.clear(amount)
+    await user.type(amount, '25')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(amount).toBeInvalid()
+    expect(onSave).not.toHaveBeenCalled()
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
 })

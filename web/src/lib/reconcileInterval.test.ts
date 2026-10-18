@@ -21,4 +21,14 @@ describe('intervalMinutes', () => {
     expect(intervalMinutes({ amount: '0', unit: 'minutes' })).toBeNull()
     expect(intervalMinutes({ amount: '1.5', unit: 'hours' })).toBeNull()
   })
+
+  it('accepts up to 24 hours', () => {
+    expect(intervalMinutes({ amount: '24', unit: 'hours' })).toBe(1440)
+    expect(intervalMinutes({ amount: '1440', unit: 'minutes' })).toBe(1440)
+  })
+
+  it('is null for more than 24 hours', () => {
+    expect(intervalMinutes({ amount: '25', unit: 'hours' })).toBeNull()
+    expect(intervalMinutes({ amount: '1441', unit: 'minutes' })).toBeNull()
+  })
 })

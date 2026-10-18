@@ -1,4 +1,4 @@
-import type { IntervalForm, IntervalUnit } from '@/lib/reconcileInterval'
+import { MAX_INTERVAL_MINUTES, type IntervalForm, type IntervalUnit } from '@/lib/reconcileInterval'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -24,6 +24,7 @@ export function ReconcileIntervalField({ id, value, onChange }: ReconcileInterva
           id={id}
           type="number"
           min="1"
+          max={value.unit === 'hours' ? MAX_INTERVAL_MINUTES / 60 : MAX_INTERVAL_MINUTES}
           step="1"
           value={value.amount}
           onChange={(event) => onChange({ ...value, amount: event.target.value })}
