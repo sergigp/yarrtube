@@ -361,19 +361,22 @@ impl ChannelVideoReconciler {
     }
 
     /// Re-reads the channel so an interval changed, or a channel deleted,
-    /// while the pass ran is honoured.
+    /// while the pass ran is honoured. A channel keeps at most one pending
+    /// reconcile; the running pass is not pending, so it never blocks itself.
     fn schedule_next_reconcile(&self, id: &ChannelHandle) -> anyhow::Result<()> {
         let Some(channel) = self.channel_repository.find(id)? else {
             info!(channel_id = %id, "channel deleted during reconcile, not scheduling the next one");
             return Ok(());
         };
+        let task = Task::ReconcileChannel {
+            channel_id: id.as_str().to_string(),
+        };
+        if self.task_repository.find_pending(&task)?.is_some() {
+            info!(channel_id = %id, "a reconcile of the channel is already pending, not scheduling another");
+            return Ok(());
+        }
         let next_run_at = self.clock.now() + channel.reconcile_interval.duration();
-        self.task_repository.schedule(
-            &Task::ReconcileChannel {
-                channel_id: id.as_str().to_string(),
-            },
-            next_run_at,
-        )?;
+        self.task_repository.schedule(&task, next_run_at)?;
         info!(channel_id = %id, next_run_at = %next_run_at, "scheduled next reconcile of channel");
 
         Ok(())
