@@ -1507,6 +1507,47 @@ mod tests {
     }
 
     #[test]
+    fn it_should_schedule_a_subtitle_fetch_for_a_downloaded_video_missing_subtitles() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::with_listing(episode_files()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = downloaded_episode();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &video,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            video_file_repository.clone(),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![fetch_subtitles_task(1, &video.id), next_reconcile(2)]
+        );
+    }
+
+    #[test]
     fn it_should_reset_a_numbered_video_whose_file_is_missing_without_dropping_its_number() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -2189,6 +2230,28 @@ mod tests {
             )
     }
 
+    /// `my_video()` downloaded into its season folder as episode
+    /// `2023`/`111401`, with its thumbnail, its subtitles still missing.
+    fn downloaded_episode() -> Video {
+        Video {
+            episode_number: Some(recovered_episode()),
+            ..downloaded_video(
+                "Season 2023/S2023E111401 - My Video.mp4",
+                Some("Season 2023/S2023E111401 - My Video.jpg"),
+            )
+        }
+    }
+
+    /// The files `downloaded_episode()` has on disk.
+    fn episode_files() -> Vec<String> {
+        vec![
+            "Season 2023".to_string(),
+            "Season 2023/S2023E111401 - My Video.mp4".to_string(),
+            "Season 2023/S2023E111401 - My Video.jpg".to_string(),
+            "Season 2023/S2023E111401 - My Video.nfo".to_string(),
+        ]
+    }
+
     /// The episode `my_video()` gets from `youtube_metadata()`'s publish time.
     fn recovered_episode() -> EpisodeNumber {
         EpisodeNumber::from_columns(2023, 111401).unwrap()
@@ -2264,6 +2327,17 @@ mod tests {
         pending_task(
             id,
             &Task::FetchThumbnail {
+                video_id: video_id.as_str().to_string(),
+                output_dir: "/videos/creators/somechannel".to_string(),
+            },
+            fixed_timestamp(),
+        )
+    }
+
+    fn fetch_subtitles_task(id: i64, video_id: &VideoRecordId) -> ScheduledTask {
+        pending_task(
+            id,
+            &Task::FetchSubtitles {
                 video_id: video_id.as_str().to_string(),
                 output_dir: "/videos/creators/somechannel".to_string(),
             },

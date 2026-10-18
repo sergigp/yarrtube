@@ -1193,7 +1193,19 @@ mod tests {
                     },
                     fixed_timestamp(),
                 ),
-                next_reconcile(2),
+                pending_task(
+                    2,
+                    &Task::FetchSubtitles {
+                        video_id: video.id.as_str().to_string(),
+                        output_dir: videos_root
+                            .path()
+                            .join("my-playlist")
+                            .to_string_lossy()
+                            .to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+                next_reconcile(3),
             ]
         );
     }

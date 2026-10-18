@@ -1,3 +1,4 @@
+use crate::domain::task::Task;
 use crate::domain::video::{EpisodePaths, Video, VideoRecordId, subtitle_staging_dir};
 use crate::domain::video_transcript::{CaptionTrack, TranscriptText, VideoTranscript};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -91,15 +92,28 @@ impl SubtitleFetcherApi for SubtitleFetcher {
 
     fn schedule_missing(
         &self,
-        _videos: &[Video],
-        _skip_ids: &HashSet<&VideoRecordId>,
-        _output_dir: &Path,
+        videos: &[Video],
+        skip_ids: &HashSet<&VideoRecordId>,
+        output_dir: &Path,
     ) -> anyhow::Result<()> {
-        Ok(())
+        videos
+            .iter()
+            .filter(|v| v.is_subtitle_fetchable() && !skip_ids.contains(&v.id))
+            .try_for_each(|video| self.schedule_fetch(video, output_dir))
     }
 }
 
 impl SubtitleFetcher {
+    fn schedule_fetch(&self, video: &Video, output_dir: &Path) -> anyhow::Result<()> {
+        self.task_repository.schedule(
+            &Task::FetchSubtitles {
+                video_id: video.id.as_str().to_string(),
+                output_dir: output_dir.to_string_lossy().to_string(),
+            },
+            self.clock.now(),
+        )
+    }
+
     fn fetch_and_place(&self, video: &Video, output_dir: &Path) -> anyhow::Result<()> {
         let staging = subtitle_staging_dir(&self.videos_path, &video.id);
         let probe = self

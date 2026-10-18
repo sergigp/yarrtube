@@ -18,7 +18,7 @@
 - [x] 2.10 `it_should_skip_if_video_no_longer_exists`
 - [x] 2.11 `it_should_keep_download_progress_while_recording_subtitles`
 - [x] 2.12 `it_should_discard_the_staging_dir`
-- [ ] 2.13 `it_should_schedule_a_subtitle_fetch_for_a_downloaded_video_missing_subtitles` (channel reconcile)
+- [x] 2.13 `it_should_schedule_a_subtitle_fetch_for_a_downloaded_video_missing_subtitles` (channel reconcile)
 - [ ] 2.14 `it_should_not_schedule_a_subtitle_fetch_for_fetched_or_unavailable_subtitles`
 - [ ] 2.15 `it_should_not_schedule_a_subtitle_fetch_for_a_video_not_downloaded`
 - [ ] 2.16 `it_should_not_schedule_a_second_subtitle_fetch_if_one_is_queued`

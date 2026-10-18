@@ -1220,18 +1220,32 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![pending_task(
-                1,
-                &Task::FetchThumbnail {
-                    video_id: video.id.as_str().to_string(),
-                    output_dir: videos_root
-                        .path()
-                        .join("my-playlist")
-                        .to_string_lossy()
-                        .to_string(),
-                },
-                fixed_timestamp(),
-            )]
+            vec![
+                pending_task(
+                    1,
+                    &Task::FetchThumbnail {
+                        video_id: video.id.as_str().to_string(),
+                        output_dir: videos_root
+                            .path()
+                            .join("my-playlist")
+                            .to_string_lossy()
+                            .to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+                pending_task(
+                    2,
+                    &Task::FetchSubtitles {
+                        video_id: video.id.as_str().to_string(),
+                        output_dir: videos_root
+                            .path()
+                            .join("my-playlist")
+                            .to_string_lossy()
+                            .to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+            ]
         );
     }
 
@@ -1317,18 +1331,32 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![pending_task(
-                1,
-                &Task::FetchThumbnail {
-                    video_id: video.id.as_str().to_string(),
-                    output_dir: videos_root
-                        .path()
-                        .join("my-playlist")
-                        .to_string_lossy()
-                        .to_string(),
-                },
-                fixed_timestamp(),
-            )]
+            vec![
+                pending_task(
+                    1,
+                    &Task::FetchThumbnail {
+                        video_id: video.id.as_str().to_string(),
+                        output_dir: videos_root
+                            .path()
+                            .join("my-playlist")
+                            .to_string_lossy()
+                            .to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+                pending_task(
+                    2,
+                    &Task::FetchSubtitles {
+                        video_id: video.id.as_str().to_string(),
+                        output_dir: videos_root
+                            .path()
+                            .join("my-playlist")
+                            .to_string_lossy()
+                            .to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+            ]
         );
     }
 
