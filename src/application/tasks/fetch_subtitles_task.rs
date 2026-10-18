@@ -515,6 +515,56 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_keep_download_progress_while_recording_subtitles() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let video = downloaded_video();
+        let redownloaded = video.clone().mark_downloaded(
+            Quality::Low,
+            "Season 2026/S2026E031501 - Title.mp4",
+            Some("Season 2026/S2026E031501 - Title.jpg".to_string()),
+            Some(120),
+            fixed_timestamp(),
+        );
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default().with_on_move({
+            let video_repository = video_repository.clone();
+            let redownloaded = redownloaded.clone();
+            move |_, _| video_repository.update(&redownloaded).unwrap()
+        }));
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default()
+                .with_caption_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        );
+        video_repository.save(&video).unwrap();
+        let task = FetchSubtitlesTask::new(
+            video_repository.clone(),
+            Arc::new(SubtitleFetcher::new(
+                video_repository.clone(),
+                video_transcript_repository.clone(),
+                video_downloader_repository.clone(),
+                video_file_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(FixedClock(now())),
+                "/videos",
+            )),
+        );
+
+        let result = run(&task, &payload_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![redownloaded.with_subtitles("Season 2026/S2026E031501 - Title.en.srt", now())]
+        );
+    }
+
     /// A downloaded channel episode numbered `2026`/`031501`, its subtitles
     /// still missing, created 30 days before `now`.
     fn downloaded_video() -> Video {
