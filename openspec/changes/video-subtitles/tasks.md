@@ -29,7 +29,7 @@
 - [x] 2.21 `it_should_delete_the_transcript_of_a_removed_video` (playlist reconcile)
 - [x] 2.22 `it_should_schedule_the_deletion_of_the_subtitle_file` in both delete-video-file subscribers
 - [x] 2.23 `it_should_delete_an_episodes_subtitle_file` (delete video file task)
-- [ ] 2.24 `it_should_decode_a_payload_queued_without_a_subtitle_filename`
+- [x] 2.24 `it_should_decode_a_payload_queued_without_a_subtitle_filename`
 - [ ] 2.25 `it_should_list_a_fetch_subtitles_task_with_video_and_playlist_names` (tasks HTTP)
 - [ ] 2.26 `CaptionTracks::original` value tests (design Test Plan item 26) pass
 - [ ] 2.27 `TranscriptText::from_srt` tests (item 27) pass

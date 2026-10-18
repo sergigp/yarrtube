@@ -215,6 +215,29 @@ mod tests {
     }
 
     #[test]
+    fn it_should_decode_a_payload_queued_without_a_subtitle_filename() {
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
+            video_file_repository.clone(),
+            "/videos",
+        ));
+
+        let result = run(
+            &task,
+            r#"{"filename": "Season 2026/S2026E031501 - My Video.mp4", "thumbnail_filename": null, "output_dir": "/videos/my-playlist"}"#,
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            *video_file_repository.deleted_calls.lock().unwrap(),
+            vec![
+                deleted("Season 2026/S2026E031501 - My Video.mp4"),
+                deleted("Season 2026/S2026E031501 - My Video.nfo"),
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_delete_a_legacy_per_video_folder() {
         let video_file_repository = Arc::new(FakeVideoFileRepository::default());
         let task = DeleteVideoFileTask::new(VideoFileDeleter::new(
