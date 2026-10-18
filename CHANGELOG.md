@@ -3,6 +3,24 @@
 All notable changes to yarrtube are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Breaking
+
+- `YARRTUBE_RECONCILE_INTERVAL_SECONDS` is removed, and a value set there is
+  not carried over. Every channel and playlist now has its own check
+  interval, 3 hours by default (the env variable defaulted to 1 hour).
+- `PATCH /api/playlists/{id}`: `exclude_from_home` is now optional. A request
+  that changes neither it nor `reconcile_interval_minutes` is rejected as
+  nothing to update.
+
+### Added
+
+- Set how often each channel and playlist is checked for new videos, from
+  1 minute to 24 hours: under "Advanced options" when adding it, or from
+  "Edit settings" afterwards (playlists gain an "Edit settings" dialog).
+  A shorter interval brings the next check forward right away.
+
 ## [0.9.0] - 2026-10-13
 
 Existing libraries need a one-time migration. Read
@@ -34,6 +52,7 @@ Existing libraries need a one-time migration. Read
   ([b0a6358], @jason-s13r)
 - The image builds with podman. ([491c8ff], @jason-s13r)
 
+[Unreleased]: https://github.com/sergigp/yarrtube/compare/v0.9.0...HEAD
 [0.9.0]: https://github.com/sergigp/yarrtube/compare/v0.8.0...v0.9.0
 [33a1416]: https://github.com/sergigp/yarrtube/commit/33a1416
 [d4b84eb]: https://github.com/sergigp/yarrtube/commit/d4b84eb
