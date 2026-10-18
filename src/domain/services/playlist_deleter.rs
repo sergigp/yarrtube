@@ -3,6 +3,7 @@ use crate::domain::playlist::Playlist;
 use crate::domain::playlist::PlaylistDeleted;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::errors::DeletePlaylistError;
+use crate::domain::task::Task;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -82,8 +83,20 @@ impl PlaylistDeleter {
     }
 
     /// Removes every pending reconcile of the playlist, so none outlives it.
-    fn remove_pending_reconciles(&self, _id: &PlaylistId) -> Result<(), DeletePlaylistError> {
-        Ok(())
+    fn remove_pending_reconciles(&self, id: &PlaylistId) -> Result<(), DeletePlaylistError> {
+        let task = Task::ReconcilePlaylist {
+            playlist_id: id.as_str().to_string(),
+        };
+        let Some(pending) = self
+            .task_repository
+            .find_pending(&task)
+            .map_err(DeletePlaylistError::Repository)?
+        else {
+            return Ok(());
+        };
+        self.task_repository
+            .delete(pending.id)
+            .map_err(DeletePlaylistError::Repository)
     }
 
     fn delete_playlist(&self, id: &PlaylistId) -> Result<(), DeletePlaylistError> {

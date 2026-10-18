@@ -9,7 +9,7 @@ Channel HTTP:
 - [x] 2.2 `it_should_remove_every_pending_reconcile_of_a_deleted_channel`: two pending reconciles of the channel → none remain.
 
 Playlist HTTP:
-- [ ] 2.3 `it_should_remove_the_pending_reconcile_of_a_deleted_playlist`: pending reconcile of the playlist and of another playlist → only the other's remains.
+- [x] 2.3 `it_should_remove_the_pending_reconcile_of_a_deleted_playlist`: pending reconcile of the playlist and of another playlist → only the other's remains.
 - [ ] 2.4 `it_should_remove_every_pending_reconcile_of_a_deleted_playlist`: two pending → none remain.
 
 Reconcile tasks:
