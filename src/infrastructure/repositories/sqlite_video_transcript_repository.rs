@@ -11,6 +11,9 @@ use rusqlite::{OptionalExtension, Row, params};
 pub trait VideoTranscriptRepository: Send + Sync {
     /// Inserts the transcript, replacing the video's previous one.
     fn save(&self, transcript: &VideoTranscript) -> anyhow::Result<()>;
+    /// No production reader yet: transcripts are stored for upcoming
+    /// summaries and recommendations.
+    #[allow(dead_code)]
     fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoTranscript>>;
     fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
 }
