@@ -285,7 +285,9 @@ impl Video {
     /// Whether a subtitle fetch is worth attempting: Downloaded, numbered,
     /// and its subtitles still Missing.
     pub fn is_subtitle_fetchable(&self) -> bool {
-        self.subtitle_state == SubtitleState::Missing
+        self.is_downloaded()
+            && self.episode_number.is_some()
+            && self.subtitle_state == SubtitleState::Missing
     }
 
     /// Records the fetched subtitle file: subtitle state Fetched. Touches
