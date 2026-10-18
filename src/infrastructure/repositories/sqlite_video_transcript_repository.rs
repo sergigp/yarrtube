@@ -144,6 +144,33 @@ mod tests {
         assert_eq!(repository.find(&video_id).unwrap(), Some(replacement));
     }
 
+    #[test]
+    fn it_should_delete_a_video_transcript() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoTranscriptRepository::new(db.database());
+        let deleted_id = VideoRecordId::new("rec1").unwrap();
+        let kept_id = VideoRecordId::new("rec2").unwrap();
+        let kept = transcript(&kept_id, "en", "en", CaptionSource::Manual, "Kept");
+        repository
+            .save(&transcript(
+                &deleted_id,
+                "en",
+                "en",
+                CaptionSource::Manual,
+                "Gone",
+            ))
+            .unwrap();
+        repository.save(&kept).unwrap();
+
+        let result = repository.delete(&deleted_id);
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        assert_eq!(
+            [&deleted_id, &kept_id].map(|id| repository.find(id).unwrap()),
+            [None, Some(kept)]
+        );
+    }
+
     fn transcript(
         video_id: &VideoRecordId,
         key: &str,

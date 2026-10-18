@@ -50,7 +50,7 @@ yt-dlp (`infrastructure/shared/ytdlp.rs`):
 
 SQLite transcript repository:
 - [x] 3.8 `it_should_replace_the_transcript_of_a_video_on_save`
-- [ ] 3.9 `it_should_delete_a_video_transcript`
+- [x] 3.9 `it_should_delete_a_video_transcript`
 
 SQLite video repository:
 - [ ] 3.10 `it_should_update_only_the_subtitle_columns`
