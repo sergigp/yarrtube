@@ -328,6 +328,7 @@ const INFO_JSON_FILENAME: &str = "info.json";
 struct CaptionInfo {
     language: Option<String>,
     timestamp: Option<i64>,
+    upload_date: Option<String>,
     subtitles: Option<std::collections::BTreeMap<String, serde_json::Value>>,
     automatic_captions: Option<std::collections::BTreeMap<String, serde_json::Value>>,
 }
@@ -393,7 +394,8 @@ pub fn probe_captions(
     Ok(CaptionProbe {
         published_at: info
             .timestamp
-            .and_then(|seconds| DateTime::from_timestamp(seconds, 0)),
+            .and_then(|seconds| DateTime::from_timestamp(seconds, 0))
+            .or_else(|| info.upload_date.as_deref().and_then(parse_upload_date)),
         tracks: CaptionTracks {
             original_language: info.language,
             manual: info.subtitles.unwrap_or_default().into_keys().collect(),
@@ -860,6 +862,8 @@ mod tests {
 
     /// Trimmed `yt-dlp -J` output of real videos, captured to pin down how
     /// it reports caption tracks and languages.
+    const UPLOADED_CAPTIONS_INFO_JSON: &str =
+        include_str!("ytdlp_fixtures/uploaded_captions.info.json");
     const AUTO_ONLY_SPANISH_INFO_JSON: &str =
         include_str!("ytdlp_fixtures/auto_only_spanish.info.json");
 
@@ -1184,6 +1188,36 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(staging_dir.join("info.json")).unwrap(),
             AUTO_ONLY_SPANISH_INFO_JSON
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_parse_the_publish_timestamp_from_the_info_json() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-captions-staging");
+        let with_timestamp = test_support::FakeYtDlp::with_stdout(UPLOADED_CAPTIONS_INFO_JSON);
+        let with_upload_date_only = test_support::FakeYtDlp::with_stdout(
+            &UPLOADED_CAPTIONS_INFO_JSON
+                .replace("\"timestamp\": 1256453853", "\"timestamp\": null"),
+        );
+
+        let published_at = [&with_timestamp, &with_upload_date_only].map(|fake| {
+            probe_captions(&fake.path, "https://example.com/video", &staging_dir)
+                .unwrap()
+                .published_at
+        });
+
+        assert_eq!(
+            published_at,
+            [
+                Some(DateTime::from_timestamp(1256453853, 0).unwrap()),
+                Some(
+                    DateTime::parse_from_rfc3339("2009-10-25T00:00:00Z")
+                        .unwrap()
+                        .to_utc()
+                ),
+            ]
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
