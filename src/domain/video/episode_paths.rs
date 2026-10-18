@@ -83,6 +83,16 @@ mod tests {
     }
 
     #[test]
+    fn it_should_name_an_episodes_subtitle_file_after_its_language() {
+        let paths = EpisodePaths::new(&PlaylistEpisodeNumber::new(7).unwrap().into(), "Title");
+
+        assert_eq!(
+            paths.subtitle(&CaptionLanguage::new("en").unwrap()),
+            "Season 1/S01E007 - Title.en.srt"
+        );
+    }
+
+    #[test]
     fn it_should_name_a_playlist_episode_in_season_one() {
         let paths = EpisodePaths::new(&PlaylistEpisodeNumber::new(7).unwrap().into(), "Song");
 
