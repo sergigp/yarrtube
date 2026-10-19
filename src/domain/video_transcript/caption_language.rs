@@ -62,4 +62,12 @@ mod tests {
             ))
         );
     }
+
+    #[test]
+    fn it_should_return_the_base_language() {
+        assert_eq!(
+            ["es-US", "en"].map(|code| CaptionLanguage::new(code).unwrap().base().to_string()),
+            ["es".to_string(), "en".to_string()]
+        );
+    }
 }
