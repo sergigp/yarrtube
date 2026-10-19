@@ -71,7 +71,7 @@ impl SubtitleReaderApi for SubtitleReader {
         video_id: &VideoId,
     ) -> Result<WebVtt, ReadSubtitlesError> {
         let playlist = self.find_playlist(playlist_id)?;
-        let video = self.find_video(video_id)?;
+        let video = self.find_playlist_video(playlist_id, video_id)?;
         self.read_subtitles(&video, playlist.path.as_str())
     }
 
@@ -81,7 +81,7 @@ impl SubtitleReaderApi for SubtitleReader {
         video_id: &VideoId,
     ) -> Result<WebVtt, ReadSubtitlesError> {
         let channel = self.find_channel(channel_id)?;
-        let video = self.find_video(video_id)?;
+        let video = self.find_channel_video(channel_id, video_id)?;
         self.read_subtitles(&video, channel.path.as_str())
     }
 }
@@ -101,12 +101,47 @@ impl SubtitleReader {
             .ok_or_else(|| ReadSubtitlesError::ChannelNotFound(channel_id.clone()))
     }
 
-    fn find_video(&self, video_id: &VideoId) -> Result<Video, ReadSubtitlesError> {
+    fn find_playlist_video(
+        &self,
+        playlist_id: &PlaylistId,
+        video_id: &VideoId,
+    ) -> Result<Video, ReadSubtitlesError> {
+        self.find_video(video_id, |video| {
+            Ok(self
+                .playlist_video_repository
+                .find_by_video(&video.id)?
+                .is_some_and(|playlist_video| playlist_video.playlist_id == *playlist_id))
+        })
+    }
+
+    fn find_channel_video(
+        &self,
+        channel_id: &ChannelHandle,
+        video_id: &VideoId,
+    ) -> Result<Video, ReadSubtitlesError> {
+        self.find_video(video_id, |video| {
+            Ok(self
+                .channel_video_repository
+                .find_by_video(&video.id)?
+                .is_some_and(|channel_video| channel_video.channel_id == *channel_id))
+        })
+    }
+
+    /// The video recorded as `video_id` that `is_recorded_for` the source:
+    /// one YouTube video can be recorded once per playlist or channel.
+    fn find_video(
+        &self,
+        video_id: &VideoId,
+        is_recorded_for: impl Fn(&Video) -> anyhow::Result<bool>,
+    ) -> Result<Video, ReadSubtitlesError> {
         self.video_repository
             .find_by_youtube_id(video_id)
             .map_err(ReadSubtitlesError::Repository)?
             .into_iter()
-            .next()
+            .map(|video| is_recorded_for(&video).map(|recorded| recorded.then_some(video)))
+            .find_map(Result::transpose)
+            .transpose()
+            .map_err(ReadSubtitlesError::Repository)?
             .ok_or_else(|| ReadSubtitlesError::VideoNotFound(video_id.clone()))
     }
 

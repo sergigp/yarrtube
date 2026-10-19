@@ -15,7 +15,7 @@
 - [x] 2.2 `it_should_serve_a_channel_videos_subtitles_as_web_vtt`: drives `read_for_channel`.
 - [x] 2.3 `it_should_fail_to_serve_subtitles_if_not_fetched`: Missing state gives 404.
 - [x] 2.4 `it_should_fail_to_serve_subtitles_if_file_missing`: Fetched but no file gives 404.
-- [ ] 2.5 `it_should_fail_to_serve_subtitles_if_video_not_in_source`: a video recorded only for another playlist gives 404.
+- [x] 2.5 `it_should_fail_to_serve_subtitles_if_video_not_in_source`: a video recorded only for another playlist gives 404.
 - [ ] 2.6 `it_should_fail_to_serve_subtitles_if_playlist_not_found`: 404.
 - [ ] 2.7 `it_should_fail_to_serve_subtitles_if_channel_not_found`: 404.
 - [ ] 2.8 `it_should_fail_to_serve_subtitles_if_invalid_video_id_provided`: 400, no DB needed.
