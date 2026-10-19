@@ -54,7 +54,7 @@
   - a tag/manifest mismatch fails the release
 
   Verify: the section exists, and its commands match the workflows.
-- [ ] 4.2 `doc/INSTALLATION.md`: document the image tags (`latest` recommended, `X.Y.Z`/`X.Y` for pinning, `edge` = unreleased `main`) near "Run the container" / "Updating". Verify: the tags listed match `release.yml`.
+- [x] 4.2 `doc/INSTALLATION.md`: document the image tags (`latest` recommended, `X.Y.Z`/`X.Y` for pinning, `edge` = unreleased `main`) near "Run the container" / "Updating". Verify: the tags listed match `release.yml`.
 - [ ] 4.3 `CLAUDE.md`: rewrite the release paragraph (edge on merge, manual stable tags, version gate) and point to the Deploy section. Verify: no mention of automatic tagging is left.
 
 ## 5. Full verification

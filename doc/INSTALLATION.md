@@ -39,6 +39,16 @@ Then you can open `http://<YOUR_NAS_IP>:8080/` or `http://localhost:8080/`.
 > web UI and its API, including the folder browser. Keep it on your LAN, or
 > put it behind a reverse proxy that handles authentication.
 
+### Image tags
+
+| Tag                        | What it is                                                                 |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `latest`                   | The latest stable release. Recommended.                                    |
+| `X.Y.Z` (e.g. `0.9.5`)     | One exact release, to pin a version.                                       |
+| `X.Y` (e.g. `0.9`)         | The latest patch release of a minor version.                               |
+| `edge`                     | The latest commit on `main`, published on every merge. Unreleased and can break. |
+| `sha-<short sha>`          | The image of one specific commit.                                          |
+
 ## Docker Compose
 
 If you run a Docker Compose stack, add:
