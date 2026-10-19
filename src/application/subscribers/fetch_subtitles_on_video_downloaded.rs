@@ -73,6 +73,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_not_schedule_a_second_subtitle_fetch_if_one_is_queued() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        task_repository
+            .schedule(&fetch_subtitles("rec1"), fixed_timestamp())
+            .unwrap();
+        let subscriber = FetchSubtitlesOnVideoDownloaded::new(
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let result = handle(&subscriber, &payload("rec1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &fetch_subtitles("rec1"))]
+        );
+    }
+
     fn fetch_subtitles(video_id: &str) -> Task {
         Task::FetchSubtitles {
             video_id: video_id.to_string(),

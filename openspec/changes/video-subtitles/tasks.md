@@ -38,7 +38,7 @@
 - [x] 2.29 `web/src/lib/tasks.ts` describes and categorizes `fetch_subtitles`; verify with `npm run check`
 - [x] 2.30 Document subtitle files and the post-upgrade backfill in `doc/PLEX.md` and `doc/ARCHITECTURE.md`
 - [x] 2.31 `it_should_schedule_a_subtitle_fetch_when_a_video_is_downloaded` (design Test Plan item 40)
-- [ ] 2.32 `it_should_not_schedule_a_second_subtitle_fetch_if_one_is_queued` (subscriber, item 41)
+- [x] 2.32 `it_should_not_schedule_a_second_subtitle_fetch_if_one_is_queued` (subscriber, item 41)
 - [ ] 2.33 `it_should_publish_that_subtitles_were_fetched` (item 42)
 - [ ] 2.34 `it_should_name_a_regional_track_with_its_base_language` (item 43)
 - [ ] 2.35 `it_should_scan_the_show_folder_after_subtitles_are_fetched` (item 44)
