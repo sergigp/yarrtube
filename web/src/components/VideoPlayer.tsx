@@ -1,9 +1,10 @@
-import { videoMediaUrl } from '@/api/client'
+import { type VideoSourceRef, videoMediaUrl } from '@/api/client'
 import type { Video } from '@/api/types'
 import { cn } from '@/lib/utils'
 
 interface VideoPlayerProps {
   basePath: string
+  source: VideoSourceRef
   video: Video | null
   autoplay: boolean
   onVideoElement: (element: HTMLVideoElement | null) => void
@@ -17,7 +18,13 @@ interface VideoPlayerProps {
  * (cancelling the page gutter) and sticks right under the header while the
  * page scrolls.
  */
-export function VideoPlayer({ basePath, video, autoplay, onVideoElement }: VideoPlayerProps) {
+export function VideoPlayer({
+  basePath,
+  source: _source,
+  video,
+  autoplay,
+  onVideoElement,
+}: VideoPlayerProps) {
   // The downloaded file to play, or null while the video can't play yet.
   const filename = video?.status === 'DOWNLOADED' ? video.filename : null
 

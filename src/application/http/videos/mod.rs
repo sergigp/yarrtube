@@ -6,15 +6,23 @@ use super::validation::{MISSING_POSITION, MISSING_WAS_WATCHED, required};
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
-    VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+    SubtitleReader, SubtitleReaderApi, VideoSearcher, VideoSearcherApi, VideoWatchStateUpdater,
+    VideoWatchStateUpdaterApi,
 };
 use crate::domain::video::{
-    HomeLimits, ListVideosError, PlaybackPosition, UpdateWatchStateError, VideoDuration, VideoId,
+    HomeLimits, ListVideosError, PlaybackPosition, ReadSubtitlesError, UpdateWatchStateError,
+    VideoDuration, VideoId, WebVtt,
 };
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::http::header::{CONTENT_TYPE, HeaderName};
 use dto::{HomeResponse, RecordProgressRequest, RecordProgressResponse, VideoResponse};
+
+/// A WebVTT body with its content type header.
+pub type VttResponse = ([(HeaderName, &'static str); 1], String);
+
+const VTT_CONTENT_TYPE: &str = "text/vtt; charset=utf-8";
 
 const HOME_LIMITS: HomeLimits = HomeLimits {
     continue_watching: 6,
@@ -90,6 +98,32 @@ pub async fn mark_video_watched(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn get_playlist_video_subtitles(
+    State(subtitle_reader): State<SubtitleReader>,
+    Path((playlist_id, youtube_id)): Path<(String, String)>,
+) -> Result<VttResponse, ApiError> {
+    let playlist_id = PlaylistId::new(playlist_id)?;
+    let youtube_id = VideoId::new(youtube_id)?;
+
+    let vtt = run_blocking(move || subtitle_reader.read_for_playlist(&playlist_id, &youtube_id))
+        .await?
+        .map_err(read_subtitles_error)?;
+    Ok(vtt_response(vtt))
+}
+
+pub async fn get_channel_video_subtitles(
+    State(subtitle_reader): State<SubtitleReader>,
+    Path((handle, youtube_id)): Path<(String, String)>,
+) -> Result<VttResponse, ApiError> {
+    let channel_id = ChannelHandle::new(handle)?;
+    let youtube_id = VideoId::new(youtube_id)?;
+
+    let vtt = run_blocking(move || subtitle_reader.read_for_channel(&channel_id, &youtube_id))
+        .await?
+        .map_err(read_subtitles_error)?;
+    Ok(vtt_response(vtt))
+}
+
 pub fn update_watch_state_error(error: UpdateWatchStateError) -> ApiError {
     match error {
         e @ UpdateWatchStateError::VideoNotFound(_) => ApiError::bad_request(e),
@@ -105,6 +139,20 @@ fn list_videos_error(error: ListVideosError) -> ApiError {
         e @ ListVideosError::ChannelNotFound(_) => ApiError::bad_request(e),
         e @ ListVideosError::Repository(_) => ApiError::internal(e),
     }
+}
+
+fn read_subtitles_error(error: ReadSubtitlesError) -> ApiError {
+    match error {
+        e @ ReadSubtitlesError::PlaylistNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
+        e @ ReadSubtitlesError::ChannelNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
+        e @ ReadSubtitlesError::VideoNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
+        e @ ReadSubtitlesError::SubtitlesNotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
+        e @ ReadSubtitlesError::Repository(_) => ApiError::internal(e),
+    }
+}
+
+fn vtt_response(vtt: WebVtt) -> VttResponse {
+    ([(CONTENT_TYPE, VTT_CONTENT_TYPE)], vtt.as_str().to_string())
 }
 
 #[cfg(test)]
@@ -2790,6 +2838,7 @@ mod tests {
             published_at: None,
             description: None,
             channel_name: None,
+            subtitle_language: None,
         }
     }
 

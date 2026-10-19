@@ -19,11 +19,12 @@ pub mod video_output_entry;
 pub mod video_record_id;
 pub mod video_status;
 pub mod video_view;
+pub mod web_vtt;
 
 pub use channel_episode_number::ChannelEpisodeNumber;
 pub use episode_number::EpisodeNumber;
 pub use episode_paths::EpisodePaths;
-pub use errors::{ListVideosError, UpdateWatchStateError};
+pub use errors::{ListVideosError, ReadSubtitlesError, UpdateWatchStateError};
 pub use events::{VideoDownloaded, VideoSubtitlesFetched};
 pub use home_limits::HomeLimits;
 pub use home_video_view::HomeVideoView;
@@ -43,3 +44,4 @@ pub use video_output_entry::{
 pub use video_record_id::VideoRecordId;
 pub use video_status::VideoStatus;
 pub use video_view::VideoView;
+pub use web_vtt::WebVtt;

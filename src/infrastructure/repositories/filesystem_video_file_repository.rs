@@ -44,6 +44,10 @@ pub trait VideoFileRepository: Send + Sync {
     /// Removes `dir` if it is empty; a non-empty or missing `dir` is left
     /// alone, not an error.
     fn remove_if_empty(&self, dir: &Path) -> anyhow::Result<()>;
+
+    /// Reads the UTF-8 content of the file at `output_dir.join(filename)`.
+    /// A missing file is `Ok(None)`, not an error.
+    fn read_to_string(&self, output_dir: &Path, filename: &str) -> anyhow::Result<Option<String>>;
 }
 
 pub struct FilesystemVideoFileRepository;
@@ -137,6 +141,14 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
             .inspect_err(|e| tracing::error!(dir = ?dir, error = %e, "failed to remove directory"))
             .map_err(|e| anyhow::anyhow!("failed to remove directory {dir:?}: {e}"))
     }
+
+    fn read_to_string(
+        &self,
+        _output_dir: &Path,
+        _filename: &str,
+    ) -> anyhow::Result<Option<String>> {
+        Ok(None)
+    }
 }
 
 /// The entries directly in `output_dir`, excluding yt-dlp's in-progress
@@ -201,6 +213,8 @@ pub struct FakeVideoFileRepository {
     pub(crate) on_move: Option<Box<dyn Fn(&Path, &Path) + Send + Sync>>,
     /// Sources whose `move_file` fails, as a permission error would.
     pub(crate) failing_moves: Vec<std::path::PathBuf>,
+    /// Files `read_to_string` finds, keyed by their full path.
+    pub(crate) files: Vec<(std::path::PathBuf, String)>,
 }
 
 #[cfg(test)]
@@ -240,6 +254,14 @@ impl FakeVideoFileRepository {
     pub fn with_failing_move(self, from: impl Into<std::path::PathBuf>) -> Self {
         Self {
             failing_moves: [self.failing_moves, vec![from.into()]].concat(),
+            ..self
+        }
+    }
+
+    /// The same fake, holding a file at `path` with `content`.
+    pub fn with_file(self, path: impl Into<std::path::PathBuf>, content: &str) -> Self {
+        Self {
+            files: [self.files, vec![(path.into(), content.to_string())]].concat(),
             ..self
         }
     }
@@ -313,6 +335,14 @@ impl VideoFileRepository for FakeVideoFileRepository {
             .unwrap()
             .push(dir.to_path_buf());
         Ok(())
+    }
+
+    fn read_to_string(
+        &self,
+        _output_dir: &Path,
+        _filename: &str,
+    ) -> anyhow::Result<Option<String>> {
+        Ok(None)
     }
 }
 

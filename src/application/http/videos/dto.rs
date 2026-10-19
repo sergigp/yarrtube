@@ -34,6 +34,7 @@ pub struct VideoResponse {
     pub published_at: Option<DateTime<Utc>>,
     pub description: Option<String>,
     pub channel_name: Option<String>,
+    pub subtitle_language: Option<String>,
 }
 
 impl From<VideoView> for VideoResponse {
@@ -48,6 +49,7 @@ impl From<VideoView> for VideoResponse {
             None => (None, None, None),
         };
         Self {
+            subtitle_language: video.subtitle_language(),
             watched: video.is_watched(),
             position_seconds: video.playback_position.seconds(),
             id: video.youtube_id.as_str().to_string(),

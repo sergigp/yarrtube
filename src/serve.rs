@@ -5,8 +5,8 @@ use crate::domain::services::{
     ChannelVideoReconciler, ChannelViewSearcher, DirectorySearcher, InternalVideoReconciler,
     LayoutMigrator, MetadataGenerator, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer,
     PlaylistSearcher, PlaylistUpdater, PlaylistVideoReconciler, PlexFolderScanner, ShowFileWriter,
-    SubtitleFetcher, TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter,
-    VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
+    SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoDownloader,
+    VideoFileDeleter, VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -422,6 +422,15 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_repository.clone(),
             infrastructure.channel_video_repository.clone(),
             infrastructure.clock.clone(),
+        ),
+        subtitle_reader: SubtitleReader::new(
+            infrastructure.playlist_repository.clone(),
+            infrastructure.playlist_video_repository.clone(),
+            infrastructure.channel_repository.clone(),
+            infrastructure.channel_video_repository.clone(),
+            infrastructure.video_repository.clone(),
+            infrastructure.video_file_repository.clone(),
+            videos_path(),
         ),
         videos_root: VideosRoot(videos_path()),
         running_version: RunningVersion(AppVersion::current()),

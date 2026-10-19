@@ -313,6 +313,12 @@ impl Video {
         }
     }
 
+    /// The language code the fetched subtitle file is named with (`en` for
+    /// `… .en.srt`); `None` unless the subtitles are Fetched.
+    pub fn subtitle_language(&self) -> Option<String> {
+        None
+    }
+
     /// The video has no original-language captions: a terminal subtitle
     /// state.
     pub fn mark_subtitles_unavailable(self, now: DateTime<Utc>) -> Self {

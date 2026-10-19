@@ -77,6 +77,7 @@ export function PlaylistDetail() {
         <div className="contents md:flex md:h-full md:min-w-0 md:flex-col md:gap-4 md:overflow-y-auto">
           <VideoPlayer
             basePath={playlist.path}
+            source={{ kind: 'playlist', id }}
             video={selectedVideo}
             autoplay={autoplay}
             onVideoElement={setVideoElement}

@@ -11,8 +11,8 @@ pub mod videos;
 use crate::domain::services::{
     ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler,
     ChannelViewSearcher, DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer,
-    PlaylistSearcher, PlaylistUpdater, PlaylistVideoReconciler, TaskViewSearcher, VideoSearcher,
-    VideoWatchStateUpdater,
+    PlaylistSearcher, PlaylistUpdater, PlaylistVideoReconciler, SubtitleReader, TaskViewSearcher,
+    VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::infrastructure::shared::app_version::AppVersion;
 use axum::Router;
@@ -49,6 +49,7 @@ pub struct ApiServices {
     pub channel_video_reconciler: ChannelVideoReconciler,
     pub directory_searcher: DirectorySearcher,
     pub video_watch_state_updater: VideoWatchStateUpdater,
+    pub subtitle_reader: SubtitleReader,
     pub videos_root: VideosRoot,
     pub running_version: RunningVersion,
 }
@@ -73,6 +74,10 @@ pub fn api_router(api_services: ApiServices) -> Router {
             "/playlists/{id}/videos",
             get(videos::list_videos_for_playlist),
         )
+        .route(
+            "/playlists/{id}/videos/{video_id}/subtitles.vtt",
+            get(videos::get_playlist_video_subtitles),
+        )
         .route("/videos/home", get(videos::list_home_videos))
         .route("/videos/{id}/progress", post(videos::record_video_progress))
         .route("/videos/{id}/watched", post(videos::mark_video_watched))
@@ -94,6 +99,10 @@ pub fn api_router(api_services: ApiServices) -> Router {
         .route(
             "/channels/{handle}/videos",
             get(videos::list_videos_for_channel),
+        )
+        .route(
+            "/channels/{handle}/videos/{video_id}/subtitles.vtt",
+            get(videos::get_channel_video_subtitles),
         )
         .route(
             "/channels/{handle}/watched",

@@ -133,6 +133,7 @@ export function aVideo(overrides: Partial<Video> = {}): Video {
     published_at: null,
     description: null,
     channel_name: null,
+    subtitle_language: null,
     ...overrides,
   }
 }

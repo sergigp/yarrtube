@@ -53,3 +53,26 @@ impl fmt::Display for UpdateWatchStateError {
 }
 
 impl std::error::Error for UpdateWatchStateError {}
+
+#[derive(Debug)]
+pub enum ReadSubtitlesError {
+    PlaylistNotFound(PlaylistId),
+    ChannelNotFound(ChannelHandle),
+    VideoNotFound(VideoId),
+    SubtitlesNotFound(VideoId),
+    Repository(anyhow::Error),
+}
+
+impl fmt::Display for ReadSubtitlesError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PlaylistNotFound(id) => write!(f, "playlist {id} not found"),
+            Self::ChannelNotFound(id) => write!(f, "channel {id} not found"),
+            Self::VideoNotFound(id) => write!(f, "video {id} not found"),
+            Self::SubtitlesNotFound(id) => write!(f, "video {id} has no subtitles"),
+            Self::Repository(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for ReadSubtitlesError {}

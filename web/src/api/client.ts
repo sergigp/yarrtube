@@ -87,6 +87,17 @@ export function videoMediaUrl(playlistPath: string, filename: string): string {
   return `/media/${encodedPath}/${encodedFilename}`
 }
 
+/** The playlist or channel a video is played from. */
+export interface VideoSourceRef {
+  kind: 'playlist' | 'channel'
+  id: string
+}
+
+/** The WebVTT subtitles of `videoId` as recorded for `source`. */
+export function videoSubtitlesUrl(_source: VideoSourceRef, _videoId: string): string {
+  return ''
+}
+
 export function avatarMediaUrl(filename: string): string {
   return `/avatars/${encodeURIComponent(filename)}`
 }
