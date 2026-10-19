@@ -6,7 +6,7 @@
   - Replace the comment saying Cargo.toml is unused.
   - Verify: unit tests cover derivation from explicit inputs (release, edge, dev), and an unset build reports `dev` with no commit.
 - [x] 1.2 Make `RunningVersion` in `src/application/http/mod.rs` carry `AppVersion`, and wire it in `src/serve.rs`. Verify: `cargo build` passes.
-- [ ] 1.3 Extend `VersionResponse` in `src/application/http/version/dto.rs` with `channel` (lowercase) and `commit` (`null` when absent), and update the handler test in `version/mod.rs`. Verify: whole-response asserts for an edge build and a dev build pass.
+- [x] 1.3 Extend `VersionResponse` in `src/application/http/version/dto.rs` with `channel` (lowercase) and `commit` (`null` when absent), and update the handler test in `version/mod.rs`. Verify: whole-response asserts for an edge build and a dev build pass.
 
 ## 2. Image build and workflows
 
