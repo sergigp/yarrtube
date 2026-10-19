@@ -8,8 +8,9 @@ pub struct WebVtt(String);
 impl WebVtt {
     pub fn from_srt(srt: &str) -> Self {
         let cues = srt
+            .trim_start_matches('\u{feff}')
             .split('\n')
-            .map(to_vtt_line)
+            .map(|line| to_vtt_line(line.strip_suffix('\r').unwrap_or(line)))
             .collect::<Vec<_>>()
             .join("\n");
         Self(format!("{HEADER}\n\n{cues}"))
@@ -42,6 +43,15 @@ mod tests {
             )
             .as_str(),
             "WEBVTT\n\n1\n00:00:01.500 --> 00:00:03.000\nHello, there\n\n2\n01:02:03.004 --> 01:02:05.000\nGeneral Kenobi\n"
+        );
+    }
+
+    #[test]
+    fn it_should_strip_a_bom_and_normalise_crlf() {
+        assert_eq!(
+            WebVtt::from_srt("\u{feff}1\r\n00:00:01,500 --> 00:00:03,000\r\nHello there\r\n")
+                .as_str(),
+            "WEBVTT\n\n1\n00:00:01.500 --> 00:00:03.000\nHello there\n"
         );
     }
 }
