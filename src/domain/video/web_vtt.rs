@@ -29,3 +29,19 @@ fn to_vtt_line(line: &str) -> String {
         line.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_convert_srt_timings_to_web_vtt() {
+        assert_eq!(
+            WebVtt::from_srt(
+                "1\n00:00:01,500 --> 00:00:03,000\nHello, there\n\n2\n01:02:03,004 --> 01:02:05,000\nGeneral Kenobi\n"
+            )
+            .as_str(),
+            "WEBVTT\n\n1\n00:00:01.500 --> 00:00:03.000\nHello, there\n\n2\n01:02:03.004 --> 01:02:05.000\nGeneral Kenobi\n"
+        );
+    }
+}

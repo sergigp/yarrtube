@@ -20,7 +20,7 @@
 - [x] 2.7 `it_should_fail_to_serve_subtitles_if_channel_not_found`: 404.
 - [x] 2.8 `it_should_fail_to_serve_subtitles_if_invalid_video_id_provided`: 400, no DB needed.
 - [x] 2.9 `it_should_include_the_subtitle_language_when_listing_videos`: `Some("en")` for Fetched `.en.srt`, `None` for Missing. Drives `Video::subtitle_language` and the DTO mapping.
-- [ ] 2.10 `web_vtt.rs` `it_should_convert_srt_timings_to_web_vtt`: only timing lines change `,`→`.`; commas in cue text are kept.
+- [x] 2.10 `web_vtt.rs` `it_should_convert_srt_timings_to_web_vtt`: only timing lines change `,`→`.`; commas in cue text are kept.
 - [ ] 2.11 `web_vtt.rs` `it_should_strip_a_bom_and_normalise_crlf`.
 - [ ] 2.12 `video.rs` `it_should_report_the_subtitle_language_from_its_filename`: Fetched gives the code; Missing/Unavailable give `None`.
 - [ ] 2.13 `web/src/lib/languageName.test.ts`: `en` gives "English", `es` gives "Spanish", unknown `zz` gives `zz` (via `Intl.DisplayNames`).
