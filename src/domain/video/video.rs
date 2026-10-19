@@ -640,6 +640,25 @@ mod tests {
     }
 
     #[test]
+    fn it_should_report_the_subtitle_language_from_its_filename() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let filename = "Season 1/S01E003 - My Video.en.srt";
+
+        let languages = [
+            video().with_subtitles(filename, now),
+            video(),
+            Video {
+                subtitle_state: SubtitleState::Unavailable,
+                subtitle_filename: Some(filename.to_string()),
+                ..video()
+            },
+        ]
+        .map(|video| video.subtitle_language());
+
+        assert_eq!(languages, [Some("en".to_string()), None, None]);
+    }
+
+    #[test]
     fn it_should_clear_its_subtitles_when_reset_for_redownload() {
         let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
         let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
