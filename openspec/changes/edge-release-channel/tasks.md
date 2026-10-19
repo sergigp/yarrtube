@@ -32,7 +32,7 @@
 
 - [x] 3.1 `web/src/api/types.ts`: extend `AppVersion` with `channel: 'release' | 'edge' | 'dev'` and `commit: { sha; subject; date } | null`. Add an `aVersion` builder to `web/src/test/helpers.tsx`. Verify: `npm run typecheck` passes.
 - [x] 3.2 Add `web/src/components/ui/popover.tsx`: shadcn-style wrapper over radix `Popover`, same style as `tooltip.tsx`. Verify: typecheck passes.
-- [ ] 3.3 `VersionLabel.tsx`:
+- [x] 3.3 `VersionLabel.tsx`:
   - For `edge` builds, render a `Badge` reading `edge` that opens a popover. Show the short-sha link to `https://github.com/sergigp/yarrtube/commit/<sha>` (new tab), the subject, and `formatDateTime(date)`.
   - Keep the muted text for `release` and `dev` builds.
   - Verify: `AppShell.test.tsx` covers:
@@ -42,7 +42,7 @@
     - Escape closes it
     - clicking the badge stays on the current route
   - Existing loading and error tests still pass with `aVersion` fixtures.
-- [ ] 3.4 Verify: `npm run check` passes.
+- [x] 3.4 Verify: `npm run check` passes.
 
 ## 4. Docs
 

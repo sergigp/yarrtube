@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { AppShell } from './App'
 import { ANNOUNCEMENTS_URL } from '@/api/client'
 import { queryKeys } from '@/api/queries'
-import { mockApi, pendingForever, renderWithProviders, type Routes } from '@/test/helpers'
+import { formatDateTime } from '@/lib/formatDateTime'
+import { aVersion, mockApi, pendingForever, renderWithProviders, type Routes } from '@/test/helpers'
 
 function renderShell({
   route = '/',
@@ -82,18 +83,86 @@ describe('AppShell', () => {
   })
 
   it('shows the running version next to the logo', async () => {
-    renderShell({ version: { version: 'v0.9.2' } })
+    renderShell({ version: aVersion({ version: 'v0.9.2' }) })
 
     expect(await within(screen.getByRole('banner')).findByText('v0.9.2')).toBeInTheDocument()
   })
 
   it('stays on the current view when the version is clicked', async () => {
-    renderShell({ route: '/tasks', version: { version: 'v0.9.2' } })
+    renderShell({ route: '/tasks', version: aVersion({ version: 'v0.9.2' }) })
     const user = userEvent.setup()
 
     await user.click(await screen.findByText('v0.9.2'))
 
     expect(screen.getByText('Loading tasks…')).toBeInTheDocument()
+  })
+
+  it('shows an edge badge instead of the version for an edge build', async () => {
+    renderShell({
+      version: aVersion({ version: 'edge-abc1234', channel: 'edge' }),
+    })
+
+    const banner = screen.getByRole('banner')
+    expect(await within(banner).findByRole('button', { name: 'edge' })).toBeInTheDocument()
+    expect(within(banner).queryByText('edge-abc1234')).not.toBeInTheDocument()
+  })
+
+  it('shows the commit of an edge build when its badge is clicked', async () => {
+    renderShell({
+      version: aVersion({ version: 'edge-abc1234', channel: 'edge' }),
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'edge' }))
+
+    const popover = await screen.findByRole('dialog')
+    expect(within(popover).getByRole('link', { name: 'abc1234' })).toHaveAttribute(
+      'href',
+      'https://github.com/sergigp/yarrtube/commit/abc1234def5678abc1234def5678abc1234def56',
+    )
+    expect(within(popover).getByRole('link', { name: 'abc1234' })).toHaveAttribute(
+      'target',
+      '_blank',
+    )
+    expect(within(popover).getByText('Fix sync')).toBeInTheDocument()
+    expect(within(popover).getByText(formatDateTime('2026-10-19T10:00:00Z'))).toBeInTheDocument()
+  })
+
+  it('closes the edge commit popover on Escape', async () => {
+    renderShell({
+      version: aVersion({ version: 'edge-abc1234', channel: 'edge' }),
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'edge' }))
+    await screen.findByRole('dialog')
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('stays on the current view when the edge badge is clicked', async () => {
+    renderShell({
+      route: '/tasks',
+      version: aVersion({ version: 'edge-abc1234', channel: 'edge' }),
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'edge' }))
+
+    expect(screen.getByText('Loading tasks…')).toBeInTheDocument()
+  })
+
+  it('shows the version of an edge build that carries no commit', async () => {
+    renderShell({
+      version: aVersion({
+        version: 'edge-abc1234',
+        channel: 'edge',
+        commit: null,
+      }),
+    })
+
+    expect(await within(screen.getByRole('banner')).findByText('edge-abc1234')).toBeInTheDocument()
   })
 
   it('shows no version while it is loading', () => {
@@ -103,7 +172,9 @@ describe('AppShell', () => {
   })
 
   it('shows no version and no error when the request fails', async () => {
-    const { queryClient } = renderShell({ version: { status: 500, error: 'version unavailable' } })
+    const { queryClient } = renderShell({
+      version: { status: 500, error: 'version unavailable' },
+    })
     await waitFor(() => expect(queryClient.isFetching({ queryKey: queryKeys.version })).toBe(0))
 
     expect(screen.getByRole('banner')).toHaveTextContent(/^$/)
