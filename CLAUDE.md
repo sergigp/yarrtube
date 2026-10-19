@@ -16,11 +16,12 @@ Docs: `doc/INSTALLATION.md` (Docker, Compose, every environment variable),
 `doc/DEVELOPMENT.md` (building from source), `doc/PLEX.md` (Plex TV Shows
 library, scan trigger), `doc/UPGRADING-TO-0.9.0.md` (layout migration
 from 0.8.x, temporary), `doc/ARCHITECTURE.md`. Every merge to `main` that
-passes CI is tagged `vX.Y.Z` and released automatically: CI bumps the latest
-tag's patch number, or uses the `Cargo.toml` version when that's ahead (bump
-it in the PR to cut a minor/major release), then calls
-`.github/workflows/release.yml` to publish the multi-arch image to
-`ghcr.io`. Pushing a `vX.Y.Z` tag by hand still triggers a release too.
+passes CI publishes the multi-arch image to `ghcr.io` as `:edge` +
+`:sha-<short sha>` via `.github/workflows/release.yml`, with no git tag
+and no `:latest`. Stable releases (`:latest`, `:X.Y.Z`, `:X.Y`) are cut
+only by pushing a `vX.Y.Z` tag by hand, and the tag must match the
+`Cargo.toml` version (bump it in a PR first). See "Deploy" in
+`doc/DEVELOPMENT.md`.
 
 ## Commands
 
