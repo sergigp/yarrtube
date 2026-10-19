@@ -1,12 +1,13 @@
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
-use crate::domain::video::{ReadSubtitlesError, VideoId, WebVtt};
+use crate::domain::video::{ReadSubtitlesError, Video, VideoId, WebVtt};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use std::path::Path;
 use std::sync::Arc;
 
 /// Reads a playlist's or channel's video subtitles, as WebVTT for the
@@ -66,10 +67,16 @@ pub trait SubtitleReaderApi: Send + Sync {
 impl SubtitleReaderApi for SubtitleReader {
     fn read_for_playlist(
         &self,
-        _playlist_id: &PlaylistId,
+        playlist_id: &PlaylistId,
         video_id: &VideoId,
     ) -> Result<WebVtt, ReadSubtitlesError> {
-        Err(ReadSubtitlesError::SubtitlesNotFound(video_id.clone()))
+        let playlist = self
+            .playlist_repository
+            .find(playlist_id)
+            .map_err(ReadSubtitlesError::Repository)?
+            .ok_or_else(|| ReadSubtitlesError::PlaylistNotFound(playlist_id.clone()))?;
+        let video = self.find_video(video_id)?;
+        self.read_subtitles(&video, playlist.path.as_str())
     }
 
     fn read_for_channel(
@@ -78,5 +85,33 @@ impl SubtitleReaderApi for SubtitleReader {
         video_id: &VideoId,
     ) -> Result<WebVtt, ReadSubtitlesError> {
         Err(ReadSubtitlesError::SubtitlesNotFound(video_id.clone()))
+    }
+}
+
+impl SubtitleReader {
+    fn find_video(&self, video_id: &VideoId) -> Result<Video, ReadSubtitlesError> {
+        self.video_repository
+            .find_by_youtube_id(video_id)
+            .map_err(ReadSubtitlesError::Repository)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| ReadSubtitlesError::VideoNotFound(video_id.clone()))
+    }
+
+    /// Reads `video`'s subtitle file from its show folder at `source_path`
+    /// and converts it to WebVTT.
+    fn read_subtitles(
+        &self,
+        video: &Video,
+        source_path: &str,
+    ) -> Result<WebVtt, ReadSubtitlesError> {
+        let not_found = || ReadSubtitlesError::SubtitlesNotFound(video.youtube_id.clone());
+        let filename = video.subtitle_filename.as_deref().ok_or_else(not_found)?;
+        let output_dir = Path::new(&self.videos_path).join(source_path);
+        self.video_file_repository
+            .read_to_string(&output_dir, filename)
+            .map_err(ReadSubtitlesError::Repository)?
+            .map(|srt| WebVtt::from_srt(&srt))
+            .ok_or_else(not_found)
     }
 }

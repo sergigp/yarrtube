@@ -165,6 +165,7 @@ mod tests {
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{EpisodeNumber, Video};
     use crate::domain::video_metadata::VideoMetadata;
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -2679,6 +2680,38 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_serve_a_playlist_videos_subtitles_as_web_vtt() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video_with_subtitles("vid1"),
+        );
+        let video_file_repository = Arc::new(
+            FakeVideoFileRepository::default()
+                .with_file(format!("{VIDEOS_ROOT}/music/{SUBTITLE_FILENAME}"), SRT),
+        );
+        let subtitle_reader = SubtitleReader::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            video_repository,
+            video_file_repository,
+            VIDEOS_ROOT,
+        );
+
+        let response = playlist_subtitles(subtitle_reader, "PL1", "vid1").await;
+
+        assert_eq!(response, Ok(vtt_body(VTT)));
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -3042,6 +3075,37 @@ mod tests {
         list_videos_for_channel(State(video_searcher), Path(handle.to_string()))
             .await
             .map(|Json(videos)| videos)
+    }
+
+    const VIDEOS_ROOT: &str = "/videos";
+    const SUBTITLE_FILENAME: &str = "Season 1/S01E001 - My Video.en.srt";
+    const SRT: &str = "1\n00:00:01,500 --> 00:00:03,000\nHello there\n\n2\n00:00:03,000 --> 00:00:04,250\nGeneral Kenobi\n";
+    const VTT: &str = "WEBVTT\n\n1\n00:00:01.500 --> 00:00:03.000\nHello there\n\n2\n00:00:03.000 --> 00:00:04.250\nGeneral Kenobi\n";
+
+    /// A downloaded video whose `en` subtitles are fetched as
+    /// `SUBTITLE_FILENAME`.
+    fn video_with_subtitles(youtube_id: &str) -> Video {
+        downloaded_video(youtube_id, "My Video", None, 1_700_000_000)
+            .with_subtitles(SUBTITLE_FILENAME, fixed_timestamp())
+    }
+
+    fn vtt_body(body: &str) -> VttResponse {
+        (
+            [(CONTENT_TYPE, "text/vtt; charset=utf-8")],
+            body.to_string(),
+        )
+    }
+
+    async fn playlist_subtitles(
+        subtitle_reader: SubtitleReader,
+        playlist_id: &str,
+        youtube_id: &str,
+    ) -> Result<VttResponse, ApiError> {
+        get_playlist_video_subtitles(
+            State(subtitle_reader),
+            Path((playlist_id.to_string(), youtube_id.to_string())),
+        )
+        .await
     }
 
     async fn home(video_searcher: VideoSearcher) -> Result<HomeResponse, ApiError> {

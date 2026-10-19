@@ -337,12 +337,13 @@ impl VideoFileRepository for FakeVideoFileRepository {
         Ok(())
     }
 
-    fn read_to_string(
-        &self,
-        _output_dir: &Path,
-        _filename: &str,
-    ) -> anyhow::Result<Option<String>> {
-        Ok(None)
+    fn read_to_string(&self, output_dir: &Path, filename: &str) -> anyhow::Result<Option<String>> {
+        let path = output_dir.join(filename);
+        Ok(self
+            .files
+            .iter()
+            .find(|(file, _)| *file == path)
+            .map(|(_, content)| content.clone()))
     }
 }
 
