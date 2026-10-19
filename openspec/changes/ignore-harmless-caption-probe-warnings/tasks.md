@@ -10,7 +10,7 @@
 
 ### ytdlp::probe_captions
 
-- [ ] 3.1 `it_should_drop_a_cache_write_warning_from_a_probe` — cache write failure warning is filtered out; test passes
+- [x] 3.1 `it_should_drop_a_cache_write_warning_from_a_probe` — cache write failure warning is filtered out; test passes
 - [ ] 3.2 `it_should_drop_a_formats_skipped_warning_from_a_probe` — `formats have been skipped` warning is filtered out; test passes
 - [ ] 3.3 `it_should_keep_a_caption_warning_next_to_harmless_ones_in_a_probe` — only the caption warning remains; test passes
 
