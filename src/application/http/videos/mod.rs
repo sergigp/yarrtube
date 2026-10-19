@@ -2712,6 +2712,41 @@ mod tests {
         assert_eq!(response, Ok(vtt_body(VTT)));
     }
 
+    #[tokio::test]
+    async fn it_should_serve_a_channel_videos_subtitles_as_web_vtt() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &video_with_subtitles("vid1"),
+            0,
+        );
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default().with_file(
+            format!("{VIDEOS_ROOT}/creators/somechannel/{SUBTITLE_FILENAME}"),
+            SRT,
+        ));
+        let subtitle_reader = SubtitleReader::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            video_file_repository,
+            VIDEOS_ROOT,
+        );
+
+        let response = channel_subtitles(subtitle_reader, "@somechannel", "vid1").await;
+
+        assert_eq!(response, Ok(vtt_body(VTT)));
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -3104,6 +3139,18 @@ mod tests {
         get_playlist_video_subtitles(
             State(subtitle_reader),
             Path((playlist_id.to_string(), youtube_id.to_string())),
+        )
+        .await
+    }
+
+    async fn channel_subtitles(
+        subtitle_reader: SubtitleReader,
+        handle: &str,
+        youtube_id: &str,
+    ) -> Result<VttResponse, ApiError> {
+        get_channel_video_subtitles(
+            State(subtitle_reader),
+            Path((handle.to_string(), youtube_id.to_string())),
         )
         .await
     }

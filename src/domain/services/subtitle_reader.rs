@@ -1,5 +1,5 @@
-use crate::domain::channel::ChannelHandle;
-use crate::domain::playlist::PlaylistId;
+use crate::domain::channel::{Channel, ChannelHandle};
+use crate::domain::playlist::{Playlist, PlaylistId};
 use crate::domain::video::{ReadSubtitlesError, Video, VideoId, WebVtt};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -70,25 +70,37 @@ impl SubtitleReaderApi for SubtitleReader {
         playlist_id: &PlaylistId,
         video_id: &VideoId,
     ) -> Result<WebVtt, ReadSubtitlesError> {
-        let playlist = self
-            .playlist_repository
-            .find(playlist_id)
-            .map_err(ReadSubtitlesError::Repository)?
-            .ok_or_else(|| ReadSubtitlesError::PlaylistNotFound(playlist_id.clone()))?;
+        let playlist = self.find_playlist(playlist_id)?;
         let video = self.find_video(video_id)?;
         self.read_subtitles(&video, playlist.path.as_str())
     }
 
     fn read_for_channel(
         &self,
-        _channel_id: &ChannelHandle,
+        channel_id: &ChannelHandle,
         video_id: &VideoId,
     ) -> Result<WebVtt, ReadSubtitlesError> {
-        Err(ReadSubtitlesError::SubtitlesNotFound(video_id.clone()))
+        let channel = self.find_channel(channel_id)?;
+        let video = self.find_video(video_id)?;
+        self.read_subtitles(&video, channel.path.as_str())
     }
 }
 
 impl SubtitleReader {
+    fn find_playlist(&self, playlist_id: &PlaylistId) -> Result<Playlist, ReadSubtitlesError> {
+        self.playlist_repository
+            .find(playlist_id)
+            .map_err(ReadSubtitlesError::Repository)?
+            .ok_or_else(|| ReadSubtitlesError::PlaylistNotFound(playlist_id.clone()))
+    }
+
+    fn find_channel(&self, channel_id: &ChannelHandle) -> Result<Channel, ReadSubtitlesError> {
+        self.channel_repository
+            .find(channel_id)
+            .map_err(ReadSubtitlesError::Repository)?
+            .ok_or_else(|| ReadSubtitlesError::ChannelNotFound(channel_id.clone()))
+    }
+
     fn find_video(&self, video_id: &VideoId) -> Result<Video, ReadSubtitlesError> {
         self.video_repository
             .find_by_youtube_id(video_id)
