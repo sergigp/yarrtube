@@ -701,8 +701,8 @@ fn run(
     Ok(RunOutcome::Success(output))
 }
 
-/// Every `WARNING:` line of `stderr`, without its indentation.
-/// `WARNING:` lines of a caption probe's stderr, minus the harmless ones.
+/// `WARNING:` lines of a caption probe's stderr, without their
+/// indentation and minus the harmless ones.
 fn caption_warning_lines(stderr: &str) -> Vec<String> {
     stderr
         .lines()
@@ -1413,7 +1413,7 @@ mod tests {
         let ytdlp = fake_ytdlp_writing_stdout_and_stderr(
             "ytdlp-captions-formats-warning",
             UPLOADED_CAPTIONS_INFO_JSON,
-            "WARNING: [youtube] yt1: Some web_embedded client https formats have been skipped as they are missing a URL. YouTube may have enabled the SABR-only streaming experiment for the current session. See  https://github.com/yt-dlp/yt-dlp/issues/12482  for more details\n",
+            &format!("{SABR_WARNING}\n"),
         );
 
         let result = probe_captions(&ytdlp, "https://example.com/video", &staging_dir);
@@ -1429,7 +1429,9 @@ mod tests {
         let ytdlp = fake_ytdlp_writing_stdout_and_stderr(
             "ytdlp-captions-mixed-warnings",
             UPLOADED_CAPTIONS_INFO_JSON,
-            "WARNING: Writing cache to '/home/yarrtube/.cache/yt-dlp/youtube-sigfuncs/a.json' failed: Traceback (most recent call last):\nWARNING: [youtube] yt1: Some web_embedded client https formats have been skipped as they are missing a URL.\nWARNING: [youtube] yt1: Some subtitles may be missing\n",
+            &format!(
+                "WARNING: Writing cache to '/home/yarrtube/.cache/yt-dlp/youtube-sigfuncs/a.json' failed: Traceback (most recent call last):\n{SABR_WARNING}\nWARNING: [youtube] yt1: Some subtitles may be missing\n"
+            ),
         );
 
         let result = probe_captions(&ytdlp, "https://example.com/video", &staging_dir);
@@ -1437,6 +1439,28 @@ mod tests {
         assert_eq!(
             result.unwrap().warnings,
             vec!["WARNING: [youtube] yt1: Some subtitles may be missing".to_string()]
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_keep_a_failure_warning_other_than_a_cache_write_in_a_probe() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-captions-staging");
+        let ytdlp = fake_ytdlp_writing_stdout_and_stderr(
+            "ytdlp-captions-other-failure-warning",
+            UPLOADED_CAPTIONS_INFO_JSON,
+            "WARNING: [youtube] yt1: Subtitles download failed: HTTP Error 429: Too Many Requests\n",
+        );
+
+        let result = probe_captions(&ytdlp, "https://example.com/video", &staging_dir);
+
+        assert_eq!(
+            result.unwrap().warnings,
+            vec![
+                "WARNING: [youtube] yt1: Subtitles download failed: HTTP Error 429: Too Many Requests"
+                    .to_string()
+            ]
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
