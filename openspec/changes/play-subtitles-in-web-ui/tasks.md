@@ -28,7 +28,7 @@
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 `filesystem_video_file_repository.rs` `it_should_read_a_files_content`: the real temp dir returns `Some(content)`.
+- [x] 3.1 `filesystem_video_file_repository.rs` `it_should_read_a_files_content`: the real temp dir returns `Some(content)`.
 - [ ] 3.2 `filesystem_video_file_repository.rs` `it_should_read_none_when_the_file_is_missing`: returns `Ok(None)`.
 
 ## 4. Verification

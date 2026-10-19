@@ -142,12 +142,12 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
             .map_err(|e| anyhow::anyhow!("failed to remove directory {dir:?}: {e}"))
     }
 
-    fn read_to_string(
-        &self,
-        _output_dir: &Path,
-        _filename: &str,
-    ) -> anyhow::Result<Option<String>> {
-        Ok(None)
+    fn read_to_string(&self, output_dir: &Path, filename: &str) -> anyhow::Result<Option<String>> {
+        let path = output_dir.join(filename);
+        std::fs::read_to_string(&path)
+            .map(Some)
+            .inspect_err(|e| tracing::error!(path = ?path, error = %e, "failed to read file"))
+            .map_err(|e| anyhow::anyhow!("failed to read {path:?}: {e}"))
     }
 }
 
@@ -623,6 +623,20 @@ mod tests {
         let exists = FilesystemVideoFileRepository.file_exists(&dir, "Nonexistent.mp4");
 
         assert!(!exists);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_read_a_files_content() {
+        let dir = unique_temp_dir("video-file-repository-read");
+        std::fs::create_dir_all(dir.join("Season 1")).unwrap();
+        std::fs::write(dir.join("Season 1/My Video.en.srt"), "1\nHello there\n").unwrap();
+
+        let content = FilesystemVideoFileRepository
+            .read_to_string(&dir, "Season 1/My Video.en.srt")
+            .unwrap();
+
+        assert_eq!(content, Some("1\nHello there\n".to_string()));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
