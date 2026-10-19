@@ -90,3 +90,48 @@ cargo test --locked
 
 End-to-end tests against a real container live in `smoke-tests/` (see its
 README) and run with `scripts/run-smoke-tests.sh`.
+
+## Deploy
+
+Images are published to `ghcr.io/sergigp/yarrtube` by
+`.github/workflows/release.yml`, on two channels.
+
+### Edge: every merge to `main`
+
+Every merge to `main` that passes CI publishes `:edge` and
+`:sha-<short sha>`. No git tag is created and `:latest` doesn't move, so
+users on `:latest` never get an untested merge. The maintainer's NAS runs
+`:edge` and pulls it every 5 minutes, so a merge is live there a few
+minutes after CI finishes. In the web UI, an edge build shows an `edge`
+badge next to the logo. Click it to see the commit it was built from.
+
+`:edge` only follows `main`'s head: a build that finishes after a newer
+merge has landed still publishes its `:sha-<short sha>` but leaves `:edge`
+to the newer build.
+
+If an edge build breaks, roll back by pinning the previous commit's image
+(`image: ghcr.io/sergigp/yarrtube:sha-<short sha>`) until a fix is merged,
+then switch back to `:edge`.
+
+Running the Release workflow by hand (Actions → Release → Run workflow)
+builds any ref and publishes only `:sha-<short sha>`. Use it to try a
+branch on the NAS without touching `:edge` or `:latest`.
+
+### Stable: a pushed `vX.Y.Z` tag
+
+A stable release happens only when you push a `vX.Y.Z` tag. It publishes
+`:latest`, `:X.Y.Z` and `:X.Y`. To cut one:
+
+1. Bump `version` in `Cargo.toml` to `X.Y.Z` in a PR (with `cargo update -p
+   yarrtube` so `Cargo.lock` follows) and merge it.
+2. Once `:edge` from that merge has been tested, tag and release it:
+
+   ```bash
+   gh release create vX.Y.Z --target main --generate-notes
+   ```
+
+   (or `git tag vX.Y.Z origin/main && git push origin vX.Y.Z`; the GitHub
+   release then has to be written by hand).
+
+The release fails before building anything if the tag doesn't match the
+version in `Cargo.toml`.

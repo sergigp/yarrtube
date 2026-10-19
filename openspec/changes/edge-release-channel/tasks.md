@@ -46,7 +46,7 @@
 
 ## 4. Docs
 
-- [ ] 4.1 `doc/DEVELOPMENT.md`: add a `## Deploy` section covering:
+- [x] 4.1 `doc/DEVELOPMENT.md`: add a `## Deploy` section covering:
   - every passing merge to `main` publishes `:edge` + `:sha-<short>`; the NAS pulls `:edge` every 5 minutes
   - rollback by pinning `:sha-<short>`
   - manual workflow runs publish only `:sha-<short>`, for testing a branch
