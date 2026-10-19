@@ -333,9 +333,10 @@ pub struct CaptionProbe {
     /// Reused by `fetch_subtitles` (`--load-info-json`): one extraction per
     /// video, fewer YouTube requests.
     pub info_json: PathBuf,
-    /// yt-dlp's stderr `WARNING:` lines: any warning makes a probe without
-    /// a selectable track inconclusive (yt-dlp withholds tracks silently,
-    /// e.g. without a PO token).
+    /// yt-dlp's stderr `WARNING:` lines that can affect caption tracks:
+    /// any of them makes a probe without a selectable track inconclusive
+    /// (yt-dlp withholds tracks silently, e.g. without a PO token). Cache
+    /// write failures and skipped-formats notices are dropped.
     pub warnings: Vec<String>,
 }
 
@@ -396,7 +397,7 @@ pub fn probe_captions(
                 .collect(),
         },
         info_json,
-        warnings: warning_lines(&String::from_utf8_lossy(&output.stderr)),
+        warnings: caption_warning_lines(&String::from_utf8_lossy(&output.stderr)),
     })
 }
 
@@ -701,13 +702,21 @@ fn run(
 }
 
 /// Every `WARNING:` line of `stderr`, without its indentation.
-fn warning_lines(stderr: &str) -> Vec<String> {
+/// `WARNING:` lines of a caption probe's stderr, minus the harmless ones.
+fn caption_warning_lines(stderr: &str) -> Vec<String> {
     stderr
         .lines()
         .map(str::trim_start)
         .filter(|line| line.starts_with("WARNING:"))
+        .filter(|line| !is_harmless_probe_warning(line))
         .map(str::to_string)
         .collect()
+}
+
+/// A cache write failure (`Writing cache to '...' failed`) or a
+/// `formats have been skipped` notice (SABR): never about captions.
+fn is_harmless_probe_warning(_line: &str) -> bool {
+    false
 }
 
 fn ensure_output_dir(output_path: &Path) -> Result<()> {

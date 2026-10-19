@@ -149,7 +149,8 @@ impl SubtitleFetcher {
 
     /// yt-dlp can withhold caption tracks silently (e.g. without a PO
     /// token) and only says so in a warning: a probe without a selectable
-    /// track that warned proves nothing, so the video stays Missing.
+    /// track that warned proves nothing, so the video stays Missing. The
+    /// probe already dropped warnings that can't affect captions.
     fn log_inconclusive(video: &Video, probe: &CaptionProbe) {
         warn!(
             video_id = %video.id,
