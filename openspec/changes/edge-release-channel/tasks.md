@@ -26,7 +26,7 @@
   - Edge-never-backwards is enforced in `release.yml`'s `merge` job: `:edge` moves only while the commit is still `main`'s head (see design decision 2).
   - Update the comments.
   - Verify: `actionlint` passes, and no remaining reference to tagging.
-- [ ] 2.5 Delete `scripts/next-release-tag.sh`. Verify: `grep -r next-release-tag` returns nothing.
+- [x] 2.5 Delete `scripts/next-release-tag.sh`. Verify: `grep -r next-release-tag` returns nothing.
 
 ## 3. Web UI
 
