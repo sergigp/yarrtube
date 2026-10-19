@@ -93,3 +93,10 @@ To implement (TDD):
 - [x] 5.12 Docs: `doc/PLEX.md` / `doc/ARCHITECTURE.md` mention the 7-day window from the first check and that probe warnings keep a video Missing
 - [x] 5.13 `cargo test --locked`, fmt, clippy, `npm run check` pass; `scripts/run-smoke-tests.sh` passes
 
+## 6. Re-audit follow-up
+
+- [x] 6.1 Legacy-layout videos are not subtitle-fetchable nor protected as pending; `from_media` never yields an absolute path (design Test Plan 66-67)
+- [x] 6.2 Subtitle fetch places nothing for a video reset for redownload meanwhile (68)
+- [x] 6.3 `fetch_subtitles` returns the staged srt of the requested track key (69)
+- [x] 6.4 `cargo test --locked`, fmt, clippy pass
+

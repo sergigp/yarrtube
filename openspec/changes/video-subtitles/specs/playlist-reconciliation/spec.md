@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Missing Subtitles Recovery
-The system SHALL, for every playlist, schedule a subtitle fetch task during a reconcile pass for each Downloaded video whose subtitle state is Missing (see `video-subtitles`), without affecting that video's download status. The pass SHALL NOT fetch the subtitles itself, and SHALL NOT schedule one for a video that already has a subtitle fetch pending or running, nor for a video the same pass resets for redownload or newly adds.
+The system SHALL, for every playlist, schedule a subtitle fetch task during a reconcile pass for each Downloaded video whose subtitle state is Missing (see `video-subtitles`), without affecting that video's download status. The pass SHALL NOT fetch the subtitles itself, and SHALL NOT schedule one for a video that already has a subtitle fetch pending or running, nor for a video the same pass resets for redownload or newly adds, nor for a video still stored in the previous per-video-folder layout.
 
 #### Scenario: Downloaded video with missing subtitles
 - **WHEN** a reconcile pass finds a Downloaded video of the playlist whose subtitle state is Missing and no subtitle fetch pending or running for it
@@ -42,7 +42,7 @@ recorded filename's base name, and every file sharing the episode base name
 of a video whose episode number is recorded but whose download or thumbnail
 fetch has not completed yet, because such files are only recorded once the
 download or fetch completes. Legacy per-video folders and flat files
-recorded on a video SHALL be protected the same way. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing, because a subtitle file is placed before it is recorded.
+recorded on a video SHALL be protected the same way. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing and it is not in the previous per-video-folder layout, because a subtitle file is placed before it is recorded.
 
 #### Scenario: Downloaded video's file is missing from disk
 - **WHEN** a reconcile pass finds that a Downloaded video's recorded file is not present in its playlist's show directory

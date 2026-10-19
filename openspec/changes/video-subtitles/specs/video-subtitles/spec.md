@@ -152,7 +152,7 @@ A subtitle fetch SHALL set the video's subtitle state to Fetched when it writes 
 - **THEN** the video's subtitle state stays Missing and no subtitle file or transcript is recorded
 
 ### Requirement: Subtitle Fetch Is Best Effort
-A subtitle fetch SHALL run as its own scheduled task, separately from the video download. Its failure SHALL NOT fail the task, SHALL NOT change the video's download status or any download field, and SHALL NOT be retried by the task queue; a later reconcile pass reschedules it. A subtitle fetch for a video that is not Downloaded, has no episode number, or whose subtitle state is not Missing SHALL make no changes and SHALL NOT contact the downloader.
+A subtitle fetch SHALL run as its own scheduled task, separately from the video download. Its failure SHALL NOT fail the task, SHALL NOT change the video's download status or any download field, and SHALL NOT be retried by the task queue; a later reconcile pass reschedules it. A subtitle fetch for a video that is not Downloaded, has no episode number, is still stored in the previous per-video-folder layout (it gets subtitles once `migrate-layout` has moved it into its season folder), or whose subtitle state is not Missing SHALL make no changes and SHALL NOT contact the downloader. A fetch SHALL place nothing when, by the time its subtitles are downloaded, the video is no longer Downloaded with the same recorded filename.
 
 #### Scenario: Fetch runs for a video already Fetched
 - **WHEN** a subtitle fetch runs for a video whose subtitle state is already Fetched or Unavailable
@@ -165,6 +165,14 @@ A subtitle fetch SHALL run as its own scheduled task, separately from the video 
 #### Scenario: Fetch runs for a deleted video
 - **WHEN** a subtitle fetch runs after its video's record was deleted
 - **THEN** it completes without changes
+
+#### Scenario: Video still in the previous layout
+- **WHEN** a subtitle fetch runs for a Downloaded, numbered video whose recorded filename is still `My Video/My Video.mp4` or `My Video.mp4` (not yet migrated)
+- **THEN** it makes no changes, writes no file and does not contact the downloader, and reconcile passes do not schedule a subtitle fetch for it
+
+#### Scenario: Video reset for redownload while its subtitles are fetched
+- **WHEN** a video is reset for redownload after a subtitle fetch for it has started but before it places the subtitle file
+- **THEN** no subtitle file is placed, no transcript is stored, no subtitles-fetched event is published, and its subtitle state stays Missing
 
 #### Scenario: Video deleted while its subtitles are fetched
 - **WHEN** a video's record is deleted (or its playlist or channel deleted) after a subtitle fetch for it has started but before it places the subtitle file

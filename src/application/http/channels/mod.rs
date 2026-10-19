@@ -2428,8 +2428,6 @@ mod tests {
         )
     }
 
-    /// Saves a video and its channel membership, returning both as stored
-    /// (the channel video with its storage-assigned `id`).
     fn video_transcript(video: &Video) -> VideoTranscript {
         VideoTranscript::create(
             video.id.clone(),
@@ -2443,6 +2441,8 @@ mod tests {
         )
     }
 
+    /// Saves a video and its channel membership, returning both as stored
+    /// (the channel video with its storage-assigned `id`).
     fn save_channel_video(
         video_repository: &dyn VideoRepository,
         channel_video_repository: &dyn ChannelVideoRepository,

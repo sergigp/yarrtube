@@ -1,6 +1,7 @@
 use crate::domain::video::EpisodeNumber;
 use crate::domain::video::video_filename::VideoFilename;
 use crate::domain::video_transcript::CaptionLanguage;
+use std::ffi::OsStr;
 use std::path::Path;
 
 /// Where an episode's files sit in its show, relative to the show directory:
@@ -28,7 +29,7 @@ impl EpisodePaths {
     /// downloaded with, not after the current title.
     pub fn from_media(media_filename: &str) -> Self {
         let path = Path::new(media_filename);
-        let lossy = |part: Option<&std::ffi::OsStr>| {
+        let lossy = |part: Option<&OsStr>| {
             part.map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_default()
         };
@@ -39,9 +40,13 @@ impl EpisodePaths {
     }
 
     /// `Season <s>/<code> - <title>`, the path every file of the episode
-    /// shares before its extension.
+    /// shares before its extension; just the base name for a media file
+    /// with no folder.
     pub fn stem(&self) -> String {
-        format!("{}/{}", self.season_folder, self.base_name)
+        match self.season_folder.as_str() {
+            "" => self.base_name.clone(),
+            folder => format!("{folder}/{}", self.base_name),
+        }
     }
 
     pub fn media(&self, extension: &str) -> String {
@@ -124,6 +129,19 @@ mod tests {
                 "Season 2026/S2026E031501 - Old Title.es.srt",
             ]
             .map(str::to_string)
+        );
+    }
+
+    #[test]
+    fn it_should_name_a_bare_media_files_siblings_relative_to_the_show() {
+        let paths = EpisodePaths::from_media("My Video.mp4");
+
+        assert_eq!(
+            [
+                paths.stem(),
+                paths.subtitle(&CaptionLanguage::new("en").unwrap()),
+            ],
+            ["My Video", "My Video.en.srt"].map(str::to_string)
         );
     }
 

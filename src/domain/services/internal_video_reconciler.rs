@@ -100,8 +100,8 @@ pub trait InternalVideoReconcilerApi: Send + Sync {
     /// flight): redownloads videos whose file is missing or not mp4, repairs
     /// missing metadata, recovers errored videos past their cooldown,
     /// reschedules stranded downloads, schedules missing thumbnails and
-    /// subtitles and deletes orphaned files. `delta` tells it what the membership sync of
-    /// the same pass just added or renamed.
+    /// subtitles and deletes orphaned files. `delta` tells it what the
+    /// membership sync of the same pass just added or renamed.
     fn reconcile(&self, desired: &DesiredState, delta: &MembershipDelta) -> anyhow::Result<()>;
 }
 
@@ -424,10 +424,11 @@ impl ActualState {
                     .to_string_lossy()
                     .as_ref(),
             )
-            || self
-                .subtitle_pending_paths
-                .iter()
-                .any(|stem| entry.starts_with(&format!("{stem}.")))
+            || self.subtitle_pending_paths.iter().any(|stem| {
+                entry
+                    .strip_prefix(stem.as_str())
+                    .is_some_and(|rest| rest.starts_with('.'))
+            })
     }
 }
 
@@ -435,9 +436,8 @@ impl ActualState {
 /// every `Downloaded` video's file and episode NFO, every stored video's
 /// thumbnail (a `Pending`/`InProgress` video may already have one
 /// pre-fetched, see the `video-thumbnails` capability) and every stored
-/// video's subtitle file. An episode file is
-/// kept by its path in its season folder, a legacy video by its top-level
-/// folder or flat file.
+/// video's subtitle file. An episode file is kept by its path in its season
+/// folder, a legacy video by its top-level folder or flat file.
 fn protected_entries(videos: &[Video]) -> HashSet<String> {
     let downloaded_files: Vec<&str> = videos
         .iter()
@@ -489,7 +489,11 @@ fn numbered_episode_paths(videos: &[Video]) -> HashSet<String> {
 fn subtitle_pending_paths(videos: &[Video]) -> HashSet<String> {
     videos
         .iter()
-        .filter(|v| v.subtitle_state == SubtitleState::Missing && v.episode_number.is_some())
+        .filter(|v| {
+            v.subtitle_state == SubtitleState::Missing
+                && v.episode_number.is_some()
+                && !v.is_in_legacy_layout()
+        })
         .filter_map(|v| v.filename.as_deref())
         .map(|filename| EpisodePaths::from_media(filename).stem())
         .collect()

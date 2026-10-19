@@ -292,10 +292,12 @@ impl Video {
     }
 
     /// Whether a subtitle fetch is worth attempting: Downloaded, numbered,
-    /// and its subtitles still Missing.
+    /// in its season folder (a legacy-layout file has no episode path to
+    /// place the subtitles next to) and its subtitles still Missing.
     pub fn is_subtitle_fetchable(&self) -> bool {
         self.is_downloaded()
             && self.episode_number.is_some()
+            && !self.is_in_legacy_layout()
             && self.subtitle_state == SubtitleState::Missing
     }
 
@@ -780,5 +782,29 @@ mod tests {
             [pending, retrying, in_progress].map(|v| v.is_due_for_recovery(later)),
             [false, false, false]
         );
+    }
+
+    #[test]
+    fn it_should_not_be_subtitle_fetchable_if_in_the_legacy_layout() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let number = EpisodeNumber::from_columns(1, 3).unwrap();
+        let downloaded_at = |filename: &str| {
+            video().with_episode_number(number, now).mark_downloaded(
+                Quality::High,
+                filename,
+                None,
+                None,
+                now,
+            )
+        };
+
+        let fetchable = [
+            "Season 1/S01E003 - My Video.mp4",
+            "My Video/My Video.mp4",
+            "My Video.mp4",
+        ]
+        .map(|filename| downloaded_at(filename).is_subtitle_fetchable());
+
+        assert_eq!(fetchable, [true, false, false]);
     }
 }

@@ -46,9 +46,7 @@ impl CaptionTracks {
                 .or_else(|| self.manual_in_only_language()),
         }
     }
-}
 
-impl CaptionTracks {
     /// The uploaded track in `language`, else a regional or named variant
     /// of it (e.g. `en-US`, `es-ES-7eCR4kqQbL4`), recorded as `language`.
     fn manual_in(&self, language: &str) -> Option<CaptionTrack> {
@@ -106,10 +104,11 @@ impl CaptionTracks {
     fn manual_in_only_language(&self) -> Option<CaptionTrack> {
         let mut bases = self.manual.iter().map(|key| base_of(key));
         let base = bases.next()?;
-        bases
-            .all(|other| other == base)
-            .then(|| self.manual_in(base))
-            .flatten()
+        if bases.all(|other| other == base) {
+            self.manual_in(base)
+        } else {
+            None
+        }
     }
 }
 

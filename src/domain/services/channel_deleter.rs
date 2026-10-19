@@ -74,8 +74,8 @@ impl ChannelDeleter {
         }
     }
 
-    /// Deletes each `ChannelVideo`'s owned `Video` row and its transcript, then the
-    /// `ChannelVideo` rows themselves.
+    /// Deletes each `ChannelVideo`'s owned `Video` row and its transcript,
+    /// then the `ChannelVideo` rows themselves.
     fn delete_channel_videos(&self, id: &ChannelHandle) -> Result<(), DeleteChannelError> {
         let channel_videos = self
             .channel_video_repository

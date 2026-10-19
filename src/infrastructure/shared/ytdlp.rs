@@ -451,7 +451,7 @@ pub fn fetch_subtitles(
             ));
         }
     }
-    let path = staged_srt(staging_dir)?.ok_or_else(|| {
+    let path = staged_srt(staging_dir, &track.key)?.ok_or_else(|| {
         anyhow!(
             "yt-dlp wrote no SubRip file for the {} subtitles",
             track.key
@@ -626,17 +626,6 @@ enum RunOutcome {
 /// pollute the reason or the permanent-unavailability classification that
 /// reads it. Non-warning text, including an unprefixed error line, is kept.
 /// Trimmed, and `None` when nothing meaningful remains.
-fn not_found_message(ytdlp_path: &Path) -> String {
-    format!(
-        "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
-        ytdlp_path.display()
-    )
-}
-
-fn failure_reason(stderr: &str) -> String {
-    reason_excluding_warnings(stderr).unwrap_or_else(|| "no error reported".to_string())
-}
-
 fn reason_excluding_warnings(stderr: &str) -> Option<String> {
     let mut in_warning_block = false;
     let text = stderr
@@ -659,6 +648,17 @@ fn reason_excluding_warnings(stderr: &str) -> Option<String> {
         .trim()
         .to_string();
     (!text.is_empty()).then_some(text)
+}
+
+fn not_found_message(ytdlp_path: &Path) -> String {
+    format!(
+        "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
+        ytdlp_path.display()
+    )
+}
+
+fn failure_reason(stderr: &str) -> String {
+    reason_excluding_warnings(stderr).unwrap_or_else(|| "no error reported".to_string())
 }
 
 /// Detects YouTube's SABR-only streaming experiment in a `yt-dlp` run's
@@ -721,13 +721,20 @@ fn staged_thumbnail(media_path: &Path) -> Option<PathBuf> {
     Some(media_path.with_extension("jpg")).filter(|thumbnail| thumbnail.is_file())
 }
 
-/// The `.srt` `--convert-subs srt` left in `staging_dir`, when it is there.
-fn staged_srt(staging_dir: &Path) -> Result<Option<PathBuf>> {
+/// The `<id>.<key>.srt` `--convert-subs srt` left in `staging_dir` for the
+/// track requested by its `--sub-langs` key, when it is there: yt-dlp names
+/// a subtitle file after the output template's stem plus the key, and any
+/// other track's file left in the staging dir is ignored.
+fn staged_srt(staging_dir: &Path, key: &str) -> Result<Option<PathBuf>> {
+    let suffix = format!(".{key}.srt");
     let entries = std::fs::read_dir(staging_dir)
         .map_err(|e| anyhow!("Failed to list the staging dir {staging_dir:?}: {e}"))?;
     Ok(entries
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .find(|path| path.extension().is_some_and(|ext| ext == "srt")))
+        .find(|path| {
+            path.file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with(&suffix))
+        }))
 }
 
 /// The printed line `back` lines before the last one, when printed.
@@ -1496,6 +1503,33 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn it_should_return_the_srt_of_the_requested_track_if_another_is_staged() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-subtitles-staging");
+        std::fs::write(staging_dir.join("info.json"), "{}").unwrap();
+        std::fs::write(staging_dir.join("yt1.es.srt"), "stale").unwrap();
+        let srt = "1\n00:00:00,000 --> 00:00:02,000\nHello there\n";
+        let fake = test_support::FakeYtDlp::writing_file("yt1.en.srt", srt);
+        let probe = a_probe_in(&staging_dir);
+
+        let result = fetch_subtitles(
+            &fake.path,
+            &probe,
+            &caption_track("en", "en", CaptionSource::Manual),
+            &staging_dir,
+        );
+
+        assert_eq!(
+            result.unwrap(),
+            FetchedSubtitles {
+                path: staging_dir.join("yt1.en.srt"),
+                srt: srt.to_string(),
+            }
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn it_should_fail_when_no_srt_was_written() {
         let staging_dir = test_support::unique_temp_dir("ytdlp-subtitles-staging");
         std::fs::write(staging_dir.join("info.json"), "{}").unwrap();
@@ -1914,6 +1948,46 @@ mod tests {
     }
 
     #[test]
+    fn it_should_fail_with_an_install_hint_if_no_binary_exists_for_a_diagnostic_probe() {
+        use test_support::unique_temp_dir;
+
+        let dir = unique_temp_dir("ytdlp-diagnose-missing-binary-message");
+        let missing_path = dir.join("does-not-exist");
+
+        let result = diagnose(&missing_path, "https://example.com/video");
+
+        assert_eq!(
+            result.map(|_| ()).map_err(|e| e.to_string()),
+            Err(format!(
+                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
+                missing_path.display()
+            ))
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn it_should_fail_to_run_if_the_binary_is_not_executable_for_a_diagnostic_probe() {
+        use test_support::unique_temp_dir;
+
+        let dir = unique_temp_dir("ytdlp-diagnose-non-executable-binary");
+        let non_executable_path = dir.join("yt-dlp");
+        std::fs::write(&non_executable_path, "#!/bin/sh\nexit 0\n").unwrap();
+
+        let result = diagnose(&non_executable_path, "https://example.com/video");
+
+        assert_eq!(
+            result.map(|_| ()).map_err(|e| e.to_string()),
+            Err(
+                "Failed to run yt-dlp diagnostic probe for https://example.com/video: Permission denied (os error 13)"
+                    .to_string()
+            )
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     #[cfg(unix)]
     fn it_should_return_the_printed_thumbnail_filename_on_success() {
         use test_support::{FakeYtDlp, unique_temp_dir};
@@ -2154,6 +2228,54 @@ mod tests {
 
         assert!(result.is_err());
         std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_fail_with_an_install_hint_if_no_binary_exists_for_channel_video_listing() {
+        use test_support::unique_temp_dir;
+
+        let dir = unique_temp_dir("ytdlp-channel-videos-missing-binary-message");
+        let missing_path = dir.join("does-not-exist");
+
+        let result = list_channel_videos(
+            &missing_path,
+            "https://www.youtube.com/@somechannel/videos",
+            10,
+        );
+
+        assert_eq!(
+            result.map(|_| ()).map_err(|e| e.to_string()),
+            Err(format!(
+                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
+                missing_path.display()
+            ))
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn it_should_fail_to_run_if_the_binary_is_not_executable_for_channel_video_listing() {
+        use test_support::unique_temp_dir;
+
+        let dir = unique_temp_dir("ytdlp-channel-videos-non-executable-binary");
+        let non_executable_path = dir.join("yt-dlp");
+        std::fs::write(&non_executable_path, "#!/bin/sh\nexit 0\n").unwrap();
+
+        let result = list_channel_videos(
+            &non_executable_path,
+            "https://www.youtube.com/@somechannel/videos",
+            10,
+        );
+
+        assert_eq!(
+            result.map(|_| ()).map_err(|e| e.to_string()),
+            Err(
+                "Failed to run yt-dlp for https://www.youtube.com/@somechannel/videos: Permission denied (os error 13)"
+                    .to_string()
+            )
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// Regression test for the JSON-line parsing format (see design.md):

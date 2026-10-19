@@ -143,6 +143,24 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_the_text_of_a_cue_without_an_index() {
+        assert_eq!(
+            TranscriptText::from_srt("00:00:00,000 --> 00:00:02,000\nHello there\n"),
+            TranscriptText::new("Hello there")
+        );
+    }
+
+    #[test]
+    fn it_should_keep_text_continuing_after_a_blank_line() {
+        assert_eq!(
+            TranscriptText::from_srt(
+                "1\n00:00:00,000 --> 00:00:02,000\nHello there\n\nGeneral Kenobi\n"
+            ),
+            TranscriptText::new("Hello there\nGeneral Kenobi")
+        );
+    }
+
+    #[test]
     fn it_should_be_empty_for_an_empty_srt() {
         assert_eq!(TranscriptText::from_srt(""), TranscriptText::new(""));
     }

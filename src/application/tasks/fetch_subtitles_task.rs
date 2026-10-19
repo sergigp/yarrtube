@@ -801,6 +801,60 @@ mod tests {
     }
 
     #[test]
+    fn it_should_discard_the_subtitles_if_the_video_was_reset_for_redownload_meanwhile() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video = downloaded_video();
+        video_repository.save(&video).unwrap();
+        let reset = video.clone().reset_for_redownload(now());
+        let resetting_repository = video_repository.clone();
+        let reset_video = reset.clone();
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default()
+                .with_caption_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt")))
+                .with_on_fetch_subtitles(move || {
+                    resetting_repository.save(&reset_video).unwrap();
+                }),
+        );
+        let task = FetchSubtitlesTask::new(
+            video_repository.clone(),
+            Arc::new(SubtitleFetcher::new(
+                video_repository.clone(),
+                video_transcript_repository.clone(),
+                video_downloader_repository,
+                video_file_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(SqliteEventPublisher::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(FixedClock(now())),
+                "/videos",
+            )),
+        );
+
+        let result = run(&task, &payload_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![reset]);
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(
+            *video_file_repository.deleted_dirs.lock().unwrap(),
+            vec![staging_dir(&video)]
+        );
+        assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_skip_if_subtitles_already_fetched() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -899,6 +953,66 @@ mod tests {
 
         assert_eq!(results, [Ok(()), Ok(())]);
         assert_eq!(video_repository.list().unwrap(), vec![pending, legacy]);
+        assert_eq!(
+            *video_downloader_repository.caption_calls.lock().unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn it_should_skip_a_numbered_video_still_in_the_legacy_layout() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default()
+                .with_caption_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        );
+        let in_folder = Video::create(VideoId::new("yt1").unwrap(), "Old", fixed_timestamp())
+            .with_episode_number(
+                EpisodeNumber::from_columns(2026, 31501).unwrap(),
+                fixed_timestamp(),
+            )
+            .mark_downloaded(Quality::High, "Old/Old.mp4", None, None, fixed_timestamp());
+        let flat = Video::create(VideoId::new("yt2").unwrap(), "Flat", fixed_timestamp())
+            .with_episode_number(
+                EpisodeNumber::from_columns(2026, 31502).unwrap(),
+                fixed_timestamp(),
+            )
+            .mark_downloaded(Quality::High, "Flat.mp4", None, None, fixed_timestamp());
+        video_repository.save(&in_folder).unwrap();
+        video_repository.save(&flat).unwrap();
+        let task = FetchSubtitlesTask::new(
+            video_repository.clone(),
+            Arc::new(SubtitleFetcher::new(
+                video_repository.clone(),
+                video_transcript_repository.clone(),
+                video_downloader_repository.clone(),
+                video_file_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(SqliteEventPublisher::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(FixedClock(now())),
+                "/videos",
+            )),
+        );
+
+        let results = [
+            run(&task, &payload_for(in_folder.id.as_str())),
+            run(&task, &payload_for(flat.id.as_str())),
+        ];
+
+        assert_eq!(results, [Ok(()), Ok(())]);
+        assert_eq!(video_repository.list().unwrap(), vec![in_folder, flat]);
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
         assert_eq!(
             *video_downloader_repository.caption_calls.lock().unwrap(),
             0
@@ -1070,6 +1184,57 @@ mod tests {
         );
         let video = Video {
             subtitles_first_missing_at: Some(now() - Duration::days(8)),
+            ..downloaded_video()
+        };
+        video_repository.save(&video).unwrap();
+        let task = FetchSubtitlesTask::new(
+            video_repository.clone(),
+            Arc::new(SubtitleFetcher::new(
+                video_repository.clone(),
+                video_transcript_repository.clone(),
+                video_downloader_repository.clone(),
+                video_file_repository.clone(),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(SqliteEventPublisher::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(FixedClock(now())),
+                "/videos",
+            )),
+        );
+
+        let result = run(&task, &payload_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                subtitle_state: SubtitleState::Unavailable,
+                updated_at: now(),
+                ..video.clone()
+            }]
+        );
+        assert_eq!(*video_file_repository.moved.lock().unwrap(), vec![]);
+        assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+    }
+
+    #[test]
+    fn it_should_mark_a_video_first_checked_exactly_seven_days_ago_unavailable() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default()
+                .with_caption_probe(Ok(caption_probe(translations_only()))),
+        );
+        let video = Video {
+            subtitles_first_missing_at: Some(now() - Duration::days(7)),
             ..downloaded_video()
         };
         video_repository.save(&video).unwrap();

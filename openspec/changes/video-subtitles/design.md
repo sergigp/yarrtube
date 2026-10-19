@@ -57,7 +57,7 @@ pub struct Video {
     pub subtitles_first_missing_at: Option<DateTime<Utc>>, // first conclusive check without a selectable track; starts the 7-day window
 }
 impl Video {
-    /// Downloaded, numbered, and subtitle state Missing.
+    /// Downloaded, numbered, not in the legacy per-video-folder layout (subtitles wait for migrate-layout), and subtitle state Missing.
     pub fn is_subtitle_fetchable(&self) -> bool;
     /// Fetched + filename; stored via `update_subtitles` only.
     pub fn with_subtitles(self, subtitle_filename: impl Into<String>, now: DateTime<Utc>) -> Self;
@@ -150,6 +150,7 @@ pub struct FetchedSubtitles { pub path: PathBuf, pub srt: String }
 /// Err on any failure (clean or systemic), so the caller leaves the video Missing.
 pub fn probe_captions(ytdlp_path: &Path, video_url: &str, staging_dir: &Path) -> Result<CaptionProbe>;
 /// `--load-info-json --skip-download --write-subs|--write-auto-subs --sub-langs <key> --sub-format vtt --convert-subs srt`.
+/// Returns the staged `<id>.<track.key>.srt` (not any .srt: a kill can leave another track's file behind).
 pub fn fetch_subtitles(ytdlp_path: &Path, probe: &CaptionProbe, track: &CaptionTrack, staging_dir: &Path) -> Result<FetchedSubtitles>;
 
 // infrastructure/repositories/youtube_video_downloader_repository.rs
@@ -263,7 +264,7 @@ TaskExecutor (Subtitles lane)
             : VideoRepository::update_subtitles(&video)            // Missing, first check recorded
         Some(track) =>
           VideoDownloaderRepository::fetch_subtitles(&probe, &track, staging) -> Err => warn, leave Missing
-          VideoRepository::find(&video.id) -> None => return       // deleted meanwhile, like VideoDownloader::record_unless_deleted
+          VideoRepository::find(&video.id) -> None, or no longer Downloaded with the same filename => return   // deleted or reset meanwhile, like VideoDownloader::record_unless_deleted
           path = EpisodePaths::from_media(&video.filename).subtitle(&track.language)
           VideoFileRepository::move_file(&fetched.path, &output_dir.join(&path))
           VideoTranscriptRepository::save(&VideoTranscript::create(id, &track, TranscriptText::from_srt(&fetched.srt), now))
@@ -426,3 +427,11 @@ Audit follow-up (to implement):
 
 `infrastructure/repositories/sqlite_video_repository.rs`
 65. `it_should_round_trip_the_first_check_without_captions` (and `update_subtitles` writes it).
+
+Re-audit follow-up:
+
+66. `video.rs`: a Downloaded numbered video in the legacy layout is not subtitle-fetchable; `fetch_subtitles_task.rs`: legacy video -> no downloader call, stays Missing; `reconcile_channel_task.rs`: no FetchSubtitles scheduled for it.
+67. `episode_paths.rs`: `from_media` of a bare filename yields a relative path (no leading `/`).
+68. `fetch_subtitles_task.rs`: video reset for redownload while fetching -> nothing placed, no transcript, no event, stays Missing.
+69. `ytdlp.rs`: a stale `<id>.es.srt` in staging is ignored when fetching key `en`.
+

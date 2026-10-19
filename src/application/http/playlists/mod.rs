@@ -2310,8 +2310,6 @@ mod tests {
         )
     }
 
-    /// Saves a video and its playlist membership, returning both as stored
-    /// (the playlist video with its storage-assigned `id`).
     fn video_transcript(video: &Video) -> VideoTranscript {
         VideoTranscript::create(
             video.id.clone(),
@@ -2325,6 +2323,8 @@ mod tests {
         )
     }
 
+    /// Saves a video and its playlist membership, returning both as stored
+    /// (the playlist video with its storage-assigned `id`).
     fn save_playlist_video(
         video_repository: &dyn VideoRepository,
         playlist_video_repository: &dyn PlaylistVideoRepository,

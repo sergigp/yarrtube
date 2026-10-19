@@ -183,7 +183,8 @@ impl SubtitleFetcher {
     /// Downloads `track`, moves it next to the episode, stores its
     /// transcript, then records only the subtitle fields: a download of the
     /// same video may have changed it since `video` was read. The video (or
-    /// its whole playlist/channel) may have been deleted while the track
+    /// its whole playlist/channel) may have been deleted, reset for
+    /// redownload or redownloaded under another name while the track
     /// downloaded: then nothing is placed, `fetch` discards the staging dir.
     fn place_subtitles(
         &self,
@@ -197,7 +198,7 @@ impl SubtitleFetcher {
         let fetched = self
             .video_downloader_repository
             .fetch_subtitles(probe, track, staging)?;
-        if self.video_repository.find(&video.id)?.is_none() {
+        if !self.is_still_downloaded_as(video)? {
             return Ok(());
         }
         let subtitle_filename = paths.subtitle(&track.language);
@@ -215,6 +216,15 @@ impl SubtitleFetcher {
             .update_subtitles(&video.clone().with_subtitles(subtitle_filename, now))?;
         self.publish_fetched(video, output_dir);
         Ok(())
+    }
+
+    /// Whether the stored video is still Downloaded as the same file the
+    /// fetch started with, so the subtitles still belong next to it.
+    fn is_still_downloaded_as(&self, video: &Video) -> anyhow::Result<bool> {
+        Ok(self
+            .video_repository
+            .find(&video.id)?
+            .is_some_and(|stored| stored.is_downloaded() && stored.filename == video.filename))
     }
 
     /// Best-effort, like `VideoDownloaded`: the subtitles are already

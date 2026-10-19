@@ -24,3 +24,28 @@ impl CaptionSource {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_round_trip_every_source_through_its_string_representation() {
+        let sources = [CaptionSource::Manual, CaptionSource::Automatic];
+
+        assert_eq!(
+            sources.map(|source| CaptionSource::parse(source.as_str())),
+            sources.map(Ok)
+        );
+    }
+
+    #[test]
+    fn it_should_reject_an_unknown_source() {
+        assert_eq!(
+            CaptionSource::parse("BOGUS"),
+            Err(ValidationError(
+                "unknown caption source 'BOGUS'".to_string()
+            ))
+        );
+    }
+}
