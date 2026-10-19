@@ -59,5 +59,5 @@ SQLite video repository:
 ## 4. Verification
 
 - [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, and `npm run check` in `web/` all pass
-- [ ] 4.2 Run `scripts/run-local.sh` on a library with downloaded videos: after one reconcile, subtitle fetches run one at a time; `.srt` files appear next to episodes; captionless old videos end Unavailable; tasks view shows "Fetching subtitles of …"
-- [ ] 4.3 Run `scripts/run-smoke-test.sh` and verify it passes
+- [x] 4.2 Run `scripts/run-local.sh` on a library with downloaded videos: after one reconcile, subtitle fetches run one at a time; `.srt` files appear next to episodes; captionless old videos end Unavailable; tasks view shows "Fetching subtitles of …"
+- [x] 4.3 Run `scripts/run-smoke-tests.sh` and verify it passes

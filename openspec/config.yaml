@@ -82,5 +82,5 @@ rules:
       replaces skeleton stub code in a real adapter via one red-green-refactor cycle.
 
       ## 4. Verification
-      cargo test, fmt, clippy, and manual check via smoke tests running scripts/run-smoke-test.sh or manually running scripts/run-local.sh when the change
+      cargo test, fmt, clippy, and manual check via smoke tests running scripts/run-smoke-tests.sh or manually running scripts/run-local.sh when the change
       is user-visible.
