@@ -59,13 +59,13 @@ struct DownloadVideoPayload {
 }
 
 #[derive(Debug, Deserialize)]
-struct DeleteVideoFilePayload {
-    filename: Option<String>,
-    thumbnail_filename: Option<String>,
+pub struct DeleteVideoFilePayload {
+    pub filename: Option<String>,
+    pub thumbnail_filename: Option<String>,
     /// Absent from tasks queued before subtitles existed.
     #[serde(default)]
-    subtitle_filename: Option<String>,
-    output_dir: String,
+    pub subtitle_filename: Option<String>,
+    pub output_dir: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -181,18 +181,11 @@ impl Task {
     /// `TaskHandler`, back into the recorded filename, recorded thumbnail
     /// filename, recorded subtitle filename, and output directory it
     /// targets.
-    #[allow(clippy::type_complexity)]
     pub fn decode_delete_video_file_payload(
         payload: &str,
-    ) -> Result<(Option<String>, Option<String>, Option<String>, String), TaskError> {
-        let parsed: DeleteVideoFilePayload = serde_json::from_str(payload)
-            .map_err(|e| TaskError(format!("invalid delete_video_file payload: {e}")))?;
-        Ok((
-            parsed.filename,
-            parsed.thumbnail_filename,
-            parsed.subtitle_filename,
-            parsed.output_dir,
-        ))
+    ) -> Result<DeleteVideoFilePayload, TaskError> {
+        serde_json::from_str(payload)
+            .map_err(|e| TaskError(format!("invalid delete_video_file payload: {e}")))
     }
 
     /// Decodes a `delete_playlist_files` task's raw JSON payload, as handed
@@ -401,8 +394,12 @@ mod tests {
             output_dir: "/videos/music".to_string(),
         };
 
-        let (filename, thumbnail_filename, subtitle_filename, output_dir) =
-            Task::decode_delete_video_file_payload(&task.payload().to_string()).unwrap();
+        let DeleteVideoFilePayload {
+            filename,
+            thumbnail_filename,
+            subtitle_filename,
+            output_dir,
+        } = Task::decode_delete_video_file_payload(&task.payload().to_string()).unwrap();
 
         assert_eq!(filename, Some("My Video.mp4".to_string()));
         assert_eq!(thumbnail_filename, Some("My Video.jpg".to_string()));

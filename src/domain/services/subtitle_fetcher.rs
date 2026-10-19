@@ -25,8 +25,9 @@ const UNAVAILABLE_AFTER: Duration = Duration::days(7);
 
 /// Best-effort fetch of a downloaded video's original-language subtitles —
 /// see the `video-subtitles` capability. The fetch itself runs from the
-/// `fetch_subtitles` task and never returns an error to its caller; each
-/// reconcile pass's missing-subtitles recovery only schedules it.
+/// `fetch_subtitles` task and never returns an error to its caller; it is
+/// scheduled by `FetchSubtitlesOnVideoDownloaded` after a download and by
+/// the reconcilers' missing-subtitles recovery.
 #[derive(Clone)]
 pub struct SubtitleFetcher {
     video_repository: Arc<dyn VideoRepository>,
@@ -123,12 +124,18 @@ impl SubtitleFetcher {
     }
 
     fn fetch_and_place(&self, video: &Video, output_dir: &Path) -> anyhow::Result<()> {
+        let Some(filename) = video.filename.as_deref() else {
+            return Ok(());
+        };
+        let paths = EpisodePaths::from_media(filename);
         let staging = subtitle_staging_dir(&self.videos_path, &video.id);
         let probe = self
             .video_downloader_repository
             .probe_captions(&video.youtube_id.to_url(), &staging)?;
         match probe.tracks.original() {
-            Some(track) => self.place_subtitles(video, &probe, &track, &staging, output_dir),
+            Some(track) => {
+                self.place_subtitles(video, &paths, &probe, &track, &staging, output_dir)
+            }
             None => self.mark_unavailable_if_old(video, &probe),
         }
     }
@@ -148,22 +155,25 @@ impl SubtitleFetcher {
 
     /// Downloads `track`, moves it next to the episode, stores its
     /// transcript, then records only the subtitle fields: a download of the
-    /// same video may have changed it since `video` was read.
+    /// same video may have changed it since `video` was read. The video (or
+    /// its whole playlist/channel) may have been deleted while the track
+    /// downloaded: then nothing is placed, `fetch` discards the staging dir.
     fn place_subtitles(
         &self,
         video: &Video,
+        paths: &EpisodePaths,
         probe: &CaptionProbe,
         track: &CaptionTrack,
         staging: &Path,
         output_dir: &Path,
     ) -> anyhow::Result<()> {
-        let Some(number) = video.episode_number else {
-            return Ok(());
-        };
         let fetched = self
             .video_downloader_repository
             .fetch_subtitles(probe, track, staging)?;
-        let subtitle_filename = EpisodePaths::new(&number, &video.title).subtitle(&track.language);
+        if self.video_repository.find(&video.id)?.is_none() {
+            return Ok(());
+        }
+        let subtitle_filename = paths.subtitle(&track.language);
         self.video_file_repository
             .move_file(&fetched.path, &output_dir.join(&subtitle_filename))?;
         let now = self.clock.now();

@@ -7,8 +7,8 @@ use crate::domain::shared::Quality;
 use crate::domain::task::{ScheduledTask, Task};
 use crate::domain::video::VideoRecordId;
 use crate::domain::video::{
-    EpisodePaths, SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, Video, VideoStatus, is_episode_path,
-    is_season_folder, nfo_path_for, owning_entry, resolve_output_dir,
+    EpisodePaths, SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, SubtitleState, Video, VideoStatus,
+    is_episode_path, is_season_folder, nfo_path_for, owning_entry, resolve_output_dir,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -151,6 +151,7 @@ impl InternalVideoReconciler {
             .collect();
         let protected_entries = protected_entries(&videos);
         let numbered_episode_paths = numbered_episode_paths(&videos);
+        let subtitle_pending_paths = subtitle_pending_paths(&videos);
 
         Ok(ActualState {
             output_dir,
@@ -160,6 +161,7 @@ impl InternalVideoReconciler {
             broken_download_ids,
             protected_entries,
             numbered_episode_paths,
+            subtitle_pending_paths,
         })
     }
 
@@ -402,6 +404,10 @@ struct ActualState {
     /// or thumbnail fetch already moved into place under it is kept, even
     /// before the video records it.
     numbered_episode_paths: HashSet<String>,
+    /// The recorded media file's stem of every numbered video whose
+    /// subtitles are still Missing: a subtitle fetch may already have moved
+    /// its `<stem>.<lang>.srt` into place without recording it yet.
+    subtitle_pending_paths: HashSet<String>,
 }
 
 impl ActualState {
@@ -418,6 +424,10 @@ impl ActualState {
                     .to_string_lossy()
                     .as_ref(),
             )
+            || self
+                .subtitle_pending_paths
+                .iter()
+                .any(|stem| entry.starts_with(&format!("{stem}.")))
     }
 }
 
@@ -473,6 +483,15 @@ fn numbered_episode_paths(videos: &[Video]) -> HashSet<String> {
             v.episode_number
                 .map(|number| EpisodePaths::new(&number, &v.title).stem())
         })
+        .collect()
+}
+
+fn subtitle_pending_paths(videos: &[Video]) -> HashSet<String> {
+    videos
+        .iter()
+        .filter(|v| v.subtitle_state == SubtitleState::Missing && v.episode_number.is_some())
+        .filter_map(|v| v.filename.as_deref())
+        .map(|filename| EpisodePaths::from_media(filename).stem())
         .collect()
 }
 

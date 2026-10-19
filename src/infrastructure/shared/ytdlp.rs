@@ -165,12 +165,7 @@ pub fn download_video(
         .stderr(Stdio::piped());
     let output = match run(
         &mut cmd,
-        || {
-            format!(
-                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
-                ytdlp_path.display()
-            )
-        },
+        || not_found_message(ytdlp_path),
         |e| format!("Failed to run yt-dlp for {video_url}: {e}"),
     )? {
         RunOutcome::Success(output) => output,
@@ -277,12 +272,7 @@ pub fn fetch_thumbnail(
     .stderr(Stdio::piped());
     let output = match run(
         &mut cmd,
-        || {
-            format!(
-                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
-                ytdlp_path.display()
-            )
-        },
+        || not_found_message(ytdlp_path),
         |e| format!("Failed to run yt-dlp thumbnail fetch for {video_url}: {e}"),
     )? {
         RunOutcome::Success(output) => output,
@@ -368,18 +358,12 @@ pub fn probe_captions(
         .stderr(Stdio::piped());
     let output = match run(
         &mut cmd,
-        || {
-            format!(
-                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
-                ytdlp_path.display()
-            )
-        },
+        || not_found_message(ytdlp_path),
         |e| format!("Failed to run yt-dlp caption probe for {video_url}: {e}"),
     )? {
         RunOutcome::Success(output) => output,
         RunOutcome::CleanFailure { stderr_raw } => {
-            let reason = reason_excluding_warnings(&stderr_raw)
-                .unwrap_or_else(|| "no error reported".to_string());
+            let reason = failure_reason(&stderr_raw);
             return Err(anyhow!(
                 "yt-dlp failed to probe captions for {video_url}: {reason}"
             ));
@@ -443,12 +427,7 @@ pub fn fetch_subtitles(
         .stderr(Stdio::piped());
     match run(
         &mut cmd,
-        || {
-            format!(
-                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
-                ytdlp_path.display()
-            )
-        },
+        || not_found_message(ytdlp_path),
         |e| {
             format!(
                 "Failed to run yt-dlp subtitle download for {}: {e}",
@@ -458,8 +437,7 @@ pub fn fetch_subtitles(
     )? {
         RunOutcome::Success(_) => {}
         RunOutcome::CleanFailure { stderr_raw } => {
-            let reason = reason_excluding_warnings(&stderr_raw)
-                .unwrap_or_else(|| "no error reported".to_string());
+            let reason = failure_reason(&stderr_raw);
             return Err(anyhow!(
                 "yt-dlp failed to download the {} subtitles: {reason}",
                 track.key
@@ -505,10 +483,7 @@ pub fn diagnose(ytdlp_path: &Path, video_url: &str) -> Result<Option<String>> {
     let output = match output_retrying_busy(&mut cmd) {
         Ok(output) => output,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Err(anyhow!(
-                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
-                ytdlp_path.display()
-            ));
+            return Err(anyhow!(not_found_message(ytdlp_path)));
         }
         Err(e) => {
             return Err(anyhow!(
@@ -599,17 +574,13 @@ pub fn list_channel_videos(
     let output = match output_retrying_busy(&mut cmd) {
         Ok(output) => output,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Err(anyhow!(
-                "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
-                ytdlp_path.display()
-            ));
+            return Err(anyhow!(not_found_message(ytdlp_path)));
         }
         Err(e) => return Err(anyhow!("Failed to run yt-dlp for {channel_url}: {e}")),
     };
 
     if !output.status.success() {
-        let reason = reason_excluding_warnings(&String::from_utf8_lossy(&output.stderr))
-            .unwrap_or_else(|| "no error reported".to_string());
+        let reason = failure_reason(&String::from_utf8_lossy(&output.stderr));
         return Err(anyhow!(
             "yt-dlp failed to list channel videos for {channel_url}: {reason}"
         ));
@@ -648,6 +619,17 @@ enum RunOutcome {
 /// pollute the reason or the permanent-unavailability classification that
 /// reads it. Non-warning text, including an unprefixed error line, is kept.
 /// Trimmed, and `None` when nothing meaningful remains.
+fn not_found_message(ytdlp_path: &Path) -> String {
+    format!(
+        "`yt-dlp` was not found at {}. Install yt-dlp there or run update-ytdlp before running yarrtube.",
+        ytdlp_path.display()
+    )
+}
+
+fn failure_reason(stderr: &str) -> String {
+    reason_excluding_warnings(stderr).unwrap_or_else(|| "no error reported".to_string())
+}
+
 fn reason_excluding_warnings(stderr: &str) -> Option<String> {
     let mut in_warning_block = false;
     let text = stderr
@@ -960,6 +942,14 @@ mod tests {
         include_str!("ytdlp_fixtures/uploaded_captions.info.json");
     const AUTO_ONLY_SPANISH_INFO_JSON: &str =
         include_str!("ytdlp_fixtures/auto_only_spanish.info.json");
+
+    fn a_probe_in(staging_dir: &Path) -> CaptionProbe {
+        CaptionProbe {
+            tracks: CaptionTracks::default(),
+            published_at: None,
+            info_json: staging_dir.join("info.json"),
+        }
+    }
 
     fn caption_track(key: &str, language: &str, source: CaptionSource) -> CaptionTrack {
         CaptionTrack {
@@ -1348,11 +1338,7 @@ mod tests {
     fn it_should_pass_manual_subtitle_flags_for_a_manual_track() {
         let staging_dir = test_support::unique_temp_dir("ytdlp-subtitles-staging");
         let fake = test_support::FakeYtDlp::with_downloaded_files("", &["yt1.en.srt"]);
-        let probe = CaptionProbe {
-            tracks: CaptionTracks::default(),
-            published_at: None,
-            info_json: staging_dir.join("info.json"),
-        };
+        let probe = a_probe_in(&staging_dir);
 
         fetch_subtitles(
             &fake.path,
@@ -1390,11 +1376,7 @@ mod tests {
     fn it_should_pass_auto_subtitle_flags_for_an_automatic_track() {
         let staging_dir = test_support::unique_temp_dir("ytdlp-subtitles-staging");
         let fake = test_support::FakeYtDlp::with_downloaded_files("", &["yt1.en-orig.srt"]);
-        let probe = CaptionProbe {
-            tracks: CaptionTracks::default(),
-            published_at: None,
-            info_json: staging_dir.join("info.json"),
-        };
+        let probe = a_probe_in(&staging_dir);
 
         fetch_subtitles(
             &fake.path,
@@ -1434,11 +1416,7 @@ mod tests {
         std::fs::write(staging_dir.join("info.json"), "{}").unwrap();
         let srt = "1\n00:00:00,000 --> 00:00:02,000\nHello there\n";
         let fake = test_support::FakeYtDlp::writing_file("yt1.en.srt", srt);
-        let probe = CaptionProbe {
-            tracks: CaptionTracks::default(),
-            published_at: None,
-            info_json: staging_dir.join("info.json"),
-        };
+        let probe = a_probe_in(&staging_dir);
 
         let result = fetch_subtitles(
             &fake.path,
@@ -1463,11 +1441,7 @@ mod tests {
         let staging_dir = test_support::unique_temp_dir("ytdlp-subtitles-staging");
         std::fs::write(staging_dir.join("info.json"), "{}").unwrap();
         let fake = test_support::FakeYtDlp::with_exit_code(0);
-        let probe = CaptionProbe {
-            tracks: CaptionTracks::default(),
-            published_at: None,
-            info_json: staging_dir.join("info.json"),
-        };
+        let probe = a_probe_in(&staging_dir);
 
         let result = fetch_subtitles(
             &fake.path,

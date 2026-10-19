@@ -41,11 +41,11 @@ with the same protected set: show files, season folders, every recorded filename
 sharing a recorded filename's base name, every file sharing the episode base
 name of a video whose number is recorded but whose download or thumbnail
 fetch has not completed yet, and legacy per-video folders or flat files
-recorded on a video.
+recorded on a video. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing, because a subtitle file is placed before it is recorded.
 
 #### Scenario: Downloaded video's file is missing from disk
 - **WHEN** a reconcile pass finds that a Downloaded video's recorded file is not present in its channel's show directory
-- **THEN** the system resets that video to PENDING, clears its recorded filename and quality, keeps its episode number, and triggers a fresh download of it
+- **THEN** the system resets that video to PENDING, resets its subtitle state to Missing and clears its recorded subtitle filename, clears its recorded filename and quality, keeps its episode number, and triggers a fresh download of it
 
 #### Scenario: Downloaded video's file is present but not mp4
 - **WHEN** a reconcile pass finds that a Downloaded video's recorded file is present in its channel's show directory but is not an mp4 container
@@ -82,3 +82,7 @@ recorded on a video.
 #### Scenario: Video's subtitle file is present
 - **WHEN** a reconcile pass finds a file matching a video's recorded subtitle filename in its season folder
 - **THEN** the system does not treat it as orphaned and does not delete it
+
+#### Scenario: A subtitle file placed but not yet recorded
+- **WHEN** a reconcile pass finds `<base name>.en.srt`, where `<base name>` is a Downloaded video's recorded filename without its extension, and that video's subtitle state is Missing
+- **THEN** the system does not treat that file as orphaned and does not delete it, even if the video's title has changed since its download

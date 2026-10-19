@@ -7,6 +7,7 @@ use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepos
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::sync::Arc;
 use tracing::info;
@@ -16,6 +17,7 @@ use tracing::info;
 pub struct ChannelDeleter {
     repository: Arc<dyn ChannelRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     avatar_repository: Arc<dyn ChannelAvatarRepository>,
     event_publisher: Arc<dyn EventPublisher>,
@@ -26,6 +28,7 @@ impl ChannelDeleter {
     pub fn new(
         repository: Arc<dyn ChannelRepository>,
         video_repository: Arc<dyn VideoRepository>,
+        video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         avatar_repository: Arc<dyn ChannelAvatarRepository>,
         event_publisher: Arc<dyn EventPublisher>,
@@ -34,6 +37,7 @@ impl ChannelDeleter {
         Self {
             repository,
             video_repository,
+            video_transcript_repository,
             channel_video_repository,
             avatar_repository,
             event_publisher,
@@ -70,7 +74,7 @@ impl ChannelDeleter {
         }
     }
 
-    /// Deletes each `ChannelVideo`'s owned `Video` row, then the
+    /// Deletes each `ChannelVideo`'s owned `Video` row and its transcript, then the
     /// `ChannelVideo` rows themselves.
     fn delete_channel_videos(&self, id: &ChannelHandle) -> Result<(), DeleteChannelError> {
         let channel_videos = self
@@ -79,6 +83,9 @@ impl ChannelDeleter {
             .map_err(DeleteChannelError::Repository)?;
         for channel_video in &channel_videos {
             self.video_repository
+                .delete(&channel_video.video_id)
+                .map_err(DeleteChannelError::Repository)?;
+            self.video_transcript_repository
                 .delete(&channel_video.video_id)
                 .map_err(DeleteChannelError::Repository)?;
         }

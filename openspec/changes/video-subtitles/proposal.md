@@ -22,9 +22,14 @@ Plex/Kodi/Jellyfin subtitles for free.
 - When the Plex scan trigger is configured, the show folder is scanned
   again after a subtitle file is written, so Plex picks it up right away.
 - Each video records a subtitle state: Missing, Fetched or Unavailable.
-  Unavailable is terminal and only reached when the video has no
-  original-language captions and is at least 7 days old (captions appear late
-  on new uploads); any failure (rate limit, network) leaves it Missing.
+  Unavailable is terminal and only reached when warning-free checks found no
+  original-language captions for at least 7 days, counted both from the
+  publish date (captions appear late on new uploads) and from the first such
+  check (so an old playlist added today still gets a week of retries); any
+  failure (rate limit, network) or yt-dlp warning (it can silently withhold
+  caption tracks) leaves it Missing. A redownload resets it to Missing.
+- The `.srt` is named after the downloaded video file, not the current
+  title, so it still pairs with the media file after a video is retitled.
 - Every reconcile pass also schedules a subtitle fetch for each Downloaded
   video whose subtitles are still Missing, so the existing library is
   backfilled automatically after upgrading and videos whose captions
@@ -58,13 +63,15 @@ Plex/Kodi/Jellyfin subtitles for free.
 
 ## Impact
 
-- Database: new subtitle state + subtitle filename on `videos`, new
+- Database: new subtitle state, subtitle filename and first-check-without-captions
+  time on `videos`, new
   `video_transcripts` table (migration `0010`).
 - `yt-dlp` integration: new caption probe and caption-only download
   invocations (requires the bundled `ffmpeg` for `--convert-subs srt`).
 - Domain: `Video`, `EpisodePaths`, `InternalVideoReconciler`,
-  `VideoFileDeleter`, the playlist/channel reconcilers (transcript deleted
-  with its video), new subtitle fetcher service and transcript aggregate.
+  `VideoFileDeleter`, the playlist/channel reconcilers and the channel/playlist
+  deleters (transcript deleted with its video), new subtitle fetcher service
+  and transcript aggregate.
 - Tasks: new `fetch_subtitles` task type and handler; `delete_video_file`
   payload gains the subtitle filename (older queued payloads without it still
   decode).

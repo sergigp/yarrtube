@@ -154,9 +154,8 @@ impl TaskViewSearcher {
 
     fn resolve_delete_video_file(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
         let mut view = HashMap::new();
-        let (filename, _thumbnail_filename, _subtitle_filename, _output_dir) =
-            Task::decode_delete_video_file_payload(payload)?;
-        if let Some(filename) = filename {
+        let payload = Task::decode_delete_video_file_payload(payload)?;
+        if let Some(filename) = payload.filename {
             view.insert("filename".to_string(), filename);
         }
         Ok(view)

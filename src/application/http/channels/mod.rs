@@ -176,6 +176,9 @@ mod tests {
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::VideoId;
     use crate::domain::video::{PlaybackPosition, Video};
+    use crate::domain::video_transcript::{
+        CaptionLanguage, CaptionSource, CaptionTrack, TranscriptText, VideoTranscript,
+    };
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
@@ -195,7 +198,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_transcript_repository::SqliteVideoTranscriptRepository;
+    use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
+        SqliteVideoTranscriptRepository, VideoTranscriptRepository,
+    };
     use crate::infrastructure::repositories::youtube_channel_repository::{
         FakeYoutubeChannelRepository, ResolvedChannel, YoutubeChannelRepository,
     };
@@ -856,6 +861,7 @@ mod tests {
         let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             avatar_repository.clone(),
             event_publisher(&db),
@@ -901,6 +907,7 @@ mod tests {
         let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
@@ -950,6 +957,7 @@ mod tests {
         let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
@@ -1001,6 +1009,7 @@ mod tests {
         let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
             video_repository.clone(),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
             channel_video_repository.clone(),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
@@ -1033,6 +1042,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_delete_the_transcripts_of_the_deleted_channel_videos() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let (video, _) = save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "yt1",
+            0,
+        );
+        video_transcript_repository
+            .save(&video_transcript(&video))
+            .unwrap();
+        let channel_deleter = ChannelDeleter::new(
+            channel_repository.clone(),
+            video_repository.clone(),
+            video_transcript_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelAvatarRepository::default()),
+            event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+        );
+
+        let response = delete(channel_deleter, "@somechannel").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+    }
+
+    #[tokio::test]
     async fn it_should_delete_the_channel_avatar() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -1049,6 +1097,7 @@ mod tests {
         let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             avatar_repository.clone(),
             event_publisher(&db),
@@ -1080,6 +1129,7 @@ mod tests {
         let channel_deleter = ChannelDeleter::new(
             channel_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
@@ -2099,6 +2149,7 @@ mod tests {
         ChannelDeleter::new(
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqliteVideoTranscriptRepository::new(unused_connection())),
             Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
             Arc::new(FakeChannelAvatarRepository::default()),
             unused_event_publisher(),
@@ -2379,6 +2430,19 @@ mod tests {
 
     /// Saves a video and its channel membership, returning both as stored
     /// (the channel video with its storage-assigned `id`).
+    fn video_transcript(video: &Video) -> VideoTranscript {
+        VideoTranscript::create(
+            video.id.clone(),
+            &CaptionTrack {
+                key: "en".to_string(),
+                language: CaptionLanguage::new("en").unwrap(),
+                source: CaptionSource::Manual,
+            },
+            TranscriptText::new("Hello there"),
+            fixed_timestamp(),
+        )
+    }
+
     fn save_channel_video(
         video_repository: &dyn VideoRepository,
         channel_video_repository: &dyn ChannelVideoRepository,

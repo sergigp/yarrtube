@@ -5,21 +5,22 @@ the types they shape.
 
 ## Files
 
-- `migrations/0010_video_subtitles.sql`: `videos.subtitle_state` (`NOT NULL DEFAULT 'MISSING'`, which backfills the library), `videos.subtitle_filename`, new `video_transcripts` table keyed by `video_id`.
+- `migrations/0010_video_subtitles.sql`: `videos.subtitle_state` (`NOT NULL DEFAULT 'MISSING'`, which backfills the library), `videos.subtitle_filename`, `videos.subtitles_first_missing_at` (nullable), new `video_transcripts` table keyed by `video_id` (no FK: foreign keys are not enabled, deleters delete transcripts explicitly).
 - `src/domain/video/subtitle_state.rs`: `SubtitleState` value object.
-- `src/domain/video/video.rs`: subtitle fields + transitions on `Video`.
-- `src/domain/video/episode_paths.rs`: `subtitle(lang)`, the one place naming `<stem>.<lang>.srt` (by the base language code).
+- `src/domain/video/video.rs`: subtitle fields + transitions on `Video`; `reset_for_redownload` resets them.
+- `src/domain/video/episode_paths.rs`: `from_media(filename)` + `subtitle(lang)`, the one place naming `<media stem>.<lang>.srt` (by the base language code).
 - `src/domain/video/events.rs`, `src/domain/event/domain_event.rs`: `VideoSubtitlesFetched` event + its `DomainEvent` variant.
 - `src/domain/{playlist_video,channel_video}/events.rs`: `VideoRemovedFrom{Playlist,Channel}` carry `subtitle_filename` (the subscribers only see the event, the row is already deleted).
 - `src/domain/video/video_output_entry.rs`: `subtitle_staging_dir`, a sibling of the thumbnail staging dir (the thumbnail fetch deletes its own dir recursively, possibly while a subtitle fetch is running in its lane).
 - `src/domain/video_transcript/{mod,video_transcript,caption_language,caption_source,caption_track,caption_tracks,transcript_text}.rs`: new aggregate; track selection and SRT to text are pure functions here.
 - `src/domain/services/subtitle_fetcher.rs`: `SubtitleFetcher`, fetches one video's subtitles and runs reconcile's missing-subtitles pass.
-- `src/domain/services/internal_video_reconciler.rs`: calls `schedule_missing`; protects `subtitle_filename` in the orphan sweep.
+- `src/domain/services/internal_video_reconciler.rs`: calls `schedule_missing`; protects `subtitle_filename` in the orphan sweep, and `<media stem>.*` of Downloaded videos whose subtitles are Missing (`subtitle_pending_paths`).
+- `src/domain/services/{channel,playlist}_deleter.rs`: delete each video's transcript next to `video_repository.delete`.
 - `src/domain/services/{playlist,channel}_video_reconciler.rs`: delete the transcript next to `video_repository.delete`.
 - `src/domain/services/video_file_deleter.rs`: deletes the subtitle file.
 - `src/domain/services/task_view_searcher.rs`: resolves `fetch_subtitles` payloads like `fetch_thumbnail`.
 - `src/domain/services/mod.rs`: exports.
-- `src/domain/task/task.rs`: `Task::FetchSubtitles`, its payload decode and lane; `DeleteVideoFile.subtitle_filename`.
+- `src/domain/task/task.rs`: `Task::FetchSubtitles`, its payload decode, lane and `video:<id>` exclusivity key; `DeleteVideoFile.subtitle_filename`; `decode_delete_video_file_payload` returns `DeleteVideoFilePayload`.
 - `src/domain/task/task_lane.rs`: `TaskLane::Subtitles` (the executor's `_ => 1` already caps it at 1).
 - `src/application/tasks/fetch_subtitles_task.rs`: task handler.
 - `src/application/tasks/mod.rs`: registers it.
@@ -31,8 +32,10 @@ the types they shape.
 - `src/infrastructure/repositories/sqlite_video_repository.rs`: map new columns; `update_subtitles`.
 - `src/infrastructure/shared/sqlite_migrations.rs`: migration `0010` default test.
 - `src/infrastructure/repositories/youtube_video_downloader_repository.rs`: `probe_captions`, `fetch_subtitles` on the port, the yt-dlp implementation and the fake.
-- `src/infrastructure/shared/ytdlp.rs`: the two yt-dlp invocations + info-JSON parsing.
-- `src/serve.rs`: wiring.
+- `src/infrastructure/shared/ytdlp.rs`: the two yt-dlp invocations + info-JSON parsing + probe warnings.
+- `src/infrastructure/shared/ytdlp_fixtures/*.info.json`: trimmed real info-JSON fixtures.
+- `src/serve.rs`, `src/infrastructure/infrastructure_container.rs`, `src/domain/mod.rs`, `src/infrastructure/repositories/mod.rs`: wiring and module exports.
+- Test wiring only (new constructor arguments): `src/application/http/{channels,playlists}/mod.rs`, `src/application/subscribers/reconcile_on_{channel,playlist}_created.rs`.
 - `web/src/lib/tasks.ts` (+ `tasks.test.ts`): describe/family/kind for `fetch_subtitles`.
 - `doc/ARCHITECTURE.md`, `doc/PLEX.md`: mention subtitle files, the fetch after download, the Plex rescan and the backfill; the ARCHITECTURE example walks through the subtitle flow (steps + sequence diagram).
 
@@ -51,6 +54,7 @@ pub struct Video {
     // ...existing fields
     pub subtitle_state: SubtitleState,
     pub subtitle_filename: Option<String>,
+    pub subtitles_first_missing_at: Option<DateTime<Utc>>, // first conclusive check without a selectable track; starts the 7-day window
 }
 impl Video {
     /// Downloaded, numbered, and subtitle state Missing.
@@ -58,17 +62,24 @@ impl Video {
     /// Fetched + filename; stored via `update_subtitles` only.
     pub fn with_subtitles(self, subtitle_filename: impl Into<String>, now: DateTime<Utc>) -> Self;
     pub fn mark_subtitles_unavailable(self, now: DateTime<Utc>) -> Self;
+    /// Records `now` as the first check without captions unless one is recorded.
+    pub fn mark_subtitles_first_missing(self, now: DateTime<Utc>) -> Self;
+    // reset_for_redownload (existing) also resets subtitle_state to Missing and clears subtitle_filename and subtitles_first_missing_at
 }
 
 // domain/video/episode_paths.rs
-impl EpisodePaths { pub fn subtitle(&self, language: &CaptionLanguage) -> String; } // "<stem>.<language.base()>.srt": media servers recognise base codes, not always regional ones
+impl EpisodePaths {
+    /// Folder + stem of the recorded media filename: sidecars written after the download follow the file, not the (changeable) title.
+    pub fn from_media(media_filename: &str) -> Self;
+    pub fn subtitle(&self, language: &CaptionLanguage) -> String; // "<stem>.<language.base()>.srt": media servers recognise base codes, not always regional ones
+}
 
 // domain/video/events.rs — published once the subtitle file is placed
 pub struct VideoSubtitlesFetched { pub video_id: String, pub output_dir: String }
 impl VideoSubtitlesFetched { pub const EVENT_TYPE: &str = "video_subtitles_fetched"; }
 
 // domain/{playlist_video,channel_video}/events.rs
-pub struct VideoRemovedFromPlaylist { /* ...existing */ #[serde(default)] pub subtitle_filename: Option<String> } // same on VideoRemovedFromChannel
+pub struct VideoRemovedFromPlaylist { /* ...existing */ pub subtitle_filename: Option<String> } // same on VideoRemovedFromChannel; #[serde(default)] sits on the subscribers' payload structs, where older events are decoded
 
 // domain/video/video_output_entry.rs
 pub fn subtitle_staging_dir(videos_path: &str, video_id: &VideoRecordId) -> PathBuf; // <staging>/<id>-subtitles
@@ -98,15 +109,19 @@ pub struct CaptionTracks {
     pub automatic: Vec<String>,            // keys of `automatic_captions`
 }
 impl CaptionTracks {
-    /// Manual `<lang>`/`<lang>-*`, else automatic `<lang>-orig`, else
-    /// automatic `<lang>`; no language reported: the only automatic `*-orig`.
+    /// For the reported language, then its base: manual `<lang>`/`<lang>-*`, else automatic
+    /// `<lang>-orig`, else plain automatic `<lang>` only when no automatic `*-orig` exists
+    /// (plain codes are otherwise translations); else the only automatic `*-orig`, with its own language.
+    /// No language reported: the only automatic `*-orig`, else the uploaded track when all
+    /// uploaded tracks share one base language (base code preferred), else None.
     pub fn original(&self) -> Option<CaptionTrack>;
 }
 
 // domain/video_transcript/transcript_text.rs
 pub struct TranscriptText(String);
 impl TranscriptText {
-    /// Drops indices, timings and tags; collapses lines repeated by rolling auto captions.
+    /// Block by block: drops each cue's index line and timing line and tag-like `<…>` markup only;
+    /// keeps digit-only lines, literal `<` and `-->` in text; collapses lines repeated by rolling auto captions.
     pub fn from_srt(srt: &str) -> Self;
     pub fn as_str(&self) -> &str;
 }
@@ -128,9 +143,11 @@ pub struct CaptionProbe {
     pub tracks: CaptionTracks,
     pub published_at: Option<DateTime<Utc>>,
     pub info_json: PathBuf, // reused by fetch_subtitles (--load-info-json): one extraction per video, fewer YouTube requests
+    pub warnings: Vec<String>, // stderr `WARNING:` lines; any warning makes an empty result inconclusive (yt-dlp withholds tracks silently, e.g. PO token)
 }
 pub struct FetchedSubtitles { pub path: PathBuf, pub srt: String }
-/// `-J --skip-download`; Err on any failure (clean or systemic), so the caller leaves the video Missing.
+/// `-J --skip-download --write-subs` without `--no-warnings` (subtitle warnings only appear when subtitles are requested; -J writes no files);
+/// Err on any failure (clean or systemic), so the caller leaves the video Missing.
 pub fn probe_captions(ytdlp_path: &Path, video_url: &str, staging_dir: &Path) -> Result<CaptionProbe>;
 /// `--load-info-json --skip-download --write-subs|--write-auto-subs --sub-langs <key> --sub-format vtt --convert-subs srt`.
 pub fn fetch_subtitles(ytdlp_path: &Path, probe: &CaptionProbe, track: &CaptionTrack, staging_dir: &Path) -> Result<FetchedSubtitles>;
@@ -155,10 +172,13 @@ pub trait VideoTranscriptRepository: Send + Sync {
 }
 pub struct SqliteVideoTranscriptRepository { db: Database }
 
+// domain/services/{channel,playlist}_deleter.rs — new third constructor argument
+// video_transcript_repository: Arc<dyn VideoTranscriptRepository>
+
 // infrastructure/repositories/sqlite_video_repository.rs
 trait VideoRepository {
     // ...existing
-    /// Writes only subtitle_state, subtitle_filename, updated_at.
+    /// Writes only subtitle_state, subtitle_filename, subtitles_first_missing_at, updated_at.
     fn update_subtitles(&self, video: &Video) -> anyhow::Result<()>;
 }
 
@@ -188,8 +208,12 @@ pub enum Task {
     DeleteVideoFile { filename: Option<String>, thumbnail_filename: Option<String>, subtitle_filename: Option<String>, output_dir: String },
     FetchSubtitles { video_id: String, output_dir: String }, // "fetch_subtitles" -> TaskLane::Subtitles
 }
-impl Task { pub fn decode_fetch_subtitles_payload(payload: &str) -> Result<(String, String), TaskError>; }
-// DeleteVideoFilePayload.subtitle_filename: Option<String> with #[serde(default)]: tasks queued before upgrade still decode.
+impl Task {
+    pub fn decode_fetch_subtitles_payload(payload: &str) -> Result<(String, String), TaskError>;
+    pub fn decode_delete_video_file_payload(payload: &str) -> Result<DeleteVideoFilePayload, TaskError>;
+}
+// "fetch_subtitles" exclusivity key: video:<id>, shared with download_video and fetch_thumbnail
+pub struct DeleteVideoFilePayload { pub filename: Option<String>, pub thumbnail_filename: Option<String>, #[serde(default)] pub subtitle_filename: Option<String>, pub output_dir: String } // serde(default): tasks queued before upgrade still decode
 
 // domain/task/task_lane.rs
 pub enum TaskLane { Download, Thumbnail, Subtitles, Light, Exclusive }
@@ -230,12 +254,17 @@ TaskExecutor (Subtitles lane)
       video.is_subtitle_fetchable() -> false => return
       VideoDownloaderRepository::probe_captions(url, subtitle_staging_dir) -> Err => warn, leave Missing
       probe.tracks.original()
-        None => published_at.unwrap_or(video.created_at) <= now - UNAVAILABLE_AFTER
-                  ? VideoRepository::update_subtitles(&video.mark_subtitles_unavailable(now))
-                  : leave Missing
+        None, !probe.warnings.is_empty() => warn(warnings), leave Missing   // inconclusive
+        None =>
+          video = video.mark_subtitles_first_missing(now)          // keeps an earlier time
+          published_at.unwrap_or(video.created_at) <= now - UNAVAILABLE_AFTER
+            && video.subtitles_first_missing_at <= now - UNAVAILABLE_AFTER
+            ? VideoRepository::update_subtitles(&video.mark_subtitles_unavailable(now))
+            : VideoRepository::update_subtitles(&video)            // Missing, first check recorded
         Some(track) =>
           VideoDownloaderRepository::fetch_subtitles(&probe, &track, staging) -> Err => warn, leave Missing
-          path = EpisodePaths::new(&number, &video.title).subtitle(&track.language)
+          VideoRepository::find(&video.id) -> None => return       // deleted meanwhile, like VideoDownloader::record_unless_deleted
+          path = EpisodePaths::from_media(&video.filename).subtitle(&track.language)
           VideoFileRepository::move_file(&fetched.path, &output_dir.join(&path))
           VideoTranscriptRepository::save(&VideoTranscript::create(id, &track, TranscriptText::from_srt(&fetched.srt), now))
           VideoRepository::update_subtitles(&video.with_subtitles(path, now))
@@ -255,7 +284,8 @@ Reconcile{Playlist,Channel}Task -> {Playlist,Channel}VideoReconciler::reconcile
     ThumbnailFetcher::schedule_missing(&actual.videos, &handled, &output_dir)
     SubtitleFetcher::schedule_missing(&actual.videos, &handled, &output_dir)
       filter is_subtitle_fetchable && !handled -> TaskRepository::schedule(&Task::FetchSubtitles{..}, now) // dedupes queued
-    delete_orphaned_files(&actual)   // protected_entries includes every subtitle_filename
+    delete_orphaned_files(&actual)   // protected_entries includes every subtitle_filename; subtitle_pending_paths protects "<media stem>."* of Downloaded videos whose subtitles are Missing
+    (redownload_broken_files: Video::reset_for_redownload also resets the subtitle fields)
 ```
 
 Removal:
@@ -264,6 +294,10 @@ Removal:
 delete_video_file_on_video_removed_from_{playlist,channel}
   TaskRepository::schedule(&Task::DeleteVideoFile{ filename, thumbnail_filename, subtitle_filename: event.subtitle_filename, output_dir })
 DeleteVideoFileTask::handle -> VideoFileDeleter::delete_video_file(filename, thumbnail, subtitle, output_dir)
+
+Channel/playlist deleted (HTTP):
+{Channel,Playlist}Deleter::delete -> for each video: VideoRepository::delete(id); VideoTranscriptRepository::delete(id)
+  publishes {Channel,Playlist}Deleted -> Delete{Channel,Playlist}FilesTask removes the show directory (subtitle files included)
 ```
 
 ## Test Plan
@@ -308,7 +342,7 @@ Behaviour (acceptance through the adapters):
 25. `it_should_list_a_fetch_subtitles_task_with_video_and_playlist_names`.
 
 Value objects / pure domain (own files):
-26. `caption_tracks.rs`: manual exact, manual regional (`en-US`), `-orig` fallback, plain automatic fallback, translations only -> None, no language + single `-orig`, no language + no `-orig` -> None.
+26. `caption_tracks.rs`: manual exact, manual regional (`en-US`), `-orig` fallback, plain automatic fallback (only when no `*-orig` exists), translations only -> None, no language + single `-orig`, no language + no `-orig` + no manual -> None.
 27. `transcript_text.rs`: strips indices/timings/tags; collapses rolling duplicates; empty input.
 28. `subtitle_state.rs`, `caption_language.rs` (rejects empty, strips nothing; `-orig` rejected), `episode_paths.rs` `subtitle`.
 
@@ -350,3 +384,45 @@ Infrastructure:
 
 `infrastructure/shared/sqlite_migrations.rs`
 39. `it_should_default_existing_videos_to_missing_subtitles` (migration).
+
+Audit follow-up (already implemented):
+
+`application/tasks/fetch_subtitles_task.rs`
+46. `it_should_mark_a_video_published_exactly_seven_days_ago_unavailable` (boundary).
+47. `it_should_not_publish_that_subtitles_were_fetched_if_unavailable` / `..._if_the_fetch_fails`.
+48. `it_should_discard_the_subtitles_if_the_video_was_deleted_meanwhile`.
+49. `it_should_name_the_subtitles_after_the_downloaded_file`: filename `... - Old Title.mp4`, title `New Title` -> `... - Old Title.en.srt`.
+
+`application/tasks/reconcile_channel_task.rs`
+50. `it_should_keep_subtitle_files_placed_but_not_yet_recorded`.
+51. `it_should_keep_unrecorded_subtitle_files_of_a_retitled_video`.
+52. `it_should_clear_the_subtitles_of_a_video_redownloaded`.
+
+`application/http/{channels,playlists}/mod.rs`
+53. `it_should_delete_the_transcripts_of_the_deleted_{channel,playlist}_videos`.
+
+`domain/video/video.rs`, `domain/video/episode_paths.rs`
+54. `it_should_record_its_fetched_subtitles`, `it_should_mark_its_subtitles_unavailable`, `it_should_clear_its_subtitles_when_reset_for_redownload`, `it_should_name_an_episodes_files_after_its_downloaded_media_file`.
+
+Audit follow-up (to implement):
+
+`application/tasks/fetch_subtitles_task.rs`
+55. `it_should_keep_an_old_video_checked_for_the_first_time_missing`: published 30d ago, no first check -> Missing, `subtitles_first_missing_at = now`.
+56. `it_should_mark_unavailable_seven_days_after_the_first_check_without_captions`: first check 8d ago -> Unavailable; first check 2d ago -> Missing, time unchanged.
+57. `it_should_keep_subtitles_missing_when_the_downloader_warns`: probe with a warning and no selectable track -> Missing, no first check recorded.
+58. `it_should_clear_the_first_check_without_captions_when_reset_for_redownload` (`video.rs` unit).
+
+`caption_tracks.rs`
+59. `it_should_select_the_only_original_when_the_reported_language_has_none`: `en` reported, automatic `{es-orig, es, en, fr}` -> `es-orig`, language `es` (fixture `auto_only_spanish.info.json` shape).
+60. `it_should_not_select_a_plain_track_when_an_original_exists_in_another_language` (covered by 59) and `it_should_select_a_plain_track_when_no_original_is_marked` (`yue` only).
+61. `it_should_select_the_uploaded_track_when_no_language_is_reported`: manual `{en, en-GB}` -> `en`; manual `{en, de}` -> None.
+
+`transcript_text.rs`
+62. `it_should_keep_a_text_line_made_of_digits`, `it_should_keep_a_literal_less_than_sign`, `it_should_keep_text_containing_an_arrow`; existing index/timing/tag/rolling tests keep passing.
+
+`infrastructure/shared/ytdlp.rs`
+63. `it_should_request_subtitles_and_keep_warnings_when_probing`: args include `--write-subs`, exclude `--no-warnings`.
+64. `it_should_collect_the_warnings_of_a_probe`: fake yt-dlp prints `WARNING: ...` on stderr, exit 0 -> `probe.warnings` holds it.
+
+`infrastructure/repositories/sqlite_video_repository.rs`
+65. `it_should_round_trip_the_first_check_without_captions` (and `update_subtitles` writes it).

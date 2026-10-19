@@ -153,7 +153,8 @@ impl Video {
     }
 
     /// Resets a video back to `Pending`, clearing its recorded filename,
-    /// thumbnail filename, and quality, used by filesystem reconciliation
+    /// thumbnail filename, quality and subtitles (back to `Missing`, so the
+    /// redownload refetches them), used by filesystem reconciliation
     /// both when a `Downloaded` video's recorded file is missing from disk
     /// and when an `Errored` video is given another chance, in each case
     /// followed by scheduling a fresh download.
@@ -166,6 +167,8 @@ impl Video {
             duration_seconds: None,
             updated_at: now,
             synced_at: None,
+            subtitle_state: SubtitleState::Missing,
+            subtitle_filename: None,
             ..self
         }
     }
@@ -563,6 +566,74 @@ mod tests {
                 episode_number: Some(number),
                 updated_at: now,
                 ..video
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_record_its_fetched_subtitles() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let video = video();
+
+        let fetched = video
+            .clone()
+            .with_subtitles("Season 1/S01E003 - My Video.en.srt", now);
+
+        assert_eq!(
+            fetched,
+            Video {
+                subtitle_state: SubtitleState::Fetched,
+                subtitle_filename: Some("Season 1/S01E003 - My Video.en.srt".to_string()),
+                updated_at: now,
+                ..video
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_mark_its_subtitles_unavailable() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let video = video();
+
+        let unavailable = video.clone().mark_subtitles_unavailable(now);
+
+        assert_eq!(
+            unavailable,
+            Video {
+                subtitle_state: SubtitleState::Unavailable,
+                updated_at: now,
+                ..video
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_clear_its_subtitles_when_reset_for_redownload() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
+        let fetched = video()
+            .mark_downloaded(
+                Quality::High,
+                "Season 1/S01E003 - My Video.mp4",
+                None,
+                None,
+                now,
+            )
+            .with_subtitles("Season 1/S01E003 - My Video.en.srt", now);
+
+        let reset = fetched.clone().reset_for_redownload(later);
+
+        assert_eq!(
+            reset,
+            Video {
+                status: VideoStatus::Pending,
+                quality: None,
+                filename: None,
+                subtitle_state: SubtitleState::Missing,
+                subtitle_filename: None,
+                updated_at: later,
+                synced_at: None,
+                ..fetched
             }
         );
     }

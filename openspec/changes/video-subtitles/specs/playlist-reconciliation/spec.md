@@ -42,11 +42,11 @@ recorded filename's base name, and every file sharing the episode base name
 of a video whose episode number is recorded but whose download or thumbnail
 fetch has not completed yet, because such files are only recorded once the
 download or fetch completes. Legacy per-video folders and flat files
-recorded on a video SHALL be protected the same way.
+recorded on a video SHALL be protected the same way. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing, because a subtitle file is placed before it is recorded.
 
 #### Scenario: Downloaded video's file is missing from disk
 - **WHEN** a reconcile pass finds that a Downloaded video's recorded file is not present in its playlist's show directory
-- **THEN** the system resets that video to PENDING, clears its recorded filename, thumbnail filename, and quality, keeps its episode number, and triggers a fresh download of it
+- **THEN** the system resets that video to PENDING, resets its subtitle state to Missing and clears its recorded subtitle filename, clears its recorded filename, thumbnail filename, and quality, keeps its episode number, and triggers a fresh download of it
 
 #### Scenario: A file on disk is not accounted for by any Downloaded video
 - **WHEN** a reconcile pass finds a file in the playlist's show directory or one of its season folders that is not a show file, not a recorded filename, recorded thumbnail filename, recorded subtitle filename or NFO of any video, not a downloader-managed in-progress temporary file, and does not share the episode base name of a video whose number is recorded
@@ -87,3 +87,7 @@ recorded on a video SHALL be protected the same way.
 #### Scenario: Video's subtitle file is present
 - **WHEN** a reconcile pass finds a file matching a video's recorded subtitle filename in its season folder
 - **THEN** the system does not treat it as orphaned and does not delete it
+
+#### Scenario: A subtitle file placed but not yet recorded
+- **WHEN** a reconcile pass finds `<base name>.en.srt`, where `<base name>` is a Downloaded video's recorded filename without its extension, and that video's subtitle state is Missing
+- **THEN** the system does not treat that file as orphaned and does not delete it, even if the video's title has changed since its download

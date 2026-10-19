@@ -154,6 +154,9 @@ mod tests {
     use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::Video;
     use crate::domain::video::VideoId;
+    use crate::domain::video_transcript::{
+        CaptionLanguage, CaptionSource, CaptionTrack, TranscriptText, VideoTranscript,
+    };
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
@@ -170,7 +173,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_transcript_repository::SqliteVideoTranscriptRepository;
+    use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
+        SqliteVideoTranscriptRepository, VideoTranscriptRepository,
+    };
     use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::repositories::youtube_playlist_items_repository::{
         FakeYoutubePlaylistItemsRepository, YoutubePlaylistItem,
@@ -899,6 +904,7 @@ mod tests {
         let playlist_deleter = PlaylistDeleter::new(
             playlist_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
             Arc::new(SqliteTaskRepository::new(
@@ -951,6 +957,7 @@ mod tests {
         let playlist_deleter = PlaylistDeleter::new(
             playlist_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
             task_repository.clone(),
@@ -1008,6 +1015,7 @@ mod tests {
         let playlist_deleter = PlaylistDeleter::new(
             playlist_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
             task_repository.clone(),
@@ -1067,6 +1075,7 @@ mod tests {
         let playlist_deleter = PlaylistDeleter::new(
             playlist_repository.clone(),
             video_repository.clone(),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
             playlist_video_repository.clone(),
             event_publisher(&db),
             Arc::new(SqliteTaskRepository::new(
@@ -1098,6 +1107,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_delete_the_transcripts_of_the_deleted_playlist_videos() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_transcript_repository =
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let (video, _) = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid1",
+            0,
+        );
+        video_transcript_repository
+            .save(&video_transcript(&video))
+            .unwrap();
+        let playlist_deleter = PlaylistDeleter::new(
+            playlist_repository.clone(),
+            video_repository.clone(),
+            video_transcript_repository.clone(),
+            playlist_video_repository.clone(),
+            event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+        );
+
+        let response = delete(playlist_deleter, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_delete_a_missing_playlist() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -1108,6 +1157,7 @@ mod tests {
         let playlist_deleter = PlaylistDeleter::new(
             playlist_repository.clone(),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             event_publisher(&db),
             Arc::new(SqliteTaskRepository::new(
@@ -2001,6 +2051,7 @@ mod tests {
         PlaylistDeleter::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqliteVideoTranscriptRepository::new(unused_connection())),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
             unused_event_publisher(),
             Arc::new(SqliteTaskRepository::new(
@@ -2261,6 +2312,19 @@ mod tests {
 
     /// Saves a video and its playlist membership, returning both as stored
     /// (the playlist video with its storage-assigned `id`).
+    fn video_transcript(video: &Video) -> VideoTranscript {
+        VideoTranscript::create(
+            video.id.clone(),
+            &CaptionTrack {
+                key: "en".to_string(),
+                language: CaptionLanguage::new("en").unwrap(),
+                source: CaptionSource::Manual,
+            },
+            TranscriptText::new("Hello there"),
+            fixed_timestamp(),
+        )
+    }
+
     fn save_playlist_video(
         video_repository: &dyn VideoRepository,
         playlist_video_repository: &dyn PlaylistVideoRepository,

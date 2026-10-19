@@ -71,3 +71,25 @@ SQLite video repository:
 - [x] 4.3 Run `scripts/run-smoke-tests.sh` and verify it passes
 - [x] 4.4 Re-run 4.1's checks and `scripts/run-smoke-tests.sh` after the follow-up; all pass
 - [x] 4.5 Run `scripts/run-local.sh`: a newly downloaded video gets its `.srt` within seconds, without a manual sync
+
+## 5. Audit follow-up
+
+Already implemented during the audit (recorded for traceability):
+
+- [x] 5.1 Subtitle file named after the recorded media filename (`EpisodePaths::from_media`); orphan sweep protects `<media stem>.*` of Downloaded videos with Missing subtitles (design Test Plan 49-51)
+- [x] 5.2 Channel/playlist deleters delete transcripts (53); subtitle fetch skips placing for a video deleted meanwhile (48); `reset_for_redownload` resets subtitles (52, 54)
+- [x] 5.3 Mutation-gap tests (46, 47, 54) and `DeleteVideoFilePayload` decode
+
+To implement (TDD):
+
+- [ ] 5.4 Skeleton: migration 0010 gains nullable `subtitles_first_missing_at`; `Video.subtitles_first_missing_at` + `mark_subtitles_first_missing`; `CaptionProbe.warnings`; `update_subtitles` writes the column. Bodies trivial. Done when `cargo build` succeeds and all tests pass
+- [ ] 5.5 `it_should_round_trip_the_first_check_without_captions` (65)
+- [ ] 5.6 `it_should_request_subtitles_and_keep_warnings_when_probing` (63) and `it_should_collect_the_warnings_of_a_probe` (64)
+- [ ] 5.7 `it_should_keep_subtitles_missing_when_the_downloader_warns` (57)
+- [ ] 5.8 `it_should_keep_an_old_video_checked_for_the_first_time_missing` (55) and `it_should_mark_unavailable_seven_days_after_the_first_check_without_captions` (56); existing Unavailable tests updated only in their given state (a first check 8d ago), not in their outcome
+- [ ] 5.9 `it_should_clear_the_first_check_without_captions_when_reset_for_redownload` (58)
+- [ ] 5.10 `CaptionTracks::original` rules (59-61)
+- [ ] 5.11 `TranscriptText::from_srt` block parser (62)
+- [ ] 5.12 Docs: `doc/PLEX.md` / `doc/ARCHITECTURE.md` mention the 7-day window from the first check and that probe warnings keep a video Missing
+- [ ] 5.13 `cargo test --locked`, fmt, clippy, `npm run check` pass; `scripts/run-smoke-tests.sh` passes
+

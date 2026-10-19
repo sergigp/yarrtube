@@ -1,6 +1,7 @@
 use crate::domain::video::EpisodeNumber;
 use crate::domain::video::video_filename::VideoFilename;
 use crate::domain::video_transcript::CaptionLanguage;
+use std::path::Path;
 
 /// Where an episode's files sit in its show, relative to the show directory:
 /// every file shares the stem `Season <s>/<code> - <title>` and differs only
@@ -18,6 +19,22 @@ impl EpisodePaths {
         Self {
             season_folder: number.season_folder(),
             base_name: format!("{} - {}", number.code(), VideoFilename::from_title(title)),
+        }
+    }
+
+    /// The paths of the episode whose media file was downloaded as
+    /// `media_filename` (`Season <s>/<code> - <title>.<ext>`): its files are
+    /// named after the recorded media file, which keeps the title it was
+    /// downloaded with, not after the current title.
+    pub fn from_media(media_filename: &str) -> Self {
+        let path = Path::new(media_filename);
+        let lossy = |part: Option<&std::ffi::OsStr>| {
+            part.map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        };
+        Self {
+            season_folder: lossy(path.parent().map(Path::as_os_str)),
+            base_name: lossy(path.file_stem()),
         }
     }
 
@@ -90,6 +107,23 @@ mod tests {
         assert_eq!(
             paths.subtitle(&CaptionLanguage::new("en").unwrap()),
             "Season 1/S01E007 - Title.en.srt"
+        );
+    }
+
+    #[test]
+    fn it_should_name_an_episodes_files_after_its_downloaded_media_file() {
+        let paths = EpisodePaths::from_media("Season 2026/S2026E031501 - Old Title.mp4");
+
+        assert_eq!(
+            [
+                paths.stem(),
+                paths.subtitle(&CaptionLanguage::new("es-US").unwrap()),
+            ],
+            [
+                "Season 2026/S2026E031501 - Old Title",
+                "Season 2026/S2026E031501 - Old Title.es.srt",
+            ]
+            .map(str::to_string)
         );
     }
 

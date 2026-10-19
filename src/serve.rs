@@ -356,6 +356,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         playlist_deleter: PlaylistDeleter::new(
             infrastructure.playlist_repository.clone(),
             infrastructure.video_repository.clone(),
+            infrastructure.video_transcript_repository.clone(),
             infrastructure.playlist_video_repository.clone(),
             infrastructure.event_publisher.clone(),
             infrastructure.task_repository.clone(),
@@ -397,6 +398,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         channel_deleter: ChannelDeleter::new(
             infrastructure.channel_repository.clone(),
             infrastructure.video_repository.clone(),
+            infrastructure.video_transcript_repository.clone(),
             infrastructure.channel_video_repository.clone(),
             infrastructure.channel_avatar_repository.clone(),
             infrastructure.event_publisher.clone(),

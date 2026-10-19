@@ -133,6 +133,10 @@ pub struct FakeVideoDownloaderRepository {
     /// mid-download.
     #[allow(clippy::type_complexity)]
     pub(crate) on_download: Option<Box<dyn Fn() + Send + Sync>>,
+    /// Runs while `fetch_subtitles` is in flight, e.g. to delete the video
+    /// mid-fetch.
+    #[allow(clippy::type_complexity)]
+    pub(crate) on_fetch_subtitles: Option<Box<dyn Fn() + Send + Sync>>,
     pub(crate) caption_probe: std::sync::Mutex<Option<anyhow::Result<CaptionProbe>>>,
     pub(crate) subtitles_result: std::sync::Mutex<Option<anyhow::Result<FetchedSubtitles>>>,
     /// How many times the downloader was contacted for captions, probe or
@@ -252,6 +256,14 @@ impl FakeVideoDownloaderRepository {
         }
     }
 
+    /// Runs `hook` while `fetch_subtitles` is in flight.
+    pub fn with_on_fetch_subtitles(self, hook: impl Fn() + Send + Sync + 'static) -> Self {
+        Self {
+            on_fetch_subtitles: Some(Box::new(hook)),
+            ..self
+        }
+    }
+
     /// Makes the diagnostic probe report `reason` as the precise failure
     /// reason.
     pub fn with_diagnosed_reason(self, reason: &str) -> Self {
@@ -280,6 +292,7 @@ impl FakeVideoDownloaderRepository {
             thumbnail_result: Default::default(),
             thumbnail_calls: Default::default(),
             on_download: None,
+            on_fetch_subtitles: None,
             caption_probe: Default::default(),
             subtitles_result: Default::default(),
             caption_calls: Default::default(),
@@ -363,6 +376,9 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
         staging_dir: &Path,
     ) -> anyhow::Result<FetchedSubtitles> {
         *self.caption_calls.lock().unwrap() += 1;
+        if let Some(hook) = &self.on_fetch_subtitles {
+            hook();
+        }
         self.subtitles_result
             .lock()
             .unwrap()
