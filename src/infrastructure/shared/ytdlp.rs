@@ -1424,6 +1424,25 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn it_should_keep_a_caption_warning_next_to_harmless_ones_in_a_probe() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-captions-staging");
+        let ytdlp = fake_ytdlp_writing_stdout_and_stderr(
+            "ytdlp-captions-mixed-warnings",
+            UPLOADED_CAPTIONS_INFO_JSON,
+            "WARNING: Writing cache to '/home/yarrtube/.cache/yt-dlp/youtube-sigfuncs/a.json' failed: Traceback (most recent call last):\nWARNING: [youtube] yt1: Some web_embedded client https formats have been skipped as they are missing a URL.\nWARNING: [youtube] yt1: Some subtitles may be missing\n",
+        );
+
+        let result = probe_captions(&ytdlp, "https://example.com/video", &staging_dir);
+
+        assert_eq!(
+            result.unwrap().warnings,
+            vec!["WARNING: [youtube] yt1: Some subtitles may be missing".to_string()]
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn it_should_fail_the_probe_on_a_clean_failed_exit() {
         let staging_dir = test_support::unique_temp_dir("ytdlp-captions-staging");
         let ytdlp = fake_ytdlp_writing_stderr(
