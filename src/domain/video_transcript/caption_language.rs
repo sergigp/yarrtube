@@ -23,6 +23,11 @@ impl CaptionLanguage {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The primary subtag, e.g. `es` for `es-US`.
+    pub fn base(&self) -> &str {
+        &self.0
+    }
 }
 
 #[cfg(test)]

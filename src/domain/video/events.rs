@@ -12,3 +12,14 @@ pub struct VideoDownloaded {
 impl VideoDownloaded {
     pub const EVENT_TYPE: &str = "video_downloaded";
 }
+
+/// A video's subtitle file was placed in its owner's `output_dir`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VideoSubtitlesFetched {
+    pub video_id: String,
+    pub output_dir: String,
+}
+
+impl VideoSubtitlesFetched {
+    pub const EVENT_TYPE: &str = "video_subtitles_fetched";
+}

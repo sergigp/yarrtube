@@ -4,18 +4,20 @@ pub mod delete_video_file_on_video_removed_from_channel;
 pub mod delete_video_file_on_video_removed_from_playlist;
 pub mod download_video_on_video_added_to_channel;
 pub mod download_video_on_video_added_to_playlist;
+pub mod fetch_subtitles_on_video_downloaded;
 pub mod fetch_thumbnail_on_video_added_to_channel;
 pub mod fetch_thumbnail_on_video_added_to_playlist;
 pub mod reconcile_on_channel_created;
 pub mod reconcile_on_playlist_created;
 pub mod scan_plex_folder_on_video_downloaded;
+pub mod scan_plex_folder_on_video_subtitles_fetched;
 
 use crate::domain::channel::{ChannelCreated, ChannelDeleted};
 use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
 use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::services::{ChannelVideoReconciler, PlaylistVideoReconciler, PlexFolderScanner};
-use crate::domain::video::VideoDownloaded;
+use crate::domain::video::{VideoDownloaded, VideoSubtitlesFetched};
 use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -27,11 +29,13 @@ use delete_video_file_on_video_removed_from_channel::DeleteVideoFileOnVideoRemov
 use delete_video_file_on_video_removed_from_playlist::DeleteVideoFileOnVideoRemovedFromPlaylist;
 use download_video_on_video_added_to_channel::DownloadVideoOnVideoAddedToChannel;
 use download_video_on_video_added_to_playlist::DownloadVideoOnVideoAddedToPlaylist;
+use fetch_subtitles_on_video_downloaded::FetchSubtitlesOnVideoDownloaded;
 use fetch_thumbnail_on_video_added_to_channel::FetchThumbnailOnVideoAddedToChannel;
 use fetch_thumbnail_on_video_added_to_playlist::FetchThumbnailOnVideoAddedToPlaylist;
 use reconcile_on_channel_created::ReconcileOnChannelCreated;
 use reconcile_on_playlist_created::ReconcileOnPlaylistCreated;
 use scan_plex_folder_on_video_downloaded::ScanPlexFolderOnVideoDownloaded;
+use scan_plex_folder_on_video_subtitles_fetched::ScanPlexFolderOnVideoSubtitlesFetched;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -124,14 +128,29 @@ pub fn registry(
     registry.insert(
         ChannelDeleted::EVENT_TYPE.to_string(),
         vec![Arc::new(DeleteChannelFilesOnChannelDeleted::new(
+            task_repository.clone(),
+            clock.clone(),
+        ))],
+    );
+    registry.insert(
+        VideoDownloaded::EVENT_TYPE.to_string(),
+        vec![Arc::new(FetchSubtitlesOnVideoDownloaded::new(
             task_repository,
             clock,
         ))],
     );
     if let Some(scanner) = plex_folder_scanner {
+        registry
+            .entry(VideoDownloaded::EVENT_TYPE.to_string())
+            .or_default()
+            .push(Arc::new(ScanPlexFolderOnVideoDownloaded::new(
+                scanner.clone(),
+            )));
         registry.insert(
-            VideoDownloaded::EVENT_TYPE.to_string(),
-            vec![Arc::new(ScanPlexFolderOnVideoDownloaded::new(scanner))],
+            VideoSubtitlesFetched::EVENT_TYPE.to_string(),
+            vec![Arc::new(ScanPlexFolderOnVideoSubtitlesFetched::new(
+                scanner,
+            ))],
         );
     }
     registry

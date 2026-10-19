@@ -8,6 +8,7 @@ use crate::infrastructure::repositories::sqlite_video_transcript_repository::Vid
 use crate::infrastructure::repositories::youtube_video_downloader_repository::{
     CaptionProbe, VideoDownloaderRepository,
 };
+use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::Duration;
 use std::collections::HashSet;
@@ -30,6 +31,7 @@ pub struct SubtitleFetcher {
     video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
     task_repository: Arc<dyn TaskRepository>,
+    event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
     videos_path: String,
 }
@@ -41,6 +43,7 @@ impl SubtitleFetcher {
         video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
         task_repository: Arc<dyn TaskRepository>,
+        event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
         videos_path: impl Into<String>,
     ) -> Self {
@@ -50,6 +53,7 @@ impl SubtitleFetcher {
             video_downloader_repository,
             video_file_repository,
             task_repository,
+            event_publisher,
             clock,
             videos_path: videos_path.into(),
         }

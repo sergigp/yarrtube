@@ -1846,6 +1846,10 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::default()),
             Arc::new(FakeVideoFileRepository::default()),
             task_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
         ));
@@ -2036,6 +2040,10 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::default()),
             Arc::new(FakeVideoFileRepository::default()),
             task_repository.clone(),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
         ));
@@ -2117,6 +2125,10 @@ mod tests {
                     Arc::new(FakeVideoDownloaderRepository::default()),
                     Arc::new(FakeVideoFileRepository::default()),
                     task_repository.clone(),
+                    Arc::new(SqliteEventPublisher::new(
+                        unused_connection(),
+                        Arc::new(FixedClock(fixed_timestamp())),
+                    )),
                     Arc::new(FixedClock(fixed_timestamp())),
                     "/videos",
                 )),

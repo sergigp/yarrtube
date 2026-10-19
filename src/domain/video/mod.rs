@@ -24,7 +24,7 @@ pub use channel_episode_number::ChannelEpisodeNumber;
 pub use episode_number::EpisodeNumber;
 pub use episode_paths::EpisodePaths;
 pub use errors::{ListVideosError, UpdateWatchStateError};
-pub use events::VideoDownloaded;
+pub use events::{VideoDownloaded, VideoSubtitlesFetched};
 pub use home_limits::HomeLimits;
 pub use home_video_view::HomeVideoView;
 pub use home_videos::HomeVideos;

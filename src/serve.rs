@@ -591,6 +591,7 @@ fn subtitle_fetcher(infrastructure: &InfrastructureContainer) -> Arc<SubtitleFet
         infrastructure.video_downloader_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.task_repository.clone(),
+        infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
         videos_path(),
     ))
@@ -955,6 +956,7 @@ mod tests {
                 ("playlist_deleted", 1),
                 ("video_added_to_channel", 2),
                 ("video_added_to_playlist", 2),
+                ("video_downloaded", 1),
                 ("video_removed_from_channel", 1),
                 ("video_removed_from_playlist", 1),
             ])
@@ -976,7 +978,7 @@ mod tests {
             (Some("http://plex:32400"), Some("token"), None),
         ];
 
-        let scan_subscribers: Vec<Option<usize>> = configurations
+        let scan_subscribers: Vec<(Option<usize>, Option<usize>)> = configurations
             .into_iter()
             .map(|(url, token, videos_path)| {
                 plex_integration_from(
@@ -986,13 +988,24 @@ mod tests {
                 )
             })
             .map(|plex| {
-                event_subscribers(&infrastructure, plex)
-                    .get("video_downloaded")
-                    .map(Vec::len)
+                let subscribers = event_subscribers(&infrastructure, plex);
+                (
+                    subscribers.get("video_downloaded").map(Vec::len),
+                    subscribers.get("video_subtitles_fetched").map(Vec::len),
+                )
             })
             .collect();
 
-        assert_eq!(scan_subscribers, vec![Some(1), None, None, None]);
+        // Without Plex, `video_downloaded` keeps only the subtitle fetch.
+        assert_eq!(
+            scan_subscribers,
+            vec![
+                (Some(2), Some(1)),
+                (Some(1), None),
+                (Some(1), None),
+                (Some(1), None),
+            ]
+        );
     }
 
     #[test]
