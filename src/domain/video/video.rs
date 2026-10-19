@@ -316,7 +316,12 @@ impl Video {
     /// The language code the fetched subtitle file is named with (`en` for
     /// `… .en.srt`); `None` unless the subtitles are Fetched.
     pub fn subtitle_language(&self) -> Option<String> {
-        None
+        self.subtitle_filename
+            .as_deref()
+            .filter(|_| self.subtitle_state == SubtitleState::Fetched)
+            .and_then(|filename| filename.strip_suffix(".srt"))
+            .and_then(|stem| stem.rsplit_once('.'))
+            .map(|(_, language)| language.to_string())
     }
 
     /// The video has no original-language captions: a terminal subtitle

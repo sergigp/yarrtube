@@ -2913,6 +2913,54 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_include_the_subtitle_language_when_listing_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        [
+            video_with_subtitles("vid1"),
+            downloaded_video("vid2", "Other Video", None, 1_700_000_000),
+        ]
+        .iter()
+        .zip(0..)
+        .for_each(|(video, position)| {
+            video_repository.save(video).unwrap();
+            playlist_video_repository
+                .save(&PlaylistVideo::create(
+                    PlaylistId::new("PL1").unwrap(),
+                    video.id.clone(),
+                    position,
+                    fixed_timestamp(),
+                ))
+                .unwrap();
+        });
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                VideoResponse {
+                    subtitle_language: Some("en".to_string()),
+                    ..downloaded_video_response("vid1", "My Video")
+                },
+                downloaded_video_response("vid2", "Other Video"),
+            ])
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -3087,6 +3135,16 @@ mod tests {
             description: None,
             channel_name: None,
             subtitle_language: None,
+        }
+    }
+
+    fn downloaded_video_response(youtube_id: &str, title: &str) -> VideoResponse {
+        VideoResponse {
+            status: "DOWNLOADED".to_string(),
+            quality: Some("high".to_string()),
+            filename: Some(format!("{title}.mp4")),
+            synced_at: Some(fixed_timestamp()),
+            ..pending_video_response(youtube_id, title)
         }
     }
 
