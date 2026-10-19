@@ -70,4 +70,4 @@ SQLite video repository:
 - [x] 4.2 Run `scripts/run-local.sh` on a library with downloaded videos: after one reconcile, subtitle fetches run one at a time; `.srt` files appear next to episodes; captionless old videos end Unavailable; tasks view shows "Fetching subtitles of …"
 - [x] 4.3 Run `scripts/run-smoke-tests.sh` and verify it passes
 - [ ] 4.4 Re-run 4.1's checks and `scripts/run-smoke-tests.sh` after the follow-up; all pass
-- [ ] 4.5 Run `scripts/run-local.sh`: a newly downloaded video gets its `.srt` within seconds, without a manual sync
+- [x] 4.5 Run `scripts/run-local.sh`: a newly downloaded video gets its `.srt` within seconds, without a manual sync
