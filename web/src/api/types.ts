@@ -152,7 +152,20 @@ export interface Announcement {
   text: string
 }
 
+/** Which kind of build the daemon runs: a stable release, an unreleased `main` build, or a local one. */
+export type BuildChannel = 'release' | 'edge' | 'dev'
+
+/** The commit a build was made from. `date` is an RFC 3339 commit date. */
+export interface BuildCommit {
+  sha: string
+  subject: string
+  date: string
+}
+
 /** Response of `GET /api/version`. */
 export interface AppVersion {
   version: string
+  channel: BuildChannel
+  /** Null for local builds. */
+  commit: BuildCommit | null
 }

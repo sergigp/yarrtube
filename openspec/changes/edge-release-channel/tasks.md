@@ -30,7 +30,7 @@
 
 ## 3. Web UI
 
-- [ ] 3.1 `web/src/api/types.ts`: extend `AppVersion` with `channel: 'release' | 'edge' | 'dev'` and `commit: { sha; subject; date } | null`. Add an `aVersion` builder to `web/src/test/helpers.tsx`. Verify: `npm run typecheck` passes.
+- [x] 3.1 `web/src/api/types.ts`: extend `AppVersion` with `channel: 'release' | 'edge' | 'dev'` and `commit: { sha; subject; date } | null`. Add an `aVersion` builder to `web/src/test/helpers.tsx`. Verify: `npm run typecheck` passes.
 - [ ] 3.2 Add `web/src/components/ui/popover.tsx`: shadcn-style wrapper over radix `Popover`, same style as `tooltip.tsx`. Verify: typecheck passes.
 - [ ] 3.3 `VersionLabel.tsx`:
   - For `edge` builds, render a `Badge` reading `edge` that opens a popover. Show the short-sha link to `https://github.com/sergigp/yarrtube/commit/<sha>` (new tab), the subject, and `formatDateTime(date)`.

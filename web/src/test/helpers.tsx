@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import type {
   Announcement,
+  AppVersion,
   ChannelListItem,
   HomeVideo,
   PlaylistListItem,
@@ -176,6 +177,19 @@ export function anAnnouncement(overrides: Partial<Announcement> = {}): Announcem
   return {
     id: `announcement-${uniqueId}`,
     text: `Announcement ${uniqueId}`,
+    ...overrides,
+  }
+}
+
+export function aVersion(overrides: Partial<AppVersion> = {}): AppVersion {
+  return {
+    version: 'v0.9.2',
+    channel: 'release',
+    commit: {
+      sha: 'abc1234def5678abc1234def5678abc1234def56',
+      subject: 'Fix sync',
+      date: '2026-10-19T10:00:00Z',
+    },
     ...overrides,
   }
 }
