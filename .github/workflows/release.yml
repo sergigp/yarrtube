@@ -83,11 +83,37 @@ jobs:
             echo "date=$(git log -1 --format=%cI)"
           } >> "$GITHUB_OUTPUT"
 
+  # A release tag must match Cargo.toml's version, so the version users see
+  # on ghcr and in the UI is the one the code declares. Fails before any
+  # image is built or pushed.
+  verify-version:
+    needs: prepare
+    if: needs.prepare.outputs.channel == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Compare tag with Cargo.toml
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(sed -nE 's/^version = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' Cargo.toml | head -n1)
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME doesn't match Cargo.toml version $manifest: bump Cargo.toml to $tag first"
+            exit 1
+          fi
+
   # Each platform builds natively on its own runner (no QEMU emulation) and
   # pushes an untagged image by digest; `merge` then stitches the digests into
   # one tagged multi-arch manifest.
   build:
-    needs: prepare
+    needs: [prepare, verify-version]
+    # `verify-version` is skipped outside the release channel.
+    if: >-
+      !cancelled() && needs.prepare.result == 'success'
+      && contains(fromJSON('["success", "skipped"]'), needs.verify-version.result)
     strategy:
       matrix:
         include:

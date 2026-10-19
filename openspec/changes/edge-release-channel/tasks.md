@@ -19,7 +19,7 @@
     - `edge` → `edge`, `sha`
     - `sha` → `sha` only
   - Verify: `actionlint` passes (if available), and a review shows no tag rule still reads `github.event_name`.
-- [ ] 2.3 `release.yml`: add a `verify-version` job for the `release` channel that fails, printing both versions, when the tag without its `v` ≠ the `Cargo.toml` version. Make `build` depend on it. Verify: run the job's shell step locally with a mismatched tag (exit 1) and a matching tag (exit 0).
+- [x] 2.3 `release.yml`: add a `verify-version` job for the `release` channel that fails, printing both versions, when the tag without its `v` ≠ the `Cargo.toml` version. Make `build` depend on it. Verify: run the job's shell step locally with a mismatched tag (exit 1) and a matching tag (exit 0).
 - [ ] 2.4 `ci.yml`:
   - Delete the `tag` job.
   - Make `release` call `release.yml` with `channel: edge`, `if: push to main`, `needs: [openspec-archived, ci]`.
