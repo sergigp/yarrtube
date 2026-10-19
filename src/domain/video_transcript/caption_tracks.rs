@@ -21,9 +21,12 @@ pub struct CaptionTracks {
 
 impl CaptionTracks {
     /// Manual `<lang>`/`<lang>-*`, else automatic `<lang>-orig`, else
-    /// automatic `<lang>`, trying the reported language then its base
-    /// language (`es` for `es-US`); no language reported: the only automatic
-    /// `*-orig`.
+    /// automatic `<lang>` when no automatic `*-orig` exists, trying the
+    /// reported language then its base language (`es` for `es-US`); else the
+    /// only automatic `*-orig`, with its own language (the reported one was
+    /// wrong). No language reported: the only automatic `*-orig`, else the
+    /// uploaded track when every uploaded track shares one base language
+    /// (the base code preferred).
     pub fn original(&self) -> Option<CaptionTrack> {
         match self.original_language.as_deref() {
             Some(language) => {
@@ -36,8 +39,11 @@ impl CaptionTracks {
                             .iter()
                             .find_map(|language| self.automatic_in(language))
                     })
+                    .or_else(|| self.only_original_automatic())
             }
-            None => self.only_original_automatic(),
+            None => self
+                .only_original_automatic()
+                .or_else(|| self.manual_in_only_language()),
         }
     }
 }
@@ -59,14 +65,27 @@ impl CaptionTracks {
     }
 
     /// The auto-generated track yt-dlp marks as the original in `language`,
-    /// else the plain auto-generated one in `language`.
+    /// else the plain auto-generated one in `language`, but only when no
+    /// track is marked as the original: YouTube lists machine translations
+    /// of the original under plain language codes.
     fn automatic_in(&self, language: &str) -> Option<CaptionTrack> {
         let original_key = format!("{language}{ORIGINAL_MARKER}");
+        let plain_is_original = !self.has_original_automatic();
         self.automatic
             .iter()
             .find(|key| **key == original_key)
-            .or_else(|| self.automatic.iter().find(|key| key.as_str() == language))
+            .or_else(|| {
+                self.automatic
+                    .iter()
+                    .find(|key| plain_is_original && key.as_str() == language)
+            })
             .and_then(|key| track(key, language, CaptionSource::Automatic))
+    }
+
+    fn has_original_automatic(&self) -> bool {
+        self.automatic
+            .iter()
+            .any(|key| key.ends_with(ORIGINAL_MARKER))
     }
 
     /// With no language reported, the original is only known when exactly
@@ -81,6 +100,22 @@ impl CaptionTracks {
             _ => None,
         }
     }
+
+    /// With no language reported, uploaded tracks all in one base language
+    /// (e.g. `en` and `en-GB`) can only be in the original language.
+    fn manual_in_only_language(&self) -> Option<CaptionTrack> {
+        let mut bases = self.manual.iter().map(|key| base_of(key));
+        let base = bases.next()?;
+        bases
+            .all(|other| other == base)
+            .then(|| self.manual_in(base))
+            .flatten()
+    }
+}
+
+/// A language code's primary subtag: `en` for `en-GB`.
+fn base_of(language: &str) -> &str {
+    language.split_once('-').map_or(language, |(base, _)| base)
 }
 
 /// The reported language, then its base language when it is regional:
@@ -180,7 +215,34 @@ mod tests {
 
     #[test]
     fn it_should_select_nothing_when_no_language_is_reported_and_no_track_is_original() {
-        assert_eq!(tracks(None, &["en"], &["en", "fr"]).original(), None);
+        assert_eq!(tracks(None, &[], &["en", "fr"]).original(), None);
+    }
+
+    #[test]
+    fn it_should_select_the_only_original_when_the_reported_language_has_none() {
+        assert_eq!(
+            tracks(Some("en"), &[], &["es-orig", "es", "en", "fr"]).original(),
+            Some(track_of("es-orig", "es", CaptionSource::Automatic))
+        );
+    }
+
+    #[test]
+    fn it_should_select_a_plain_track_when_no_original_is_marked() {
+        assert_eq!(
+            tracks(Some("yue"), &[], &["yue"]).original(),
+            Some(track_of("yue", "yue", CaptionSource::Automatic))
+        );
+    }
+
+    #[test]
+    fn it_should_select_the_uploaded_track_when_no_language_is_reported() {
+        assert_eq!(
+            [
+                tracks(None, &["en-GB", "en"], &[]).original(),
+                tracks(None, &["en", "de"], &[]).original(),
+            ],
+            [Some(track_of("en", "en", CaptionSource::Manual)), None]
+        );
     }
 
     fn tracks(language: Option<&str>, manual: &[&str], automatic: &[&str]) -> CaptionTracks {
