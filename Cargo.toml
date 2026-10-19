@@ -1,5 +1,8 @@
 [package]
 name = "yarrtube"
+# Not used for anything for now: the released version is the pushed vX.Y.Z
+# git tag, stamped into the binary at image build time (see "Deploy" in
+# doc/DEVELOPMENT.md). No need to bump it.
 version = "0.9.0"
 edition = "2024"
 
