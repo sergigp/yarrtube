@@ -26,15 +26,8 @@ When two merges to `main` are being published at the same time, `:edge` SHALL en
 Pushing a git tag `vX.Y.Z` SHALL publish a multi-arch image built from the tagged commit, tagged `:latest`, `:X.Y.Z` and `:X.Y`. It SHALL NOT publish `:edge`.
 
 #### Scenario: Maintainer pushes a release tag
-- **WHEN** the maintainer pushes tag `v0.10.0` on a commit whose manifest version is `0.10.0`
-- **THEN** `:latest`, `:0.10.0` and `:0.10` point to the image built from that commit, and `:edge` is unchanged
-
-### Requirement: Release Tag Must Match Manifest Version
-A release build SHALL fail before publishing any image when the pushed tag without its `v` prefix differs from the version declared in the package manifest of the tagged commit.
-
-#### Scenario: Tag ahead of manifest
-- **WHEN** tag `v0.9.5` is pushed on a commit whose manifest declares `0.9.0`
-- **THEN** the release workflow fails, reports both versions, and publishes no image tags
+- **WHEN** the maintainer pushes tag `v0.10.0`
+- **THEN** `:latest`, `:0.10.0` and `:0.10` point to the image built from the tagged commit, and `:edge` is unchanged
 
 ### Requirement: Manual Runs Publish Only A Commit Image
 A manually triggered release run SHALL publish only `:sha-<short commit sha>` for the selected ref. It SHALL NOT move `:edge`, `:latest` or any semver image tag.

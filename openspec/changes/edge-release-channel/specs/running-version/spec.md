@@ -47,7 +47,7 @@ The web UI header SHALL show the running build immediately after the logo, at al
 ## ADDED Requirements
 
 ### Requirement: Release Builds Report Their Tag
-A container image built for a release SHALL report the release tag it was built from (e.g. `v0.9.5`) as its version, and SHALL report channel `release`.
+A container image built for a release SHALL report the release tag it was built from (e.g. `v0.9.5`) as its version, independently of the version declared in the package manifest, and SHALL report channel `release`.
 
 #### Scenario: Image built for a pushed release tag
 - **WHEN** a `v1.0.0` tag is pushed and its release image is built
@@ -73,5 +73,5 @@ The popover SHALL close on outside click or Escape.
 ## REMOVED Requirements
 
 ### Requirement: Release Builds Carry Their Release Tag
-**Reason**: Releases are no longer tagged automatically on every merge, and a release tag must now match the manifest version, so "independently of the manifest" no longer holds.
-**Migration**: Replaced by "Release Builds Report Their Tag". The tag/manifest match is enforced by `release-channels` "Release Tag Must Match Manifest Version".
+**Reason**: Releases are no longer tagged automatically on every merge, so its "automatically tagged release" scenario no longer holds.
+**Migration**: Replaced by "Release Builds Report Their Tag".

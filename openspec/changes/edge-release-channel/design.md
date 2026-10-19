@@ -6,7 +6,7 @@
   - `edge` + `sha` when the event is `workflow_dispatch`
 - In a `workflow_call`, `github.event_name` is the **caller's** event (`push`). That's why CI-called builds get `:latest` today. Reusing the call for edge builds without changing this would also tag them `:latest`.
 - The version is a compile-time `option_env!("YARRTUBE_VERSION")` in `app_version.rs`, passed as a Docker `ARG` after `cargo chef cook`. It ends up in the `RunningVersion(String)` axum state, which `GET /api/version` serializes.
-- `Cargo.toml` declares `0.9.0`. The latest tag is `v0.9.4`, because CI only bumped tags.
+- `Cargo.toml` declares `0.9.0`. The latest tag is `v0.9.4`, because CI only bumped tags. Nothing reads `Cargo.toml`'s version.
 
 ## Goals / Non-Goals
 
@@ -34,10 +34,9 @@
 - *Alternative (rejected during apply):* `concurrency: { group: edge-publish, cancel-in-progress: true }` on the CI job. Concurrency doesn't know commit order. If an older merge's CI finishes after a newer one's, its publish starts later, cancels the newer one, and `:edge` ends up on the older commit.
 - The CI run-level `cancel-in-progress: false` stays as it is.
 
-**3. Version gate as a first job (`verify-version`) in `release.yml`, only for `channel == release`.**
-- It compares `${TAG#v}` with `Cargo.toml`'s `version` (same `sed` as the old script).
-- On a mismatch it prints both versions and exits 1. `build` needs this job, so nothing is pushed.
-- *Alternative:* derive the version from `CARGO_PKG_VERSION` and ignore the tag. Rejected because the tag is what users see on ghcr and in the UI, so the two must agree.
+**3. The tag is the version.**
+- A release reports its pushed `vX.Y.Z` tag. `Cargo.toml`'s version is left alone, and a comment there says it is unused.
+- *Alternative (built, then removed in `4b690ed`):* a `verify-version` job failing the release when the tag ≠ `Cargo.toml`'s version. Rejected because nothing reads that version (no crates.io publish, no `CARGO_PKG_VERSION`), so the check only added a bump PR to every release.
 
 **4. Commit metadata as build args, read with `option_env!`.**
 - New Docker `ARG`s, declared next to `YARRTUBE_VERSION` after `cargo chef cook`:
@@ -65,14 +64,13 @@
 
 ## Risks / Trade-offs
 
-- [The first stable release is blocked because `Cargo.toml` (0.9.0) is behind the tags (v0.9.4)] → the docs and tasks say to bump to `0.9.5`+ in the PR before tagging.
-- [Users on `:latest` stop getting fixes until the maintainer cuts a release] → intended. The Deploy docs describe cutting a release as two commands.
+- [Users on `:latest` stop getting fixes until the maintainer cuts a release] → intended. The Deploy docs describe cutting a release as one command.
 - [A cancelled edge publish leaves orphan untagged digests on ghcr] → harmless storage. Ignored.
-- [A commit subject with characters that break YAML or a shell] → it's passed through `env:` and `$GITHUB_ENV` and never interpolated into a `run:` script.
+- [A commit subject with characters that break YAML or a shell] → it travels as a job output into the build action's `build-args` input and is never interpolated into a `run:` script.
 
 ## Migration Plan
 
 1. Merge the change. Its own merge publishes the first `:edge`. `:latest` stays on `v0.9.4`.
 2. On the NAS, point the image and the 5-minute pull at `:edge`.
-3. To release: bump `Cargo.toml` to `0.9.5` in a PR, merge it, then run `gh release create v0.9.5 --generate-notes --target main`.
+3. To release: once `:edge` has been tested, run `gh release create v0.9.5 --target <tested sha> --generate-notes`.
 4. Rollback of a bad edge build: pin the NAS to `:sha-<previous>` until a fix merges. Rollback of the release process itself: revert the PR.

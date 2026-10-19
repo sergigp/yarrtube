@@ -14,9 +14,8 @@ continuous delivery. Other users need releases that were cut on purpose.
 - A stable release happens only when the maintainer pushes a `vX.Y.Z` tag
   (e.g. via `gh release create vX.Y.Z --generate-notes`). It publishes
   `:latest`, `:X.Y.Z` and `:X.Y`.
-- A release build fails before publishing anything when the tag doesn't
-  match the `Cargo.toml` version. `Cargo.toml` becomes the declared release
-  version again.
+- The tag is the version: `Cargo.toml`'s version isn't read by anything and
+  is never bumped (a comment there says so).
 - A manual run of the release workflow publishes only `:sha-<short sha>`, so
   testing a branch image never overwrites `:edge`.
 - An older edge build can never overwrite `:edge` with an older commit.
@@ -36,13 +35,11 @@ continuous delivery. Other users need releases that were cut on purpose.
 
 ### New Capabilities
 - `release-channels`: which image tags CI publishes on a merge to `main`, on
-  a pushed release tag and on a manual run, and the version gate on
-  releases.
+  a pushed release tag and on a manual run.
 
 ### Modified Capabilities
 - `running-version`:
   - Edge builds come from every merge, not only manual runs.
-  - Release builds must match the manifest version.
   - The version endpoint also returns channel and commit.
   - The header shows an edge badge with commit details.
 
@@ -50,7 +47,7 @@ continuous delivery. Other users need releases that were cut on purpose.
 
 - `.github/workflows/ci.yml`: the `tag` job is removed; the call to
   `release.yml` becomes the edge publish.
-- `.github/workflows/release.yml`: `channel` input, version gate, tag rules,
+- `.github/workflows/release.yml`: `channel` input, tag rules,
   commit build args.
 - `scripts/next-release-tag.sh`: deleted.
 - `Dockerfile`: new commit build args.
@@ -66,7 +63,5 @@ continuous delivery. Other users need releases that were cut on purpose.
   - a new `ui/popover.tsx` (radix)
   - `AppShell.test.tsx`
 - Docs: `doc/DEVELOPMENT.md`, `doc/INSTALLATION.md`, `CLAUDE.md`.
-- Ops:
-  - The NAS switches its 5-minute pull from `:latest` to `:edge`.
-  - `Cargo.toml` (now `0.9.0`, latest tag `v0.9.4`) must be bumped to at
-    least `0.9.5` before the next stable release.
+- `Cargo.toml`: a comment marking its version as unused.
+- Ops: the NAS switches its 5-minute pull from `:latest` to `:edge`.

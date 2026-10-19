@@ -3,7 +3,7 @@
 - [x] 1.1 In `src/infrastructure/shared/app_version.rs`:
   - Replace `APP_VERSION` with an `AppVersion { version, channel, commit: Option<Commit { sha, subject, date }> }`, built from `YARRTUBE_VERSION` and `YARRTUBE_COMMIT_{SHA,SUBJECT,DATE}` via `option_env!`.
   - Derive the channel: `dev` when unset, `edge` when prefixed `edge-`, else `release`.
-  - Replace the comment saying Cargo.toml is unused.
+  - Keep the comment saying Cargo.toml's version is unused.
   - Verify: unit tests cover derivation from explicit inputs (release, edge, dev), and an unset build reports `dev` with no commit.
 - [x] 1.2 Make `RunningVersion` in `src/application/http/mod.rs` carry `AppVersion`, and wire it in `src/serve.rs`. Verify: `cargo build` passes.
 - [x] 1.3 Extend `VersionResponse` in `src/application/http/version/dto.rs` with `channel` (lowercase) and `commit` (`null` when absent), and update the handler test in `version/mod.rs`. Verify: whole-response asserts for an edge build and a dev build pass.
@@ -19,7 +19,7 @@
     - `edge` → `edge`, `sha`
     - `sha` → `sha` only
   - Verify: `actionlint` passes (if available), and a review shows no tag rule still reads `github.event_name`.
-- [x] 2.3 `release.yml`: add a `verify-version` job for the `release` channel that fails, printing both versions, when the tag without its `v` ≠ the `Cargo.toml` version. Make `build` depend on it. Verify: run the job's shell step locally with a mismatched tag (exit 1) and a matching tag (exit 0).
+- [x] 2.3 ~~`release.yml`: add a `verify-version` job comparing the tag with `Cargo.toml`.~~ Obsolete: implemented, then removed in `4b690ed` (the tag is the version, see design decision 3). Instead, a comment in `Cargo.toml` marks its version as unused. Verify: `release.yml` has no `verify-version` job.
 - [x] 2.4 `ci.yml`:
   - Delete the `tag` job.
   - Make `release` call `release.yml` with `channel: edge`, `if: push to main`, `needs: [openspec-archived, ci]`.
@@ -50,12 +50,12 @@
   - every passing merge to `main` publishes `:edge` + `:sha-<short>`; the NAS pulls `:edge` every 5 minutes
   - rollback by pinning `:sha-<short>`
   - manual workflow runs publish only `:sha-<short>`, for testing a branch
-  - cutting a stable release: bump `Cargo.toml` in a PR, merge, `gh release create vX.Y.Z --generate-notes --target main` (or push a `vX.Y.Z` tag) → `:latest`, `:X.Y.Z`, `:X.Y`
-  - a tag/manifest mismatch fails the release
+  - cutting a stable release: once `:edge` has been tested, `gh release create vX.Y.Z --target <sha> --generate-notes` (or push a `vX.Y.Z` tag) → `:latest`, `:X.Y.Z`, `:X.Y`
+  - the tag is the version; `Cargo.toml` needs no bump
 
   Verify: the section exists, and its commands match the workflows.
 - [x] 4.2 `doc/INSTALLATION.md`: document the image tags (`latest` recommended, `X.Y.Z`/`X.Y` for pinning, `edge` = unreleased `main`) near "Run the container" / "Updating". Verify: the tags listed match `release.yml`.
-- [x] 4.3 `CLAUDE.md`: rewrite the release paragraph (edge on merge, manual stable tags, version gate) and point to the Deploy section. Verify: no mention of automatic tagging is left.
+- [x] 4.3 `CLAUDE.md`: rewrite the release paragraph (edge on merge, manual stable tags, the tag is the version) and point to the Deploy section. Verify: no mention of automatic tagging is left.
 
 ## 5. Full verification
 
