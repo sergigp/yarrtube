@@ -16,7 +16,7 @@
 - [x] 2.3 `it_should_fail_to_serve_subtitles_if_not_fetched`: Missing state gives 404.
 - [x] 2.4 `it_should_fail_to_serve_subtitles_if_file_missing`: Fetched but no file gives 404.
 - [x] 2.5 `it_should_fail_to_serve_subtitles_if_video_not_in_source`: a video recorded only for another playlist gives 404.
-- [ ] 2.6 `it_should_fail_to_serve_subtitles_if_playlist_not_found`: 404.
+- [x] 2.6 `it_should_fail_to_serve_subtitles_if_playlist_not_found`: 404.
 - [ ] 2.7 `it_should_fail_to_serve_subtitles_if_channel_not_found`: 404.
 - [ ] 2.8 `it_should_fail_to_serve_subtitles_if_invalid_video_id_provided`: 400, no DB needed.
 - [ ] 2.9 `it_should_include_the_subtitle_language_when_listing_videos`: `Some("en")` for Fetched `.en.srt`, `None` for Missing. Drives `Video::subtitle_language` and the DTO mapping.

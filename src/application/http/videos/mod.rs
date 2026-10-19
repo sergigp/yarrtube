@@ -2855,6 +2855,30 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_serve_subtitles_if_playlist_not_found() {
+        let db = TestDatabase::new();
+        let subtitle_reader = SubtitleReader::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(FakeVideoFileRepository::default()),
+            VIDEOS_ROOT,
+        );
+
+        let response = playlist_subtitles(subtitle_reader, "PL1", "vid1").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "playlist PL1 not found"
+            ))
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
