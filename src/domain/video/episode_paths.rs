@@ -39,9 +39,10 @@ impl EpisodePaths {
         self.media("nfo")
     }
 
-    /// `<stem>.<lang>.srt`, the episode's subtitle file in `language`.
+    /// `<stem>.<lang>.srt`, the episode's subtitle file in `language`, named
+    /// by its base code (`es` for `es-US`): media servers recognise those.
     pub fn subtitle(&self, language: &CaptionLanguage) -> String {
-        self.media(&format!("{}.srt", language.as_str()))
+        self.media(&format!("{}.srt", language.base()))
     }
 
     /// The thumbnail's file name as the episode NFO references it: a sibling

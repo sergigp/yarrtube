@@ -26,7 +26,7 @@ impl CaptionLanguage {
 
     /// The primary subtag, e.g. `es` for `es-US`.
     pub fn base(&self) -> &str {
-        &self.0
+        self.0.split('-').next().unwrap_or(&self.0)
     }
 }
 
