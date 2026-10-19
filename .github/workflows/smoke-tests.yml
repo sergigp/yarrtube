@@ -2,9 +2,9 @@ name: Smoke tests
 
 # Fixtures used by this workflow (see smoke-tests/README.md for how to
 # maintain them):
-#   - SMOKE_PLAYLIST_ID: id of the maintainer-owned public "yarrtube-smoke-tests"
-#     YouTube playlist (must keep containing the Creative-Commons "Big Buck
-#     Bunny" video).
+#   - the fixture playlist and channel, defaulted in
+#     ./scripts/run-smoke-tests.sh (the playlist is maintainer-owned and must
+#     keep containing the Creative-Commons "Big Buck Bunny" video).
 #   - secrets.YOUTUBE_API_KEY: a YouTube Data API v3 key, added as a repo
 #     secret (Settings > Secrets and variables > Actions). Only ever
 #     referenced here, never printed.
@@ -21,12 +21,6 @@ on:
 concurrency:
   group: smoke-tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  SMOKE_PLAYLIST_ID: PLXWRoRTUXjks
-  SMOKE_PLAYLIST_NAME: yarrtube smoke tests
-  SMOKE_CHANNEL_HANDLE: "@BlenderOfficial"
-  SMOKE_CHANNEL_VIDEO_LIMIT: 1
 
 jobs:
   smoke-tests:

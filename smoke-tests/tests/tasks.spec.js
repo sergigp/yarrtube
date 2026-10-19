@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from '../helpers/fixtures.js'
 
 test('tasks view lists the recurring yt-dlp self-update task', async ({ page }) => {
   await page.goto('/')

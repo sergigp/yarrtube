@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from '../helpers/fixtures.js'
 
 test('mobile sidebar opens via the menu button and closes', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
 
-  const overlay = page.locator('div[aria-hidden="true"]')
+  const overlay = page.locator('#root div[aria-hidden="true"]')
   await expect(overlay).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Open menu' }).click()

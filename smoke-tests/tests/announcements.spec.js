@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from '../helpers/fixtures.js'
 
 // The live file on `main` changes over time, so every test stubs it.
 const ANNOUNCEMENTS_URL =

@@ -43,7 +43,7 @@ export async function syncItem(page, { section, name }) {
       { timeout: 15_000 },
     )
     await chooseRowAction(page, row, 'Sync')
-    await synced
+    expect((await synced).ok(), 'sync response').toBe(true)
   } finally {
     page.off('dialog', onDialog)
   }
@@ -78,7 +78,7 @@ export async function markItemWatched(page, { section, name }) {
       (response) => response.url().endsWith('/watched') && response.request().method() === 'POST',
     )
     await chooseRowAction(page, row, 'Mark all watched')
-    await marked
+    expect((await marked).ok(), 'mark watched response').toBe(true)
   } finally {
     page.off('dialog', onDialog)
   }

@@ -10,14 +10,25 @@ const STATUS_LABELS = {
 }
 
 export async function waitForVideoStatus(page, { title, status = 'DOWNLOADED', timeoutMs = 240_000 } = {}) {
+  const main = page.locator('main')
   if (title) {
-    await page.getByRole('button').filter({ hasText: title }).first().click()
+    await main.getByRole('button').filter({ hasText: title }).first().click()
+    // The detail pane shows the video asked about, so its status is the one read.
+    await expect(main.getByRole('heading', { level: 3 }).first()).toHaveText(title)
   }
   const indicator =
     status === 'DOWNLOADED'
-      ? page.getByText(/^Synced /).first()
-      : page.getByText(STATUS_LABELS[status] ?? status, { exact: true }).first()
-  await expect(indicator).toBeVisible({ timeout: timeoutMs })
+      ? main.getByText(/^Synced /).first()
+      : main.getByText(STATUS_LABELS[status] ?? status, { exact: true }).first()
+  if (status !== 'DOWNLOADED') {
+    await expect(indicator).toBeVisible({ timeout: timeoutMs })
+    return
+  }
+  // A download that has given up won't recover, so fail on it right away
+  // rather than after the whole timeout.
+  const errored = main.getByText(STATUS_LABELS.ERRORED, { exact: true }).first()
+  await expect(indicator.or(errored).first()).toBeVisible({ timeout: timeoutMs })
+  await expect(errored, 'the download errored').toBeHidden()
 }
 
 export async function assertVideoPlays(page) {

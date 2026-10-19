@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from '../helpers/fixtures.js'
 import {
   openAddChannelDialog,
   openAddPlaylistDialog,
@@ -15,6 +15,7 @@ import {
 } from '../helpers/addDialog.js'
 import { waitForVideoStatus } from '../helpers/video.js'
 import { deleteItem } from '../helpers/sidebar.js'
+import { expectEpisodeOnDisk } from '../helpers/library.js'
 
 const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
 const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
@@ -38,7 +39,6 @@ function endingIn(path) {
 }
 
 test('it should create a playlist into a browsed parent folder', async ({ page }) => {
-  test.skip(!PLAYLIST_ID, 'SMOKE_PLAYLIST_ID is not set')
   const folderName = 'browsed-parent-target'
 
   await page.goto('/')
@@ -65,6 +65,12 @@ test('it should create a playlist into a browsed parent folder', async ({ page }
 
   // The videos went to the stated destination, not anywhere else.
   expect(await listDirectories(page, 'playlists')).toContain(folderName)
+  await expectEpisodeOnDisk({
+    showPath: `playlists/${folderName}`,
+    kind: 'playlist',
+    showTitle: PLAYLIST_NAME,
+    videoTitle: await page.locator('main h3').first().innerText(),
+  })
 
   await deleteItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
 })
@@ -72,7 +78,6 @@ test('it should create a playlist into a browsed parent folder', async ({ page }
 test('it should create a playlist into a staged parent folder that did not exist', async ({
   page,
 }) => {
-  test.skip(!PLAYLIST_ID, 'SMOKE_PLAYLIST_ID is not set')
   const stagedParent = `staged-${Date.now()}`
   const folderName = 'staged-parent-target'
 
@@ -105,6 +110,12 @@ test('it should create a playlist into a staged parent folder that did not exist
   // Both directories exist once the first download has run.
   expect(await listDirectories(page, '')).toContain(stagedParent)
   expect(await listDirectories(page, stagedParent)).toContain(folderName)
+  await expectEpisodeOnDisk({
+    showPath: `${stagedParent}/${folderName}`,
+    kind: 'playlist',
+    showTitle: PLAYLIST_NAME,
+    videoTitle: await page.locator('main h3').first().innerText(),
+  })
 
   await deleteItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
 })
@@ -150,16 +161,15 @@ test('it should descend into an existing directory when the create-folder step n
   await expect(destinationNotice(dialog).locator('code')).toHaveText(
     endingIn('playlists/descended-target'),
   )
-  // Descended into, not adopted as new: the browser lists it rather than
-  // reporting it as not existing yet.
+  // Descended into, not adopted as new: the breadcrumb now ends in it, and
+  // the browser doesn't report it as not existing yet.
+  await expect(dialog.getByRole('navigation', { name: 'Folder path' })).toHaveText(/playlists$/)
   await expect(dialog.getByText(/Does not exist yet/)).toHaveCount(0)
 })
 
 test('it should block submission when the destination is already used by another playlist', async ({
   page,
 }) => {
-  test.skip(!PLAYLIST_ID, 'SMOKE_PLAYLIST_ID is not set')
-
   await page.goto('/')
   await openAddPlaylistDialog(page)
   await submitPlaylist(page, { url: PLAYLIST_ID })

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from '../helpers/fixtures.js'
 import {
   openAddPlaylistDialog,
   openAdvancedOptions,
@@ -35,8 +35,6 @@ test('it should explain a value that is not a playlist', async ({ page }) => {
 })
 
 test('it should state the title, count and destination', async ({ page }) => {
-  test.skip(!PLAYLIST_ID, 'SMOKE_PLAYLIST_ID is not set')
-
   await page.goto('/')
   await openAddPlaylistDialog(page)
   const dialog = page.getByRole('dialog')
@@ -59,8 +57,6 @@ test('it should state the title, count and destination', async ({ page }) => {
 })
 
 test('it should auto-fill the folder name under advanced options', async ({ page }) => {
-  test.skip(!PLAYLIST_ID, 'SMOKE_PLAYLIST_ID is not set')
-
   await page.goto('/')
   await openAddPlaylistDialog(page)
   const dialog = await fillPlaylist(page, { url: PLAYLIST_ID })
