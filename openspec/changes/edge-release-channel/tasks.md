@@ -59,4 +59,4 @@
 
 ## 5. Full verification
 
-- [ ] 5.1 Verify: `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cargo test --locked` pass.
+- [x] 5.1 Verify: `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cargo test --locked` pass.
