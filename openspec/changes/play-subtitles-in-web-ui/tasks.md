@@ -13,7 +13,7 @@
 
 - [x] 2.1 `it_should_serve_a_playlist_videos_subtitles_as_web_vtt`: a Fetched playlist video with seeded `.srt` returns `text/vtt` with the converted body. Drives `read_for_playlist`, `WebVtt::from_srt` and the fake's `read_to_string`.
 - [x] 2.2 `it_should_serve_a_channel_videos_subtitles_as_web_vtt`: drives `read_for_channel`.
-- [ ] 2.3 `it_should_fail_to_serve_subtitles_if_not_fetched`: Missing state gives 404.
+- [x] 2.3 `it_should_fail_to_serve_subtitles_if_not_fetched`: Missing state gives 404.
 - [ ] 2.4 `it_should_fail_to_serve_subtitles_if_file_missing`: Fetched but no file gives 404.
 - [ ] 2.5 `it_should_fail_to_serve_subtitles_if_video_not_in_source`: a video recorded only for another playlist gives 404.
 - [ ] 2.6 `it_should_fail_to_serve_subtitles_if_playlist_not_found`: 404.

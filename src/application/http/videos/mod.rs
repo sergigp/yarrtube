@@ -2747,6 +2747,44 @@ mod tests {
         assert_eq!(response, Ok(vtt_body(VTT)));
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_serve_subtitles_if_not_fetched() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &downloaded_video("vid1", "My Video", None, 1_700_000_000),
+        );
+        let video_file_repository = Arc::new(
+            FakeVideoFileRepository::default()
+                .with_file(format!("{VIDEOS_ROOT}/music/{SUBTITLE_FILENAME}"), SRT),
+        );
+        let subtitle_reader = SubtitleReader::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            video_repository,
+            video_file_repository,
+            VIDEOS_ROOT,
+        );
+
+        let response = playlist_subtitles(subtitle_reader, "PL1", "vid1").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "video vid1 has no subtitles"
+            ))
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
