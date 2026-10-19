@@ -136,8 +136,23 @@ impl SubtitleFetcher {
             Some(track) => {
                 self.place_subtitles(video, &paths, &probe, &track, &staging, output_dir)
             }
+            None if !probe.warnings.is_empty() => {
+                Self::log_inconclusive(video, &probe);
+                Ok(())
+            }
             None => self.mark_unavailable_if_old(video, &probe),
         }
+    }
+
+    /// yt-dlp can withhold caption tracks silently (e.g. without a PO
+    /// token) and only says so in a warning: a probe without a selectable
+    /// track that warned proves nothing, so the video stays Missing.
+    fn log_inconclusive(video: &Video, probe: &CaptionProbe) {
+        warn!(
+            video_id = %video.id,
+            warnings = ?probe.warnings,
+            "caption probe warned and found no original-language track"
+        );
     }
 
     /// Captions often appear days after an upload: only a video at least
