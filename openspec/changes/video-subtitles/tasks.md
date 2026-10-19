@@ -43,7 +43,7 @@
 - [x] 2.34 `it_should_name_a_regional_track_with_its_base_language` (item 43)
 - [x] 2.35 `it_should_scan_the_show_folder_after_subtitles_are_fetched` (item 44)
 - [x] 2.36 `it_should_return_the_base_language` (item 45)
-- [ ] 2.37 Docs: `doc/PLEX.md` says subtitles arrive right after the download and trigger a rescan, files use the base language code; `doc/ARCHITECTURE.md` example gains the subtitle flow (step 4: `VideoDownloaded` → `FetchSubtitlesOnVideoDownloaded` + Plex scan; new step: `FetchSubtitles` lane → `.srt` + transcript → `VideoSubtitlesFetched` → Plex rescan; the periodic-sync step keeps only backfill and retries) and its sequence diagram shows it
+- [x] 2.37 Docs: `doc/PLEX.md` says subtitles arrive right after the download and trigger a rescan, files use the base language code; `doc/ARCHITECTURE.md` example gains the subtitle flow (step 4: `VideoDownloaded` → `FetchSubtitlesOnVideoDownloaded` + Plex scan; new step: `FetchSubtitles` lane → `.srt` + transcript → `VideoSubtitlesFetched` → Plex rescan; the periodic-sync step keeps only backfill and retries) and its sequence diagram shows it
 
 ## 3. Infrastructure adapters (TDD)
 
