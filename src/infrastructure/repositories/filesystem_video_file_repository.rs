@@ -144,10 +144,14 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
 
     fn read_to_string(&self, output_dir: &Path, filename: &str) -> anyhow::Result<Option<String>> {
         let path = output_dir.join(filename);
-        std::fs::read_to_string(&path)
-            .map(Some)
-            .inspect_err(|e| tracing::error!(path = ?path, error = %e, "failed to read file"))
-            .map_err(|e| anyhow::anyhow!("failed to read {path:?}: {e}"))
+        match std::fs::read_to_string(&path) {
+            Ok(content) => Ok(Some(content)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => {
+                tracing::error!(path = ?path, error = %e, "failed to read file");
+                Err(anyhow::anyhow!("failed to read {path:?}: {e}"))
+            }
+        }
     }
 }
 
@@ -637,6 +641,17 @@ mod tests {
             .unwrap();
 
         assert_eq!(content, Some("1\nHello there\n".to_string()));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_read_none_when_the_file_is_missing() {
+        let dir = unique_temp_dir("video-file-repository-read-missing");
+
+        let content =
+            FilesystemVideoFileRepository.read_to_string(&dir, "Season 1/My Video.en.srt");
+
+        assert_eq!(content.map_err(|e| e.to_string()), Ok(None));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
