@@ -33,6 +33,13 @@ operations:
         Then mark the task done.
       - Never write production logic before a failing test that requires it, and never
         write more than one new test per cycle.
+      - |
+        Run manual verifications yourself whenever possible, using scripts/run-local.sh
+        and the Playwright MCP browser. Only mark a check done if you performed exactly
+        what it describes and observed the expected result. Never substitute an
+        equivalent action (e.g. setting textTracks mode instead of clicking the native
+        CC menu) and mark it done: leave it unchecked, and in the final summary list
+        what remains for the user to verify by hand and what you checked instead.
 
 rules:
   design:
@@ -82,5 +89,12 @@ rules:
       replaces skeleton stub code in a real adapter via one red-green-refactor cycle.
 
       ## 4. Verification
-      cargo test, fmt, clippy, and manual check via smoke tests running scripts/run-smoke-tests.sh or manually running scripts/run-local.sh when the change
-      is user-visible.
+      cargo test, fmt, clippy, and smoke tests via scripts/run-smoke-tests.sh.
+      When the change is user-visible, add a "Manual (agent)" task for the checks the
+      agent can run itself: start scripts/run-local.sh --port <free port> --fresh-videos,
+      seed data via the HTTP API, drive the UI with the Playwright MCP browser, assert
+      concrete evidence (DOM state, network requests, screenshot), then stop the server
+      and delete yarrtube.sqlite3 and the fresh videos dir.
+      Add a separate "Manual (human)" task listing every check the agent cannot perform
+      faithfully (native browser menus/controls, Plex/Kodi clients, real devices, visual
+      judgement). Omit it only if there are none.

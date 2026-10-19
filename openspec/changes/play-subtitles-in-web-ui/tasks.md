@@ -35,4 +35,4 @@
 
 - [x] 4.1 Run `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `cd web && npm run check`. All must pass.
 - [x] 4.2 Smoke: in `smoke-tests/tests/playlist.spec.js` and `channel.spec.js`, wait for `subtitle_language` on the downloaded video, turn the player's track on in the page, and assert the browser's `subtitles.vtt` response is 200 `text/vtt` starting with `WEBVTT`. Both new routes must be recorded by route coverage. Run `scripts/run-smoke-tests.sh`. If the smoke videos have no captions, stop and ask.
-- [x] 4.3 Manual: run `scripts/run-local.sh` and open a video with Fetched subtitles. Confirm CC is off at start. Enable it from the player's captions menu, confirm cues show in sync, and confirm `subtitles.vtt` is requested only after enabling.
+- [ ] 4.3 Manual: run `scripts/run-local.sh` and open a video with Fetched subtitles. Confirm CC is off at start. Enable it from the player's captions menu, confirm cues show in sync, and confirm `subtitles.vtt` is requested only after enabling.
