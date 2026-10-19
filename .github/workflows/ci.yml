@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  # Never cancel a run on main: it may be halfway through tagging/releasing.
+  # Never cancel a run on main: it may be halfway through publishing :edge.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -76,45 +76,16 @@ jobs:
       - name: Test
         run: cargo test --locked
 
-  # Every merge to main that passes CI gets the next vX.Y.Z tag (see
-  # scripts/next-release-tag.sh) and is released.
-  tag:
-    name: Tag release
+  # Every merge to main that passes CI is published as :edge +
+  # :sha-<short> (see release.yml). Stable releases (:latest) are only cut by
+  # pushing a vX.Y.Z tag by hand.
+  edge:
+    name: Publish edge image
     needs: [openspec-archived, ci]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency:
-      group: tag-release
-      cancel-in-progress: false
-    outputs:
-      tag: ${{ steps.next.outputs.tag }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Compute next tag
-        id: next
-        run: echo "tag=$(scripts/next-release-tag.sh)" >> "$GITHUB_OUTPUT"
-
-      - name: Create and push tag
-        if: steps.next.outputs.tag != ''
-        env:
-          TAG: ${{ steps.next.outputs.tag }}
-        run: |
-          git tag "$TAG" "$GITHUB_SHA"
-          git push origin "refs/tags/$TAG"
-
-  release:
-    name: Release
-    needs: tag
-    if: needs.tag.outputs.tag != ''
     permissions:
       contents: read
       packages: write
     uses: ./.github/workflows/release.yml
     with:
-      tag: ${{ needs.tag.outputs.tag }}
+      channel: edge

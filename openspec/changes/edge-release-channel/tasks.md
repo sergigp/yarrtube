@@ -20,10 +20,10 @@
     - `sha` → `sha` only
   - Verify: `actionlint` passes (if available), and a review shows no tag rule still reads `github.event_name`.
 - [x] 2.3 `release.yml`: add a `verify-version` job for the `release` channel that fails, printing both versions, when the tag without its `v` ≠ the `Cargo.toml` version. Make `build` depend on it. Verify: run the job's shell step locally with a mismatched tag (exit 1) and a matching tag (exit 0).
-- [ ] 2.4 `ci.yml`:
+- [x] 2.4 `ci.yml`:
   - Delete the `tag` job.
   - Make `release` call `release.yml` with `channel: edge`, `if: push to main`, `needs: [openspec-archived, ci]`.
-  - Give it `concurrency: { group: edge-publish, cancel-in-progress: true }`.
+  - Edge-never-backwards is enforced in `release.yml`'s `merge` job: `:edge` moves only while the commit is still `main`'s head (see design decision 2).
   - Update the comments.
   - Verify: `actionlint` passes, and no remaining reference to tagging.
 - [ ] 2.5 Delete `scripts/next-release-tag.sh`. Verify: `grep -r next-release-tag` returns nothing.

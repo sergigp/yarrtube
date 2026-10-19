@@ -30,9 +30,9 @@
 
 **2. CI calls `release.yml` with `channel: edge` and passes no tag.**
 - The `tag` job and `next-release-tag.sh` are deleted.
-- The `release` job in `ci.yml` gets `concurrency: { group: edge-publish, cancel-in-progress: true }`. A newer merge cancels an in-flight older publish, so the older one can never push `:edge` last.
-- Pushing the manifest is a single `imagetools create`, so a cancelled run either moved `:edge` or didn't. No partial state.
-- The CI run-level `cancel-in-progress: false` stays as it is. Only the publish job is cancellable.
+- `:edge` only moves when the build's commit is still `main`'s head at manifest-push time (`gh api repos/<repo>/commits/main`, checked in `merge`). A build that finishes after a newer merge landed still publishes its `:sha-<short>` but leaves `:edge` alone.
+- *Alternative (rejected during apply):* `concurrency: { group: edge-publish, cancel-in-progress: true }` on the CI job. Concurrency doesn't know commit order. If an older merge's CI finishes after a newer one's, its publish starts later, cancels the newer one, and `:edge` ends up on the older commit.
+- The CI run-level `cancel-in-progress: false` stays as it is.
 
 **3. Version gate as a first job (`verify-version`) in `release.yml`, only for `channel == release`.**
 - It compares `${TAG#v}` with `Cargo.toml`'s `version` (same `sed` as the old script).
