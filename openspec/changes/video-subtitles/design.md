@@ -8,7 +8,9 @@ the types they shape.
 - `migrations/0010_video_subtitles.sql`: `videos.subtitle_state` (`NOT NULL DEFAULT 'MISSING'`, which backfills the library), `videos.subtitle_filename`, new `video_transcripts` table keyed by `video_id`.
 - `src/domain/video/subtitle_state.rs`: `SubtitleState` value object.
 - `src/domain/video/video.rs`: subtitle fields + transitions on `Video`.
-- `src/domain/video/episode_paths.rs`: `subtitle(lang)`, the one place naming `<stem>.<lang>.srt`.
+- `src/domain/video/episode_paths.rs`: `subtitle(lang)`, the one place naming `<stem>.<lang>.srt` (by the base language code).
+- `src/domain/video/events.rs`, `src/domain/event/domain_event.rs`: `VideoSubtitlesFetched` event + its `DomainEvent` variant.
+- `src/domain/{playlist_video,channel_video}/events.rs`: `VideoRemovedFrom{Playlist,Channel}` carry `subtitle_filename` (the subscribers only see the event, the row is already deleted).
 - `src/domain/video/video_output_entry.rs`: `subtitle_staging_dir`, a sibling of the thumbnail staging dir (the thumbnail fetch deletes its own dir recursively, possibly while a subtitle fetch is running in its lane).
 - `src/domain/video_transcript/{mod,video_transcript,caption_language,caption_source,caption_track,caption_tracks,transcript_text}.rs`: new aggregate; track selection and SRT to text are pure functions here.
 - `src/domain/services/subtitle_fetcher.rs`: `SubtitleFetcher`, fetches one video's subtitles and runs reconcile's missing-subtitles pass.
@@ -22,13 +24,17 @@ the types they shape.
 - `src/application/tasks/fetch_subtitles_task.rs`: task handler.
 - `src/application/tasks/mod.rs`: registers it.
 - `src/application/subscribers/delete_video_file_on_video_removed_from_{playlist,channel}.rs`: pass `subtitle_filename`.
+- `src/application/subscribers/fetch_subtitles_on_video_downloaded.rs`: schedules `FetchSubtitles` on `VideoDownloaded`, so subtitles don't wait for the next reconcile.
+- `src/application/subscribers/scan_plex_folder_on_video_subtitles_fetched.rs`: Plex scan on `VideoSubtitlesFetched`, mirrors `scan_plex_folder_on_video_downloaded.rs`.
+- `src/application/subscribers/mod.rs`: registers both (the Plex one only when configured).
 - `src/infrastructure/repositories/sqlite_video_transcript_repository.rs`: `VideoTranscriptRepository` port + SQLite implementation.
 - `src/infrastructure/repositories/sqlite_video_repository.rs`: map new columns; `update_subtitles`.
+- `src/infrastructure/shared/sqlite_migrations.rs`: migration `0010` default test.
 - `src/infrastructure/repositories/youtube_video_downloader_repository.rs`: `probe_captions`, `fetch_subtitles` on the port, the yt-dlp implementation and the fake.
 - `src/infrastructure/shared/ytdlp.rs`: the two yt-dlp invocations + info-JSON parsing.
 - `src/serve.rs`: wiring.
 - `web/src/lib/tasks.ts` (+ `tasks.test.ts`): describe/family/kind for `fetch_subtitles`.
-- `doc/ARCHITECTURE.md`, `doc/PLEX.md`: mention subtitle files and the backfill.
+- `doc/ARCHITECTURE.md`, `doc/PLEX.md`: mention subtitle files, the fetch after download, the Plex rescan and the backfill; the ARCHITECTURE example walks through the subtitle flow (steps + sequence diagram).
 
 ## Types & Signatures
 
@@ -55,14 +61,25 @@ impl Video {
 }
 
 // domain/video/episode_paths.rs
-impl EpisodePaths { pub fn subtitle(&self, language: &CaptionLanguage) -> String; } // "<stem>.<lang>.srt"
+impl EpisodePaths { pub fn subtitle(&self, language: &CaptionLanguage) -> String; } // "<stem>.<language.base()>.srt": media servers recognise base codes, not always regional ones
+
+// domain/video/events.rs — published once the subtitle file is placed
+pub struct VideoSubtitlesFetched { pub video_id: String, pub output_dir: String }
+impl VideoSubtitlesFetched { pub const EVENT_TYPE: &str = "video_subtitles_fetched"; }
+
+// domain/{playlist_video,channel_video}/events.rs
+pub struct VideoRemovedFromPlaylist { /* ...existing */ #[serde(default)] pub subtitle_filename: Option<String> } // same on VideoRemovedFromChannel
 
 // domain/video/video_output_entry.rs
 pub fn subtitle_staging_dir(videos_path: &str, video_id: &VideoRecordId) -> PathBuf; // <staging>/<id>-subtitles
 
 // domain/video_transcript/caption_language.rs — e.g. "en", "pt-BR"; never carries "-orig"
 pub struct CaptionLanguage(String);
-impl CaptionLanguage { pub fn new(value: &str) -> Result<Self, ValidationError>; pub fn as_str(&self) -> &str; }
+impl CaptionLanguage {
+    pub fn new(value: &str) -> Result<Self, ValidationError>;
+    pub fn as_str(&self) -> &str;
+    pub fn base(&self) -> &str; // primary subtag: "es-US" -> "es", "en" -> "en"
+}
 
 // domain/video_transcript/caption_source.rs — stored as MANUAL / AUTOMATIC
 pub enum CaptionSource { Manual, Automatic }
@@ -133,7 +150,7 @@ impl FakeVideoDownloaderRepository {
 // infrastructure/repositories/sqlite_video_transcript_repository.rs
 pub trait VideoTranscriptRepository: Send + Sync {
     fn save(&self, transcript: &VideoTranscript) -> anyhow::Result<()>; // upsert by video_id
-    fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoTranscript>>;
+    fn find(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<VideoTranscript>>; // #[allow(dead_code)] until a feature reads transcripts
     fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
 }
 pub struct SqliteVideoTranscriptRepository { db: Database }
@@ -153,11 +170,13 @@ pub struct SubtitleFetcher {
     video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
     task_repository: Arc<dyn TaskRepository>,
+    event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
     videos_path: String,
 }
 pub trait SubtitleFetcherApi: Send + Sync {
     /// No-op unless `is_subtitle_fetchable`. Best effort: logs and swallows every failure.
+    /// Publishes `VideoSubtitlesFetched` after recording Fetched.
     fn fetch(&self, video: &Video, output_dir: &Path);
     /// Schedules FetchSubtitles for each fetchable video not in `skip_ids`.
     fn schedule_missing(&self, videos: &[Video], skip_ids: &HashSet<&VideoRecordId>, output_dir: &Path) -> anyhow::Result<()>;
@@ -181,9 +200,25 @@ fn delete_video_file(&self, filename: Option<String>, thumbnail_filename: Option
 // application/tasks/fetch_subtitles_task.rs
 pub struct FetchSubtitlesTask { video_repository: Arc<dyn VideoRepository>, subtitle_fetcher: Arc<SubtitleFetcher> }
 impl TaskHandler for FetchSubtitlesTask { fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()>; } // always Ok
+
+// application/subscribers/fetch_subtitles_on_video_downloaded.rs — reads video_id + output_dir from the payload, no lookup
+pub struct FetchSubtitlesOnVideoDownloaded { task_repository: Arc<dyn TaskRepository>, clock: Arc<dyn Clock> }
+impl EventSubscriber for FetchSubtitlesOnVideoDownloaded { fn handle(&self, payload: &str) -> anyhow::Result<()>; }
+
+// application/subscribers/scan_plex_folder_on_video_subtitles_fetched.rs — registered only when Plex is configured
+pub struct ScanPlexFolderOnVideoSubtitlesFetched { scanner: PlexFolderScanner }
+impl EventSubscriber for ScanPlexFolderOnVideoSubtitlesFetched { fn handle(&self, payload: &str) -> anyhow::Result<()>; } // Err retries the event
 ```
 
 ## Call Stack
+
+Download finished:
+```
+VideoDownloader publishes VideoDownloaded{video_id, output_dir, folder}
+  FetchSubtitlesOnVideoDownloaded::handle(payload)
+    TaskRepository::schedule(&Task::FetchSubtitles{video_id, output_dir}, now)   // dedupes queued
+  ScanPlexFolderOnVideoDownloaded::handle(payload)                                // existing
+```
 
 Subtitle fetch:
 ```
@@ -204,7 +239,11 @@ TaskExecutor (Subtitles lane)
           VideoFileRepository::move_file(&fetched.path, &output_dir.join(&path))
           VideoTranscriptRepository::save(&VideoTranscript::create(id, &track, TranscriptText::from_srt(&fetched.srt), now))
           VideoRepository::update_subtitles(&video.with_subtitles(path, now))
+          EventPublisher::publish(&DomainEvent::VideoSubtitlesFetched{video_id, output_dir}) -> Err => warn
       VideoFileRepository::delete_dir_recursive(subtitle_staging_dir)   // always
+
+ScanPlexFolderOnVideoSubtitlesFetched::handle(payload)
+  PlexFolderScanner::scan_folder(output_dir)
 ```
 
 Reconcile:
@@ -221,8 +260,9 @@ Reconcile{Playlist,Channel}Task -> {Playlist,Channel}VideoReconciler::reconcile
 
 Removal:
 ```
+{Playlist,Channel}VideoReconciler publishes VideoRemovedFrom{Playlist,Channel}{ ..., subtitle_filename: video.subtitle_filename }
 delete_video_file_on_video_removed_from_{playlist,channel}
-  TaskRepository::schedule(&Task::DeleteVideoFile{ filename, thumbnail_filename, subtitle_filename: video.subtitle_filename, output_dir })
+  TaskRepository::schedule(&Task::DeleteVideoFile{ filename, thumbnail_filename, subtitle_filename: event.subtitle_filename, output_dir })
 DeleteVideoFileTask::handle -> VideoFileDeleter::delete_video_file(filename, thumbnail, subtitle, output_dir)
 ```
 
@@ -275,6 +315,22 @@ Value objects / pure domain (own files):
 `web/src/lib/tasks.test.ts`
 29. describes `fetch_subtitles` with and without resolved names; family `downloads`; kind `download`.
 
+Follow-up (fetch after download, Plex rescan, base language code):
+
+`application/subscribers/fetch_subtitles_on_video_downloaded.rs`
+40. `it_should_schedule_a_subtitle_fetch_when_a_video_is_downloaded`: `FetchSubtitles{video_id, output_dir}` pending, run now.
+41. `it_should_not_schedule_a_second_subtitle_fetch_if_one_is_queued`.
+
+`application/tasks/fetch_subtitles_task.rs`
+42. `it_should_publish_that_subtitles_were_fetched`: outbox holds `VideoSubtitlesFetched{video_id, output_dir}`; none when Unavailable or failed.
+43. `it_should_name_a_regional_track_with_its_base_language`: reported `es-US`, manual `es-US` -> `.es.srt`; transcript language `es-US`.
+
+`application/subscribers/scan_plex_folder_on_video_subtitles_fetched.rs`
+44. `it_should_scan_the_show_folder_after_subtitles_are_fetched`: scan on every containing section.
+
+`caption_language.rs`
+45. `it_should_return_the_base_language`: `es-US` -> `es`, `en` -> `en`.
+
 Infrastructure:
 
 `infrastructure/shared/ytdlp.rs` (fake yt-dlp scripts, like existing tests; info-JSON fixtures captured from real yt-dlp in task 3.1)
@@ -291,4 +347,6 @@ Infrastructure:
 
 `infrastructure/repositories/sqlite_video_repository.rs`
 38. `it_should_update_only_the_subtitle_columns`.
+
+`infrastructure/shared/sqlite_migrations.rs`
 39. `it_should_default_existing_videos_to_missing_subtitles` (migration).

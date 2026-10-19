@@ -3,6 +3,7 @@
 ## 1. Walking skeleton
 
 - [x] 1.1 Create every file, type and signature from design.md (## Files, ## Types & Signatures) across all layers: migration `0010_video_subtitles.sql`, `SubtitleState` + `Video` fields/transitions, `EpisodePaths::subtitle`, `subtitle_staging_dir`, the `video_transcript` aggregate, `SubtitleFetcher`, `Task::FetchSubtitles` + `TaskLane::Subtitles` + `DeleteVideoFile.subtitle_filename`, `FetchSubtitlesTask` registered in `tasks::registry`, `VideoTranscriptRepository` + SQLite impl, `VideoRepository::update_subtitles`, `VideoDownloaderRepository::{probe_captions, fetch_subtitles}` (yt-dlp impl + fake), wired in `serve.rs` and into `InternalVideoReconciler` and the playlist/channel reconcilers. Bodies return trivial values (`Ok(())`, `None`, empty `CaptionTracks`); never `todo!()`. Done when `cargo build` succeeds and all existing tests pass
+- [ ] 1.2 Follow-up skeleton: `VideoSubtitlesFetched` event + `DomainEvent` variant, `CaptionLanguage::base` (returns the full code for now), `SubtitleFetcher.event_publisher` wired in `serve.rs`, `FetchSubtitlesOnVideoDownloaded` and `ScanPlexFolderOnVideoSubtitlesFetched` subscribers (handlers return `Ok(())`) registered in `subscribers::registry` (the Plex one only when configured). Done when `cargo build` succeeds and all existing tests pass
 
 ## 2. Behaviour (TDD)
 
@@ -36,6 +37,13 @@
 - [x] 2.28 `SubtitleState`, `CaptionLanguage`, `EpisodePaths::subtitle` tests (item 28) pass
 - [x] 2.29 `web/src/lib/tasks.ts` describes and categorizes `fetch_subtitles`; verify with `npm run check`
 - [x] 2.30 Document subtitle files and the post-upgrade backfill in `doc/PLEX.md` and `doc/ARCHITECTURE.md`
+- [ ] 2.31 `it_should_schedule_a_subtitle_fetch_when_a_video_is_downloaded` (design Test Plan item 40)
+- [ ] 2.32 `it_should_not_schedule_a_second_subtitle_fetch_if_one_is_queued` (subscriber, item 41)
+- [ ] 2.33 `it_should_publish_that_subtitles_were_fetched` (item 42)
+- [ ] 2.34 `it_should_name_a_regional_track_with_its_base_language` (item 43)
+- [ ] 2.35 `it_should_scan_the_show_folder_after_subtitles_are_fetched` (item 44)
+- [ ] 2.36 `it_should_return_the_base_language` (item 45)
+- [ ] 2.37 Docs: `doc/PLEX.md` says subtitles arrive right after the download and trigger a rescan, files use the base language code; `doc/ARCHITECTURE.md` example gains the subtitle flow (step 4: `VideoDownloaded` → `FetchSubtitlesOnVideoDownloaded` + Plex scan; new step: `FetchSubtitles` lane → `.srt` + transcript → `VideoSubtitlesFetched` → Plex rescan; the periodic-sync step keeps only backfill and retries) and its sequence diagram shows it
 
 ## 3. Infrastructure adapters (TDD)
 
@@ -61,3 +69,5 @@ SQLite video repository:
 - [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, and `npm run check` in `web/` all pass
 - [x] 4.2 Run `scripts/run-local.sh` on a library with downloaded videos: after one reconcile, subtitle fetches run one at a time; `.srt` files appear next to episodes; captionless old videos end Unavailable; tasks view shows "Fetching subtitles of …"
 - [x] 4.3 Run `scripts/run-smoke-tests.sh` and verify it passes
+- [ ] 4.4 Re-run 4.1's checks and `scripts/run-smoke-tests.sh` after the follow-up; all pass
+- [ ] 4.5 Run `scripts/run-local.sh`: a newly downloaded video gets its `.srt` within seconds, without a manual sync
