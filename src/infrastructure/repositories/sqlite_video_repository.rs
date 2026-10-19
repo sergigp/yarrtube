@@ -9,7 +9,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use std::collections::HashMap;
 
-const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename";
+const VIDEO_COLUMNS: &str = "id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_first_missing_at";
 
 /// A `videos` row as read, before its values are parsed into a `Video`.
 struct VideoRow {
@@ -32,6 +32,7 @@ struct VideoRow {
     episode: Option<u32>,
     subtitle_state: String,
     subtitle_filename: Option<String>,
+    subtitles_first_missing_at: Option<String>,
 }
 
 pub trait VideoRepository: Send + Sync {
@@ -54,7 +55,8 @@ pub trait VideoRepository: Send + Sync {
         title: &str,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()>;
-    /// Writes only `subtitle_state`, `subtitle_filename` and `updated_at`,
+    /// Writes only `subtitle_state`, `subtitle_filename`,
+    /// `subtitles_first_missing_at` and `updated_at`,
     /// leaving the download's fields untouched even if they changed since
     /// the caller read the video.
     fn update_subtitles(&self, video: &Video) -> anyhow::Result<()>;
@@ -120,8 +122,8 @@ impl VideoRepository for SqliteVideoRepository {
     fn save(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+            "INSERT INTO videos (id, youtube_id, title, status, quality, filename, thumbnail_filename, duration_seconds, created_at, updated_at, watched_at, playback_position_seconds, synced_at, last_errored_at, last_played_at, season, episode, subtitle_state, subtitle_filename, subtitles_first_missing_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
              ON CONFLICT (id) DO UPDATE SET
                 youtube_id = excluded.youtube_id,
                 title = excluded.title,
@@ -140,7 +142,8 @@ impl VideoRepository for SqliteVideoRepository {
                 season = excluded.season,
                 episode = excluded.episode,
                 subtitle_state = excluded.subtitle_state,
-                subtitle_filename = excluded.subtitle_filename",
+                subtitle_filename = excluded.subtitle_filename,
+                subtitles_first_missing_at = excluded.subtitles_first_missing_at",
             params![
                 video.id.as_str(),
                 video.youtube_id.as_str(),
@@ -161,6 +164,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.episode_number.map(|n| n.episode()),
                 video.subtitle_state.as_str(),
                 video.subtitle_filename,
+                video.subtitles_first_missing_at.map(|t| t.to_rfc3339()),
             ],
         )
         .inspect_err(|e| {
@@ -212,7 +216,7 @@ impl VideoRepository for SqliteVideoRepository {
     fn update(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitle_state = ?17, subtitle_filename = ?18
+            "UPDATE videos SET youtube_id = ?2, title = ?3, status = ?4, quality = ?5, filename = ?6, thumbnail_filename = ?7, duration_seconds = ?8, updated_at = ?9, watched_at = ?10, playback_position_seconds = ?11, synced_at = ?12, last_errored_at = ?13, last_played_at = ?14, season = ?15, episode = ?16, subtitle_state = ?17, subtitle_filename = ?18, subtitles_first_missing_at = ?19
              WHERE id = ?1",
             params![
                 video.id.as_str(),
@@ -233,6 +237,7 @@ impl VideoRepository for SqliteVideoRepository {
                 video.episode_number.map(|n| n.episode()),
                 video.subtitle_state.as_str(),
                 video.subtitle_filename,
+                video.subtitles_first_missing_at.map(|t| t.to_rfc3339()),
             ],
         )
         .inspect_err(|e| {
@@ -263,11 +268,12 @@ impl VideoRepository for SqliteVideoRepository {
     fn update_subtitles(&self, video: &Video) -> anyhow::Result<()> {
         let conn = self.db.write()?;
         conn.execute(
-            "UPDATE videos SET subtitle_state = ?2, subtitle_filename = ?3, updated_at = ?4 WHERE id = ?1",
+            "UPDATE videos SET subtitle_state = ?2, subtitle_filename = ?3, subtitles_first_missing_at = ?4, updated_at = ?5 WHERE id = ?1",
             params![
                 video.id.as_str(),
                 video.subtitle_state.as_str(),
                 video.subtitle_filename,
+                video.subtitles_first_missing_at.map(|t| t.to_rfc3339()),
                 video.updated_at.to_rfc3339(),
             ],
         )
@@ -463,6 +469,7 @@ impl SqliteVideoRepository {
             episode: row.get(16)?,
             subtitle_state: row.get(17)?,
             subtitle_filename: row.get(18)?,
+            subtitles_first_missing_at: row.get(19)?,
         })
     }
 
@@ -498,6 +505,10 @@ impl SqliteVideoRepository {
             episode_number: Self::decode_episode_number(row.season, row.episode)?,
             subtitle_state: SubtitleState::parse(&row.subtitle_state)?,
             subtitle_filename: row.subtitle_filename,
+            subtitles_first_missing_at: row
+                .subtitles_first_missing_at
+                .map(|t| Self::parse_timestamp(&t, "subtitles_first_missing_at"))
+                .transpose()?,
         })
     }
 

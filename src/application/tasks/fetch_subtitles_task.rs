@@ -1056,6 +1056,7 @@ mod tests {
             tracks,
             published_at: Some(fixed_timestamp()),
             info_json: PathBuf::from("yt1.info.json"),
+            warnings: vec![],
         }
     }
 

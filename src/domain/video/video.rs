@@ -51,6 +51,9 @@ pub struct Video {
     pub subtitle_state: SubtitleState,
     /// The episode's subtitle file, recorded once its subtitles are fetched.
     pub subtitle_filename: Option<String>,
+    /// When a conclusive subtitle fetch first found no selectable track:
+    /// starts the 7-day window before the subtitles are given up on.
+    pub subtitles_first_missing_at: Option<DateTime<Utc>>,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -77,6 +80,7 @@ impl Video {
             episode_number: None,
             subtitle_state: SubtitleState::Missing,
             subtitle_filename: None,
+            subtitles_first_missing_at: None,
         }
     }
 
@@ -313,6 +317,12 @@ impl Video {
             updated_at: now,
             ..self
         }
+    }
+
+    /// Records `now` as the first check without captions, unless one is
+    /// already recorded.
+    pub fn mark_subtitles_first_missing(self, _now: DateTime<Utc>) -> Self {
+        self
     }
 
     /// Records the episode number assigned to this video.

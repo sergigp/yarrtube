@@ -145,12 +145,13 @@ impl SubtitleFetcher {
     /// a later reconcile pass to try again.
     fn mark_unavailable_if_old(&self, video: &Video, probe: &CaptionProbe) -> anyhow::Result<()> {
         let now = self.clock.now();
+        let video = video.clone().mark_subtitles_first_missing(now);
         let published_at = probe.published_at.unwrap_or(video.created_at);
         if published_at > now - UNAVAILABLE_AFTER {
             return Ok(());
         }
         self.video_repository
-            .update_subtitles(&video.clone().mark_subtitles_unavailable(now))
+            .update_subtitles(&video.mark_subtitles_unavailable(now))
     }
 
     /// Downloads `track`, moves it next to the episode, stores its

@@ -759,6 +759,7 @@ mod tests {
             episode_number: None,
             subtitle_state: SubtitleState::Missing,
             subtitle_filename: None,
+            subtitles_first_missing_at: None,
         }
     }
 

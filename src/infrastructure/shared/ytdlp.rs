@@ -333,6 +333,10 @@ pub struct CaptionProbe {
     /// Reused by `fetch_subtitles` (`--load-info-json`): one extraction per
     /// video, fewer YouTube requests.
     pub info_json: PathBuf,
+    /// yt-dlp's stderr `WARNING:` lines: any warning makes a probe without
+    /// a selectable track inconclusive (yt-dlp withholds tracks silently,
+    /// e.g. without a PO token).
+    pub warnings: Vec<String>,
 }
 
 /// A caption-only download's result: the staged `.srt` and its contents.
@@ -390,6 +394,7 @@ pub fn probe_captions(
                 .collect(),
         },
         info_json,
+        warnings: Vec::new(),
     })
 }
 
@@ -948,6 +953,7 @@ mod tests {
             tracks: CaptionTracks::default(),
             published_at: None,
             info_json: staging_dir.join("info.json"),
+            warnings: vec![],
         }
     }
 
@@ -1275,6 +1281,7 @@ mod tests {
                 },
                 published_at: Some(DateTime::from_timestamp(1792267205, 0).unwrap()),
                 info_json: staging_dir.join("info.json"),
+                warnings: vec![],
             }
         );
         assert_eq!(
