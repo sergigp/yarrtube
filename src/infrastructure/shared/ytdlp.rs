@@ -346,8 +346,10 @@ pub struct FetchedSubtitles {
     pub srt: String,
 }
 
-/// `-J --skip-download`; Err on any failure (clean or systemic), so the
-/// caller leaves the video Missing.
+/// `-J --skip-download --write-subs` without `--no-warnings`: subtitle
+/// warnings only appear when subtitles are requested, and `-J` writes no
+/// files. Err on any failure (clean or systemic), so the caller leaves the
+/// video Missing.
 pub fn probe_captions(
     ytdlp_path: &Path,
     video_url: &str,
@@ -355,7 +357,7 @@ pub fn probe_captions(
 ) -> Result<CaptionProbe> {
     ensure_output_dir(staging_dir)?;
     let mut cmd = Command::new(ytdlp_path);
-    cmd.args(["-J", "--skip-download", "--no-warnings"])
+    cmd.args(["-J", "--skip-download", "--write-subs"])
         .arg(video_url)
         .current_dir(staging_dir)
         .stdout(Stdio::piped())
@@ -394,7 +396,7 @@ pub fn probe_captions(
                 .collect(),
         },
         info_json,
-        warnings: Vec::new(),
+        warnings: warning_lines(&String::from_utf8_lossy(&output.stderr)),
     })
 }
 
@@ -696,6 +698,16 @@ fn run(
     }
 
     Ok(RunOutcome::Success(output))
+}
+
+/// Every `WARNING:` line of `stderr`, without its indentation.
+fn warning_lines(stderr: &str) -> Vec<String> {
+    stderr
+        .lines()
+        .map(str::trim_start)
+        .filter(|line| line.starts_with("WARNING:"))
+        .map(str::to_string)
+        .collect()
 }
 
 fn ensure_output_dir(output_path: &Path) -> Result<()> {
@@ -1317,6 +1329,46 @@ mod tests {
                         .to_utc()
                 ),
             ]
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_request_subtitles_and_keep_warnings_when_probing() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-captions-staging");
+        let fake = test_support::FakeYtDlp::with_stdout(UPLOADED_CAPTIONS_INFO_JSON);
+
+        probe_captions(&fake.path, "https://example.com/video", &staging_dir).unwrap();
+
+        assert_eq!(
+            fake.captured_args(),
+            [
+                "-J",
+                "--skip-download",
+                "--write-subs",
+                "https://example.com/video"
+            ]
+            .map(str::to_string)
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_collect_the_warnings_of_a_probe() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-captions-staging");
+        let ytdlp = fake_ytdlp_writing_stdout_and_stderr(
+            "ytdlp-captions-warning",
+            UPLOADED_CAPTIONS_INFO_JSON,
+            "[youtube] yt1: Downloading webpage\nWARNING: [youtube] yt1: Some subtitles may be missing\n",
+        );
+
+        let result = probe_captions(&ytdlp, "https://example.com/video", &staging_dir);
+
+        assert_eq!(
+            result.unwrap().warnings,
+            vec!["WARNING: [youtube] yt1: Some subtitles may be missing".to_string()]
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
