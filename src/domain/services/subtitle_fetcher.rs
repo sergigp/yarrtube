@@ -1,5 +1,8 @@
+use crate::domain::event::DomainEvent;
 use crate::domain::task::Task;
-use crate::domain::video::{EpisodePaths, Video, VideoRecordId, subtitle_staging_dir};
+use crate::domain::video::{
+    EpisodePaths, Video, VideoRecordId, VideoSubtitlesFetched, subtitle_staging_dir,
+};
 use crate::domain::video_transcript::{CaptionTrack, TranscriptText, VideoTranscript};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -67,7 +70,7 @@ pub trait SubtitleFetcherApi: Send + Sync {
     /// `output_dir`, stores its transcript and records it Fetched; with no
     /// original-language track, records it Unavailable once it is at least 7
     /// days old. Best effort: logs and swallows every failure, leaving the
-    /// video Missing.
+    /// video Missing. Publishes `VideoSubtitlesFetched` once Fetched.
     fn fetch(&self, video: &Video, output_dir: &Path);
 
     /// Missing-subtitles recovery pass over `videos`, run by
@@ -171,7 +174,21 @@ impl SubtitleFetcher {
                 now,
             ))?;
         self.video_repository
-            .update_subtitles(&video.clone().with_subtitles(subtitle_filename, now))
+            .update_subtitles(&video.clone().with_subtitles(subtitle_filename, now))?;
+        self.publish_fetched(video, output_dir);
+        Ok(())
+    }
+
+    /// Best-effort, like `VideoDownloaded`: the subtitles are already
+    /// recorded, only the Plex rescan is lost.
+    fn publish_fetched(&self, video: &Video, output_dir: &Path) {
+        let event = DomainEvent::VideoSubtitlesFetched(VideoSubtitlesFetched {
+            video_id: video.id.as_str().to_string(),
+            output_dir: output_dir.to_string_lossy().to_string(),
+        });
+        if let Err(e) = self.event_publisher.publish(&event) {
+            warn!(video_id = %video.id, error = %e, "failed to publish that the video's subtitles were fetched");
+        }
     }
 
     /// Best-effort: a leftover staging dir is harmless, Plex and Kodi ignore

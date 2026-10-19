@@ -41,8 +41,9 @@ impl TaskHandler for FetchSubtitlesTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::shared::Quality;
-    use crate::domain::video::{EpisodeNumber, Video, VideoId};
+    use crate::domain::video::{EpisodeNumber, Video, VideoId, VideoSubtitlesFetched};
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, CaptionTracks, TranscriptText, VideoTranscript,
     };
@@ -56,6 +57,9 @@ mod tests {
         CaptionProbe, FakeVideoDownloaderRepository, FetchedSubtitles,
     };
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_repository::{
+        EventRepository, SqliteEventRepository,
+    };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Duration, Utc};
@@ -659,6 +663,53 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_publish_that_subtitles_were_fetched() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default()
+                .with_caption_probe(Ok(caption_probe(english_captions())))
+                .with_subtitles_result(Ok(fetched_subtitles("yt1.en.srt"))),
+        );
+        let video = downloaded_video();
+        video_repository.save(&video).unwrap();
+        let task = FetchSubtitlesTask::new(
+            video_repository.clone(),
+            Arc::new(SubtitleFetcher::new(
+                video_repository.clone(),
+                Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+                video_downloader_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteTaskRepository::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(SqliteEventPublisher::new(
+                    db.database(),
+                    Arc::new(FixedClock(now())),
+                )),
+                Arc::new(FixedClock(now())),
+                "/videos",
+            )),
+        );
+
+        let result = run(&task, &payload_for(video.id.as_str()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoSubtitlesFetched(VideoSubtitlesFetched {
+                    video_id: video.id.as_str().to_string(),
+                    output_dir: "/videos/my-channel".to_string(),
+                }),
+            )]
+        );
+    }
+
     /// A downloaded channel episode numbered `2026`/`031501`, its subtitles
     /// still missing, created 30 days before `now`.
     fn downloaded_video() -> Video {
@@ -718,6 +769,18 @@ mod tests {
             "/videos/.downloads/{}-subtitles",
             video.id.as_str()
         ))
+    }
+
+    fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+        ScheduledEvent {
+            id,
+            event_type: event.event_type().to_string(),
+            payload: event.payload().to_string(),
+            retries: 0,
+            created_at: now(),
+            updated_at: now(),
+            last_error: None,
+        }
     }
 
     fn payload_for(video_id: &str) -> String {
