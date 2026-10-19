@@ -91,5 +91,5 @@ To implement (TDD):
 - [x] 5.10 `CaptionTracks::original` rules (59-61)
 - [x] 5.11 `TranscriptText::from_srt` block parser (62)
 - [x] 5.12 Docs: `doc/PLEX.md` / `doc/ARCHITECTURE.md` mention the 7-day window from the first check and that probe warnings keep a video Missing
-- [ ] 5.13 `cargo test --locked`, fmt, clippy, `npm run check` pass; `scripts/run-smoke-tests.sh` passes
+- [x] 5.13 `cargo test --locked`, fmt, clippy, `npm run check` pass; `scripts/run-smoke-tests.sh` passes
 
