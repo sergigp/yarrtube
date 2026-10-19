@@ -52,3 +52,24 @@ export async function assertVideoPlays(page) {
   await video.evaluate((el) => el.play())
   await expect.poll(() => video.evaluate((el) => el.currentTime), { timeout: 15_000 }).toBeGreaterThan(0)
 }
+
+/**
+ * Waits for the player to offer the selected video's subtitles (they're
+ * fetched after the download, and the video list polls), turns them on, and
+ * checks the browser loads them as WebVTT cues.
+ */
+export async function assertSubtitlesShow(page, { timeoutMs = 120_000 } = {}) {
+  const video = page.locator('video')
+  await expect(video.locator('track[kind="subtitles"]')).toBeAttached({ timeout: timeoutMs })
+
+  const subtitlesLoaded = page.waitForResponse((response) => response.url().endsWith('/subtitles.vtt'))
+  // Captions start off: turning them on is what makes the browser fetch them.
+  await video.evaluate((el) => {
+    el.textTracks[0].mode = 'showing'
+  })
+  const response = await subtitlesLoaded
+  expect(response.status()).toBe(200)
+  expect(response.headers()['content-type']).toBe('text/vtt; charset=utf-8')
+  expect(await response.text()).toMatch(/^WEBVTT\n/)
+  await expect.poll(() => video.evaluate((el) => el.textTracks[0].cues?.length ?? 0)).toBeGreaterThan(0)
+}

@@ -6,7 +6,7 @@ import {
   destinationNotice,
   slugOf,
 } from '../helpers/addDialog.js'
-import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
+import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow } from '../helpers/video.js'
 import { expectEpisodeOnDisk, expectGoneFromDisk } from '../helpers/library.js'
 import { expectPlexScanned } from '../helpers/plex.js'
 import { syncItem, deleteItem, sectionRows, includeItemInHome } from '../helpers/sidebar.js'
@@ -71,6 +71,10 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
       el.pause()
     })
     expect((await progressReported).status()).toBe(200)
+  })
+
+  await test.step('show its subtitles', async () => {
+    await assertSubtitlesShow(page)
   })
 
   await test.step('show it on the home feed', async () => {

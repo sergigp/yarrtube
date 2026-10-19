@@ -5,7 +5,7 @@ import {
   destinationNotice,
   slugOf,
 } from '../helpers/addDialog.js'
-import { waitForVideoStatus, assertVideoPlays } from '../helpers/video.js'
+import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow } from '../helpers/video.js'
 import {
   syncItem,
   deleteItem,
@@ -66,6 +66,10 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     await expectPlexScanned(page.request, CHANNEL_PATH)
     await assertVideoPlays(page)
     return { videoTitle, channelName }
+  })
+
+  await test.step('show its subtitles', async () => {
+    await assertSubtitlesShow(page)
   })
 
   await test.step('resume from the recorded position', async () => {
