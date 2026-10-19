@@ -19,7 +19,8 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::warn;
 
-/// How old a video with no original-language captions must be before its
+/// How long both since its publish time and since its first check without
+/// captions a video with no original-language captions waits before its
 /// subtitles are recorded Unavailable.
 const UNAVAILABLE_AFTER: Duration = Duration::days(7);
 
@@ -70,9 +71,11 @@ pub trait SubtitleFetcherApi: Send + Sync {
     /// (`Video::is_subtitle_fetchable`). Otherwise probes its caption tracks,
     /// downloads the original-language one as `<episode stem>.<lang>.srt` in
     /// `output_dir`, stores its transcript and records it Fetched; with no
-    /// original-language track, records it Unavailable once it is at least 7
-    /// days old. Best effort: logs and swallows every failure, leaving the
-    /// video Missing. Publishes `VideoSubtitlesFetched` once Fetched.
+    /// original-language track and no yt-dlp warning, records the first such
+    /// check and records it Unavailable once both its publish time and that
+    /// first check are at least 7 days old. Best effort: logs and swallows
+    /// every failure, leaving the video Missing. Publishes
+    /// `VideoSubtitlesFetched` once Fetched.
     fn fetch(&self, video: &Video, output_dir: &Path);
 
     /// Missing-subtitles recovery pass over `videos`, run by
@@ -140,7 +143,7 @@ impl SubtitleFetcher {
                 Self::log_inconclusive(video, &probe);
                 Ok(())
             }
-            None => self.mark_unavailable_if_old(video, &probe),
+            None => self.mark_unavailable_if_long_missing(video, &probe),
         }
     }
 
@@ -155,15 +158,23 @@ impl SubtitleFetcher {
         );
     }
 
-    /// Captions often appear days after an upload: only a video at least
-    /// `UNAVAILABLE_AFTER` old is given up on, a newer one stays Missing for
-    /// a later reconcile pass to try again.
-    fn mark_unavailable_if_old(&self, video: &Video, probe: &CaptionProbe) -> anyhow::Result<()> {
+    /// Records the first check without captions, if none is recorded yet.
+    /// Captions often appear days after an upload, and a playlist added
+    /// today may hold old videos: only a video published and first checked
+    /// without captions at least `UNAVAILABLE_AFTER` ago is given up on,
+    /// any other stays Missing for a later reconcile pass to try again.
+    fn mark_unavailable_if_long_missing(
+        &self,
+        video: &Video,
+        probe: &CaptionProbe,
+    ) -> anyhow::Result<()> {
         let now = self.clock.now();
         let video = video.clone().mark_subtitles_first_missing(now);
+        let cutoff = now - UNAVAILABLE_AFTER;
         let published_at = probe.published_at.unwrap_or(video.created_at);
-        if published_at > now - UNAVAILABLE_AFTER {
-            return Ok(());
+        let first_missing_at = video.subtitles_first_missing_at.unwrap_or(now);
+        if published_at > cutoff || first_missing_at > cutoff {
+            return self.video_repository.update_subtitles(&video);
         }
         self.video_repository
             .update_subtitles(&video.mark_subtitles_unavailable(now))

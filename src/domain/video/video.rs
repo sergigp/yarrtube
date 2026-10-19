@@ -321,8 +321,15 @@ impl Video {
 
     /// Records `now` as the first check without captions, unless one is
     /// already recorded.
-    pub fn mark_subtitles_first_missing(self, _now: DateTime<Utc>) -> Self {
-        self
+    pub fn mark_subtitles_first_missing(self, now: DateTime<Utc>) -> Self {
+        match self.subtitles_first_missing_at {
+            Some(_) => self,
+            None => Self {
+                subtitles_first_missing_at: Some(now),
+                updated_at: now,
+                ..self
+            },
+        }
     }
 
     /// Records the episode number assigned to this video.
