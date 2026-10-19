@@ -85,8 +85,11 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    then publishes `VideoSubtitlesFetched`, whose
    `ScanPlexFolderOnVideoSubtitlesFetched` subscriber asks Plex to scan the
    show folder again so the subtitle shows up. A video with no
-   original-language captions becomes `UNAVAILABLE` once it is 7 days old;
-   any failure leaves it `MISSING`.
+   original-language captions records its first such check
+   (`subtitles_first_missing_at`) and becomes `UNAVAILABLE` once both its
+   publish date and that first check are 7 days old; any failure, or a probe
+   where yt-dlp warned (it can withhold caption tracks silently), leaves it
+   `MISSING`.
 6. Every interval, the `ReconcileChannel` task runs the sync again and schedules
    the next one. New uploads repeat steps 3–5. The sync also schedules a
    `FetchThumbnail` for any video still missing its thumbnail, and a

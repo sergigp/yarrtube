@@ -90,6 +90,6 @@ To implement (TDD):
 - [x] 5.9 `it_should_clear_the_first_check_without_captions_when_reset_for_redownload` (58)
 - [x] 5.10 `CaptionTracks::original` rules (59-61)
 - [x] 5.11 `TranscriptText::from_srt` block parser (62)
-- [ ] 5.12 Docs: `doc/PLEX.md` / `doc/ARCHITECTURE.md` mention the 7-day window from the first check and that probe warnings keep a video Missing
+- [x] 5.12 Docs: `doc/PLEX.md` / `doc/ARCHITECTURE.md` mention the 7-day window from the first check and that probe warnings keep a video Missing
 - [ ] 5.13 `cargo test --locked`, fmt, clippy, `npm run check` pass; `scripts/run-smoke-tests.sh` passes
 

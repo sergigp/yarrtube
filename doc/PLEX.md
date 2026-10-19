@@ -36,8 +36,12 @@ The file is named by the base language code (`.es.srt` for `es-US`
 captions), which Plex recognises. Plex lists them in the subtitle menu;
 whether it turns them on by itself depends on each Plex user's subtitle
 settings (_Account → Languages_). Videos without captions in their language
-get none, and captions that YouTube hasn't generated yet are retried on
-later syncs. After upgrading, the first sync of each playlist and channel
+get none, but only after a week of retries: a video is given up on once it
+was published at least 7 days ago and its first check without captions was
+at least 7 days ago, so captions YouTube hasn't generated yet, and old videos
+of a playlist added today, are retried on later syncs. A check where yt-dlp
+printed a warning (it can silently withhold captions, e.g. when YouTube
+asks for a token) doesn't count, and is retried too. After upgrading, the first sync of each playlist and channel
 queues a subtitle fetch for every episode already downloaded; they run one
 at a time in the background.
 
