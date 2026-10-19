@@ -40,6 +40,7 @@ pub struct SubtitleFetcher {
 }
 
 impl SubtitleFetcher {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
         video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
