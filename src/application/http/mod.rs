@@ -14,6 +14,7 @@ use crate::domain::services::{
     PlaylistSearcher, PlaylistUpdater, PlaylistVideoReconciler, TaskViewSearcher, VideoSearcher,
     VideoWatchStateUpdater,
 };
+use crate::infrastructure::shared::app_version::AppVersion;
 use axum::Router;
 use axum::extract::FromRef;
 use axum::routing::{get, post};
@@ -24,11 +25,11 @@ use axum::routing::{get, post};
 #[derive(Clone)]
 pub struct VideosRoot(pub String);
 
-/// The version this binary was built for, carried in the adapter layer like
+/// The build this binary was made from, carried in the adapter layer like
 /// `VideosRoot`: build metadata, not business logic, so no domain service
 /// stands behind it.
 #[derive(Clone)]
-pub struct RunningVersion(pub String);
+pub struct RunningVersion(pub AppVersion);
 
 #[derive(Clone, FromRef)]
 pub struct ApiServices {

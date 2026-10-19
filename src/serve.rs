@@ -424,7 +424,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.clock.clone(),
         ),
         videos_root: VideosRoot(videos_path()),
-        running_version: RunningVersion(AppVersion::current().version),
+        running_version: RunningVersion(AppVersion::current()),
     }
 }
 
