@@ -4,7 +4,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 No new behaviour tests (application behaviour unchanged per design.md Test Plan); verify `cargo test fetch_subtitles` passes
+- [x] 2.1 No new behaviour tests (application behaviour unchanged per design.md Test Plan); verify `cargo test fetch_subtitles` passes
 
 ## 3. Infrastructure adapters (TDD)
 
