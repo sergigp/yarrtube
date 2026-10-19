@@ -157,11 +157,12 @@ impl Video {
     }
 
     /// Resets a video back to `Pending`, clearing its recorded filename,
-    /// thumbnail filename, quality and subtitles (back to `Missing`, so the
-    /// redownload refetches them), used by filesystem reconciliation
-    /// both when a `Downloaded` video's recorded file is missing from disk
-    /// and when an `Errored` video is given another chance, in each case
-    /// followed by scheduling a fresh download.
+    /// thumbnail filename, quality and subtitles (back to `Missing` with no
+    /// first check without captions, so the redownload refetches them),
+    /// used by filesystem reconciliation both when a `Downloaded` video's
+    /// recorded file is missing from disk and when an `Errored` video is
+    /// given another chance, in each case followed by scheduling a fresh
+    /// download.
     pub fn reset_for_redownload(self, now: DateTime<Utc>) -> Self {
         Self {
             status: VideoStatus::Pending,
@@ -173,6 +174,7 @@ impl Video {
             synced_at: None,
             subtitle_state: SubtitleState::Missing,
             subtitle_filename: None,
+            subtitles_first_missing_at: None,
             ..self
         }
     }
@@ -651,6 +653,36 @@ mod tests {
                 updated_at: later,
                 synced_at: None,
                 ..fetched
+            }
+        );
+    }
+
+    #[test]
+    fn it_should_clear_the_first_check_without_captions_when_reset_for_redownload() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let later = DateTime::<Utc>::from_timestamp(200, 0).unwrap();
+        let checked = video()
+            .mark_downloaded(
+                Quality::High,
+                "Season 1/S01E003 - My Video.mp4",
+                None,
+                None,
+                now,
+            )
+            .mark_subtitles_first_missing(now);
+
+        let reset = checked.clone().reset_for_redownload(later);
+
+        assert_eq!(
+            reset,
+            Video {
+                status: VideoStatus::Pending,
+                quality: None,
+                filename: None,
+                subtitles_first_missing_at: None,
+                updated_at: later,
+                synced_at: None,
+                ..checked
             }
         );
     }

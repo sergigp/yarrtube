@@ -87,7 +87,7 @@ To implement (TDD):
 - [x] 5.6 `it_should_request_subtitles_and_keep_warnings_when_probing` (63) and `it_should_collect_the_warnings_of_a_probe` (64)
 - [x] 5.7 `it_should_keep_subtitles_missing_when_the_downloader_warns` (57)
 - [x] 5.8 `it_should_keep_an_old_video_checked_for_the_first_time_missing` (55) and `it_should_mark_unavailable_seven_days_after_the_first_check_without_captions` (56); existing Unavailable tests updated only in their given state (a first check 8d ago), not in their outcome
-- [ ] 5.9 `it_should_clear_the_first_check_without_captions_when_reset_for_redownload` (58)
+- [x] 5.9 `it_should_clear_the_first_check_without_captions_when_reset_for_redownload` (58)
 - [ ] 5.10 `CaptionTracks::original` rules (59-61)
 - [ ] 5.11 `TranscriptText::from_srt` block parser (62)
 - [ ] 5.12 Docs: `doc/PLEX.md` / `doc/ARCHITECTURE.md` mention the 7-day window from the first check and that probe warnings keep a video Missing
