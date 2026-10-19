@@ -125,7 +125,7 @@ A successful subtitle fetch SHALL store the video's transcript: the captions' pl
 - **THEN** the stored transcript contains those three lines unchanged
 
 ### Requirement: Subtitle Fetch Outcome
-A subtitle fetch SHALL set the video's subtitle state to Fetched when it writes the subtitle file and stores the transcript. A check is conclusive when the downloader successfully reports the video's caption tracks without reporting any warning (it can silently withhold tracks, e.g. when YouTube requires a token it does not have, and only says so in a warning). When a conclusive check finds no selectable track, the fetch SHALL record that time as the first check without captions if none is recorded yet, and SHALL set the state to Unavailable only when at least 7 days have passed both since the video was published (its record's creation time when no publish time is reported) and since that first check without captions. Otherwise the state SHALL stay Missing.
+A subtitle fetch SHALL set the video's subtitle state to Fetched when it writes the subtitle file and stores the transcript. A check is conclusive when the downloader successfully reports the video's caption tracks without reporting any warning that can affect them (it can silently withhold tracks, e.g. when YouTube requires a token it does not have, and only says so in a warning). Warnings that cannot affect caption tracks SHALL be ignored: the downloader failing to write its cache, and notices that some video formats were skipped. When a conclusive check finds no selectable track, the fetch SHALL record that time as the first check without captions if none is recorded yet, and SHALL set the state to Unavailable only when at least 7 days have passed both since the video was published (its record's creation time when no publish time is reported) and since that first check without captions. Otherwise the state SHALL stay Missing.
 
 #### Scenario: Captions fetched
 - **WHEN** a subtitle fetch selects a track and writes it
@@ -140,8 +140,12 @@ A subtitle fetch SHALL set the video's subtitle state to Fetched when it writes 
 - **THEN** its subtitle state stays Missing and now is recorded as its first check without captions, so later reconcile passes keep trying for 7 days
 
 #### Scenario: Downloader warns while checking
-- **WHEN** the downloader reports the caption tracks with a warning and none is selectable
+- **WHEN** the downloader reports the caption tracks with a warning that can affect them (e.g. `Some subtitles may be missing`) and none is selectable
 - **THEN** the video's subtitle state stays Missing, no first check without captions is recorded, and the warning is logged
+
+#### Scenario: Downloader only warns about its cache or skipped formats
+- **WHEN** the downloader reports the caption tracks with only a cache write failure warning and a `formats have been skipped` warning, and none is selectable
+- **THEN** the check is conclusive: the first check without captions is recorded (or the state becomes Unavailable once the 7-day conditions hold) and nothing is logged as inconclusive
 
 #### Scenario: Recent video with no captions yet
 - **WHEN** a subtitle fetch finds no selectable track for a video published 2 days ago
