@@ -716,7 +716,8 @@ fn caption_warning_lines(stderr: &str) -> Vec<String> {
 /// A cache write failure (`Writing cache to '...' failed`) or a
 /// `formats have been skipped` notice (SABR): never about captions.
 fn is_harmless_probe_warning(line: &str) -> bool {
-    line.starts_with("WARNING: Writing cache to ") && line.contains(" failed")
+    (line.starts_with("WARNING: Writing cache to ") && line.contains(" failed"))
+        || line.contains("formats have been skipped")
 }
 
 fn ensure_output_dir(output_path: &Path) -> Result<()> {
@@ -1397,6 +1398,22 @@ mod tests {
             "ytdlp-captions-cache-warning",
             UPLOADED_CAPTIONS_INFO_JSON,
             "WARNING: Writing cache to '/home/yarrtube/.cache/yt-dlp/youtube-sigfuncs/0229cd64-main-104.json' failed: Traceback (most recent call last):\n  File \"yt_dlp/cache.py\", line 41, in store\nPermissionError: [Errno 13] Permission denied: '/home/yarrtube'\n",
+        );
+
+        let result = probe_captions(&ytdlp, "https://example.com/video", &staging_dir);
+
+        assert_eq!(result.unwrap().warnings, Vec::<String>::new());
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_drop_a_formats_skipped_warning_from_a_probe() {
+        let staging_dir = test_support::unique_temp_dir("ytdlp-captions-staging");
+        let ytdlp = fake_ytdlp_writing_stdout_and_stderr(
+            "ytdlp-captions-formats-warning",
+            UPLOADED_CAPTIONS_INFO_JSON,
+            "WARNING: [youtube] yt1: Some web_embedded client https formats have been skipped as they are missing a URL. YouTube may have enabled the SABR-only streaming experiment for the current session. See  https://github.com/yt-dlp/yt-dlp/issues/12482  for more details\n",
         );
 
         let result = probe_captions(&ytdlp, "https://example.com/video", &staging_dir);
