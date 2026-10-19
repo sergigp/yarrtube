@@ -1,5 +1,6 @@
-import { type VideoSourceRef, videoMediaUrl } from '@/api/client'
+import { type VideoSourceRef, videoMediaUrl, videoSubtitlesUrl } from '@/api/client'
 import type { Video } from '@/api/types'
+import { languageName } from '@/lib/languageName'
 import { cn } from '@/lib/utils'
 
 interface VideoPlayerProps {
@@ -20,7 +21,7 @@ interface VideoPlayerProps {
  */
 export function VideoPlayer({
   basePath,
-  source: _source,
+  source,
   video,
   autoplay,
   onVideoElement,
@@ -37,7 +38,6 @@ export function VideoPlayer({
       )}
     >
       {video && filename ? (
-        // eslint-disable-next-line jsx-a11y/media-has-caption
         <video
           ref={onVideoElement}
           controls
@@ -47,7 +47,17 @@ export function VideoPlayer({
           poster={
             video.thumbnail_filename ? videoMediaUrl(basePath, video.thumbnail_filename) : undefined
           }
-        />
+        >
+          {video.subtitle_language && (
+            // Not `default`: captions stay off until turned on from the player's own controls.
+            <track
+              kind="subtitles"
+              src={videoSubtitlesUrl(source, video.id)}
+              srcLang={video.subtitle_language}
+              label={languageName(video.subtitle_language)}
+            />
+          )}
+        </video>
       ) : (
         <p className="text-sm text-muted-foreground">
           {video ? 'This video has not been downloaded yet.' : 'Select a video to play it.'}

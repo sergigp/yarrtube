@@ -94,8 +94,8 @@ export interface VideoSourceRef {
 }
 
 /** The WebVTT subtitles of `videoId` as recorded for `source`. */
-export function videoSubtitlesUrl(_source: VideoSourceRef, _videoId: string): string {
-  return ''
+export function videoSubtitlesUrl(source: VideoSourceRef, videoId: string): string {
+  return `/api/${source.kind}s/${encodeURIComponent(source.id)}/videos/${encodeURIComponent(videoId)}/subtitles.vtt`
 }
 
 export function avatarMediaUrl(filename: string): string {
