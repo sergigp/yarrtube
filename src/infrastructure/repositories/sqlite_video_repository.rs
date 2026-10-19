@@ -827,6 +827,24 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_the_first_check_without_captions() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let checked_at = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let original = video("First", now);
+        repo.save(&original).unwrap();
+        let checked = Video {
+            subtitles_first_missing_at: Some(checked_at),
+            updated_at: checked_at,
+            ..original.clone()
+        };
+
+        repo.update_subtitles(&checked).unwrap();
+
+        assert_eq!(repo.find(&original.id).unwrap(), Some(checked));
+    }
+
+    #[test]
     fn it_should_round_trip_a_watched_video_with_a_playback_position() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
