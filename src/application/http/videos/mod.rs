@@ -2903,6 +2903,16 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_serve_subtitles_if_invalid_video_id_provided() {
+        let response = playlist_subtitles(any_subtitle_reader(), "PL1", "").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("YouTube video ID must not be empty"))
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -2926,6 +2936,20 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
             Arc::new(FixedClock(watched_timestamp())),
+        )
+    }
+
+    /// A reader for tests whose request is rejected before reaching it, on
+    /// an unmigrated in-memory database like `any_video_searcher`.
+    fn any_subtitle_reader() -> SubtitleReader {
+        SubtitleReader::new(
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+            Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(FakeVideoFileRepository::default()),
+            VIDEOS_ROOT,
         )
     }
 
