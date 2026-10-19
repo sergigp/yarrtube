@@ -96,7 +96,8 @@ The system SHALL, on startup and before resuming normal task execution, treat an
 The system SHALL execute tasks in lanes, each with its own maximum number of tasks running at the same time:
 - a **download lane**, containing video downloads, whose concurrency is configurable,
 - a **thumbnail lane**, containing thumbnail fetches, with a concurrency of 1,
-- a **light lane**, containing every other task type except thumbnail fetches and the yt-dlp update (reconciles and file deletions), with a concurrency of 1.
+- a **subtitle lane**, containing subtitle fetches, with a concurrency of 1,
+- a **light lane**, containing every other task type except thumbnail fetches, subtitle fetches and the yt-dlp update (reconciles and file deletions), with a concurrency of 1.
 
 A lane SHALL start a new eligible task whenever it has fewer tasks running than its concurrency. A long-running task in one lane SHALL NOT delay the start of eligible tasks in another lane.
 
@@ -118,6 +119,14 @@ A lane SHALL start a new eligible task whenever it has fewer tasks running than 
 
 #### Scenario: Thumbnail lane runs one fetch at a time
 - **WHEN** two thumbnail fetches for different videos are eligible at the same time
+- **THEN** the system runs one, and starts the other only after the first finishes
+
+#### Scenario: Subtitle backfill does not block other work
+- **WHEN** many subtitle fetches are queued, one of them is running, and a video download, thumbnail fetch, reconcile or file-deletion task becomes eligible
+- **THEN** that task starts without waiting for any of the subtitle fetches to finish
+
+#### Scenario: Subtitle lane runs one fetch at a time
+- **WHEN** two subtitle fetches for different videos are eligible at the same time
 - **THEN** the system runs one, and starts the other only after the first finishes
 
 ### Requirement: Configurable Download Concurrency

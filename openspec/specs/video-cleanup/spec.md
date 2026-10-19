@@ -7,15 +7,15 @@ Deletes a video's downloaded file from disk once that video is no longer part of
 ## Requirements
 
 ### Requirement: File Deletion Triggered By Video Removal
-The system SHALL delete a video's downloaded file, its recorded thumbnail file if any, and its episode NFO if any, from disk as soon as that video is removed from its tracked playlist or tracked channel, provided the video had reached the downloaded status. The show's `tvshow.nfo`, its poster and the season folder SHALL NOT be deleted with a video.
+The system SHALL delete a video's downloaded file, its recorded thumbnail file if any, its recorded subtitle file if any, and its episode NFO if any, from disk as soon as that video is removed from its tracked playlist or tracked channel, provided the video had reached the downloaded status. The show's `tvshow.nfo`, its poster and the season folder SHALL NOT be deleted with a video.
 
 #### Scenario: Downloaded video removed from its playlist
 - **WHEN** a video with status downloaded is removed from its playlist
-- **THEN** the system deletes that video's file, its thumbnail file if it has one, and its NFO if present, from disk, and leaves the show files and the season folder in place
+- **THEN** the system deletes that video's file, its thumbnail file if it has one, its subtitle file if it has one, and its NFO if present, from disk, and leaves the show files and the season folder in place
 
 #### Scenario: Downloaded video removed from its channel
 - **WHEN** a video with status downloaded ages out of its channel's most recent `video_limit` uploads (or is otherwise no longer among them)
-- **THEN** the system deletes that video's file, its thumbnail file if it has one, and its NFO if present, from disk
+- **THEN** the system deletes that video's file, its thumbnail file if it has one, its subtitle file if it has one, and its NFO if present, from disk
 
 #### Scenario: Never-downloaded video removed from its playlist
 - **WHEN** a video that never reached the downloaded status is removed from its playlist
@@ -26,8 +26,7 @@ The system SHALL delete a video's downloaded file, its recorded thumbnail file i
 - **THEN** the system does not attempt any file deletion for that video
 
 ### Requirement: File Located By Its Recorded Filename
-The system SHALL locate a removed video's file, and separately its
-thumbnail file, each by its own recorded filename (the exact path recorded
+The system SHALL locate a removed video's file, and separately its thumbnail file and its subtitle file, each by its own recorded filename (the exact path recorded
 when the video was downloaded, relative to the show directory), rather than
 by re-deriving either name from its title. Its NFO SHALL be located as the
 recorded filename with the `.nfo` extension. A video still stored in a
@@ -39,6 +38,10 @@ legacy per-video folder SHALL have that folder deleted as a whole.
 
 #### Scenario: Thumbnail found by recorded thumbnail filename
 - **WHEN** a removed video has a recorded thumbnail filename and its owning playlist's or channel's show directory contains a file at that exact path
+- **THEN** the system deletes that file
+
+#### Scenario: Subtitle file found by recorded subtitle filename
+- **WHEN** a removed video has a recorded subtitle filename and its owning playlist's or channel's show directory contains a file at that exact path
 - **THEN** the system deletes that file
 
 #### Scenario: No recorded filename
