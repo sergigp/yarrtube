@@ -10,7 +10,7 @@
 
 ## 2. Image build and workflows
 
-- [ ] 2.1 `Dockerfile`: declare `ARG YARRTUBE_COMMIT_SHA`, `YARRTUBE_COMMIT_SUBJECT` and `YARRTUBE_COMMIT_DATE` next to `YARRTUBE_VERSION`, after `cargo chef cook`. Verify: a local `docker build --build-arg ...` reports them via `GET /api/version`.
+- [x] 2.1 `Dockerfile`: declare `ARG YARRTUBE_COMMIT_SHA`, `YARRTUBE_COMMIT_SUBJECT` and `YARRTUBE_COMMIT_DATE` next to `YARRTUBE_VERSION`, after `cargo chef cook`. Verify: a local `docker build --build-arg ...` reports them via `GET /api/version`.
 - [ ] 2.2 `release.yml`:
   - Add a `channel` input to `workflow_call` and resolve the channel: `push: tags` → `release`, `workflow_dispatch` → `sha`.
   - Compute the version (tag, or `edge-<short>`) and the commit sha/subject/date from the checked-out ref into `$GITHUB_ENV`, and pass all of them as `build-args`.
