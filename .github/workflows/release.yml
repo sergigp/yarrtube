@@ -1,18 +1,20 @@
 name: Release
 
+# Publishes the multi-arch image to ghcr.io. Which tags move depends on the
+# channel, resolved once in `prepare` (never from `github.event_name`: inside
+# a `workflow_call` that is the caller's event, `push`):
+#   - release (a pushed vX.Y.Z tag): :latest, :X.Y.Z, :X.Y
+#   - edge (CI, after a merge to main passes): :edge, :sha-<short>
+#   - sha (a manual run, to test any ref): :sha-<short> only
 on:
   push:
     tags:
       - "v*.*.*"
-  # Manual run publishes a pre-release test image (:edge + :sha-<short>) from
-  # the selected ref without touching :latest or any semver tag.
   workflow_dispatch:
-  # Called by CI after it tags a merge to main: tags pushed with GITHUB_TOKEN
-  # don't trigger `push: tags`, so the tag is passed in explicitly instead.
   workflow_call:
     inputs:
-      tag:
-        description: Release tag to build and publish (e.g. v1.2.3)
+      channel:
+        description: Release channel to publish (only `edge` is called for)
         required: true
         type: string
 
@@ -25,10 +27,67 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Resolves the channel and the build metadata stamped into the binary: the
+  # version it reports (the release tag, or `edge-<short sha>`) and the commit
+  # it was built from.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.channel.outputs.channel }}
+      version: ${{ steps.version.outputs.version }}
+      commit_sha: ${{ steps.commit.outputs.sha }}
+      commit_subject: ${{ steps.commit.outputs.subject }}
+      commit_date: ${{ steps.commit.outputs.date }}
+    steps:
+      - name: Resolve channel
+        id: channel
+        env:
+          INPUT_CHANNEL: ${{ inputs.channel }}
+        run: |
+          if [ -n "$INPUT_CHANNEL" ]; then
+            channel="$INPUT_CHANNEL"
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            channel=sha
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            channel=release
+          else
+            echo "Cannot resolve a release channel for $GITHUB_EVENT_NAME on $GITHUB_REF" >&2
+            exit 1
+          fi
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+
+      - name: Compute version
+        id: version
+        env:
+          CHANNEL: ${{ steps.channel.outputs.channel }}
+        run: |
+          if [ "$CHANNEL" = "release" ]; then
+            version="$GITHUB_REF_NAME"
+          else
+            version="edge-${GITHUB_SHA::7}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      # Subject line only: build args are newline-separated.
+      - name: Read commit
+        id: commit
+        run: |
+          {
+            echo "sha=$(git log -1 --format=%H)"
+            echo "subject=$(git log -1 --format=%s)"
+            echo "date=$(git log -1 --format=%cI)"
+          } >> "$GITHUB_OUTPUT"
+
   # Each platform builds natively on its own runner (no QEMU emulation) and
   # pushes an untagged image by digest; `merge` then stitches the digests into
   # one tagged multi-arch manifest.
   build:
+    needs: prepare
     strategy:
       matrix:
         include:
@@ -43,25 +102,10 @@ jobs:
           platform=${{ matrix.platform }}
           echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
 
-      # The version the binary reports: the release tag, or `edge-<short sha>`
-      # for a manual test build.
-      - name: Compute version
-        env:
-          TAG: ${{ inputs.tag }}
-        run: |
-          if [ -n "$TAG" ]; then
-            version="$TAG"
-          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            version="edge-${GITHUB_SHA::7}"
-          else
-            version="$GITHUB_REF_NAME"
-          fi
-          echo "YARRTUBE_VERSION=$version" >> "$GITHUB_ENV"
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -86,7 +130,11 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: YARRTUBE_VERSION=${{ env.YARRTUBE_VERSION }}
+          build-args: |
+            YARRTUBE_VERSION=${{ needs.prepare.outputs.version }}
+            YARRTUBE_COMMIT_SHA=${{ needs.prepare.outputs.commit_sha }}
+            YARRTUBE_COMMIT_SUBJECT=${{ needs.prepare.outputs.commit_subject }}
+            YARRTUBE_COMMIT_DATE=${{ needs.prepare.outputs.commit_date }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,scope=${{ env.PLATFORM_PAIR }},mode=max
@@ -107,7 +155,7 @@ jobs:
 
   merge:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [prepare, build]
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -126,16 +174,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # :edge only follows main's head: a build that finishes after a newer
+      # merge landed publishes its :sha-<short> but leaves :edge to the newer
+      # build, so :edge never moves back to an older commit.
+      - name: Check edge is still main's head
+        id: head
+        if: needs.prepare.outputs.channel == 'edge'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$head" = "$GITHUB_SHA" ]; then
+            echo "move_edge=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "main moved on to $head; not moving :edge to $GITHUB_SHA"
+            echo "move_edge=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: latest=false
           tags: |
-            type=semver,pattern={{version}},value=${{ inputs.tag }}
-            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
-            type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
-            type=sha,enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=semver,pattern={{version}},value=${{ needs.prepare.outputs.version }},enable=${{ needs.prepare.outputs.channel == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.prepare.outputs.version }},enable=${{ needs.prepare.outputs.channel == 'release' }}
+            type=raw,value=latest,enable=${{ needs.prepare.outputs.channel == 'release' }}
+            type=raw,value=edge,enable=${{ steps.head.outputs.move_edge == 'true' }}
+            type=sha,enable=${{ needs.prepare.outputs.channel != 'release' }}
 
       - name: Create and push multi-arch manifest
         working-directory: ${{ runner.temp }}/digests
