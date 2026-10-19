@@ -1,8 +1,8 @@
 /// The build this binary was made from, stamped by the image build:
 /// `YARRTUBE_VERSION` (the release tag, or `edge-<short sha>`) and
 /// `YARRTUBE_COMMIT_{SHA,SUBJECT,DATE}`. A build without them (e.g. a local
-/// one) reports `dev` and no commit. The release workflow refuses a tag that
-/// differs from Cargo.toml's version, so the two agree on every release.
+/// one) reports `dev` and no commit. Cargo.toml's version is deliberately not
+/// used: releases are cut by tag only.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AppVersion {
     pub version: String,

@@ -19,9 +19,8 @@ from 0.8.x, temporary), `doc/ARCHITECTURE.md`. Every merge to `main` that
 passes CI publishes the multi-arch image to `ghcr.io` as `:edge` +
 `:sha-<short sha>` via `.github/workflows/release.yml`, with no git tag
 and no `:latest`. Stable releases (`:latest`, `:X.Y.Z`, `:X.Y`) are cut
-only by pushing a `vX.Y.Z` tag by hand, and the tag must match the
-`Cargo.toml` version (bump it in a PR first). See "Deploy" in
-`doc/DEVELOPMENT.md`.
+only by pushing a `vX.Y.Z` tag by hand; the tag is the version
+(`Cargo.toml`'s isn't used). See "Deploy" in `doc/DEVELOPMENT.md`.
 
 ## Commands
 

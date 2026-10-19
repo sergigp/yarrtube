@@ -120,18 +120,13 @@ branch on the NAS without touching `:edge` or `:latest`.
 ### Stable: a pushed `vX.Y.Z` tag
 
 A stable release happens only when you push a `vX.Y.Z` tag. It publishes
-`:latest`, `:X.Y.Z` and `:X.Y`. To cut one:
+`:latest`, `:X.Y.Z` and `:X.Y`. Once `:edge` has been tested, tag the
+commit it was built from and release it:
 
-1. Bump `version` in `Cargo.toml` to `X.Y.Z` in a PR (with `cargo update -p
-   yarrtube` so `Cargo.lock` follows) and merge it.
-2. Once `:edge` from that merge has been tested, tag and release it:
+```bash
+gh release create vX.Y.Z --target <sha> --generate-notes
+```
 
-   ```bash
-   gh release create vX.Y.Z --target main --generate-notes
-   ```
-
-   (or `git tag vX.Y.Z origin/main && git push origin vX.Y.Z`; the GitHub
-   release then has to be written by hand).
-
-The release fails before building anything if the tag doesn't match the
-version in `Cargo.toml`.
+(or `git tag vX.Y.Z <sha> && git push origin vX.Y.Z`; the GitHub release
+then has to be written by hand). The tag is the version: `Cargo.toml`'s
+version isn't read by anything and doesn't need bumping.
