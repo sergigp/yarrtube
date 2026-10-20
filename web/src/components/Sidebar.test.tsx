@@ -172,6 +172,25 @@ describe('Sidebar', () => {
     expect(heading).toHaveTextContent(/^Playlists$/)
   })
 
+  it("keeps a folded section folded and marks its heading active on that section's detail route", async () => {
+    renderSidebar(
+      {
+        'GET /api/channels': [aChannel({ id: 'chan', name: 'Chan A' })],
+        'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      },
+      { route: '/channels/chan' },
+    )
+
+    await screen.findByText('Chan A')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Channels' }))
+    const channelsHeading = screen.getByRole('button', { name: 'Channels' })
+
+    expect(channelsHeading).toHaveAttribute('aria-expanded', 'false')
+    expect(channelsHeading).toHaveAttribute('aria-current', 'true')
+    expect(screen.queryByText('Chan A')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Playlists' })).not.toHaveAttribute('aria-current')
+  })
+
   it('offers search only above the threshold and filters both sections', async () => {
     const channels = Array.from({ length: 10 }, (_, index) =>
       aChannel({ name: `Chan ${index}`, unwatched_count: 1 }),

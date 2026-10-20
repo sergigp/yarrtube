@@ -207,16 +207,19 @@ function SidebarSection({
   showAvatar,
   onNavigate,
 }: SidebarSectionProps) {
-  void headingActive
   const [pendingDelete, setPendingDelete] = useState<LibraryItem | null>(null)
 
   return (
     <div>
-      <h3 className="mb-2 font-heading text-base font-semibold tracking-tight text-foreground">
+      <h3 className="mb-1 font-heading text-base font-semibold tracking-tight text-foreground">
         <button
           type="button"
-          className="flex w-full items-center gap-1 rounded-md px-2 text-left transition-colors hover:text-primary"
+          className={cn(
+            'flex w-full items-center gap-1 rounded-md px-2 py-1 text-left transition-colors hover:text-primary',
+            headingActive && 'bg-accent text-primary',
+          )}
           aria-expanded={!folded}
+          aria-current={headingActive || undefined}
           onClick={onToggleFolded}
         >
           {folded ? (
