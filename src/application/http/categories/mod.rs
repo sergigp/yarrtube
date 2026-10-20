@@ -274,6 +274,58 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_count_the_total_once_across_categories() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        channel_repository.insert(&channel("@science")).unwrap();
+        playlist_repository.insert(&playlist("PLchess")).unwrap();
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@science",
+            &downloaded_video("shared"),
+        );
+        save_playlist_video(
+            &video_repository,
+            &SqlitePlaylistVideoRepository::new(db.database()),
+            "PLchess",
+            &downloaded_video("shared"),
+        );
+        let chess = Category {
+            members: vec![playlist_member("PLchess")],
+            ..category(None, "Chess")
+        };
+        let science = Category {
+            members: vec![channel_member("@science")],
+            ..category(None, "Science")
+        };
+        repository.insert(&chess).unwrap();
+        repository.insert(&science).unwrap();
+        let category_view_searcher = CategoryViewSearcher::new(
+            repository,
+            channel_repository,
+            playlist_repository,
+            category_video_collector(&db),
+        );
+
+        let response = list(category_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(CategoryListResponse {
+                categories: vec![
+                    list_item(&chess, 1, &[], &["PLchess"]),
+                    list_item(&science, 1, &["@science"], &[]),
+                ],
+                unwatched_total: 1,
+            })
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),

@@ -40,18 +40,21 @@ pub trait CategoryViewSearcherApi: Send + Sync {
 
 impl CategoryViewSearcherApi for CategoryViewSearcher {
     fn search_all(&self) -> anyhow::Result<CategoryViews> {
-        let categories = self
+        let unwatched = self
             .repository
             .list()?
             .into_iter()
             .map(|category| {
-                let unwatched = self.unwatched_youtube_ids(&category)?;
-                Ok(Self::category_view(category, unwatched.len()))
+                let ids = self.unwatched_youtube_ids(&category)?;
+                Ok((category, ids))
             })
-            .collect::<anyhow::Result<Vec<CategoryView>>>()?;
+            .collect::<anyhow::Result<Vec<(Category, HashSet<VideoId>)>>>()?;
         Ok(CategoryViews {
-            unwatched_total: categories.iter().map(|view| view.unwatched_count).sum(),
-            categories,
+            unwatched_total: Self::distinct_total(&unwatched),
+            categories: unwatched
+                .into_iter()
+                .map(|(category, ids)| Self::category_view(category, ids.len()))
+                .collect(),
         })
     }
 }
@@ -66,6 +69,15 @@ impl CategoryViewSearcher {
             .filter(|sourced| sourced.video.is_downloaded_and_unwatched())
             .map(|sourced| sourced.video.youtube_id)
             .collect())
+    }
+
+    /// The distinct YouTube IDs across every category's unwatched set.
+    fn distinct_total(unwatched: &[(Category, HashSet<VideoId>)]) -> usize {
+        unwatched
+            .iter()
+            .flat_map(|(_, ids)| ids)
+            .collect::<HashSet<_>>()
+            .len()
     }
 
     fn category_view(category: Category, unwatched_count: usize) -> CategoryView {
