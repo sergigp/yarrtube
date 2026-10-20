@@ -158,6 +158,20 @@ describe('Sidebar', () => {
     expect(caughtUpHeading).toHaveTextContent(/^Channels$/)
   })
 
+  it('shows no total on a folded Playlists heading', async () => {
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+    })
+
+    await screen.findByText('List B')
+    const heading = screen.getByRole('button', { name: 'Playlists' })
+    await userEvent.setup().click(heading)
+
+    expect(heading).toHaveAttribute('aria-expanded', 'false')
+    expect(heading).toHaveTextContent(/^Playlists$/)
+  })
+
   it('offers search only above the threshold and filters both sections', async () => {
     const channels = Array.from({ length: 10 }, (_, index) =>
       aChannel({ name: `Chan ${index}`, unwatched_count: 1 }),
