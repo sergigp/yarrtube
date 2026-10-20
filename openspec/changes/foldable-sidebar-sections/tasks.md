@@ -14,7 +14,7 @@
 - [x] 2.8 `Sidebar` › lists every channel of an unfolded section with no show-more control — replaces the "show more" test and removes the "Show N more"/"Show less" control
 - [x] 2.9 `Sidebar` › folds a section from its heading, hiding its rows and add control — heading becomes the toggle button with a chevron
 - [x] 2.10 `Sidebar` › unfolds a folded section
-- [ ] 2.11 `Sidebar` › folds sections independently
+- [x] 2.11 `Sidebar` › folds sections independently
 - [ ] 2.12 `Sidebar` › exposes the fold state on the heading control (`aria-expanded`)
 - [ ] 2.13 `Sidebar` › remembers a folded section across remounts
 - [ ] 2.14 `Sidebar` › shows the channels' muted unwatched total only while folded and above 0
