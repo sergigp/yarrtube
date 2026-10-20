@@ -6,11 +6,18 @@ import { Thumbnail } from './Thumbnail'
 import { Button } from '@/components/ui/button'
 import { errorMessage } from '@/lib/errorMessage'
 
-function summaryFor(videos: readonly unknown[] | undefined, unwatchedCount: number | undefined): string | null {
+function summaryFor(
+  videos: readonly unknown[] | undefined,
+  unwatchedCount: number | undefined,
+  prefix: string | undefined,
+): string | null {
   if (!videos) {
     return null
   }
   const parts = [`${videos.length} ${videos.length === 1 ? 'video' : 'videos'}`]
+  if (prefix) {
+    parts.unshift(prefix)
+  }
   if (unwatchedCount !== undefined && unwatchedCount > 0) {
     parts.push(`${unwatchedCount} unwatched`)
   }
@@ -53,7 +60,9 @@ export function DetailHeader({
   showAvatar,
   videos,
   unwatchedCount,
+  summaryPrefix,
   onSync,
+  menuItems,
   onMarkWatched,
   excludedFromHome,
   onSetExcludedFromHome,
@@ -63,7 +72,7 @@ export function DetailHeader({
 }: DetailHeaderProps) {
   const [syncing, setSyncing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const summary = summaryFor(videos, unwatchedCount)
+  const summary = summaryFor(videos, unwatchedCount, summaryPrefix)
 
   return (
     <div className="mb-4 flex items-center gap-3 md:mb-6">
@@ -80,30 +89,33 @@ export function DetailHeader({
         {summary && <p className="truncate text-xs text-muted-foreground md:text-sm">{summary}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={syncing}
-          aria-label="Sync"
-          onClick={async () => {
-            setSyncing(true)
-            try {
-              await onSync?.()
-            } catch (err) {
-              window.alert(`Failed to sync "${name}": ${errorMessage(err)}`)
-            } finally {
-              setSyncing(false)
-            }
-          }}
-        >
-          <RotateCw className={syncing ? 'animate-spin' : undefined} />
-          <span className="hidden sm:inline">Sync</span>
-        </Button>
+        {onSync && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={syncing}
+            aria-label="Sync"
+            onClick={async () => {
+              setSyncing(true)
+              try {
+                await onSync()
+              } catch (err) {
+                window.alert(`Failed to sync "${name}": ${errorMessage(err)}`)
+              } finally {
+                setSyncing(false)
+              }
+            }}
+          >
+            <RotateCw className={syncing ? 'animate-spin' : undefined} />
+            <span className="hidden sm:inline">Sync</span>
+          </Button>
+        )}
         {/* Labelled apart from the sidebar row's "Actions for <name>", which is
             on screen at the same time. */}
         <EntryActionsMenu
           name={name}
           label={`More actions for ${name}`}
+          leadingItems={menuItems}
           onMarkWatched={onMarkWatched}
           excludedFromHome={excludedFromHome}
           onSetExcludedFromHome={onSetExcludedFromHome}

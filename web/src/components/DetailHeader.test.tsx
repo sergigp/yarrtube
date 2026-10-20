@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DetailHeader } from './DetailHeader'
 import { aVideo } from '@/test/helpers'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 
 const noop = async () => {}
 
@@ -167,5 +168,26 @@ describe('DetailHeader', () => {
       ),
     )
     expect(onMarkWatched).toHaveBeenCalledOnce()
+  })
+
+  it('shows the summary prefix and menu items, and no Sync without onSync', async () => {
+    render(
+      <DetailHeader
+        name="Chess"
+        videos={[aVideo(), aVideo()]}
+        unwatchedCount={1}
+        summaryPrefix="3 sources"
+        menuItems={<DropdownMenuItem>Manage sources</DropdownMenuItem>}
+        onDelete={noop}
+        deleteDescription="desc"
+      />,
+    )
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'More actions for Chess' }))
+    const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
+
+    expect(screen.getByText('3 sources · 2 videos · 1 unwatched')).toBeInTheDocument()
+    expect(items).toEqual(['Manage sources', 'Delete'])
+    expect(screen.queryByRole('button', { name: 'Sync' })).not.toBeInTheDocument()
   })
 })
