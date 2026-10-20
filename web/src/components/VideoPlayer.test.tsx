@@ -43,6 +43,25 @@ describe('VideoPlayer', () => {
     ])
   })
 
+  it('starts captions off again when another video is selected', () => {
+    const player = (id: string) => (
+      <VideoPlayer
+        basePath="music"
+        source={PLAYLIST}
+        video={aVideo({ id, subtitle_language: 'en' })}
+        autoplay={false}
+        onVideoElement={() => {}}
+      />
+    )
+    const { container, rerender } = render(player('vid1'))
+    const firstTrack = container.querySelector('track')
+
+    rerender(player('vid2'))
+
+    // A reused <track> would keep the captions mode the user picked for the previous video.
+    expect(container.querySelector('track')).not.toBe(firstTrack)
+  })
+
   it('offers no captions track for a video without subtitles', () => {
     const { container } = renderPlayer(null)
 

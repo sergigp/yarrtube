@@ -50,7 +50,9 @@ export function VideoPlayer({
         >
           {video.subtitle_language && (
             // Not `default`: captions stay off until turned on from the player's own controls.
+            // Keyed per video so a new track starts off; the <video> itself isn't remounted.
             <track
+              key={video.id}
               kind="subtitles"
               src={videoSubtitlesUrl(source, video.id)}
               srcLang={video.subtitle_language}
