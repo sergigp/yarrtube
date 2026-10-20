@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Sidebar } from './Sidebar'
 import {
   aCategory,
@@ -56,5 +57,19 @@ describe('SidebarCategories', () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
     expect(screen.getByTitle('12 unwatched')).toHaveTextContent('12')
+  })
+
+  it('opens a category and marks its row active', async () => {
+    renderSidebar({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess' }),
+        aCategory({ id: 'science', name: 'Science' }),
+      ]),
+    })
+
+    await userEvent.setup().click(await screen.findByRole('link', { name: 'Chess' }))
+
+    expect(screen.getByRole('link', { name: 'Chess' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Science' })).not.toHaveAttribute('aria-current')
   })
 })

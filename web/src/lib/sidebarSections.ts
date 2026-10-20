@@ -51,3 +51,12 @@ export function sectionView(
 export function unwatchedTotal(items: LibraryItem[]): number {
   return items.reduce((total, item) => total + (item.unwatched_count ?? 0), 0)
 }
+
+/** The entry id right after `prefix` in `pathname` (e.g. `/channels/<id>`), if any. */
+export function activeIdFrom(pathname: string, prefix: string): string | null {
+  if (!pathname.startsWith(prefix)) {
+    return null
+  }
+  const rest = pathname.slice(prefix.length).split('/')[0]
+  return rest ? decodeURIComponent(rest) : null
+}

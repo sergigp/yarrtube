@@ -21,6 +21,7 @@ import {
 import type { LibraryItem } from '@/api/types'
 import {
   SEARCH_THRESHOLD,
+  activeIdFrom,
   orderChannels,
   sectionView,
   unwatchedTotal,
@@ -38,14 +39,6 @@ import { useRememberedFlag } from '@/hooks/useRememberedFlag'
 import { useSaveChannelSettings } from '@/hooks/useSaveChannelSettings'
 import { errorMessage } from '@/lib/errorMessage'
 import { cn } from '@/lib/utils'
-
-function activeIdFrom(pathname: string, prefix: string): string | null {
-  if (!pathname.startsWith(prefix)) {
-    return null
-  }
-  const rest = pathname.slice(prefix.length).split('/')[0]
-  return rest ? decodeURIComponent(rest) : null
-}
 
 interface SidebarRowMenuProps {
   item: LibraryItem

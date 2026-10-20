@@ -1,22 +1,29 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useCategories } from '@/api/queries'
 import type { Category } from '@/api/types'
 import { orderCategories } from '@/lib/categories'
+import { activeIdFrom } from '@/lib/sidebarSections'
+import { cn } from '@/lib/utils'
 import { SidebarSectionHeading } from './SidebarSectionHeading'
 
 interface CategoryRowProps {
   category: Category
+  active: boolean
   onNavigate: () => void
 }
 
-function CategoryRow({ category, onNavigate }: CategoryRowProps) {
+function CategoryRow({ category, active, onNavigate }: CategoryRowProps) {
   const unwatchedCount = category.unwatched_count
   return (
-    <li className="flex items-center gap-1 rounded-md pr-1">
+    <li className={cn('flex items-center gap-1 rounded-md pr-1', active && 'bg-accent')}>
       <Link
         to={`/categories/${encodeURIComponent(category.id)}`}
         onClick={onNavigate}
-        className="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm text-foreground no-underline transition-colors hover:text-primary"
+        aria-current={active ? 'page' : undefined}
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-sm no-underline transition-colors',
+          active ? 'font-medium text-primary' : 'text-foreground hover:text-primary',
+        )}
       >
         <span className="min-w-0 flex-1 truncate">{category.name}</span>
         {unwatchedCount > 0 && (
@@ -40,6 +47,8 @@ interface SidebarCategoriesProps {
 
 /** The sidebar's Categories section: every category, unread first. */
 export function SidebarCategories({ onClose }: SidebarCategoriesProps) {
+  const { pathname } = useLocation()
+  const activeId = activeIdFrom(pathname, '/categories/')
   const { data } = useCategories()
   const categories = data && orderCategories(data.categories)
 
@@ -54,7 +63,12 @@ export function SidebarCategories({ onClose }: SidebarCategoriesProps) {
       {categories && categories.length > 0 && (
         <ul className="flex flex-col" aria-label="Categories">
           {categories.map((category) => (
-            <CategoryRow key={category.id} category={category} onNavigate={onClose} />
+            <CategoryRow
+              key={category.id}
+              category={category}
+              active={category.id === activeId}
+              onNavigate={onClose}
+            />
           ))}
         </ul>
       )}
