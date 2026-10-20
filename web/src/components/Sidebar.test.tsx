@@ -102,6 +102,16 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: 'Add playlist' })).toBeInTheDocument()
   })
 
+  it('exposes the fold state on the heading control', async () => {
+    renderSidebar({ 'GET /api/channels': [], 'GET /api/playlists': [] })
+
+    const heading = await screen.findByRole('button', { name: 'Channels' })
+    const unfolded = heading.getAttribute('aria-expanded')
+    await userEvent.setup().click(heading)
+
+    expect([unfolded, heading.getAttribute('aria-expanded')]).toEqual(['true', 'false'])
+  })
+
   it('offers search only above the threshold and filters both sections', async () => {
     const channels = Array.from({ length: 10 }, (_, index) =>
       aChannel({ name: `Chan ${index}`, unwatched_count: 1 }),

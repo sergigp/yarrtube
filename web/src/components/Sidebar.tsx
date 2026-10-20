@@ -217,6 +217,7 @@ function SidebarSection({
         <button
           type="button"
           className="flex w-full items-center gap-1 rounded-md px-2 text-left transition-colors hover:text-primary"
+          aria-expanded={!folded}
           onClick={onToggleFolded}
         >
           {folded ? (

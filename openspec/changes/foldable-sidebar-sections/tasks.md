@@ -15,7 +15,7 @@
 - [x] 2.9 `Sidebar` › folds a section from its heading, hiding its rows and add control — heading becomes the toggle button with a chevron
 - [x] 2.10 `Sidebar` › unfolds a folded section
 - [x] 2.11 `Sidebar` › folds sections independently
-- [ ] 2.12 `Sidebar` › exposes the fold state on the heading control (`aria-expanded`)
+- [x] 2.12 `Sidebar` › exposes the fold state on the heading control (`aria-expanded`)
 - [ ] 2.13 `Sidebar` › remembers a folded section across remounts
 - [ ] 2.14 `Sidebar` › shows the channels' muted unwatched total only while folded and above 0
 - [ ] 2.15 `Sidebar` › shows no total on a folded Playlists heading
