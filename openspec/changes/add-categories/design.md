@@ -41,20 +41,22 @@ Web (`web/src/`):
 - `api/queries.ts` — `queryKeys.categories`, `queryKeys.categoryVideos`, `useCategories`, `useCategoryVideos`; `useInvalidateLibrary` also invalidates categories.
 - `hooks/useWatchProgress.ts` — invalidates categories with channels when the watched state flips.
 - `hooks/useSaveSourceCategories.ts` — applies a source's chosen categories (one members PUT per changed category).
-- `lib/categories.ts` (+ test) — ordering, membership lookups and changes; pure.
+- `lib/categories.ts` (+ test) — ordering, membership lookups and changes, the manage sources dialog's chips, filtering and staged summary; pure.
 - `test/helpers.tsx` — `aCategory`, `aCategoryList` builders.
 - `components/VideoGrid.tsx` — home card grid extracted from `Home.tsx` for reuse.
 - `components/Home.tsx` — uses `VideoGrid`.
-- `components/SidebarSectionHeading.tsx` — the foldable heading from `foldable-sidebar-sections`, extracted with an `actions` slot for the manage gear.
-- `components/SidebarCategories.tsx` (+ test) — the Categories section, rows, row menu, delete confirmation.
+- `components/SidebarSectionHeading.tsx` — the foldable heading from `foldable-sidebar-sections`, extracted for reuse (no actions slot).
+- `components/SidebarCategories.tsx` (+ test) — the Categories section, rows, row menu ("Manage sources", "Delete"), delete confirmation.
 - `components/Sidebar.tsx` — renders `SidebarCategories` above Channels; uses `SidebarSectionHeading`.
-- `components/AddCategoryDialog.tsx` (+ test) — name-only create dialog.
-- `components/CategoriesView.tsx` (+ test) — management view (`/categories?selected=<id>`).
-- `components/CategoryDetail.tsx` (+ test) — category view (`/categories/:id`).
+- `components/AddCategoryDialog.tsx` (+ test) — name-only create dialog; lands on the new category with the manage sources dialog open.
+- `components/CategoryDetail.tsx` (+ test) — category view (`/categories/:id`): `DetailHeader` with rename, summary and actions menu; opens `ManageSourcesDialog`, also when arriving with `ManageSourcesState`.
+- `components/ManageSourcesDialog.tsx` (+ test) — the chip dialog: search, state filter, staged changes, discard confirmation.
+- `components/EditableTitle.tsx` (+ test) — a heading with a "Rename" pencil that turns into an in-place field.
+- `components/DetailHeader.tsx` (+ test) — `onSync` optional, `summaryPrefix`, `onRename` (renders `EditableTitle`), `menuItems` passed to `EntryActionsMenu` as leading items; `videos` widened to any array.
+- `components/ui/toggle.tsx`, `components/ui/toggle-group.tsx` — shadcn wrappers over the `radix-ui` Toggle and ToggleGroup (already a dependency).
 - `components/CategoryPicker.tsx` (+ test) — chip picker with inline create.
 - `components/AddChannelDialog.tsx`, `AddPlaylistDialog.tsx`, `EditChannelDialog.tsx`, `EditPlaylistDialog.tsx` (+ tests) — Categories field.
-- `components/SettingsMenu.tsx` — "Categories" item.
-- `App.tsx` — routes, add category dialog state.
+- `App.tsx` — the `/categories/:id` route, add category dialog state. There is no `/categories` route and the Settings menu is unchanged.
 - `smoke-tests/tests/categories.spec.js` — every new route through the real binary.
 
 ## Types & Signatures
@@ -291,6 +293,17 @@ export function categoryIdsOf(categories: Category[], source: SourceRef): string
 export function withMember(category: Category, source: SourceRef): CategoryMembers
 export function withoutMember(category: Category, source: SourceRef): CategoryMembers
 export function withMembers(category: Category, sources: SourceRef[]): CategoryMembers
+export interface SourceChip { source: SourceRef; name: string; avatarFilename: string | null }
+export type SourceFilter = 'all' | 'in' | 'out'
+/** Every tracked source as a chip, each kind by name ignoring case. */
+export function sourceChips(channels: ChannelListItem[] | undefined, playlists: PlaylistListItem[] | undefined):
+  { channels: SourceChip[]; playlists: SourceChip[] }
+export function membersOf(category: Category): CategoryMembers
+export function isIn(members: CategoryMembers, source: SourceRef): boolean
+export function toggled(members: CategoryMembers, source: SourceRef): CategoryMembers
+/** Chips matching the search (name, ignoring case) and the state filter, order kept. */
+export function visibleChips(chips: SourceChip[], staged: CategoryMembers, search: string, filter: SourceFilter): SourceChip[]
+export function stagedSummary(saved: CategoryMembers, staged: CategoryMembers): { added: number; removed: number }
 /** The members PUT each category needs so `source` is in exactly `chosenIds`. */
 export function membershipChanges(categories: Category[], source: SourceRef, chosenIds: string[]):
   { id: string; members: CategoryMembers }[]
@@ -300,11 +313,17 @@ export function useSaveSourceCategories(): (source: SourceRef, chosenIds: string
 
 // web/src/components
 export function SidebarSectionHeading(props: { title: string; folded: boolean; onToggleFolded: () => void;
-  headingActive: boolean; foldedTotal?: number; actions?: ReactNode }): JSX.Element
+  headingActive: boolean; foldedTotal?: number }): JSX.Element
 export function SidebarCategories(props: { onAddCategory: () => void; onClose: () => void }): JSX.Element
 export function AddCategoryDialog(props: { open: boolean; onOpenChange: (open: boolean) => void }): JSX.Element
-export function CategoriesView(): JSX.Element                // reads ?selected=
-export function CategoryDetail(): JSX.Element                // reads :id
+export function CategoryDetail(): JSX.Element                // reads :id and ManageSourcesState
+/** Router state that opens the manage sources dialog on arrival; consumed once (replaced) so reload/back don't reopen it. */
+export interface ManageSourcesState { manageSources: true }
+export function ManageSourcesDialog(props: { category: Category; open: boolean;
+  onOpenChange: (open: boolean) => void }): JSX.Element
+export function EditableTitle(props: { name: string; onRename: (name: string) => Promise<void> }): JSX.Element
+// DetailHeaderProps (changed): onSync?: () => Promise<void>; summaryPrefix?: string;
+//   onRename?: (name: string) => Promise<void>; menuItems?: ReactNode; videos: readonly unknown[] | undefined
 export function CategoryPicker(props: { value: string[]; onChange: (ids: string[]) => void }): JSX.Element
 export function VideoGrid(props: { videos: HomeVideo[]; showProgress?: boolean }): JSX.Element
 ```
@@ -355,8 +374,21 @@ Web — save a source's categories (add/edit dialogs):
 2. `useSaveSourceCategories()(source, chosenIds)` → `membershipChanges(categories, source, chosenIds)` → `setCategoryMembers(id, members)` each → invalidate `categories`
 3. failure after the source saved → dialog shows "added/saved, but its categories were not saved"
 
-Web — management view add members:
-1. checked sources → `withMembers(category, sources)` → `setCategoryMembers` → invalidate `categories`
+Web — manage sources:
+1. open (⋮ "Manage sources", empty-state control, or arrival with `ManageSourcesState` from the sidebar row / `AddCategoryDialog`) → `staged = membersOf(category)`
+2. chip toggle / Enter on the only match → `staged = toggled(staged, source)`; `stagedSummary(membersOf(category), staged)` drives the footer and Save
+3. Save → `setCategoryMembers(category.id, staged)` (one PUT, full set) → invalidate library → close; failure → message, dialog stays
+4. Cancel/Esc/outside click with a non-zero summary → `ConfirmDialog` "Discard changes?" → close
+
+Web — rename:
+1. pencil → field (focused, selected) → Enter/blur: unchanged → close; else `renameCategory(id, name)` → invalidate library → close
+2. failure → message under the field, field stays open; Escape → close showing the saved name
+
+Decisions:
+- One searchable chip set instead of two transfer panes: wraps on any width, one search, state filter replaces the second pane.
+- Chips are a `ToggleGroup type="multiple"` per kind: roving arrow-key focus and `aria-pressed` for free; Tab moves between groups, not through every chip.
+- Order never changes on toggle, so the chip under the pointer stays put.
+- Staged edits with one PUT: matches the members endpoint (full set), gives Cancel a meaning and removes the save-one-change-at-a-time locking.
 
 ## Test Plan
 
@@ -409,27 +441,33 @@ Web — management view add members:
    - `lib/categories` › adds and removes members without duplicates
    - `SidebarCategories` › lists every category above channels with badges, in unread order
    - `SidebarCategories` › opens a category and marks its row active
-   - `SidebarCategories` › manage control navigates without folding
    - `SidebarCategories` › folds with the muted unwatched total and marks the heading active on a category route
-   - `SidebarCategories` › manages and deletes from the row menu, with the member-count confirmation
+   - `SidebarCategories` › manages sources and deletes from the row menu, with the member-count confirmation
    - `SidebarCategories` › is not filtered by the sidebar search
-   - `AddCategoryDialog` › creates a category and opens it in the management view
+   - `AddCategoryDialog` › creates a category and opens it with the manage sources dialog
    - `AddCategoryDialog` › disables create for a blank name and shows a taken-name error
-   - `CategoriesView` › lists categories with member counts and selects one from the address
-   - `CategoriesView` › renames in place, and rejects a taken name keeping the saved one
-   - `CategoriesView` › groups members by kind and removes one
-   - `CategoriesView` › filters the picker and adds the checked sources
-   - `CategoriesView` › deletes the selected category after confirmation
-   - `CategoriesView` › shows list or details on a narrow viewport
-   - `CategoryDetail` › shows the members and video cards newest first
-   - `CategoryDetail` › marks all watched
-   - `CategoryDetail` › explains an empty category and an unknown one
+   - `lib/categories` › builds chips per kind by name ignoring case, channels with avatars
+   - `lib/categories` › filters chips by search and state keeping their order
+   - `lib/categories` › toggles a source and summarises staged additions and removals
+   - `EditableTitle` › renames on Enter and on blur, cancels on Escape, closes unchanged without saving
+   - `EditableTitle` › keeps the field open with the message when the name is rejected
+   - `DetailHeader` › shows the summary prefix and menu items, and no Sync without `onSync`
+   - `CategoryDetail` › shows the summary and video cards newest first
+   - `CategoryDetail` › marks all watched and deletes from the actions menu
+   - `CategoryDetail` › renames from the header
+   - `CategoryDetail` › explains an empty category, whose control opens the dialog, and an unknown one
+   - `CategoryDetail` › opens the dialog on arrival with `ManageSourcesState`, once
+   - `ManageSourcesDialog` › shows channels and playlists as chips pressed by membership
+   - `ManageSourcesDialog` › stages toggles, summarises them and saves the full set at once
+   - `ManageSourcesDialog` › filters by search and state, and Enter toggles the only match
+   - `ManageSourcesDialog` › disables Save with nothing staged and asks before discarding
+   - `ManageSourcesDialog` › keeps staged changes when saving fails
+   - `ManageSourcesDialog` › says when nothing is tracked
    - `CategoryPicker` › picks, removes and creates categories
    - `AddChannelDialog` › adds a channel into the chosen categories, and reports categories that failed to save
    - `AddPlaylistDialog` › adds a playlist into the chosen categories
    - `EditChannelDialog` › saves a change of categories alone
    - `EditPlaylistDialog` › saves a change of categories alone
-   - `SettingsMenu` › offers Categories
    - `useWatchProgress` › refetches categories when a report flips the watched state
 5. Smoke test (`smoke-tests/tests/categories.spec.js`)
-   - create, rename, add members, open the category view, mark all watched, assign from the add channel dialog, delete — covering every new route
+   - create (lands in manage sources), add sources with chips, rename in place, mark all watched, assign from the add channel dialog, delete from the actions menu — covering every new route

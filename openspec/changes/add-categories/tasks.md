@@ -97,3 +97,37 @@ Web (Vitest):
 - [x] 4.2 `npm run check` and `npm run build` pass in `web/`
 - [x] 4.3 Add `smoke-tests/tests/categories.spec.js` (create, rename, add members, category view, mark all watched, assign from the add channel dialog, delete) and `scripts/run-smoke-tests.sh` passes
 - [x] 4.4 Manual check with `scripts/run-local.sh`: sidebar section order and badges, folding with total, manage view on desktop and mobile, category view, dialogs' Categories field, deleting a channel removes it from its categories
+
+## 5. Rework: manage from the category view
+
+Replaces the management view (tasks 2.44, 2.48, 2.50–2.56, 2.64 and their code) with management on the category view, per the revised spec and design.
+
+- [ ] 5.1 Skeleton: add the shadcn `toggle` and `toggle-group` wrappers; create `ManageSourcesDialog`, `EditableTitle`, `ManageSourcesState` and the new `lib/categories` functions as stubs; widen `DetailHeader` (`onSync` optional, `summaryPrefix`, `onRename`, `menuItems`, `videos` any array). Remove `CategoriesView` (+ test), the `/categories` route, the Settings menu "Categories" item (+ its test), and the sidebar heading's manage control and the `SidebarSectionHeading` actions slot (+ their tests). Point every former `/categories?selected=` link at the category view. Done when `npm run check` passes.
+
+Web (Vitest, TDD):
+
+- [ ] 5.2 `lib/categories` › builds chips per kind by name ignoring case, channels with avatars
+- [ ] 5.3 `lib/categories` › filters chips by search and state keeping their order
+- [ ] 5.4 `lib/categories` › toggles a source and summarises staged additions and removals
+- [ ] 5.5 `EditableTitle` › renames on Enter and on blur, cancels on Escape, closes unchanged without saving
+- [ ] 5.6 `EditableTitle` › keeps the field open with the message when the name is rejected
+- [ ] 5.7 `DetailHeader` › shows the summary prefix and menu items, and no Sync without `onSync`
+- [ ] 5.8 `CategoryDetail` › shows the summary and video cards newest first
+- [ ] 5.9 `CategoryDetail` › marks all watched and deletes from the actions menu
+- [ ] 5.10 `CategoryDetail` › renames from the header
+- [ ] 5.11 `CategoryDetail` › explains an empty category, whose control opens the dialog, and an unknown one
+- [ ] 5.12 `CategoryDetail` › opens the dialog on arrival with `ManageSourcesState`, once
+- [ ] 5.13 `ManageSourcesDialog` › shows channels and playlists as chips pressed by membership
+- [ ] 5.14 `ManageSourcesDialog` › stages toggles, summarises them and saves the full set at once
+- [ ] 5.15 `ManageSourcesDialog` › filters by search and state, and Enter toggles the only match
+- [ ] 5.16 `ManageSourcesDialog` › disables Save with nothing staged and asks before discarding
+- [ ] 5.17 `ManageSourcesDialog` › keeps staged changes when saving fails
+- [ ] 5.18 `ManageSourcesDialog` › says when nothing is tracked
+- [ ] 5.19 `SidebarCategories` › "Manage sources" in the row menu opens the category view with the dialog
+- [ ] 5.20 `AddCategoryDialog` › creates a category and opens it with the manage sources dialog
+
+Verification:
+
+- [ ] 5.21 `npm run check` and `npm run build` pass in `web/`
+- [ ] 5.22 Update `smoke-tests/tests/categories.spec.js` (create lands in manage sources, add sources with chips, rename in place, mark all watched, delete from the actions menu) and `scripts/run-smoke-tests.sh` passes
+- [ ] 5.23 Manual check with `scripts/run-local.sh`: category header and menu, rename, the dialog on desktop and mobile (chips, search, filters, keyboard, discard), entry points from the sidebar row, empty state and add category

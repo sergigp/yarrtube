@@ -17,27 +17,26 @@ from transcripts, personalised home rows and media-server export.
   unwatched YouTube videos across all its members (a video tracked by two
   members counts once).
 - **Sidebar Categories section**, above Channels:
-  - heading with a manage control (gear) opening the manage page;
   - "+ Add category" under the heading, opening a dialog asking only for a
-    name; on create, the user lands on the manage page with the new
-    category open and its add-members picker focused;
+    name; on create, the user lands on the new category's page with its
+    manage sources dialog open;
   - every category always listed (never trimmed, no search), each with its
     unwatched badge, ordered like Channels: unwatched first, most unwatched
     first, ties and caught-up categories by name ignoring case;
-  - row menu: "Manage" (opens it on the manage page) and "Delete"
-    (confirmed);
-  - selecting a category opens its browse page.
-- **Manage page** (`/categories`), also reachable from the header Settings
-  menu ("Categories"): master-detail on desktop (category list with member
-  counts, selected category on the right), stacked list-then-detail on
-  mobile. For the selected category: rename in place, an "In <name>" list
-  grouped by kind (Channels, Playlists) with Remove, a searchable checkbox
-  list of non-member sources to add in bulk, and Delete with a confirmation
-  that states the member count and that no videos are deleted. A
-  "+ New category" control creates categories from the page.
-- **Browse page**: the category's videos across all members, each YouTube
-  video shown once, newest first, using the home-style cards, with "Mark all
-  watched" and "Manage". An empty category invites the user to add members.
+  - row menu: "Manage sources" (opens the category page with the manage
+    sources dialog) and "Delete" (confirmed);
+  - selecting a category opens its page.
+- **Category page**: the category's videos across all its sources, each
+  YouTube video shown once, newest first, using the home-style cards. Its
+  header follows the channel and playlist pages: the name with a pencil to
+  rename it in place, a summary (sources, videos, unwatched) and a "⋮" menu
+  with "Mark all watched", "Manage sources" and "Delete" (confirmed, stating
+  the source count and that no videos are deleted). An empty category
+  invites the user to add sources.
+- **Manage sources dialog**: every tracked channel and playlist as a chip
+  (channels with their avatar), pressed when in the category, with a search,
+  All / In / Not in filters, and staged changes saved at once. There is no
+  separate management page.
 - **Mark category watched**: marks every downloaded video of every member
   watched (every stored copy, as for channels).
 - **Add/Edit channel and playlist dialogs** gain a Categories chip picker to
@@ -61,17 +60,17 @@ auto-categorisation, video members, category colours/icons.
 - `video-listing`: list the videos of a category across its members, each
   YouTube video once, newest first.
 - `watch-state`: mark a category watched.
-- `web-ui`: sidebar Categories section and ordering, Settings menu entry,
-  manage page, browse page, Categories field in the add/edit channel and
-  playlist dialogs.
+- `web-ui`: sidebar Categories section and ordering, category page with
+  in-place rename and the manage sources dialog, Categories field in the
+  add/edit channel and playlist dialogs.
 
 ## Impact
 
 - Backend: new category domain and SQLite tables (category, membership) via
   a migration; new HTTP endpoints for categories, membership, category
   videos and mark-watched; channel/playlist deletion cleans memberships.
-- Web UI: new routes and views (manage, browse), sidebar section, dialog
-  field, API types and fixture builders (`aCategory`) kept in step with the
+- Web UI: a category route and view, the manage sources dialog, sidebar
+  section, dialog field, API types and fixture builders (`aCategory`) kept in step with the
   Rust DTOs.
 - Depends on `foldable-sidebar-sections` (the Categories heading is
   foldable like the others). Playlist unwatched badges ship separately; the
