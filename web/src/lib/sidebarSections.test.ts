@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { matchesSearch, orderChannels, sectionView } from './sidebarSections'
-import { aChannel } from '@/test/helpers'
+import { matchesSearch, orderChannels, sectionView, unwatchedTotal } from './sidebarSections'
+import { aChannel, aPlaylist } from '@/test/helpers'
 
 describe('orderChannels', () => {
   it('puts channels with the most unwatched videos first', () => {
@@ -87,5 +87,18 @@ describe('sectionView', () => {
     const view = sectionView(items, { searchText: '', folded: true, activeId: 'elsewhere' })
 
     expect(view).toEqual({ folded: true, headingActive: false, rows: [] })
+  })
+})
+
+describe('unwatchedTotal', () => {
+  it("sums the rows' unwatched counts, treating missing counts as 0", () => {
+    const items = [
+      aChannel({ unwatched_count: 3 }),
+      aChannel({ unwatched_count: 0 }),
+      aChannel({ unwatched_count: 20 }),
+      aPlaylist(),
+    ]
+
+    expect(unwatchedTotal(items)).toBe(23)
   })
 })

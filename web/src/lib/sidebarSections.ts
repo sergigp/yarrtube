@@ -31,7 +31,10 @@ export interface SectionView {
   rows: LibraryItem[] | undefined
 }
 
-/** The rows a section shows: every match while searching, otherwise every row. */
+/**
+ * What a section shows: every match while searching, only its heading when
+ * folded, otherwise every row.
+ */
 export function sectionView(
   items: LibraryItem[] | undefined,
   { searchText, folded, activeId }: SectionViewOptions,
@@ -46,6 +49,5 @@ export function sectionView(
 
 /** Sum of the rows' unwatched counts (missing counts as 0). */
 export function unwatchedTotal(items: LibraryItem[]): number {
-  void items
-  return 0
+  return items.reduce((total, item) => total + (item.unwatched_count ?? 0), 0)
 }
