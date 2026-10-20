@@ -46,23 +46,6 @@ describe('Sidebar', () => {
     expect(busyIndex).toBeLessThan(behindIndex)
   })
 
-  it('collapses long caught-up sections behind a "show more" toggle', async () => {
-    const channels = Array.from({ length: 8 }, (_, index) =>
-      aChannel({ name: `Channel ${String.fromCharCode(65 + index)}`, unwatched_count: 0 }),
-    )
-    renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] })
-
-    await screen.findByText('Channel A')
-
-    // Five caught-up channels lead; the other three hide behind the toggle.
-    expect(screen.queryByText('Channel F')).not.toBeInTheDocument()
-    const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Show 3 more' }))
-    expect(screen.getByText('Channel F')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Show less' }))
-    expect(screen.queryByText('Channel F')).not.toBeInTheDocument()
-  })
-
   it('offers search only above the threshold and filters both sections', async () => {
     const channels = Array.from({ length: 10 }, (_, index) =>
       aChannel({ name: `Chan ${index}`, unwatched_count: 1 }),

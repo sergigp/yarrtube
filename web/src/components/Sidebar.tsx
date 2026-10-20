@@ -20,9 +20,7 @@ import {
 } from '@/api/client'
 import type { LibraryItem } from '@/api/types'
 import {
-  CAUGHT_UP_PREVIEW,
   SEARCH_THRESHOLD,
-  channelLeadCount,
   orderChannels,
   sectionView,
   unwatchedTotal,
@@ -45,34 +43,6 @@ function activeIdFrom(pathname: string, prefix: string): string | null {
   }
   const rest = pathname.slice(prefix.length).split('/')[0]
   return rest ? decodeURIComponent(rest) : null
-}
-
-/**
- * Whether a sidebar section is expanded, remembered per browser. Storage may
- * be unavailable (private mode, blocked site data): the section then starts
- * collapsed and the choice lasts until reload.
- */
-function useExpandedState(section: string): readonly [boolean, () => void] {
-  const key = `yarrtube.sidebar.expanded.${section}`
-  const [expanded, setExpanded] = useState(() => {
-    try {
-      return window.localStorage.getItem(key) === 'true'
-    } catch {
-      return false
-    }
-  })
-
-  const toggle = () => {
-    const next = !expanded
-    setExpanded(next)
-    try {
-      window.localStorage.setItem(key, String(next))
-    } catch {
-      // Not remembered; the in-memory state still applies.
-    }
-  }
-
-  return [expanded, toggle] as const
 }
 
 interface SidebarRowMenuProps {
@@ -196,10 +166,6 @@ interface SidebarSectionProps {
   onAdd: () => void
   onClose: () => void
   items: LibraryItem[] | undefined
-  hiddenCount: number
-  expanded: boolean
-  collapsible: boolean
-  onToggleExpanded: () => void
   folded: boolean
   headingActive: boolean
   onToggleFolded: () => void
@@ -225,10 +191,6 @@ function SidebarSection({
   onAdd,
   onClose,
   items,
-  hiddenCount,
-  expanded,
-  collapsible,
-  onToggleExpanded,
   folded,
   headingActive,
   onToggleFolded,
@@ -302,16 +264,6 @@ function SidebarSection({
           ))}
         </ul>
       )}
-      {!error && collapsible && (
-        <button
-          type="button"
-          className="mt-1 px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          aria-expanded={expanded}
-          onClick={onToggleExpanded}
-        >
-          {expanded ? 'Show less' : `Show ${hiddenCount} more`}
-        </button>
-      )}
 
       <ConfirmDialog
         open={pendingDelete !== null}
@@ -365,8 +317,6 @@ export function Sidebar({
   const editingPlaylist =
     playlists?.find((playlist) => playlist.id === editingPlaylistId) ?? null
   const [search, setSearch] = useState('')
-  const [channelsExpanded, toggleChannelsExpanded] = useExpandedState('channels')
-  const [playlistsExpanded, togglePlaylistsExpanded] = useExpandedState('playlists')
   const [channelsFolded, toggleChannelsFolded] = useRememberedFlag(
     'yarrtube.sidebar.folded.channels',
     false,
@@ -413,15 +363,11 @@ export function Sidebar({
   const channelsView = sectionView(orderedChannels, {
     searchText,
     folded: channelsFolded,
-    expanded: channelsExpanded,
-    leadCount: orderedChannels ? channelLeadCount(orderedChannels) : 0,
     activeId: activeChannelId,
   })
   const playlistsView = sectionView(playlists, {
     searchText,
     folded: playlistsFolded,
-    expanded: playlistsExpanded,
-    leadCount: CAUGHT_UP_PREVIEW,
     activeId: activePlaylistId,
   })
   const showChannels = !searchText || channelsView.rows?.length !== 0
@@ -465,10 +411,6 @@ export function Sidebar({
             onAdd={onAddChannel}
             onClose={onClose}
             items={channelsView.rows}
-            hiddenCount={channelsView.hiddenCount}
-            expanded={channelsExpanded}
-            collapsible={channelsView.collapsible}
-            onToggleExpanded={toggleChannelsExpanded}
             folded={channelsView.folded}
             headingActive={channelsView.headingActive}
             onToggleFolded={toggleChannelsFolded}
@@ -498,10 +440,6 @@ export function Sidebar({
             onAdd={onAddPlaylist}
             onClose={onClose}
             items={playlistsView.rows}
-            hiddenCount={playlistsView.hiddenCount}
-            expanded={playlistsExpanded}
-            collapsible={playlistsView.collapsible}
-            onToggleExpanded={togglePlaylistsExpanded}
             folded={playlistsView.folded}
             headingActive={playlistsView.headingActive}
             onToggleFolded={togglePlaylistsFolded}
