@@ -43,6 +43,7 @@ pub trait CategoryUpdaterApi: Send + Sync {
 impl CategoryUpdaterApi for CategoryUpdater {
     fn rename(&self, id: &CategoryId, name: CategoryName) -> Result<(), UpdateCategoryError> {
         let category = self.find_category(id)?;
+        self.ensure_name_free(id, &name)?;
         self.save(&category.with_name(name))
     }
 
@@ -61,6 +62,24 @@ impl CategoryUpdater {
             .find(id)
             .map_err(UpdateCategoryError::Repository)?
             .ok_or_else(|| UpdateCategoryError::NotFound(id.clone()))
+    }
+
+    /// Fails when a category other than `id` already has `name`.
+    fn ensure_name_free(
+        &self,
+        id: &CategoryId,
+        name: &CategoryName,
+    ) -> Result<(), UpdateCategoryError> {
+        let taken = self
+            .repository
+            .list()
+            .map_err(UpdateCategoryError::Repository)?
+            .iter()
+            .any(|category| &category.id != id && category.name.is_same_as(name));
+        if taken {
+            return Err(UpdateCategoryError::NameTaken(name.clone()));
+        }
+        Ok(())
     }
 
     fn save(&self, category: &Category) -> Result<(), UpdateCategoryError> {

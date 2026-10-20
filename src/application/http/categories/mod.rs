@@ -435,6 +435,32 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_rename_if_name_taken() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = category(None, "Chess");
+        let sports = category(None, "Sports");
+        repository.insert(&chess).unwrap();
+        repository.insert(&sports).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = rename(category_updater, chess.id.as_str(), "sports").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "a category named \"sports\" already exists"
+            ))
+        );
+        assert_eq!(repository.list().unwrap(), vec![chess, sports]);
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
