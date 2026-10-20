@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { Trash2 } from 'lucide-react'
+import { ChevronLeft, Trash2 } from 'lucide-react'
 import {
   avatarMediaUrl,
   deleteCategory,
@@ -24,6 +24,7 @@ import {
   type SourceRef,
 } from '@/lib/categories'
 import { matchesSearch } from '@/lib/sidebarSections'
+import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { errorMessage } from '@/lib/errorMessage'
 import type { ManageCategoryState } from './AddCategoryDialog'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -307,9 +308,18 @@ function DeleteCategoryButton({ category }: { category: Category }) {
   )
 }
 
-function CategoryEditor({ category }: { category: Category }) {
+function CategoryEditor({ category, showBack }: { category: Category; showBack: boolean }) {
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-6">
+      {showBack && (
+        <Link
+          to="/categories"
+          className="flex items-center gap-1 self-start text-sm text-muted-foreground no-underline hover:text-foreground"
+        >
+          <ChevronLeft className="size-4" />
+          Back to categories
+        </Link>
+      )}
       <CategoryNameField key={category.id} category={category} />
       <CategoryMembers category={category} />
       <AddMembersPicker key={category.id} category={category} />
@@ -325,17 +335,20 @@ export function CategoriesView() {
   const { data } = useCategories()
   const categories = data?.categories
   const selected = categories?.find((category) => category.id === selectedId) ?? null
+  const desktop = useIsDesktop()
+  // Below the desktop breakpoint, the selected category's details replace the list.
+  const showList = desktop || !selected
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <h1 className="font-heading text-xl font-semibold">Categories</h1>
       <div className="flex min-w-0 flex-col gap-6 md:flex-row">
-        {categories && (
+        {categories && showList && (
           <div className="md:w-64 md:shrink-0">
             <CategoryList categories={categories} selectedId={selectedId} />
           </div>
         )}
-        {selected && <CategoryEditor category={selected} />}
+        {selected && <CategoryEditor category={selected} showBack={!desktop} />}
       </div>
     </div>
   )

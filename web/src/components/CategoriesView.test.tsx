@@ -73,8 +73,7 @@ describe('CategoriesView', () => {
     await user.clear(name)
     await user.type(name, 'Board games')
     await user.tab()
-    const list = screen.getByRole('list', { name: 'Category list' })
-    await within(list).findByText('Board games')
+    await screen.findByRole('region', { name: 'In Board games' })
     await user.clear(name)
     await user.type(name, 'Science{Enter}')
 
@@ -217,6 +216,27 @@ describe('CategoriesView', () => {
     expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(
       /^\/categories$/,
     )
+    expect(screen.queryByRole('textbox', { name: 'Category name' })).not.toBeInTheDocument()
+  })
+
+  it('shows list or details on a narrow viewport', async () => {
+    // The matchMedia stub reports a viewport below the desktop breakpoint.
+    renderView({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess' }),
+        aCategory({ id: 'science', name: 'Science' }),
+      ]),
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: /^Chess/ }))
+    const listWithDetails = screen.queryByRole('list', { name: 'Category list' })
+    const name = screen.getByRole('textbox', { name: 'Category name' })
+    await user.click(screen.getByRole('link', { name: 'Back to categories' }))
+
+    expect(listWithDetails).not.toBeInTheDocument()
+    expect(name).toHaveValue('Chess')
+    expect(screen.getByRole('list', { name: 'Category list' })).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Category name' })).not.toBeInTheDocument()
   })
 })
