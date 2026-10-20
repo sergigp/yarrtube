@@ -326,6 +326,46 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_skip_members_already_deleted() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        channel_repository.insert(&channel("@kept")).unwrap();
+        save_channel_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@gone",
+            &downloaded_video("orphan"),
+        );
+        let chess = Category {
+            members: vec![
+                channel_member("@gone"),
+                channel_member("@kept"),
+                playlist_member("PLgone"),
+            ],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_view_searcher = CategoryViewSearcher::new(
+            repository,
+            channel_repository,
+            playlist_repository,
+            category_video_collector(&db),
+        );
+
+        let response = list(category_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(CategoryListResponse {
+                categories: vec![list_item(&chess, 0, &["@kept"], &[])],
+                unwatched_total: 0,
+            })
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),

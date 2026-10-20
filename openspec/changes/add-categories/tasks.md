@@ -16,7 +16,7 @@ Backend acceptance tests:
 - [x] 2.5 `it_should_list_categories_by_name_ignoring_case` — list order and member lists
 - [x] 2.6 `it_should_count_distinct_unwatched_videos_per_category` — per-category count across channel and playlist members, shared video once
 - [x] 2.7 `it_should_count_the_total_once_across_categories` — `unwatched_total` is the distinct union
-- [ ] 2.8 `it_should_skip_members_already_deleted` — a member whose source is gone is neither listed nor counted
+- [x] 2.8 `it_should_skip_members_already_deleted` — a member whose source is gone is neither listed nor counted
 - [ ] 2.9 `it_should_rename_a_category`
 - [ ] 2.10 `it_should_rename_a_category_to_a_case_variant_of_its_name`
 - [ ] 2.11 `it_should_fail_to_rename_if_name_taken`

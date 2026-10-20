@@ -40,6 +40,7 @@ pub trait CategoryViewSearcherApi: Send + Sync {
 
 impl CategoryViewSearcherApi for CategoryViewSearcher {
     fn search_all(&self) -> anyhow::Result<CategoryViews> {
+        let tracked = self.tracked_members()?;
         let unwatched = self
             .repository
             .list()?
@@ -53,13 +54,28 @@ impl CategoryViewSearcherApi for CategoryViewSearcher {
             unwatched_total: Self::distinct_total(&unwatched),
             categories: unwatched
                 .into_iter()
-                .map(|(category, ids)| Self::category_view(category, ids.len()))
+                .map(|(category, ids)| Self::category_view(category, &tracked, ids.len()))
                 .collect(),
         })
     }
 }
 
 impl CategoryViewSearcher {
+    /// Every tracked channel and playlist, as a member.
+    fn tracked_members(&self) -> anyhow::Result<HashSet<CategoryMember>> {
+        let channels = self
+            .channel_repository
+            .list()?
+            .into_iter()
+            .map(|channel| CategoryMember::Channel(channel.id));
+        let playlists = self
+            .playlist_repository
+            .list()?
+            .into_iter()
+            .map(|playlist| CategoryMember::Playlist(playlist.id));
+        Ok(channels.chain(playlists).collect())
+    }
+
     /// The YouTube IDs of the category's downloaded, unwatched videos, once each.
     fn unwatched_youtube_ids(&self, category: &Category) -> anyhow::Result<HashSet<VideoId>> {
         Ok(self
@@ -80,18 +96,26 @@ impl CategoryViewSearcher {
             .len()
     }
 
-    fn category_view(category: Category, unwatched_count: usize) -> CategoryView {
+    /// The category's view, listing only its `tracked` members.
+    fn category_view(
+        category: Category,
+        tracked: &HashSet<CategoryMember>,
+        unwatched_count: usize,
+    ) -> CategoryView {
+        let members: Vec<&CategoryMember> = category
+            .members
+            .iter()
+            .filter(|member| tracked.contains(member))
+            .collect();
         CategoryView {
-            channels: category
-                .members
+            channels: members
                 .iter()
                 .filter_map(|member| match member {
                     CategoryMember::Channel(handle) => Some(handle.clone()),
                     CategoryMember::Playlist(_) => None,
                 })
                 .collect(),
-            playlists: category
-                .members
+            playlists: members
                 .iter()
                 .filter_map(|member| match member {
                     CategoryMember::Playlist(id) => Some(id.clone()),
