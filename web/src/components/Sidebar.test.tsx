@@ -407,6 +407,27 @@ describe('Sidebar', () => {
     await waitFor(() => expect(screen.queryByTitle('2 unwatched')).not.toBeInTheDocument())
   })
 
+  it('offers playlist row actions in order', async () => {
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+    })
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for List B' }))
+
+    expect(
+      (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
+    ).toEqual([
+      'Sync',
+      'Mark all watched',
+      'Exclude from home',
+      'Hide unwatched count',
+      'Edit settings',
+      'Delete',
+    ])
+  })
+
   it("edits a playlist's settings from its row menu", async () => {
     let playlist = aPlaylist({ id: 'PL1', name: 'Lofi beats', reconcile_interval_minutes: 180 })
     const update = vi.fn(() => {
