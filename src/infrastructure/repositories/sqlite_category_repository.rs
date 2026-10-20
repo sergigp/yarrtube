@@ -273,6 +273,28 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_replace_members_on_update() {
+        let db = TestDatabase::new();
+        let repository = SqliteCategoryRepository::new(db.database());
+        let chess = category(
+            "Chess",
+            &[channel_member("@Hikaru"), playlist_member("PLendgames")],
+        );
+        repository.insert(&chess).unwrap();
+        let renamed = chess
+            .clone()
+            .with_name(CategoryName::new("Board games").unwrap())
+            .with_members(vec![
+                playlist_member("PLopenings"),
+                channel_member("@Hikaru"),
+            ]);
+
+        repository.update(&renamed).unwrap();
+
+        assert_eq!(repository.find(&chess.id).unwrap(), Some(renamed));
+    }
+
     fn category(name: &str, members: &[CategoryMember]) -> Category {
         Category::create(CategoryName::new(name).unwrap(), fixed_timestamp())
             .with_members(members.to_vec())
