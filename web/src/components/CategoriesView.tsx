@@ -14,7 +14,7 @@ import {
   useLibraryAction,
   usePlaylists,
 } from '@/api/queries'
-import type { Category, LibraryItem } from '@/api/types'
+import type { Category, CategoryMembers, LibraryItem } from '@/api/types'
 import {
   byName,
   deleteCategoryDescription,
@@ -118,10 +118,11 @@ interface MemberGroupProps {
   title: string
   items: LibraryItem[]
   showAvatar?: boolean
+  disabled: boolean
   onRemove: (item: LibraryItem) => void
 }
 
-function MemberGroup({ title, items, showAvatar, onRemove }: MemberGroupProps) {
+function MemberGroup({ title, items, showAvatar, disabled, onRemove }: MemberGroupProps) {
   const headingId = useId()
   return (
     <div className="flex flex-col gap-1">
@@ -145,6 +146,7 @@ function MemberGroup({ title, items, showAvatar, onRemove }: MemberGroupProps) {
               variant="ghost"
               size="sm"
               aria-label={`Remove ${item.name}`}
+              disabled={disabled}
               onClick={() => onRemove(item)}
             >
               Remove
@@ -157,20 +159,44 @@ function MemberGroup({ title, items, showAvatar, onRemove }: MemberGroupProps) {
 }
 
 /** The category's members, by kind, each removable at once. */
-function CategoryMembers({ category }: { category: Category }) {
-  const { data: channels } = useChannels()
-  const { data: playlists } = usePlaylists()
+/**
+ * Saves a category's members, one change at a time: `saving` holds until the
+ * change is saved and the refetched category shows it, so the next change is
+ * always built from the members as they are.
+ */
+function useMemberChanges(category: Category) {
   const invalidateLibrary = useInvalidateLibrary()
-  const headingId = useId()
+  const [saving, setSaving] = useState(false)
 
-  const remove = async (source: SourceRef) => {
+  const save = async (members: CategoryMembers, failure: string): Promise<boolean> => {
+    setSaving(true)
     try {
-      await setCategoryMembers(category.id, withoutMember(category, source))
+      await setCategoryMembers(category.id, members)
       await invalidateLibrary()
+      return true
     } catch (err) {
-      window.alert(`Failed to remove it from "${category.name}": ${errorMessage(err)}`)
+      window.alert(`${failure}: ${errorMessage(err)}`)
+      return false
+    } finally {
+      setSaving(false)
     }
   }
+
+  return { saving, save }
+}
+
+type MemberChanges = ReturnType<typeof useMemberChanges>
+
+function CategoryMemberList({ category, changes }: { category: Category; changes: MemberChanges }) {
+  const { data: channels } = useChannels()
+  const { data: playlists } = usePlaylists()
+  const headingId = useId()
+
+  const remove = (source: SourceRef) =>
+    void changes.save(
+      withoutMember(category, source),
+      `Failed to remove it from "${category.name}"`,
+    )
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
@@ -187,14 +213,16 @@ function CategoryMembers({ category }: { category: Category }) {
           title="Channels"
           items={byName(channels?.filter((channel) => category.channels.includes(channel.id)))}
           showAvatar
-          onRemove={(channel) => void remove({ kind: 'channel', id: channel.id })}
+          disabled={changes.saving}
+          onRemove={(channel) => remove({ kind: 'channel', id: channel.id })}
         />
       )}
       {category.playlists.length > 0 && (
         <MemberGroup
           title="Playlists"
           items={byName(playlists?.filter((playlist) => category.playlists.includes(playlist.id)))}
-          onRemove={(playlist) => void remove({ kind: 'playlist', id: playlist.id })}
+          disabled={changes.saving}
+          onRemove={(playlist) => remove({ kind: 'playlist', id: playlist.id })}
         />
       )}
     </section>
@@ -205,15 +233,13 @@ function CategoryMembers({ category }: { category: Category }) {
  * The tracked channels and playlists not in the category, filtered by name,
  * to check and add at once.
  */
-function AddMembersPicker({ category }: { category: Category }) {
+function AddMembersPicker({ category, changes }: { category: Category; changes: MemberChanges }) {
   const { data: channels } = useChannels()
   const { data: playlists } = usePlaylists()
-  const invalidateLibrary = useInvalidateLibrary()
   const location = useLocation()
   const focusSearch = (location.state as ManageCategoryState | null)?.focusAddMembers ?? false
   const [search, setSearch] = useState('')
   const [checked, setChecked] = useState<SourceRef[]>([])
-  const [adding, setAdding] = useState(false)
   const text = search.trim()
   const candidates = (items: LibraryItem[] | undefined, kind: SourceRef['kind']) =>
     byName(items)
@@ -231,15 +257,12 @@ function AddMembersPicker({ category }: { category: Category }) {
     )
 
   const addSelected = async () => {
-    setAdding(true)
-    try {
-      await setCategoryMembers(category.id, withMembers(category, checked))
+    const added = await changes.save(
+      withMembers(category, checked),
+      `Failed to add to "${category.name}"`,
+    )
+    if (added) {
       setChecked([])
-      await invalidateLibrary()
-    } catch (err) {
-      window.alert(`Failed to add to "${category.name}": ${errorMessage(err)}`)
-    } finally {
-      setAdding(false)
     }
   }
 
@@ -278,7 +301,7 @@ function AddMembersPicker({ category }: { category: Category }) {
       <Button
         type="button"
         className="self-start"
-        disabled={checked.length === 0 || adding}
+        disabled={checked.length === 0 || changes.saving}
         onClick={addSelected}
       >
         Add selected
@@ -319,6 +342,7 @@ function DeleteCategoryButton({ category }: { category: Category }) {
 }
 
 function CategoryEditor({ category, showBack }: { category: Category; showBack: boolean }) {
+  const changes = useMemberChanges(category)
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-6">
       {showBack && (
@@ -337,8 +361,8 @@ function CategoryEditor({ category, showBack }: { category: Category; showBack: 
       >
         Open {category.name}
       </Link>
-      <CategoryMembers category={category} />
-      <AddMembersPicker key={category.id} category={category} />
+      <CategoryMemberList category={category} changes={changes} />
+      <AddMembersPicker key={category.id} category={category} changes={changes} />
       <DeleteCategoryButton category={category} />
     </section>
   )

@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CategoryPicker } from './CategoryPicker'
-import { aCategory, aCategoryList, mockApi, renderWithProviders } from '@/test/helpers'
+import {
+  aCategory,
+  aCategoryList,
+  aCreatedCategory,
+  mockApi,
+  renderWithProviders,
+} from '@/test/helpers'
 
 function Harness({ initial }: { initial: string[] }) {
   const [value, setValue] = useState(initial)
@@ -26,9 +32,8 @@ describe('CategoryPicker', () => {
     const fetchMock = mockApi({
       'GET /api/categories': () => aCategoryList(categories),
       'POST /api/categories': () => {
-        const created = aCategory({ id: 'speedcubing', name: 'Speedcubing' })
-        categories = [...categories, created]
-        return created
+        categories = [...categories, aCategory({ id: 'speedcubing', name: 'Speedcubing' })]
+        return aCreatedCategory({ id: 'speedcubing', name: 'Speedcubing' })
       },
     })
     renderWithProviders(<Harness initial={['chess']} />)
@@ -57,5 +62,34 @@ describe('CategoryPicker', () => {
       ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
     ) as [string, RequestInit]
     expect(JSON.parse(init.body as string)).toEqual({ name: 'Speedcubing' })
+  })
+
+  it('picks and creates categories from the keyboard', async () => {
+    let categories = [
+      aCategory({ id: 'chess', name: 'Chess' }),
+      aCategory({ id: 'cooking', name: 'Cooking' }),
+    ]
+    mockApi({
+      'GET /api/categories': () => aCategoryList(categories),
+      'POST /api/categories': () => {
+        categories = [...categories, aCategory({ id: 'crafts', name: 'Crafts' })]
+        return aCreatedCategory({ id: 'crafts', name: 'Crafts' })
+      },
+    })
+    renderWithProviders(<Harness initial={[]} />)
+    const user = userEvent.setup()
+    const field = await screen.findByRole('combobox', { name: 'Categories' })
+
+    await user.type(field, 'c')
+    const highlighted = screen.getByRole('option', { selected: true }).textContent
+    await user.keyboard('{ArrowDown}{Enter}')
+    const afterArrowPick = chips()
+    await user.type(field, 'che{Enter}')
+    await user.type(field, 'Crafts{Enter}')
+
+    expect(await screen.findByText('Crafts')).toBeInTheDocument()
+    expect(highlighted).toBe('Chess')
+    expect(afterArrowPick).toEqual(['Cooking'])
+    expect(chips()).toEqual(['Cooking', 'Chess', 'Crafts'])
   })
 })

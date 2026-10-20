@@ -295,4 +295,51 @@ describe('CategoriesView', () => {
     expect(within(members).getByRole('list', { name: 'Channels' })).toBeInTheDocument()
     expect(within(members).queryByRole('list', { name: 'Playlists' })).not.toBeInTheDocument()
   })
+
+  it('holds member changes until the previous one is saved and shown', async () => {
+    let members = ['@a', '@b', '@d']
+    let releaseRefetch = () => {}
+    let holdNextRefetch = false
+    const { fetchMock } = renderView(
+      {
+        'GET /api/categories': () => {
+          const list = aCategoryList([aCategory({ id: 'chess', name: 'Chess', channels: members })])
+          if (!holdNextRefetch) {
+            return list
+          }
+          holdNextRefetch = false
+          return new Promise((resolve) => {
+            releaseRefetch = () => resolve(list)
+          })
+        },
+        'GET /api/channels': ['@a', '@b', '@d'].map((id) => aChannel({ id, name: id.slice(1) })),
+        'PUT /api/categories/chess/members': () => {
+          members = members.filter((id) => id !== '@a')
+          holdNextRefetch = true
+          return null
+        },
+      },
+      { route: '/categories?selected=chess' },
+    )
+    const user = userEvent.setup()
+    const region = await screen.findByRole('region', { name: 'In Chess' })
+    await within(region).findByText('b')
+
+    await user.click(within(region).getByRole('button', { name: 'Remove a' }))
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter(([url]) => url === '/api/categories').length,
+      ).toBeGreaterThan(1),
+    )
+    const removeWhileSaving = within(region).getByRole('button', { name: 'Remove b' })
+    const addWhileSaving = screen.getByRole('button', { name: 'Add selected' })
+    const disabledWhileSaving = [removeWhileSaving, addWhileSaving].map((button) =>
+      button.hasAttribute('disabled'),
+    )
+    releaseRefetch()
+
+    await waitFor(() => expect(within(region).queryByText('a')).not.toBeInTheDocument())
+    expect(disabledWhileSaving).toEqual([true, true])
+    expect(within(region).getByRole('button', { name: 'Remove b' })).toBeEnabled()
+  })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { EditChannelDialog } from './EditChannelDialog'
 import {
@@ -205,5 +205,23 @@ describe('EditChannelDialog', () => {
         .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
         .map(([url, init]) => [url, JSON.parse((init as RequestInit).body as string)]),
     ).toEqual([['/api/categories/chess/members', { channels: ['@gotham'], playlists: [] }]])
+  })
+
+  it('picks a category with Enter without saving the dialog', async () => {
+    const { onSave, onOpenChange } = renderDialog(
+      aChannel({ id: '@hikaru', name: 'Hikaru' }),
+      vi.fn(async () => {}),
+      { 'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]) },
+    )
+    const field = screen.getByRole('combobox', { name: 'Categories' })
+    await screen.findByText('Categories')
+
+    await userEvent.setup().type(field, 'che{Enter}')
+
+    expect(
+      await within(screen.getByRole('list', { name: 'Chosen categories' })).findByText('Chess'),
+    ).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(onSave).not.toHaveBeenCalled()
   })
 })

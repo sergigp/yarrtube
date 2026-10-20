@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useState, type KeyboardEvent } from 'react'
 import { Plus, X } from 'lucide-react'
 import { createCategory } from '@/api/client'
 import { useCategories, useInvalidateLibrary } from '@/api/queries'
@@ -7,6 +7,10 @@ import { errorMessage } from '@/lib/errorMessage'
 import { matchesSearch } from '@/lib/sidebarSections'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
+
+/** The listbox entry that creates a category from the typed name. */
+const CREATE_KEY = 'create'
 
 interface CategoryPickerProps {
   value: string[]
@@ -21,6 +25,7 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
   const { data } = useCategories()
   const invalidateLibrary = useInvalidateLibrary()
   const [text, setText] = useState('')
+  const [highlighted, setHighlighted] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const fieldId = useId()
   const listboxId = useId()
@@ -36,7 +41,7 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
 
   const pick = (id: string) => {
     onChange([...value, id])
-    setText('')
+    changeText('')
   }
 
   const create = async () => {
@@ -47,6 +52,42 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
       pick(category.id)
     } catch (err) {
       setError(errorMessage(err))
+    }
+  }
+
+  // What the listbox offers, in order: the matching categories, then creating one.
+  const choices = [
+    ...options.map((category) => ({
+      key: category.id,
+      label: category.name,
+      choose: () => pick(category.id),
+    })),
+    ...(offersCreate
+      ? [{ key: CREATE_KEY, label: `Create "${typed}"`, choose: () => void create() }]
+      : []),
+  ]
+  const active = Math.min(highlighted, choices.length - 1)
+  const optionId = (index: number) => `${listboxId}-${index}`
+
+  function changeText(next: string) {
+    setText(next)
+    setHighlighted(0)
+  }
+
+  // Typing in the field never submits the dialog around it: Enter chooses
+  // the highlighted entry, arrows move the highlight, Escape clears the text.
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      const step = event.key === 'ArrowDown' ? 1 : -1
+      setHighlighted((active + step + choices.length) % Math.max(choices.length, 1))
+    } else if (event.key === 'Enter' && typed !== '') {
+      event.preventDefault()
+      choices[active]?.choose()
+    } else if (event.key === 'Escape' && text !== '') {
+      event.preventDefault()
+      event.stopPropagation()
+      changeText('')
     }
   }
 
@@ -74,37 +115,34 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
       <Input
         id={fieldId}
         role="combobox"
-        aria-expanded={options.length > 0 || offersCreate}
+        aria-expanded={choices.length > 0}
         aria-controls={listboxId}
         aria-autocomplete="list"
+        aria-activedescendant={choices.length > 0 ? optionId(active) : undefined}
         placeholder="Add a category"
         value={text}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => changeText(event.target.value)}
+        onKeyDown={handleKeyDown}
       />
-      {(options.length > 0 || offersCreate) && (
+      {choices.length > 0 && (
         <ul id={listboxId} role="listbox" className="flex flex-col rounded-md border border-border py-1">
-          {options.map((category) => (
+          {choices.map((choice, index) => (
             <li
-              key={category.id}
+              key={choice.key}
+              id={optionId(index)}
               role="option"
-              aria-selected={false}
-              className="cursor-pointer px-3 py-1.5 text-sm hover:bg-secondary"
-              onClick={() => pick(category.id)}
+              aria-selected={index === active}
+              className={cn(
+                'flex cursor-pointer items-center gap-1.5 px-3 py-1.5 text-sm hover:bg-secondary',
+                index === active && 'bg-secondary',
+              )}
+              onMouseEnter={() => setHighlighted(index)}
+              onClick={choice.choose}
             >
-              {category.name}
+              {choice.key === CREATE_KEY && <Plus className="size-3.5" />}
+              {choice.label}
             </li>
           ))}
-          {offersCreate && (
-            <li
-              role="option"
-              aria-selected={false}
-              className="flex cursor-pointer items-center gap-1.5 px-3 py-1.5 text-sm hover:bg-secondary"
-              onClick={create}
-            >
-              <Plus className="size-3.5" />
-              {`Create "${typed}"`}
-            </li>
-          )}
         </ul>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
