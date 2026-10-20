@@ -18,8 +18,10 @@ export function memberCount(_category: Category): number {
 }
 
 /** The ids of the categories `source` is a member of. */
-export function categoryIdsOf(_categories: Category[], _source: SourceRef): string[] {
-  return []
+export function categoryIdsOf(categories: Category[], source: SourceRef): string[] {
+  return categories
+    .filter((category) => membersOfKind(category, source.kind).includes(source.id))
+    .map((category) => category.id)
 }
 
 /** The category's members with `source` added. */
@@ -44,4 +46,8 @@ export function membershipChanges(
   _chosenIds: string[],
 ): { id: string; members: CategoryMembers }[] {
   return []
+}
+
+function membersOfKind(category: Category, kind: SourceRef['kind']): string[] {
+  return kind === 'channel' ? category.channels : category.playlists
 }

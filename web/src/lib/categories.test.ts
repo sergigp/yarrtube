@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { orderCategories } from './categories'
+import { categoryIdsOf, orderCategories } from './categories'
 import { aCategory } from '@/test/helpers'
 
 describe('categories', () => {
@@ -24,5 +24,19 @@ describe('categories', () => {
       'delta',
     ])
     expect(categories.map((category) => category.name)[0]).toBe('Alpha')
+  })
+
+  it('finds the categories of a source', () => {
+    const categories = [
+      aCategory({ id: 'chess', channels: ['@Hikaru'], playlists: ['PLendgames'] }),
+      aCategory({ id: 'streams', channels: ['@Hikaru'] }),
+      aCategory({ id: 'cooking', playlists: ['@Hikaru'] }),
+    ]
+
+    expect([
+      categoryIdsOf(categories, { kind: 'channel', id: '@Hikaru' }),
+      categoryIdsOf(categories, { kind: 'playlist', id: 'PLendgames' }),
+      categoryIdsOf(categories, { kind: 'channel', id: '@Nobody' }),
+    ]).toEqual([['chess', 'streams'], ['chess'], []])
   })
 })
