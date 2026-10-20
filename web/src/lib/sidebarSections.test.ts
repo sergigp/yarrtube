@@ -64,4 +64,12 @@ describe('sectionView', () => {
 
     expect(view).toEqual({ folded: false, headingActive: false, rows: [veritasium] })
   })
+
+  it('marks the heading active when folded and the active row belongs to the section', () => {
+    const items = [aChannel({ id: 'a' }), aChannel({ id: 'b' })]
+
+    const view = sectionView(items, { searchText: '', folded: true, activeId: 'b' })
+
+    expect(view).toEqual({ folded: true, headingActive: true, rows: [] })
+  })
 })
