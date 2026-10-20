@@ -144,7 +144,7 @@ describe('CategoryDetail', () => {
     const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
     await user.keyboard('{Escape}')
     await user.click(within(emptyState).getByRole('button', { name: 'Add channels and playlists' }))
-    const dialogTitle = within(await screen.findByRole('dialog')).getByRole('heading').textContent
+    const dialogTitle = within(await screen.findByRole('dialog')).getByRole('heading', { level: 2 }).textContent
     empty.unmount()
     const withoutVideos = renderCategory(routes, '/categories/science')
     const noVideosMessage = (await screen.findByText(/No videos/)).textContent

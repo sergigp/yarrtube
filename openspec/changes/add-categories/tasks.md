@@ -117,7 +117,7 @@ Web (Vitest, TDD):
 - [x] 5.10 `CategoryDetail` › renames from the header
 - [x] 5.11 `CategoryDetail` › explains an empty category, whose control opens the dialog, and an unknown one
 - [x] 5.12 `CategoryDetail` › opens the dialog on arrival with `ManageSourcesState`, once
-- [ ] 5.13 `ManageSourcesDialog` › shows channels and playlists as chips pressed by membership
+- [x] 5.13 `ManageSourcesDialog` › shows channels and playlists as chips pressed by membership
 - [ ] 5.14 `ManageSourcesDialog` › stages toggles, summarises them and saves the full set at once
 - [ ] 5.15 `ManageSourcesDialog` › filters by search and state, and Enter toggles the only match
 - [ ] 5.16 `ManageSourcesDialog` › disables Save with nothing staged and asks before discarding
