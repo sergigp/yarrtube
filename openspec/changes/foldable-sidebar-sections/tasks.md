@@ -8,7 +8,7 @@
 - [x] 2.2 `sectionView` › shows nothing but the heading when folded
 - [x] 2.3 `sectionView` › shows every match when folded but searching
 - [x] 2.4 `sectionView` › marks the heading active when folded and the active row belongs to the section
-- [ ] 2.5 `sectionView` › does not mark the heading active when unfolded
+- [x] 2.5 `sectionView` › does not mark the heading active when unfolded
 - [ ] 2.6 `sectionView` › does not mark the heading active when the active id is not in the section
 - [ ] 2.7 `unwatchedTotal` › sums the rows' unwatched counts, treating missing counts as 0
 - [ ] 2.8 `Sidebar` › lists every channel of an unfolded section with no show-more control — replaces the "show more" test and removes the "Show N more"/"Show less" control

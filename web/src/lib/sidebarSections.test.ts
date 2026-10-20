@@ -72,4 +72,12 @@ describe('sectionView', () => {
 
     expect(view).toEqual({ folded: true, headingActive: true, rows: [] })
   })
+
+  it('does not mark the heading active when unfolded', () => {
+    const items = [aChannel({ id: 'a' }), aChannel({ id: 'b' })]
+
+    const view = sectionView(items, { searchText: '', folded: false, activeId: 'b' })
+
+    expect(view).toEqual({ folded: false, headingActive: false, rows: items })
+  })
 })
