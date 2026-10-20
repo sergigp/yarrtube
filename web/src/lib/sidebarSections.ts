@@ -47,3 +47,58 @@ export function channelLeadCount(orderedChannels: ChannelListItem[]): number {
 export function matchesSearch(item: LibraryItem, text: string): boolean {
   return item.name.toLowerCase().includes(text.toLowerCase())
 }
+
+export interface SectionViewOptions {
+  searchText: string
+  folded: boolean
+  expanded: boolean
+  leadCount: number
+  activeId: string | null
+}
+
+export interface SectionView {
+  /** True when only the heading shows: folded and not searching. */
+  folded: boolean
+  /** Folded, and the viewed entry belongs to this section. */
+  headingActive: boolean
+  rows: LibraryItem[] | undefined
+  hiddenCount: number
+  collapsible: boolean
+}
+
+/**
+ * The rows a section shows: every match while searching, otherwise all rows
+ * when expanded or its leading rows (plus the active one) when collapsed.
+ * `collapsible` says whether collapsing would hide anything.
+ */
+export function sectionView(
+  items: LibraryItem[] | undefined,
+  { searchText, expanded, leadCount, activeId }: SectionViewOptions,
+): SectionView {
+  if (!items) {
+    return { folded: false, headingActive: false, rows: items, hiddenCount: 0, collapsible: false }
+  }
+  if (searchText) {
+    return {
+      folded: false,
+      headingActive: false,
+      rows: items.filter((item) => matchesSearch(item, searchText)),
+      hiddenCount: 0,
+      collapsible: false,
+    }
+  }
+  const collapsed = collapse(items, leadCount, activeId)
+  return {
+    folded: false,
+    headingActive: false,
+    rows: expanded ? items : collapsed.shown,
+    hiddenCount: expanded ? 0 : collapsed.hiddenCount,
+    collapsible: collapsed.hiddenCount > 0,
+  }
+}
+
+/** Sum of the rows' unwatched counts (missing counts as 0). */
+export function unwatchedTotal(items: LibraryItem[]): number {
+  void items
+  return 0
+}

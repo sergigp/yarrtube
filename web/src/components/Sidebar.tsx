@@ -23,9 +23,9 @@ import {
   CAUGHT_UP_PREVIEW,
   SEARCH_THRESHOLD,
   channelLeadCount,
-  collapse,
-  matchesSearch,
   orderChannels,
+  sectionView,
+  unwatchedTotal,
 } from '@/lib/sidebarSections'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EditChannelDialog } from './EditChannelDialog'
@@ -34,6 +34,7 @@ import { EntryActionsMenu } from './EntryActionsMenu'
 import { Thumbnail } from './Thumbnail'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { useRememberedFlag } from '@/hooks/useRememberedFlag'
 import { useSaveChannelSettings } from '@/hooks/useSaveChannelSettings'
 import { errorMessage } from '@/lib/errorMessage'
 import { cn } from '@/lib/utils'
@@ -72,46 +73,6 @@ function useExpandedState(section: string): readonly [boolean, () => void] {
   }
 
   return [expanded, toggle] as const
-}
-
-interface SectionViewOptions {
-  searchText: string
-  expanded: boolean
-  leadCount: number
-  activeId: string | null
-}
-
-interface SectionView {
-  rows: LibraryItem[] | undefined
-  hiddenCount: number
-  collapsible: boolean
-}
-
-/**
- * The rows a section shows: every match while searching, otherwise all rows
- * when expanded or its leading rows (plus the active one) when collapsed.
- * `collapsible` says whether collapsing would hide anything.
- */
-function sectionView(
-  items: LibraryItem[] | undefined,
-  { searchText, expanded, leadCount, activeId }: SectionViewOptions,
-): SectionView {
-  if (!items) {
-    return { rows: items, hiddenCount: 0, collapsible: false }
-  }
-  if (searchText) {
-    return {
-      rows: items.filter((item) => matchesSearch(item, searchText)),
-      hiddenCount: 0,
-      collapsible: false,
-    }
-  }
-  const collapsed = collapse(items, leadCount, activeId)
-  return {
-    rows: expanded ? items : collapsed.shown,
-    hiddenCount: expanded ? 0 : collapsed.hiddenCount,
-    collapsible: collapsed.hiddenCount > 0,
-  }
 }
 
 interface SidebarRowMenuProps {
@@ -239,6 +200,11 @@ interface SidebarSectionProps {
   expanded: boolean
   collapsible: boolean
   onToggleExpanded: () => void
+  folded: boolean
+  headingActive: boolean
+  onToggleFolded: () => void
+  /** Channels only; omitted for Playlists. Shown when folded and > 0. */
+  foldedTotal?: number | undefined
   error: Error | null
   activeId: string | null
   hrefFor: (item: LibraryItem) => string
@@ -263,6 +229,10 @@ function SidebarSection({
   expanded,
   collapsible,
   onToggleExpanded,
+  folded,
+  headingActive,
+  onToggleFolded,
+  foldedTotal,
   error,
   activeId,
   hrefFor,
@@ -275,6 +245,10 @@ function SidebarSection({
   showAvatar,
   onNavigate,
 }: SidebarSectionProps) {
+  void folded
+  void headingActive
+  void onToggleFolded
+  void foldedTotal
   const [pendingDelete, setPendingDelete] = useState<LibraryItem | null>(null)
 
   return (
@@ -393,6 +367,14 @@ export function Sidebar({
   const [search, setSearch] = useState('')
   const [channelsExpanded, toggleChannelsExpanded] = useExpandedState('channels')
   const [playlistsExpanded, togglePlaylistsExpanded] = useExpandedState('playlists')
+  const [channelsFolded, toggleChannelsFolded] = useRememberedFlag(
+    'yarrtube.sidebar.folded.channels',
+    false,
+  )
+  const [playlistsFolded, togglePlaylistsFolded] = useRememberedFlag(
+    'yarrtube.sidebar.folded.playlists',
+    false,
+  )
 
   // The drawer scrolls on its own; keep the page behind it still.
   useEffect(() => {
@@ -430,12 +412,14 @@ export function Sidebar({
   const orderedChannels = channels && orderChannels(channels)
   const channelsView = sectionView(orderedChannels, {
     searchText,
+    folded: channelsFolded,
     expanded: channelsExpanded,
     leadCount: orderedChannels ? channelLeadCount(orderedChannels) : 0,
     activeId: activeChannelId,
   })
   const playlistsView = sectionView(playlists, {
     searchText,
+    folded: playlistsFolded,
     expanded: playlistsExpanded,
     leadCount: CAUGHT_UP_PREVIEW,
     activeId: activePlaylistId,
@@ -485,6 +469,10 @@ export function Sidebar({
             expanded={channelsExpanded}
             collapsible={channelsView.collapsible}
             onToggleExpanded={toggleChannelsExpanded}
+            folded={channelsView.folded}
+            headingActive={channelsView.headingActive}
+            onToggleFolded={toggleChannelsFolded}
+            foldedTotal={channels && unwatchedTotal(channels)}
             error={channelsError}
             activeId={activeChannelId}
             hrefFor={(channel) => `/channels/${channel.id}`}
@@ -514,6 +502,9 @@ export function Sidebar({
             expanded={playlistsExpanded}
             collapsible={playlistsView.collapsible}
             onToggleExpanded={togglePlaylistsExpanded}
+            folded={playlistsView.folded}
+            headingActive={playlistsView.headingActive}
+            onToggleFolded={togglePlaylistsFolded}
             error={playlistsError}
             activeId={activePlaylistId}
             hrefFor={(playlist) => `/playlists/${playlist.id}`}
