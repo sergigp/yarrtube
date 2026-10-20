@@ -666,6 +666,45 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_let_a_source_be_in_several_categories() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@Veritasium")).unwrap();
+        let chess = Category {
+            members: vec![channel_member("@Veritasium")],
+            ..category(None, "Chess")
+        };
+        let science = category(None, "Science");
+        repository.insert(&chess).unwrap();
+        repository.insert(&science).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = set_members(
+            category_updater,
+            science.id.as_str(),
+            members_request(&["@Veritasium"], &[]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![
+                chess,
+                Category {
+                    members: vec![channel_member("@Veritasium")],
+                    ..science
+                }
+            ]
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
