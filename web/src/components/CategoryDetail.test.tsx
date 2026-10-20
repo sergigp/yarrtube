@@ -26,7 +26,7 @@ function renderCategory(routes: ApiRoutes, route = '/categories/chess') {
 }
 
 describe('CategoryDetail', () => {
-  it('shows the members and video cards newest first', async () => {
+  it('shows the summary and video cards newest first', async () => {
     renderCategory({
       'GET /api/categories': aCategoryList([
         aCategory({
@@ -34,6 +34,7 @@ describe('CategoryDetail', () => {
           name: 'Chess',
           channels: ['@hikaru', '@gotham'],
           playlists: ['PLend'],
+          unwatched_count: 1,
         }),
       ]),
       'GET /api/channels': [
@@ -48,7 +49,7 @@ describe('CategoryDetail', () => {
     })
 
     expect(await screen.findByRole('heading', { name: 'Chess' })).toBeInTheDocument()
-    expect(await screen.findByText('GothamChess · Hikaru · Endgame course')).toBeInTheDocument()
+    expect(await screen.findByText('3 sources · 2 videos · 1 unwatched')).toBeInTheDocument()
     const cards = await screen.findAllByRole('listitem')
     expect(cards.map((card) => within(card).getAllByRole('link')[1]?.textContent)).toEqual([
       'Newest',
@@ -74,8 +75,10 @@ describe('CategoryDetail', () => {
       'POST /api/categories/chess/watched': markWatched,
     })
 
+    const user = userEvent.setup()
     await screen.findAllByRole('listitem')
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Mark all watched' }))
+    await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
 
     expect(await screen.findAllByRole('img', { name: 'Watched' })).toHaveLength(2)
     expect(markWatched).toHaveBeenCalledOnce()

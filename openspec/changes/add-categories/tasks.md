@@ -112,7 +112,7 @@ Web (Vitest, TDD):
 - [x] 5.5 `EditableTitle` › renames on Enter and on blur, cancels on Escape, closes unchanged without saving
 - [x] 5.6 `EditableTitle` › keeps the field open with the message when the name is rejected
 - [x] 5.7 `DetailHeader` › shows the summary prefix and menu items, and no Sync without `onSync`
-- [ ] 5.8 `CategoryDetail` › shows the summary and video cards newest first
+- [x] 5.8 `CategoryDetail` › shows the summary and video cards newest first
 - [ ] 5.9 `CategoryDetail` › marks all watched and deletes from the actions menu
 - [ ] 5.10 `CategoryDetail` › renames from the header
 - [ ] 5.11 `CategoryDetail` › explains an empty category, whose control opens the dialog, and an unknown one
