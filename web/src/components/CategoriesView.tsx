@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { useCategories } from '@/api/queries'
+import { renameCategory } from '@/api/client'
+import { useCategories, useInvalidateLibrary } from '@/api/queries'
 import type { Category } from '@/api/types'
 import { memberCount } from '@/lib/categories'
+import { errorMessage } from '@/lib/errorMessage'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
@@ -42,10 +45,53 @@ function CategoryList({ categories, selectedId }: CategoryListProps) {
   )
 }
 
+/**
+ * The category's name, saved when the field loses focus or Enter is pressed.
+ * A rejected name shows why and goes back to the saved one.
+ */
+function CategoryNameField({ category }: { category: Category }) {
+  const invalidateLibrary = useInvalidateLibrary()
+  const [name, setName] = useState(category.name)
+  const [error, setError] = useState<string | null>(null)
+
+  const save = async () => {
+    if (name === category.name) {
+      return
+    }
+    setError(null)
+    try {
+      await renameCategory(category.id, name)
+      await invalidateLibrary()
+    } catch (err) {
+      setError(errorMessage(err))
+      setName(category.name)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Input
+        aria-label="Category name"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        onBlur={save}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            void save()
+          }
+        }}
+        className="font-heading text-lg font-semibold"
+      />
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </div>
+  )
+}
+
 function CategoryEditor({ category }: { category: Category }) {
   return (
-    <section className="flex min-w-0 flex-col gap-6">
-      <Input aria-label="Category name" defaultValue={category.name} key={category.id} />
+    <section className="flex min-w-0 flex-1 flex-col gap-6">
+      <CategoryNameField key={category.id} category={category} />
     </section>
   )
 }

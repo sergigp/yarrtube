@@ -65,7 +65,7 @@ Web (Vitest):
 - [x] 2.48 `AddCategoryDialog` › creates a category and opens it in the management view
 - [x] 2.49 `AddCategoryDialog` › disables create for a blank name and shows a taken-name error
 - [x] 2.50 `CategoriesView` › lists categories with member counts and selects one from the address
-- [ ] 2.51 `CategoriesView` › renames in place, and rejects a taken name keeping the saved one
+- [x] 2.51 `CategoriesView` › renames in place, and rejects a taken name keeping the saved one
 - [ ] 2.52 `CategoriesView` › groups members by kind and removes one
 - [ ] 2.53 `CategoriesView` › filters the picker and adds the checked sources
 - [ ] 2.54 `CategoriesView` › deletes the selected category after confirmation

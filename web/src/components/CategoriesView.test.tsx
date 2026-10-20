@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { CategoriesView } from './CategoriesView'
 import {
   aCategory,
@@ -34,5 +35,44 @@ describe('CategoriesView', () => {
 
     expect(rows).toEqual(['Chess3 members', 'cooking1 member', 'Science0 members'])
     expect(await screen.findByRole('textbox', { name: 'Category name' })).toHaveValue('Chess')
+  })
+
+  it('renames in place, and rejects a taken name keeping the saved one', async () => {
+    let chess = aCategory({ id: 'chess', name: 'Chess' })
+    const science = aCategory({ id: 'science', name: 'Science' })
+    const responses = [
+      () => {
+        chess = { ...chess, name: 'Board games' }
+        return null
+      },
+      () => ({ status: 409, error: 'a category named "Science" already exists' }),
+    ]
+    const { fetchMock } = renderView(
+      {
+        'GET /api/categories': () => aCategoryList([chess, science]),
+        'PATCH /api/categories/chess': () => responses.shift()?.(),
+      },
+      { route: '/categories?selected=chess' },
+    )
+    const user = userEvent.setup()
+    const name = await screen.findByRole('textbox', { name: 'Category name' })
+
+    await user.clear(name)
+    await user.type(name, 'Board games')
+    await user.tab()
+    const list = screen.getByRole('list', { name: 'Category list' })
+    await within(list).findByText('Board games')
+    await user.clear(name)
+    await user.type(name, 'Science{Enter}')
+
+    expect(
+      await screen.findByText('a category named "Science" already exists'),
+    ).toBeInTheDocument()
+    expect(name).toHaveValue('Board games')
+    expect(
+      fetchMock.mock.calls
+        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH')
+        .map(([, init]) => JSON.parse((init as RequestInit).body as string)),
+    ).toEqual([{ name: 'Board games' }, { name: 'Science' }])
   })
 })
