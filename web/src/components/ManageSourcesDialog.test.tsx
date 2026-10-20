@@ -28,6 +28,15 @@ async function chipsOf(group: string): Promise<[string, boolean][]> {
     .map((chip) => [chip.textContent ?? '', chip.getAttribute('aria-pressed') === 'true'])
 }
 
+/** The names of every chip shown, channels first. */
+function shownChips(): string[] {
+  return screen.queryAllByRole('toolbar').flatMap((group) =>
+    within(group)
+      .getAllByRole('button')
+      .map((chip) => chip.textContent ?? ''),
+  )
+}
+
 const chess = aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] })
 
 const library = {
@@ -98,5 +107,42 @@ describe('ManageSourcesDialog', () => {
     expect(puts.map(([, init]) => JSON.parse((init as RequestInit).body as string))).toEqual([
       { channels: ['@gotham'], playlists: ['PLend'] },
     ])
+  })
+
+  it('filters by search and state, and Enter toggles the only match', async () => {
+    renderDialog(aCategory({ id: 'science', name: 'Science', channels: ['@veritasium'] }), {
+      'GET /api/channels': [
+        aChannel({ id: '@veritasium', name: 'Veritasium' }),
+        aChannel({ id: '@hikaru', name: 'Hikaru' }),
+        aChannel({ id: '@vsauce', name: 'Vsauce' }),
+      ],
+      'GET /api/playlists': [aPlaylist({ id: 'PLover', name: 'Overview' })],
+    })
+    const user = userEvent.setup()
+    const search = screen.getByRole('searchbox', { name: 'Search channels and playlists' })
+    const focusedOnOpen = search === document.activeElement
+
+    await screen.findByRole('button', { name: 'Vsauce' })
+    const filters = screen.getAllByRole('radio').map((filter) => filter.textContent)
+    await user.type(search, 'VER')
+    const searched = shownChips()
+    await user.click(screen.getByRole('radio', { name: /^Not in Science/ }))
+    const searchedOut = shownChips()
+    await user.click(screen.getByRole('radio', { name: /^In Science/ }))
+    const searchedIn = shownChips()
+    await user.click(screen.getByRole('radio', { name: 'All' }))
+    await user.clear(search)
+    await user.type(search, 'hik{Enter}')
+
+    expect(focusedOnOpen).toBe(true)
+    expect(filters).toEqual(['All', 'In Science1', 'Not in Science3'])
+    expect({ searched, searchedOut, searchedIn }).toEqual({
+      searched: ['Veritasium', 'Overview'],
+      searchedOut: ['Overview'],
+      searchedIn: ['Veritasium'],
+    })
+    expect(screen.getByRole('button', { name: 'Hikaru' })).toHaveAttribute('aria-pressed', 'true')
+    expect(search).toHaveFocus()
+    expect(screen.getByRole('radio', { name: /^In Science/ })).toHaveTextContent('In Science2')
   })
 })

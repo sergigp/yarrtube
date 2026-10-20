@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { Check, ListVideo, Plus } from 'lucide-react'
+import { Check, ListVideo, Plus, Search } from 'lucide-react'
 import { avatarMediaUrl, setCategoryMembers } from '@/api/client'
 import { useChannels, useInvalidateLibrary, usePlaylists } from '@/api/queries'
 import type { Category, CategoryMembers } from '@/api/types'
@@ -9,11 +9,14 @@ import {
   sourceChips,
   stagedSummary,
   toggled,
+  visibleChips,
   type SourceChip,
+  type SourceFilter,
   type SourceRef,
 } from '@/lib/categories'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Thumbnail } from './Thumbnail'
 
@@ -51,7 +54,14 @@ function ManageSourcesBody({ category, onClose }: { category: Category; onClose:
   const invalidateLibrary = useInvalidateLibrary()
   const saved = membersOf(category)
   const [staged, setStaged] = useState(saved)
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<SourceFilter>('all')
   const chips = sourceChips(channels, playlists)
+  const allChips = [...chips.channels, ...chips.playlists]
+  const shown = (kind: SourceChip[]) => visibleChips(kind, staged, search, filter)
+  const shownChannels = shown(chips.channels)
+  const shownPlaylists = shown(chips.playlists)
+  const inCount = allChips.filter((chip) => isIn(staged, chip.source)).length
   const toggle = (source: SourceRef) => setStaged((current) => toggled(current, source))
 
   const save = async () => {
@@ -62,9 +72,50 @@ function ManageSourcesBody({ category, onClose }: { category: Category; onClose:
 
   return (
     <>
+      <div className="flex flex-col gap-3 px-6 pb-4">
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            aria-label="Search channels and playlists"
+            placeholder="Search channels and playlists"
+            className="pl-8"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => {
+              // Enter picks the only match, so typing a name and Enter adds it.
+              const matches = [...shownChannels, ...shownPlaylists]
+              if (event.key === 'Enter' && matches.length === 1) {
+                event.preventDefault()
+                toggle(matches[0]!.source)
+              }
+            }}
+          />
+        </div>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          aria-label="Show"
+          value={filter}
+          onValueChange={(value) => {
+            if (value) {
+              setFilter(value as SourceFilter)
+            }
+          }}
+        >
+          <FilterItem value="all" label="All" />
+          <FilterItem value="in" label={`In ${category.name}`} count={inCount} />
+          <FilterItem
+            value="out"
+            label={`Not in ${category.name}`}
+            count={allChips.length - inCount}
+          />
+        </ToggleGroup>
+      </div>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto border-t border-border px-6 py-4">
-        <ChipGroup title="Channels" chips={chips.channels} staged={staged} onToggle={toggle} />
-        <ChipGroup title="Playlists" chips={chips.playlists} staged={staged} onToggle={toggle} />
+        <ChipGroup title="Channels" chips={shownChannels} staged={staged} onToggle={toggle} />
+        <ChipGroup title="Playlists" chips={shownPlaylists} staged={staged} onToggle={toggle} />
       </div>
       <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border px-6 py-4">
         <p className="mr-auto text-sm text-muted-foreground">
@@ -141,6 +192,19 @@ function SourceChipItem({ chip, pressed }: { chip: SourceChip; pressed: boolean 
       )}
       <span className="truncate">{chip.name}</span>
       {pressed ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+    </ToggleGroupItem>
+  )
+}
+
+/** A state filter pill, with how many sources it holds. */
+function FilterItem({ value, label, count }: { value: SourceFilter; label: string; count?: number }) {
+  return (
+    <ToggleGroupItem
+      value={value}
+      className="rounded-full px-3 font-normal data-[state=on]:border-primary/40 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+    >
+      <span className="max-w-40 truncate">{label}</span>
+      {count !== undefined && <span className="text-xs text-muted-foreground">{count}</span>}
     </ToggleGroupItem>
   )
 }

@@ -119,7 +119,7 @@ Web (Vitest, TDD):
 - [x] 5.12 `CategoryDetail` › opens the dialog on arrival with `ManageSourcesState`, once
 - [x] 5.13 `ManageSourcesDialog` › shows channels and playlists as chips pressed by membership
 - [x] 5.14 `ManageSourcesDialog` › stages toggles, summarises them and saves the full set at once
-- [ ] 5.15 `ManageSourcesDialog` › filters by search and state, and Enter toggles the only match
+- [x] 5.15 `ManageSourcesDialog` › filters by search and state, and Enter toggles the only match
 - [ ] 5.16 `ManageSourcesDialog` › disables Save with nothing staged and asks before discarding
 - [ ] 5.17 `ManageSourcesDialog` › keeps staged changes when saving fails
 - [ ] 5.18 `ManageSourcesDialog` › says when nothing is tracked
