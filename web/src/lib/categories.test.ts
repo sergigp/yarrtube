@@ -4,6 +4,7 @@ import {
   membershipChanges,
   orderCategories,
   sourceChips,
+  visibleChips,
   withMember,
   withMembers,
   withoutMember,
@@ -107,6 +108,37 @@ describe('categories', () => {
         { source: { kind: 'playlist', id: 'PLendgames' }, name: 'endgames', avatarFilename: null },
         { source: { kind: 'playlist', id: 'PLopenings' }, name: 'Openings', avatarFilename: null },
       ],
+    })
+  })
+
+  it('filters chips by search and state keeping their order', () => {
+    const chips = sourceChips(
+      [
+        aChannel({ id: '@veritasium', name: 'Veritasium' }),
+        aChannel({ id: '@hikaru', name: 'Hikaru' }),
+        aChannel({ id: '@vsauce', name: 'Vsauce' }),
+        aChannel({ id: '@overlord', name: 'Overlord' }),
+      ],
+      [],
+    ).channels
+    const staged = { channels: ['@veritasium', '@hikaru'], playlists: [] }
+    const names = (filter: 'all' | 'in' | 'out', search: string) =>
+      visibleChips(chips, staged, search, filter).map((chip) => chip.name)
+
+    expect({
+      all: names('all', ''),
+      in: names('in', ''),
+      out: names('out', ''),
+      allVer: names('all', ' VER '),
+      inVer: names('in', 'ver'),
+      outVer: names('out', 'ver'),
+    }).toEqual({
+      all: ['Hikaru', 'Overlord', 'Veritasium', 'Vsauce'],
+      in: ['Hikaru', 'Veritasium'],
+      out: ['Overlord', 'Vsauce'],
+      allVer: ['Overlord', 'Veritasium'],
+      inVer: ['Veritasium'],
+      outVer: ['Overlord'],
     })
   })
 })

@@ -1,4 +1,5 @@
 import type { Category, CategoryMembers, ChannelListItem, PlaylistListItem } from '@/api/types'
+import { matchesSearch } from './sidebarSections'
 
 /** A channel or playlist, as a category member. */
 export type SourceRef = { kind: 'channel' | 'playlist'; id: string }
@@ -36,7 +37,7 @@ export function categoryIdsOf(categories: Category[], source: SourceRef): string
 
 /** Whether `source` is a member of the category. */
 export function isMember(category: Category, source: SourceRef): boolean {
-  return membersOfKind(category, source.kind).includes(source.id)
+  return isIn(category, source)
 }
 
 /** The category's members with `source` added. */
@@ -115,8 +116,8 @@ export function membersOf(_category: Category): CategoryMembers {
 }
 
 /** Whether `source` is among `members`. */
-export function isIn(_members: CategoryMembers, _source: SourceRef): boolean {
-  return false
+export function isIn(members: CategoryMembers, source: SourceRef): boolean {
+  return membersOfKind(members, source.kind).includes(source.id)
 }
 
 /** `members` with `source` added when absent, removed when present. */
@@ -127,11 +128,14 @@ export function toggled(members: CategoryMembers, _source: SourceRef): CategoryM
 /** Chips matching the search (name, ignoring case) and the state filter, order kept. */
 export function visibleChips(
   chips: SourceChip[],
-  _staged: CategoryMembers,
-  _search: string,
-  _filter: SourceFilter,
+  staged: CategoryMembers,
+  search: string,
+  filter: SourceFilter,
 ): SourceChip[] {
+  const text = search.trim()
   return chips
+    .filter((chip) => filter === 'all' || isIn(staged, chip.source) === (filter === 'in'))
+    .filter((chip) => !text || matchesSearch(chip, text))
 }
 
 /** How many sources `staged` adds to and removes from `saved`. */
@@ -142,8 +146,8 @@ export function stagedSummary(
   return { added: 0, removed: 0 }
 }
 
-function membersOfKind(category: Category, kind: SourceRef['kind']): string[] {
-  return kind === 'channel' ? category.channels : category.playlists
+function membersOfKind(members: CategoryMembers, kind: SourceRef['kind']): string[] {
+  return kind === 'channel' ? members.channels : members.playlists
 }
 
 function replaceMembersOfKind(
