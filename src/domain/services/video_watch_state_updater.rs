@@ -121,7 +121,7 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
     ) -> Result<(), UpdateWatchStateError> {
         self.ensure_channel_exists(channel_id)?;
         let now = self.clock.now();
-        self.unwatched_downloaded_youtube_ids(channel_id)?
+        Self::unwatched_downloaded_youtube_ids(self.channel_videos(channel_id)?)
             .iter()
             .try_for_each(|youtube_id| self.mark_copies_watched(youtube_id, now))
     }
@@ -134,11 +134,11 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
             .try_for_each(|youtube_id| self.mark_copies_watched(youtube_id, now))
     }
 
-    fn mark_playlist_watched(
-        &self,
-        _playlist_id: &PlaylistId,
-    ) -> Result<(), UpdateWatchStateError> {
-        Ok(())
+    fn mark_playlist_watched(&self, playlist_id: &PlaylistId) -> Result<(), UpdateWatchStateError> {
+        let now = self.clock.now();
+        Self::unwatched_downloaded_youtube_ids(self.playlist_videos(playlist_id)?)
+            .iter()
+            .try_for_each(|youtube_id| self.mark_copies_watched(youtube_id, now))
     }
 }
 
@@ -177,18 +177,13 @@ impl VideoWatchStateUpdater {
             .collect())
     }
 
-    /// The YouTube IDs of the channel's `Downloaded` videos not yet watched,
-    /// each once.
-    fn unwatched_downloaded_youtube_ids(
-        &self,
-        channel_id: &ChannelHandle,
-    ) -> Result<HashSet<VideoId>, UpdateWatchStateError> {
-        Ok(self
-            .channel_videos(channel_id)?
+    /// The YouTube IDs of the `Downloaded` videos not yet watched, each once.
+    fn unwatched_downloaded_youtube_ids(videos: Vec<Video>) -> HashSet<VideoId> {
+        videos
             .into_iter()
             .filter(|video| video.is_downloaded_and_unwatched())
             .map(|video| video.youtube_id)
-            .collect())
+            .collect()
     }
 
     fn channel_videos(
@@ -203,6 +198,25 @@ impl VideoWatchStateUpdater {
                     .filter_map(|channel_video| {
                         self.video_repository
                             .find(&channel_video.video_id)
+                            .transpose()
+                    })
+                    .collect()
+            })
+            .map_err(UpdateWatchStateError::Repository)
+    }
+
+    fn playlist_videos(
+        &self,
+        playlist_id: &PlaylistId,
+    ) -> Result<Vec<Video>, UpdateWatchStateError> {
+        self.playlist_video_repository
+            .list_for_playlist(playlist_id)
+            .and_then(|playlist_videos| {
+                playlist_videos
+                    .iter()
+                    .filter_map(|playlist_video| {
+                        self.video_repository
+                            .find(&playlist_video.video_id)
                             .transpose()
                     })
                     .collect()

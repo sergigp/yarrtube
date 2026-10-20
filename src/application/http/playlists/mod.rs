@@ -157,11 +157,14 @@ pub async fn mark_playlist_watched(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::channel::ChannelHandle;
+    use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName};
     use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
+    use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::ShowFileWriter;
@@ -178,6 +181,11 @@ mod tests {
     use crate::infrastructure::repositories::filesystem_channel_avatar_repository::FakeChannelAvatarRepository;
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, SqliteChannelVideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         PlaylistRepository, SqlitePlaylistRepository,
     };
@@ -2251,6 +2259,72 @@ mod tests {
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
+    #[tokio::test]
+    async fn it_should_mark_every_downloaded_playlist_video_watched() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let downloaded = save_downloaded_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid_downloaded",
+            0,
+        );
+        let (pending, _) = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid_pending",
+            1,
+        );
+        let shared = save_downloaded_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid_shared",
+            2,
+        );
+        let channel_copy = downloaded_video("vid_shared");
+        video_repository.save(&channel_copy).unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                ChannelHandle::new("@somechannel").unwrap(),
+                channel_copy.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            channel_video_repository,
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(FixedClock(watched_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+        );
+
+        let response = mark_watched(video_watch_state_updater, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![
+                downloaded.mark_watched(watched_timestamp()),
+                pending,
+                shared.mark_watched(watched_timestamp()),
+                channel_copy.mark_watched(watched_timestamp()),
+            ]
+        );
+    }
+
     fn any_playlist_creator() -> PlaylistCreator {
         PlaylistCreator::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
@@ -2508,6 +2582,10 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
+    fn watched_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_800_000_000, 0).unwrap()
+    }
+
     fn playlist_id(id: &str) -> PlaylistId {
         PlaylistId::new(id).unwrap()
     }
@@ -2751,10 +2829,29 @@ mod tests {
             .map(|Json(playlist)| playlist)
     }
 
+    async fn mark_watched(
+        video_watch_state_updater: VideoWatchStateUpdater,
+        id: &str,
+    ) -> Result<StatusCode, ApiError> {
+        mark_playlist_watched(State(video_watch_state_updater), Path(id.to_string())).await
+    }
+
     async fn reconcile(
         playlist_video_reconciler: PlaylistVideoReconciler,
         id: &str,
     ) -> Result<StatusCode, ApiError> {
         reconcile_playlist(State(playlist_video_reconciler), Path(id.to_string())).await
+    }
+
+    /// The collector the updater reads category videos through, on `db` like
+    /// the repositories each test seeds.
+    fn category_video_collector(db: &TestDatabase) -> CategoryVideoCollector {
+        CategoryVideoCollector::new(
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+        )
     }
 }

@@ -24,7 +24,7 @@
 - [x] 2.4 `it_should_hide_a_playlists_unwatched_count`: PATCH `{hide_unwatched_count: true}` stores and returns `true`, and leaves other settings unchanged.
 - [x] 2.5 `it_should_show_a_playlists_unwatched_count_again`: PATCH `{hide_unwatched_count: false}` on a hidden playlist stores `false`.
 - [x] 2.6 `it_should_fail_to_update_if_nothing_to_change`: an empty PATCH returns 400 with the new `NOTHING_TO_UPDATE` message.
-- [ ] 2.7 `it_should_mark_every_downloaded_playlist_video_watched`: 204; downloaded videos and their channel copies are watched, and pending videos are unchanged.
+- [x] 2.7 `it_should_mark_every_downloaded_playlist_video_watched`: 204; downloaded videos and their channel copies are watched, and pending videos are unchanged.
 - [ ] 2.8 `it_should_fail_to_mark_watched_a_missing_playlist`: 400, nothing changed.
 - [ ] 2.9 `it_should_fail_to_mark_watched_if_invalid_playlist_id_provided`: 400.
 - [ ] 2.10 Vitest `sidebarSections.test.ts`, `orders entries by shown unwatched count`: hidden counts sort as 0, and the order is otherwise stable.
