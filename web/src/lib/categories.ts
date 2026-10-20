@@ -26,10 +26,7 @@ export function categoryIdsOf(categories: Category[], source: SourceRef): string
 
 /** The category's members with `source` added. */
 export function withMember(category: Category, source: SourceRef): CategoryMembers {
-  return replaceMembersOfKind(category, source.kind, [
-    ...membersOfKind(category, source.kind),
-    source.id,
-  ])
+  return withMembers(category, [source])
 }
 
 /** The category's members with `source` removed. */
@@ -42,8 +39,13 @@ export function withoutMember(category: Category, source: SourceRef): CategoryMe
 }
 
 /** The category's members with every one of `sources` added. */
-export function withMembers(_category: Category, _sources: SourceRef[]): CategoryMembers {
-  return { channels: [], playlists: [] }
+export function withMembers(category: Category, sources: SourceRef[]): CategoryMembers {
+  const added = (kind: SourceRef['kind']) =>
+    sources.filter((source) => source.kind === kind).map((source) => source.id)
+  return {
+    channels: unique([...category.channels, ...added('channel')]),
+    playlists: unique([...category.playlists, ...added('playlist')]),
+  }
 }
 
 /** The members PUT each category needs so `source` is in exactly `chosenIds`. */
@@ -75,4 +77,8 @@ function replaceMembersOfKind(
   return kind === 'channel'
     ? { channels: ids, playlists: category.playlists }
     : { channels: category.channels, playlists: ids }
+}
+
+function unique(ids: string[]): string[] {
+  return [...new Set(ids)]
 }

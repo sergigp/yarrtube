@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { categoryIdsOf, membershipChanges, orderCategories } from './categories'
+import {
+  categoryIdsOf,
+  membershipChanges,
+  orderCategories,
+  withMember,
+  withMembers,
+  withoutMember,
+} from './categories'
 import { aCategory } from '@/test/helpers'
 
 describe('categories', () => {
@@ -56,6 +63,27 @@ describe('categories', () => {
     expect(changes).toEqual([
       { id: 'streams', members: { channels: ['@Ludwig'], playlists: ['PLclips'] } },
       { id: 'cooking', members: { channels: ['@Babish', '@Hikaru'], playlists: [] } },
+    ])
+  })
+
+  it('adds and removes members without duplicates', () => {
+    const chess = aCategory({ channels: ['@Hikaru'], playlists: ['PLendgames'] })
+
+    expect([
+      withMember(chess, { kind: 'channel', id: '@Hikaru' }),
+      withMember(chess, { kind: 'playlist', id: 'PLopenings' }),
+      withoutMember(chess, { kind: 'channel', id: '@Hikaru' }),
+      withMembers(chess, [
+        { kind: 'channel', id: '@GothamChess' },
+        { kind: 'channel', id: '@Hikaru' },
+        { kind: 'playlist', id: 'PLopenings' },
+        { kind: 'channel', id: '@GothamChess' },
+      ]),
+    ]).toEqual([
+      { channels: ['@Hikaru'], playlists: ['PLendgames'] },
+      { channels: ['@Hikaru'], playlists: ['PLendgames', 'PLopenings'] },
+      { channels: [], playlists: ['PLendgames'] },
+      { channels: ['@Hikaru', '@GothamChess'], playlists: ['PLendgames', 'PLopenings'] },
     ])
   })
 })
