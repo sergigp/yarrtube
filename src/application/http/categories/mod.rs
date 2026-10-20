@@ -636,6 +636,36 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_keep_a_repeated_member_once() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        channel_repository.insert(&channel("@Hikaru")).unwrap();
+        playlist_repository.insert(&playlist("PLendgames")).unwrap();
+        let chess = category(None, "Chess");
+        repository.insert(&chess).unwrap();
+        let category_updater =
+            CategoryUpdater::new(repository.clone(), channel_repository, playlist_repository);
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&["@Hikaru", "@Hikaru"], &["PLendgames", "PLendgames"]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                members: vec![channel_member("@Hikaru"), playlist_member("PLendgames")],
+                ..chess
+            }]
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),

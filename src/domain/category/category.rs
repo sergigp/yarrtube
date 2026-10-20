@@ -30,6 +30,12 @@ impl Category {
 
     /// Replaces the members, keeping each once (first occurrence wins).
     pub fn with_members(self, members: Vec<CategoryMember>) -> Self {
+        let members = members.into_iter().fold(Vec::new(), |mut kept, member| {
+            if !kept.contains(&member) {
+                kept.push(member);
+            }
+            kept
+        });
         Self { members, ..self }
     }
 
