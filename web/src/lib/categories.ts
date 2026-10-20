@@ -5,7 +5,11 @@ export type SourceRef = { kind: 'channel' | 'playlist'; id: string }
 
 /** Unread first, most unread first, then by name ignoring case. */
 export function orderCategories(categories: Category[]): Category[] {
-  return categories
+  return [...categories].sort(
+    (a, b) =>
+      b.unwatched_count - a.unwatched_count ||
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+  )
 }
 
 /** How many channels and playlists the category holds. */

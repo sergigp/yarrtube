@@ -52,7 +52,7 @@ Value objects (one cycle each, in `category_name.rs` / `category_id.rs`):
 
 Web (Vitest):
 
-- [ ] 2.38 `lib/categories` › orders unread first, most first, ties and caught-up by name ignoring case
+- [x] 2.38 `lib/categories` › orders unread first, most first, ties and caught-up by name ignoring case
 - [ ] 2.39 `lib/categories` › finds the categories of a source
 - [ ] 2.40 `lib/categories` › computes membership changes: adds, removes, leaves unchanged ones out
 - [ ] 2.41 `lib/categories` › adds and removes members without duplicates
