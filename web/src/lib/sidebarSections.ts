@@ -37,7 +37,8 @@ export function sectionView(
   { searchText, folded, activeId }: SectionViewOptions,
 ): SectionView {
   if (folded && !searchText) {
-    return { folded: true, headingActive: activeId !== null, rows: [] }
+    const headingActive = items?.some((item) => item.id === activeId) ?? false
+    return { folded: true, headingActive, rows: [] }
   }
   const rows = items && searchText ? items.filter((item) => matchesSearch(item, searchText)) : items
   return { folded: false, headingActive: false, rows }

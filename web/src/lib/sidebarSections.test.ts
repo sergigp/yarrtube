@@ -80,4 +80,12 @@ describe('sectionView', () => {
 
     expect(view).toEqual({ folded: false, headingActive: false, rows: items })
   })
+
+  it('does not mark the heading active when the active id is not in the section', () => {
+    const items = [aChannel({ id: 'a' }), aChannel({ id: 'b' })]
+
+    const view = sectionView(items, { searchText: '', folded: true, activeId: 'elsewhere' })
+
+    expect(view).toEqual({ folded: true, headingActive: false, rows: [] })
+  })
 })
