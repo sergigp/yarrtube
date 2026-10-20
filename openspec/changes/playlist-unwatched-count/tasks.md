@@ -19,7 +19,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `it_should_count_unwatched_downloaded_videos_when_listing_playlists`: the list counts only downloaded, unwatched videos per playlist, and 0 for a playlist without any.
-- [ ] 2.2 `it_should_list_playlists_with_their_hide_unwatched_count`: a hidden playlist is listed with `hide_unwatched_count: true` and its real count.
+- [x] 2.2 `it_should_list_playlists_with_their_hide_unwatched_count`: a hidden playlist is listed with `hide_unwatched_count: true` and its real count.
 - [ ] 2.3 `it_should_create_a_playlist_showing_its_unwatched_count`: created playlists store and return `hide_unwatched_count: false`.
 - [ ] 2.4 `it_should_hide_a_playlists_unwatched_count`: PATCH `{hide_unwatched_count: true}` stores and returns `true`, and leaves other settings unchanged.
 - [ ] 2.5 `it_should_show_a_playlists_unwatched_count_again`: PATCH `{hide_unwatched_count: false}` on a hidden playlist stores `false`.

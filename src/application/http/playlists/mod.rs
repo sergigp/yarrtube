@@ -1411,6 +1411,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_playlists_with_their_hide_unwatched_count() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH).with_hide_unwatched_count(true))
+            .unwrap();
+        save_downloaded_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid_unwatched",
+            0,
+        );
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            video_repository,
+        );
+
+        let response = list(playlist_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![PlaylistListItemResponse {
+                hide_unwatched_count: true,
+                unwatched_count: 1,
+                ..playlist_list_item_response("PL1", DEFAULT_PATH)
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_exclude_a_playlist_from_home() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
