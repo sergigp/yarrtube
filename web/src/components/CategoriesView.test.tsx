@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { InitialEntry } from 'react-router-dom'
@@ -10,12 +10,22 @@ import {
   aPlaylist,
   mockApi,
   renderWithProviders,
+  RouteProbe,
   type Routes,
 } from '@/test/helpers'
 
 function renderView(routes: Routes, { route = '/categories' }: { route?: InitialEntry } = {}) {
   const fetchMock = mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
-  return { fetchMock, ...renderWithProviders(<CategoriesView />, { route }) }
+  return {
+    fetchMock,
+    ...renderWithProviders(
+      <>
+        <CategoriesView />
+        <RouteProbe />
+      </>,
+      { route },
+    ),
+  }
 }
 
 describe('CategoriesView', () => {
@@ -172,5 +182,41 @@ describe('CategoriesView', () => {
       channels: ['@hikaru', '@veritasium'],
       playlists: ['PLuniverse'],
     })
+  })
+
+  it('deletes the selected category after confirmation', async () => {
+    let categories = [
+      aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], playlists: ['PLend'] }),
+      aCategory({ id: 'science', name: 'Science' }),
+    ]
+    const remove = vi.fn(() => {
+      categories = categories.filter((category) => category.id !== 'chess')
+      return null
+    })
+    renderView(
+      {
+        'GET /api/categories': () => aCategoryList(categories),
+        'DELETE /api/categories/chess': remove,
+      },
+      { route: '/categories?selected=chess' },
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Delete category' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete "Chess"?' })
+    const description = within(dialog).getByText(/holds/).textContent
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(remove).toHaveBeenCalledOnce())
+    expect(description).toBe(
+      '"Chess" holds 2 channels and playlists. None of them, nor any video, will be deleted.',
+    )
+    expect(
+      await within(screen.getByRole('list', { name: 'Category list' })).findAllByRole('link'),
+    ).toHaveLength(1)
+    expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(
+      /^\/categories$/,
+    )
+    expect(screen.queryByRole('textbox', { name: 'Category name' })).not.toBeInTheDocument()
   })
 })

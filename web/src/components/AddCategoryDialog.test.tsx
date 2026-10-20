@@ -1,14 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useLocation } from 'react-router-dom'
 import { AddCategoryDialog } from './AddCategoryDialog'
-import { mockApi, renderWithProviders, type Routes } from '@/test/helpers'
-
-function RouteProbe() {
-  const location = useLocation()
-  return <output aria-label="Current route">{`${location.pathname}${location.search}`}</output>
-}
+import { mockApi, renderWithProviders, RouteProbe, type Routes } from '@/test/helpers'
 
 function renderDialog(routes: Routes) {
   const fetchMock = mockApi(routes)

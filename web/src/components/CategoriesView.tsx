@@ -1,9 +1,22 @@
 import { useId, useState } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { avatarMediaUrl, renameCategory, setCategoryMembers } from '@/api/client'
-import { useCategories, useChannels, useInvalidateLibrary, usePlaylists } from '@/api/queries'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Trash2 } from 'lucide-react'
+import {
+  avatarMediaUrl,
+  deleteCategory,
+  renameCategory,
+  setCategoryMembers,
+} from '@/api/client'
+import {
+  useCategories,
+  useChannels,
+  useInvalidateLibrary,
+  useLibraryAction,
+  usePlaylists,
+} from '@/api/queries'
 import type { Category, LibraryItem } from '@/api/types'
 import {
+  deleteCategoryDescription,
   isMember,
   memberCount,
   withMembers,
@@ -13,6 +26,7 @@ import {
 import { matchesSearch } from '@/lib/sidebarSections'
 import { errorMessage } from '@/lib/errorMessage'
 import type { ManageCategoryState } from './AddCategoryDialog'
+import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -262,12 +276,44 @@ function AddMembersPicker({ category }: { category: Category }) {
   )
 }
 
+/** Deletes the category after confirming that its sources and videos stay. */
+function DeleteCategoryButton({ category }: { category: Category }) {
+  const navigate = useNavigate()
+  const refreshing = useLibraryAction()
+  const [confirming, setConfirming] = useState(false)
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="destructive"
+        className="self-start"
+        onClick={() => setConfirming(true)}
+      >
+        <Trash2 />
+        Delete category
+      </Button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Delete "${category.name}"?`}
+        description={deleteCategoryDescription(category)}
+        onConfirm={refreshing(async () => {
+          await deleteCategory(category.id)
+          navigate('/categories')
+        })}
+      />
+    </>
+  )
+}
+
 function CategoryEditor({ category }: { category: Category }) {
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-6">
       <CategoryNameField key={category.id} category={category} />
       <CategoryMembers category={category} />
       <AddMembersPicker key={category.id} category={category} />
+      <DeleteCategoryButton category={category} />
     </section>
   )
 }

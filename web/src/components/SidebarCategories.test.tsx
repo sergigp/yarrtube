@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import {
   aCategory,
@@ -9,10 +8,11 @@ import {
   aChannel,
   mockApi,
   renderWithProviders,
+  RouteProbe,
   type Routes,
 } from '@/test/helpers'
 
-/** Renders the sidebar beside stand-in views that name the route shown. */
+/** Renders the sidebar beside a probe of the current route. */
 function renderSidebar(routes: Routes, { route = '/' } = {}) {
   mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
   return renderWithProviders(
@@ -28,11 +28,6 @@ function renderSidebar(routes: Routes, { route = '/' } = {}) {
     </>,
     { route },
   )
-}
-
-function RouteProbe() {
-  const location = useLocation()
-  return <output aria-label="Current route">{`${location.pathname}${location.search}`}</output>
 }
 
 function categoryRowNames(): string[] {

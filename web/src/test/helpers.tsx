@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react'
 import { render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, type InitialEntry } from 'react-router-dom'
+import { MemoryRouter, useLocation, type InitialEntry } from 'react-router-dom'
 import { vi } from 'vitest'
 import type {
   Announcement,
@@ -87,6 +87,15 @@ export function renderWithProviders(
     </QueryClientProvider>
   )
   return { ...render(ui, { wrapper }), queryClient }
+}
+
+/**
+ * Shows the router's current path and query, so a test can assert where the
+ * user ended up (query it as the "Current route" status).
+ */
+export function RouteProbe() {
+  const location = useLocation()
+  return <output aria-label="Current route">{`${location.pathname}${location.search}`}</output>
 }
 
 let uniqueId = 0
