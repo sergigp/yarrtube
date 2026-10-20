@@ -263,6 +263,19 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_the_playlists_hide_unwatched_count() {
+        let repo = repo();
+        let playlist = playlist("PL1", "First").with_hide_unwatched_count(true);
+        repo.insert(&playlist).unwrap();
+        assert_eq!(repo.find(&playlist.id).unwrap(), Some(playlist.clone()));
+        let updated = playlist.with_hide_unwatched_count(false);
+
+        repo.update(&updated).unwrap();
+
+        assert_eq!(repo.find(&updated.id).unwrap(), Some(updated));
+    }
+
+    #[test]
     fn it_should_update_an_existing_playlist() {
         let repo = repo();
         let original = playlist("PL1", "First");

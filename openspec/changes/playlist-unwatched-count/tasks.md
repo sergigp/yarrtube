@@ -45,7 +45,7 @@
 
 SQLite playlist repository:
 
-- [ ] 3.1 `it_should_round_trip_the_playlists_hide_unwatched_count`: insert and update persist the column.
+- [x] 3.1 `it_should_round_trip_the_playlists_hide_unwatched_count`: insert and update persist the column.
 
 SQLite playlist video repository:
 
