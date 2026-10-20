@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { CategoryDetail } from './CategoryDetail'
+import { RouteProbe } from '@/test/RouteProbe'
 import {
   aCategory,
   aCategoryList,
@@ -17,9 +18,12 @@ import {
 function renderCategory(routes: ApiRoutes, route = '/categories/chess') {
   const fetchMock = mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
   const { unmount } = renderWithProviders(
-    <Routes>
-      <Route path="/categories/:id" element={<CategoryDetail />} />
-    </Routes>,
+    <>
+      <Routes>
+        <Route path="/categories/:id" element={<CategoryDetail />} />
+      </Routes>
+      <RouteProbe />
+    </>,
     { route },
   )
   return { fetchMock, unmount }
@@ -57,7 +61,7 @@ describe('CategoryDetail', () => {
     ])
   })
 
-  it('marks all watched', async () => {
+  it('marks all watched and deletes from the actions menu', async () => {
     let watched = false
     let category = aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 2 })
     const markWatched = vi.fn(() => {
@@ -65,6 +69,7 @@ describe('CategoryDetail', () => {
       category = { ...category, unwatched_count: 0 }
       return null
     })
+    const remove = vi.fn(() => null)
     const { fetchMock } = renderCategory({
       'GET /api/categories': () => aCategoryList([category]),
       'GET /api/channels': [aChannel({ id: '@hikaru', name: 'Hikaru' })],
@@ -73,6 +78,7 @@ describe('CategoryDetail', () => {
         aHomeVideo({ id: 'v2', watched }),
       ],
       'POST /api/categories/chess/watched': markWatched,
+      'DELETE /api/categories/chess': remove,
     })
 
     const user = userEvent.setup()
@@ -87,6 +93,20 @@ describe('CategoryDetail', () => {
         fetchMock.mock.calls.filter(([url]) => url === '/api/categories').length,
       ).toBeGreaterThan(1),
     )
+
+    await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete "Chess"?' })
+    const description = within(dialog).getByText(/holds/).textContent
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    expect(description).toBe(
+      '"Chess" holds 1 channels and playlists. None of them, nor any video, will be deleted.',
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(/^\/$/),
+    )
+    expect(remove).toHaveBeenCalledOnce()
   })
 
   it('explains a category without videos and an unknown one', async () => {
