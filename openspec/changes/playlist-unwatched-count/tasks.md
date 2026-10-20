@@ -57,7 +57,7 @@ Migrations:
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass; `npm run check` passes in `web/`.
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass; `npm run check` passes in `web/`.
 - [ ] 4.2 Smoke: extend `smoke-tests/tests/playlist.spec.js`:
   - After the download, the playlist row shows badge "1".
   - "Hide unwatched count" removes the badge, and "Show unwatched count" brings it back.
