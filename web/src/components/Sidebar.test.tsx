@@ -132,6 +132,32 @@ describe('Sidebar', () => {
     expect(screen.queryByText('List B')).not.toBeInTheDocument()
   })
 
+  it("shows the channels' muted unwatched total only while folded and above 0", async () => {
+    const { unmount } = renderSidebar({
+      'GET /api/channels': [
+        aChannel({ name: 'Chan A', unwatched_count: 3 }),
+        aChannel({ name: 'Chan B', unwatched_count: 0 }),
+        aChannel({ name: 'Chan C', unwatched_count: 20 }),
+      ],
+      'GET /api/playlists': [],
+    })
+    await screen.findByText('Chan A')
+    const totalWhileUnfolded = screen.queryByLabelText('23 unwatched')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Channels' }))
+    const totalWhileFolded = screen.queryByLabelText('23 unwatched')?.textContent
+    unmount()
+
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A', unwatched_count: 0 })],
+      'GET /api/playlists': [],
+    })
+    const caughtUpHeading = await screen.findByRole('button', { name: 'Channels' })
+
+    expect([totalWhileUnfolded, totalWhileFolded]).toEqual([null, '23'])
+    expect(caughtUpHeading).toHaveAttribute('aria-expanded', 'false')
+    expect(caughtUpHeading).toHaveTextContent(/^Channels$/)
+  })
+
   it('offers search only above the threshold and filters both sections', async () => {
     const channels = Array.from({ length: 10 }, (_, index) =>
       aChannel({ name: `Chan ${index}`, unwatched_count: 1 }),

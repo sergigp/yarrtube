@@ -208,7 +208,6 @@ function SidebarSection({
   onNavigate,
 }: SidebarSectionProps) {
   void headingActive
-  void foldedTotal
   const [pendingDelete, setPendingDelete] = useState<LibraryItem | null>(null)
 
   return (
@@ -226,6 +225,14 @@ function SidebarSection({
             <ChevronDown className="size-4 shrink-0" />
           )}
           {title}
+          {folded && foldedTotal !== undefined && foldedTotal > 0 && (
+            <span
+              className="ml-1 text-xs font-normal text-muted-foreground"
+              aria-label={`${foldedTotal} unwatched`}
+            >
+              {foldedTotal}
+            </span>
+          )}
         </button>
       </h3>
       {!folded && (
