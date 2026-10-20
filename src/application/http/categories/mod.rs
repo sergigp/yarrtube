@@ -526,6 +526,23 @@ mod tests {
         assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_delete_a_missing_category() {
+        let db = TestDatabase::new();
+        let category_deleter =
+            CategoryDeleter::new(Arc::new(SqliteCategoryRepository::new(db.database())));
+
+        let response = delete(category_deleter, "missing").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "category missing not found"
+            ))
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
