@@ -249,4 +249,16 @@ describe('CategoriesView', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'New category' }))
     expect(await screen.findByRole('dialog', { name: 'Add category' })).toBeInTheDocument()
   })
+
+  it("links to the selected category's view", async () => {
+    renderView(
+      { 'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]) },
+      { route: '/categories?selected=chess' },
+    )
+
+    expect(await screen.findByRole('link', { name: 'Open Chess' })).toHaveAttribute(
+      'href',
+      '/categories/chess',
+    )
+  })
 })

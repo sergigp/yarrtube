@@ -321,6 +321,12 @@ function CategoryEditor({ category, showBack }: { category: Category; showBack: 
         </Link>
       )}
       <CategoryNameField key={category.id} category={category} />
+      <Link
+        to={`/categories/${encodeURIComponent(category.id)}`}
+        className="self-start text-sm text-primary no-underline hover:underline"
+      >
+        Open {category.name}
+      </Link>
       <CategoryMembers category={category} />
       <AddMembersPicker key={category.id} category={category} />
       <DeleteCategoryButton category={category} />
