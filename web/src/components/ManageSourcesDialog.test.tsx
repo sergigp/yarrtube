@@ -145,4 +145,43 @@ describe('ManageSourcesDialog', () => {
     expect(search).toHaveFocus()
     expect(screen.getByRole('radio', { name: /^In Science/ })).toHaveTextContent('In Science2')
   })
+
+  it('disables Save with nothing staged and asks before discarding', async () => {
+    const { fetchMock, onOpenChange } = renderDialog(chess, library)
+    const user = userEvent.setup()
+    const save = screen.getByRole('button', { name: 'Save' })
+
+    const disabledOnOpen = save.hasAttribute('disabled')
+    await user.click(await screen.findByRole('button', { name: 'GothamChess' }))
+    const disabledWithAChange = save.hasAttribute('disabled')
+    await user.click(screen.getByRole('button', { name: 'GothamChess' }))
+    const disabledWhenUndone = save.hasAttribute('disabled')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    const closedWithoutAsking = onOpenChange.mock.calls.length
+    onOpenChange.mockClear()
+
+    await user.click(screen.getByRole('button', { name: 'Hikaru' }))
+    await user.keyboard('{Escape}')
+    const confirm = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await user.click(within(confirm).getByRole('button', { name: 'Keep editing' }))
+    const keptEditing = {
+      closed: onOpenChange.mock.calls.length,
+      hikaru: screen.getByRole('button', { name: 'Hikaru' }).getAttribute('aria-pressed'),
+    }
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole(
+        'button',
+        { name: 'Discard' },
+      ),
+    )
+
+    expect([disabledOnOpen, disabledWithAChange, disabledWhenUndone]).toEqual([true, false, true])
+    expect(closedWithoutAsking).toBe(1)
+    expect(keptEditing).toEqual({ closed: 0, hikaru: 'false' })
+    expect(onOpenChange.mock.calls).toEqual([[false]])
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT'),
+    ).toEqual([])
+  })
 })

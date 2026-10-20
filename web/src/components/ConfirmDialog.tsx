@@ -7,6 +7,7 @@ interface ConfirmDialogProps {
   onOpenChange: (open: boolean) => void
   title: string
   description?: string
+  cancelLabel?: string
   confirmLabel?: string
   onConfirm: () => void | Promise<void>
 }
@@ -22,6 +23,7 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
+  cancelLabel = 'Cancel',
   confirmLabel = 'Delete',
   onConfirm,
 }: ConfirmDialogProps) {
@@ -61,7 +63,7 @@ export function ConfirmDialog({
             disabled={confirming}
             onClick={() => handleOpenChange(false)}
           >
-            Cancel
+            {cancelLabel}
           </Button>
           <Button type="button" variant="destructive" onClick={handleConfirm} disabled={confirming}>
             {confirming ? 'Deleting…' : confirmLabel}

@@ -1,5 +1,5 @@
-import { useId, useState } from 'react'
-import { Check, ListVideo, Plus, Search } from 'lucide-react'
+import { useId, useRef, useState } from 'react'
+import { Check, ListVideo, Plus, Search, X } from 'lucide-react'
 import { avatarMediaUrl, setCategoryMembers } from '@/api/client'
 import { useChannels, useInvalidateLibrary, usePlaylists } from '@/api/queries'
 import type { Category, CategoryMembers } from '@/api/types'
@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
 
 interface ManageSourcesDialogProps {
@@ -30,25 +31,18 @@ interface ManageSourcesDialogProps {
 export function ManageSourcesDialog({ category, open, onOpenChange }: ManageSourcesDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-full flex-col gap-0 overflow-hidden p-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-full max-sm:rounded-none sm:max-w-2xl">
-        <div className="flex flex-col gap-1.5 px-6 pt-6 pb-4">
-          <DialogTitle>Manage sources in {category.name}</DialogTitle>
-          <DialogDescription>
-            Pick the channels and playlists whose videos show in {category.name}.
-          </DialogDescription>
-        </div>
-        {/* The body unmounts with the dialog, so every open starts from the saved sources. */}
-        <ManageSourcesBody category={category} onClose={() => onOpenChange(false)} />
-      </DialogContent>
+      {/* Mounted only while open, so every open starts from the saved sources. */}
+      {open && <ManageSourcesContent category={category} onClose={() => onOpenChange(false)} />}
     </Dialog>
   )
 }
 
 /**
  * The chips and save controls. Toggling only stages a change; Save makes the
- * category's sources exactly the pressed chips in one request.
+ * category's sources exactly the pressed chips in one request. Closing with
+ * staged changes asks to discard them first.
  */
-function ManageSourcesBody({ category, onClose }: { category: Category; onClose: () => void }) {
+function ManageSourcesContent({ category, onClose }: { category: Category; onClose: () => void }) {
   const { data: channels } = useChannels()
   const { data: playlists } = usePlaylists()
   const invalidateLibrary = useInvalidateLibrary()
@@ -56,13 +50,25 @@ function ManageSourcesBody({ category, onClose }: { category: Category; onClose:
   const [staged, setStaged] = useState(saved)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<SourceFilter>('all')
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
   const chips = sourceChips(channels, playlists)
   const allChips = [...chips.channels, ...chips.playlists]
   const shown = (kind: SourceChip[]) => visibleChips(kind, staged, search, filter)
   const shownChannels = shown(chips.channels)
   const shownPlaylists = shown(chips.playlists)
   const inCount = allChips.filter((chip) => isIn(staged, chip.source)).length
+  const summary = stagedSummary(saved, staged)
+  const dirty = summary.added + summary.removed > 0
   const toggle = (source: SourceRef) => setStaged((current) => toggled(current, source))
+
+  const requestClose = () => (dirty ? setConfirmingDiscard(true) : onClose())
+  const guardDismiss = (event: Event) => {
+    if (dirty) {
+      event.preventDefault()
+      setConfirmingDiscard(true)
+    }
+  }
 
   const save = async () => {
     await setCategoryMembers(category.id, staged)
@@ -71,11 +77,39 @@ function ManageSourcesBody({ category, onClose }: { category: Category; onClose:
   }
 
   return (
-    <>
+    <DialogContent
+      showCloseButton={false}
+      onOpenAutoFocus={(event) => {
+        event.preventDefault()
+        searchRef.current?.focus()
+      }}
+      onEscapeKeyDown={guardDismiss}
+      onInteractOutside={guardDismiss}
+      className="flex max-h-[calc(100dvh-2rem)] w-full flex-col gap-0 overflow-hidden p-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-full max-sm:rounded-none sm:max-w-2xl"
+    >
+      <div className="flex items-start gap-3 px-6 pt-6 pb-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <DialogTitle>Manage sources in {category.name}</DialogTitle>
+          <DialogDescription>
+            Pick the channels and playlists whose videos show in {category.name}.
+          </DialogDescription>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close"
+          className="-mt-2 -mr-2"
+          onClick={requestClose}
+        >
+          <X />
+        </Button>
+      </div>
       <div className="flex flex-col gap-3 px-6 pb-4">
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={searchRef}
             type="search"
             aria-label="Search channels and playlists"
             placeholder="Search channels and playlists"
@@ -118,14 +152,24 @@ function ManageSourcesBody({ category, onClose }: { category: Category; onClose:
         <ChipGroup title="Playlists" chips={shownPlaylists} staged={staged} onToggle={toggle} />
       </div>
       <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border px-6 py-4">
-        <p className="mr-auto text-sm text-muted-foreground">
-          {summaryText(stagedSummary(saved, staged))}
-        </p>
-        <Button type="button" onClick={save}>
+        <p className="mr-auto text-sm text-muted-foreground">{summaryText(summary)}</p>
+        <Button type="button" variant="outline" onClick={requestClose}>
+          Cancel
+        </Button>
+        <Button type="button" disabled={!dirty} onClick={save}>
           Save
         </Button>
       </div>
-    </>
+      <ConfirmDialog
+        open={confirmingDiscard}
+        onOpenChange={setConfirmingDiscard}
+        title="Discard changes?"
+        description={`Your changes to the sources in ${category.name} won't be saved.`}
+        cancelLabel="Keep editing"
+        confirmLabel="Discard"
+        onConfirm={onClose}
+      />
+    </DialogContent>
   )
 }
 
