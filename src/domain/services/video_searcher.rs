@@ -1,7 +1,7 @@
-use crate::domain::category::CategoryId;
+use crate::domain::category::{Category, CategoryId};
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
-use crate::domain::services::CategoryVideoCollector;
+use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
 use crate::domain::video::{
     HomeLimits, HomeVideoView, HomeVideos, ListVideosError, SourcedVideo, Video, VideoId,
     VideoSource, VideoStatus, VideoView,
@@ -148,8 +148,14 @@ impl VideoSearcherApi for VideoSearcher {
         })
     }
 
-    fn list_for_category(&self, _id: &CategoryId) -> Result<Vec<HomeVideoView>, ListVideosError> {
-        Ok(Vec::new())
+    fn list_for_category(&self, id: &CategoryId) -> Result<Vec<HomeVideoView>, ListVideosError> {
+        let category = self.find_category(id)?;
+        let mut videos = self
+            .category_video_collector
+            .downloaded_videos(&category)
+            .map_err(ListVideosError::Repository)?;
+        videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.created_at));
+        Ok(Self::views(videos))
     }
 }
 
@@ -161,6 +167,13 @@ fn is_excluded(video: &anyhow::Result<Video>) -> bool {
 }
 
 impl VideoSearcher {
+    fn find_category(&self, id: &CategoryId) -> Result<Category, ListVideosError> {
+        self.category_repository
+            .find(id)
+            .map_err(ListVideosError::Repository)?
+            .ok_or_else(|| ListVideosError::CategoryNotFound(id.clone()))
+    }
+
     fn view(&self, video: Video) -> anyhow::Result<VideoView> {
         let metadata = self.video_metadata_repository.find(&video.id)?;
         Ok(VideoView { video, metadata })

@@ -3,6 +3,7 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::{MISSING_POSITION, MISSING_WAS_WATCHED, required};
+use crate::domain::category::CategoryId;
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
@@ -57,10 +58,17 @@ pub async fn list_videos_for_channel(
 }
 
 pub async fn list_videos_for_category(
-    State(_video_searcher): State<VideoSearcher>,
-    Path(_id): Path<String>,
+    State(video_searcher): State<VideoSearcher>,
+    Path(id): Path<String>,
 ) -> Result<Json<Vec<HomeVideoResponse>>, ApiError> {
-    Ok(Json(Vec::new()))
+    let id = CategoryId::new(id)?;
+
+    let videos = run_blocking(move || video_searcher.list_for_category(&id))
+        .await?
+        .map_err(list_videos_error)?;
+    Ok(Json(
+        videos.into_iter().map(HomeVideoResponse::from).collect(),
+    ))
 }
 
 pub async fn list_home_videos(
@@ -169,6 +177,7 @@ fn vtt_response(vtt: WebVtt) -> VttResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::category::{Category, CategoryMember, CategoryName};
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
@@ -178,7 +187,9 @@ mod tests {
     use crate::domain::video::{EpisodeNumber, Video};
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
+    use crate::infrastructure::repositories::sqlite_category_repository::{
+        CategoryRepository, SqliteCategoryRepository,
+    };
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -3096,6 +3107,69 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_list_videos_for_a_category() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        channel_repository
+            .insert(&channel("@somechannel", Some("avatar.jpg")))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &downloaded_video("vid1", "Oldest", None, 10),
+            1,
+        );
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &downloaded_video("vid3", "Newest", Some("vid3.jpg"), 30),
+            0,
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &downloaded_video("vid2", "Middle", None, 20),
+        );
+        let chess =
+            category_with_members(&[channel_member("@somechannel"), playlist_member("PL1")]);
+        category_repository.insert(&chess).unwrap();
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = list_for_category(video_searcher, chess.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                HomeVideoResponse {
+                    thumbnail_filename: Some("vid3.jpg".to_string()),
+                    ..home_video_response("vid3", "Newest", channel_source(Some("avatar.jpg")))
+                },
+                home_video_response("vid2", "Middle", playlist_source()),
+                home_video_response("vid1", "Oldest", channel_source(Some("avatar.jpg"))),
+            ])
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -3347,6 +3421,19 @@ mod tests {
         }
     }
 
+    fn category_with_members(members: &[CategoryMember]) -> Category {
+        Category::create(CategoryName::new("Chess").unwrap(), fixed_timestamp())
+            .with_members(members.to_vec())
+    }
+
+    fn channel_member(handle: &str) -> CategoryMember {
+        CategoryMember::Channel(ChannelHandle::new(handle).unwrap())
+    }
+
+    fn playlist_member(id: &str) -> CategoryMember {
+        CategoryMember::Playlist(PlaylistId::new(id).unwrap())
+    }
+
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
@@ -3500,6 +3587,15 @@ mod tests {
         playlist_id: &str,
     ) -> Result<Vec<VideoResponse>, ApiError> {
         list_videos_for_playlist(State(video_searcher), Path(playlist_id.to_string()))
+            .await
+            .map(|Json(videos)| videos)
+    }
+
+    async fn list_for_category(
+        video_searcher: VideoSearcher,
+        id: &str,
+    ) -> Result<Vec<HomeVideoResponse>, ApiError> {
+        list_videos_for_category(State(video_searcher), Path(id.to_string()))
             .await
             .map(|Json(videos)| videos)
     }
