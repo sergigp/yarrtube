@@ -93,7 +93,7 @@ Web (Vitest):
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass
 - [ ] 4.2 `npm run check` and `npm run build` pass in `web/`
 - [ ] 4.3 Add `smoke-tests/tests/categories.spec.js` (create, rename, add members, category view, mark all watched, assign from the add channel dialog, delete) and `scripts/run-smoke-tests.sh` passes
 - [ ] 4.4 Manual check with `scripts/run-local.sh`: sidebar section order and badges, folding with total, manage view on desktop and mobile, category view, dialogs' Categories field, deleting a channel removes it from its categories
