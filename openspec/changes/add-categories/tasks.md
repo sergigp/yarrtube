@@ -47,7 +47,7 @@ Value objects (one cycle each, in `category_name.rs` / `category_id.rs`):
 - [x] 2.33 `CategoryName` › accepts a name and trims it
 - [x] 2.34 `CategoryName` › rejects empty and blank names
 - [x] 2.35 `CategoryName` › accepts 60 characters and rejects 61
-- [ ] 2.36 `CategoryName` › `is_same_as` ignores case
+- [x] 2.36 `CategoryName` › `is_same_as` ignores case
 - [ ] 2.37 `CategoryId` › accepts an id and rejects a blank one
 
 Web (Vitest):

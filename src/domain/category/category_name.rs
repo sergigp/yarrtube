@@ -92,6 +92,19 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_be_the_same_name_ignoring_case() {
+        let chess = CategoryName::new("Chess").unwrap();
+
+        assert_eq!(
+            [
+                chess.is_same_as(&CategoryName::new("cHESS").unwrap()),
+                chess.is_same_as(&CategoryName::new("Chess club").unwrap()),
+            ],
+            [true, false]
+        );
+    }
+
     fn error(message: &str) -> ValidationError {
         ValidationError(message.to_string())
     }
