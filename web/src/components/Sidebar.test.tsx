@@ -71,6 +71,26 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('button', { name: /^Show / })).not.toBeInTheDocument()
   })
 
+  it('offers a labelled add row in an empty section and a heading + once it has items', async () => {
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList(),
+    })
+
+    await screen.findByText('List B')
+
+    expect(await screen.findByRole('button', { name: 'Add category' })).toHaveTextContent(
+      'Add category',
+    )
+    expect(screen.getByRole('button', { name: 'Add channel' })).toHaveTextContent('Add channel')
+    expect(screen.getByRole('button', { name: 'Add playlist' })).toHaveTextContent('')
+    expect(screen.getByRole('button', { name: 'Add playlist' })).toHaveAttribute(
+      'title',
+      'Add playlist',
+    )
+  })
+
   it('folds a section from its heading, hiding its rows and add control', async () => {
     renderSidebar({
       'GET /api/channels': [aChannel({ name: 'Chan A' })],
@@ -147,7 +167,7 @@ describe('Sidebar', () => {
     expect(screen.queryByText('List B')).not.toBeInTheDocument()
   })
 
-  it("shows the channels' muted unwatched total only while folded and above 0", async () => {
+  it("shows the channels' unwatched total badge only while folded and above 0", async () => {
     const { unmount } = renderSidebar({
       'GET /api/channels': [
         aChannel({ name: 'Chan A', unwatched_count: 3 }),

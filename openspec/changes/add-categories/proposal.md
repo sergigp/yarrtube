@@ -17,9 +17,10 @@ from transcripts, personalised home rows and media-server export.
   unwatched YouTube videos across all its members (a video tracked by two
   members counts once).
 - **Sidebar Categories section**, above Channels:
-  - "+ Add category" under the heading, opening a dialog asking only for a
-    name; on create, the user lands on the new category's page with its
-    manage sources dialog open;
+  - "Add category": a full-width row while no category exists, a "+" on
+    the heading once one does, opening a dialog asking only for a name; on
+    create, the user lands on the new category's page with its manage
+    sources dialog open;
   - every category always listed (never trimmed, no search), each with its
     unwatched badge, ordered like Channels: unwatched first, most unwatched
     first, ties and caught-up categories by name ignoring case;
@@ -41,11 +42,17 @@ from transcripts, personalised home rows and media-server export.
   watched (every stored copy, as for channels).
 - **Add/Edit channel and playlist dialogs** gain a Categories chip picker to
   assign the source to existing categories, or create one inline.
+- **Sidebar section headings** (Categories, Channels, Playlists): once a
+  section has items, its add control becomes a compact "+" at the
+  heading's trailing edge (the full-width row stays for an empty section);
+  a folded heading's unwatched total uses the green row badge instead of
+  muted text.
 - Deleting a channel or playlist removes it from every category; deleting a
   category never deletes sources or videos.
 
 Out of scope: Plex/media-server export, home personalisation, Ollama
-auto-categorisation, video members, category colours/icons.
+auto-categorisation, video members, category colours/icons, marking a
+whole sidebar section watched from its heading.
 
 ## Capabilities
 
@@ -62,7 +69,8 @@ auto-categorisation, video members, category colours/icons.
 - `watch-state`: mark a category watched.
 - `web-ui`: sidebar Categories section and ordering, category page with
   in-place rename and the manage sources dialog, Categories field in the
-  add/edit channel and playlist dialogs.
+  add/edit channel and playlist dialogs; sidebar section add controls
+  (row when empty, heading "+" otherwise) and the folded total badge.
 
 ## Impact
 

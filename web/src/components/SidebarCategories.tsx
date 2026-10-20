@@ -83,6 +83,13 @@ export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesP
   const categories = data && orderCategories(data.categories)
   const [folded, toggleFolded] = useRememberedFlag('yarrtube.sidebar.folded.categories', false)
   const headingActive = folded && (categories?.some((category) => category.id === activeId) ?? false)
+  // Closing first lets the mobile drawer get out of the dialog's way.
+  const add = () => {
+    onClose()
+    onAddCategory()
+  }
+  // No categories yet gets a full-width add row; otherwise a compact `+` on the heading.
+  const empty = categories?.length === 0
 
   return (
     <div>
@@ -92,21 +99,20 @@ export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesP
         onToggleFolded={toggleFolded}
         headingActive={headingActive}
         foldedTotal={data?.unwatched_total}
+        add={empty ? undefined : { label: 'Add category', onClick: add }}
       />
       {!folded && (
         <>
-          {/* Closing first lets the mobile drawer get out of the dialog's way. */}
-          <button
-            type="button"
-            className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            onClick={() => {
-              onClose()
-              onAddCategory()
-            }}
-          >
-            <Plus className="size-4 shrink-0" />
-            Add category
-          </button>
+          {empty && (
+            <button
+              type="button"
+              className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              onClick={add}
+            >
+              <Plus className="size-4 shrink-0" />
+              Add category
+            </button>
+          )}
           {categories && categories.length > 0 && (
             <ul className="flex flex-col" aria-label="Categories">
               {categories.map((category) => (

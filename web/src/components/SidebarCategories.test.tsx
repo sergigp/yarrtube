@@ -85,7 +85,7 @@ describe('SidebarCategories', () => {
     expect(screen.getByRole('link', { name: 'Science' })).not.toHaveAttribute('aria-current')
   })
 
-  it('folds with the muted unwatched total and marks the heading active on a category route', async () => {
+  it('folds with the unwatched total badge and marks the heading active on a category route', async () => {
     renderSidebar(
       {
         'GET /api/categories': aCategoryList(
@@ -100,12 +100,11 @@ describe('SidebarCategories', () => {
     )
 
     await screen.findByText('Chess')
-    const addControlWhileUnfolded =
-      screen.queryByRole('button', { name: 'Add category' })?.textContent
+    const addControlWhileUnfolded = screen.queryByRole('button', { name: 'Add category' }) !== null
     const heading = screen.getByRole('button', { name: 'Categories' })
     await userEvent.setup().click(heading)
 
-    expect(addControlWhileUnfolded).toBe('Add category')
+    expect(addControlWhileUnfolded).toBe(true)
     expect(heading).toHaveAttribute('aria-expanded', 'false')
     expect(heading).toHaveAttribute('aria-current', 'true')
     expect(within(heading).getByLabelText('16 unwatched')).toHaveTextContent('16')

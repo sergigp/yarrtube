@@ -203,6 +203,14 @@ function SidebarSection({
   onNavigate,
 }: SidebarSectionProps) {
   const [pendingDelete, setPendingDelete] = useState<LibraryItem | null>(null)
+  // Closing first lets the mobile drawer get out of the dialog's way;
+  // on desktop the sidebar is static and `onClose` changes nothing.
+  const add = () => {
+    onClose()
+    onAdd()
+  }
+  // An empty section gets a full-width add row; otherwise a compact `+` on the heading.
+  const empty = !error && items?.length === 0
 
   return (
     <div>
@@ -212,22 +220,20 @@ function SidebarSection({
         onToggleFolded={onToggleFolded}
         headingActive={headingActive}
         foldedTotal={foldedTotal}
+        add={empty ? undefined : { label: addLabel, onClick: add }}
       />
       {!folded && (
         <>
-          {/* Closing first lets the mobile drawer get out of the dialog's way;
-              on desktop the sidebar is static and `onClose` changes nothing. */}
-          <button
-            type="button"
-            className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            onClick={() => {
-              onClose()
-              onAdd()
-            }}
-          >
-            <Plus className="size-4 shrink-0" />
-            {addLabel}
-          </button>
+          {empty && (
+            <button
+              type="button"
+              className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              onClick={add}
+            >
+              <Plus className="size-4 shrink-0" />
+              {addLabel}
+            </button>
+          )}
           {error && (
             <p className="px-2 text-sm text-destructive">Failed to load: {error.message}</p>
           )}

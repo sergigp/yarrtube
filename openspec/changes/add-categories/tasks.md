@@ -59,7 +59,7 @@ Web (Vitest):
 - [x] 2.42 `SidebarCategories` › lists every category above channels with badges, in unread order
 - [x] 2.43 `SidebarCategories` › opens a category and marks its row active
 - [x] 2.44 `SidebarCategories` › manage control navigates without folding
-- [x] 2.45 `SidebarCategories` › folds with the muted unwatched total and marks the heading active on a category route
+- [x] 2.45 `SidebarCategories` › folds with the unwatched total badge and marks the heading active on a category route
 - [x] 2.46 `SidebarCategories` › manages and deletes from the row menu, with the member-count confirmation
 - [x] 2.47 `SidebarCategories` › is not filtered by the sidebar search
 - [x] 2.48 `AddCategoryDialog` › creates a category and opens it in the management view
@@ -131,3 +131,14 @@ Verification:
 - [x] 5.21 `npm run check` and `npm run build` pass in `web/`
 - [x] 5.22 Update `smoke-tests/tests/categories.spec.js` (create lands in manage sources, add sources with chips, rename in place, mark all watched, delete from the actions menu) and `scripts/run-smoke-tests.sh` passes
 - [ ] 5.23 Manual check with `scripts/run-local.sh`: category header and menu, rename, the dialog on desktop and mobile (chips, search, filters, keyboard, discard), entry points from the sidebar row, empty state and add category
+
+## 6. Sidebar add controls and folded badge
+
+Per the revised Sidebar Add Entries, Folded Section Unwatched Total and Sidebar Categories Section requirements. Marking a whole section watched from its heading is out of scope.
+
+- [x] 6.1 `SidebarSectionHeading` takes an optional `add` control (trailing "+" outside the `h3`); Channels, Playlists and Categories show the full-width add row only when loaded and empty, otherwise the heading "+"
+- [x] 6.2 `Sidebar` › offers a labelled add row in an empty section and a heading + once it has items
+- [x] 6.3 Folded total rendered as the row badge; `Sidebar` › shows the channels' unwatched total badge only while folded and above 0 (renamed), and 2.45 renamed to match
+- [x] 6.4 `npm run check` passes in `web/`
+- [ ] 6.5 `scripts/run-smoke-tests.sh` passes
+- [ ] 6.6 Manual check with `scripts/run-local.sh`: heading "+" and empty add rows in all three sections, folded badges, on desktop and mobile

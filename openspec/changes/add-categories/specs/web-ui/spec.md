@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Sidebar Categories Section
-The sidebar SHALL show a "Categories" section above the Channels section. Its heading SHALL fold and unfold the section like the other sidebar sections and, while folded, SHALL show in a muted style the unwatched total across all categories when it is above 0. While unfolded, the section SHALL show an "Add category" control between its heading and its list, and SHALL list every category, never trimmed, each row showing the category's name and, when its unwatched count is above 0, a badge with that count. Selecting a category row SHALL navigate to that category's view. When the user is on a category's view, its row SHALL be marked active; when the section is folded, its heading SHALL be marked active instead. The sidebar search SHALL NOT filter categories. With no categories, the unfolded section SHALL show only its heading and the "Add category" control.
+The sidebar SHALL show a "Categories" section above the Channels section. Its heading SHALL fold and unfold the section like the other sidebar sections and, while folded, SHALL show the unwatched total across all categories as a badge styled like the row badges, at the heading's trailing edge, when it is above 0. While unfolded, the section SHALL offer an "Add category" control placed like the other sections' add controls: a full-width labelled row beneath the heading while no category exists, otherwise (categories exist, or they are still loading) a compact "+" button at the trailing edge of the heading, outside its fold toggle, with the accessible name and tooltip "Add category". The section SHALL list every category, never trimmed, each row showing the category's name and, when its unwatched count is above 0, a badge with that count. Selecting a category row SHALL navigate to that category's view. When the user is on a category's view, its row SHALL be marked active; when the section is folded, its heading SHALL be marked active instead. The sidebar search SHALL NOT filter categories. With no categories, the unfolded section SHALL show only its heading and the full-width "Add category" row.
 
 #### Scenario: Categories listed above channels
 - **WHEN** the categories "Chess" and "Sports" exist
@@ -21,7 +21,7 @@ The sidebar SHALL show a "Categories" section above the Channels section. Its he
 
 #### Scenario: Folded categories total
 - **WHEN** the Categories section is folded and the unwatched total across categories is 16
-- **THEN** the heading shows a muted total of 16
+- **THEN** the heading shows an unwatched badge of 16
 
 #### Scenario: Search leaves categories alone
 - **WHEN** a user types in the sidebar search field
@@ -29,7 +29,11 @@ The sidebar SHALL show a "Categories" section above the Channels section. Its he
 
 #### Scenario: No categories yet
 - **WHEN** no category exists and the Categories section is unfolded
-- **THEN** the section shows its heading and the "Add category" control, and no rows
+- **THEN** the section shows its heading and a full-width "Add category" row, and no category rows
+
+#### Scenario: Adding from the heading once categories exist
+- **WHEN** at least one category exists and the Categories section is unfolded
+- **THEN** the heading shows a "+" control named "Add category", and no "Add category" row is shown
 
 ### Requirement: Sidebar Category Ordering
 The sidebar's Categories section SHALL list categories with an unwatched count above 0 first, ordered by unwatched count from highest to lowest, with equal counts ordered by name, ignoring case. The categories with no unwatched videos SHALL follow, ordered by name, ignoring case.
@@ -187,3 +191,55 @@ The add channel, add playlist, edit channel and edit playlist dialogs SHALL offe
 #### Scenario: Categories fail to save
 - **WHEN** a user adds a channel with categories chosen and the channel is tracked but its categories cannot be saved
 - **THEN** the dialog says the channel was added but its categories were not saved
+
+## MODIFIED Requirements
+
+### Requirement: Sidebar Add Entries
+The sidebar's Channels section SHALL offer an "Add channel" control and its Playlists section an "Add playlist" control, visible whenever the section is unfolded. When the section has loaded with nothing tracked, the control SHALL be a full-width labelled row placed beneath the section heading. Otherwise (the section has rows, is still loading, or failed to load) the control SHALL be a compact "+" button at the trailing edge of the section heading, outside the heading's fold toggle, with the accessible name "Add channel" or "Add playlist" and that name as its tooltip. A folded section SHALL NOT show its add control. "Add channel" SHALL open the add channel dialog and "Add playlist" SHALL open the add playlist dialog. On viewports narrower than the desktop breakpoint, activating either control SHALL close the sidebar before the dialog is shown.
+
+#### Scenario: Opening the add channel dialog from the sidebar
+- **WHEN** a user activates "Add channel" in the sidebar's Channels section
+- **THEN** the add channel dialog opens
+
+#### Scenario: Opening the add playlist dialog from the sidebar
+- **WHEN** a user activates "Add playlist" in the sidebar's Playlists section
+- **THEN** the add playlist dialog opens
+
+#### Scenario: Add entries with nothing tracked
+- **WHEN** no channels or playlists are tracked and both sections are unfolded
+- **THEN** both sections show a full-width labelled add row beneath their heading
+
+#### Scenario: Heading add control once tracked
+- **WHEN** at least one channel is tracked and the Channels section is unfolded
+- **THEN** the "Channels" heading shows a "+" control named "Add channel", and no "Add channel" row is shown
+
+#### Scenario: Folded section hides its add entry
+- **WHEN** the Channels section is folded
+- **THEN** no "Add channel" control is shown
+
+#### Scenario: Adding from the mobile sidebar
+- **WHEN** a user on a mobile-width viewport opens the sidebar and activates "Add channel" or "Add playlist"
+- **THEN** the sidebar closes and the matching add dialog is shown
+
+### Requirement: Folded Section Unwatched Total
+A folded Channels section SHALL show, at its heading's trailing edge and as a badge styled like the rows' unwatched badges, the sum of its channels' unwatched counts, when that sum is above 0. No total SHALL be shown while the section is unfolded, while it is folded with a sum of 0, or for the Playlists section. The total SHALL update together with the channel badges.
+
+#### Scenario: Folded channels with unwatched videos
+- **WHEN** the Channels section is folded and its channels have 3, 0 and 20 unwatched videos
+- **THEN** the "Channels" heading shows an unwatched badge of 23
+
+#### Scenario: Folded channels with nothing unwatched
+- **WHEN** the Channels section is folded and no channel has unwatched videos
+- **THEN** the "Channels" heading shows no total
+
+#### Scenario: Unfolded section shows no total
+- **WHEN** the Channels section is unfolded
+- **THEN** the "Channels" heading shows no total
+
+#### Scenario: Playlists show no total
+- **WHEN** the Playlists section is folded
+- **THEN** the "Playlists" heading shows no total
+
+#### Scenario: Total follows watching
+- **WHEN** the Channels section is folded and a user finishes watching one of a channel's unwatched videos
+- **THEN** the total decreases by one promptly without a page reload

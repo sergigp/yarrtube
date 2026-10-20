@@ -45,9 +45,9 @@ Web (`web/src/`):
 - `test/helpers.tsx` — `aCategory`, `aCategoryList` builders.
 - `components/VideoGrid.tsx` — home card grid extracted from `Home.tsx` for reuse.
 - `components/Home.tsx` — uses `VideoGrid`.
-- `components/SidebarSectionHeading.tsx` — the foldable heading from `foldable-sidebar-sections`, extracted for reuse (no actions slot).
+- `components/SidebarSectionHeading.tsx` — the foldable heading from `foldable-sidebar-sections`, extracted for reuse (no actions slot). Takes an optional `add` control, rendered as a trailing "+" outside the `h3` so the heading's accessible name stays the title; the folded total is a badge styled like the row badges.
 - `components/SidebarCategories.tsx` (+ test) — the Categories section, rows, row menu ("Manage sources", "Delete"), delete confirmation.
-- `components/Sidebar.tsx` — renders `SidebarCategories` above Channels; uses `SidebarSectionHeading`.
+- `components/Sidebar.tsx` — renders `SidebarCategories` above Channels; uses `SidebarSectionHeading`. Each section (and `SidebarCategories`) shows the full-width add row only when loaded and empty, otherwise passes `add` to the heading.
 - `components/AddCategoryDialog.tsx` (+ test) — name-only create dialog; lands on the new category with the manage sources dialog open.
 - `components/CategoryDetail.tsx` (+ test) — category view (`/categories/:id`): `DetailHeader` with rename, summary and actions menu; opens `ManageSourcesDialog`, also when arriving with `ManageSourcesState`.
 - `components/ManageSourcesDialog.tsx` (+ test) — the chip dialog: search, state filter, staged changes, discard confirmation.
@@ -313,7 +313,7 @@ export function useSaveSourceCategories(): (source: SourceRef, chosenIds: string
 
 // web/src/components
 export function SidebarSectionHeading(props: { title: string; folded: boolean; onToggleFolded: () => void;
-  headingActive: boolean; foldedTotal?: number }): JSX.Element
+  headingActive: boolean; foldedTotal?: number; add?: { label: string; onClick: () => void } }): JSX.Element
 export function SidebarCategories(props: { onAddCategory: () => void; onClose: () => void }): JSX.Element
 export function AddCategoryDialog(props: { open: boolean; onOpenChange: (open: boolean) => void }): JSX.Element
 export function CategoryDetail(): JSX.Element                // reads :id and ManageSourcesState
@@ -441,9 +441,11 @@ Decisions:
    - `lib/categories` › adds and removes members without duplicates
    - `SidebarCategories` › lists every category above channels with badges, in unread order
    - `SidebarCategories` › opens a category and marks its row active
-   - `SidebarCategories` › folds with the muted unwatched total and marks the heading active on a category route
+   - `SidebarCategories` › folds with the unwatched total badge and marks the heading active on a category route
    - `SidebarCategories` › manages sources and deletes from the row menu, with the member-count confirmation
    - `SidebarCategories` › is not filtered by the sidebar search
+   - `Sidebar` › offers a labelled add row in an empty section and a heading + once it has items
+   - `Sidebar` › shows the channels' unwatched total badge only while folded and above 0
    - `AddCategoryDialog` › creates a category and opens it with the manage sources dialog
    - `AddCategoryDialog` › disables create for a blank name and shows a taken-name error
    - `lib/categories` › builds chips per kind by name ignoring case, channels with avatars
