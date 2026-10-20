@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { InitialEntry } from 'react-router-dom'
 import { CategoriesView } from './CategoriesView'
 import {
   aCategory,
@@ -12,7 +13,7 @@ import {
   type Routes,
 } from '@/test/helpers'
 
-function renderView(routes: Routes, { route = '/categories' } = {}) {
+function renderView(routes: Routes, { route = '/categories' }: { route?: InitialEntry } = {}) {
   const fetchMock = mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
   return { fetchMock, ...renderWithProviders(<CategoriesView />, { route }) }
 }
@@ -116,5 +117,60 @@ describe('CategoriesView', () => {
       ([, init]) => (init as RequestInit | undefined)?.method === 'PUT',
     ) as [string, RequestInit]
     expect(JSON.parse(init.body as string)).toEqual({ channels: ['@gotham'], playlists: ['PLend'] })
+  })
+
+  it('filters the picker and adds the checked sources', async () => {
+    let chess = aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] })
+    const { fetchMock } = renderView(
+      {
+        'GET /api/categories': () => aCategoryList([chess]),
+        'GET /api/channels': [
+          aChannel({ id: '@hikaru', name: 'Hikaru' }),
+          aChannel({ id: '@veritasium', name: 'Veritasium' }),
+          aChannel({ id: '@everyday', name: 'Everyday Astronaut' }),
+          aChannel({ id: '@babish', name: 'Babish' }),
+        ],
+        'GET /api/playlists': [
+          aPlaylist({ id: 'PLuniverse', name: 'Universe' }),
+          aPlaylist({ id: 'PLcooking', name: 'Cooking' }),
+        ],
+        'PUT /api/categories/chess/members': () => {
+          chess = { ...chess, channels: ['@hikaru', '@veritasium'], playlists: ['PLuniverse'] }
+          return null
+        },
+      },
+      {
+        route: { pathname: '/categories', search: '?selected=chess', state: { focusAddMembers: true } },
+      },
+    )
+    const user = userEvent.setup()
+    const search = await screen.findByRole('searchbox', {
+      name: 'Search channels and playlists to add',
+    })
+    await screen.findByRole('checkbox', { name: 'Veritasium' })
+    const focused = document.activeElement === search
+    const picker = screen.getByRole('group', { name: 'Add to Chess' })
+
+    await user.type(search, 'ver')
+    const matches = within(picker)
+      .getAllByRole('checkbox')
+      .map((checkbox) => (checkbox.closest('label')?.textContent ?? '').trim())
+    await user.click(within(picker).getByRole('checkbox', { name: 'Veritasium' }))
+    await user.click(within(picker).getByRole('checkbox', { name: 'Universe' }))
+    await user.click(screen.getByRole('button', { name: 'Add selected' }))
+
+    await waitFor(() =>
+      expect(within(picker).queryByRole('checkbox', { name: 'Veritasium' })).not.toBeInTheDocument(),
+    )
+    expect(focused).toBe(true)
+    expect(matches).toEqual(['Everyday Astronaut', 'Veritasium', 'Universe'])
+    expect(within(picker).getAllByRole('checkbox')).toHaveLength(1)
+    const [, init] = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PUT',
+    ) as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({
+      channels: ['@hikaru', '@veritasium'],
+      playlists: ['PLuniverse'],
+    })
   })
 })

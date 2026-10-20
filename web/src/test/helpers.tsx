@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react'
 import { render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, type InitialEntry } from 'react-router-dom'
 import { vi } from 'vitest'
 import type {
   Announcement,
@@ -70,10 +70,14 @@ function jsonResponse(body: unknown, status: number): Response {
 
 /**
  * Renders `ui` inside a fresh react-query client and a memory router, the
- * providers every routed component expects. Retries and polling are off so
+ * providers every routed component expects. `route` is a path, or a location
+ * carrying navigation state. Retries and polling are off so
  * tests stay deterministic.
  */
-export function renderWithProviders(ui: ReactElement, { route = '/' }: { route?: string } = {}) {
+export function renderWithProviders(
+  ui: ReactElement,
+  { route = '/' }: { route?: InitialEntry } = {},
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, refetchInterval: false } },
   })

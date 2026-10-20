@@ -24,9 +24,12 @@ export function deleteCategoryDescription(category: Category): string {
 
 /** The ids of the categories `source` is a member of. */
 export function categoryIdsOf(categories: Category[], source: SourceRef): string[] {
-  return categories
-    .filter((category) => membersOfKind(category, source.kind).includes(source.id))
-    .map((category) => category.id)
+  return categories.filter((category) => isMember(category, source)).map((category) => category.id)
+}
+
+/** Whether `source` is a member of the category. */
+export function isMember(category: Category, source: SourceRef): boolean {
+  return membersOfKind(category, source.kind).includes(source.id)
 }
 
 /** The category's members with `source` added. */

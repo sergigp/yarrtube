@@ -67,7 +67,7 @@ Web (Vitest):
 - [x] 2.50 `CategoriesView` › lists categories with member counts and selects one from the address
 - [x] 2.51 `CategoriesView` › renames in place, and rejects a taken name keeping the saved one
 - [x] 2.52 `CategoriesView` › groups members by kind and removes one
-- [ ] 2.53 `CategoriesView` › filters the picker and adds the checked sources
+- [x] 2.53 `CategoriesView` › filters the picker and adds the checked sources
 - [ ] 2.54 `CategoriesView` › deletes the selected category after confirmation
 - [ ] 2.55 `CategoriesView` › shows list or details on a narrow viewport
 - [ ] 2.56 `CategoryDetail` › shows the members and video cards newest first

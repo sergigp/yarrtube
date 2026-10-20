@@ -1,10 +1,18 @@
 import { useId, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { avatarMediaUrl, renameCategory, setCategoryMembers } from '@/api/client'
 import { useCategories, useChannels, useInvalidateLibrary, usePlaylists } from '@/api/queries'
 import type { Category, LibraryItem } from '@/api/types'
-import { memberCount, withoutMember, type SourceRef } from '@/lib/categories'
+import {
+  isMember,
+  memberCount,
+  withMembers,
+  withoutMember,
+  type SourceRef,
+} from '@/lib/categories'
+import { matchesSearch } from '@/lib/sidebarSections'
 import { errorMessage } from '@/lib/errorMessage'
+import type { ManageCategoryState } from './AddCategoryDialog'
 import { Thumbnail } from './Thumbnail'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -174,11 +182,92 @@ function byName<T extends LibraryItem>(items: T[] | undefined): T[] {
   )
 }
 
+/**
+ * The tracked channels and playlists not in the category, filtered by name,
+ * to check and add at once.
+ */
+function AddMembersPicker({ category }: { category: Category }) {
+  const { data: channels } = useChannels()
+  const { data: playlists } = usePlaylists()
+  const invalidateLibrary = useInvalidateLibrary()
+  const location = useLocation()
+  const focusSearch = (location.state as ManageCategoryState | null)?.focusAddMembers ?? false
+  const [search, setSearch] = useState('')
+  const [checked, setChecked] = useState<SourceRef[]>([])
+  const [adding, setAdding] = useState(false)
+  const text = search.trim()
+  const candidates = (items: LibraryItem[] | undefined, kind: SourceRef['kind']) =>
+    byName(items)
+      .filter((item) => !isMember(category, { kind, id: item.id }))
+      .filter((item) => !text || matchesSearch(item, text))
+      .map((item) => ({ item, source: { kind, id: item.id } }))
+  const pickable = [...candidates(channels, 'channel'), ...candidates(playlists, 'playlist')]
+  const isChecked = (source: SourceRef) =>
+    checked.some((other) => other.kind === source.kind && other.id === source.id)
+  const toggle = (source: SourceRef) =>
+    setChecked((prev) =>
+      isChecked(source)
+        ? prev.filter((other) => other.kind !== source.kind || other.id !== source.id)
+        : [...prev, source],
+    )
+
+  const addSelected = async () => {
+    setAdding(true)
+    try {
+      await setCategoryMembers(category.id, withMembers(category, checked))
+      setChecked([])
+      await invalidateLibrary()
+    } catch (err) {
+      window.alert(`Failed to add to "${category.name}": ${errorMessage(err)}`)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  return (
+    <fieldset className="flex min-w-0 flex-col gap-2">
+      <legend className="mb-2 font-heading text-base font-semibold">Add to {category.name}</legend>
+      <Input
+        type="search"
+        aria-label="Search channels and playlists to add"
+        placeholder="Search channels and playlists"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        autoFocus={focusSearch}
+      />
+      <ul className="flex max-h-72 flex-col overflow-y-auto">
+        {pickable.map(({ item, source }) => (
+          <li key={`${source.kind}:${source.id}`}>
+            <label className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-secondary">
+              <input
+                type="checkbox"
+                className="size-4 shrink-0 accent-primary"
+                checked={isChecked(source)}
+                onChange={() => toggle(source)}
+              />
+              {item.name}
+            </label>
+          </li>
+        ))}
+      </ul>
+      <Button
+        type="button"
+        className="self-start"
+        disabled={checked.length === 0 || adding}
+        onClick={addSelected}
+      >
+        Add selected
+      </Button>
+    </fieldset>
+  )
+}
+
 function CategoryEditor({ category }: { category: Category }) {
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-6">
       <CategoryNameField key={category.id} category={category} />
       <CategoryMembers category={category} />
+      <AddMembersPicker key={category.id} category={category} />
     </section>
   )
 }
