@@ -11,6 +11,7 @@ import {
   deleteItem,
   markItemWatched,
   sectionRows,
+  sectionHeading,
   unwatchedBadge,
 } from '../helpers/sidebar.js'
 import { expectPendingSync } from '../helpers/tasks.js'
@@ -92,14 +93,24 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
   await test.step('mark its video watched', async () => {
     // The downloaded, unwatched video shows as a badge on the channel's row
     // until the video is marked watched from its own actions menu (covers
-    // POST /videos/{id}/watched).
+    // POST /videos/{id}/watched). Folding the Channels section meanwhile
+    // keeps it folded on the channel's own route, marks its heading active
+    // and shows the section's unwatched total, which follows the video.
     await expect(unwatchedBadge(channelRow)).toHaveText('1')
+    const channelsHeading = sectionHeading(page, 'Channels')
+    await channelsHeading.click()
+    await expect(channelsHeading).toHaveAttribute('aria-expanded', 'false')
+    await expect(channelsHeading).toHaveAttribute('aria-current', 'true')
+    await expect(channelsHeading.getByLabel('1 unwatched')).toHaveText('1')
     const markedOne = page.waitForResponse(
       (response) => response.url().endsWith('/watched') && response.request().method() === 'POST',
     )
     await page.getByRole('button', { name: `Actions for ${videoTitle}` }).first().click()
     await page.getByRole('menuitem', { name: 'Mark as watched' }).click()
     expect(new URL((await markedOne).url()).pathname).toMatch(/^\/api\/videos\/[^/]+\/watched$/)
+    await expect(channelsHeading).toHaveAccessibleName('Channels')
+    await channelsHeading.click()
+    await expect(channelRow).toBeVisible()
     await expect(unwatchedBadge(channelRow)).toHaveCount(0)
     await expect(page.locator('main ul li').getByLabel('Watched')).toBeVisible()
   })

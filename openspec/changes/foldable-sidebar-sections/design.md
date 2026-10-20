@@ -6,6 +6,7 @@
 - `web/src/components/Sidebar.test.tsx` — fold behaviour; the "show more" test is replaced.
 
 - `smoke-tests/helpers/sidebar.js`, `smoke-tests/tests/{addDialogLocation,playlist,channel}.spec.js` — section selectors become `h3:has(button:text-is("<Section>"))`: Playwright's `:text-is` matches the smallest element holding the text, which is now the heading button.
+- `smoke-tests/tests/sidebarFolding.spec.js` (new) — folding survives a real reload, on desktop and in the mobile drawer; `smoke-tests/tests/channel.spec.js` — the folded Channels heading is marked active on the channel's route and its total drops when the video is marked watched; `smoke-tests/helpers/sidebar.js` gains `sectionHeading`; `smoke-tests/README.md` lists the new coverage.
 
 No backend, API type or fixture changes.
 

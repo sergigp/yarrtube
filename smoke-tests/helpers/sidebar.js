@@ -4,6 +4,12 @@ export function sectionRows(page, section) {
   return page.locator(`h3:has(button:text-is("${section}")) ~ ul li`)
 }
 
+// The heading toggle that folds a section; while folded its name also
+// carries the section's unwatched total ("Channels 3 unwatched").
+export function sectionHeading(page, section) {
+  return page.getByRole('button', { name: new RegExp(`^${section}( \\d+ unwatched)?$`) })
+}
+
 async function rowFor(page, section, name) {
   const rows = sectionRows(page, section)
   const named = rows.filter({ hasText: name })

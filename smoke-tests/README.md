@@ -89,12 +89,17 @@ uncaught page error or a 5xx `/api` response.
   fixture channel (episodes under `Season <year>`, plus a `poster.jpg`),
   including marking a single video watched, with loose (non-title)
   assertions since the channel's newest video can change, plus the
-  invalid-handle error case.
+  invalid-handle error case. While the video is unwatched, the folded
+  Channels heading shows the section's unwatched total and is marked
+  active on the channel's route; the total goes once the video is watched.
 - **Channel video limit** (`tests/channelVideoLimit.spec.js`): a channel
   with two downloaded videos, edited down to one: the next sync drops the
   older video from the list and its files from disk, keeping the newer.
 - **Mobile sidebar** (`tests/mobile-sidebar.spec.js`): opening/closing the
   sidebar at a narrow viewport.
+- **Sidebar folding** (`tests/sidebarFolding.spec.js`): a folded section
+  stays folded across a reload while the other keeps its own state, on
+  desktop and in the mobile drawer.
 - **Tasks view** (`tests/tasks.spec.js`): the recurring yt-dlp self-update
   task the daemon seeds at startup is listed as pending.
 
