@@ -19,7 +19,20 @@ pub trait CategoryDeleterApi: Send + Sync {
 }
 
 impl CategoryDeleterApi for CategoryDeleter {
-    fn delete(&self, _id: &CategoryId) -> Result<(), DeleteCategoryError> {
-        Ok(())
+    fn delete(&self, id: &CategoryId) -> Result<(), DeleteCategoryError> {
+        self.ensure_exists(id)?;
+        self.repository
+            .delete(id)
+            .map_err(DeleteCategoryError::Repository)
+    }
+}
+
+impl CategoryDeleter {
+    fn ensure_exists(&self, id: &CategoryId) -> Result<(), DeleteCategoryError> {
+        self.repository
+            .find(id)
+            .map_err(DeleteCategoryError::Repository)?
+            .map(|_| ())
+            .ok_or_else(|| DeleteCategoryError::NotFound(id.clone()))
     }
 }

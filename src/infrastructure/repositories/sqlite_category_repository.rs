@@ -97,8 +97,18 @@ impl CategoryRepository for SqliteCategoryRepository {
         Ok(())
     }
 
-    fn delete(&self, _id: &CategoryId) -> anyhow::Result<()> {
-        Ok(())
+    fn delete(&self, id: &CategoryId) -> anyhow::Result<()> {
+        let mut conn = self.db.write()?;
+        let tx = conn
+            .transaction()
+            .context("failed to begin category delete")?;
+        Self::delete_members(&tx, id)?;
+        tx.execute("DELETE FROM categories WHERE id = ?1", params![id.as_str()])
+            .inspect_err(
+                |e| tracing::error!(category_id = %id, error = %e, "failed to delete category"),
+            )
+            .context("failed to delete category")?;
+        tx.commit().context("failed to commit category delete")
     }
 }
 
@@ -122,6 +132,18 @@ impl SqliteCategoryRepository {
             .context("failed to insert category member")
             .map(|_| ())
         })
+    }
+
+    fn delete_members(conn: &Connection, id: &CategoryId) -> anyhow::Result<()> {
+        conn.execute(
+            "DELETE FROM category_members WHERE category_id = ?1",
+            params![id.as_str()],
+        )
+        .inspect_err(
+            |e| tracing::error!(category_id = %id, error = %e, "failed to delete category members"),
+        )
+        .context("failed to delete category members")?;
+        Ok(())
     }
 
     fn members(conn: &Connection, id: &CategoryId) -> anyhow::Result<Vec<CategoryMember>> {

@@ -3,10 +3,12 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::required;
-use crate::domain::category::{CategoryId, CategoryName, CreateCategoryError, UpdateCategoryError};
+use crate::domain::category::{
+    CategoryId, CategoryName, CreateCategoryError, DeleteCategoryError, UpdateCategoryError,
+};
 use crate::domain::services::{
-    CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryUpdater, CategoryUpdaterApi,
-    CategoryViewSearcher, CategoryViewSearcherApi, VideoWatchStateUpdater,
+    CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryDeleterApi, CategoryUpdater,
+    CategoryUpdaterApi, CategoryViewSearcher, CategoryViewSearcherApi, VideoWatchStateUpdater,
 };
 use axum::Json;
 use axum::extract::{Path, State};
@@ -56,10 +58,16 @@ pub async fn update_category(
 }
 
 pub async fn delete_category(
-    State(_category_deleter): State<CategoryDeleter>,
-    Path(_id): Path<String>,
+    State(category_deleter): State<CategoryDeleter>,
+    Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    Ok(StatusCode::NO_CONTENT)
+    let id = CategoryId::new(id)?;
+
+    match run_blocking(move || category_deleter.delete(&id)).await? {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(e @ DeleteCategoryError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
+        Err(e @ DeleteCategoryError::Repository(_)) => Err(ApiError::internal(e)),
+    }
 }
 
 pub async fn set_category_members(
@@ -481,6 +489,43 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_delete_a_category_keeping_its_sources() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = SqliteChannelRepository::new(db.database());
+        let playlist_repository = SqlitePlaylistRepository::new(db.database());
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let gotham = channel("@GothamChess");
+        let endgames = playlist("PLendgames");
+        let video = downloaded_video("vid1");
+        channel_repository.insert(&gotham).unwrap();
+        playlist_repository.insert(&endgames).unwrap();
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+        );
+        let chess = Category {
+            members: vec![
+                channel_member("@GothamChess"),
+                playlist_member("PLendgames"),
+            ],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_deleter = CategoryDeleter::new(repository.clone());
+
+        let response = delete(category_deleter, chess.id.as_str()).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(repository.list().unwrap(), vec![]);
+        assert_eq!(channel_repository.list().unwrap(), vec![gotham]);
+        assert_eq!(playlist_repository.list().unwrap(), vec![endgames]);
+        assert_eq!(video_repository.find(&video.id).unwrap(), Some(video));
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
@@ -638,6 +683,10 @@ mod tests {
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    async fn delete(category_deleter: CategoryDeleter, id: &str) -> Result<StatusCode, ApiError> {
+        delete_category(State(category_deleter), Path(id.to_string())).await
     }
 
     async fn rename(
