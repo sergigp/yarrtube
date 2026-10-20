@@ -261,4 +261,32 @@ describe('CategoriesView', () => {
       '/categories/chess',
     )
   })
+
+  it('guides filling an empty category, showing only the member kinds it holds', async () => {
+    const routes = {
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'empty', name: 'Cooking' }),
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] }),
+      ]),
+    }
+    const empty = renderView(routes, { route: '/categories?selected=empty' })
+    const emptyMembers = await screen.findByRole('region', { name: 'In Cooking' })
+    const emptyText = emptyMembers.textContent
+    const pickerText = screen.getByRole('group', { name: 'Add to Cooking' }).textContent
+    empty.unmount()
+
+    renderView(
+      { ...routes, 'GET /api/channels': [aChannel({ id: '@hikaru', name: 'Hikaru' })] },
+      { route: '/categories?selected=chess' },
+    )
+    const members = await screen.findByRole('region', { name: 'In Chess' })
+    await within(members).findByText('Hikaru')
+
+    expect(emptyText).toBe(
+      'In CookingNothing here yet. Pick channels and playlists below to add them.',
+    )
+    expect(pickerText).toContain('No channels or playlists tracked yet.')
+    expect(within(members).getByRole('list', { name: 'Channels' })).toBeInTheDocument()
+    expect(within(members).queryByRole('list', { name: 'Playlists' })).not.toBeInTheDocument()
+  })
 })

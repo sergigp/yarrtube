@@ -177,17 +177,26 @@ function CategoryMembers({ category }: { category: Category }) {
       <h2 id={headingId} className="font-heading text-base font-semibold">
         In {category.name}
       </h2>
-      <MemberGroup
-        title="Channels"
-        items={byName(channels?.filter((channel) => category.channels.includes(channel.id)))}
-        showAvatar
-        onRemove={(channel) => void remove({ kind: 'channel', id: channel.id })}
-      />
-      <MemberGroup
-        title="Playlists"
-        items={byName(playlists?.filter((playlist) => category.playlists.includes(playlist.id)))}
-        onRemove={(playlist) => void remove({ kind: 'playlist', id: playlist.id })}
-      />
+      {memberCount(category) === 0 && (
+        <p className="text-sm text-muted-foreground">
+          Nothing here yet. Pick channels and playlists below to add them.
+        </p>
+      )}
+      {category.channels.length > 0 && (
+        <MemberGroup
+          title="Channels"
+          items={byName(channels?.filter((channel) => category.channels.includes(channel.id)))}
+          showAvatar
+          onRemove={(channel) => void remove({ kind: 'channel', id: channel.id })}
+        />
+      )}
+      {category.playlists.length > 0 && (
+        <MemberGroup
+          title="Playlists"
+          items={byName(playlists?.filter((playlist) => category.playlists.includes(playlist.id)))}
+          onRemove={(playlist) => void remove({ kind: 'playlist', id: playlist.id })}
+        />
+      )}
     </section>
   )
 }
@@ -245,6 +254,12 @@ function AddMembersPicker({ category }: { category: Category }) {
         onChange={(event) => setSearch(event.target.value)}
         autoFocus={focusSearch}
       />
+      {channels?.length === 0 && playlists?.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No channels or playlists tracked yet. Add one from the sidebar, then come back to group
+          it here.
+        </p>
+      )}
       <ul className="flex max-h-72 flex-col overflow-y-auto">
         {pickable.map(({ item, source }) => (
           <li key={`${source.kind}:${source.id}`}>
