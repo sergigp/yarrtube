@@ -234,8 +234,13 @@ impl Video {
 
     /// This video with `current`'s watch state: `watched_at`,
     /// `playback_position` and `last_played_at`.
-    pub fn with_watch_state_of(self, _current: &Video) -> Self {
-        self
+    pub fn with_watch_state_of(self, current: &Video) -> Self {
+        Self {
+            watched_at: current.watched_at,
+            playback_position: current.playback_position,
+            last_played_at: current.last_played_at,
+            ..self
+        }
     }
 
     pub fn is_watched(&self) -> bool {
