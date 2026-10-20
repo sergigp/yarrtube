@@ -2357,6 +2357,18 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![video]);
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_mark_watched_if_invalid_playlist_id_provided() {
+        let response = mark_watched(any_video_watch_state_updater(), " ").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "YouTube playlist ID must not be empty"
+            ))
+        );
+    }
+
     fn any_playlist_creator() -> PlaylistCreator {
         PlaylistCreator::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
@@ -2545,6 +2557,21 @@ mod tests {
         fn resolve(&self, _id: &PlaylistId) -> anyhow::Result<Option<ResolvedPlaylist>> {
             anyhow::bail!("YouTube API request failed")
         }
+    }
+
+    /// An updater for tests whose request is rejected before reaching it, on
+    /// an unmigrated in-memory database.
+    fn any_video_watch_state_updater() -> VideoWatchStateUpdater {
+        VideoWatchStateUpdater::new(
+            Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+            Arc::new(FixedClock(watched_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(unused_connection())),
+            any_category_video_collector(),
+        )
     }
 
     fn unused_connection() -> crate::infrastructure::shared::sqlite_connection::Database {
@@ -2884,6 +2911,17 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+        )
+    }
+
+    /// A collector on an unmigrated in-memory database.
+    fn any_category_video_collector() -> CategoryVideoCollector {
+        CategoryVideoCollector::new(
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+            Arc::new(SqliteVideoRepository::new(unused_connection())),
         )
     }
 }
