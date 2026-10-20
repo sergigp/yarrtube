@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   categoryIdsOf,
+  membersOf,
   membershipChanges,
   orderCategories,
   sourceChips,
+  stagedSummary,
+  toggled,
   visibleChips,
   withMember,
   withMembers,
   withoutMember,
+  type SourceRef,
 } from './categories'
 import { aCategory, aChannel, aPlaylist } from '@/test/helpers'
 
@@ -139,6 +143,25 @@ describe('categories', () => {
       allVer: ['Overlord', 'Veritasium'],
       inVer: ['Veritasium'],
       outVer: ['Overlord'],
+    })
+  })
+
+  it('toggles a source and summarises staged additions and removals', () => {
+    const saved = membersOf(
+      aCategory({ channels: ['@hikaru'], playlists: ['PLendgames'], unwatched_count: 3 }),
+    )
+    const staged = [
+      { kind: 'channel', id: '@gotham' },
+      { kind: 'channel', id: '@hikaru' },
+      { kind: 'playlist', id: 'PLopenings' },
+      { kind: 'channel', id: '@gotham' },
+      { kind: 'channel', id: '@ludwig' },
+    ].reduce((members, source) => toggled(members, source as SourceRef), saved)
+
+    expect({ saved, staged, summary: stagedSummary(saved, staged) }).toEqual({
+      saved: { channels: ['@hikaru'], playlists: ['PLendgames'] },
+      staged: { channels: ['@ludwig'], playlists: ['PLendgames', 'PLopenings'] },
+      summary: { added: 2, removed: 1 },
     })
   })
 })

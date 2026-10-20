@@ -111,8 +111,8 @@ export function sourceChips(
 }
 
 /** The category's members, as the manage sources dialog stages them. */
-export function membersOf(_category: Category): CategoryMembers {
-  return { channels: [], playlists: [] }
+export function membersOf(category: Category): CategoryMembers {
+  return { channels: category.channels, playlists: category.playlists }
 }
 
 /** Whether `source` is among `members`. */
@@ -121,8 +121,13 @@ export function isIn(members: CategoryMembers, source: SourceRef): boolean {
 }
 
 /** `members` with `source` added when absent, removed when present. */
-export function toggled(members: CategoryMembers, _source: SourceRef): CategoryMembers {
-  return members
+export function toggled(members: CategoryMembers, source: SourceRef): CategoryMembers {
+  const ids = membersOfKind(members, source.kind)
+  return replaceMembersOfKind(
+    members,
+    source.kind,
+    isIn(members, source) ? ids.filter((id) => id !== source.id) : [...ids, source.id],
+  )
 }
 
 /** Chips matching the search (name, ignoring case) and the state filter, order kept. */
@@ -140,10 +145,10 @@ export function visibleChips(
 
 /** How many sources `staged` adds to and removes from `saved`. */
 export function stagedSummary(
-  _saved: CategoryMembers,
-  _staged: CategoryMembers,
+  saved: CategoryMembers,
+  staged: CategoryMembers,
 ): { added: number; removed: number } {
-  return { added: 0, removed: 0 }
+  return { added: countMissing(staged, saved), removed: countMissing(saved, staged) }
 }
 
 function membersOfKind(members: CategoryMembers, kind: SourceRef['kind']): string[] {
@@ -151,13 +156,21 @@ function membersOfKind(members: CategoryMembers, kind: SourceRef['kind']): strin
 }
 
 function replaceMembersOfKind(
-  category: Category,
+  members: CategoryMembers,
   kind: SourceRef['kind'],
   ids: string[],
 ): CategoryMembers {
   return kind === 'channel'
-    ? { channels: ids, playlists: category.playlists }
-    : { channels: category.channels, playlists: ids }
+    ? { channels: ids, playlists: members.playlists }
+    : { channels: members.channels, playlists: ids }
+}
+
+/** How many of `members` are not in `others`. */
+function countMissing(members: CategoryMembers, others: CategoryMembers): number {
+  return (
+    members.channels.filter((id) => !others.channels.includes(id)).length +
+    members.playlists.filter((id) => !others.playlists.includes(id)).length
+  )
 }
 
 function unique(ids: string[]): string[] {
