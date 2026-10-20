@@ -49,7 +49,7 @@ SQLite playlist repository:
 
 SQLite playlist video repository:
 
-- [ ] 3.2 `it_should_list_videos_of_every_playlist`: `list()` returns rows from every playlist.
+- [x] 3.2 `it_should_list_videos_of_every_playlist`: `list()` returns rows from every playlist.
 
 Migrations:
 

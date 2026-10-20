@@ -240,6 +240,43 @@ mod tests {
     }
 
     #[test]
+    fn it_should_list_videos_of_every_playlist() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let other_playlist = PlaylistId::new("PL2").unwrap();
+        let first = seed_video(&repo, "yt1", "First");
+        let second = seed_video(&repo, "yt2", "Second");
+        repo.save(&PlaylistVideo::create(
+            playlist_id(),
+            first.id.clone(),
+            0,
+            now,
+        ))
+        .unwrap();
+        repo.save(&PlaylistVideo::create(
+            other_playlist.clone(),
+            second.id.clone(),
+            0,
+            now,
+        ))
+        .unwrap();
+
+        assert_eq!(
+            repo.list().unwrap(),
+            vec![
+                PlaylistVideo {
+                    id: 1,
+                    ..PlaylistVideo::create(playlist_id(), first.id, 0, now)
+                },
+                PlaylistVideo {
+                    id: 2,
+                    ..PlaylistVideo::create(other_playlist, second.id, 0, now)
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_list_playlist_videos_ordered_by_position() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
