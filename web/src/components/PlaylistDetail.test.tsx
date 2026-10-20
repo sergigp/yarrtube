@@ -34,8 +34,6 @@ describe('PlaylistDetail', () => {
     expect(document.querySelector('video')?.getAttribute('src')).toBe(
       `/media/${playlist.path}/first.mp4`,
     )
-    // Playlists have no mark-all-watched action.
-    expect(screen.queryByRole('button', { name: 'Mark all watched' })).not.toBeInTheDocument()
   })
 
   it("summarizes the playlist's unwatched count", async () => {
@@ -121,6 +119,38 @@ describe('PlaylistDetail', () => {
     expect(update).toHaveBeenCalledOnce()
     await user.click(screen.getByRole('button', { name: 'More actions for The Playlist' }))
     expect(await screen.findByRole('menuitem', { name: 'Include in home' })).toBeInTheDocument()
+  })
+
+  it('marks the playlist watched from its page header', async () => {
+    const first = aVideo({ title: 'First Video' })
+    const second = aVideo({ title: 'Second Video' })
+    let marked = false
+    renderPlaylist(
+      {
+        'GET /api/playlists': () => [
+          aPlaylist({ id: 'PL1', name: 'The Playlist', unwatched_count: marked ? 0 : 2 }),
+        ],
+        'GET /api/playlists/PL1/videos': () => [
+          { ...first, watched: marked },
+          { ...second, watched: marked },
+        ],
+        'POST /api/playlists/PL1/watched': () => {
+          marked = true
+          return null
+        },
+      },
+      '/playlists/PL1',
+    )
+    const user = userEvent.setup()
+
+    expect(await screen.findByText('2 videos · 2 unwatched')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'More actions for The Playlist' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+
+    expect(await screen.findByText('2 videos')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: /^Watched.*Second Video$/ }),
+    ).toBeInTheDocument()
   })
 
   it('deletes the playlist from its page header menu after confirming', async () => {

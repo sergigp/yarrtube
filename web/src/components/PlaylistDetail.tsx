@@ -9,7 +9,7 @@ import {
   useSetPlaylistExcludedFromHome,
   useUpdatePlaylistSettings,
 } from '@/api/queries'
-import { reconcilePlaylist, deletePlaylist } from '@/api/client'
+import { reconcilePlaylist, deletePlaylist, markPlaylistWatched } from '@/api/client'
 import { useWatchProgress } from '@/hooks/useWatchProgress'
 import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
@@ -58,6 +58,7 @@ export function PlaylistDetail() {
         videos={videos}
         unwatchedCount={playlist.unwatched_count}
         onSync={refreshing(() => reconcilePlaylist(id))}
+        onMarkWatched={refreshing(() => markPlaylistWatched(id))}
         excludedFromHome={playlist.exclude_from_home}
         onSetExcludedFromHome={(excluded) => setPlaylistExcludedFromHome(id, excluded)}
         onEditRequest={() => setEditing(true)}
