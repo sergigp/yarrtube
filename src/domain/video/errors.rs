@@ -42,6 +42,7 @@ pub enum UpdateWatchStateError {
     VideoNotDownloaded(VideoId),
     ChannelNotFound(ChannelHandle),
     CategoryNotFound(CategoryId),
+    PlaylistNotFound(PlaylistId),
     Repository(anyhow::Error),
 }
 
@@ -52,6 +53,7 @@ impl fmt::Display for UpdateWatchStateError {
             Self::VideoNotDownloaded(id) => write!(f, "video {id} is not downloaded"),
             Self::ChannelNotFound(id) => write!(f, "channel {id} not found"),
             Self::CategoryNotFound(id) => write!(f, "category {id} not found"),
+            Self::PlaylistNotFound(id) => write!(f, "playlist {id} not found"),
             Self::Repository(e) => write!(f, "{e}"),
         }
     }

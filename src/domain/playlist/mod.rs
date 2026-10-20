@@ -7,6 +7,8 @@ pub mod playlist_kind;
 pub mod playlist_name;
 pub mod playlist_path;
 pub mod playlist_preview;
+pub mod playlist_settings_change;
+pub mod playlist_view;
 
 pub use errors::{
     CreatePlaylistError, DeletePlaylistError, PreviewPlaylistError, UpdatePlaylistError,
@@ -18,3 +20,5 @@ pub use playlist_kind::PlaylistKind;
 pub use playlist_name::PlaylistName;
 pub use playlist_path::PlaylistPath;
 pub use playlist_preview::PlaylistPreview;
+pub use playlist_settings_change::PlaylistSettingsChange;
+pub use playlist_view::PlaylistView;

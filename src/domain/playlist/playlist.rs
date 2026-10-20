@@ -14,6 +14,7 @@ pub struct Playlist {
     pub quality: Quality,
     pub kind: PlaylistKind,
     pub exclude_from_home: bool,
+    pub hide_unwatched_count: bool,
     pub reconcile_interval: ReconcileInterval,
     pub created_at: DateTime<Utc>,
     /// The highest episode number the playlist has ever assigned.
@@ -39,6 +40,7 @@ impl Playlist {
             quality,
             kind,
             exclude_from_home,
+            hide_unwatched_count: false,
             reconcile_interval,
             created_at,
             last_episode: None,
@@ -48,6 +50,13 @@ impl Playlist {
     pub fn with_exclude_from_home(self, exclude_from_home: bool) -> Self {
         Self {
             exclude_from_home,
+            ..self
+        }
+    }
+
+    pub fn with_hide_unwatched_count(self, hide_unwatched_count: bool) -> Self {
+        Self {
+            hide_unwatched_count,
             ..self
         }
     }

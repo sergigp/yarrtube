@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { matchesSearch, orderChannels, sectionView, unwatchedTotal } from './sidebarSections'
+import { matchesSearch, orderByUnwatched, sectionView, unwatchedTotal } from './sidebarSections'
 import { aChannel, aPlaylist } from '@/test/helpers'
 
-describe('orderChannels', () => {
+describe('orderByUnwatched', () => {
   it('puts channels with the most unwatched videos first', () => {
     const channels = [
       aChannel({ id: 'a', unwatched_count: 0 }),
@@ -10,7 +10,7 @@ describe('orderChannels', () => {
       aChannel({ id: 'c', unwatched_count: 2 }),
     ]
 
-    expect(orderChannels(channels).map((channel) => channel.id)).toEqual(['b', 'c', 'a'])
+    expect(orderByUnwatched(channels).map((channel) => channel.id)).toEqual(['b', 'c', 'a'])
   })
 
   it('keeps the incoming order among ties and does not mutate the input', () => {
@@ -21,7 +21,7 @@ describe('orderChannels', () => {
       aChannel({ id: 'd', unwatched_count: 0 }),
     ]
 
-    const ordered = orderChannels(channels)
+    const ordered = orderByUnwatched(channels)
 
     expect(ordered.map((channel) => channel.id)).toEqual(['a', 'b', 'c', 'd'])
     expect(channels.map((channel) => channel.id)).toEqual(['a', 'b', 'c', 'd'])

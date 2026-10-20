@@ -12,8 +12,8 @@ pub mod videos;
 use crate::domain::services::{
     CategoryCreator, CategoryDeleter, CategoryUpdater, CategoryViewSearcher, ChannelCreator,
     ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler, ChannelViewSearcher,
-    DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher,
-    PlaylistUpdater, PlaylistVideoReconciler, SubtitleReader, TaskViewSearcher, VideoSearcher,
+    DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater,
+    PlaylistVideoReconciler, PlaylistViewSearcher, SubtitleReader, TaskViewSearcher, VideoSearcher,
     VideoWatchStateUpdater,
 };
 use crate::infrastructure::shared::app_version::AppVersion;
@@ -38,9 +38,9 @@ pub struct ApiServices {
     pub playlist_creator: PlaylistCreator,
     pub playlist_deleter: PlaylistDeleter,
     pub playlist_previewer: PlaylistPreviewer,
-    pub playlist_searcher: PlaylistSearcher,
     pub playlist_updater: PlaylistUpdater,
     pub playlist_video_reconciler: PlaylistVideoReconciler,
+    pub playlist_view_searcher: PlaylistViewSearcher,
     pub video_searcher: VideoSearcher,
     pub task_view_searcher: TaskViewSearcher,
     pub channel_creator: ChannelCreator,
@@ -75,6 +75,10 @@ pub fn api_router(api_services: ApiServices) -> Router {
         .route(
             "/playlists/{id}/reconcile",
             post(playlists::reconcile_playlist),
+        )
+        .route(
+            "/playlists/{id}/watched",
+            post(playlists::mark_playlist_watched),
         )
         .route(
             "/playlists/{id}/videos",

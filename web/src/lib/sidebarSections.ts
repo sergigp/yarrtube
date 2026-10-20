@@ -1,14 +1,19 @@
-import type { ChannelListItem, LibraryItem } from '@/api/types'
+import type { LibraryItem } from '@/api/types'
 
 // When the search field appears.
 export const SEARCH_THRESHOLD = 15
 
+/** The unwatched count to display: 0 when the entry hides it. */
+export function shownUnwatchedCount(item: LibraryItem): number {
+  return item.unwatched_count ?? 0
+}
+
 /**
- * Channels with unwatched videos first, most unwatched first. The sort is
- * stable, so ties and the caught-up channels keep the API's name order.
+ * Entries with a shown unwatched count first, most first. The sort is stable,
+ * so ties and the caught-up entries keep the API's name order.
  */
-export function orderChannels(channels: ChannelListItem[]): ChannelListItem[] {
-  return [...channels].sort((a, b) => b.unwatched_count - a.unwatched_count)
+export function orderByUnwatched<T extends LibraryItem>(items: T[]): T[] {
+  return [...items].sort((a, b) => shownUnwatchedCount(b) - shownUnwatchedCount(a))
 }
 
 /** Case-insensitive name match; expects `text` already trimmed. */

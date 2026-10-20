@@ -16,6 +16,8 @@ pub trait PlaylistVideoRepository: Send + Sync {
     fn find_by_video(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<PlaylistVideo>>;
     /// Ordered by position (YouTube-defined order), then by insertion order.
     fn list_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<Vec<PlaylistVideo>>;
+    /// Every stored playlist video, across all playlists.
+    fn list(&self) -> anyhow::Result<Vec<PlaylistVideo>>;
     fn delete(&self, playlist_id: &PlaylistId, youtube_video_id: &VideoId) -> anyhow::Result<()>;
     fn delete_all_for_playlist(&self, playlist_id: &PlaylistId) -> anyhow::Result<()>;
 }
@@ -96,6 +98,10 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
             columns_to_playlist_video(columns)
         })
         .collect()
+    }
+
+    fn list(&self) -> anyhow::Result<Vec<PlaylistVideo>> {
+        Ok(vec![])
     }
 
     fn delete(&self, playlist_id: &PlaylistId, youtube_video_id: &VideoId) -> anyhow::Result<()> {

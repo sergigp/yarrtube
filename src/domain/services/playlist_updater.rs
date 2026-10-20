@@ -1,5 +1,6 @@
 use crate::domain::playlist::Playlist;
 use crate::domain::playlist::PlaylistId;
+use crate::domain::playlist::PlaylistSettingsChange;
 use crate::domain::playlist::errors::UpdatePlaylistError;
 use crate::domain::shared::ReconcileInterval;
 use crate::domain::task::Task;
@@ -32,16 +33,16 @@ impl PlaylistUpdater {
 }
 
 pub trait PlaylistUpdaterApi: Send + Sync {
-    /// Sets whether the playlist's videos are left out of home and/or its
-    /// reconcile interval, returning the playlist as stored. `None` keeps the
-    /// stored value; setting the value it already has changes nothing. A new
+    /// Applies `change` (whether the playlist's videos are left out of home,
+    /// whether its unwatched count is hidden, its reconcile interval),
+    /// returning the playlist as stored. A `None` setting keeps the stored
+    /// value; setting the value it already has changes nothing. A new
     /// interval brings the pending reconcile forward when it would now run
     /// later than `now + interval`.
     fn update_settings(
         &self,
         id: PlaylistId,
-        exclude_from_home: Option<bool>,
-        reconcile_interval: Option<ReconcileInterval>,
+        change: PlaylistSettingsChange,
     ) -> Result<Playlist, UpdatePlaylistError>;
 }
 
@@ -49,16 +50,11 @@ impl PlaylistUpdaterApi for PlaylistUpdater {
     fn update_settings(
         &self,
         id: PlaylistId,
-        exclude_from_home: Option<bool>,
-        reconcile_interval: Option<ReconcileInterval>,
+        change: PlaylistSettingsChange,
     ) -> Result<Playlist, UpdatePlaylistError> {
-        let playlist = Self::apply_settings(
-            self.find_playlist(&id)?,
-            exclude_from_home,
-            reconcile_interval,
-        );
+        let playlist = Self::apply_settings(self.find_playlist(&id)?, change);
         self.update_playlist(&playlist)?;
-        if let Some(reconcile_interval) = reconcile_interval {
+        if let Some(reconcile_interval) = change.reconcile_interval {
             self.bring_forward_next_reconcile(&id, reconcile_interval)?;
         }
         info!(
@@ -80,16 +76,12 @@ impl PlaylistUpdater {
         }
     }
 
-    fn apply_settings(
-        playlist: Playlist,
-        exclude_from_home: Option<bool>,
-        reconcile_interval: Option<ReconcileInterval>,
-    ) -> Playlist {
-        let playlist = match exclude_from_home {
+    fn apply_settings(playlist: Playlist, change: PlaylistSettingsChange) -> Playlist {
+        let playlist = match change.exclude_from_home {
             Some(exclude_from_home) => playlist.with_exclude_from_home(exclude_from_home),
             None => playlist,
         };
-        match reconcile_interval {
+        match change.reconcile_interval {
             Some(reconcile_interval) => playlist.with_reconcile_interval(reconcile_interval),
             None => playlist,
         }

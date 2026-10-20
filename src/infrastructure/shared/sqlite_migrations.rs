@@ -17,6 +17,8 @@ const RECONCILE_INTERVAL_SQL: &str =
     include_str!("../../../migrations/0009_reconcile_interval.sql");
 const VIDEO_SUBTITLES_SQL: &str = include_str!("../../../migrations/0010_video_subtitles.sql");
 const CATEGORIES_SQL: &str = include_str!("../../../migrations/0011_categories.sql");
+const PLAYLIST_HIDE_UNWATCHED_COUNT_SQL: &str =
+    include_str!("../../../migrations/0012_playlist_hide_unwatched_count.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -31,6 +33,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(RECONCILE_INTERVAL_SQL),
         M::up(VIDEO_SUBTITLES_SQL),
         M::up(CATEGORIES_SQL),
+        M::up(PLAYLIST_HIDE_UNWATCHED_COUNT_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))

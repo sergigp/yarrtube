@@ -22,7 +22,7 @@ import type { LibraryItem } from '@/api/types'
 import {
   SEARCH_THRESHOLD,
   activeIdFrom,
-  orderChannels,
+  orderByUnwatched,
   sectionView,
   unwatchedTotal,
 } from '@/lib/sidebarSections'
@@ -368,7 +368,7 @@ export function Sidebar({
 
   const searchable = (channels?.length ?? 0) + (playlists?.length ?? 0) > SEARCH_THRESHOLD
   const searchText = searchable ? search.trim() : ''
-  const orderedChannels = channels && orderChannels(channels)
+  const orderedChannels = channels && orderByUnwatched(channels)
   const channelsView = sectionView(orderedChannels, {
     searchText,
     folded: channelsFolded,

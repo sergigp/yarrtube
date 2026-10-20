@@ -3,24 +3,25 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::{MISSING_QUALITY, required};
+use super::videos::update_watch_state_error;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist::{
-    CreatePlaylistError, DeletePlaylistError, PlaylistPath, PreviewPlaylistError,
-    UpdatePlaylistError,
+    CreatePlaylistError, DeletePlaylistError, PlaylistPath, PlaylistSettingsChange,
+    PreviewPlaylistError, UpdatePlaylistError,
 };
 use crate::domain::services::{
     CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi, PlaylistDeleter,
-    PlaylistDeleterApi, PlaylistPreviewer, PlaylistPreviewerApi, PlaylistSearcher,
-    PlaylistSearcherApi, PlaylistUpdater, PlaylistUpdaterApi, PlaylistVideoReconciler,
-    PlaylistVideoReconcilerApi,
+    PlaylistDeleterApi, PlaylistPreviewer, PlaylistPreviewerApi, PlaylistUpdater,
+    PlaylistUpdaterApi, PlaylistVideoReconciler, PlaylistVideoReconcilerApi, PlaylistViewSearcher,
+    PlaylistViewSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use crate::domain::shared::{Quality, ReconcileInterval};
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use dto::{
-    CreatePlaylistRequest, PlaylistPreviewResponse, PlaylistResponse, PreviewPlaylistQuery,
-    UpdatePlaylistRequest,
+    CreatePlaylistRequest, PlaylistListItemResponse, PlaylistPreviewResponse, PlaylistResponse,
+    PreviewPlaylistQuery, UpdatePlaylistRequest,
 };
 
 const MISSING_PATH: &str = "Playlist path must not be empty";
@@ -93,19 +94,19 @@ pub async fn update_playlist(
     Json(request): Json<UpdatePlaylistRequest>,
 ) -> Result<Json<PlaylistResponse>, ApiError> {
     let id = PlaylistId::new(id)?;
-    let reconcile_interval = request
-        .reconcile_interval_minutes
-        .map(ReconcileInterval::new)
-        .transpose()?;
-    if request.exclude_from_home.is_none() && reconcile_interval.is_none() {
+    let change = PlaylistSettingsChange {
+        exclude_from_home: request.exclude_from_home,
+        hide_unwatched_count: request.hide_unwatched_count,
+        reconcile_interval: request
+            .reconcile_interval_minutes
+            .map(ReconcileInterval::new)
+            .transpose()?,
+    };
+    if change.is_empty() {
         return Err(ApiError::bad_request(NOTHING_TO_UPDATE));
     }
 
-    match run_blocking(move || {
-        playlist_updater.update_settings(id, request.exclude_from_home, reconcile_interval)
-    })
-    .await?
-    {
+    match run_blocking(move || playlist_updater.update_settings(id, change)).await? {
         Ok(playlist) => Ok(Json(PlaylistResponse::from(playlist))),
         Err(e @ UpdatePlaylistError::NotFound(_)) => Err(ApiError::new(StatusCode::NOT_FOUND, e)),
         Err(e @ UpdatePlaylistError::Repository(_)) => Err(ApiError::internal(e)),
@@ -126,14 +127,30 @@ pub async fn reconcile_playlist(
 }
 
 pub async fn list_playlists(
-    State(playlist_searcher): State<PlaylistSearcher>,
-) -> Result<Json<Vec<PlaylistResponse>>, ApiError> {
-    let playlists = run_blocking(move || playlist_searcher.search_all())
+    State(playlist_view_searcher): State<PlaylistViewSearcher>,
+) -> Result<Json<Vec<PlaylistListItemResponse>>, ApiError> {
+    let playlists = run_blocking(move || playlist_view_searcher.search_all())
         .await?
         .map_err(ApiError::internal)?;
     Ok(Json(
-        playlists.into_iter().map(PlaylistResponse::from).collect(),
+        playlists
+            .into_iter()
+            .map(PlaylistListItemResponse::from)
+            .collect(),
     ))
+}
+
+pub async fn mark_playlist_watched(
+    State(video_watch_state_updater): State<VideoWatchStateUpdater>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let playlist_id = PlaylistId::new(id)?;
+
+    run_blocking(move || video_watch_state_updater.mark_playlist_watched(&playlist_id))
+        .await?
+        .map_err(update_watch_state_error)?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]
@@ -1194,10 +1211,13 @@ mod tests {
     #[tokio::test]
     async fn it_should_list_no_playlists() {
         let db = TestDatabase::new();
-        let playlist_searcher =
-            PlaylistSearcher::new(Arc::new(SqlitePlaylistRepository::new(db.database())));
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+        );
 
-        let response = list(playlist_searcher).await;
+        let response = list(playlist_view_searcher).await;
 
         assert_eq!(response, Ok(vec![]));
     }
@@ -1212,15 +1232,19 @@ mod tests {
         playlist_repository
             .insert(&playlist("PL2", "music/second"))
             .unwrap();
-        let playlist_searcher = PlaylistSearcher::new(playlist_repository);
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+        );
 
-        let response = list(playlist_searcher).await;
+        let response = list(playlist_view_searcher).await;
 
         assert_eq!(
             response,
             Ok(vec![
-                playlist_response("PL1", "music/first"),
-                playlist_response("PL2", "music/second"),
+                playlist_list_item_response("PL1", "music/first"),
+                playlist_list_item_response("PL2", "music/second"),
             ])
         );
     }
@@ -1238,17 +1262,21 @@ mod tests {
                 ..playlist("PL2", "music/second")
             })
             .unwrap();
-        let playlist_searcher = PlaylistSearcher::new(playlist_repository);
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+        );
 
-        let response = list(playlist_searcher).await;
+        let response = list(playlist_view_searcher).await;
 
         assert_eq!(
             response,
             Ok(vec![
-                playlist_response("PL1", "music/first"),
-                PlaylistResponse {
+                playlist_list_item_response("PL1", "music/first"),
+                PlaylistListItemResponse {
                     exclude_from_home: true,
-                    ..playlist_response("PL2", "music/second")
+                    ..playlist_list_item_response("PL2", "music/second")
                 },
             ])
         );
@@ -1264,15 +1292,19 @@ mod tests {
                     .with_reconcile_interval(ReconcileInterval::new(720).unwrap()),
             )
             .unwrap();
-        let playlist_searcher = PlaylistSearcher::new(playlist_repository);
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+        );
 
-        let response = list(playlist_searcher).await;
+        let response = list(playlist_view_searcher).await;
 
         assert_eq!(
             response,
-            Ok(vec![PlaylistResponse {
+            Ok(vec![PlaylistListItemResponse {
                 reconcile_interval_minutes: 720,
-                ..playlist_response("PL1", DEFAULT_PATH)
+                ..playlist_list_item_response("PL1", DEFAULT_PATH)
             }])
         );
     }
@@ -1293,24 +1325,28 @@ mod tests {
                 })
                 .unwrap();
         }
-        let playlist_searcher = PlaylistSearcher::new(playlist_repository);
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+        );
 
-        let response = list(playlist_searcher).await;
+        let response = list(playlist_view_searcher).await;
 
         assert_eq!(
             response,
             Ok(vec![
-                PlaylistResponse {
+                PlaylistListItemResponse {
                     name: "Ambient".to_string(),
-                    ..playlist_response("PL3", "music/list")
+                    ..playlist_list_item_response("PL3", "music/list")
                 },
-                PlaylistResponse {
+                PlaylistListItemResponse {
                     name: "Courses".to_string(),
-                    ..playlist_response("PL2", "music/list")
+                    ..playlist_list_item_response("PL2", "music/list")
                 },
-                PlaylistResponse {
+                PlaylistListItemResponse {
                     name: "watch later".to_string(),
-                    ..playlist_response("PL1", "music/list")
+                    ..playlist_list_item_response("PL1", "music/list")
                 },
             ])
         );
@@ -2387,6 +2423,7 @@ mod tests {
     fn empty_update_request() -> UpdatePlaylistRequest {
         UpdatePlaylistRequest {
             exclude_from_home: None,
+            hide_unwatched_count: None,
             reconcile_interval_minutes: None,
         }
     }
@@ -2394,6 +2431,7 @@ mod tests {
     fn update_request(exclude_from_home: bool) -> UpdatePlaylistRequest {
         UpdatePlaylistRequest {
             exclude_from_home: Some(exclude_from_home),
+            hide_unwatched_count: None,
             reconcile_interval_minutes: None,
         }
     }
@@ -2420,8 +2458,24 @@ mod tests {
             quality: "high".to_string(),
             kind: "youtube_linked".to_string(),
             exclude_from_home: false,
+            hide_unwatched_count: false,
             reconcile_interval_minutes: 180,
             created_at: fixed_timestamp(),
+        }
+    }
+
+    fn playlist_list_item_response(id: &str, path: &str) -> PlaylistListItemResponse {
+        PlaylistListItemResponse {
+            id: id.to_string(),
+            name: "Lofi beats".to_string(),
+            path: path.to_string(),
+            quality: "high".to_string(),
+            kind: "youtube_linked".to_string(),
+            exclude_from_home: false,
+            hide_unwatched_count: false,
+            reconcile_interval_minutes: 180,
+            created_at: fixed_timestamp(),
+            unwatched_count: 0,
         }
     }
 
@@ -2447,8 +2501,10 @@ mod tests {
         delete_playlist(State(playlist_deleter), Path(id.to_string())).await
     }
 
-    async fn list(playlist_searcher: PlaylistSearcher) -> Result<Vec<PlaylistResponse>, ApiError> {
-        list_playlists(State(playlist_searcher))
+    async fn list(
+        playlist_view_searcher: PlaylistViewSearcher,
+    ) -> Result<Vec<PlaylistListItemResponse>, ApiError> {
+        list_playlists(State(playlist_view_searcher))
             .await
             .map(|Json(playlists)| playlists)
     }

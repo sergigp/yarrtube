@@ -30,8 +30,10 @@ export interface PlaylistListItem {
   quality: string
   kind: string
   exclude_from_home: boolean
+  hide_unwatched_count: boolean
   reconcile_interval_minutes: number
   created_at: string
+  unwatched_count: number
 }
 
 /** A sidebar/detail library entry: what channels and playlists share. */
@@ -42,6 +44,7 @@ export interface LibraryItem {
   avatar_filename?: string | null
   unwatched_count?: number
   exclude_from_home?: boolean
+  hide_unwatched_count?: boolean
 }
 
 /** An entry of `GET /api/playlists/:id/videos` and `/api/channels/:handle/videos`. */

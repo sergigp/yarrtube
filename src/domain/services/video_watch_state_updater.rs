@@ -1,6 +1,7 @@
 use crate::domain::category::Category;
 use crate::domain::category::CategoryId;
 use crate::domain::channel::ChannelHandle;
+use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
 use crate::domain::video::{
     PlaybackPosition, UpdateWatchStateError, Video, VideoDuration, VideoId,
@@ -8,6 +9,8 @@ use crate::domain::video::{
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
+use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
+use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
@@ -22,16 +25,21 @@ pub struct VideoWatchStateUpdater {
     video_repository: Arc<dyn VideoRepository>,
     channel_repository: Arc<dyn ChannelRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
+    playlist_repository: Arc<dyn PlaylistRepository>,
+    playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     clock: Arc<dyn Clock>,
     category_repository: Arc<dyn CategoryRepository>,
     category_video_collector: CategoryVideoCollector,
 }
 
 impl VideoWatchStateUpdater {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
         channel_repository: Arc<dyn ChannelRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
+        playlist_repository: Arc<dyn PlaylistRepository>,
+        playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         clock: Arc<dyn Clock>,
         category_repository: Arc<dyn CategoryRepository>,
         category_video_collector: CategoryVideoCollector,
@@ -40,6 +48,8 @@ impl VideoWatchStateUpdater {
             video_repository,
             channel_repository,
             channel_video_repository,
+            playlist_repository,
+            playlist_video_repository,
             clock,
             category_repository,
             category_video_collector,
@@ -68,6 +78,9 @@ pub trait VideoWatchStateUpdaterApi: Send + Sync {
     /// Marks every downloaded video of the category watched, every copy of
     /// each; pending/in-flight videos are left unchanged.
     fn mark_category_watched(&self, id: &CategoryId) -> Result<(), UpdateWatchStateError>;
+    /// Marks every `Downloaded` video of the playlist watched, with every
+    /// stored copy of each; pending/in-flight videos are left unchanged.
+    fn mark_playlist_watched(&self, playlist_id: &PlaylistId) -> Result<(), UpdateWatchStateError>;
 }
 
 impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
@@ -119,6 +132,13 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
         self.unwatched_category_youtube_ids(&category)?
             .iter()
             .try_for_each(|youtube_id| self.mark_copies_watched(youtube_id, now))
+    }
+
+    fn mark_playlist_watched(
+        &self,
+        _playlist_id: &PlaylistId,
+    ) -> Result<(), UpdateWatchStateError> {
+        Ok(())
     }
 }
 

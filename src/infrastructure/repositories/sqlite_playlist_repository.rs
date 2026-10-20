@@ -164,6 +164,7 @@ impl SqlitePlaylistRepository {
             quality: Quality::new(row.quality)?,
             kind: PlaylistKind::new(row.kind)?,
             exclude_from_home: row.exclude_from_home,
+            hide_unwatched_count: false,
             reconcile_interval: ReconcileInterval::new(row.reconcile_interval)?,
             created_at: DateTime::parse_from_rfc3339(&row.created_at)
                 .context("failed to parse stored created_at")?

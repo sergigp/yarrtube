@@ -25,6 +25,9 @@ interface EntryActionsMenuProps {
   /** Playlists only: the current setting; undefined hides the home item. */
   excludedFromHome?: boolean | undefined
   onSetExcludedFromHome?: ((excluded: boolean) => Promise<void>) | undefined
+  /** Playlists only: the current setting; undefined hides the item. */
+  unwatchedCountHidden?: boolean | undefined
+  onSetUnwatchedCountHidden?: ((hidden: boolean) => Promise<void>) | undefined
   /** Opens the edit channel or playlist dialog, which the caller owns. */
   onEditRequest?: (() => void) | undefined
   /** Asks for confirmation; the caller owns the confirm dialog. */

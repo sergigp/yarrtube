@@ -5,10 +5,10 @@ use crate::domain::services::{
     CategoryVideoCollector, CategoryViewSearcher, ChannelAvatarRestorer, ChannelCreator,
     ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler, ChannelViewSearcher,
     DirectorySearcher, InternalVideoReconciler, LayoutMigrator, MetadataGenerator, PlaylistCreator,
-    PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher, PlaylistUpdater, PlaylistVideoReconciler,
-    PlexFolderScanner, ShowFileWriter, SubtitleFetcher, SubtitleReader, TaskViewSearcher,
-    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoRelocator, VideoSearcher,
-    VideoWatchStateUpdater,
+    PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater, PlaylistVideoReconciler,
+    PlaylistViewSearcher, PlexFolderScanner, ShowFileWriter, SubtitleFetcher, SubtitleReader,
+    TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoRelocator,
+    VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -366,13 +366,17 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         playlist_previewer: PlaylistPreviewer::new(
             infrastructure.youtube_playlist_repository.clone(),
         ),
-        playlist_searcher: PlaylistSearcher::new(infrastructure.playlist_repository.clone()),
         playlist_updater: PlaylistUpdater::new(
             infrastructure.playlist_repository.clone(),
             infrastructure.task_repository.clone(),
             infrastructure.clock.clone(),
         ),
         playlist_video_reconciler: playlist_video_reconciler(infrastructure),
+        playlist_view_searcher: PlaylistViewSearcher::new(
+            infrastructure.playlist_repository.clone(),
+            infrastructure.playlist_video_repository.clone(),
+            infrastructure.video_repository.clone(),
+        ),
         video_searcher: VideoSearcher::new(
             infrastructure.playlist_repository.clone(),
             infrastructure.playlist_video_repository.clone(),
@@ -425,6 +429,8 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.video_repository.clone(),
             infrastructure.channel_repository.clone(),
             infrastructure.channel_video_repository.clone(),
+            infrastructure.playlist_repository.clone(),
+            infrastructure.playlist_video_repository.clone(),
             infrastructure.clock.clone(),
             infrastructure.category_repository.clone(),
             category_video_collector(infrastructure),
