@@ -2,12 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Sidebar } from './Sidebar'
-import { aChannel, aPlaylist, mockApi, renderWithProviders, type Routes } from '@/test/helpers'
+import {
+  aCategoryList,
+  aChannel,
+  aPlaylist,
+  mockApi,
+  renderWithProviders,
+  type Routes,
+} from '@/test/helpers'
 
 function renderSidebar(routes: Routes, { route = '/' } = {}) {
   mockApi(routes)
   return renderWithProviders(
-    <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+    <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}}
+      onAddCategory={() => {}}
+    />,
     { route },
   )
 }
@@ -21,6 +30,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [aChannel({ name: 'Chan A', unwatched_count: 3 })],
       'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList(),
     })
 
     expect(await screen.findByText('Chan A')).toBeInTheDocument()
@@ -35,6 +45,7 @@ describe('Sidebar', () => {
         aChannel({ name: 'Busy', unwatched_count: 5 }),
       ],
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
     })
 
     await screen.findByText('Busy')
@@ -64,6 +75,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [aChannel({ name: 'Chan A' })],
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
     })
 
     await screen.findByText('Chan A')
@@ -78,6 +90,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [aChannel({ name: 'Chan A' })],
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
     })
 
     await screen.findByText('Chan A')
@@ -93,6 +106,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [aChannel({ name: 'Chan A' })],
       'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList(),
     })
 
     await screen.findByText('Chan A')
@@ -116,6 +130,7 @@ describe('Sidebar', () => {
     const routes = {
       'GET /api/channels': [aChannel({ name: 'Chan A' })],
       'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList(),
     }
     const { unmount } = renderSidebar(routes)
     await screen.findByText('Chan A')
@@ -140,6 +155,7 @@ describe('Sidebar', () => {
         aChannel({ name: 'Chan C', unwatched_count: 20 }),
       ],
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
     })
     await screen.findByText('Chan A')
     const totalWhileUnfolded = screen.queryByLabelText('23 unwatched')
@@ -150,6 +166,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [aChannel({ name: 'Chan A', unwatched_count: 0 })],
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
     })
     const caughtUpHeading = await screen.findByRole('button', { name: 'Channels' })
 
@@ -162,6 +179,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [],
       'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList(),
     })
 
     await screen.findByText('List B')
@@ -177,6 +195,7 @@ describe('Sidebar', () => {
       {
         'GET /api/channels': [aChannel({ id: 'chan', name: 'Chan A' })],
         'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+        'GET /api/categories': aCategoryList(),
       },
       { route: '/channels/chan' },
     )
@@ -251,6 +270,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': { status: 500, error: 'boom' },
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
     })
 
     expect(await screen.findByText('Failed to load: boom')).toBeInTheDocument()
@@ -262,6 +282,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [],
       'GET /api/playlists': () => playlistRows,
+      'GET /api/categories': aCategoryList(),
       [`DELETE /api/playlists/${playlist.id}`]: () => {
         playlistRows = []
         return null
@@ -285,6 +306,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [channel],
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
       [`POST /api/channels/${channel.id}/reconcile`]: reconcile,
     })
 
@@ -301,6 +323,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [channel],
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
       [`POST /api/channels/${channel.id}/watched`]: markWatched,
     })
 
@@ -315,6 +338,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [],
       'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList(),
     })
 
     const user = userEvent.setup()
@@ -334,10 +358,13 @@ describe('Sidebar', () => {
     const fetchMock = mockApi({
       'GET /api/channels': [],
       'GET /api/playlists': () => [playlist],
+      'GET /api/categories': aCategoryList(),
       'PATCH /api/playlists/PL1': update,
     })
     renderWithProviders(
-      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}}
+      onAddCategory={() => {}}
+    />,
     )
 
     const user = userEvent.setup()
@@ -369,10 +396,13 @@ describe('Sidebar', () => {
     const fetchMock = mockApi({
       'GET /api/channels': [],
       'GET /api/playlists': () => [playlist],
+      'GET /api/categories': aCategoryList(),
       'PATCH /api/playlists/PL1': update,
     })
     renderWithProviders(
-      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}}
+      onAddCategory={() => {}}
+    />,
     )
 
     const user = userEvent.setup()
@@ -397,10 +427,13 @@ describe('Sidebar', () => {
     const fetchMock = mockApi({
       'GET /api/channels': [],
       'GET /api/playlists': () => [playlist],
+      'GET /api/categories': aCategoryList(),
       'PATCH /api/playlists/PL1': update,
     })
     renderWithProviders(
-      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}}
+      onAddCategory={() => {}}
+    />,
     )
 
     const user = userEvent.setup()
@@ -420,6 +453,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [aChannel({ name: 'Chan A' })],
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
     })
 
     const user = userEvent.setup()
@@ -444,10 +478,13 @@ describe('Sidebar', () => {
     const fetchMock = mockApi({
       'GET /api/channels': () => [channel],
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
       'PATCH /api/channels/chan': update,
     })
     renderWithProviders(
-      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}}
+      onAddCategory={() => {}}
+    />,
     )
 
     const user = userEvent.setup()
@@ -474,6 +511,7 @@ describe('Sidebar', () => {
     mockApi({
       'GET /api/channels': [aChannel({ id: 'chan', name: 'Chan A', video_limit: 5 })],
       'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
       'PATCH /api/channels/chan': aChannel({
         id: 'chan',
         name: 'Chan A',
@@ -482,7 +520,9 @@ describe('Sidebar', () => {
       'POST /api/channels/chan/reconcile': reconcile,
     })
     renderWithProviders(
-      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}}
+      onAddCategory={() => {}}
+    />,
     )
 
     const user = userEvent.setup()
@@ -505,6 +545,7 @@ describe('Sidebar', () => {
     renderSidebar({
       'GET /api/channels': [],
       'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'Bluey' })],
+      'GET /api/categories': aCategoryList(),
       'PATCH /api/playlists/PL1': { status: 500, error: 'database is locked' },
     })
 
@@ -525,7 +566,9 @@ describe('Sidebar', () => {
     mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [] })
     const onClose = vi.fn()
     renderWithProviders(
-      <Sidebar open onClose={onClose} onAddChannel={() => {}} onAddPlaylist={() => {}} />,
+      <Sidebar open onClose={onClose} onAddChannel={() => {}} onAddPlaylist={() => {}}
+      onAddCategory={() => {}}
+    />,
     )
 
     const user = userEvent.setup()

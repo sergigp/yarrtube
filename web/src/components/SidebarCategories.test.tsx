@@ -1,0 +1,60 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import { screen, within } from '@testing-library/react'
+import { Sidebar } from './Sidebar'
+import {
+  aCategory,
+  aCategoryList,
+  aChannel,
+  mockApi,
+  renderWithProviders,
+  type Routes,
+} from '@/test/helpers'
+
+function renderSidebar(routes: Routes, { route = '/' } = {}) {
+  mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
+  return renderWithProviders(
+    <Sidebar
+      open
+      onClose={() => {}}
+      onAddChannel={() => {}}
+      onAddPlaylist={() => {}}
+      onAddCategory={() => {}}
+    />,
+    { route },
+  )
+}
+
+function categoryRowNames(): string[] {
+  return within(screen.getByRole('list', { name: 'Categories' }))
+    .getAllByRole('link')
+    .map((link) => link.textContent ?? '')
+}
+
+describe('SidebarCategories', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('lists every category above channels with badges, in unread order', async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A' })],
+      'GET /api/categories': aCategoryList([
+        aCategory({ name: 'Alpha', unwatched_count: 0 }),
+        aCategory({ name: 'Bravo', unwatched_count: 4 }),
+        aCategory({ name: 'Charlie', unwatched_count: 12 }),
+        aCategory({ name: 'Delta', unwatched_count: 0 }),
+      ]),
+    })
+
+    await screen.findByText('Charlie')
+    const categoriesHeading = screen.getByRole('button', { name: 'Categories' })
+    const channelsHeading = screen.getByRole('button', { name: 'Channels' })
+
+    expect(categoryRowNames()).toEqual(['Charlie12', 'Bravo4', 'Alpha', 'Delta'])
+    expect(
+      categoriesHeading.compareDocumentPosition(channelsHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(screen.getByTitle('12 unwatched')).toHaveTextContent('12')
+  })
+})

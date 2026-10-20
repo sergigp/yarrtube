@@ -5,7 +5,14 @@ import { AppShell } from './App'
 import { ANNOUNCEMENTS_URL } from '@/api/client'
 import { queryKeys } from '@/api/queries'
 import { formatDateTime } from '@/lib/formatDateTime'
-import { aVersion, mockApi, pendingForever, renderWithProviders, type Routes } from '@/test/helpers'
+import {
+  aCategoryList,
+  aVersion,
+  mockApi,
+  pendingForever,
+  renderWithProviders,
+  type Routes,
+} from '@/test/helpers'
 
 function renderShell({
   route = '/',
@@ -14,6 +21,7 @@ function renderShell({
   mockApi({
     'GET /api/channels': [],
     'GET /api/playlists': [],
+    'GET /api/categories': aCategoryList(),
     'GET /api/videos/home': pendingForever(),
     'GET /api/tasks': pendingForever(),
     'GET /api/version': version,

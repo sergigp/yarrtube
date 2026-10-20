@@ -29,6 +29,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { EditChannelDialog } from './EditChannelDialog'
 import { EditPlaylistDialog } from './EditPlaylistDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
+import { SidebarCategories } from './SidebarCategories'
 import { SidebarSectionHeading } from './SidebarSectionHeading'
 import { Thumbnail } from './Thumbnail'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
@@ -300,6 +301,7 @@ interface SidebarProps {
   onClose: () => void
   onAddChannel: () => void
   onAddPlaylist: () => void
+  onAddCategory: () => void
 }
 
 export function Sidebar({
@@ -308,6 +310,7 @@ export function Sidebar({
   onClose,
   onAddChannel,
   onAddPlaylist,
+  onAddCategory,
 }: SidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -399,6 +402,7 @@ export function Sidebar({
           'md:static md:z-auto md:h-full md:w-60 md:max-w-none md:translate-x-0 md:shadow-none md:transition-none md:py-6',
         )}
       >
+        <SidebarCategories onAddCategory={onAddCategory} onClose={onClose} />
         {searchable && (
           <Input
             type="search"
