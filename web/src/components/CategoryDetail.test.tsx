@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
+import { CategoriesView } from './CategoriesView'
 import { CategoryDetail } from './CategoryDetail'
 import {
   aCategory,
@@ -19,6 +20,7 @@ function renderCategory(routes: ApiRoutes, route = '/categories/chess') {
   const { unmount } = renderWithProviders(
     <Routes>
       <Route path="/categories/:id" element={<CategoryDetail />} />
+      <Route path="/categories" element={<CategoriesView />} />
     </Routes>,
     { route },
   )
@@ -86,33 +88,46 @@ describe('CategoryDetail', () => {
     )
   })
 
-  it('explains an empty category and an unknown one', async () => {
-    const categories = aCategoryList([
-      aCategory({ id: 'chess', name: 'Chess' }),
-      aCategory({ id: 'science', name: 'Science', channels: ['@veritasium'] }),
-    ])
-    const routes = {
-      'GET /api/categories': categories,
-      'GET /api/channels': [aChannel({ id: '@veritasium', name: 'Veritasium' })],
+  it('invites to add channels and playlists to an empty category', async () => {
+    renderCategory({
+      'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
       'GET /api/categories/chess/videos': [],
+    })
+
+    const emptyState = await screen.findByRole('region', { name: 'Nothing in Chess yet' })
+    const explanation = within(emptyState).getByText(/^Add channels and playlists to/).textContent
+    const markable = screen.queryByRole('button', { name: 'Mark all watched' })
+    await userEvent
+      .setup()
+      .click(within(emptyState).getByRole('link', { name: 'Add channels and playlists' }))
+
+    expect(explanation).toBe(
+      'Add channels and playlists to Chess to watch their videos here, newest first.',
+    )
+    expect(markable).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('searchbox', { name: 'Search channels and playlists to add' }),
+    ).toHaveFocus()
+  })
+
+  it('explains a category without videos and an unknown one', async () => {
+    const routes = {
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'science', name: 'Science', channels: ['@veritasium'] }),
+      ]),
+      'GET /api/channels': [aChannel({ id: '@veritasium', name: 'Veritasium' })],
       'GET /api/categories/science/videos': [],
       'GET /api/categories/missing/videos': { status: 404, error: 'category missing not found' },
     }
-    const empty = renderCategory(routes, '/categories/chess')
-    const emptyMessage = (await screen.findByText(/holds no channels/)).textContent
-    const addLink = screen.getByRole('link', { name: 'Add channels and playlists' })
-    const manageLink = screen.getByRole('link', { name: 'Manage' })
-    const links = [addLink, manageLink].map((link) => link.getAttribute('href'))
-    empty.unmount()
     const withoutVideos = renderCategory(routes, '/categories/science')
     const noVideosMessage = (await screen.findByText(/No videos/)).textContent
+    const manageLink = screen.getByRole('link', { name: 'Manage' }).getAttribute('href')
     withoutVideos.unmount()
 
     renderCategory(routes, '/categories/missing')
 
-    expect(emptyMessage).toBe('This category holds no channels or playlists yet.')
-    expect(links).toEqual(['/categories?selected=chess', '/categories?selected=chess'])
     expect(noVideosMessage).toBe('No videos synced yet.')
+    expect(manageLink).toBe('/categories?selected=science')
     expect(await screen.findByText('Category not found.')).toBeInTheDocument()
   })
 })
