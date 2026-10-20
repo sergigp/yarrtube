@@ -171,4 +171,22 @@ describe('SidebarCategories', () => {
       '/categories?selected=science',
     )
   })
+
+  it('is not filtered by the sidebar search', async () => {
+    renderSidebar({
+      'GET /api/channels': Array.from({ length: 16 }, (_, index) =>
+        aChannel({ name: `Chan ${index}` }),
+      ),
+      'GET /api/categories': aCategoryList([
+        aCategory({ name: 'Chess' }),
+        aCategory({ name: 'Science' }),
+      ]),
+    })
+
+    const search = await screen.findByRole('searchbox', { name: 'Search channels and playlists' })
+    await screen.findByText('Chess')
+    await userEvent.setup().type(search, 'Chan 1')
+
+    expect(categoryRowNames()).toEqual(['Chess', 'Science'])
+  })
 })

@@ -61,7 +61,7 @@ Web (Vitest):
 - [x] 2.44 `SidebarCategories` › manage control navigates without folding
 - [x] 2.45 `SidebarCategories` › folds with the muted unwatched total and marks the heading active on a category route
 - [x] 2.46 `SidebarCategories` › manages and deletes from the row menu, with the member-count confirmation
-- [ ] 2.47 `SidebarCategories` › is not filtered by the sidebar search
+- [x] 2.47 `SidebarCategories` › is not filtered by the sidebar search
 - [ ] 2.48 `AddCategoryDialog` › creates a category and opens it in the management view
 - [ ] 2.49 `AddCategoryDialog` › disables create for a blank name and shows a taken-name error
 - [ ] 2.50 `CategoriesView` › lists categories with member counts and selects one from the address
