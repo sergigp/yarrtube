@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs'
  *
  * - starts from an empty library (unless it opts out with
  *   `test.use({ keepLibrary: true })`): whatever an earlier (possibly failed)
- *   test left tracked is deleted through the API, and its files are waited
+ *   test left tracked, and every category, is deleted through the API, and its files are waited
  *   out, so one failure can't cascade into "Already added" or ambiguous
  *   sidebar rows in the tests after it (or in its own retry), and the stub
  *   Plex server forgets the scans earlier tests caused;
@@ -54,6 +54,7 @@ export const test = base.extend({
 export { expect }
 
 async function deleteAllSources(request) {
+  await deleteAllCategories(request)
   const leftovers = []
   for (const kind of ['playlists', 'channels']) {
     const response = await request.get(`/api/${kind}`)
@@ -69,4 +70,18 @@ async function deleteAllSources(request) {
   await expect
     .poll(() => leftovers.filter((dir) => existsSync(dir)), { timeout: 30_000 })
     .toEqual([])
+}
+
+// The upgrade check's seed phase runs against a released image that may
+// predate categories, where the path falls through to the web UI's HTML.
+async function deleteAllCategories(request) {
+  const response = await request.get('/api/categories')
+  if (!(response.headers()['content-type'] ?? '').includes('application/json')) {
+    return
+  }
+  expect(response.ok(), 'GET /api/categories').toBeTruthy()
+  for (const category of (await response.json()).categories) {
+    const deleted = await request.delete(`/api/categories/${encodeURIComponent(category.id)}`)
+    expect(deleted.ok(), `DELETE /api/categories/${category.id}`).toBeTruthy()
+  }
 }
