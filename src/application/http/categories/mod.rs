@@ -411,6 +411,30 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_rename_a_category_to_a_case_variant_of_its_name() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = category(None, "chess");
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = rename(category_updater, chess.id.as_str(), "Chess").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                name: CategoryName::new("Chess").unwrap(),
+                ..chess
+            }]
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),

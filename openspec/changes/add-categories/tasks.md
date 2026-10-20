@@ -18,7 +18,7 @@ Backend acceptance tests:
 - [x] 2.7 `it_should_count_the_total_once_across_categories` — `unwatched_total` is the distinct union
 - [x] 2.8 `it_should_skip_members_already_deleted` — a member whose source is gone is neither listed nor counted
 - [x] 2.9 `it_should_rename_a_category`
-- [ ] 2.10 `it_should_rename_a_category_to_a_case_variant_of_its_name`
+- [x] 2.10 `it_should_rename_a_category_to_a_case_variant_of_its_name`
 - [ ] 2.11 `it_should_fail_to_rename_if_name_taken`
 - [ ] 2.12 `it_should_fail_to_rename_a_missing_category`
 - [ ] 2.13 `it_should_delete_a_category_keeping_its_sources`
