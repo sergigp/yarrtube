@@ -109,7 +109,7 @@ Web (Vitest, TDD):
 - [x] 5.2 `lib/categories` › builds chips per kind by name ignoring case, channels with avatars
 - [x] 5.3 `lib/categories` › filters chips by search and state keeping their order
 - [x] 5.4 `lib/categories` › toggles a source and summarises staged additions and removals
-- [ ] 5.5 `EditableTitle` › renames on Enter and on blur, cancels on Escape, closes unchanged without saving
+- [x] 5.5 `EditableTitle` › renames on Enter and on blur, cancels on Escape, closes unchanged without saving
 - [ ] 5.6 `EditableTitle` › keeps the field open with the message when the name is rejected
 - [ ] 5.7 `DetailHeader` › shows the summary prefix and menu items, and no Sync without `onSync`
 - [ ] 5.8 `CategoryDetail` › shows the summary and video cards newest first
