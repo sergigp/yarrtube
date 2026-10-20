@@ -115,7 +115,7 @@ Web (Vitest, TDD):
 - [x] 5.8 `CategoryDetail` › shows the summary and video cards newest first
 - [x] 5.9 `CategoryDetail` › marks all watched and deletes from the actions menu
 - [x] 5.10 `CategoryDetail` › renames from the header
-- [ ] 5.11 `CategoryDetail` › explains an empty category, whose control opens the dialog, and an unknown one
+- [x] 5.11 `CategoryDetail` › explains an empty category, whose control opens the dialog, and an unknown one
 - [ ] 5.12 `CategoryDetail` › opens the dialog on arrival with `ManageSourcesState`, once
 - [ ] 5.13 `ManageSourcesDialog` › shows channels and playlists as chips pressed by membership
 - [ ] 5.14 `ManageSourcesDialog` › stages toggles, summarises them and saves the full set at once

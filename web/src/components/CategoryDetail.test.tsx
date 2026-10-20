@@ -109,21 +109,38 @@ describe('CategoryDetail', () => {
     expect(remove).toHaveBeenCalledOnce()
   })
 
-  it('explains a category without videos and an unknown one', async () => {
+  it('explains an empty category, whose control opens the dialog, and an unknown one', async () => {
     const routes = {
       'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess' }),
         aCategory({ id: 'science', name: 'Science', channels: ['@veritasium'] }),
       ]),
       'GET /api/channels': [aChannel({ id: '@veritasium', name: 'Veritasium' })],
+      'GET /api/categories/chess/videos': [],
       'GET /api/categories/science/videos': [],
       'GET /api/categories/missing/videos': { status: 404, error: 'category missing not found' },
     }
+    const user = userEvent.setup()
+    const empty = renderCategory(routes, '/categories/chess')
+    const emptyState = await screen.findByRole('region', { name: 'Nothing in Chess yet' })
+    const explanation = within(emptyState).getByText(/^Add channels and playlists to/).textContent
+    await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
+    const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
+    await user.keyboard('{Escape}')
+    await user.click(within(emptyState).getByRole('button', { name: 'Add channels and playlists' }))
+    const dialogTitle = within(await screen.findByRole('dialog')).getByRole('heading').textContent
+    empty.unmount()
     const withoutVideos = renderCategory(routes, '/categories/science')
     const noVideosMessage = (await screen.findByText(/No videos/)).textContent
     withoutVideos.unmount()
 
     renderCategory(routes, '/categories/missing')
 
+    expect(explanation).toBe(
+      'Add channels and playlists to Chess to watch their videos here, newest first.',
+    )
+    expect(items).toEqual(['Manage sources', 'Delete'])
+    expect(dialogTitle).toBe('Manage sources in Chess')
     expect(noVideosMessage).toBe('No videos synced yet.')
     expect(await screen.findByText('Category not found.')).toBeInTheDocument()
   })
