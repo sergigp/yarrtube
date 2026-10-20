@@ -135,6 +135,7 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
     }
 
     fn mark_playlist_watched(&self, playlist_id: &PlaylistId) -> Result<(), UpdateWatchStateError> {
+        self.ensure_playlist_exists(playlist_id)?;
         let now = self.clock.now();
         Self::unwatched_downloaded_youtube_ids(self.playlist_videos(playlist_id)?)
             .iter()
@@ -175,6 +176,17 @@ impl VideoWatchStateUpdater {
             .filter(|sourced| !sourced.video.is_watched())
             .map(|sourced| sourced.video.youtube_id)
             .collect())
+    }
+
+    fn ensure_playlist_exists(
+        &self,
+        playlist_id: &PlaylistId,
+    ) -> Result<(), UpdateWatchStateError> {
+        self.playlist_repository
+            .find(playlist_id)
+            .map_err(UpdateWatchStateError::Repository)?
+            .map(|_| ())
+            .ok_or_else(|| UpdateWatchStateError::PlaylistNotFound(playlist_id.clone()))
     }
 
     /// The YouTube IDs of the `Downloaded` videos not yet watched, each once.

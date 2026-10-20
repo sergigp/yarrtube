@@ -2325,6 +2325,38 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_mark_watched_a_missing_playlist() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let video = save_downloaded_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PLmissing",
+            "vid1",
+            0,
+        );
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            playlist_video_repository,
+            Arc::new(FixedClock(watched_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+        );
+
+        let response = mark_watched(video_watch_state_updater, "PLmissing").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("playlist PLmissing not found"))
+        );
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+    }
+
     fn any_playlist_creator() -> PlaylistCreator {
         PlaylistCreator::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
