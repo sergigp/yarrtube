@@ -92,10 +92,21 @@ export type SourceFilter = 'all' | 'in' | 'out'
 
 /** Every tracked source as a chip, each kind by name ignoring case. */
 export function sourceChips(
-  _channels: ChannelListItem[] | undefined,
-  _playlists: PlaylistListItem[] | undefined,
+  channels: ChannelListItem[] | undefined,
+  playlists: PlaylistListItem[] | undefined,
 ): { channels: SourceChip[]; playlists: SourceChip[] } {
-  return { channels: [], playlists: [] }
+  return {
+    channels: byName(channels).map((channel) => ({
+      source: { kind: 'channel', id: channel.id },
+      name: channel.name,
+      avatarFilename: channel.avatar_filename,
+    })),
+    playlists: byName(playlists).map((playlist) => ({
+      source: { kind: 'playlist', id: playlist.id },
+      name: playlist.name,
+      avatarFilename: null,
+    })),
+  }
 }
 
 /** The category's members, as the manage sources dialog stages them. */

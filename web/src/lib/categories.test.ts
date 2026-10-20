@@ -3,11 +3,12 @@ import {
   categoryIdsOf,
   membershipChanges,
   orderCategories,
+  sourceChips,
   withMember,
   withMembers,
   withoutMember,
 } from './categories'
-import { aCategory } from '@/test/helpers'
+import { aCategory, aChannel, aPlaylist } from '@/test/helpers'
 
 describe('categories', () => {
   it('orders unread first, most first, ties and caught-up by name ignoring case', () => {
@@ -85,5 +86,27 @@ describe('categories', () => {
       { channels: [], playlists: ['PLendgames'] },
       { channels: ['@Hikaru', '@GothamChess'], playlists: ['PLendgames', 'PLopenings'] },
     ])
+  })
+
+  it('builds chips per kind by name ignoring case, channels with avatars', () => {
+    const channels = [
+      aChannel({ id: '@Hikaru', name: 'Hikaru', avatar_filename: 'hikaru.jpg' }),
+      aChannel({ id: '@chessbrah', name: 'chessbrah', avatar_filename: null }),
+    ]
+    const playlists = [
+      aPlaylist({ id: 'PLopenings', name: 'Openings' }),
+      aPlaylist({ id: 'PLendgames', name: 'endgames' }),
+    ]
+
+    expect(sourceChips(channels, playlists)).toEqual({
+      channels: [
+        { source: { kind: 'channel', id: '@chessbrah' }, name: 'chessbrah', avatarFilename: null },
+        { source: { kind: 'channel', id: '@Hikaru' }, name: 'Hikaru', avatarFilename: 'hikaru.jpg' },
+      ],
+      playlists: [
+        { source: { kind: 'playlist', id: 'PLendgames' }, name: 'endgames', avatarFilename: null },
+        { source: { kind: 'playlist', id: 'PLopenings' }, name: 'Openings', avatarFilename: null },
+      ],
+    })
   })
 })

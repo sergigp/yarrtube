@@ -106,7 +106,7 @@ Replaces the management view (tasks 2.44, 2.48, 2.50–2.56, 2.64 and their code
 
 Web (Vitest, TDD):
 
-- [ ] 5.2 `lib/categories` › builds chips per kind by name ignoring case, channels with avatars
+- [x] 5.2 `lib/categories` › builds chips per kind by name ignoring case, channels with avatars
 - [ ] 5.3 `lib/categories` › filters chips by search and state keeping their order
 - [ ] 5.4 `lib/categories` › toggles a source and summarises staged additions and removals
 - [ ] 5.5 `EditableTitle` › renames on Enter and on blur, cancels on Escape, closes unchanged without saving
