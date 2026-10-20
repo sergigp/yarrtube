@@ -27,6 +27,22 @@ describe('orderByUnwatched', () => {
     expect(channels.map((channel) => channel.id)).toEqual(['a', 'b', 'c', 'd'])
     expect(ordered).not.toBe(channels)
   })
+
+  it('orders entries by shown unwatched count', () => {
+    const playlists = [
+      aPlaylist({ id: 'a', unwatched_count: 0 }),
+      aPlaylist({ id: 'music', unwatched_count: 40, hide_unwatched_count: true }),
+      aPlaylist({ id: 'courses', unwatched_count: 2 }),
+      aPlaylist({ id: 'z', unwatched_count: 0 }),
+    ]
+
+    expect(orderByUnwatched(playlists).map((playlist) => playlist.id)).toEqual([
+      'courses',
+      'a',
+      'music',
+      'z',
+    ])
+  })
 })
 
 describe('matchesSearch', () => {

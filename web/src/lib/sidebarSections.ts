@@ -5,7 +5,7 @@ export const SEARCH_THRESHOLD = 15
 
 /** The unwatched count to display: 0 when the entry hides it. */
 export function shownUnwatchedCount(item: LibraryItem): number {
-  return item.unwatched_count ?? 0
+  return item.hide_unwatched_count ? 0 : (item.unwatched_count ?? 0)
 }
 
 /**
