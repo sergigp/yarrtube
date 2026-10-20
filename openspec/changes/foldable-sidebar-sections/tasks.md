@@ -29,7 +29,7 @@
 - [x] 3.1 `useRememberedFlag` › starts at the initial value when nothing is remembered
 - [x] 3.2 `useRememberedFlag` › restores the remembered value
 - [x] 3.3 `useRememberedFlag` › remembers a toggle under its key
-- [ ] 3.4 `useRememberedFlag` › falls back to the initial value when storage throws, and still toggles
+- [x] 3.4 `useRememberedFlag` › falls back to the initial value when storage throws, and still toggles
 
 ## 4. Verification
 

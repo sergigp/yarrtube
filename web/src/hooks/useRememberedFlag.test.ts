@@ -35,4 +35,18 @@ describe('useRememberedFlag', () => {
       'true',
     ])
   })
+
+  it('falls back to the initial value when storage throws, and still toggles', () => {
+    const blocked = () => {
+      throw new DOMException('blocked', 'SecurityError')
+    }
+    vi.spyOn(window.localStorage, 'getItem').mockImplementation(blocked)
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(blocked)
+    const { result } = renderHook(() => useRememberedFlag('yarrtube.test.flag', false))
+    const initial = result.current[0]
+
+    act(() => result.current[1]())
+
+    expect([initial, result.current[0]]).toEqual([false, true])
+  })
 })
