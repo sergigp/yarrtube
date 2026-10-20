@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { RotateCw } from 'lucide-react'
 import { ConfirmDialog } from './ConfirmDialog'
+import { EditableTitle } from './EditableTitle'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { Thumbnail } from './Thumbnail'
 import { Button } from '@/components/ui/button'
@@ -62,6 +63,7 @@ export function DetailHeader({
   unwatchedCount,
   summaryPrefix,
   onSync,
+  onRename,
   menuItems,
   onMarkWatched,
   excludedFromHome,
@@ -83,9 +85,13 @@ export function DetailHeader({
         />
       )}
       <div className="flex min-w-0 flex-1 flex-col">
-        <h2 className="truncate font-heading text-lg font-semibold text-foreground md:text-xl">
-          {name}
-        </h2>
+        {onRename ? (
+          <EditableTitle name={name} onRename={onRename} />
+        ) : (
+          <h2 className="truncate font-heading text-lg font-semibold text-foreground md:text-xl">
+            {name}
+          </h2>
+        )}
         {summary && <p className="truncate text-xs text-muted-foreground md:text-sm">{summary}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-2">

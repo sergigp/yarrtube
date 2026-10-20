@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FolderPlus, Plus, Settings2 } from 'lucide-react'
-import { deleteCategory } from '@/api/client'
+import { deleteCategory, renameCategory } from '@/api/client'
 import {
   useCategories,
   useCategoryVideos,
@@ -77,6 +77,7 @@ export function CategoryDetail() {
         videos={videos}
         unwatchedCount={category.unwatched_count}
         summaryPrefix={`${sources} ${sources === 1 ? 'source' : 'sources'}`}
+        onRename={refreshing((name: string) => renameCategory(category.id, name))}
         menuItems={
           <DropdownMenuItem onSelect={() => setManaging(true)}>
             <Settings2 />

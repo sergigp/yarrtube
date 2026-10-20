@@ -127,4 +127,29 @@ describe('CategoryDetail', () => {
     expect(noVideosMessage).toBe('No videos synced yet.')
     expect(await screen.findByText('Category not found.')).toBeInTheDocument()
   })
+
+  it('renames from the header', async () => {
+    let chess = aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] })
+    const rename = vi.fn(() => {
+      chess = { ...chess, name: 'Board games' }
+      return null
+    })
+    const { fetchMock } = renderCategory({
+      'GET /api/categories': () => aCategoryList([chess]),
+      'GET /api/categories/chess/videos': [],
+      'PATCH /api/categories/chess': rename,
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Rename' }))
+    await user.clear(screen.getByRole('textbox', { name: 'Name' }))
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Board games{Enter}')
+
+    expect(await screen.findByRole('heading', { name: 'Board games' })).toBeInTheDocument()
+    const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/categories/chess') as [
+      string,
+      RequestInit,
+    ]
+    expect(JSON.parse(init.body as string)).toEqual({ name: 'Board games' })
+  })
 })

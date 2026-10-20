@@ -114,7 +114,7 @@ Web (Vitest, TDD):
 - [x] 5.7 `DetailHeader` › shows the summary prefix and menu items, and no Sync without `onSync`
 - [x] 5.8 `CategoryDetail` › shows the summary and video cards newest first
 - [x] 5.9 `CategoryDetail` › marks all watched and deletes from the actions menu
-- [ ] 5.10 `CategoryDetail` › renames from the header
+- [x] 5.10 `CategoryDetail` › renames from the header
 - [ ] 5.11 `CategoryDetail` › explains an empty category, whose control opens the dialog, and an unknown one
 - [ ] 5.12 `CategoryDetail` › opens the dialog on arrival with `ManageSourcesState`, once
 - [ ] 5.13 `ManageSourcesDialog` › shows channels and playlists as chips pressed by membership
