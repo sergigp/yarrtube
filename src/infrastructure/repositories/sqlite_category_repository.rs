@@ -206,3 +206,43 @@ struct CategoryRow {
     name: String,
     created_at: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+
+    #[test]
+    fn it_should_return_the_category_after_inserting_it() {
+        let db = TestDatabase::new();
+        let repository = SqliteCategoryRepository::new(db.database());
+        let chess = category(
+            "Chess",
+            &[
+                channel_member("@GothamChess"),
+                playlist_member("PLendgames"),
+            ],
+        );
+
+        repository.insert(&chess).unwrap();
+
+        assert_eq!(repository.find(&chess.id).unwrap(), Some(chess));
+    }
+
+    fn category(name: &str, members: &[CategoryMember]) -> Category {
+        Category::create(CategoryName::new(name).unwrap(), fixed_timestamp())
+            .with_members(members.to_vec())
+    }
+
+    fn channel_member(handle: &str) -> CategoryMember {
+        CategoryMember::Channel(ChannelHandle::new(handle).unwrap())
+    }
+
+    fn playlist_member(id: &str) -> CategoryMember {
+        CategoryMember::Playlist(PlaylistId::new(id).unwrap())
+    }
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+}

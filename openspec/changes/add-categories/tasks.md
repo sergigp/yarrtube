@@ -85,7 +85,7 @@ Web (Vitest):
 
 `SqliteCategoryRepository`:
 
-- [ ] 3.1 `it_should_return_the_category_after_inserting_it`
+- [x] 3.1 `it_should_return_the_category_after_inserting_it`
 - [ ] 3.2 `it_should_list_categories_by_name_ignoring_case`
 - [ ] 3.3 `it_should_keep_members_in_the_order_first_added`
 - [ ] 3.4 `it_should_replace_members_on_update`
