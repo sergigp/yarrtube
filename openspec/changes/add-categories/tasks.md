@@ -70,7 +70,7 @@ Web (Vitest):
 - [x] 2.53 `CategoriesView` › filters the picker and adds the checked sources
 - [x] 2.54 `CategoriesView` › deletes the selected category after confirmation
 - [x] 2.55 `CategoriesView` › shows list or details on a narrow viewport
-- [ ] 2.56 `CategoryDetail` › shows the members and video cards newest first
+- [x] 2.56 `CategoryDetail` › shows the members and video cards newest first
 - [ ] 2.57 `CategoryDetail` › marks all watched
 - [ ] 2.58 `CategoryDetail` › explains an empty category and an unknown one
 - [ ] 2.59 `CategoryPicker` › picks, removes and creates categories

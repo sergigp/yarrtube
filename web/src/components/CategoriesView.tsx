@@ -16,6 +16,7 @@ import {
 } from '@/api/queries'
 import type { Category, LibraryItem } from '@/api/types'
 import {
+  byName,
   deleteCategoryDescription,
   isMember,
   memberCount,
@@ -188,12 +189,6 @@ function CategoryMembers({ category }: { category: Category }) {
         onRemove={(playlist) => void remove({ kind: 'playlist', id: playlist.id })}
       />
     </section>
-  )
-}
-
-function byName<T extends LibraryItem>(items: T[] | undefined): T[] {
-  return [...(items ?? [])].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
   )
 }
 

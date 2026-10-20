@@ -12,6 +12,13 @@ export function orderCategories(categories: Category[]): Category[] {
   )
 }
 
+/** `items` by name ignoring case; a missing list is empty. */
+export function byName<T extends { name: string }>(items: T[] | undefined): T[] {
+  return [...(items ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+  )
+}
+
 /** How many channels and playlists the category holds. */
 export function memberCount(category: Category): number {
   return category.channels.length + category.playlists.length
