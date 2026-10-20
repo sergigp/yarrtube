@@ -1,6 +1,7 @@
 use crate::domain::category::{Category, CategoryMember, CategoryView, CategoryViews};
+use crate::domain::playlist::{Playlist, PlaylistId};
 use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
-use crate::domain::video::VideoId;
+use crate::domain::video::{SourcedVideo, VideoId, VideoSource};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -40,8 +41,10 @@ pub trait CategoryViewSearcherApi: Send + Sync {
 
 impl CategoryViewSearcherApi for CategoryViewSearcher {
     fn search_all(&self) -> anyhow::Result<CategoryViews> {
-        let tracked = self.tracked_members()?;
-        let unwatched = self.unwatched_by_category()?;
+        let playlists = self.playlist_repository.list()?;
+        let tracked = self.tracked_members(&playlists)?;
+        let hidden = Self::hidden_count_playlists(&playlists);
+        let unwatched = self.unwatched_by_category(&hidden)?;
         Ok(CategoryViews {
             unwatched_total: Self::distinct_total(&unwatched),
             categories: unwatched
@@ -53,42 +56,63 @@ impl CategoryViewSearcherApi for CategoryViewSearcher {
 }
 
 impl CategoryViewSearcher {
-    /// Every tracked channel and playlist, as a member.
-    fn tracked_members(&self) -> anyhow::Result<HashSet<CategoryMember>> {
+    /// Every tracked channel and the given `playlists`, as members.
+    fn tracked_members(&self, playlists: &[Playlist]) -> anyhow::Result<HashSet<CategoryMember>> {
         let channels = self
             .channel_repository
             .list()?
             .into_iter()
             .map(|channel| CategoryMember::Channel(channel.id));
-        let playlists = self
-            .playlist_repository
-            .list()?
-            .into_iter()
-            .map(|playlist| CategoryMember::Playlist(playlist.id));
+        let playlists = playlists
+            .iter()
+            .map(|playlist| CategoryMember::Playlist(playlist.id.clone()));
         Ok(channels.chain(playlists).collect())
     }
 
+    /// The playlists whose unwatched count is hidden, which add nothing to
+    /// category counts.
+    fn hidden_count_playlists(playlists: &[Playlist]) -> HashSet<PlaylistId> {
+        playlists
+            .iter()
+            .filter(|playlist| playlist.hide_unwatched_count)
+            .map(|playlist| playlist.id.clone())
+            .collect()
+    }
+
     /// Every category paired with its distinct unwatched YouTube IDs.
-    fn unwatched_by_category(&self) -> anyhow::Result<Vec<(Category, HashSet<VideoId>)>> {
+    fn unwatched_by_category(
+        &self,
+        hidden: &HashSet<PlaylistId>,
+    ) -> anyhow::Result<Vec<(Category, HashSet<VideoId>)>> {
         self.repository
             .list()?
             .into_iter()
             .map(|category| {
-                let ids = self.unwatched_youtube_ids(&category)?;
+                let ids = self.unwatched_youtube_ids(&category, hidden)?;
                 Ok((category, ids))
             })
             .collect()
     }
 
-    /// The YouTube IDs of the category's downloaded, unwatched videos, once each.
-    fn unwatched_youtube_ids(&self, category: &Category) -> anyhow::Result<HashSet<VideoId>> {
+    /// The YouTube IDs of the category's downloaded, unwatched videos, once
+    /// each, leaving out the copies collected through `hidden` playlists.
+    fn unwatched_youtube_ids(
+        &self,
+        category: &Category,
+        hidden: &HashSet<PlaylistId>,
+    ) -> anyhow::Result<HashSet<VideoId>> {
         Ok(self
             .collector
             .downloaded_videos(category)?
             .into_iter()
             .filter(|sourced| sourced.video.is_downloaded_and_unwatched())
+            .filter(|sourced| !Self::is_from_hidden_playlist(sourced, hidden))
             .map(|sourced| sourced.video.youtube_id)
             .collect())
+    }
+
+    fn is_from_hidden_playlist(sourced: &SourcedVideo, hidden: &HashSet<PlaylistId>) -> bool {
+        matches!(&sourced.source, VideoSource::Playlist { id, .. } if hidden.contains(id))
     }
 
     /// The distinct YouTube IDs across every category's unwatched set.
