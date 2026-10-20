@@ -96,11 +96,11 @@ uncaught page error or a 5xx `/api` response.
   with two downloaded videos, edited down to one: the next sync drops the
   older video from the list and its files from disk, keeping the newer.
 - **Categories** (`tests/categories.spec.js`): create a category from the
-  sidebar, rename it in the management view, assign the fixture channel to
-  it from the Add channel dialog, remove it and add it back from the
-  picker, open the category view once the video downloads, mark it all
-  watched, fold the section and delete the category, keeping the channel.
-  Also reaches the management view from the Settings menu.
+  sidebar (landing in its manage sources dialog), rename it in place,
+  assign the fixture channel to it from the Add channel dialog, remove it
+  and add it back with the source chips, mark it all watched once the video
+  downloads, fold the section and delete the category from its actions
+  menu, keeping the channel.
 - **Mobile sidebar** (`tests/mobile-sidebar.spec.js`): opening/closing the
   sidebar at a narrow viewport.
 - **Sidebar folding** (`tests/sidebarFolding.spec.js`): a folded section

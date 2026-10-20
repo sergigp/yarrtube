@@ -4,26 +4,36 @@ import { sectionHeading, sectionRows } from '../helpers/sidebar.js'
 
 const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 
-test('category lifecycle: create, rename, assign from the add channel dialog, manage members, view, mark watched, delete', async ({ page }) => {
+test('category lifecycle: create, manage sources, rename, assign from the add channel dialog, view, mark watched, delete', async ({ page }) => {
   await page.goto('/')
 
   const dialog = page.getByRole('dialog')
   const categoryRows = sectionRows(page, 'Categories')
+  const summary = page.locator('main').getByText(/^\d+ sources? · /)
+  const openManageSources = async (name) => {
+    await page.getByRole('button', { name: `More actions for ${name}` }).click()
+    await page.getByRole('menuitem', { name: 'Manage sources' }).click()
+    await expect(dialog).toContainText(`Manage sources in ${name}`)
+  }
 
-  await test.step('create it from the sidebar', async () => {
+  await test.step('create it from the sidebar, landing in its manage sources dialog', async () => {
     await page.getByRole('button', { name: 'Add category', exact: true }).click()
     await dialog.getByLabel('Name').fill('Chess')
     await dialog.getByRole('button', { name: 'Create', exact: true }).click()
+    await expect(page).toHaveURL(/\/categories\/[^?]+$/)
+    await expect(dialog).toContainText('Manage sources in Chess')
+    await expect(dialog.getByRole('searchbox', { name: 'Search channels and playlists' })).toBeFocused()
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
     await dialog.waitFor({ state: 'hidden' })
-    await expect(page).toHaveURL(/\/categories\?selected=/)
-    await expect(page.getByRole('searchbox', { name: 'Search channels and playlists to add' })).toBeFocused()
     await expect(categoryRows).toHaveText(['Chess'])
   })
 
   await test.step('rename it in place', async () => {
-    const name = page.getByRole('textbox', { name: 'Category name' })
+    await page.getByRole('button', { name: 'Rename', exact: true }).click()
+    const name = page.getByRole('textbox', { name: 'Name', exact: true })
     await name.fill('Board games')
     await name.press('Enter')
+    await expect(page.getByRole('heading', { name: 'Board games', exact: true })).toBeVisible()
     await expect(categoryRows).toHaveText([/^Board games/])
   })
 
@@ -36,28 +46,35 @@ test('category lifecycle: create, rename, assign from the add channel dialog, ma
     await dialog.getByRole('button', { name: /^Create Channel/ }).click()
     await dialog.waitFor({ state: 'hidden' })
     const [{ name }] = await (await page.request.get('/api/channels')).json()
-    const members = page.getByRole('region', { name: 'In Board games' })
-    await expect(members.getByText(name, { exact: true })).toBeVisible()
+    await expect(summary).toHaveText(/^1 source · /)
     return name
   })
 
-  await test.step('remove it and add it back from the picker', async () => {
-    const members = page.getByRole('region', { name: 'In Board games' })
-    const picker = page.getByRole('group', { name: 'Add to Board games' })
-    await members.getByRole('button', { name: `Remove ${channelName}` }).click()
-    await expect(members.getByText(channelName, { exact: true })).toHaveCount(0)
-    await page.getByRole('searchbox', { name: 'Search channels and playlists to add' }).fill(channelName)
-    await picker.getByRole('checkbox', { name: channelName }).check()
-    await picker.getByRole('button', { name: 'Add selected' }).click()
-    await expect(members.getByText(channelName, { exact: true })).toBeVisible()
-    await expect(picker.getByRole('checkbox', { name: channelName })).toHaveCount(0)
+  await test.step('remove it and add it back with the chips', async () => {
+    await openManageSources('Board games')
+    const chip = dialog.getByRole('button', { name: channelName, exact: true })
+    await expect(chip).toHaveAttribute('aria-pressed', 'true')
+    await chip.click()
+    await expect(dialog).toContainText('−1 removed')
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    await expect(page.getByRole('region', { name: 'Nothing in Board games yet' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Add channels and playlists' }).click()
+    const search = dialog.getByRole('searchbox', { name: 'Search channels and playlists' })
+    await search.fill(channelName)
+    await search.press('Enter')
+    await expect(dialog.getByRole('button', { name: channelName, exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await expect(dialog).toContainText('+1 added')
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    await expect(summary).toHaveText(/^1 source · /)
   })
 
-  await test.step('open its view, wait for the channel video and mark it all watched', async () => {
-    await categoryRows.getByRole('link', { name: /^Board games/ }).click()
-    await expect(page).toHaveURL(/\/categories\/[^?]+$/)
-    await expect(page.getByRole('heading', { name: 'Board games' })).toBeVisible()
-    await expect(page.locator('main').getByText(channelName, { exact: true }).first()).toBeVisible()
+  await test.step('wait for the channel video and mark it all watched', async () => {
     // The video card shows once the channel's download finishes.
     const cards = page.locator('main ul li')
     await expect(cards).toHaveCount(1, { timeout: 240_000 })
@@ -67,7 +84,8 @@ test('category lifecycle: create, rename, assign from the add channel dialog, ma
     const marked = page.waitForResponse(
       (response) => response.url().endsWith('/watched') && response.request().method() === 'POST',
     )
-    await page.getByRole('button', { name: 'Mark all watched' }).click()
+    await page.getByRole('button', { name: 'More actions for Board games' }).click()
+    await page.getByRole('menuitem', { name: 'Mark all watched' }).click()
     expect((await marked).status()).toBe(204)
     await expect(cards.getByRole('img', { name: 'Watched' })).toBeVisible()
     await expect(categoryRows.getByLabel(/ unwatched$/)).toHaveCount(0)
@@ -96,8 +114,8 @@ test('category lifecycle: create, rename, assign from the add channel dialog, ma
     await expect(categoryRows).toHaveText([/^Board games/])
   })
 
-  await test.step('delete it, keeping its channel', async () => {
-    await categoryRows.getByRole('button', { name: 'Actions for Board games' }).click()
+  await test.step('delete it from its actions menu, keeping its channel', async () => {
+    await page.getByRole('button', { name: 'More actions for Board games' }).click()
     await page.getByRole('menuitem', { name: 'Delete', exact: true }).click()
     await expect(dialog).toContainText(
       '"Board games" holds 1 channels and playlists. None of them, nor any video, will be deleted.',
@@ -108,14 +126,4 @@ test('category lifecycle: create, rename, assign from the add channel dialog, ma
     await expect(page).toHaveURL(/\/$/)
     await expect(sectionRows(page, 'Channels')).toHaveCount(1)
   })
-})
-
-test('reaches the categories management view from the settings menu', async ({ page }) => {
-  await page.goto('/')
-
-  await page.getByRole('button', { name: 'Settings' }).click()
-  await page.getByRole('menuitem', { name: 'Categories' }).click()
-
-  await expect(page).toHaveURL(/\/categories$/)
-  await expect(page.getByText('No categories yet. Create one to group channels and playlists.')).toBeVisible()
 })

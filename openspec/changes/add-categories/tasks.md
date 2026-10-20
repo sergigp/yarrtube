@@ -129,5 +129,5 @@ Web (Vitest, TDD):
 Verification:
 
 - [x] 5.21 `npm run check` and `npm run build` pass in `web/`
-- [ ] 5.22 Update `smoke-tests/tests/categories.spec.js` (create lands in manage sources, add sources with chips, rename in place, mark all watched, delete from the actions menu) and `scripts/run-smoke-tests.sh` passes
+- [x] 5.22 Update `smoke-tests/tests/categories.spec.js` (create lands in manage sources, add sources with chips, rename in place, mark all watched, delete from the actions menu) and `scripts/run-smoke-tests.sh` passes
 - [ ] 5.23 Manual check with `scripts/run-local.sh`: category header and menu, rename, the dialog on desktop and mobile (chips, search, filters, keyboard, discard), entry points from the sidebar row, empty state and add category
