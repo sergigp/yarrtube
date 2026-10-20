@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test'
 
 export function sectionRows(page, section) {
-  return page.locator(`h3:text-is("${section}") ~ ul li`)
+  return page.locator(`h3:has(button:text-is("${section}")) ~ ul li`)
 }
 
 async function rowFor(page, section, name) {

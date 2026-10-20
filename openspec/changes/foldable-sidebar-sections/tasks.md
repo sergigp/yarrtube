@@ -34,5 +34,5 @@
 ## 4. Verification
 
 - [x] 4.1 `npm run check` (typecheck, lint, tests) and `npm run build` pass in `web/`; `cargo build --release` embeds the new build
-- [ ] 4.2 `scripts/run-smoke-tests.sh` passes (mobile sidebar included)
+- [x] 4.2 `scripts/run-smoke-tests.sh` passes (mobile sidebar included)
 - [ ] 4.3 Manual check with `scripts/run-local.sh`: fold/unfold both sections on desktop and in the mobile drawer, folded Channels total updates after watching a video, folded heading marked active on a channel route, search reveals matches in a folded section, fold state survives a reload

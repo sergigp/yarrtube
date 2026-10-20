@@ -57,7 +57,7 @@ test('it should create a playlist into a browsed parent folder', async ({ page }
   await dialog.waitFor({ state: 'hidden' })
 
   const sidebarLink = page
-    .locator('h3:text-is("Playlists") ~ ul')
+    .locator('h3:has(button:text-is("Playlists")) ~ ul')
     .getByRole('link', { name: PLAYLIST_NAME })
   await expect(sidebarLink).toBeVisible()
   await sidebarLink.click()
@@ -102,7 +102,7 @@ test('it should create a playlist into a staged parent folder that did not exist
   await dialog.waitFor({ state: 'hidden' })
 
   const sidebarLink = page
-    .locator('h3:text-is("Playlists") ~ ul')
+    .locator('h3:has(button:text-is("Playlists")) ~ ul')
     .getByRole('link', { name: PLAYLIST_NAME })
   await sidebarLink.click()
   await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 240_000 })
@@ -174,7 +174,7 @@ test('it should block submission when the destination is already used by another
   await openAddPlaylistDialog(page)
   await submitPlaylist(page, { url: PLAYLIST_ID })
   const sidebarLink = page
-    .locator('h3:text-is("Playlists") ~ ul')
+    .locator('h3:has(button:text-is("Playlists")) ~ ul')
     .getByRole('link', { name: PLAYLIST_NAME })
   await expect(sidebarLink).toBeVisible()
 
