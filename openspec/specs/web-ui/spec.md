@@ -214,7 +214,7 @@ On viewports narrower than the desktop breakpoint, the sidebar (channels and pla
 - **THEN** the sidebar is always visible as a persistent side panel, regardless of the open/closed state used on mobile
 
 ### Requirement: Sidebar Add Entries
-The sidebar's Channels section SHALL offer an "Add channel" control and its Playlists section an "Add playlist" control, each placed between the section heading and the section's list and always visible regardless of the section's rows or collapsed state. "Add channel" SHALL open the add channel dialog and "Add playlist" SHALL open the add playlist dialog. On viewports narrower than the desktop breakpoint, activating either control SHALL close the sidebar before the dialog is shown.
+The sidebar's Channels section SHALL offer an "Add channel" control and its Playlists section an "Add playlist" control, each placed between the section heading and the section's list and visible whenever the section is unfolded, regardless of the section's rows. A folded section SHALL NOT show its add control. "Add channel" SHALL open the add channel dialog and "Add playlist" SHALL open the add playlist dialog. On viewports narrower than the desktop breakpoint, activating either control SHALL close the sidebar before the dialog is shown.
 
 #### Scenario: Opening the add channel dialog from the sidebar
 - **WHEN** a user activates "Add channel" in the sidebar's Channels section
@@ -225,8 +225,12 @@ The sidebar's Channels section SHALL offer an "Add channel" control and its Play
 - **THEN** the add playlist dialog opens
 
 #### Scenario: Add entries with nothing tracked
-- **WHEN** no channels or playlists are tracked
+- **WHEN** no channels or playlists are tracked and both sections are unfolded
 - **THEN** both sections still show their add control beneath their heading
+
+#### Scenario: Folded section hides its add entry
+- **WHEN** the Channels section is folded
+- **THEN** no "Add channel" control is shown
 
 #### Scenario: Adding from the mobile sidebar
 - **WHEN** a user on a mobile-width viewport opens the sidebar and activates "Add channel" or "Add playlist"
@@ -927,45 +931,84 @@ The sidebar's Playlists section SHALL list playlists by name, ignoring case.
 - **WHEN** the tracked playlists are "watch later", "Courses" and "Ambient"
 - **THEN** the Playlists section lists them in the order "Ambient", "Courses", "watch later"
 
-### Requirement: Collapsed Sidebar Sections
-Each sidebar section SHALL start collapsed, showing only its leading rows in the section's order followed by a control that reveals the remaining rows and states how many there are. In the Channels section, the leading rows SHALL be the channels with unwatched videos, up to 10; when no channel has unwatched videos, the leading rows SHALL be the first 5 channels. In the Playlists section, the leading rows SHALL be the first 5 playlists. When a section has no rows beyond its leading rows, the control SHALL NOT be shown. An expanded section SHALL offer a control to collapse it again.
+### Requirement: Foldable Sidebar Sections
+Each sidebar section heading SHALL be a control that folds and unfolds its section. The heading SHALL show a chevron pointing right while the section is folded and down while it is unfolded, and the whole heading (chevron and title) SHALL be the toggle target. The heading SHALL expose to assistive technology whether its section is unfolded. An unfolded section SHALL list all its rows in the section's order. A folded section SHALL show only its heading: its rows, its add control and its loading, empty and error messages SHALL be hidden. Folding SHALL apply the same way in the mobile sidebar.
 
-#### Scenario: Only unread channels shown while collapsed
-- **WHEN** 3 of 40 tracked channels have unwatched videos and the Channels section is collapsed
-- **THEN** the section shows those 3 channels followed by a control to show the 37 others
+#### Scenario: Unfolded section lists every row
+- **WHEN** 40 channels are tracked and the Channels section is unfolded
+- **THEN** the Channels section lists all 40 channels, with no show-more control
 
-#### Scenario: Unread channels beyond the cap
-- **WHEN** 14 tracked channels have unwatched videos and the Channels section is collapsed
-- **THEN** the section shows the 10 with the most unwatched videos, and the other unread channels are among the hidden rows
+#### Scenario: Folding a section
+- **WHEN** a user activates the "Channels" heading while the Channels section is unfolded
+- **THEN** the Channels section shows only its heading, with a right-pointing chevron, and no channel rows or "Add channel" control
 
-#### Scenario: No unread channels
-- **WHEN** no tracked channel has unwatched videos and the Channels section is collapsed
-- **THEN** the section shows the first 5 channels alphabetically followed by a control to show the rest
+#### Scenario: Unfolding a section
+- **WHEN** a user activates the "Channels" heading while the Channels section is folded
+- **THEN** the section shows its add control and all its rows again, with a down-pointing chevron
 
-#### Scenario: Short section has no control
-- **WHEN** 4 playlists are tracked
-- **THEN** the Playlists section shows all 4 and no show-more control
+#### Scenario: Sections fold independently
+- **WHEN** a user folds the Channels section
+- **THEN** the Playlists section is unchanged
 
-#### Scenario: Expanding and collapsing a section
-- **WHEN** a user activates a section's show-more control and then its collapse control
-- **THEN** the section first shows all its rows in order, then returns to its leading rows
+#### Scenario: Folded state is announced
+- **WHEN** a screen reader reaches the heading of a folded section
+- **THEN** the heading is announced as a collapsed control named after the section
 
-### Requirement: Active Sidebar Entry Always Visible
-When the user is on a channel's or playlist's detail view and that entry is not among its collapsed section's leading rows, the sidebar SHALL still show that entry, marked as active, in the collapsed section.
+### Requirement: Folded Section Unwatched Total
+A folded Channels section SHALL show, beside its heading title and in a muted style distinct from row badges, the sum of its channels' unwatched counts, when that sum is above 0. No total SHALL be shown while the section is unfolded, while it is folded with a sum of 0, or for the Playlists section. The total SHALL update together with the channel badges.
 
-#### Scenario: Viewing a caught-up channel while collapsed
-- **WHEN** a user opens the detail view of a channel that is hidden in the collapsed Channels section
-- **THEN** the Channels section shows that channel, marked as active, alongside its leading rows
+#### Scenario: Folded channels with unwatched videos
+- **WHEN** the Channels section is folded and its channels have 3, 0 and 20 unwatched videos
+- **THEN** the "Channels" heading shows a muted total of 23
 
-### Requirement: Remembered Sidebar Section State
-The application SHALL remember, per browser, whether each sidebar section is expanded or collapsed, and SHALL restore that state when the application is loaded again. When no state has been remembered, a section SHALL start collapsed. When the remembered state cannot be read, the sidebar SHALL fall back to collapsed without an error.
+#### Scenario: Folded channels with nothing unwatched
+- **WHEN** the Channels section is folded and no channel has unwatched videos
+- **THEN** the "Channels" heading shows no total
 
-#### Scenario: Expanded section survives a reload
-- **WHEN** a user expands the Channels section and reloads the page
-- **THEN** the Channels section is still expanded, and the Playlists section keeps its own state
+#### Scenario: Unfolded section shows no total
+- **WHEN** the Channels section is unfolded
+- **THEN** the "Channels" heading shows no total
+
+#### Scenario: Playlists show no total
+- **WHEN** the Playlists section is folded
+- **THEN** the "Playlists" heading shows no total
+
+#### Scenario: Total follows watching
+- **WHEN** the Channels section is folded and a user finishes watching one of a channel's unwatched videos
+- **THEN** the total decreases by one promptly without a page reload
+
+### Requirement: Active Entry In A Folded Section
+When the user is on a channel's or playlist's detail view and that entry's section is folded, the section SHALL stay folded and its heading SHALL be marked active, visually and to assistive technology. The heading SHALL NOT be marked active while the section is unfolded or when no entry of the section is being viewed.
+
+#### Scenario: Opening a channel of a folded section
+- **WHEN** the Channels section is folded and a user opens a channel's detail view
+- **THEN** the Channels section stays folded and its heading is marked active
+
+#### Scenario: Unfolding shows the active entry
+- **WHEN** a user unfolds a section whose heading is marked active
+- **THEN** the heading is no longer marked active and the viewed entry is shown marked active
+
+#### Scenario: Viewing another section's entry
+- **WHEN** the Channels section is folded and a user opens a playlist's detail view
+- **THEN** the "Channels" heading is not marked active
+
+### Requirement: Remembered Sidebar Fold State
+The application SHALL remember, per browser, whether each sidebar section is folded, and SHALL restore that state when the application is loaded again. When no state has been remembered, a section SHALL start unfolded. When the remembered state cannot be read, the section SHALL start unfolded without an error.
+
+#### Scenario: Folded section survives a reload
+- **WHEN** a user folds the Playlists section and reloads the page
+- **THEN** the Playlists section is still folded, and the Channels section keeps its own fold state
+
+#### Scenario: First visit
+- **WHEN** a user loads the application with no remembered fold state
+- **THEN** every sidebar section is unfolded
+
+#### Scenario: Storage unavailable
+- **WHEN** the browser's storage cannot be read
+- **THEN** every sidebar section starts unfolded and folding still works until the page is reloaded
 
 ### Requirement: Sidebar Search
-When the number of tracked channels plus tracked playlists is above 15, the sidebar SHALL show a single search field above its sections. At 15 or fewer the field SHALL NOT be shown. While the field contains text, each section SHALL show every entry whose name contains that text, ignoring case, in the section's usual order and regardless of whether the section is collapsed. A section with no matching entry SHALL be hidden. When no entry matches in either section, the sidebar SHALL say that nothing matches. Clearing the field SHALL restore each section's normal collapsed or expanded view.
+When the number of tracked channels plus tracked playlists is above 15, the sidebar SHALL show a single search field above its sections. At 15 or fewer the field SHALL NOT be shown. While the field contains text, each section SHALL show every entry whose name contains that text, ignoring case, in the section's usual order and regardless of whether the section is folded. A section with no matching entry SHALL be hidden. When no entry matches in either section, the sidebar SHALL say that nothing matches. Clearing the field SHALL restore each section's folded or unfolded view. Searching SHALL NOT change any section's remembered fold state.
 
 #### Scenario: Search field hidden for a short list
 - **WHEN** 10 channels and 5 playlists are tracked
@@ -977,7 +1020,11 @@ When the number of tracked channels plus tracked playlists is above 15, the side
 
 #### Scenario: Matching across both sections
 - **WHEN** a user types "ver" and the channel "Veritasium" and the playlist "Universe Overview" are tracked
-- **THEN** the Channels section shows "Veritasium" and the Playlists section shows "Universe Overview", even if both sections are collapsed and those entries are not among their leading rows
+- **THEN** the Channels section shows "Veritasium" and the Playlists section shows "Universe Overview"
+
+#### Scenario: Matches in a folded section
+- **WHEN** the Channels section is folded and a user types text matching the channel "Veritasium"
+- **THEN** the Channels section shows "Veritasium"
 
 #### Scenario: Section without matches is hidden
 - **WHEN** a user's search text matches only channels
@@ -985,7 +1032,7 @@ When the number of tracked channels plus tracked playlists is above 15, the side
 
 #### Scenario: Clearing the search
 - **WHEN** a user clears the search field
-- **THEN** both sections return to the collapsed or expanded view they had before searching
+- **THEN** both sections return to the folded or unfolded view they had before searching
 
 ### Requirement: Background Refresh Pauses In Hidden Tabs
 The application SHALL NOT request fresh data from the daemon while its browser tab is hidden. When the tab becomes visible again, it SHALL refresh the data shown in the current view and sidebar.
