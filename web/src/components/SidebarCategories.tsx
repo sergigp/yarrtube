@@ -1,7 +1,8 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Settings2 } from 'lucide-react'
+import { Plus, Settings2 } from 'lucide-react'
 import { useCategories } from '@/api/queries'
 import type { Category } from '@/api/types'
+import { useRememberedFlag } from '@/hooks/useRememberedFlag'
 import { orderCategories } from '@/lib/categories'
 import { activeIdFrom } from '@/lib/sidebarSections'
 import { cn } from '@/lib/utils'
@@ -47,19 +48,22 @@ interface SidebarCategoriesProps {
 }
 
 /** The sidebar's Categories section: every category, unread first. */
-export function SidebarCategories({ onClose }: SidebarCategoriesProps) {
+export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesProps) {
   const { pathname } = useLocation()
   const activeId = activeIdFrom(pathname, '/categories/')
   const { data } = useCategories()
   const categories = data && orderCategories(data.categories)
+  const [folded, toggleFolded] = useRememberedFlag('yarrtube.sidebar.folded.categories', false)
+  const headingActive = folded && (categories?.some((category) => category.id === activeId) ?? false)
 
   return (
     <div>
       <SidebarSectionHeading
         title="Categories"
-        folded={false}
-        onToggleFolded={() => {}}
-        headingActive={false}
+        folded={folded}
+        onToggleFolded={toggleFolded}
+        headingActive={headingActive}
+        foldedTotal={data?.unwatched_total}
         actions={
           <Link
             to="/categories"
@@ -72,17 +76,33 @@ export function SidebarCategories({ onClose }: SidebarCategoriesProps) {
           </Link>
         }
       />
-      {categories && categories.length > 0 && (
-        <ul className="flex flex-col" aria-label="Categories">
-          {categories.map((category) => (
-            <CategoryRow
-              key={category.id}
-              category={category}
-              active={category.id === activeId}
-              onNavigate={onClose}
-            />
-          ))}
-        </ul>
+      {!folded && (
+        <>
+          {/* Closing first lets the mobile drawer get out of the dialog's way. */}
+          <button
+            type="button"
+            className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            onClick={() => {
+              onClose()
+              onAddCategory()
+            }}
+          >
+            <Plus className="size-4 shrink-0" />
+            Add category
+          </button>
+          {categories && categories.length > 0 && (
+            <ul className="flex flex-col" aria-label="Categories">
+              {categories.map((category) => (
+                <CategoryRow
+                  key={category.id}
+                  category={category}
+                  active={category.id === activeId}
+                  onNavigate={onClose}
+                />
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </div>
   )

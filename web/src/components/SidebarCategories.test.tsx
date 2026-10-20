@@ -98,4 +98,32 @@ describe('SidebarCategories', () => {
     )
     expect(screen.getByText('Chess')).toBeInTheDocument()
   })
+
+  it('folds with the muted unwatched total and marks the heading active on a category route', async () => {
+    renderSidebar(
+      {
+        'GET /api/categories': aCategoryList(
+          [
+            aCategory({ id: 'chess', name: 'Chess', unwatched_count: 3 }),
+            aCategory({ id: 'science', name: 'Science', unwatched_count: 14 }),
+          ],
+          { unwatched_total: 16 },
+        ),
+      },
+      { route: '/categories/chess' },
+    )
+
+    await screen.findByText('Chess')
+    const addControlWhileUnfolded =
+      screen.queryByRole('button', { name: 'Add category' })?.textContent
+    const heading = screen.getByRole('button', { name: 'Categories' })
+    await userEvent.setup().click(heading)
+
+    expect(addControlWhileUnfolded).toBe('Add category')
+    expect(heading).toHaveAttribute('aria-expanded', 'false')
+    expect(heading).toHaveAttribute('aria-current', 'true')
+    expect(within(heading).getByLabelText('16 unwatched')).toHaveTextContent('16')
+    expect(screen.queryByText('Chess')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add category' })).not.toBeInTheDocument()
+  })
 })
