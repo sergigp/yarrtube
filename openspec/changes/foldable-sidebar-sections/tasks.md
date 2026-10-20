@@ -6,7 +6,7 @@
 
 - [x] 2.1 `sectionView` › lists every row when unfolded — drives removing the row-level collapse: delete `collapse`, `channelLeadCount`, `UNREAD_CAP`, `CAUGHT_UP_PREVIEW`, `useExpandedState`, the `expanded`/`leadCount`/`hiddenCount`/`collapsible` fields and their tests
 - [x] 2.2 `sectionView` › shows nothing but the heading when folded
-- [ ] 2.3 `sectionView` › shows every match when folded but searching
+- [x] 2.3 `sectionView` › shows every match when folded but searching
 - [ ] 2.4 `sectionView` › marks the heading active when folded and the active row belongs to the section
 - [ ] 2.5 `sectionView` › does not mark the heading active when unfolded
 - [ ] 2.6 `sectionView` › does not mark the heading active when the active id is not in the section

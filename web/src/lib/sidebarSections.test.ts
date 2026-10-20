@@ -55,4 +55,13 @@ describe('sectionView', () => {
 
     expect(view).toEqual({ folded: true, headingActive: false, rows: [] })
   })
+
+  it('shows every match when folded but searching', () => {
+    const veritasium = aChannel({ name: 'Veritasium' })
+    const items = [veritasium, aChannel({ name: 'Kurzgesagt' })]
+
+    const view = sectionView(items, { searchText: 'ver', folded: true, activeId: null })
+
+    expect(view).toEqual({ folded: false, headingActive: false, rows: [veritasium] })
+  })
 })
