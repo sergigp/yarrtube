@@ -2,6 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
+use super::validation::required;
 use crate::domain::category::{CategoryName, CreateCategoryError};
 use crate::domain::services::{
     CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryUpdater, CategoryViewSearcher,
@@ -15,11 +16,13 @@ use dto::{
     UpdateCategoryRequest,
 };
 
+const MISSING_CATEGORY_NAME: &str = "Category name must not be empty (missing)";
+
 pub async fn create_category(
     State(category_creator): State<CategoryCreator>,
     Json(request): Json<CreateCategoryRequest>,
 ) -> Result<(StatusCode, Json<CategoryResponse>), ApiError> {
-    let name = CategoryName::new(request.name.unwrap_or_default())?;
+    let name = CategoryName::new(required(request.name, MISSING_CATEGORY_NAME)?)?;
 
     match run_blocking(move || category_creator.create(name)).await? {
         Ok(category) => Ok((StatusCode::CREATED, Json(CategoryResponse::from(category)))),
@@ -74,9 +77,10 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
     };
-    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
+    use rusqlite::Connection;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -98,6 +102,29 @@ mod tests {
             ))
         );
         assert_eq!(stored, vec![category(id, "Chess")]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_if_name_missing() {
+        let response = create(any_category_creator(), CreateCategoryRequest { name: None }).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Category name must not be empty (missing)"
+            ))
+        );
+    }
+
+    fn any_category_creator() -> CategoryCreator {
+        CategoryCreator::new(
+            Arc::new(SqliteCategoryRepository::new(unused_connection())),
+            Arc::new(FixedClock(fixed_timestamp())),
+        )
+    }
+
+    fn unused_connection() -> Database {
+        Database::single(Connection::open_in_memory().unwrap())
     }
 
     fn create_request(name: &str) -> CreateCategoryRequest {
