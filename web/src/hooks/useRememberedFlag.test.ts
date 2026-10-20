@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { useRememberedFlag } from './useRememberedFlag'
 
 describe('useRememberedFlag', () => {
@@ -23,5 +23,16 @@ describe('useRememberedFlag', () => {
     const { result } = renderHook(() => useRememberedFlag('yarrtube.test.flag', false))
 
     expect(result.current[0]).toBe(true)
+  })
+
+  it('remembers a toggle under its key', () => {
+    const { result } = renderHook(() => useRememberedFlag('yarrtube.test.flag', false))
+
+    act(() => result.current[1]())
+
+    expect([result.current[0], window.localStorage.getItem('yarrtube.test.flag')]).toEqual([
+      true,
+      'true',
+    ])
   })
 })
