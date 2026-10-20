@@ -14,7 +14,11 @@ impl CategoryId {
 
     /// Parses an identifier as stored or as supplied by a client.
     pub fn new(id: impl Into<String>) -> Result<Self, ValidationError> {
-        Ok(Self(id.into()))
+        let id = id.into();
+        if id.trim().is_empty() {
+            return Err(ValidationError("Category ID must not be empty".to_string()));
+        }
+        Ok(Self(id))
     }
 
     pub fn as_str(&self) -> &str {
@@ -25,5 +29,26 @@ impl CategoryId {
 impl fmt::Display for CategoryId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_accept_an_id() {
+        assert_eq!(
+            CategoryId::new("category-1"),
+            Ok(CategoryId("category-1".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_blank_id() {
+        assert_eq!(
+            CategoryId::new("  "),
+            Err(ValidationError("Category ID must not be empty".to_string()))
+        );
     }
 }
