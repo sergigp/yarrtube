@@ -37,4 +37,4 @@
 - [x] 4.2 `scripts/run-smoke-tests.sh` passes (mobile sidebar included)
 - [x] 4.4 Smoke `tests/sidebarFolding.spec.js`: a folded section stays folded across a reload while the other keeps its state (desktop), and the same in the mobile drawer
 - [x] 4.5 Smoke `tests/channel.spec.js` "mark its video watched": the folded Channels heading is active on the channel route and shows a total of 1, which disappears once the video is marked watched
-- [ ] 4.3 Manual check with `scripts/run-local.sh`: fold/unfold both sections on desktop and in the mobile drawer, folded Channels total updates after watching a video, folded heading marked active on a channel route, search reveals matches in a folded section, fold state survives a reload
+- [x] 4.3 Manual check with `scripts/run-local.sh`: fold/unfold both sections on desktop and in the mobile drawer, folded Channels total updates after watching a video, folded heading marked active on a channel route, search reveals matches in a folded section, fold state survives a reload
