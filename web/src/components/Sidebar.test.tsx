@@ -112,6 +112,26 @@ describe('Sidebar', () => {
     expect([unfolded, heading.getAttribute('aria-expanded')]).toEqual(['true', 'false'])
   })
 
+  it('remembers a folded section across remounts', async () => {
+    const routes = {
+      'GET /api/channels': [aChannel({ name: 'Chan A' })],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+    }
+    const { unmount } = renderSidebar(routes)
+    await screen.findByText('Chan A')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Playlists' }))
+    unmount()
+
+    renderSidebar(routes)
+
+    expect(await screen.findByText('Chan A')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Playlists' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(screen.queryByText('List B')).not.toBeInTheDocument()
+  })
+
   it('offers search only above the threshold and filters both sections', async () => {
     const channels = Array.from({ length: 10 }, (_, index) =>
       aChannel({ name: `Chan ${index}`, unwatched_count: 1 }),
