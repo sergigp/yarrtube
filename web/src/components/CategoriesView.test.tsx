@@ -272,7 +272,11 @@ describe('CategoriesView', () => {
     const empty = renderView(routes, { route: '/categories?selected=empty' })
     const emptyMembers = await screen.findByRole('region', { name: 'In Cooking' })
     const emptyText = emptyMembers.textContent
-    const pickerText = screen.getByRole('group', { name: 'Add to Cooking' }).textContent
+    const noSources = (
+      await within(screen.getByRole('group', { name: 'Add to Cooking' })).findByText(
+        /^No channels or playlists tracked yet\./,
+      )
+    ).textContent
     empty.unmount()
 
     renderView(
@@ -285,7 +289,9 @@ describe('CategoriesView', () => {
     expect(emptyText).toBe(
       'In CookingNothing here yet. Pick channels and playlists below to add them.',
     )
-    expect(pickerText).toContain('No channels or playlists tracked yet.')
+    expect(noSources).toBe(
+      'No channels or playlists tracked yet. Add one from the sidebar, then come back to group it here.',
+    )
     expect(within(members).getByRole('list', { name: 'Channels' })).toBeInTheDocument()
     expect(within(members).queryByRole('list', { name: 'Playlists' })).not.toBeInTheDocument()
   })
