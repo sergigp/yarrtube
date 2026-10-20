@@ -501,6 +501,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_rename_if_name_missing() {
+        let response = update_category(
+            State(any_category_updater()),
+            Path("chess".to_string()),
+            Json(UpdateCategoryRequest { name: None }),
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Category name must not be empty (missing)"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_rename_if_name_invalid() {
+        let response = rename(any_category_updater(), "chess", "   ").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("Category name must not be empty"))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_rename_a_missing_category() {
         let db = TestDatabase::new();
         let category_updater = CategoryUpdater::new(

@@ -9,6 +9,7 @@ import type {
   Category,
   CategoryList,
   ChannelListItem,
+  CreatedCategory,
   HomeVideo,
   PlaylistListItem,
   Task,
@@ -207,6 +208,17 @@ export function aCategory(overrides: Partial<Category> = {}): Category {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
     unwatched_count: 0,
+    channels: [],
+    playlists: [],
+    ...overrides,
+  }
+}
+
+export function aCreatedCategory(overrides: Partial<CreatedCategory> = {}): CreatedCategory {
+  uniqueId += 1
+  return {
+    id: `category-${uniqueId}`,
+    name: `Category ${uniqueId}`,
     channels: [],
     playlists: [],
     ...overrides,

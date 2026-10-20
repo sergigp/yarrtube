@@ -296,7 +296,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_delete_the_category_and_its_members() {
+    fn it_should_delete_the_category() {
         let db = TestDatabase::new();
         let repository = SqliteCategoryRepository::new(db.database());
         let chess = category("Chess", &[channel_member("@Hikaru")]);
@@ -306,11 +306,21 @@ mod tests {
 
         repository.delete(&chess.id).unwrap();
 
-        assert_eq!(repository.list().unwrap(), vec![streams.clone()]);
-        // Recreated under the same id, it holds none of the deleted members.
+        assert_eq!(repository.list().unwrap(), vec![streams]);
+    }
+
+    #[test]
+    fn it_should_delete_the_members_of_a_deleted_category() {
+        let db = TestDatabase::new();
+        let repository = SqliteCategoryRepository::new(db.database());
+        let chess = category("Chess", &[channel_member("@Hikaru")]);
+        repository.insert(&chess).unwrap();
+
+        repository.delete(&chess.id).unwrap();
         let recreated = chess.with_members(vec![]);
         repository.insert(&recreated).unwrap();
-        assert_eq!(repository.list().unwrap(), vec![recreated, streams]);
+
+        assert_eq!(repository.list().unwrap(), vec![recreated]);
     }
 
     fn category(name: &str, members: &[CategoryMember]) -> Category {

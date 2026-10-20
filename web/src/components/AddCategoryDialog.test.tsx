@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AddCategoryDialog } from './AddCategoryDialog'
-import { mockApi, renderWithProviders, type Routes } from '@/test/helpers'
+import { aCreatedCategory, mockApi, renderWithProviders, type Routes } from '@/test/helpers'
 import { RouteProbe } from '@/test/RouteProbe'
 
 function renderDialog(routes: Routes) {
@@ -19,7 +19,7 @@ function renderDialog(routes: Routes) {
 
 describe('AddCategoryDialog', () => {
   it('creates a category and opens it in the management view', async () => {
-    const create = vi.fn(() => ({ id: 'chess', name: 'Chess', channels: [], playlists: [] }))
+    const create = vi.fn(() => (aCreatedCategory({ id: 'chess', name: 'Chess' })))
     const { fetchMock, onOpenChange } = renderDialog({ 'POST /api/categories': create })
     const user = userEvent.setup()
 

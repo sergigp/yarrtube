@@ -41,15 +41,7 @@ pub trait CategoryViewSearcherApi: Send + Sync {
 impl CategoryViewSearcherApi for CategoryViewSearcher {
     fn search_all(&self) -> anyhow::Result<CategoryViews> {
         let tracked = self.tracked_members()?;
-        let unwatched = self
-            .repository
-            .list()?
-            .into_iter()
-            .map(|category| {
-                let ids = self.unwatched_youtube_ids(&category)?;
-                Ok((category, ids))
-            })
-            .collect::<anyhow::Result<Vec<(Category, HashSet<VideoId>)>>>()?;
+        let unwatched = self.unwatched_by_category()?;
         Ok(CategoryViews {
             unwatched_total: Self::distinct_total(&unwatched),
             categories: unwatched
@@ -74,6 +66,18 @@ impl CategoryViewSearcher {
             .into_iter()
             .map(|playlist| CategoryMember::Playlist(playlist.id));
         Ok(channels.chain(playlists).collect())
+    }
+
+    /// Every category paired with its distinct unwatched YouTube IDs.
+    fn unwatched_by_category(&self) -> anyhow::Result<Vec<(Category, HashSet<VideoId>)>> {
+        self.repository
+            .list()?
+            .into_iter()
+            .map(|category| {
+                let ids = self.unwatched_youtube_ids(&category)?;
+                Ok((category, ids))
+            })
+            .collect()
     }
 
     /// The YouTube IDs of the category's downloaded, unwatched videos, once each.

@@ -563,7 +563,11 @@ describe('Sidebar', () => {
   })
 
   it('closes when Escape is pressed while open', async () => {
-    mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [] })
+    mockApi({
+      'GET /api/channels': [],
+      'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(),
+    })
     const onClose = vi.fn()
     renderWithProviders(
       <Sidebar open onClose={onClose} onAddChannel={() => {}} onAddPlaylist={() => {}}
