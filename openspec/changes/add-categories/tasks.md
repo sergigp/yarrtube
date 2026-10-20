@@ -31,7 +31,7 @@ Backend acceptance tests:
 - [x] 2.20 `it_should_fail_to_set_members_if_a_handle_is_invalid`
 - [x] 2.21 `it_should_fail_to_set_members_of_a_missing_category`
 - [x] 2.22 `it_should_mark_a_category_watched` — every downloaded video of every member and its copies watched, pending ones left
-- [ ] 2.23 `it_should_fail_to_mark_a_missing_category_watched`
+- [x] 2.23 `it_should_fail_to_mark_a_missing_category_watched`
 - [ ] 2.24 `it_should_list_videos_for_a_category` — across members, newest sync first, with source
 - [ ] 2.25 `it_should_list_a_shared_video_once_from_the_channel`
 - [ ] 2.26 `it_should_list_only_downloaded_videos_for_a_category`

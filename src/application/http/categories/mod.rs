@@ -850,6 +850,29 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_mark_a_missing_category_watched() {
+        let db = TestDatabase::new();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+        );
+
+        let response = mark_watched(video_watch_state_updater, "missing").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "category missing not found"
+            ))
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
