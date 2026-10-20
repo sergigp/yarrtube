@@ -25,7 +25,8 @@ use dto::{
 };
 
 const MISSING_PATH: &str = "Playlist path must not be empty";
-const NOTHING_TO_UPDATE: &str = "Request must change exclude from home or the reconcile interval";
+const NOTHING_TO_UPDATE: &str =
+    "Request must change exclude from home, hide unwatched count or the reconcile interval";
 
 pub async fn create_playlist(
     State(playlist_creator): State<PlaylistCreator>,
@@ -1844,7 +1845,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_fail_to_update_if_nothing_to_update() {
+    async fn it_should_fail_to_update_if_nothing_to_change() {
         let request = empty_update_request();
 
         let response = update(any_playlist_updater(), "PL1", request).await;
@@ -1852,7 +1853,7 @@ mod tests {
         assert_eq!(
             response,
             Err(ApiError::bad_request(
-                "Request must change exclude from home or the reconcile interval"
+                "Request must change exclude from home, hide unwatched count or the reconcile interval"
             ))
         );
     }
