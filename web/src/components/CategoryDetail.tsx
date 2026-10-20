@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { CheckCheck, FolderPlus, Plus, Settings2 } from 'lucide-react'
 import {
   useCategories,
@@ -12,7 +12,7 @@ import type { Category, ChannelListItem, PlaylistListItem } from '@/api/types'
 import { byName, memberCount } from '@/lib/categories'
 import { errorMessage } from '@/lib/errorMessage'
 import { Button } from '@/components/ui/button'
-import type { ManageCategoryState } from './AddCategoryDialog'
+import { ManageSourcesDialog } from './ManageSourcesDialog'
 import { VideoGrid } from './VideoGrid'
 
 /** The names of the category's members: channels, then playlists, each by name. */
@@ -27,13 +27,17 @@ function memberNames(
   ].map((source) => source.name)
 }
 
+/** Router state that opens the manage sources dialog on arrival at a category's view. */
+export interface ManageSourcesState {
+  manageSources: true
+}
+
 /**
  * What an empty category shows instead of videos: what it is for, and the
- * way to fill it, which lands on its add-members search in the management view.
+ * way to fill it, the manage sources dialog.
  */
-function EmptyCategory({ category, managePath }: { category: Category; managePath: string }) {
+function EmptyCategory({ category, onManage }: { category: Category; onManage: () => void }) {
   const headingId = useId()
-  const state: ManageCategoryState = { focusAddMembers: true }
   return (
     <section
       aria-labelledby={headingId}
@@ -50,11 +54,9 @@ function EmptyCategory({ category, managePath }: { category: Category; managePat
           Add channels and playlists to {category.name} to watch their videos here, newest first.
         </p>
       </div>
-      <Button asChild>
-        <Link to={managePath} state={state}>
-          <Plus />
-          Add channels and playlists
-        </Link>
+      <Button type="button" onClick={onManage}>
+        <Plus />
+        Add channels and playlists
       </Button>
     </section>
   )
@@ -65,6 +67,7 @@ export function CategoryDetail() {
   const { id = '' } = useParams()
   const markCategoryWatched = useMarkCategoryWatched()
   const [marking, setMarking] = useState(false)
+  const [managing, setManaging] = useState(false)
   const { data } = useCategories()
   const { data: channels } = useChannels()
   const { data: playlists } = usePlaylists()
@@ -77,7 +80,6 @@ export function CategoryDetail() {
   if (!category) {
     return <p className="text-sm text-muted-foreground">Category not found.</p>
   }
-  const managePath = `/categories?selected=${encodeURIComponent(category.id)}`
   const empty = memberCount(category) === 0
 
   const markAllWatched = async () => {
@@ -115,19 +117,18 @@ export function CategoryDetail() {
               Mark all watched
             </Button>
           )}
-          <Button asChild variant="outline" size="sm">
-            <Link to={managePath}>
-              <Settings2 />
-              Manage
-            </Link>
+          <Button type="button" variant="outline" size="sm" onClick={() => setManaging(true)}>
+            <Settings2 />
+            Manage
           </Button>
         </div>
       </header>
       {empty ? (
-        <EmptyCategory category={category} managePath={managePath} />
+        <EmptyCategory category={category} onManage={() => setManaging(true)} />
       ) : (
         videos && <VideoGrid videos={videos} />
       )}
+      <ManageSourcesDialog category={category} open={managing} onOpenChange={setManaging} />
     </div>
   )
 }

@@ -6,7 +6,7 @@ import { renderWithProviders } from '@/test/helpers'
 import { RouteProbe } from '@/test/RouteProbe'
 
 describe('SettingsMenu', () => {
-  it('offers Categories', async () => {
+  it('offers Tasks', async () => {
     renderWithProviders(
       <>
         <SettingsMenu />
@@ -17,11 +17,11 @@ describe('SettingsMenu', () => {
 
     await user.click(screen.getByRole('button', { name: 'Settings' }))
     const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
-    await user.click(screen.getByRole('menuitem', { name: 'Categories' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Tasks' }))
 
-    expect(items).toEqual(['Categories', 'Tasks'])
+    expect(items).toEqual(['Tasks'])
     expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(
-      /^\/categories$/,
+      /^\/tasks$/,
     )
   })
 })

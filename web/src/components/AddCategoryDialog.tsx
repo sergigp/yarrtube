@@ -7,17 +7,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 
-/** Location state asking the management view to focus its add-members search. */
-export interface ManageCategoryState {
-  focusAddMembers?: boolean
-}
-
 interface AddCategoryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-/** Asks for a new category's name, then opens it in the management view. */
+/** Asks for a new category's name, then opens its view. */
 export function AddCategoryDialog({ open, onOpenChange }: AddCategoryDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -49,8 +44,7 @@ function AddCategoryForm({ onClose }: { onClose: () => void }) {
       const category = await createCategory(name)
       invalidateLibrary()
       onClose()
-      const state: ManageCategoryState = { focusAddMembers: true }
-      navigate(`/categories?selected=${encodeURIComponent(category.id)}`, { state })
+      navigate(`/categories/${encodeURIComponent(category.id)}`)
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)))
     } finally {

@@ -102,7 +102,7 @@ Web (Vitest):
 
 Replaces the management view (tasks 2.44, 2.48, 2.50–2.56, 2.64 and their code) with management on the category view, per the revised spec and design.
 
-- [ ] 5.1 Skeleton: add the shadcn `toggle` and `toggle-group` wrappers; create `ManageSourcesDialog`, `EditableTitle`, `ManageSourcesState` and the new `lib/categories` functions as stubs; widen `DetailHeader` (`onSync` optional, `summaryPrefix`, `onRename`, `menuItems`, `videos` any array). Remove `CategoriesView` (+ test), the `/categories` route, the Settings menu "Categories" item (+ its test), and the sidebar heading's manage control and the `SidebarSectionHeading` actions slot (+ their tests). Point every former `/categories?selected=` link at the category view. Done when `npm run check` passes.
+- [x] 5.1 Skeleton: add the shadcn `toggle` and `toggle-group` wrappers; create `ManageSourcesDialog`, `EditableTitle`, `ManageSourcesState` and the new `lib/categories` functions as stubs; widen `DetailHeader` (`onSync` optional, `summaryPrefix`, `onRename`, `menuItems`, `videos` any array). Remove `CategoriesView` (+ test), the `/categories` route, the Settings menu "Categories" item (+ its test), and the sidebar heading's manage control and the `SidebarSectionHeading` actions slot (+ their tests). Point every former `/categories?selected=` link at the category view. Done when `npm run check` passes.
 
 Web (Vitest, TDD):
 

@@ -52,7 +52,7 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
           <DropdownMenuItem
             onSelect={() => {
               onNavigate()
-              navigate(`/categories?selected=${encodeURIComponent(category.id)}`)
+              navigate(`/categories/${encodeURIComponent(category.id)}`)
             }}
           >
             <Settings2 />
@@ -90,17 +90,6 @@ export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesP
         onToggleFolded={toggleFolded}
         headingActive={headingActive}
         foldedTotal={data?.unwatched_total}
-        actions={
-          <Link
-            to="/categories"
-            onClick={onClose}
-            aria-label="Manage categories"
-            title="Manage categories"
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          >
-            <Settings2 className="size-4" />
-          </Link>
-        }
       />
       {!folded && (
         <>

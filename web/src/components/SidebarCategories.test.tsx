@@ -78,22 +78,6 @@ describe('SidebarCategories', () => {
     expect(screen.getByRole('link', { name: 'Science' })).not.toHaveAttribute('aria-current')
   })
 
-  it('manage control navigates without folding', async () => {
-    renderSidebar({ 'GET /api/categories': aCategoryList([aCategory({ name: 'Chess' })]) })
-
-    await screen.findByText('Chess')
-    await userEvent.setup().click(screen.getByRole('link', { name: 'Manage categories' }))
-
-    expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(
-      /^\/categories$/,
-    )
-    expect(screen.getByRole('button', { name: 'Categories' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    )
-    expect(screen.getByText('Chess')).toBeInTheDocument()
-  })
-
   it('folds with the muted unwatched total and marks the heading active on a category route', async () => {
     renderSidebar(
       {
@@ -163,7 +147,7 @@ describe('SidebarCategories', () => {
     expect(remove).toHaveBeenCalledOnce()
     expect(routeAfterDelete).toBe('/')
     expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(
-      '/categories?selected=science',
+      '/categories/science',
     )
   })
 

@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -9,18 +8,15 @@ interface SidebarSectionHeadingProps {
   headingActive: boolean
   /** Shown, muted, when folded and > 0. */
   foldedTotal?: number | undefined
-  /** Controls next to the fold toggle, e.g. a manage link; they don't fold. */
-  actions?: ReactNode
 }
 
-/** A sidebar section's heading: a fold toggle, with optional trailing actions. */
+/** A sidebar section's heading: a fold toggle. */
 export function SidebarSectionHeading({
   title,
   folded,
   onToggleFolded,
   headingActive,
   foldedTotal,
-  actions,
 }: SidebarSectionHeadingProps) {
   return (
     <h3 className="mb-1 flex items-center gap-1 font-heading text-base font-semibold tracking-tight text-foreground">
@@ -49,7 +45,6 @@ export function SidebarSectionHeading({
           </span>
         )}
       </button>
-      {actions}
     </h3>
   )
 }

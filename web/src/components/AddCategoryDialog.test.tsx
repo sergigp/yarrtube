@@ -18,7 +18,7 @@ function renderDialog(routes: Routes) {
 }
 
 describe('AddCategoryDialog', () => {
-  it('creates a category and opens it in the management view', async () => {
+  it('creates a category and opens its view', async () => {
     const create = vi.fn(() => (aCreatedCategory({ id: 'chess', name: 'Chess' })))
     const { fetchMock, onOpenChange } = renderDialog({ 'POST /api/categories': create })
     const user = userEvent.setup()
@@ -30,7 +30,7 @@ describe('AddCategoryDialog', () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(JSON.parse(init.body as string)).toEqual({ name: 'Chess' })
     expect(screen.getByRole('status', { name: 'Current route', hidden: true })).toHaveTextContent(
-      '/categories?selected=chess',
+      '/categories/chess',
     )
   })
 

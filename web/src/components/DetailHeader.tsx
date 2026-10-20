@@ -1,13 +1,12 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { RotateCw } from 'lucide-react'
-import type { Video } from '@/api/types'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { Thumbnail } from './Thumbnail'
 import { Button } from '@/components/ui/button'
 import { errorMessage } from '@/lib/errorMessage'
 
-function summaryFor(videos: Video[] | undefined, unwatchedCount: number | undefined): string | null {
+function summaryFor(videos: readonly unknown[] | undefined, unwatchedCount: number | undefined): string | null {
   if (!videos) {
     return null
   }
@@ -22,9 +21,16 @@ interface DetailHeaderProps {
   name: string
   avatarSrc?: string | null
   showAvatar?: boolean
-  videos: Video[] | undefined
+  videos: readonly unknown[] | undefined
   unwatchedCount?: number
-  onSync: () => Promise<void>
+  /** Shown before the video counts, e.g. "2 sources". */
+  summaryPrefix?: string
+  /** Shows the Sync control; categories have none. */
+  onSync?: () => Promise<void>
+  /** Shows a "Rename" pencil that edits the name in place. */
+  onRename?: (name: string) => Promise<void>
+  /** Items listed first in the actions menu. */
+  menuItems?: ReactNode
   onMarkWatched?: () => Promise<void>
   /** Playlists only: whether the playlist is excluded from home. */
   excludedFromHome?: boolean
@@ -82,7 +88,7 @@ export function DetailHeader({
           onClick={async () => {
             setSyncing(true)
             try {
-              await onSync()
+              await onSync?.()
             } catch (err) {
               window.alert(`Failed to sync "${name}": ${errorMessage(err)}`)
             } finally {

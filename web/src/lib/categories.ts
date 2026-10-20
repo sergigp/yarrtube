@@ -1,4 +1,4 @@
-import type { Category, CategoryMembers } from '@/api/types'
+import type { Category, CategoryMembers, ChannelListItem, PlaylistListItem } from '@/api/types'
 
 /** A channel or playlist, as a category member. */
 export type SourceRef = { kind: 'channel' | 'playlist'; id: string }
@@ -78,6 +78,57 @@ export function membershipChanges(
     const members = chosen ? withMember(category, source) : withoutMember(category, source)
     return [{ id: category.id, members }]
   })
+}
+
+/** A tracked channel or playlist as a chip of the manage sources dialog. */
+export interface SourceChip {
+  source: SourceRef
+  name: string
+  avatarFilename: string | null
+}
+
+/** Which chips the manage sources dialog shows, by whether they're in the category. */
+export type SourceFilter = 'all' | 'in' | 'out'
+
+/** Every tracked source as a chip, each kind by name ignoring case. */
+export function sourceChips(
+  _channels: ChannelListItem[] | undefined,
+  _playlists: PlaylistListItem[] | undefined,
+): { channels: SourceChip[]; playlists: SourceChip[] } {
+  return { channels: [], playlists: [] }
+}
+
+/** The category's members, as the manage sources dialog stages them. */
+export function membersOf(_category: Category): CategoryMembers {
+  return { channels: [], playlists: [] }
+}
+
+/** Whether `source` is among `members`. */
+export function isIn(_members: CategoryMembers, _source: SourceRef): boolean {
+  return false
+}
+
+/** `members` with `source` added when absent, removed when present. */
+export function toggled(members: CategoryMembers, _source: SourceRef): CategoryMembers {
+  return members
+}
+
+/** Chips matching the search (name, ignoring case) and the state filter, order kept. */
+export function visibleChips(
+  chips: SourceChip[],
+  _staged: CategoryMembers,
+  _search: string,
+  _filter: SourceFilter,
+): SourceChip[] {
+  return chips
+}
+
+/** How many sources `staged` adds to and removes from `saved`. */
+export function stagedSummary(
+  _saved: CategoryMembers,
+  _staged: CategoryMembers,
+): { added: number; removed: number } {
+  return { added: 0, removed: 0 }
 }
 
 function membersOfKind(category: Category, kind: SourceRef['kind']): string[] {
