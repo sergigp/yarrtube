@@ -150,10 +150,11 @@ impl VideoSearcherApi for VideoSearcher {
 
     fn list_for_category(&self, id: &CategoryId) -> Result<Vec<HomeVideoView>, ListVideosError> {
         let category = self.find_category(id)?;
-        let mut videos = self
-            .category_video_collector
-            .downloaded_videos(&category)
-            .map_err(ListVideosError::Repository)?;
+        let mut videos = Self::once_per_youtube_video(
+            self.category_video_collector
+                .downloaded_videos(&category)
+                .map_err(ListVideosError::Repository)?,
+        );
         videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.created_at));
         Ok(Self::views(videos))
     }
