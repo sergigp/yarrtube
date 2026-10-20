@@ -4,6 +4,8 @@ import { useChannelPreview, useChannels, useInvalidateLibrary } from '@/api/quer
 import type { ChannelListItem, ChannelPreview } from '@/api/types'
 import { useLookup, type Lookup } from '@/hooks/useLookup'
 import { useSaveLocation, type LocationValue } from '@/hooks/useSaveLocation'
+import { useSaveSourceCategories } from '@/hooks/useSaveSourceCategories'
+import { errorMessage } from '@/lib/errorMessage'
 import { deriveChannelPathSegment } from '@/lib/channelHandle'
 import { DEFAULT_INTERVAL_FORM, intervalMinutes, type IntervalForm } from '@/lib/reconcileInterval'
 import { channelNoticeLead } from '@/lib/noticeLead'
@@ -11,6 +13,7 @@ import { DestinationNotice, DestinationPath } from './DestinationNotice'
 import { lookupNotice } from './lookupNotice'
 import { FolderNameField } from './FolderNameField'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
+import { CategoryPicker } from './CategoryPicker'
 import { SaveToField } from './SaveToField'
 import { Thumbnail } from './Thumbnail'
 import { VideoQualityField } from './VideoQualityField'
@@ -94,7 +97,9 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [categoryIds, setCategoryIds] = useState<string[]>([])
   const invalidateLibrary = useInvalidateLibrary()
+  const saveSourceCategories = useSaveSourceCategories()
   const entered = form.channel.trim()
   const channels = useChannels()
   const lookup = useLookup(entered, useChannelPreview, channels.data, sameHandle)
@@ -117,7 +122,7 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
     setSubmitting(true)
     setError(null)
     try {
-      await createChannel({
+      const channel = await createChannel({
         channel: form.channel,
         quality: form.quality,
         video_limit: Number(form.video_limit),
@@ -126,6 +131,13 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
       })
       location.remember()
       invalidateLibrary()
+      try {
+        await saveSourceCategories({ kind: 'channel', id: channel.id }, categoryIds)
+      } catch (err) {
+        throw new Error(
+          `The channel was added, but its categories were not saved: ${errorMessage(err)}`,
+        )
+      }
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)))
@@ -153,6 +165,8 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
       {entered && (
         <ChannelNotice lookup={lookup} videoLimit={form.video_limit} location={location.value} />
       )}
+
+      <CategoryPicker value={categoryIds} onChange={setCategoryIds} />
 
       <div className="min-w-0 border-t border-border pt-4">
         <button

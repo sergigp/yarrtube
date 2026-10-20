@@ -1,10 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AddChannelDialog } from './AddChannelDialog'
-import { aChannel, aPlaylist, mockApi, renderWithProviders, type Routes } from '@/test/helpers'
+import {
+  aCategory,
+  aCategoryList,
+  aChannel,
+  aPlaylist,
+  mockApi,
+  renderWithProviders,
+  type Routes,
+} from '@/test/helpers'
 
 const baseRoutes: Routes = {
+  'GET /api/categories': aCategoryList(),
   'GET /api/channels': [],
   'GET /api/playlists': [],
   'GET /api/directories': { root: '/videos', path: '', entries: [] },
@@ -182,5 +191,56 @@ describe('AddChannelDialog', () => {
 
     expect(await screen.findByText('channel not found')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create Channel' })).toBeDisabled()
+  })
+
+  it('adds a channel into the chosen categories, and reports categories that failed to save', async () => {
+    const routes = (streamsResponse: unknown): Routes => ({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@other'] }),
+        aCategory({ id: 'cooking', name: 'Cooking' }),
+        aCategory({ id: 'streams', name: 'Streams' }),
+      ]),
+      'GET /api/channels/preview?channel=%40chan': {
+        id: '@chan',
+        title: 'The Channel',
+        avatar_url: null,
+      },
+      'POST /api/channels': aChannel({ id: '@chan' }),
+      'PUT /api/categories/chess/members': null,
+      'PUT /api/categories/streams/members': streamsResponse,
+    })
+    const addWithCategories = async () => {
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Channel Handle or URL'), '@chan')
+      const field = screen.getByRole('combobox', { name: 'Categories' })
+      await user.type(field, 'che')
+      await user.click(await screen.findByRole('option', { name: 'Chess' }))
+      await user.type(field, 'str')
+      await user.click(await screen.findByRole('option', { name: 'Streams' }))
+      const submit = screen.getByRole('button', { name: 'Create Channel' })
+      await waitFor(() => expect(submit).toBeEnabled())
+      await user.click(submit)
+    }
+    const saved = renderDialog(routes(null))
+    await addWithCategories()
+    await waitFor(() => expect(saved.onOpenChange).toHaveBeenCalledWith(false))
+    const membersSent = saved.fetchMock.mock.calls
+      .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
+      .map(([url, init]) => [url, JSON.parse((init as RequestInit).body as string)])
+    cleanup()
+
+    const failed = renderDialog(routes({ status: 500, error: 'disk full' }))
+    await addWithCategories()
+
+    expect(membersSent).toEqual([
+      ['/api/categories/chess/members', { channels: ['@other', '@chan'], playlists: [] }],
+      ['/api/categories/streams/members', { channels: ['@chan'], playlists: [] }],
+    ])
+    expect(
+      await screen.findByText(
+        'The channel was added, but its categories were not saved: disk full',
+      ),
+    ).toBeInTheDocument()
+    expect(failed.onOpenChange).not.toHaveBeenCalled()
   })
 })
