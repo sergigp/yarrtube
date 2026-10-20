@@ -478,6 +478,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_not_total_videos_reached_only_through_hidden_playlists() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PLmusic").with_hide_unwatched_count(true))
+            .unwrap();
+        save_playlist_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqlitePlaylistVideoRepository::new(db.database()),
+            "PLmusic",
+            &downloaded_video("song"),
+        );
+        let music = Category {
+            members: vec![playlist_member("PLmusic")],
+            ..category(None, "Music")
+        };
+        repository.insert(&music).unwrap();
+        let category_view_searcher = CategoryViewSearcher::new(
+            repository,
+            channel_repository,
+            playlist_repository,
+            category_video_collector(&db),
+        );
+
+        let response = list(category_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(CategoryListResponse {
+                categories: vec![list_item(&music, 0, &[], &["PLmusic"])],
+                unwatched_total: 0,
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_skip_members_already_deleted() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
