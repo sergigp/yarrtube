@@ -16,6 +16,7 @@ import {
   deleteChannel,
   deletePlaylist,
   markChannelWatched,
+  markPlaylistWatched,
   avatarMediaUrl,
 } from '@/api/client'
 import type { LibraryItem } from '@/api/types'
@@ -459,6 +460,7 @@ export function Sidebar({
             hrefFor={(playlist) => `/playlists/${playlist.id}`}
             onNavigate={onClose}
             onSync={refreshing(reconcilePlaylist)}
+            onMarkWatched={refreshing(markPlaylistWatched)}
             onSetExcludedFromHome={setPlaylistExcludedFromHome}
             onEditRequest={setEditingPlaylistId}
             onDelete={refreshing(async (id: string) => {

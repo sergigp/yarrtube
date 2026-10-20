@@ -220,7 +220,12 @@ export async function markChannelWatched(handle: string): Promise<void> {
   })
 }
 
-export async function markPlaylistWatched(_id: string): Promise<void> {}
+export async function markPlaylistWatched(id: string): Promise<void> {
+  await send(`/playlists/${encodeURIComponent(id)}/watched`, {
+    method: 'POST',
+    label: `mark playlist ${id} watched`,
+  })
+}
 
 export async function markVideoWatched(youtubeId: string): Promise<void> {
   await send(`/videos/${encodeURIComponent(youtubeId)}/watched`, {

@@ -20,7 +20,7 @@ interface EntryActionsMenuProps {
   leadingItems?: ReactNode
   /** Replaces the trigger's default vertical "⋮" icon. */
   triggerIcon?: ReactNode
-  /** Channels only: marks every downloaded video watched. */
+  /** Marks every downloaded video watched. */
   onMarkWatched?: (() => Promise<void>) | undefined
   /** Playlists only: the current setting; undefined hides the home item. */
   excludedFromHome?: boolean | undefined

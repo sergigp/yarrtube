@@ -386,19 +386,25 @@ describe('Sidebar', () => {
     expect(markWatched).toHaveBeenCalledOnce()
   })
 
-  it('a playlist row menu offers no mark-all-watched item', async () => {
+  it('marks a playlist watched from its row menu', async () => {
+    let playlist = aPlaylist({ id: 'PL1', name: 'Courses', unwatched_count: 2 })
+    const markWatched = vi.fn(() => {
+      playlist = { ...playlist, unwatched_count: 0 }
+      return null
+    })
     renderSidebar({
       'GET /api/channels': [],
-      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/playlists': () => [playlist],
       'GET /api/categories': aCategoryList(),
+      'POST /api/playlists/PL1/watched': markWatched,
     })
 
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Actions for List B' }))
+    await user.click(await screen.findByRole('button', { name: 'Actions for Courses' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
 
-    expect(
-      (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
-    ).toEqual(['Sync', 'Exclude from home', 'Edit settings', 'Delete'])
+    expect(markWatched).toHaveBeenCalledOnce()
+    await waitFor(() => expect(screen.queryByTitle('2 unwatched')).not.toBeInTheDocument())
   })
 
   it("edits a playlist's settings from its row menu", async () => {
