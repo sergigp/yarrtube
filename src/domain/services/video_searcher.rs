@@ -33,6 +33,7 @@ pub struct VideoSearcher {
 }
 
 impl VideoSearcher {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         playlist_repository: Arc<dyn PlaylistRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
