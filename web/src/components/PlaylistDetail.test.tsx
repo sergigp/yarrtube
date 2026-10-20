@@ -38,6 +38,23 @@ describe('PlaylistDetail', () => {
     expect(screen.queryByRole('button', { name: 'Mark all watched' })).not.toBeInTheDocument()
   })
 
+  it("summarizes the playlist's unwatched count", async () => {
+    for (const hidden of [false, true]) {
+      const { unmount } = renderPlaylist(
+        {
+          'GET /api/playlists': [
+            aPlaylist({ id: 'PL1', unwatched_count: 2, hide_unwatched_count: hidden }),
+          ],
+          'GET /api/playlists/PL1/videos': [aVideo(), aVideo(), aVideo()],
+        },
+        '/playlists/PL1',
+      )
+
+      expect(await screen.findByText('3 videos · 2 unwatched')).toBeInTheDocument()
+      unmount()
+    }
+  })
+
   it('reports an unknown playlist', async () => {
     renderPlaylist(
       {

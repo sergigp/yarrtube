@@ -56,6 +56,7 @@ export function PlaylistDetail() {
       <DetailHeader
         name={playlist.name}
         videos={videos}
+        unwatchedCount={playlist.unwatched_count}
         onSync={refreshing(() => reconcilePlaylist(id))}
         excludedFromHome={playlist.exclude_from_home}
         onSetExcludedFromHome={(excluded) => setPlaylistExcludedFromHome(id, excluded)}
