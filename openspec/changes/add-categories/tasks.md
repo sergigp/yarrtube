@@ -24,7 +24,7 @@ Backend acceptance tests:
 - [x] 2.13 `it_should_delete_a_category_keeping_its_sources`
 - [x] 2.14 `it_should_fail_to_delete_a_missing_category`
 - [x] 2.15 `it_should_set_the_members_of_a_category`
-- [ ] 2.16 `it_should_replace_the_members_of_a_category`
+- [x] 2.16 `it_should_replace_the_members_of_a_category`
 - [ ] 2.17 `it_should_keep_a_repeated_member_once`
 - [ ] 2.18 `it_should_let_a_source_be_in_several_categories`
 - [ ] 2.19 `it_should_fail_to_set_members_if_a_source_is_not_tracked`

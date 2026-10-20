@@ -601,6 +601,41 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_replace_the_members_of_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        channel_repository.insert(&channel("@Hikaru")).unwrap();
+        let chess = Category {
+            members: vec![channel_member("@GothamChess"), channel_member("@Hikaru")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&["@Hikaru"], &[]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                members: vec![channel_member("@Hikaru")],
+                ..chess
+            }]
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
