@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, Trash2 } from 'lucide-react'
+import { ChevronLeft, Plus, Trash2 } from 'lucide-react'
 import {
   avatarMediaUrl,
   deleteCategory,
@@ -26,7 +26,7 @@ import {
 import { matchesSearch } from '@/lib/sidebarSections'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { errorMessage } from '@/lib/errorMessage'
-import type { ManageCategoryState } from './AddCategoryDialog'
+import { AddCategoryDialog, type ManageCategoryState } from './AddCategoryDialog'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Thumbnail } from './Thumbnail'
 import { Button } from '@/components/ui/button'
@@ -338,10 +338,22 @@ export function CategoriesView() {
   const desktop = useIsDesktop()
   // Below the desktop breakpoint, the selected category's details replace the list.
   const showList = desktop || !selected
+  const [adding, setAdding] = useState(false)
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <h1 className="font-heading text-xl font-semibold">Categories</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="font-heading text-xl font-semibold">Categories</h1>
+        <Button type="button" variant="outline" size="sm" onClick={() => setAdding(true)}>
+          <Plus />
+          New category
+        </Button>
+      </div>
+      {categories && categories.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No categories yet. Create one to group channels and playlists.
+        </p>
+      )}
       <div className="flex min-w-0 flex-col gap-6 md:flex-row">
         {categories && showList && (
           <div className="md:w-64 md:shrink-0">
@@ -350,6 +362,7 @@ export function CategoriesView() {
         )}
         {selected && <CategoryEditor category={selected} showBack={!desktop} />}
       </div>
+      <AddCategoryDialog open={adding} onOpenChange={setAdding} />
     </div>
   )
 }

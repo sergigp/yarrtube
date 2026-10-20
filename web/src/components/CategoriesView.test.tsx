@@ -239,4 +239,14 @@ describe('CategoriesView', () => {
     expect(screen.getByRole('list', { name: 'Category list' })).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Category name' })).not.toBeInTheDocument()
   })
+
+  it('invites to create a category when there is none', async () => {
+    renderView({ 'GET /api/categories': aCategoryList([]) })
+
+    expect(
+      await screen.findByText('No categories yet. Create one to group channels and playlists.'),
+    ).toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'New category' }))
+    expect(await screen.findByRole('dialog', { name: 'Add category' })).toBeInTheDocument()
+  })
 })
