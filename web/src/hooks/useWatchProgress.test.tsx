@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useWatchProgress } from './useWatchProgress'
-import { useCategories } from '@/api/queries'
-import { aCategoryList, aVideo, mockApi } from '@/test/helpers'
+import { useCategories, usePlaylists } from '@/api/queries'
+import { aCategoryList, aPlaylist, aVideo, mockApi } from '@/test/helpers'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -303,6 +303,28 @@ describe('useWatchProgress', () => {
 
     expect(element.paused).toBe(true)
     expect(element.currentTime).toBe(0)
+  })
+
+  it('refetches the playlist list when the watched state changes', async () => {
+    const listPlaylists = vi.fn(() => [aPlaylist()])
+    mockApi({
+      'GET /api/playlists': listPlaylists,
+      'POST /api/videos/abc/progress': { watched: true },
+    })
+    const element = fakeVideoElement({ currentTime: 290, duration: 300 })
+    const video = aVideo({ id: 'abc', watched: false })
+    renderHook(
+      () => {
+        usePlaylists()
+        useWatchProgress(element, video)
+      },
+      { wrapper: Wrapper },
+    )
+    await waitFor(() => expect(listPlaylists).toHaveBeenCalledOnce())
+
+    element.dispatchEvent(new Event('pause'))
+
+    await waitFor(() => expect(listPlaylists).toHaveBeenCalledTimes(2))
   })
 
   it('reports through a beacon when the page hides', () => {
