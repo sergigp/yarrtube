@@ -705,6 +705,37 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_set_members_if_a_source_is_not_tracked() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@Hikaru")).unwrap();
+        let chess = Category {
+            members: vec![channel_member("@Hikaru")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&["@Hikaru", "@Ghost"], &["PLghost"]),
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("channel @Ghost is not tracked"))
+        );
+        assert_eq!(repository.list().unwrap(), vec![chess]);
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),

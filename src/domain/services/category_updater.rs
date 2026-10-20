@@ -53,6 +53,7 @@ impl CategoryUpdaterApi for CategoryUpdater {
         members: Vec<CategoryMember>,
     ) -> Result<(), UpdateCategoryError> {
         let category = self.find_category(id)?;
+        self.ensure_tracked(&members)?;
         self.save(&category.with_members(members))
     }
 }
@@ -81,6 +82,31 @@ impl CategoryUpdater {
             return Err(UpdateCategoryError::NameTaken(name.clone()));
         }
         Ok(())
+    }
+
+    /// Fails on the first of `members` that is not a tracked source.
+    fn ensure_tracked(&self, members: &[CategoryMember]) -> Result<(), UpdateCategoryError> {
+        members.iter().try_for_each(|member| {
+            if self.is_tracked(member)? {
+                Ok(())
+            } else {
+                Err(UpdateCategoryError::MemberNotTracked(member.clone()))
+            }
+        })
+    }
+
+    fn is_tracked(&self, member: &CategoryMember) -> Result<bool, UpdateCategoryError> {
+        match member {
+            CategoryMember::Channel(handle) => self
+                .channel_repository
+                .find(handle)
+                .map(|channel| channel.is_some()),
+            CategoryMember::Playlist(id) => self
+                .playlist_repository
+                .find(id)
+                .map(|playlist| playlist.is_some()),
+        }
+        .map_err(UpdateCategoryError::Repository)
     }
 
     fn save(&self, category: &Category) -> Result<(), UpdateCategoryError> {
