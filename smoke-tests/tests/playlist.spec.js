@@ -9,7 +9,7 @@ import {
 import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow } from '../helpers/video.js'
 import { expectEpisodeOnDisk, expectGoneFromDisk } from '../helpers/library.js'
 import { expectPlexScanned } from '../helpers/plex.js'
-import { syncItem, deleteItem, sectionRows, includeItemInHome } from '../helpers/sidebar.js'
+import { syncItem, deleteItem, sectionRows, includeItemInHome, sectionList } from '../helpers/sidebar.js'
 import { expectPendingSync } from '../helpers/tasks.js'
 
 const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
@@ -19,7 +19,7 @@ const PLAYLIST_PATH = `playlists/${slugOf(PLAYLIST_NAME)}`
 test('playlist lifecycle: add, download, play, sync, duplicate error, delete', async ({ page }) => {
   await page.goto('/')
 
-  const sidebarLink = page.locator('h3:has(button:text-is("Playlists")) ~ ul').getByRole('link', { name: PLAYLIST_NAME })
+  const sidebarLink = sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME })
   const continueWatching = page.locator('section', {
     has: page.getByRole('heading', { name: 'Continue watching' }),
   })
@@ -142,7 +142,7 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     // Change how often the playlist is checked from its page header's "⋮"
     // menu; reopening the dialog shows the saved value (covers PATCH
     // /playlists/{id} with an interval).
-    await page.locator('h3:has(button:text-is("Playlists")) ~ ul').getByRole('link', { name: PLAYLIST_NAME }).click()
+    await sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME }).click()
     const editPlaylist = async () => {
       await page.getByRole('button', { name: /^More actions for / }).click()
       await page.getByRole('menuitem', { name: 'Edit settings' }).click()
@@ -186,7 +186,7 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     // Playing past the watched threshold marks the video watched without
     // interrupting playback: once the list shows it watched, the player is
     // still playing where it was, not rewound and paused.
-    await page.locator('h3:has(button:text-is("Playlists")) ~ ul').getByRole('link', { name: PLAYLIST_NAME }).click()
+    await sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME }).click()
     await assertVideoPlays(page)
     const player = page.locator('video')
     const markedWatched = page.waitForResponse(

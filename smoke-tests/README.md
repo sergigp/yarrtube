@@ -100,7 +100,10 @@ uncaught page error or a 5xx `/api` response.
   assign the fixture channel to it from the Add channel dialog, remove it
   and add it back with the source chips, mark it all watched once the video
   downloads, fold the section and delete the category from its actions
-  menu, keeping the channel.
+  menu, keeping the channel. At a mobile viewport, the "Add category" row
+  closes the drawer before its dialog opens, a new category's manage
+  sources dialog fills the screen, and once a category exists the
+  heading's "+" adds the next one.
 - **Mobile sidebar** (`tests/mobile-sidebar.spec.js`): opening/closing the
   sidebar at a narrow viewport.
 - **Sidebar folding** (`tests/sidebarFolding.spec.js`): a folded section

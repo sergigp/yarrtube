@@ -1,7 +1,21 @@
 import { expect } from '@playwright/test'
 
+// The heading's row (its `h3` plus the add "+"), which the section's add row,
+// list and empty/error messages follow as siblings.
+function headingRow(section) {
+  return `div:has(> h3 > button:text-is("${section}"))`
+}
+
+export function sectionList(page, section) {
+  return page.locator(`${headingRow(section)} ~ ul`)
+}
+
 export function sectionRows(page, section) {
-  return page.locator(`h3:has(button:text-is("${section}")) ~ ul li`)
+  return sectionList(page, section).locator('li')
+}
+
+export function sectionEmptyMessage(page, section) {
+  return page.locator(`${headingRow(section)} ~ p`)
 }
 
 // The heading toggle that folds a section; while folded its name also

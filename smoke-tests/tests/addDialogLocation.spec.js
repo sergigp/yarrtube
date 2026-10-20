@@ -14,7 +14,7 @@ import {
   submitPlaylist,
 } from '../helpers/addDialog.js'
 import { waitForVideoStatus } from '../helpers/video.js'
-import { deleteItem } from '../helpers/sidebar.js'
+import { deleteItem, sectionList } from '../helpers/sidebar.js'
 import { expectEpisodeOnDisk } from '../helpers/library.js'
 
 const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
@@ -56,9 +56,7 @@ test('it should create a playlist into a browsed parent folder', async ({ page }
   await dialog.getByRole('button', { name: /^Create Playlist/ }).click()
   await dialog.waitFor({ state: 'hidden' })
 
-  const sidebarLink = page
-    .locator('h3:has(button:text-is("Playlists")) ~ ul')
-    .getByRole('link', { name: PLAYLIST_NAME })
+  const sidebarLink = sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME })
   await expect(sidebarLink).toBeVisible()
   await sidebarLink.click()
   await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 240_000 })
@@ -101,9 +99,7 @@ test('it should create a playlist into a staged parent folder that did not exist
   await dialog.getByRole('button', { name: /^Create Playlist/ }).click()
   await dialog.waitFor({ state: 'hidden' })
 
-  const sidebarLink = page
-    .locator('h3:has(button:text-is("Playlists")) ~ ul')
-    .getByRole('link', { name: PLAYLIST_NAME })
+  const sidebarLink = sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME })
   await sidebarLink.click()
   await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 240_000 })
 
@@ -173,9 +169,7 @@ test('it should block submission when the destination is already used by another
   await page.goto('/')
   await openAddPlaylistDialog(page)
   await submitPlaylist(page, { url: PLAYLIST_ID })
-  const sidebarLink = page
-    .locator('h3:has(button:text-is("Playlists")) ~ ul')
-    .getByRole('link', { name: PLAYLIST_NAME })
+  const sidebarLink = sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME })
   await expect(sidebarLink).toBeVisible()
 
   // Both dialogs share the location logic, so the channel dialog pointed at

@@ -140,5 +140,7 @@ Per the revised Sidebar Add Entries, Folded Section Unwatched Total and Sidebar 
 - [x] 6.2 `Sidebar` › offers a labelled add row in an empty section and a heading + once it has items
 - [x] 6.3 Folded total rendered as the row badge; `Sidebar` › shows the channels' unwatched total badge only while folded and above 0 (renamed), and 2.45 renamed to match
 - [x] 6.4 `npm run check` passes in `web/`
-- [ ] 6.5 `scripts/run-smoke-tests.sh` passes
-- [x] 6.6 Manual check with `scripts/run-local.sh`: heading "+" and empty add rows in all three sections, folded badges, on desktop and mobile
+- [x] 6.5 Smoke helpers find a section's list, rows and messages as siblings of its heading row (the `h3` is now wrapped with the "+"), in one place in `helpers/sidebar.js`
+- [x] 6.6 `smoke-tests/tests/categories.spec.js` › category on mobile: add from the drawer, manage sources full screen, then add from the heading
+- [x] 6.7 `scripts/run-smoke-tests.sh` passes
+- [x] 6.8 Manual check with `scripts/run-local.sh`: heading "+" and empty add rows in all three sections, folded badges, on desktop and mobile

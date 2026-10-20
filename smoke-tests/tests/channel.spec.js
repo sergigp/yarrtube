@@ -11,6 +11,7 @@ import {
   deleteItem,
   markItemWatched,
   sectionRows,
+  sectionEmptyMessage,
   sectionHeading,
   unwatchedBadge,
 } from '../helpers/sidebar.js'
@@ -26,7 +27,7 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
   await page.goto('/')
 
   const dialog = page.getByRole('dialog')
-  const sidebarLink = page.locator('h3:has(button:text-is("Channels")) ~ ul li a').first()
+  const sidebarLink = sectionRows(page, 'Channels').locator('a').first()
   const channelRow = sectionRows(page, 'Channels').first()
 
   await test.step('add it from the sidebar', async () => {
@@ -174,7 +175,7 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     // The sidebar also hides its list on a fetch error, so an empty list alone
     // wouldn't distinguish "deleted" from "broken" — check for the explicit
     // empty-state text instead.
-    await expect(page.locator('h3:has(button:text-is("Channels")) ~ p', { hasText: 'None tracked yet.' })).toBeVisible()
+    await expect(sectionEmptyMessage(page, 'Channels').filter({ hasText: 'None tracked yet.' })).toBeVisible()
     await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
     // The library being otherwise empty, home has nothing left to show.
     await expect(page.getByText('No videos synced yet.')).toBeVisible()
