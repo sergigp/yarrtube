@@ -16,6 +16,12 @@ impl CategoryName {
                 "Category name must not be empty".to_string(),
             ));
         }
+        if name.chars().count() > Self::MAX_LENGTH {
+            return Err(ValidationError(format!(
+                "Category name must be at most {} characters",
+                Self::MAX_LENGTH
+            )));
+        }
         Ok(Self(name))
     }
 
@@ -68,6 +74,21 @@ mod tests {
         assert_eq!(
             CategoryName::new("   "),
             Err(error("Category name must not be empty"))
+        );
+    }
+
+    #[test]
+    fn it_should_accept_a_name_of_60_characters() {
+        let name = "é".repeat(60);
+
+        assert_eq!(CategoryName::new(name.as_str()), Ok(CategoryName(name)));
+    }
+
+    #[test]
+    fn it_should_reject_a_name_of_61_characters() {
+        assert_eq!(
+            CategoryName::new("é".repeat(61)),
+            Err(error("Category name must be at most 60 characters"))
         );
     }
 
