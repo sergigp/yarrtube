@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Ellipsis, Plus, RotateCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, Ellipsis, Plus, RotateCw } from 'lucide-react'
 import {
   queryKeys,
   useChannels,
@@ -207,62 +207,77 @@ function SidebarSection({
   showAvatar,
   onNavigate,
 }: SidebarSectionProps) {
-  void folded
   void headingActive
-  void onToggleFolded
   void foldedTotal
   const [pendingDelete, setPendingDelete] = useState<LibraryItem | null>(null)
 
   return (
     <div>
-      <h3 className="mb-2 px-2 font-heading text-base font-semibold tracking-tight text-foreground">
-        {title}
+      <h3 className="mb-2 font-heading text-base font-semibold tracking-tight text-foreground">
+        <button
+          type="button"
+          className="flex w-full items-center gap-1 rounded-md px-2 text-left transition-colors hover:text-primary"
+          onClick={onToggleFolded}
+        >
+          {folded ? (
+            <ChevronRight className="size-4 shrink-0" />
+          ) : (
+            <ChevronDown className="size-4 shrink-0" />
+          )}
+          {title}
+        </button>
       </h3>
-      {/* Closing first lets the mobile drawer get out of the dialog's way;
-          on desktop the sidebar is static and `onClose` changes nothing. */}
-      <button
-        type="button"
-        className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-        onClick={() => {
-          onClose()
-          onAdd()
-        }}
-      >
-        <Plus className="size-4 shrink-0" />
-        {addLabel}
-      </button>
-      {error && <p className="px-2 text-sm text-destructive">Failed to load: {error.message}</p>}
-      {!error && !items && <p className="px-2 text-sm text-muted-foreground">Loading…</p>}
-      {!error && items && items.length === 0 && (
-        <p className="px-2 text-sm text-muted-foreground">None tracked yet.</p>
-      )}
-      {!error && items && items.length > 0 && (
-        <ul className="flex flex-col">
-          {items.map((item) => (
-            <SidebarRow
-              key={item.id}
-              item={item}
-              active={item.id === activeId}
-              href={hrefFor(item)}
-              showAvatar={showAvatar}
-              onNavigate={onNavigate}
-              onSync={async () => {
-                try {
-                  await onSync(item.id)
-                } catch (err) {
-                  window.alert(`Failed to sync "${item.name}": ${errorMessage(err)}`)
-                }
-              }}
-              onMarkWatched={onMarkWatched && (() => onMarkWatched(item.id))}
-              onSetExcludedFromHome={
-                onSetExcludedFromHome &&
-                ((excluded: boolean) => onSetExcludedFromHome(item.id, excluded))
-              }
-              onEditRequest={onEditRequest && (() => onEditRequest(item.id))}
-              onDeleteRequest={() => setPendingDelete(item)}
-            />
-          ))}
-        </ul>
+      {!folded && (
+        <>
+          {/* Closing first lets the mobile drawer get out of the dialog's way;
+              on desktop the sidebar is static and `onClose` changes nothing. */}
+          <button
+            type="button"
+            className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            onClick={() => {
+              onClose()
+              onAdd()
+            }}
+          >
+            <Plus className="size-4 shrink-0" />
+            {addLabel}
+          </button>
+          {error && (
+            <p className="px-2 text-sm text-destructive">Failed to load: {error.message}</p>
+          )}
+          {!error && !items && <p className="px-2 text-sm text-muted-foreground">Loading…</p>}
+          {!error && items && items.length === 0 && (
+            <p className="px-2 text-sm text-muted-foreground">None tracked yet.</p>
+          )}
+          {!error && items && items.length > 0 && (
+            <ul className="flex flex-col">
+              {items.map((item) => (
+                <SidebarRow
+                  key={item.id}
+                  item={item}
+                  active={item.id === activeId}
+                  href={hrefFor(item)}
+                  showAvatar={showAvatar}
+                  onNavigate={onNavigate}
+                  onSync={async () => {
+                    try {
+                      await onSync(item.id)
+                    } catch (err) {
+                      window.alert(`Failed to sync "${item.name}": ${errorMessage(err)}`)
+                    }
+                  }}
+                  onMarkWatched={onMarkWatched && (() => onMarkWatched(item.id))}
+                  onSetExcludedFromHome={
+                    onSetExcludedFromHome &&
+                    ((excluded: boolean) => onSetExcludedFromHome(item.id, excluded))
+                  }
+                  onEditRequest={onEditRequest && (() => onEditRequest(item.id))}
+                  onDeleteRequest={() => setPendingDelete(item)}
+                />
+              ))}
+            </ul>
+          )}
+        </>
       )}
 
       <ConfirmDialog
