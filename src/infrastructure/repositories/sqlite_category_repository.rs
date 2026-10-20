@@ -85,8 +85,11 @@ impl CategoryRepository for SqliteCategoryRepository {
     }
 
     fn update(&self, category: &Category) -> anyhow::Result<()> {
-        let conn = self.db.write()?;
-        conn.execute(
+        let mut conn = self.db.write()?;
+        let tx = conn
+            .transaction()
+            .context("failed to begin category update")?;
+        tx.execute(
             "UPDATE categories SET name = ?2 WHERE id = ?1",
             params![category.id.as_str(), category.name.as_str()],
         )
@@ -94,7 +97,9 @@ impl CategoryRepository for SqliteCategoryRepository {
             |e| tracing::error!(category_id = %category.id, error = %e, "failed to update category"),
         )
         .context("failed to update category")?;
-        Ok(())
+        Self::delete_members(&tx, &category.id)?;
+        Self::insert_members(&tx, category)?;
+        tx.commit().context("failed to commit category update")
     }
 
     fn delete(&self, id: &CategoryId) -> anyhow::Result<()> {

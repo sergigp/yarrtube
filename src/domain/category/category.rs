@@ -29,8 +29,8 @@ impl Category {
     }
 
     /// Replaces the members, keeping each once (first occurrence wins).
-    pub fn with_members(self, _members: Vec<CategoryMember>) -> Self {
-        self
+    pub fn with_members(self, members: Vec<CategoryMember>) -> Self {
+        Self { members, ..self }
     }
 
     pub fn without_member(self, _member: &CategoryMember) -> Self {

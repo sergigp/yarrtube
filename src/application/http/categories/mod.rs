@@ -4,8 +4,11 @@ use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::required;
 use crate::domain::category::{
-    CategoryId, CategoryName, CreateCategoryError, DeleteCategoryError, UpdateCategoryError,
+    CategoryId, CategoryMember, CategoryName, CreateCategoryError, DeleteCategoryError,
+    UpdateCategoryError,
 };
+use crate::domain::channel::ChannelHandle;
+use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryDeleterApi, CategoryUpdater,
     CategoryUpdaterApi, CategoryViewSearcher, CategoryViewSearcherApi, VideoWatchStateUpdater,
@@ -71,10 +74,17 @@ pub async fn delete_category(
 }
 
 pub async fn set_category_members(
-    State(_category_updater): State<CategoryUpdater>,
-    Path(_id): Path<String>,
-    Json(_request): Json<SetCategoryMembersRequest>,
+    State(category_updater): State<CategoryUpdater>,
+    Path(id): Path<String>,
+    Json(request): Json<SetCategoryMembersRequest>,
 ) -> Result<StatusCode, ApiError> {
+    let id = CategoryId::new(id)?;
+    let members = members_from(request)?;
+
+    run_blocking(move || category_updater.set_members(&id, members))
+        .await?
+        .map_err(update_category_error)?;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -83,6 +93,19 @@ pub async fn mark_category_watched(
     Path(_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// The requested channels, then the requested playlists, as members.
+fn members_from(request: SetCategoryMembersRequest) -> Result<Vec<CategoryMember>, ApiError> {
+    let channels = request
+        .channels
+        .into_iter()
+        .map(|handle| ChannelHandle::new(handle).map(CategoryMember::Channel));
+    let playlists = request
+        .playlists
+        .into_iter()
+        .map(|id| PlaylistId::new(id).map(CategoryMember::Playlist));
+    Ok(channels.chain(playlists).collect::<Result<_, _>>()?)
 }
 
 fn update_category_error(error: UpdateCategoryError) -> ApiError {
@@ -97,10 +120,10 @@ fn update_category_error(error: UpdateCategoryError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::category::{Category, CategoryMember};
-    use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
+    use crate::domain::category::Category;
+    use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
-    use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
+    use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::shared::{Quality, ReconcileInterval};
@@ -543,6 +566,41 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_set_the_members_of_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        channel_repository.insert(&channel("@Hikaru")).unwrap();
+        playlist_repository.insert(&playlist("PLendgames")).unwrap();
+        let chess = category(None, "Chess");
+        repository.insert(&chess).unwrap();
+        let category_updater =
+            CategoryUpdater::new(repository.clone(), channel_repository, playlist_repository);
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&["@GothamChess", "@Hikaru"], &["PLendgames"]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                members: vec![
+                    channel_member("@GothamChess"),
+                    channel_member("@Hikaru"),
+                    playlist_member("PLendgames"),
+                ],
+                ..chess
+            }]
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
@@ -552,6 +610,13 @@ mod tests {
 
     fn unused_connection() -> Database {
         Database::single(Connection::open_in_memory().unwrap())
+    }
+
+    fn members_request(channels: &[&str], playlists: &[&str]) -> SetCategoryMembersRequest {
+        SetCategoryMembersRequest {
+            channels: channels.iter().map(|c| c.to_string()).collect(),
+            playlists: playlists.iter().map(|p| p.to_string()).collect(),
+        }
     }
 
     fn create_request(name: &str) -> CreateCategoryRequest {
@@ -700,6 +765,14 @@ mod tests {
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    async fn set_members(
+        category_updater: CategoryUpdater,
+        id: &str,
+        request: SetCategoryMembersRequest,
+    ) -> Result<StatusCode, ApiError> {
+        set_category_members(State(category_updater), Path(id.to_string()), Json(request)).await
     }
 
     async fn delete(category_deleter: CategoryDeleter, id: &str) -> Result<StatusCode, ApiError> {

@@ -49,10 +49,11 @@ impl CategoryUpdaterApi for CategoryUpdater {
 
     fn set_members(
         &self,
-        _id: &CategoryId,
-        _members: Vec<CategoryMember>,
+        id: &CategoryId,
+        members: Vec<CategoryMember>,
     ) -> Result<(), UpdateCategoryError> {
-        Ok(())
+        let category = self.find_category(id)?;
+        self.save(&category.with_members(members))
     }
 }
 
