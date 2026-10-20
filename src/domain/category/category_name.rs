@@ -34,3 +34,24 @@ impl fmt::Display for CategoryName {
         write!(f, "{}", self.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_accept_a_name() {
+        assert_eq!(
+            CategoryName::new("Chess"),
+            Ok(CategoryName("Chess".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_trim_a_name() {
+        assert_eq!(
+            CategoryName::new("  Chess  "),
+            Ok(CategoryName("Chess".to_string()))
+        );
+    }
+}

@@ -44,7 +44,7 @@ Backend acceptance tests:
 
 Value objects (one cycle each, in `category_name.rs` / `category_id.rs`):
 
-- [ ] 2.33 `CategoryName` › accepts a name and trims it
+- [x] 2.33 `CategoryName` › accepts a name and trims it
 - [ ] 2.34 `CategoryName` › rejects empty and blank names
 - [ ] 2.35 `CategoryName` › accepts 60 characters and rejects 61
 - [ ] 2.36 `CategoryName` › `is_same_as` ignores case
