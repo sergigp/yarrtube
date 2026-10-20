@@ -126,6 +126,27 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_create_if_name_taken_ignoring_case() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = category(None, "Chess");
+        repository.insert(&chess).unwrap();
+        let category_creator =
+            CategoryCreator::new(repository.clone(), Arc::new(FixedClock(fixed_timestamp())));
+
+        let response = create(category_creator, create_request("chess")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "a category named \"chess\" already exists"
+            ))
+        );
+        assert_eq!(repository.list().unwrap(), vec![chess]);
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),

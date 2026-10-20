@@ -24,10 +24,26 @@ pub trait CategoryCreatorApi: Send + Sync {
 
 impl CategoryCreatorApi for CategoryCreator {
     fn create(&self, name: CategoryName) -> Result<Category, CreateCategoryError> {
+        self.ensure_name_free(&name)?;
         let category = Category::create(name, self.clock.now());
         self.repository
             .insert(&category)
             .map_err(CreateCategoryError::Repository)?;
         Ok(category)
+    }
+}
+
+impl CategoryCreator {
+    fn ensure_name_free(&self, name: &CategoryName) -> Result<(), CreateCategoryError> {
+        let taken = self
+            .repository
+            .list()
+            .map_err(CreateCategoryError::Repository)?
+            .iter()
+            .any(|category| category.name.is_same_as(name));
+        if taken {
+            return Err(CreateCategoryError::NameTaken(name.clone()));
+        }
+        Ok(())
     }
 }

@@ -24,8 +24,8 @@ impl CategoryName {
     }
 
     /// Equal ignoring case.
-    pub fn is_same_as(&self, _other: &CategoryName) -> bool {
-        false
+    pub fn is_same_as(&self, other: &CategoryName) -> bool {
+        self.0.to_lowercase() == other.0.to_lowercase()
     }
 }
 
