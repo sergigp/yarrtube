@@ -4,7 +4,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 
 pub trait CategoryRepository: Send + Sync {
     fn find(&self, id: &CategoryId) -> anyhow::Result<Option<Category>>;
@@ -28,8 +28,18 @@ impl SqliteCategoryRepository {
 }
 
 impl CategoryRepository for SqliteCategoryRepository {
-    fn find(&self, _id: &CategoryId) -> anyhow::Result<Option<Category>> {
-        Ok(None)
+    fn find(&self, id: &CategoryId) -> anyhow::Result<Option<Category>> {
+        let conn = self.db.read()?;
+        conn.query_row(
+            "SELECT id, name, created_at FROM categories WHERE id = ?1",
+            params![id.as_str()],
+            Self::read_row,
+        )
+        .optional()
+        .inspect_err(|e| tracing::error!(category_id = %id, error = %e, "failed to query category"))
+        .context("failed to query category")?
+        .map(|row| Self::row_to_category(&conn, row))
+        .transpose()
     }
 
     fn list(&self) -> anyhow::Result<Vec<Category>> {
@@ -74,7 +84,16 @@ impl CategoryRepository for SqliteCategoryRepository {
         tx.commit().context("failed to commit category insert")
     }
 
-    fn update(&self, _category: &Category) -> anyhow::Result<()> {
+    fn update(&self, category: &Category) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "UPDATE categories SET name = ?2 WHERE id = ?1",
+            params![category.id.as_str(), category.name.as_str()],
+        )
+        .inspect_err(
+            |e| tracing::error!(category_id = %category.id, error = %e, "failed to update category"),
+        )
+        .context("failed to update category")?;
         Ok(())
     }
 

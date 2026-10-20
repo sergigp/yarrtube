@@ -24,8 +24,8 @@ impl Category {
         }
     }
 
-    pub fn with_name(self, _name: CategoryName) -> Self {
-        self
+    pub fn with_name(self, name: CategoryName) -> Self {
+        Self { name, ..self }
     }
 
     /// Replaces the members, keeping each once (first occurrence wins).

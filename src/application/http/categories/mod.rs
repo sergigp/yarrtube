@@ -3,10 +3,10 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::required;
-use crate::domain::category::{CategoryName, CreateCategoryError};
+use crate::domain::category::{CategoryId, CategoryName, CreateCategoryError, UpdateCategoryError};
 use crate::domain::services::{
-    CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryUpdater, CategoryViewSearcher,
-    CategoryViewSearcherApi, VideoWatchStateUpdater,
+    CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryUpdater, CategoryUpdaterApi,
+    CategoryViewSearcher, CategoryViewSearcherApi, VideoWatchStateUpdater,
 };
 use axum::Json;
 use axum::extract::{Path, State};
@@ -41,10 +41,17 @@ pub async fn list_categories(
 }
 
 pub async fn update_category(
-    State(_category_updater): State<CategoryUpdater>,
-    Path(_id): Path<String>,
-    Json(_request): Json<UpdateCategoryRequest>,
+    State(category_updater): State<CategoryUpdater>,
+    Path(id): Path<String>,
+    Json(request): Json<UpdateCategoryRequest>,
 ) -> Result<StatusCode, ApiError> {
+    let id = CategoryId::new(id)?;
+    let name = CategoryName::new(required(request.name, MISSING_CATEGORY_NAME)?)?;
+
+    run_blocking(move || category_updater.rename(&id, name))
+        .await?
+        .map_err(update_category_error)?;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -70,10 +77,19 @@ pub async fn mark_category_watched(
     Ok(StatusCode::NO_CONTENT)
 }
 
+fn update_category_error(error: UpdateCategoryError) -> ApiError {
+    match error {
+        e @ UpdateCategoryError::NotFound(_) => ApiError::new(StatusCode::NOT_FOUND, e),
+        e @ UpdateCategoryError::NameTaken(_) => ApiError::new(StatusCode::CONFLICT, e),
+        e @ UpdateCategoryError::MemberNotTracked(_) => ApiError::bad_request(e),
+        e @ UpdateCategoryError::Repository(_) => ApiError::internal(e),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::category::{Category, CategoryId, CategoryMember};
+    use crate::domain::category::{Category, CategoryMember};
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
@@ -366,6 +382,35 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_rename_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@chess")).unwrap();
+        let chess = Category {
+            members: vec![channel_member("@chess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = rename(category_updater, chess.id.as_str(), "Board games").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                name: CategoryName::new("Board games").unwrap(),
+                ..chess
+            }]
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
@@ -523,6 +568,21 @@ mod tests {
 
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    async fn rename(
+        category_updater: CategoryUpdater,
+        id: &str,
+        name: &str,
+    ) -> Result<StatusCode, ApiError> {
+        update_category(
+            State(category_updater),
+            Path(id.to_string()),
+            Json(UpdateCategoryRequest {
+                name: Some(name.to_string()),
+            }),
+        )
+        .await
     }
 
     async fn list(

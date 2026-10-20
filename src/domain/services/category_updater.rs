@@ -1,4 +1,6 @@
-use crate::domain::category::{CategoryId, CategoryMember, CategoryName, UpdateCategoryError};
+use crate::domain::category::{
+    Category, CategoryId, CategoryMember, CategoryName, UpdateCategoryError,
+};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -39,8 +41,9 @@ pub trait CategoryUpdaterApi: Send + Sync {
 }
 
 impl CategoryUpdaterApi for CategoryUpdater {
-    fn rename(&self, _id: &CategoryId, _name: CategoryName) -> Result<(), UpdateCategoryError> {
-        Ok(())
+    fn rename(&self, id: &CategoryId, name: CategoryName) -> Result<(), UpdateCategoryError> {
+        let category = self.find_category(id)?;
+        self.save(&category.with_name(name))
     }
 
     fn set_members(
@@ -49,5 +52,20 @@ impl CategoryUpdaterApi for CategoryUpdater {
         _members: Vec<CategoryMember>,
     ) -> Result<(), UpdateCategoryError> {
         Ok(())
+    }
+}
+
+impl CategoryUpdater {
+    fn find_category(&self, id: &CategoryId) -> Result<Category, UpdateCategoryError> {
+        self.repository
+            .find(id)
+            .map_err(UpdateCategoryError::Repository)?
+            .ok_or_else(|| UpdateCategoryError::NotFound(id.clone()))
+    }
+
+    fn save(&self, category: &Category) -> Result<(), UpdateCategoryError> {
+        self.repository
+            .update(category)
+            .map_err(UpdateCategoryError::Repository)
     }
 }
