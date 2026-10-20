@@ -46,6 +46,20 @@ describe('Sidebar', () => {
     expect(busyIndex).toBeLessThan(behindIndex)
   })
 
+  it('lists every channel of an unfolded section with no show-more control', async () => {
+    const channels = Array.from({ length: 40 }, (_, index) =>
+      aChannel({ name: `Chan ${index}`, unwatched_count: 0 }),
+    )
+    renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] })
+
+    await screen.findByText('Chan 0')
+
+    expect(
+      channels.filter((channel) => screen.queryByText(channel.name) === null),
+    ).toEqual([])
+    expect(screen.queryByRole('button', { name: /^Show / })).not.toBeInTheDocument()
+  })
+
   it('offers search only above the threshold and filters both sections', async () => {
     const channels = Array.from({ length: 10 }, (_, index) =>
       aChannel({ name: `Chan ${index}`, unwatched_count: 1 }),

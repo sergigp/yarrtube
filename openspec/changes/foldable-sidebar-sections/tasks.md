@@ -11,7 +11,7 @@
 - [x] 2.5 `sectionView` › does not mark the heading active when unfolded
 - [x] 2.6 `sectionView` › does not mark the heading active when the active id is not in the section
 - [x] 2.7 `unwatchedTotal` › sums the rows' unwatched counts, treating missing counts as 0
-- [ ] 2.8 `Sidebar` › lists every channel of an unfolded section with no show-more control — replaces the "show more" test and removes the "Show N more"/"Show less" control
+- [x] 2.8 `Sidebar` › lists every channel of an unfolded section with no show-more control — replaces the "show more" test and removes the "Show N more"/"Show less" control
 - [ ] 2.9 `Sidebar` › folds a section from its heading, hiding its rows and add control — heading becomes the toggle button with a chevron
 - [ ] 2.10 `Sidebar` › unfolds a folded section
 - [ ] 2.11 `Sidebar` › folds sections independently
