@@ -10,6 +10,8 @@ pub struct PlaylistSettingsChange {
 
 impl PlaylistSettingsChange {
     pub fn is_empty(&self) -> bool {
-        self.exclude_from_home.is_none() && self.reconcile_interval.is_none()
+        self.exclude_from_home.is_none()
+            && self.hide_unwatched_count.is_none()
+            && self.reconcile_interval.is_none()
     }
 }

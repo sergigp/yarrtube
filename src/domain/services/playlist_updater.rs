@@ -60,6 +60,7 @@ impl PlaylistUpdaterApi for PlaylistUpdater {
         info!(
             playlist_id = %id,
             exclude_from_home = playlist.exclude_from_home,
+            hide_unwatched_count = playlist.hide_unwatched_count,
             reconcile_interval_minutes = playlist.reconcile_interval.minutes(),
             "updated playlist"
         );
@@ -79,6 +80,10 @@ impl PlaylistUpdater {
     fn apply_settings(playlist: Playlist, change: PlaylistSettingsChange) -> Playlist {
         let playlist = match change.exclude_from_home {
             Some(exclude_from_home) => playlist.with_exclude_from_home(exclude_from_home),
+            None => playlist,
+        };
+        let playlist = match change.hide_unwatched_count {
+            Some(hide_unwatched_count) => playlist.with_hide_unwatched_count(hide_unwatched_count),
             None => playlist,
         };
         match change.reconcile_interval {

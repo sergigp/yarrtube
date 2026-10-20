@@ -1513,6 +1513,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_hide_a_playlists_unwatched_count() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let stored = Playlist {
+            exclude_from_home: true,
+            ..playlist("PL1", DEFAULT_PATH)
+        }
+        .with_reconcile_interval(ReconcileInterval::new(720).unwrap());
+        playlist_repository.insert(&stored).unwrap();
+        let playlist_updater = PlaylistUpdater::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = update(playlist_updater, "PL1", hide_count_request(true)).await;
+
+        assert_eq!(
+            response,
+            Ok(PlaylistResponse {
+                exclude_from_home: true,
+                hide_unwatched_count: true,
+                reconcile_interval_minutes: 720,
+                ..playlist_response("PL1", DEFAULT_PATH)
+            })
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![stored.with_hide_unwatched_count(true)]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_include_a_playlist_in_home_again() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -2596,6 +2632,13 @@ mod tests {
             exclude_from_home: Some(exclude_from_home),
             hide_unwatched_count: None,
             reconcile_interval_minutes: None,
+        }
+    }
+
+    fn hide_count_request(hide_unwatched_count: bool) -> UpdatePlaylistRequest {
+        UpdatePlaylistRequest {
+            hide_unwatched_count: Some(hide_unwatched_count),
+            ..empty_update_request()
         }
     }
 
