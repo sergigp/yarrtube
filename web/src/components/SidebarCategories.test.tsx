@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import {
   aCategory,
@@ -11,18 +12,27 @@ import {
   type Routes,
 } from '@/test/helpers'
 
+/** Renders the sidebar beside stand-in views that name the route shown. */
 function renderSidebar(routes: Routes, { route = '/' } = {}) {
   mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
   return renderWithProviders(
-    <Sidebar
-      open
-      onClose={() => {}}
-      onAddChannel={() => {}}
-      onAddPlaylist={() => {}}
-      onAddCategory={() => {}}
-    />,
+    <>
+      <Sidebar
+        open
+        onClose={() => {}}
+        onAddChannel={() => {}}
+        onAddPlaylist={() => {}}
+        onAddCategory={() => {}}
+      />
+      <RouteProbe />
+    </>,
     { route },
   )
+}
+
+function RouteProbe() {
+  const location = useLocation()
+  return <output aria-label="Current route">{`${location.pathname}${location.search}`}</output>
 }
 
 function categoryRowNames(): string[] {
@@ -71,5 +81,21 @@ describe('SidebarCategories', () => {
 
     expect(screen.getByRole('link', { name: 'Chess' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'Science' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('manage control navigates without folding', async () => {
+    renderSidebar({ 'GET /api/categories': aCategoryList([aCategory({ name: 'Chess' })]) })
+
+    await screen.findByText('Chess')
+    await userEvent.setup().click(screen.getByRole('link', { name: 'Manage categories' }))
+
+    expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(
+      /^\/categories$/,
+    )
+    expect(screen.getByRole('button', { name: 'Categories' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.getByText('Chess')).toBeInTheDocument()
   })
 })

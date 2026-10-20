@@ -58,7 +58,7 @@ Web (Vitest):
 - [x] 2.41 `lib/categories` › adds and removes members without duplicates
 - [x] 2.42 `SidebarCategories` › lists every category above channels with badges, in unread order
 - [x] 2.43 `SidebarCategories` › opens a category and marks its row active
-- [ ] 2.44 `SidebarCategories` › manage control navigates without folding
+- [x] 2.44 `SidebarCategories` › manage control navigates without folding
 - [ ] 2.45 `SidebarCategories` › folds with the muted unwatched total and marks the heading active on a category route
 - [ ] 2.46 `SidebarCategories` › manages and deletes from the row menu, with the member-count confirmation
 - [ ] 2.47 `SidebarCategories` › is not filtered by the sidebar search

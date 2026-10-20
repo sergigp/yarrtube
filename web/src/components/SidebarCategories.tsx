@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
+import { Settings2 } from 'lucide-react'
 import { useCategories } from '@/api/queries'
 import type { Category } from '@/api/types'
 import { orderCategories } from '@/lib/categories'
@@ -59,6 +60,17 @@ export function SidebarCategories({ onClose }: SidebarCategoriesProps) {
         folded={false}
         onToggleFolded={() => {}}
         headingActive={false}
+        actions={
+          <Link
+            to="/categories"
+            onClick={onClose}
+            aria-label="Manage categories"
+            title="Manage categories"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <Settings2 className="size-4" />
+          </Link>
+        }
       />
       {categories && categories.length > 0 && (
         <ul className="flex flex-col" aria-label="Categories">
