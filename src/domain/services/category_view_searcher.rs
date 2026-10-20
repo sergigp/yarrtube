@@ -1,4 +1,4 @@
-use crate::domain::category::CategoryViews;
+use crate::domain::category::{Category, CategoryMember, CategoryView, CategoryViews};
 use crate::domain::services::CategoryVideoCollector;
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -38,9 +38,36 @@ pub trait CategoryViewSearcherApi: Send + Sync {
 
 impl CategoryViewSearcherApi for CategoryViewSearcher {
     fn search_all(&self) -> anyhow::Result<CategoryViews> {
+        let categories = self.repository.list()?;
         Ok(CategoryViews {
-            categories: vec![],
+            categories: categories.into_iter().map(Self::category_view).collect(),
             unwatched_total: 0,
         })
+    }
+}
+
+impl CategoryViewSearcher {
+    fn category_view(category: Category) -> CategoryView {
+        CategoryView {
+            channels: category
+                .members
+                .iter()
+                .filter_map(|member| match member {
+                    CategoryMember::Channel(handle) => Some(handle.clone()),
+                    CategoryMember::Playlist(_) => None,
+                })
+                .collect(),
+            playlists: category
+                .members
+                .iter()
+                .filter_map(|member| match member {
+                    CategoryMember::Playlist(id) => Some(id.clone()),
+                    CategoryMember::Channel(_) => None,
+                })
+                .collect(),
+            id: category.id,
+            name: category.name,
+            unwatched_count: 0,
+        }
     }
 }

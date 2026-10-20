@@ -1,8 +1,10 @@
-use crate::domain::category::{Category, CategoryId, CategoryName};
+use crate::domain::category::{Category, CategoryId, CategoryMember, CategoryName};
+use crate::domain::channel::ChannelHandle;
+use crate::domain::playlist::PlaylistId;
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use rusqlite::{Row, params};
+use rusqlite::{Connection, Row, params};
 
 pub trait CategoryRepository: Send + Sync {
     fn find(&self, id: &CategoryId) -> anyhow::Result<Option<Category>>;
@@ -33,7 +35,9 @@ impl CategoryRepository for SqliteCategoryRepository {
     fn list(&self) -> anyhow::Result<Vec<Category>> {
         let conn = self.db.read()?;
         let mut stmt = conn
-            .prepare("SELECT id, name, created_at FROM categories")
+            .prepare(
+                "SELECT id, name, created_at FROM categories ORDER BY name COLLATE NOCASE, rowid",
+            )
             .inspect_err(|e| tracing::error!(error = %e, "failed to prepare category list query"))
             .context("failed to prepare category list query")?;
         let rows = stmt
@@ -44,14 +48,17 @@ impl CategoryRepository for SqliteCategoryRepository {
         rows.map(|row| {
             row.inspect_err(|e| tracing::error!(error = %e, "failed to read category row"))
                 .context("failed to read category row")
-                .and_then(Self::row_to_category)
+                .and_then(|row| Self::row_to_category(&conn, row))
         })
         .collect()
     }
 
     fn insert(&self, category: &Category) -> anyhow::Result<()> {
-        let conn = self.db.write()?;
-        conn.execute(
+        let mut conn = self.db.write()?;
+        let tx = conn
+            .transaction()
+            .context("failed to begin category insert")?;
+        tx.execute(
             "INSERT INTO categories (id, name, created_at) VALUES (?1, ?2, ?3)",
             params![
                 category.id.as_str(),
@@ -63,7 +70,8 @@ impl CategoryRepository for SqliteCategoryRepository {
             |e| tracing::error!(category_id = %category.id, error = %e, "failed to insert category"),
         )
         .context("failed to insert category")?;
-        Ok(())
+        Self::insert_members(&tx, category)?;
+        tx.commit().context("failed to commit category insert")
     }
 
     fn update(&self, _category: &Category) -> anyhow::Result<()> {
@@ -84,17 +92,68 @@ impl SqliteCategoryRepository {
         })
     }
 
-    fn row_to_category(row: CategoryRow) -> anyhow::Result<Category> {
+    fn insert_members(conn: &Connection, category: &Category) -> anyhow::Result<()> {
+        category.members.iter().try_for_each(|member| {
+            let (kind, id) = Self::member_columns(member);
+            conn.execute(
+                "INSERT INTO category_members (category_id, member_kind, member_id) VALUES (?1, ?2, ?3)",
+                params![category.id.as_str(), kind, id],
+            )
+            .inspect_err(|e| tracing::error!(category_id = %category.id, error = %e, "failed to insert category member"))
+            .context("failed to insert category member")
+            .map(|_| ())
+        })
+    }
+
+    fn members(conn: &Connection, id: &CategoryId) -> anyhow::Result<Vec<CategoryMember>> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT member_kind, member_id FROM category_members WHERE category_id = ?1 ORDER BY rowid",
+            )
+            .context("failed to prepare category members query")?;
+        let rows = stmt
+            .query_map(params![id.as_str()], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .inspect_err(|e| tracing::error!(category_id = %id, error = %e, "failed to list category members"))
+            .context("failed to list category members")?;
+        rows.map(|row| {
+            row.context("failed to read category member row")
+                .and_then(|(kind, member_id)| Self::row_to_member(&kind, member_id))
+        })
+        .collect()
+    }
+
+    fn member_columns(member: &CategoryMember) -> (&'static str, &str) {
+        match member {
+            CategoryMember::Channel(handle) => (CHANNEL_KIND, handle.as_str()),
+            CategoryMember::Playlist(id) => (PLAYLIST_KIND, id.as_str()),
+        }
+    }
+
+    fn row_to_member(kind: &str, id: String) -> anyhow::Result<CategoryMember> {
+        match kind {
+            CHANNEL_KIND => Ok(CategoryMember::Channel(ChannelHandle::new(id)?)),
+            PLAYLIST_KIND => Ok(CategoryMember::Playlist(PlaylistId::new(id)?)),
+            other => Err(anyhow::anyhow!("unknown category member kind \"{other}\"")),
+        }
+    }
+
+    fn row_to_category(conn: &Connection, row: CategoryRow) -> anyhow::Result<Category> {
+        let id = CategoryId::new(row.id)?;
         Ok(Category {
-            id: CategoryId::new(row.id)?,
+            members: Self::members(conn, &id)?,
+            id,
             name: CategoryName::new(row.name)?,
-            members: Vec::new(),
             created_at: DateTime::parse_from_rfc3339(&row.created_at)
                 .context("failed to parse stored created_at")?
                 .with_timezone(&Utc),
         })
     }
 }
+
+const CHANNEL_KIND: &str = "channel";
+const PLAYLIST_KIND: &str = "playlist";
 
 struct CategoryRow {
     id: String,

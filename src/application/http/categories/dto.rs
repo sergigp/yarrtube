@@ -55,8 +55,16 @@ impl From<CategoryView> for CategoryListItemResponse {
             id: category.id.as_str().to_string(),
             name: category.name.as_str().to_string(),
             unwatched_count: category.unwatched_count,
-            channels: Vec::new(),
-            playlists: Vec::new(),
+            channels: category
+                .channels
+                .iter()
+                .map(|handle| handle.as_str().to_string())
+                .collect(),
+            playlists: category
+                .playlists
+                .iter()
+                .map(|id| id.as_str().to_string())
+                .collect(),
         }
     }
 }

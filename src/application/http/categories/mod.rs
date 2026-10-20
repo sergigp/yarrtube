@@ -6,7 +6,7 @@ use super::validation::required;
 use crate::domain::category::{CategoryName, CreateCategoryError};
 use crate::domain::services::{
     CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryUpdater, CategoryViewSearcher,
-    VideoWatchStateUpdater,
+    CategoryViewSearcherApi, VideoWatchStateUpdater,
 };
 use axum::Json;
 use axum::extract::{Path, State};
@@ -32,12 +32,12 @@ pub async fn create_category(
 }
 
 pub async fn list_categories(
-    State(_category_view_searcher): State<CategoryViewSearcher>,
+    State(category_view_searcher): State<CategoryViewSearcher>,
 ) -> Result<Json<CategoryListResponse>, ApiError> {
-    Ok(Json(CategoryListResponse {
-        categories: vec![],
-        unwatched_total: 0,
-    }))
+    let categories = run_blocking(move || category_view_searcher.search_all())
+        .await?
+        .map_err(ApiError::internal)?;
+    Ok(Json(CategoryListResponse::from(categories)))
 }
 
 pub async fn update_category(
@@ -73,13 +73,27 @@ pub async fn mark_category_watched(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::category::{Category, CategoryId};
+    use crate::domain::category::{Category, CategoryId, CategoryMember};
+    use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
+    use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
+    use crate::domain::services::CategoryVideoCollector;
+    use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
     };
+    use crate::infrastructure::repositories::sqlite_channel_repository::{
+        ChannelRepository, SqliteChannelRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::{
+        PlaylistRepository, SqlitePlaylistRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
+    use dto::CategoryListItemResponse;
     use rusqlite::Connection;
     use std::sync::Arc;
 
@@ -147,6 +161,48 @@ mod tests {
         assert_eq!(repository.list().unwrap(), vec![chess]);
     }
 
+    #[tokio::test]
+    async fn it_should_list_categories_by_name_ignoring_case() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        playlist_repository.insert(&playlist("PLendgames")).unwrap();
+        let science = category(None, "science");
+        let chess = Category {
+            members: vec![
+                channel_member("@GothamChess"),
+                playlist_member("PLendgames"),
+            ],
+            ..category(None, "Chess")
+        };
+        let sports = category(None, "Sports");
+        [&science, &chess, &sports]
+            .into_iter()
+            .for_each(|category| repository.insert(category).unwrap());
+        let category_view_searcher = CategoryViewSearcher::new(
+            repository,
+            channel_repository,
+            playlist_repository,
+            category_video_collector(&db),
+        );
+
+        let response = list(category_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(CategoryListResponse {
+                categories: vec![
+                    list_item(&chess, 0, &["@GothamChess"], &["PLendgames"]),
+                    list_item(&science, 0, &[], &[]),
+                    list_item(&sports, 0, &[], &[]),
+                ],
+                unwatched_total: 0,
+            })
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
@@ -188,8 +244,78 @@ mod tests {
         }
     }
 
+    fn list_item(
+        category: &Category,
+        unwatched_count: usize,
+        channels: &[&str],
+        playlists: &[&str],
+    ) -> CategoryListItemResponse {
+        CategoryListItemResponse {
+            id: category.id.as_str().to_string(),
+            name: category.name.as_str().to_string(),
+            unwatched_count,
+            channels: channels.iter().map(|c| c.to_string()).collect(),
+            playlists: playlists.iter().map(|p| p.to_string()).collect(),
+        }
+    }
+
+    fn channel_member(handle: &str) -> CategoryMember {
+        CategoryMember::Channel(ChannelHandle::new(handle).unwrap())
+    }
+
+    fn playlist_member(id: &str) -> CategoryMember {
+        CategoryMember::Playlist(PlaylistId::new(id).unwrap())
+    }
+
+    fn channel(handle: &str) -> Channel {
+        Channel::create(
+            ChannelHandle::new(handle).unwrap(),
+            format!("Channel {handle}"),
+            format!("UC{handle}"),
+            Quality::High,
+            VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
+            PlaylistPath::new(format!("channels/{handle}")).unwrap(),
+            None,
+            fixed_timestamp(),
+        )
+    }
+
+    fn playlist(id: &str) -> Playlist {
+        Playlist::create(
+            PlaylistId::new(id).unwrap(),
+            PlaylistName::new(format!("Playlist {id}")).unwrap(),
+            PlaylistPath::new(format!("playlists/{id}")).unwrap(),
+            Quality::High,
+            PlaylistKind::YoutubeLinked,
+            false,
+            ReconcileInterval::default_interval(),
+            fixed_timestamp(),
+        )
+    }
+
+    /// The collector the services read category videos through, on `db`
+    /// like the repositories each test seeds.
+    fn category_video_collector(db: &TestDatabase) -> CategoryVideoCollector {
+        CategoryVideoCollector::new(
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+        )
+    }
+
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    async fn list(
+        category_view_searcher: CategoryViewSearcher,
+    ) -> Result<CategoryListResponse, ApiError> {
+        list_categories(State(category_view_searcher))
+            .await
+            .map(|Json(categories)| categories)
     }
 
     async fn create(
