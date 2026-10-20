@@ -3,7 +3,7 @@
 ## 1. Walking skeleton
 
 - [x] 1.1 Create every file, type and signature from design.md (## Files, ## Types & Signatures) across backend and web, wired end to end, with stub bodies only:
-  - Migration 0011, registered.
+  - Migration 0012, registered.
   - `Playlist.hide_unwatched_count` (always `false`), plus `with_hide_unwatched_count`.
   - `PlaylistSettingsChange`; `PlaylistUpdater::update_settings` takes it, and the existing behaviour is kept.
   - `PlaylistView` + `PlaylistViewSearcher` replace `PlaylistSearcher`, with `unwatched_count: 0`.
@@ -40,6 +40,9 @@
 - [x] 2.20 Vitest `PlaylistDetail.test.tsx`, `hides the unwatched count from its page header`.
 - [x] 2.21 Vitest `useWatchProgress.test.tsx`, `refetches the playlist list when the watched state changes`; the existing "does not refetch" test also covers the playlist list.
 - [x] 2.22 Vitest: channel row and channel page header menus offer no "Hide unwatched count" / "Show unwatched count".
+- [ ] 2.23 `it_should_not_count_videos_of_a_playlist_hiding_its_count_in_a_category` (categories/mod.rs): channel member with 1 unwatched video, hidden playlist member with 2 others; the category's count and `unwatched_total` are 1.
+- [ ] 2.24 `it_should_count_once_a_video_of_a_hidden_playlist_also_in_a_counted_member`: a video in both a hidden playlist member and a channel member counts 1.
+- [ ] 2.25 `it_should_not_total_videos_reached_only_through_hidden_playlists`: the only unwatched video belongs to a hidden playlist member; the category's count and `unwatched_total` are 0.
 
 ## 3. Infrastructure adapters (TDD)
 
@@ -53,7 +56,7 @@ SQLite playlist video repository:
 
 Migrations:
 
-- [x] 3.3 `it_should_default_existing_playlists_to_show_their_unwatched_count_when_migrating`: a pre-0011 playlist reads `hide_unwatched_count = 0`.
+- [x] 3.3 `it_should_default_existing_playlists_to_show_their_unwatched_count_when_migrating`: a pre-0012 playlist reads `hide_unwatched_count = 0`.
 
 ## 4. Verification
 
@@ -78,5 +81,4 @@ Migrations:
 
 ## Workflow follow-up
 
-- Rebase onto the parallel sidebar-collapsing change if it lands first; the conflict is in `Sidebar.tsx` / `sidebarSections.ts`.
 - Archive the change after review.

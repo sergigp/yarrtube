@@ -3,8 +3,8 @@
 ## Files
 
 Backend:
-- `migrations/0011_playlist_hide_unwatched_count.sql`: adds `playlists.hide_unwatched_count INTEGER NOT NULL DEFAULT 0`.
-- `src/infrastructure/shared/sqlite_migrations.rs`: registers 0011.
+- `migrations/0012_playlist_hide_unwatched_count.sql`: adds `playlists.hide_unwatched_count INTEGER NOT NULL DEFAULT 0`.
+- `src/infrastructure/shared/sqlite_migrations.rs`: registers 0012.
 - `src/domain/playlist/playlist.rs`: `hide_unwatched_count` field (`false` on `create`) + `with_hide_unwatched_count`.
 - `src/domain/playlist/playlist_settings_change.rs` (new): `PlaylistSettingsChange`. The update now takes two `Option<bool>`s, which are too easy to swap as positional arguments.
 - `src/domain/playlist/playlist_view.rs` (new): flat `PlaylistView` = the listed fields plus `unwatched_count`.
@@ -15,6 +15,7 @@ Backend:
 - `src/domain/services/playlist_updater.rs`: takes `PlaylistSettingsChange` and applies `hide_unwatched_count`.
 - `src/domain/services/video_watch_state_updater.rs`: `mark_playlist_watched`; injects the playlist repository and the playlist video repository.
 - `src/domain/video/errors.rs`: `UpdateWatchStateError::PlaylistNotFound`.
+- `src/domain/services/category_view_searcher.rs`: when counting, drops collected videos whose source is a playlist hiding its count, using the playlists `tracked_members` already loads. A video also collected through a counted member keeps counting once.
 - `src/infrastructure/repositories/sqlite_playlist_repository.rs`: reads and writes the new column.
 - `src/infrastructure/repositories/sqlite_playlist_video_repository.rs`: `list()` across all playlists.
 - `src/application/http/playlists/dto.rs`:
@@ -40,7 +41,6 @@ Web:
 - `web/src/lib/sidebarSections.ts`:
   - New `shownUnwatchedCount`.
   - `orderChannels` becomes `orderByUnwatched`, generic over `LibraryItem` and sorting on the shown count.
-  - `channelLeadCount` is untouched, because a parallel change reworks collapsing.
 - `web/src/lib/unwatchedCountSetting.ts` (new): `unwatchedCountSettingAction` for the failure alert, the counterpart of `homeSetting.ts`.
 - `web/src/components/EntryActionsMenu.tsx`: "Hide unwatched count" / "Show unwatched count" item after the home item.
 - `web/src/components/DetailHeader.tsx`: passes the new props through to `EntryActionsMenu`.
@@ -121,6 +121,8 @@ impl VideoWatchStateUpdater {
         playlist_repository: Arc<dyn PlaylistRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         clock: Arc<dyn Clock>,
+        category_repository: Arc<dyn CategoryRepository>,
+        category_video_collector: CategoryVideoCollector,
     ) -> Self;
 }
 pub trait VideoWatchStateUpdaterApi: Send + Sync {
@@ -247,6 +249,19 @@ POST /api/playlists/{id}/watched
   -> 204
 ```
 
+List categories (counts):
+```
+GET /api/categories
+  category_view_searcher.search_all()
+    hidden = playlist_repository.list() where hide_unwatched_count -> HashSet<PlaylistId>
+    per category: collector.downloaded_videos(&category)
+      .filter(is_downloaded_and_unwatched)
+      .filter(source is not VideoSource::Playlist { id } with id in hidden)
+      -> HashSet<VideoId>                                // distinct, so a counted copy still counts once
+    unwatched_total = distinct union of every category's set
+```
+"Mark all watched" on a category is unchanged: it still marks hidden playlists' videos, since it's an action, not a counter.
+
 Web, badge + order:
 ```
 Sidebar
@@ -302,4 +317,10 @@ SQLite playlist video repository:
 
 Migrations:
 
-25. `it_should_default_existing_playlists_to_show_their_unwatched_count_when_migrating`: a playlist inserted before 0011 reads `hide_unwatched_count = 0`.
+25. `it_should_default_existing_playlists_to_show_their_unwatched_count_when_migrating`: a playlist inserted before 0012 reads `hide_unwatched_count = 0`.
+
+Categories (acceptance, categories/mod.rs):
+
+26. `it_should_not_count_videos_of_a_playlist_hiding_its_count_in_a_category`: channel member with 1 unwatched video, hidden playlist member with 2 others; count and `unwatched_total` are 1.
+27. `it_should_count_once_a_video_of_a_hidden_playlist_also_in_a_counted_member`: count 1.
+28. `it_should_not_total_videos_reached_only_through_hidden_playlists`: count and `unwatched_total` are 0.

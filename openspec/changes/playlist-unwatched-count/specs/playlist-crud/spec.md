@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Playlist Unwatched Count Visibility
-The system SHALL record, for each playlist, whether its unwatched count is hidden. A newly created playlist SHALL have it shown. The setting SHALL NOT change how the unwatched count is computed or whether it is returned; it only states whether clients should display it.
+The system SHALL record, for each playlist, whether its unwatched count is hidden. A newly created playlist SHALL have it shown. The setting SHALL NOT change how the playlist's own unwatched count is computed or whether it is returned; clients use it to decide whether to display that count. A playlist whose count is hidden SHALL add nothing to category unwatched counts.
 
 #### Scenario: Created playlist shows its unwatched count
 - **WHEN** a playlist is created
