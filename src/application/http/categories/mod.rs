@@ -3,6 +3,7 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::required;
+use super::videos::update_watch_state_error;
 use crate::domain::category::{
     CategoryId, CategoryMember, CategoryName, CreateCategoryError, DeleteCategoryError,
     UpdateCategoryError,
@@ -12,6 +13,7 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
     CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryDeleterApi, CategoryUpdater,
     CategoryUpdaterApi, CategoryViewSearcher, CategoryViewSearcherApi, VideoWatchStateUpdater,
+    VideoWatchStateUpdaterApi,
 };
 use axum::Json;
 use axum::extract::{Path, State};
@@ -89,9 +91,15 @@ pub async fn set_category_members(
 }
 
 pub async fn mark_category_watched(
-    State(_video_watch_state_updater): State<VideoWatchStateUpdater>,
-    Path(_id): Path<String>,
+    State(video_watch_state_updater): State<VideoWatchStateUpdater>,
+    Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    let id = CategoryId::new(id)?;
+
+    run_blocking(move || video_watch_state_updater.mark_category_watched(&id))
+        .await?
+        .map_err(update_watch_state_error)?;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -773,6 +781,75 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_mark_a_category_watched() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = SqlitePlaylistRepository::new(db.database());
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        channel_repository.insert(&channel("@chess")).unwrap();
+        playlist_repository.insert(&playlist("PLchess")).unwrap();
+        playlist_repository.insert(&playlist("PLother")).unwrap();
+        let channel_video = downloaded_video("channel-video");
+        let pending = pending_video("pending");
+        let playlist_video = downloaded_video("playlist-video");
+        let copy_outside = downloaded_video("channel-video");
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@chess",
+            &channel_video,
+        );
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@chess",
+            &pending,
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            &playlist_video_repository,
+            "PLchess",
+            &playlist_video,
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            &playlist_video_repository,
+            "PLother",
+            &copy_outside,
+        );
+        let chess = Category {
+            members: vec![channel_member("@chess"), playlist_member("PLchess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let video_watch_state_updater = VideoWatchStateUpdater::new(
+            video_repository.clone(),
+            channel_repository,
+            channel_video_repository,
+            Arc::new(FixedClock(watched_timestamp())),
+            repository,
+            category_video_collector(&db),
+        );
+
+        let response = mark_watched(video_watch_state_updater, chess.id.as_str()).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            [&channel_video, &pending, &playlist_video, &copy_outside]
+                .map(|video| video_repository.find(&video.id).unwrap()),
+            [
+                Some(channel_video.clone().mark_watched(watched_timestamp())),
+                Some(pending.clone()),
+                Some(playlist_video.clone().mark_watched(watched_timestamp())),
+                Some(copy_outside.clone().mark_watched(watched_timestamp())),
+            ]
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
@@ -943,8 +1020,19 @@ mod tests {
         )
     }
 
+    fn watched_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_800_000_000, 0).unwrap()
+    }
+
     fn fixed_timestamp() -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    async fn mark_watched(
+        video_watch_state_updater: VideoWatchStateUpdater,
+        id: &str,
+    ) -> Result<StatusCode, ApiError> {
+        mark_category_watched(State(video_watch_state_updater), Path(id.to_string())).await
     }
 
     async fn set_members(

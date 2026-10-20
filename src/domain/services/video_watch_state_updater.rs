@@ -1,6 +1,7 @@
+use crate::domain::category::Category;
 use crate::domain::category::CategoryId;
 use crate::domain::channel::ChannelHandle;
-use crate::domain::services::CategoryVideoCollector;
+use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
 use crate::domain::video::{
     PlaybackPosition, UpdateWatchStateError, Video, VideoDuration, VideoId,
 };
@@ -112,8 +113,12 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
             .try_for_each(|youtube_id| self.mark_copies_watched(youtube_id, now))
     }
 
-    fn mark_category_watched(&self, _id: &CategoryId) -> Result<(), UpdateWatchStateError> {
-        Ok(())
+    fn mark_category_watched(&self, id: &CategoryId) -> Result<(), UpdateWatchStateError> {
+        let category = self.find_category(id)?;
+        let now = self.clock.now();
+        self.unwatched_category_youtube_ids(&category)?
+            .iter()
+            .try_for_each(|youtube_id| self.mark_copies_watched(youtube_id, now))
     }
 }
 
@@ -127,6 +132,29 @@ impl VideoWatchStateUpdater {
             .map_err(UpdateWatchStateError::Repository)?
             .map(|_| ())
             .ok_or_else(|| UpdateWatchStateError::ChannelNotFound(channel_id.clone()))
+    }
+
+    fn find_category(&self, id: &CategoryId) -> Result<Category, UpdateWatchStateError> {
+        self.category_repository
+            .find(id)
+            .map_err(UpdateWatchStateError::Repository)?
+            .ok_or_else(|| UpdateWatchStateError::CategoryNotFound(id.clone()))
+    }
+
+    /// The YouTube IDs of the category's downloaded videos not yet watched,
+    /// each once.
+    fn unwatched_category_youtube_ids(
+        &self,
+        category: &Category,
+    ) -> Result<HashSet<VideoId>, UpdateWatchStateError> {
+        Ok(self
+            .category_video_collector
+            .downloaded_videos(category)
+            .map_err(UpdateWatchStateError::Repository)?
+            .into_iter()
+            .filter(|sourced| !sourced.video.is_watched())
+            .map(|sourced| sourced.video.youtube_id)
+            .collect())
     }
 
     /// The YouTube IDs of the channel's `Downloaded` videos not yet watched,
