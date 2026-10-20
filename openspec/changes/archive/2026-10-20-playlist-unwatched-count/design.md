@@ -13,7 +13,7 @@ Backend:
 - `src/domain/services/playlist_searcher.rs`: deleted, since its only caller is `list_playlists`.
 - `src/domain/services/mod.rs`: swaps the exports.
 - `src/domain/services/playlist_updater.rs`: takes `PlaylistSettingsChange` and applies `hide_unwatched_count`.
-- `src/domain/services/video_watch_state_updater.rs`: `mark_playlist_watched`; injects the playlist repository and the playlist video repository.
+- `src/domain/services/video_watch_state_updater.rs`: `mark_playlist_watched`; injects the playlist repository and the playlist video repository. `playlist_videos` and the existing `channel_videos` load their videos with one `find_many` instead of one `find` per entry.
 - `src/domain/video/errors.rs`: `UpdateWatchStateError::PlaylistNotFound`.
 - `src/domain/services/category_view_searcher.rs`: when counting, drops collected videos whose source is a playlist hiding its count, using the playlists `tracked_members` already loads. A video also collected through a counted member keeps counting once.
 - `src/infrastructure/repositories/sqlite_playlist_repository.rs`: reads and writes the new column.
@@ -243,7 +243,7 @@ POST /api/playlists/{id}/watched
     video_watch_state_updater.mark_playlist_watched(&id)
       ensure_playlist_exists(&id)                          // PlaylistNotFound -> 400
       playlist_video_repository.list_for_playlist(&id)
-        -> video_repository.find(&video_id)
+        -> video_repository.find_many(&[VideoRecordId])
         .filter(is_downloaded_and_unwatched) -> HashSet<VideoId>
       .try_for_each(mark_copies_watched(youtube_id, now))  // existing helper
   -> 204

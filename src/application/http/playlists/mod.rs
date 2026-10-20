@@ -2256,9 +2256,6 @@ mod tests {
         );
     }
 
-    /// A creator for tests whose request is rejected before reaching it. Its
-    /// repositories sit on an unmigrated in-memory database, so a request that
-    /// wrongly got through would fail loudly instead of passing.
     #[tokio::test]
     async fn it_should_mark_every_downloaded_playlist_video_watched() {
         let db = TestDatabase::new();
@@ -2369,6 +2366,9 @@ mod tests {
         );
     }
 
+    /// A creator for tests whose request is rejected before reaching it. Its
+    /// repositories sit on an unmigrated in-memory database, so a request that
+    /// wrongly got through would fail loudly instead of passing.
     fn any_playlist_creator() -> PlaylistCreator {
         PlaylistCreator::new(
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),

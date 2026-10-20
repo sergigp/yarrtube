@@ -43,6 +43,7 @@
 - [x] 2.23 `it_should_not_count_videos_of_a_playlist_hiding_its_count_in_a_category` (categories/mod.rs): channel member with 1 unwatched video, hidden playlist member with 2 others; the category's count and `unwatched_total` are 1.
 - [x] 2.24 `it_should_count_once_a_video_of_a_hidden_playlist_also_in_a_counted_member`: a video in both a hidden playlist member and a channel member counts 1.
 - [x] 2.25 `it_should_not_total_videos_reached_only_through_hidden_playlists`: the only unwatched video belongs to a hidden playlist member; the category's count and `unwatched_total` are 0.
+- [ ] 2.26 Refactor: `playlist_videos` and `channel_videos` in `VideoWatchStateUpdater` load videos with one `video_repository.find_many` instead of a `find` per entry. Behaviour-preserving; existing tests stay green, no new tests.
 
 ## 3. Infrastructure adapters (TDD)
 
