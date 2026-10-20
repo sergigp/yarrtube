@@ -2,9 +2,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AddPlaylistDialog } from './AddPlaylistDialog'
-import { aPlaylist, mockApi, renderWithProviders, type Routes } from '@/test/helpers'
+import {
+  aCategory,
+  aCategoryList,
+  aPlaylist,
+  mockApi,
+  renderWithProviders,
+  type Routes,
+} from '@/test/helpers'
 
 const baseRoutes: Routes = {
+  'GET /api/categories': aCategoryList(),
   'GET /api/playlists': [],
   'GET /api/channels': [],
   'GET /api/directories': { root: '/videos', path: '', entries: [] },
@@ -383,5 +391,32 @@ describe('AddPlaylistDialog', () => {
       await screen.findByText(/is already used by Other Mix\. Choose a different folder\./),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create Playlist' })).toBeDisabled()
+  })
+
+  it('adds a playlist into the chosen categories', async () => {
+    const { fetchMock, onOpenChange } = renderDialog({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', playlists: ['PLother'] }),
+        aCategory({ id: 'music', name: 'Music' }),
+      ]),
+      'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
+      'POST /api/playlists': aPlaylist({ id: 'PL1' }),
+      'PUT /api/categories/chess/members': null,
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
+    await user.type(screen.getByRole('combobox', { name: 'Categories' }), 'che')
+    await user.click(await screen.findByRole('option', { name: 'Chess' }))
+    const submit = screen.getByRole('button', { name: 'Create Playlist' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(
+      fetchMock.mock.calls
+        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
+        .map(([url, init]) => [url, JSON.parse((init as RequestInit).body as string)]),
+    ).toEqual([['/api/categories/chess/members', { channels: [], playlists: ['PLother', 'PL1'] }]])
   })
 })

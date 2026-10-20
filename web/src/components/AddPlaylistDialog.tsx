@@ -4,6 +4,8 @@ import { useInvalidateLibrary, usePlaylistPreview, usePlaylists } from '@/api/qu
 import type { PlaylistListItem, PlaylistPreview } from '@/api/types'
 import { useLookup, type Lookup } from '@/hooks/useLookup'
 import { useSaveLocation, type LocationValue } from '@/hooks/useSaveLocation'
+import { useSaveSourceCategories } from '@/hooks/useSaveSourceCategories'
+import { errorMessage } from '@/lib/errorMessage'
 import { playlistNoticeLead } from '@/lib/noticeLead'
 import { DEFAULT_INTERVAL_FORM, intervalMinutes, type IntervalForm } from '@/lib/reconcileInterval'
 import { DestinationNotice, DestinationPath } from './DestinationNotice'
@@ -11,6 +13,7 @@ import { lookupNotice } from './lookupNotice'
 import { FolderNameField } from './FolderNameField'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
 import { SaveToField } from './SaveToField'
+import { CategoryPicker } from './CategoryPicker'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -85,7 +88,9 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [categoryIds, setCategoryIds] = useState<string[]>([])
   const invalidateLibrary = useInvalidateLibrary()
+  const saveSourceCategories = useSaveSourceCategories()
   const entered = form.playlist.trim()
   const playlists = usePlaylists()
   const lookup = useLookup(entered, usePlaylistPreview, playlists.data, sameId)
@@ -108,7 +113,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
     setSubmitting(true)
     setError(null)
     try {
-      await createPlaylist({
+      const playlist = await createPlaylist({
         playlist: form.playlist,
         path: location.value.path,
         quality: form.quality,
@@ -117,6 +122,13 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
       })
       location.remember()
       invalidateLibrary()
+      try {
+        await saveSourceCategories({ kind: 'playlist', id: playlist.id }, categoryIds)
+      } catch (err) {
+        throw new Error(
+          `The playlist was added, but its categories were not saved: ${errorMessage(err)}`,
+        )
+      }
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)))
@@ -141,6 +153,8 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
       <SaveToField location={location} />
 
       {entered && <PlaylistNotice lookup={lookup} location={location.value} />}
+
+      <CategoryPicker value={categoryIds} onChange={setCategoryIds} />
 
       <div className="min-w-0 border-t border-border pt-4">
         <button

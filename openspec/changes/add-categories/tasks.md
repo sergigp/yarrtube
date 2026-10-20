@@ -75,7 +75,7 @@ Web (Vitest):
 - [x] 2.58 `CategoryDetail` › explains an empty category and an unknown one
 - [x] 2.59 `CategoryPicker` › picks, removes and creates categories
 - [x] 2.60 `AddChannelDialog` › adds a channel into the chosen categories, and reports categories that failed to save
-- [ ] 2.61 `AddPlaylistDialog` › adds a playlist into the chosen categories
+- [x] 2.61 `AddPlaylistDialog` › adds a playlist into the chosen categories
 - [ ] 2.62 `EditChannelDialog` › saves a change of categories alone
 - [ ] 2.63 `EditPlaylistDialog` › saves a change of categories alone
 - [ ] 2.64 `SettingsMenu` › offers Categories
