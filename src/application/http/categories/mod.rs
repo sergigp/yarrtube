@@ -116,6 +116,16 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_create_if_name_invalid() {
+        let response = create(any_category_creator(), create_request("   ")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("Category name must not be empty"))
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),

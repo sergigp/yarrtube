@@ -11,7 +11,7 @@ Backend acceptance tests:
 
 - [x] 2.1 `it_should_create_a_category` — creating stores a category with a generated id, trimmed name and no members
 - [x] 2.2 `it_should_fail_to_create_if_name_missing` — missing name is rejected
-- [ ] 2.3 `it_should_fail_to_create_if_name_invalid` — `CategoryName` errors map to 400
+- [x] 2.3 `it_should_fail_to_create_if_name_invalid` — `CategoryName` errors map to 400
 - [ ] 2.4 `it_should_fail_to_create_if_name_taken_ignoring_case` — duplicate name is a conflict
 - [ ] 2.5 `it_should_list_categories_by_name_ignoring_case` — list order and member lists
 - [ ] 2.6 `it_should_count_distinct_unwatched_videos_per_category` — per-category count across channel and playlist members, shared video once
