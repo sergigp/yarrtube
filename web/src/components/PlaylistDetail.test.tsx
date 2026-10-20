@@ -6,14 +6,15 @@ import { PlaylistDetail } from './PlaylistDetail'
 import { aPlaylist, aVideo, mockApi, renderWithProviders, type Routes as ApiRoutes } from '@/test/helpers'
 
 function renderPlaylist(routes: ApiRoutes, route: string) {
-  mockApi(routes)
-  return renderWithProviders(
+  const fetchMock = mockApi(routes)
+  const rendered = renderWithProviders(
     <Routes>
       <Route path="/playlists/:id" element={<PlaylistDetail />} />
       <Route path="/" element={<p>home page</p>} />
     </Routes>,
     { route },
   )
+  return { ...rendered, fetchMock }
 }
 
 describe('PlaylistDetail', () => {
@@ -151,6 +152,34 @@ describe('PlaylistDetail', () => {
     expect(
       await screen.findByRole('button', { name: /^Watched.*Second Video$/ }),
     ).toBeInTheDocument()
+  })
+
+  it('hides the unwatched count from its page header', async () => {
+    let playlist = aPlaylist({ id: 'PL1', name: 'The Playlist' })
+    const update = vi.fn(() => {
+      playlist = { ...playlist, hide_unwatched_count: true }
+      return playlist
+    })
+    const { fetchMock } = renderPlaylist(
+      {
+        'GET /api/playlists': () => [playlist],
+        'GET /api/playlists/PL1/videos': [],
+        'PATCH /api/playlists/PL1': update,
+      },
+      '/playlists/PL1',
+    )
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Playlist' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Hide unwatched count' }))
+
+    expect(update).toHaveBeenCalledOnce()
+    const patchCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PATCH',
+    ) as [string, RequestInit]
+    expect(JSON.parse(patchCall[1].body as string)).toEqual({ hide_unwatched_count: true })
+    await user.click(screen.getByRole('button', { name: 'More actions for The Playlist' }))
+    expect(await screen.findByRole('menuitem', { name: 'Show unwatched count' })).toBeInTheDocument()
   })
 
   it('deletes the playlist from its page header menu after confirming', async () => {
