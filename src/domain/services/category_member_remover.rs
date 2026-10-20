@@ -20,7 +20,12 @@ pub trait CategoryMemberRemoverApi: Send + Sync {
 }
 
 impl CategoryMemberRemoverApi for CategoryMemberRemover {
-    fn remove_from_all(&self, _member: &CategoryMember) -> anyhow::Result<()> {
-        Ok(())
+    fn remove_from_all(&self, member: &CategoryMember) -> anyhow::Result<()> {
+        self.repository
+            .list()?
+            .into_iter()
+            .filter(|category| category.has_member(member))
+            .map(|category| category.without_member(member))
+            .try_for_each(|category| self.repository.update(&category))
     }
 }

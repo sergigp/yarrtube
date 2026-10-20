@@ -38,7 +38,7 @@ Backend acceptance tests:
 - [x] 2.27 `it_should_list_videos_of_a_playlist_excluded_from_home_for_a_category`
 - [x] 2.28 `it_should_list_no_videos_for_a_category_without_members`
 - [x] 2.29 `it_should_fail_to_list_videos_for_a_missing_category`
-- [ ] 2.30 `it_should_remove_the_channel_from_every_category` (channel-deleted subscriber)
+- [x] 2.30 `it_should_remove_the_channel_from_every_category` (channel-deleted subscriber)
 - [ ] 2.31 `it_should_ignore_an_invalid_channel_id` (channel-deleted subscriber)
 - [ ] 2.32 `it_should_remove_the_playlist_from_every_category` (playlist-deleted subscriber)
 

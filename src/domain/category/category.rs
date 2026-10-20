@@ -39,11 +39,18 @@ impl Category {
         Self { members, ..self }
     }
 
-    pub fn without_member(self, _member: &CategoryMember) -> Self {
-        self
+    pub fn without_member(self, member: &CategoryMember) -> Self {
+        Self {
+            members: self
+                .members
+                .into_iter()
+                .filter(|kept| kept != member)
+                .collect(),
+            ..self
+        }
     }
 
-    pub fn has_member(&self, _member: &CategoryMember) -> bool {
-        false
+    pub fn has_member(&self, member: &CategoryMember) -> bool {
+        self.members.contains(member)
     }
 }
