@@ -9,7 +9,16 @@ import {
 import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow } from '../helpers/video.js'
 import { expectEpisodeOnDisk, expectGoneFromDisk } from '../helpers/library.js'
 import { expectPlexScanned } from '../helpers/plex.js'
-import { syncItem, deleteItem, sectionRows, includeItemInHome, sectionList } from '../helpers/sidebar.js'
+import {
+  syncItem,
+  deleteItem,
+  sectionRows,
+  includeItemInHome,
+  markItemWatched,
+  sectionList,
+  setItemUnwatchedCountHidden,
+  unwatchedBadge,
+} from '../helpers/sidebar.js'
 import { expectPendingSync } from '../helpers/tasks.js'
 
 const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
@@ -20,6 +29,7 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   await page.goto('/')
 
   const sidebarLink = sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME })
+  const playlistRow = sectionRows(page, 'Playlists').filter({ hasText: PLAYLIST_NAME })
   const continueWatching = page.locator('section', {
     has: page.getByRole('heading', { name: 'Continue watching' }),
   })
@@ -47,6 +57,19 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     // And Plex was asked to scan it in.
     await expectPlexScanned(page.request, PLAYLIST_PATH)
     return videoTitle
+  })
+
+  await test.step('show its unwatched badge, hide it and show it again', async () => {
+    // The downloaded, unwatched video shows as a badge on the playlist's row;
+    // reloading skips waiting for the sidebar's periodic refresh. Hiding the
+    // count removes the badge and showing it brings it back (covers PATCH
+    // /playlists/{id} with hide_unwatched_count).
+    await page.reload()
+    await expect(unwatchedBadge(playlistRow)).toHaveText('1')
+    await setItemUnwatchedCountHidden(page, { section: 'Playlists', name: PLAYLIST_NAME, hidden: true })
+    await expect(unwatchedBadge(playlistRow)).toHaveCount(0)
+    await setItemUnwatchedCountHidden(page, { section: 'Playlists', name: PLAYLIST_NAME, hidden: false })
+    await expect(unwatchedBadge(playlistRow)).toHaveText('1')
   })
 
   await test.step('play it and record the position', async () => {
@@ -205,6 +228,13 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     await expect(page.locator('main ul li').getByLabel('Watched')).toBeVisible({ timeout: 10_000 })
     expect(await player.evaluate((el) => el.paused)).toBe(false)
     expect(await player.evaluate((el) => el.currentTime)).toBeGreaterThan(nearEnd)
+  })
+
+  await test.step('mark it all watched from its row menu', async () => {
+    // Covers POST /playlists/{id}/watched; with its only video watched, the
+    // row shows no badge.
+    await markItemWatched(page, { section: 'Playlists', name: PLAYLIST_NAME })
+    await expect(unwatchedBadge(playlistRow)).toHaveCount(0)
   })
 
   await test.step('reject adding it twice', async () => {

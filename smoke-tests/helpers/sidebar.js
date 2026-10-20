@@ -107,6 +107,16 @@ export async function markItemWatched(page, { section, name }) {
   }
 }
 
+/** Hides or shows a playlist row's unwatched badge through its row menu. */
+export async function setItemUnwatchedCountHidden(page, { section, name, hidden }) {
+  const row = await rowFor(page, section, name)
+  const updated = page.waitForResponse(
+    (response) => response.request().method() === 'PATCH' && response.url().includes('/playlists/'),
+  )
+  await chooseRowAction(page, row, hidden ? 'Hide unwatched count' : 'Show unwatched count')
+  expect((await updated).status()).toBe(200)
+}
+
 export async function includeItemInHome(page, { section, name }) {
   const row = await rowFor(page, section, name)
   const updated = page.waitForResponse(
