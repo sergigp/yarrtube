@@ -3223,6 +3223,66 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_list_only_downloaded_videos_for_a_category() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        let pending = |youtube_id: &str| {
+            Video::create(
+                VideoId::new(youtube_id).unwrap(),
+                "Not downloaded",
+                fixed_timestamp(),
+            )
+        };
+        [
+            downloaded_video("vid1", "Downloaded", None, 10),
+            pending("pending"),
+            pending("downloading").start_download(fixed_timestamp()),
+            pending("failed").mark_errored(fixed_timestamp()),
+            pending("excluded").mark_excluded(fixed_timestamp()),
+        ]
+        .iter()
+        .for_each(|video| {
+            save_channel_video(
+                video_repository.as_ref(),
+                channel_video_repository.as_ref(),
+                "@somechannel",
+                video,
+                0,
+            )
+        });
+        let chess = category_with_members(&[channel_member("@somechannel")]);
+        category_repository.insert(&chess).unwrap();
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = list_for_category(video_searcher, chess.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![home_video_response(
+                "vid1",
+                "Downloaded",
+                channel_source(None)
+            )])
+        );
+    }
+
     /// A searcher for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
