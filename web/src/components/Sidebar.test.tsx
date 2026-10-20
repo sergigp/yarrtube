@@ -71,6 +71,24 @@ describe('Sidebar', () => {
     expect(busyIndex).toBeLessThan(behindIndex)
   })
 
+  it('orders playlists by unwatched count', async () => {
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [
+        aPlaylist({ name: 'Ambient', unwatched_count: 0 }),
+        aPlaylist({ name: 'Courses', unwatched_count: 2 }),
+        aPlaylist({ name: 'Music', unwatched_count: 40, hide_unwatched_count: true }),
+        aPlaylist({ name: 'watch later', unwatched_count: 7 }),
+      ],
+    })
+
+    await screen.findByText('Ambient')
+    // Row link text includes the unwatched badge, so strip the digits.
+    expect(
+      screen.getAllByRole('link').map((link) => (link.textContent ?? '').replace(/\d+$/, '')),
+    ).toEqual(['watch later', 'Courses', 'Ambient', 'Music'])
+  })
+
   it('lists every channel of an unfolded section with no show-more control', async () => {
     const channels = Array.from({ length: 40 }, (_, index) =>
       aChannel({ name: `Chan ${index}`, unwatched_count: 0 }),

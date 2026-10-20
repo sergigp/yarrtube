@@ -375,7 +375,7 @@ export function Sidebar({
     folded: channelsFolded,
     activeId: activeChannelId,
   })
-  const playlistsView = sectionView(playlists, {
+  const playlistsView = sectionView(playlists && orderByUnwatched(playlists), {
     searchText,
     folded: playlistsFolded,
     activeId: activePlaylistId,
