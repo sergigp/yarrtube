@@ -9,7 +9,7 @@ Prerequisite: `foldable-sidebar-sections` is applied (the Categories heading reu
 
 Backend acceptance tests:
 
-- [ ] 2.1 `it_should_create_a_category` — creating stores a category with a generated id, trimmed name and no members
+- [x] 2.1 `it_should_create_a_category` — creating stores a category with a generated id, trimmed name and no members
 - [ ] 2.2 `it_should_fail_to_create_if_name_missing` — missing name is rejected
 - [ ] 2.3 `it_should_fail_to_create_if_name_invalid` — `CategoryName` errors map to 400
 - [ ] 2.4 `it_should_fail_to_create_if_name_taken_ignoring_case` — duplicate name is a conflict

@@ -24,6 +24,10 @@ pub trait CategoryCreatorApi: Send + Sync {
 
 impl CategoryCreatorApi for CategoryCreator {
     fn create(&self, name: CategoryName) -> Result<Category, CreateCategoryError> {
-        Ok(Category::create(name, self.clock.now()))
+        let category = Category::create(name, self.clock.now());
+        self.repository
+            .insert(&category)
+            .map_err(CreateCategoryError::Repository)?;
+        Ok(category)
     }
 }

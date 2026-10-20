@@ -10,7 +10,7 @@ impl CategoryName {
     pub const MAX_LENGTH: usize = 60;
 
     pub fn new(name: impl Into<String>) -> Result<Self, ValidationError> {
-        Ok(Self(name.into()))
+        Ok(Self(name.into().trim().to_string()))
     }
 
     pub fn as_str(&self) -> &str {
