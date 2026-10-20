@@ -3,6 +3,7 @@ import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { errorMessage } from '@/lib/errorMessage'
 
 interface EditableTitleProps {
   name: string
@@ -11,10 +12,13 @@ interface EditableTitleProps {
 
 /**
  * A heading with a "Rename" pencil that turns it into an in-place field:
- * Enter or leaving the field saves, Escape cancels.
+ * Enter or leaving the field saves, Escape cancels. A rejected name keeps
+ * the field open with the reason.
  */
 export function EditableTitle({ name, onRename }: EditableTitleProps) {
   const [draft, setDraft] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   if (draft === null) {
     return (
@@ -43,31 +47,51 @@ export function EditableTitle({ name, onRename }: EditableTitleProps) {
     )
   }
 
-  const save = async () => {
+  const close = () => {
     setDraft(null)
-    if (draft !== name) {
-      await onRename(draft)
-    }
+    setError(null)
   }
 
-  return (
-    <Input
-      aria-label="Name"
-      value={draft}
-      autoFocus
-      onFocus={(event) => event.target.select()}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={save}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault()
-          void save()
-        } else if (event.key === 'Escape') {
-          event.preventDefault()
-          setDraft(null)
+  const save = async () => {
+    if (saving) {
+      return
+    }
+    if (draft === name) {
+      close()
+      return
+    }
+    setSaving(true)
+    try {
+      await onRename(draft)
+      close()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+  
+    return (
+      <div className="flex min-w-0 flex-col gap-1">
+        <Input
+        aria-label="Name"
+        value={draft}
+        autoFocus
+        onFocus={(event) => event.target.select()}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={save}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            void save()
+          } else if (event.key === 'Escape') {
+            event.preventDefault()
+            close()
         }
       }}
       className="h-auto min-w-0 px-2 py-0.5 font-heading text-lg font-semibold md:text-xl"
     />
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </div>
   )
 }
