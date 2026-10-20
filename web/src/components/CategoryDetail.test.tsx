@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useNavigate, type InitialEntry } from 'react-router-dom'
 import { CategoryDetail } from './CategoryDetail'
 import { RouteProbe } from '@/test/RouteProbe'
 import {
@@ -15,7 +15,7 @@ import {
   type Routes as ApiRoutes,
 } from '@/test/helpers'
 
-function renderCategory(routes: ApiRoutes, route = '/categories/chess') {
+function renderCategory(routes: ApiRoutes, route: InitialEntry = '/categories/chess') {
   const fetchMock = mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
   const { unmount } = renderWithProviders(
     <>
@@ -23,10 +23,26 @@ function renderCategory(routes: ApiRoutes, route = '/categories/chess') {
         <Route path="/categories/:id" element={<CategoryDetail />} />
       </Routes>
       <RouteProbe />
+      <HistoryControls />
     </>,
     { route },
   )
   return { fetchMock, unmount }
+}
+
+/** Leaves the view and comes back through history, as the browser's buttons would. */
+function HistoryControls() {
+  const navigate = useNavigate()
+  return (
+    <>
+      <button type="button" onClick={() => navigate('/')}>
+        Go home
+      </button>
+      <button type="button" onClick={() => navigate(-1)}>
+        Go back
+      </button>
+    </>
+  )
 }
 
 describe('CategoryDetail', () => {
@@ -168,5 +184,28 @@ describe('CategoryDetail', () => {
       RequestInit,
     ]
     expect(JSON.parse(init.body as string)).toEqual({ name: 'Board games' })
+  })
+
+  it('opens the dialog on arrival with ManageSourcesState, once', async () => {
+    renderCategory(
+      {
+        'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
+        'GET /api/categories/chess/videos': [],
+      },
+      { pathname: '/categories/chess', state: { manageSources: true } },
+    )
+    const user = userEvent.setup()
+
+    const openedOnArrival = (await screen.findByRole('dialog')).textContent?.includes(
+      'Manage sources in Chess',
+    )
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Go home' }))
+    await user.click(screen.getByRole('button', { name: 'Go back' }))
+    await screen.findByRole('region', { name: 'Nothing in Chess yet' })
+
+    expect(openedOnArrival).toBe(true)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
-import { useId, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useId, useState } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { FolderPlus, Plus, Settings2 } from 'lucide-react'
 import { deleteCategory, renameCategory } from '@/api/client'
 import {
@@ -55,9 +55,23 @@ function EmptyCategory({ category, onManage }: { category: Category; onManage: (
 export function CategoryDetail() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const refreshing = useLibraryAction()
   const markCategoryWatched = useMarkCategoryWatched()
   const [managing, setManaging] = useState(false)
+  // Arriving with ManageSourcesState opens the dialog once per navigation;
+  // the state is then dropped from history so reload and back don't reopen it.
+  const arrivedManaging = (location.state as ManageSourcesState | null)?.manageSources === true
+  const [openedFor, setOpenedFor] = useState<string | null>(null)
+  if (arrivedManaging && openedFor !== location.key) {
+    setOpenedFor(location.key)
+    setManaging(true)
+  }
+  useEffect(() => {
+    if (arrivedManaging) {
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [arrivedManaging, location.pathname, navigate])
   const { data } = useCategories()
   const { data: videos } = useCategoryVideos(id)
   const category = data?.categories.find((candidate) => candidate.id === id)
