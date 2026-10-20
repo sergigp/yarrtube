@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
@@ -125,5 +125,50 @@ describe('SidebarCategories', () => {
     expect(within(heading).getByLabelText('16 unwatched')).toHaveTextContent('16')
     expect(screen.queryByText('Chess')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add category' })).not.toBeInTheDocument()
+  })
+
+  it('manages and deletes from the row menu, with the member-count confirmation', async () => {
+    let categories = [
+      aCategory({
+        id: 'chess',
+        name: 'Chess',
+        channels: ['@GothamChess', '@Hikaru', '@ChessBrah'],
+        playlists: ['PLendgames'],
+      }),
+      aCategory({ id: 'science', name: 'Science' }),
+    ]
+    const remove = vi.fn(() => {
+      categories = categories.filter((category) => category.id !== 'chess')
+      return null
+    })
+    renderSidebar(
+      {
+        'GET /api/categories': () => aCategoryList(categories),
+        'DELETE /api/categories/chess': remove,
+      },
+      { route: '/categories/chess' },
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Chess' }))
+    const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete "Chess"?' })
+    const description = within(dialog).getByText(/holds/).textContent
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.queryByText('Chess')).not.toBeInTheDocument())
+    const routeAfterDelete = screen.getByRole('status', { name: 'Current route' }).textContent
+    await user.click(screen.getByRole('button', { name: 'Actions for Science' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Manage' }))
+
+    expect(items).toEqual(['Manage', 'Delete'])
+    expect(description).toBe(
+      '"Chess" holds 4 channels and playlists. None of them, nor any video, will be deleted.',
+    )
+    expect(remove).toHaveBeenCalledOnce()
+    expect(routeAfterDelete).toBe('/')
+    expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(
+      '/categories?selected=science',
+    )
   })
 })

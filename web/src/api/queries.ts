@@ -170,8 +170,8 @@ export function useVersion(): UseQueryResult<AppVersion, Error> {
 }
 
 /**
- * Returns a function that refetches the channel and playlist lists (and,
- * by prefix, their video lists) after an action that changed them.
+ * Returns a function that refetches the channel, playlist and category lists
+ * (and, by prefix, their video lists) after an action that changed them.
  */
 export function useInvalidateLibrary(): () => Promise<unknown> {
   const queryClient = useQueryClient()
@@ -180,6 +180,7 @@ export function useInvalidateLibrary(): () => Promise<unknown> {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.channels }),
         queryClient.invalidateQueries({ queryKey: queryKeys.playlists }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.categories }),
       ]),
     [queryClient],
   )

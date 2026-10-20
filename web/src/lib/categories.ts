@@ -13,8 +13,13 @@ export function orderCategories(categories: Category[]): Category[] {
 }
 
 /** How many channels and playlists the category holds. */
-export function memberCount(_category: Category): number {
-  return 0
+export function memberCount(category: Category): number {
+  return category.channels.length + category.playlists.length
+}
+
+/** The delete confirmation's reassurance: what the category holds stays. */
+export function deleteCategoryDescription(category: Category): string {
+  return `"${category.name}" holds ${memberCount(category)} channels and playlists. None of them, nor any video, will be deleted.`
 }
 
 /** The ids of the categories `source` is a member of. */
