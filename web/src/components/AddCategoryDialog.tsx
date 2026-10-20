@@ -6,13 +6,14 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import type { ManageSourcesState } from './CategoryDetail'
 
 interface AddCategoryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-/** Asks for a new category's name, then opens its view. */
+/** Asks for a new category's name, then opens its view to pick its sources. */
 export function AddCategoryDialog({ open, onOpenChange }: AddCategoryDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -44,7 +45,8 @@ function AddCategoryForm({ onClose }: { onClose: () => void }) {
       const category = await createCategory(name)
       invalidateLibrary()
       onClose()
-      navigate(`/categories/${encodeURIComponent(category.id)}`)
+      const state: ManageSourcesState = { manageSources: true }
+      navigate(`/categories/${encodeURIComponent(category.id)}`, { state })
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)))
     } finally {

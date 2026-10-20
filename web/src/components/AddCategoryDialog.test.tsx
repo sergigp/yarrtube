@@ -1,16 +1,28 @@
 import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Route, Routes as RouterRoutes } from 'react-router-dom'
 import { AddCategoryDialog } from './AddCategoryDialog'
-import { aCreatedCategory, mockApi, renderWithProviders, type Routes } from '@/test/helpers'
+import { CategoryDetail } from './CategoryDetail'
+import {
+  aCategory,
+  aCategoryList,
+  aCreatedCategory,
+  mockApi,
+  renderWithProviders,
+  type Routes as ApiRoutes,
+} from '@/test/helpers'
 import { RouteProbe } from '@/test/RouteProbe'
 
-function renderDialog(routes: Routes) {
+function renderDialog(routes: ApiRoutes) {
   const fetchMock = mockApi(routes)
   const onOpenChange = vi.fn()
   renderWithProviders(
     <>
       <AddCategoryDialog open onOpenChange={onOpenChange} />
+      <RouterRoutes>
+        <Route path="/categories/:id" element={<CategoryDetail />} />
+      </RouterRoutes>
       <RouteProbe />
     </>,
   )
@@ -18,9 +30,15 @@ function renderDialog(routes: Routes) {
 }
 
 describe('AddCategoryDialog', () => {
-  it('creates a category and opens its view', async () => {
+  it('creates a category and opens it with the manage sources dialog', async () => {
     const create = vi.fn(() => (aCreatedCategory({ id: 'chess', name: 'Chess' })))
-    const { fetchMock, onOpenChange } = renderDialog({ 'POST /api/categories': create })
+    const { fetchMock, onOpenChange } = renderDialog({
+      'POST /api/categories': create,
+      'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
+      'GET /api/categories/chess/videos': [],
+      'GET /api/channels': [],
+      'GET /api/playlists': [],
+    })
     const user = userEvent.setup()
 
     await user.type(screen.getByLabelText('Name'), 'Chess')
@@ -32,6 +50,8 @@ describe('AddCategoryDialog', () => {
     expect(screen.getByRole('status', { name: 'Current route', hidden: true })).toHaveTextContent(
       '/categories/chess',
     )
+    expect(await screen.findByRole('dialog', { name: 'Manage sources in Chess' })).toBeVisible()
+    expect(screen.getByRole('searchbox', { name: 'Search channels and playlists' })).toHaveFocus()
   })
 
   it('disables create for a blank name and shows a taken-name error', async () => {

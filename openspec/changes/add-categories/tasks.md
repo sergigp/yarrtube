@@ -124,7 +124,7 @@ Web (Vitest, TDD):
 - [x] 5.17 `ManageSourcesDialog` › keeps staged changes when saving fails
 - [x] 5.18 `ManageSourcesDialog` › says when nothing is tracked
 - [x] 5.19 `SidebarCategories` › "Manage sources" in the row menu opens the category view with the dialog
-- [ ] 5.20 `AddCategoryDialog` › creates a category and opens it with the manage sources dialog
+- [x] 5.20 `AddCategoryDialog` › creates a category and opens it with the manage sources dialog
 
 Verification:
 
