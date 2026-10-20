@@ -36,9 +36,13 @@ function AddCategoryForm({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const canSubmit = name.trim() !== '' && !submitting
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!canSubmit) {
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
@@ -66,7 +70,7 @@ function AddCategoryForm({ onClose }: { onClose: () => void }) {
         />
       </div>
       {error && <p className="text-sm text-destructive">{error.message}</p>}
-      <Button type="submit" disabled={submitting} className="self-start">
+      <Button type="submit" disabled={!canSubmit} className="self-start">
         {submitting ? 'Creating…' : 'Create'}
       </Button>
     </form>

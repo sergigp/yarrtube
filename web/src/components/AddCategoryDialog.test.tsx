@@ -38,4 +38,24 @@ describe('AddCategoryDialog', () => {
       '/categories?selected=chess',
     )
   })
+
+  it('disables create for a blank name and shows a taken-name error', async () => {
+    const { onOpenChange } = renderDialog({
+      'POST /api/categories': { status: 409, error: 'a category named "Chess" already exists' },
+    })
+    const user = userEvent.setup()
+    const create = screen.getByRole('button', { name: 'Create' })
+    const disabledWhenEmpty = create.hasAttribute('disabled')
+    await user.type(screen.getByLabelText('Name'), '   ')
+    const disabledWhenBlank = create.hasAttribute('disabled')
+
+    await user.type(screen.getByLabelText('Name'), 'Chess')
+    await user.click(create)
+
+    expect([disabledWhenEmpty, disabledWhenBlank]).toEqual([true, true])
+    expect(
+      await screen.findByText('a category named "Chess" already exists'),
+    ).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
 })
