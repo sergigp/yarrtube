@@ -20,7 +20,7 @@ Backend acceptance tests:
 - [x] 2.9 `it_should_rename_a_category`
 - [x] 2.10 `it_should_rename_a_category_to_a_case_variant_of_its_name`
 - [x] 2.11 `it_should_fail_to_rename_if_name_taken`
-- [ ] 2.12 `it_should_fail_to_rename_a_missing_category`
+- [x] 2.12 `it_should_fail_to_rename_a_missing_category`
 - [ ] 2.13 `it_should_delete_a_category_keeping_its_sources`
 - [ ] 2.14 `it_should_fail_to_delete_a_missing_category`
 - [ ] 2.15 `it_should_set_the_members_of_a_category`

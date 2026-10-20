@@ -461,6 +461,26 @@ mod tests {
         assert_eq!(repository.list().unwrap(), vec![chess, sports]);
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_rename_a_missing_category() {
+        let db = TestDatabase::new();
+        let category_updater = CategoryUpdater::new(
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = rename(category_updater, "missing", "Chess").await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "category missing not found"
+            ))
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
