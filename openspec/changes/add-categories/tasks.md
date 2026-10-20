@@ -40,7 +40,7 @@ Backend acceptance tests:
 - [x] 2.29 `it_should_fail_to_list_videos_for_a_missing_category`
 - [x] 2.30 `it_should_remove_the_channel_from_every_category` (channel-deleted subscriber)
 - [x] 2.31 `it_should_ignore_an_invalid_channel_id` (channel-deleted subscriber)
-- [ ] 2.32 `it_should_remove_the_playlist_from_every_category` (playlist-deleted subscriber)
+- [x] 2.32 `it_should_remove_the_playlist_from_every_category` (playlist-deleted subscriber)
 
 Value objects (one cycle each, in `category_name.rs` / `category_id.rs`):
 
