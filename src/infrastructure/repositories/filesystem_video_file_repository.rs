@@ -654,4 +654,23 @@ mod tests {
         assert_eq!(content.map_err(|e| e.to_string()), Ok(None));
         std::fs::remove_dir_all(&dir).unwrap();
     }
+
+    #[test]
+    fn it_should_fail_to_read_a_file_that_is_not_utf8() {
+        let dir = unique_temp_dir("video-file-repository-read-not-utf8");
+        std::fs::create_dir_all(dir.join("Season 1")).unwrap();
+        let path = dir.join("Season 1/My Video.en.srt");
+        std::fs::write(&path, [0xff, 0xfe, 0xfd]).unwrap();
+
+        let content =
+            FilesystemVideoFileRepository.read_to_string(&dir, "Season 1/My Video.en.srt");
+
+        assert_eq!(
+            content.map_err(|e| e.to_string()),
+            Err(format!(
+                "failed to read {path:?}: stream did not contain valid UTF-8"
+            ))
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
