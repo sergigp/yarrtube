@@ -16,13 +16,13 @@ import {
 
 function renderCategory(routes: ApiRoutes, route = '/categories/chess') {
   const fetchMock = mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
-  renderWithProviders(
+  const { unmount } = renderWithProviders(
     <Routes>
       <Route path="/categories/:id" element={<CategoryDetail />} />
     </Routes>,
     { route },
   )
-  return { fetchMock }
+  return { fetchMock, unmount }
 }
 
 describe('CategoryDetail', () => {
@@ -84,5 +84,35 @@ describe('CategoryDetail', () => {
         fetchMock.mock.calls.filter(([url]) => url === '/api/categories').length,
       ).toBeGreaterThan(1),
     )
+  })
+
+  it('explains an empty category and an unknown one', async () => {
+    const categories = aCategoryList([
+      aCategory({ id: 'chess', name: 'Chess' }),
+      aCategory({ id: 'science', name: 'Science', channels: ['@veritasium'] }),
+    ])
+    const routes = {
+      'GET /api/categories': categories,
+      'GET /api/channels': [aChannel({ id: '@veritasium', name: 'Veritasium' })],
+      'GET /api/categories/chess/videos': [],
+      'GET /api/categories/science/videos': [],
+      'GET /api/categories/missing/videos': { status: 404, error: 'category missing not found' },
+    }
+    const empty = renderCategory(routes, '/categories/chess')
+    const emptyMessage = (await screen.findByText(/holds no channels/)).textContent
+    const addLink = screen.getByRole('link', { name: 'Add channels and playlists' })
+    const manageLink = screen.getByRole('link', { name: 'Manage' })
+    const links = [addLink, manageLink].map((link) => link.getAttribute('href'))
+    empty.unmount()
+    const withoutVideos = renderCategory(routes, '/categories/science')
+    const noVideosMessage = (await screen.findByText(/No videos/)).textContent
+    withoutVideos.unmount()
+
+    renderCategory(routes, '/categories/missing')
+
+    expect(emptyMessage).toBe('This category holds no channels or playlists yet.')
+    expect(links).toEqual(['/categories?selected=chess', '/categories?selected=chess'])
+    expect(noVideosMessage).toBe('No videos synced yet.')
+    expect(await screen.findByText('Category not found.')).toBeInTheDocument()
   })
 })

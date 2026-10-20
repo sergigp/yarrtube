@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { CheckCheck } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
+import { CheckCheck, Settings2 } from 'lucide-react'
 import {
   useCategories,
   useCategoryVideos,
@@ -9,7 +9,7 @@ import {
   usePlaylists,
 } from '@/api/queries'
 import type { Category, ChannelListItem, PlaylistListItem } from '@/api/types'
-import { byName } from '@/lib/categories'
+import { byName, memberCount } from '@/lib/categories'
 import { errorMessage } from '@/lib/errorMessage'
 import { Button } from '@/components/ui/button'
 import { VideoGrid } from './VideoGrid'
@@ -37,9 +37,13 @@ export function CategoryDetail() {
   const { data: videos } = useCategoryVideos(id)
   const category = data?.categories.find((candidate) => candidate.id === id)
 
-  if (!category) {
-    return null
+  if (!data) {
+    return <p className="text-sm text-muted-foreground">Loading category…</p>
   }
+  if (!category) {
+    return <p className="text-sm text-muted-foreground">Category not found.</p>
+  }
+  const managePath = `/categories?selected=${encodeURIComponent(category.id)}`
 
   const markAllWatched = async () => {
     setMarking(true)
@@ -61,18 +65,35 @@ export function CategoryDetail() {
             {memberNames(category, channels, playlists).join(' · ')}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={marking}
-          onClick={markAllWatched}
-        >
-          <CheckCheck />
-          Mark all watched
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={marking}
+            onClick={markAllWatched}
+          >
+            <CheckCheck />
+            Mark all watched
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to={managePath}>
+              <Settings2 />
+              Manage
+            </Link>
+          </Button>
+        </div>
       </header>
-      {videos && <VideoGrid videos={videos} />}
+      {memberCount(category) === 0 ? (
+        <div className="flex flex-col items-start gap-2 text-sm">
+          <p className="text-muted-foreground">This category holds no channels or playlists yet.</p>
+          <Link to={managePath} className="text-primary">
+            Add channels and playlists
+          </Link>
+        </div>
+      ) : (
+        videos && <VideoGrid videos={videos} />
+      )}
     </div>
   )
 }
