@@ -12,7 +12,7 @@ export function orderChannels(channels: ChannelListItem[]): ChannelListItem[] {
 }
 
 /** Case-insensitive name match; expects `text` already trimmed. */
-export function matchesSearch(item: LibraryItem, text: string): boolean {
+export function matchesSearch(item: { name: string }, text: string): boolean {
   return item.name.toLowerCase().includes(text.toLowerCase())
 }
 

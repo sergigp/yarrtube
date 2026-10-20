@@ -73,7 +73,7 @@ Web (Vitest):
 - [x] 2.56 `CategoryDetail` › shows the members and video cards newest first
 - [x] 2.57 `CategoryDetail` › marks all watched
 - [x] 2.58 `CategoryDetail` › explains an empty category and an unknown one
-- [ ] 2.59 `CategoryPicker` › picks, removes and creates categories
+- [x] 2.59 `CategoryPicker` › picks, removes and creates categories
 - [ ] 2.60 `AddChannelDialog` › adds a channel into the chosen categories, and reports categories that failed to save
 - [ ] 2.61 `AddPlaylistDialog` › adds a playlist into the chosen categories
 - [ ] 2.62 `EditChannelDialog` › saves a change of categories alone
