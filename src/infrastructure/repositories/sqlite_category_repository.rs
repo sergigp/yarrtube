@@ -243,6 +243,36 @@ mod tests {
         assert_eq!(repository.list().unwrap(), vec![chess, science, sports]);
     }
 
+    #[test]
+    fn it_should_keep_members_in_the_order_first_added() {
+        let db = TestDatabase::new();
+        let repository = SqliteCategoryRepository::new(db.database());
+        let chess = category(
+            "Chess",
+            &[
+                playlist_member("PLopenings"),
+                channel_member("@Hikaru"),
+                playlist_member("PLendgames"),
+                channel_member("@GothamChess"),
+            ],
+        );
+
+        repository.insert(&chess).unwrap();
+
+        assert_eq!(
+            repository
+                .find(&chess.id)
+                .unwrap()
+                .map(|found| found.members),
+            Some(vec![
+                playlist_member("PLopenings"),
+                channel_member("@Hikaru"),
+                playlist_member("PLendgames"),
+                channel_member("@GothamChess"),
+            ])
+        );
+    }
+
     fn category(name: &str, members: &[CategoryMember]) -> Category {
         Category::create(CategoryName::new(name).unwrap(), fixed_timestamp())
             .with_members(members.to_vec())
