@@ -53,7 +53,8 @@ _None._
 - Web UI only: `Sidebar.tsx` (+ tests), `src/lib/sidebarSections.ts`
   (collapse helpers removed, fold-aware section view and total added), a
   per-viewer `localStorage` entry for fold state. No smoke test relies on
-  the removed collapse.
+  the removed collapse; smoke selectors that found a section by its `<h3>`
+  text now match the heading's toggle button instead.
 - No backend change: the Channels total is derived from the existing
   per-channel unwatched counts. Old `yarrtube.sidebar.expanded.*` storage
   entries are left in place and ignored.

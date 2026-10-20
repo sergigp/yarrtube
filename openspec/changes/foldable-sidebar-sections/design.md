@@ -5,7 +5,9 @@
 - `web/src/components/Sidebar.tsx` — heading becomes the fold toggle (chevron, muted total, active marker); folded section renders the heading only; "Show N more"/"Show less" control removed.
 - `web/src/components/Sidebar.test.tsx` — fold behaviour; the "show more" test is replaced.
 
-No backend, API type, fixture or smoke test changes.
+- `smoke-tests/helpers/sidebar.js`, `smoke-tests/tests/{addDialogLocation,playlist,channel}.spec.js` — section selectors become `h3:has(button:text-is("<Section>"))`: Playwright's `:text-is` matches the smallest element holding the text, which is now the heading button.
+
+No backend, API type or fixture changes.
 
 ## Types & Signatures
 
