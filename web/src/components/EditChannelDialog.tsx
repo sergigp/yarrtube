@@ -7,6 +7,8 @@ import {
   type ChannelSettingsForm,
 } from '@/lib/channelSettings'
 import { intervalForm, type IntervalForm } from '@/lib/reconcileInterval'
+import { useSourceCategoriesField } from '@/hooks/useSourceCategoriesField'
+import { CategoryPicker } from './CategoryPicker'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
 import { VideoQualityField } from './VideoQualityField'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
@@ -60,20 +62,25 @@ function EditChannelForm({ channel, onSave, onClose }: EditChannelFormProps) {
 
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const categories = useSourceCategoriesField({ kind: 'channel', id: channel.id })
   const lowersLimit = lowersVideoLimit(channel.video_limit, form.video_limit)
   const changesQuality = form.quality !== channel.quality
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const changes = channelSettingsChanges(channel, form)
-    if (Object.keys(changes).length === 0) {
+    const changesSettings = Object.keys(changes).length > 0
+    if (!changesSettings && !categories.changed) {
       onClose()
       return
     }
     setSubmitting(true)
     setError(null)
     try {
-      await onSave(changes)
+      if (changesSettings) {
+        await onSave(changes)
+      }
+      await categories.save()
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)))
@@ -123,6 +130,8 @@ function EditChannelForm({ channel, onSave, onClose }: EditChannelFormProps) {
         value={form.interval}
         onChange={changeInterval}
       />
+
+      <CategoryPicker value={categories.value} onChange={categories.onChange} />
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
       <Button type="submit" disabled={submitting} className="self-start">

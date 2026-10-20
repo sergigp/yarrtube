@@ -1,17 +1,28 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { EditChannelDialog } from './EditChannelDialog'
-import { aChannel } from '@/test/helpers'
+import {
+  aCategory,
+  aCategoryList,
+  aChannel,
+  mockApi,
+  renderWithProviders,
+  type Routes,
+} from '@/test/helpers'
 import type { ChannelListItem } from '@/api/types'
 
 function renderDialog(
   channel: ChannelListItem,
   onSave: (changes: object) => Promise<void> = vi.fn(async () => {}),
+  routes: Routes = { 'GET /api/categories': aCategoryList() },
 ) {
+  const fetchMock = mockApi(routes)
   const onOpenChange = vi.fn()
-  render(<EditChannelDialog channel={channel} open onOpenChange={onOpenChange} onSave={onSave} />)
-  return { onOpenChange, onSave }
+  renderWithProviders(
+    <EditChannelDialog channel={channel} open onOpenChange={onOpenChange} onSave={onSave} />,
+  )
+  return { onOpenChange, onSave, fetchMock }
 }
 
 describe('EditChannelDialog', () => {
@@ -167,5 +178,32 @@ describe('EditChannelDialog', () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('saves a change of categories alone', async () => {
+    const { onSave, onOpenChange, fetchMock } = renderDialog(
+      aChannel({ id: '@hikaru', name: 'Hikaru' }),
+      vi.fn(async () => {}),
+      {
+        'GET /api/categories': aCategoryList([
+          aCategory({ id: 'chess', name: 'Chess', channels: ['@gotham', '@hikaru'] }),
+          aCategory({ id: 'cooking', name: 'Cooking' }),
+          aCategory({ id: 'streams', name: 'Streams', channels: ['@hikaru'] }),
+        ]),
+        'PUT /api/categories/chess/members': null,
+      },
+    )
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Remove Chess' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(onSave).not.toHaveBeenCalled()
+    expect(
+      fetchMock.mock.calls
+        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
+        .map(([url, init]) => [url, JSON.parse((init as RequestInit).body as string)]),
+    ).toEqual([['/api/categories/chess/members', { channels: ['@gotham'], playlists: [] }]])
   })
 })
