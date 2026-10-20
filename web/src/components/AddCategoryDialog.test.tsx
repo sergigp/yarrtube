@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AddCategoryDialog } from './AddCategoryDialog'
-import { mockApi, renderWithProviders, RouteProbe, type Routes } from '@/test/helpers'
+import { mockApi, renderWithProviders, type Routes } from '@/test/helpers'
+import { RouteProbe } from '@/test/RouteProbe'
 
 function renderDialog(routes: Routes) {
   const fetchMock = mockApi(routes)

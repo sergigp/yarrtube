@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SettingsMenu } from './SettingsMenu'
-import { renderWithProviders, RouteProbe } from '@/test/helpers'
+import { renderWithProviders } from '@/test/helpers'
+import { RouteProbe } from '@/test/RouteProbe'
 
 describe('SettingsMenu', () => {
   it('offers Categories', async () => {

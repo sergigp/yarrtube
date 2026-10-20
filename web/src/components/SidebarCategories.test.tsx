@@ -8,9 +8,9 @@ import {
   aChannel,
   mockApi,
   renderWithProviders,
-  RouteProbe,
   type Routes,
 } from '@/test/helpers'
+import { RouteProbe } from '@/test/RouteProbe'
 
 /** Renders the sidebar beside a probe of the current route. */
 function renderSidebar(routes: Routes, { route = '/' } = {}) {

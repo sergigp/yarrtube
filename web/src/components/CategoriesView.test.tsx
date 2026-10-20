@@ -10,9 +10,9 @@ import {
   aPlaylist,
   mockApi,
   renderWithProviders,
-  RouteProbe,
   type Routes,
 } from '@/test/helpers'
+import { RouteProbe } from '@/test/RouteProbe'
 
 function renderView(routes: Routes, { route = '/categories' }: { route?: InitialEntry } = {}) {
   const fetchMock = mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
