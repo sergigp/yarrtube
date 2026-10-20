@@ -208,6 +208,28 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Channels')).not.toBeInTheDocument()
   })
 
+  it('shows matches of a folded section while searching, and folds it again when cleared', async () => {
+    const channels = [
+      aChannel({ name: 'Veritasium' }),
+      ...Array.from({ length: 15 }, (_, index) => aChannel({ name: `Chan ${index}` })),
+    ]
+    renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] })
+
+    const search = await screen.findByRole('searchbox', { name: 'Search channels and playlists' })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Channels' }))
+    await user.type(search, 'ver')
+    const matchWhileSearching = screen.queryByText('Veritasium')?.textContent
+    await user.clear(search)
+
+    expect(matchWhileSearching).toBe('Veritasium')
+    expect(screen.queryByText('Veritasium')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Channels' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  })
+
   it('says when nothing matches the search', async () => {
     const channels = Array.from({ length: 16 }, (_, index) => aChannel({ name: `Chan ${index}` }))
     renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] })

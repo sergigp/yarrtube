@@ -20,7 +20,7 @@
 - [x] 2.14 `Sidebar` › shows the channels' muted unwatched total only while folded and above 0
 - [x] 2.15 `Sidebar` › shows no total on a folded Playlists heading
 - [x] 2.16 `Sidebar` › keeps a folded section folded and marks its heading active on that section's detail route
-- [ ] 2.17 `Sidebar` › shows matches of a folded section while searching, and folds it again when cleared
+- [x] 2.17 `Sidebar` › shows matches of a folded section while searching, and folds it again when cleared
 
 ## 3. Infrastructure adapters (TDD)
 
