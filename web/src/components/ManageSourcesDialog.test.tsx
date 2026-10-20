@@ -184,4 +184,23 @@ describe('ManageSourcesDialog', () => {
       fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT'),
     ).toEqual([])
   })
+
+  it('keeps staged changes when saving fails', async () => {
+    const { onOpenChange } = renderDialog(chess, {
+      ...library,
+      'PUT /api/categories/chess/members': { status: 500, error: 'database is locked' },
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'GothamChess' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('database is locked')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'GothamChess' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByText('+1 added')).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
 })

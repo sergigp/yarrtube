@@ -14,6 +14,7 @@ import {
   type SourceFilter,
   type SourceRef,
 } from '@/lib/categories'
+import { errorMessage } from '@/lib/errorMessage'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -51,6 +52,8 @@ function ManageSourcesContent({ category, onClose }: { category: Category; onClo
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<SourceFilter>('all')
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const chips = sourceChips(channels, playlists)
   const allChips = [...chips.channels, ...chips.playlists]
@@ -71,9 +74,17 @@ function ManageSourcesContent({ category, onClose }: { category: Category; onClo
   }
 
   const save = async () => {
-    await setCategoryMembers(category.id, staged)
-    invalidateLibrary()
-    onClose()
+    setSaving(true)
+    setError(null)
+    try {
+      await setCategoryMembers(category.id, staged)
+      invalidateLibrary()
+      onClose()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -152,12 +163,13 @@ function ManageSourcesContent({ category, onClose }: { category: Category; onClo
         <ChipGroup title="Playlists" chips={shownPlaylists} staged={staged} onToggle={toggle} />
       </div>
       <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border px-6 py-4">
+        {error && <p className="w-full text-sm text-destructive">{error}</p>}
         <p className="mr-auto text-sm text-muted-foreground">{summaryText(summary)}</p>
         <Button type="button" variant="outline" onClick={requestClose}>
           Cancel
         </Button>
-        <Button type="button" disabled={!dirty} onClick={save}>
-          Save
+        <Button type="button" disabled={!dirty || saving} onClick={save}>
+          {saving ? 'Saving…' : 'Save'}
         </Button>
       </div>
       <ConfirmDialog
