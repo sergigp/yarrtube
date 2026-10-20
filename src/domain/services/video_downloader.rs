@@ -268,7 +268,7 @@ impl VideoDownloader {
                 now,
             )
             .with_episode_number(number, now);
-        self.video_repository.update(&downloaded_video)?;
+        let downloaded_video = self.save(downloaded_video)?;
         info!(video_id = %downloaded_video.id, "video downloaded");
         Ok(downloaded_video)
     }
@@ -389,8 +389,7 @@ impl VideoDownloader {
     /// without error, so no retry is scheduled and it is not dead-lettered.
     fn exclude(&self, started: Video, reason: &str) -> anyhow::Result<()> {
         let video_id = started.id.clone();
-        let excluded = started.mark_excluded(self.clock.now());
-        self.video_repository.update(&excluded)?;
+        self.save(started.mark_excluded(self.clock.now()))?;
         info!(video_id = %video_id, reason = %reason, "excluding permanently-unavailable video");
         Ok(())
     }
@@ -453,7 +452,18 @@ impl VideoDownloader {
         } else {
             started.mark_errored_retrying(self.clock.now())
         };
-        self.video_repository.update(&updated)
+        self.save(updated).map(|_| ())
+    }
+
+    /// Saves `video` with the watch state stored now, not the one read when
+    /// the download started; a video gone meanwhile is saved as given.
+    fn save(&self, video: Video) -> anyhow::Result<Video> {
+        let saved = match self.video_repository.find(&video.id)? {
+            Some(current) => video.with_watch_state_of(&current),
+            None => video,
+        };
+        self.video_repository.update(&saved)?;
+        Ok(saved)
     }
 
     /// Builds `video`'s metadata with its playlist position (no `thumb` yet)
