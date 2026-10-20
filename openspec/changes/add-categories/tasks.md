@@ -130,7 +130,7 @@ Verification:
 
 - [x] 5.21 `npm run check` and `npm run build` pass in `web/`
 - [x] 5.22 Update `smoke-tests/tests/categories.spec.js` (create lands in manage sources, add sources with chips, rename in place, mark all watched, delete from the actions menu) and `scripts/run-smoke-tests.sh` passes
-- [ ] 5.23 Manual check with `scripts/run-local.sh`: category header and menu, rename, the dialog on desktop and mobile (chips, search, filters, keyboard, discard), entry points from the sidebar row, empty state and add category
+- [x] 5.23 Manual check with `scripts/run-local.sh`: category header and menu, rename, the dialog on desktop and mobile (chips, search, filters, keyboard, discard), entry points from the sidebar row, empty state and add category
 
 ## 6. Sidebar add controls and folded badge
 
@@ -141,4 +141,4 @@ Per the revised Sidebar Add Entries, Folded Section Unwatched Total and Sidebar 
 - [x] 6.3 Folded total rendered as the row badge; `Sidebar` › shows the channels' unwatched total badge only while folded and above 0 (renamed), and 2.45 renamed to match
 - [x] 6.4 `npm run check` passes in `web/`
 - [ ] 6.5 `scripts/run-smoke-tests.sh` passes
-- [ ] 6.6 Manual check with `scripts/run-local.sh`: heading "+" and empty add rows in all three sections, folded badges, on desktop and mobile
+- [x] 6.6 Manual check with `scripts/run-local.sh`: heading "+" and empty add rows in all three sections, folded badges, on desktop and mobile
