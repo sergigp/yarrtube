@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react'
 import type { UpdatePlaylistRequest } from '@/api/client'
 import type { PlaylistListItem } from '@/api/types'
 import { intervalForm, intervalMinutes, type IntervalForm } from '@/lib/reconcileInterval'
+import { useSourceCategoriesField } from '@/hooks/useSourceCategoriesField'
+import { CategoryPicker } from './CategoryPicker'
 import { ReconcileIntervalField } from './ReconcileIntervalField'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -52,19 +54,24 @@ function EditPlaylistForm({ playlist, onSave, onClose }: EditPlaylistFormProps) 
 
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const categories = useSourceCategoriesField({ kind: 'playlist', id: playlist.id })
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const minutes = intervalMinutes(interval)
     if (minutes === null) return
-    if (minutes === playlist.reconcile_interval_minutes) {
+    const changesInterval = minutes !== playlist.reconcile_interval_minutes
+    if (!changesInterval && !categories.changed) {
       onClose()
       return
     }
     setSubmitting(true)
     setError(null)
     try {
-      await onSave({ reconcile_interval_minutes: minutes })
+      if (changesInterval) {
+        await onSave({ reconcile_interval_minutes: minutes })
+      }
+      await categories.save()
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)))
@@ -76,6 +83,8 @@ function EditPlaylistForm({ playlist, onSave, onClose }: EditPlaylistFormProps) 
   return (
     <form className="flex min-w-0 flex-col gap-5" onSubmit={handleSubmit}>
       <ReconcileIntervalField id="edit-playlist-interval" value={interval} onChange={changeInterval} />
+      <CategoryPicker value={categories.value} onChange={categories.onChange} />
+
       {error && <p className="text-sm text-destructive">{error.message}</p>}
       <Button type="submit" disabled={submitting} className="self-start">
         {submitting ? 'Saving…' : 'Save'}
