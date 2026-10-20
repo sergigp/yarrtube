@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { matchesSearch, orderByUnwatched, sectionView, unwatchedTotal } from './sidebarSections'
+import {
+  matchesSearch,
+  orderByUnwatched,
+  sectionView,
+  shownUnwatchedCount,
+  unwatchedTotal,
+} from './sidebarSections'
 import { aChannel, aPlaylist } from '@/test/helpers'
 
 describe('orderByUnwatched', () => {
@@ -42,6 +48,12 @@ describe('orderByUnwatched', () => {
       'music',
       'z',
     ])
+  })
+})
+
+describe('shownUnwatchedCount', () => {
+  it('shows no unwatched count for an entry that hides it', () => {
+    expect(shownUnwatchedCount(aPlaylist({ unwatched_count: 3, hide_unwatched_count: true }))).toBe(0)
   })
 })
 
