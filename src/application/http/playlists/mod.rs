@@ -1353,6 +1353,64 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_count_unwatched_downloaded_videos_when_listing_playlists() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", "music/first"))
+            .unwrap();
+        playlist_repository
+            .insert(&playlist("PL2", "music/second"))
+            .unwrap();
+        for (youtube_id, position) in [("vid_unwatched_1", 0), ("vid_unwatched_2", 1)] {
+            save_downloaded_playlist_video(
+                video_repository.as_ref(),
+                playlist_video_repository.as_ref(),
+                "PL1",
+                youtube_id,
+                position,
+            );
+        }
+        let watched = save_downloaded_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid_watched",
+            2,
+        );
+        video_repository
+            .update(&watched.mark_watched(fixed_timestamp()))
+            .unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid_pending",
+            3,
+        );
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            video_repository,
+        );
+
+        let response = list(playlist_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                PlaylistListItemResponse {
+                    unwatched_count: 2,
+                    ..playlist_list_item_response("PL1", "music/first")
+                },
+                playlist_list_item_response("PL2", "music/second"),
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_exclude_a_playlist_from_home() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
@@ -2387,6 +2445,43 @@ mod tests {
             .unwrap()
             .unwrap();
         (video, playlist_video)
+    }
+
+    /// Saves a downloaded video and its playlist membership, returning the
+    /// video as stored.
+    fn save_downloaded_playlist_video(
+        video_repository: &dyn VideoRepository,
+        playlist_video_repository: &dyn PlaylistVideoRepository,
+        playlist: &str,
+        youtube_id: &str,
+        position: i64,
+    ) -> Video {
+        let video = downloaded_video(youtube_id);
+        video_repository.save(&video).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                playlist_id(playlist),
+                video.id.clone(),
+                position,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        video
+    }
+
+    fn downloaded_video(youtube_id: &str) -> Video {
+        Video::create(
+            VideoId::new(youtube_id).unwrap(),
+            format!("Video {youtube_id}"),
+            fixed_timestamp(),
+        )
+        .mark_downloaded(
+            Quality::High,
+            format!("Video {youtube_id}.mp4"),
+            None,
+            Some(100),
+            fixed_timestamp(),
+        )
     }
 
     fn playlist_item(video_id: &str, title: &str, position: i64) -> YoutubePlaylistItem {

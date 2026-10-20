@@ -101,7 +101,28 @@ impl PlaylistVideoRepository for SqlitePlaylistVideoRepository {
     }
 
     fn list(&self) -> anyhow::Result<Vec<PlaylistVideo>> {
-        Ok(vec![])
+        let conn = self.db.read()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, playlist_id, video_id, position, created_at
+                 FROM playlist_videos ORDER BY id ASC",
+            )
+            .inspect_err(
+                |e| tracing::error!(error = %e, "failed to prepare list-all-playlist-videos query"),
+            )
+            .context("failed to prepare list-all-playlist-videos query")?;
+        let rows = stmt
+            .query_map([], row_to_columns)
+            .inspect_err(|e| tracing::error!(error = %e, "failed to list all playlist videos"))
+            .context("failed to list all playlist videos")?;
+
+        rows.map(|row| {
+            let columns = row
+                .inspect_err(|e| tracing::error!(error = %e, "failed to read playlist video row"))
+                .context("failed to read playlist video row")?;
+            columns_to_playlist_video(columns)
+        })
+        .collect()
     }
 
     fn delete(&self, playlist_id: &PlaylistId, youtube_video_id: &VideoId) -> anyhow::Result<()> {
