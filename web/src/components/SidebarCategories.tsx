@@ -8,6 +8,7 @@ import { useRememberedFlag } from '@/hooks/useRememberedFlag'
 import { deleteCategoryDescription, orderCategories } from '@/lib/categories'
 import { activeIdFrom } from '@/lib/sidebarSections'
 import { cn } from '@/lib/utils'
+import type { ManageSourcesState } from './CategoryDetail'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { SidebarSectionHeading } from './SidebarSectionHeading'
@@ -52,11 +53,12 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
           <DropdownMenuItem
             onSelect={() => {
               onNavigate()
-              navigate(`/categories/${encodeURIComponent(category.id)}`)
+              const state: ManageSourcesState = { manageSources: true }
+              navigate(`/categories/${encodeURIComponent(category.id)}`, { state })
             }}
           >
             <Settings2 />
-            Manage
+            Manage sources
           </DropdownMenuItem>
         }
         onDeleteRequest={onDeleteRequest}

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Route, Routes as RouterRoutes } from 'react-router-dom'
+import { CategoryDetail } from './CategoryDetail'
 import { Sidebar } from './Sidebar'
 import {
   aCategory,
@@ -8,15 +10,20 @@ import {
   aChannel,
   mockApi,
   renderWithProviders,
-  type Routes,
+  type Routes as ApiRoutes,
 } from '@/test/helpers'
 import { RouteProbe } from '@/test/RouteProbe'
 
-/** Renders the sidebar beside a probe of the current route. */
-function renderSidebar(routes: Routes, { route = '/' } = {}) {
+/** Renders the sidebar beside a probe of the current route and, optionally, the category view. */
+function renderSidebar(routes: ApiRoutes, { route = '/', withCategoryView = false } = {}) {
   mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
   return renderWithProviders(
     <>
+      {withCategoryView && (
+        <RouterRoutes>
+          <Route path="/categories/:id" element={<CategoryDetail />} />
+        </RouterRoutes>
+      )}
       <Sidebar
         open
         onClose={() => {}}
@@ -106,7 +113,7 @@ describe('SidebarCategories', () => {
     expect(screen.queryByRole('button', { name: 'Add category' })).not.toBeInTheDocument()
   })
 
-  it('manages and deletes from the row menu, with the member-count confirmation', async () => {
+  it('manages sources and deletes from the row menu, with the member-count confirmation', async () => {
     let categories = [
       aCategory({
         id: 'chess',
@@ -124,8 +131,10 @@ describe('SidebarCategories', () => {
       {
         'GET /api/categories': () => aCategoryList(categories),
         'DELETE /api/categories/chess': remove,
+        'GET /api/categories/chess/videos': [],
+        'GET /api/categories/science/videos': [],
       },
-      { route: '/categories/chess' },
+      { route: '/categories/chess', withCategoryView: true },
     )
     const user = userEvent.setup()
 
@@ -138,17 +147,18 @@ describe('SidebarCategories', () => {
     await waitFor(() => expect(screen.queryByText('Chess')).not.toBeInTheDocument())
     const routeAfterDelete = screen.getByRole('status', { name: 'Current route' }).textContent
     await user.click(screen.getByRole('button', { name: 'Actions for Science' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Manage' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Manage sources' }))
 
-    expect(items).toEqual(['Manage', 'Delete'])
+    expect(items).toEqual(['Manage sources', 'Delete'])
     expect(description).toBe(
       '"Chess" holds 4 channels and playlists. None of them, nor any video, will be deleted.',
     )
     expect(remove).toHaveBeenCalledOnce()
     expect(routeAfterDelete).toBe('/')
-    expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(
-      '/categories/science',
-    )
+    expect(await screen.findByRole('dialog', { name: 'Manage sources in Science' })).toBeVisible()
+    expect(
+      screen.getByRole('status', { name: 'Current route', hidden: true }),
+    ).toHaveTextContent('/categories/science')
   })
 
   it('is not filtered by the sidebar search', async () => {
