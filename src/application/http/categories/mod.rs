@@ -432,6 +432,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_count_once_a_video_of_a_hidden_playlist_also_in_a_counted_member() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        channel_repository.insert(&channel("@chess")).unwrap();
+        playlist_repository
+            .insert(&playlist("PLmusic").with_hide_unwatched_count(true))
+            .unwrap();
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@chess",
+            &downloaded_video("shared"),
+        );
+        save_playlist_video(
+            &video_repository,
+            &SqlitePlaylistVideoRepository::new(db.database()),
+            "PLmusic",
+            &downloaded_video("shared"),
+        );
+        let chess = Category {
+            members: vec![channel_member("@chess"), playlist_member("PLmusic")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_view_searcher = CategoryViewSearcher::new(
+            repository,
+            channel_repository,
+            playlist_repository,
+            category_video_collector(&db),
+        );
+
+        let response = list(category_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(CategoryListResponse {
+                categories: vec![list_item(&chess, 1, &["@chess"], &["PLmusic"])],
+                unwatched_total: 1,
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_skip_members_already_deleted() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
