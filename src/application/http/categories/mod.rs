@@ -75,21 +75,30 @@ mod tests {
     use super::*;
     use crate::domain::category::{Category, CategoryId, CategoryMember};
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
+    use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
+    use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::video::{Video, VideoId};
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
     };
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
-    use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, SqliteChannelVideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_playlist_repository::{
         PlaylistRepository, SqlitePlaylistRepository,
     };
-    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
-    use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+        PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        SqliteVideoRepository, VideoRepository,
+    };
     use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
@@ -203,6 +212,68 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_count_distinct_unwatched_videos_per_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        channel_repository.insert(&channel("@chess")).unwrap();
+        playlist_repository.insert(&playlist("PLchess")).unwrap();
+        [
+            downloaded_video("shared"),
+            downloaded_video("channel-only"),
+            pending_video("pending"),
+        ]
+        .iter()
+        .for_each(|video| {
+            save_channel_video(
+                &video_repository,
+                &channel_video_repository,
+                "@chess",
+                video,
+            )
+        });
+        [
+            downloaded_video("shared"),
+            downloaded_video("playlist-only"),
+            downloaded_video("watched").mark_watched(fixed_timestamp()),
+        ]
+        .iter()
+        .for_each(|video| {
+            save_playlist_video(
+                &video_repository,
+                &playlist_video_repository,
+                "PLchess",
+                video,
+            )
+        });
+        let chess = Category {
+            members: vec![channel_member("@chess"), playlist_member("PLchess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_view_searcher = CategoryViewSearcher::new(
+            repository,
+            channel_repository,
+            playlist_repository,
+            category_video_collector(&db),
+        );
+
+        let response = list(category_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(CategoryListResponse {
+                categories: vec![list_item(&chess, 3, &["@chess"], &["PLchess"])],
+                unwatched_total: 3,
+            })
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
@@ -257,6 +328,58 @@ mod tests {
             channels: channels.iter().map(|c| c.to_string()).collect(),
             playlists: playlists.iter().map(|p| p.to_string()).collect(),
         }
+    }
+
+    fn downloaded_video(youtube_id: &str) -> Video {
+        pending_video(youtube_id).mark_downloaded(
+            Quality::High,
+            format!("{youtube_id}.mp4"),
+            None,
+            None,
+            fixed_timestamp(),
+        )
+    }
+
+    fn pending_video(youtube_id: &str) -> Video {
+        Video::create(
+            VideoId::new(youtube_id).unwrap(),
+            format!("Video {youtube_id}"),
+            fixed_timestamp(),
+        )
+    }
+
+    fn save_channel_video(
+        video_repository: &dyn VideoRepository,
+        channel_video_repository: &dyn ChannelVideoRepository,
+        handle: &str,
+        video: &Video,
+    ) {
+        video_repository.save(video).unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                ChannelHandle::new(handle).unwrap(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+    }
+
+    fn save_playlist_video(
+        video_repository: &dyn VideoRepository,
+        playlist_video_repository: &dyn PlaylistVideoRepository,
+        playlist_id: &str,
+        video: &Video,
+    ) {
+        video_repository.save(video).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                PlaylistId::new(playlist_id).unwrap(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
     }
 
     fn channel_member(handle: &str) -> CategoryMember {
