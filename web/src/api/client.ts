@@ -1,10 +1,14 @@
 import type {
   Announcement,
   AppVersion,
+  CategoryList,
+  CategoryMembers,
+  CreatedCategory,
   ChannelListItem,
   ChannelPreview,
   CreatedChannel,
   DirectoryListing,
+  HomeVideo,
   HomeVideos,
   PlaylistListItem,
   PlaylistPreview,
@@ -16,7 +20,7 @@ import type {
 import { parseAnnouncements } from '@/lib/announcements'
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown
   /** Names the request in the fallback error message; defaults to the path. */
   label?: string
@@ -237,6 +241,49 @@ export function recordVideoProgress(
 export function beaconVideoProgress(youtubeId: string, progress: VideoProgress): void {
   const body = new Blob([JSON.stringify(progress)], { type: 'application/json' })
   navigator.sendBeacon(`/api/videos/${encodeURIComponent(youtubeId)}/progress`, body)
+}
+
+export function listCategories(): Promise<CategoryList> {
+  return request('/categories')
+}
+
+export function createCategory(name: string): Promise<CreatedCategory> {
+  return request('/categories', { method: 'POST', body: { name }, label: '/categories' })
+}
+
+export async function renameCategory(id: string, name: string): Promise<void> {
+  await send(`/categories/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: { name },
+    label: `rename category ${id}`,
+  })
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  await send(`/categories/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    label: `delete category ${id}`,
+  })
+}
+
+/** Replaces the category's members with exactly `members`. */
+export async function setCategoryMembers(id: string, members: CategoryMembers): Promise<void> {
+  await send(`/categories/${encodeURIComponent(id)}/members`, {
+    method: 'PUT',
+    body: members,
+    label: `set members of category ${id}`,
+  })
+}
+
+export function listCategoryVideos(id: string): Promise<HomeVideo[]> {
+  return request(`/categories/${encodeURIComponent(id)}/videos`)
+}
+
+export async function markCategoryWatched(id: string): Promise<void> {
+  await send(`/categories/${encodeURIComponent(id)}/watched`, {
+    method: 'POST',
+    label: `mark category ${id} watched`,
+  })
 }
 
 /** Published on the public repository's `main`, so it can be edited without a release. */

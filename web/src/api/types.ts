@@ -171,3 +171,33 @@ export interface AppVersion {
   /** Null for local builds. */
   commit: BuildCommit | null
 }
+
+/** An entry of `GET /api/categories`. Members are channel handles and playlist IDs. */
+export interface Category {
+  id: string
+  name: string
+  unwatched_count: number
+  channels: string[]
+  playlists: string[]
+}
+
+/** Response of `GET /api/categories`. */
+export interface CategoryList {
+  categories: Category[]
+  /** Distinct unwatched videos across every category. */
+  unwatched_total: number
+}
+
+/** Body of `PUT /api/categories/:id/members`: the category's members, exactly. */
+export interface CategoryMembers {
+  channels: string[]
+  playlists: string[]
+}
+
+/** Response of `POST /api/categories`. */
+export interface CreatedCategory {
+  id: string
+  name: string
+  channels: string[]
+  playlists: string[]
+}

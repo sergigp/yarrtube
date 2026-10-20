@@ -9,6 +9,8 @@ import {
   fetchTasks,
   fetchVersion,
   fetchVideos,
+  listCategories,
+  listCategoryVideos,
   markVideoWatched,
   previewChannel,
   previewPlaylist,
@@ -20,8 +22,10 @@ import {
 import type {
   Announcement,
   AppVersion,
+  CategoryList,
   ChannelListItem,
   ChannelPreview,
+  HomeVideo,
   HomeVideos,
   PlaylistListItem,
   PlaylistPreview,
@@ -37,6 +41,8 @@ const LIVE_INTERVAL_MS = 3_000
 export const queryKeys = {
   channels: ['channels'] as const,
   playlists: ['playlists'] as const,
+  categories: ['categories'] as const,
+  categoryVideos: (id: string) => ['categories', id, 'videos'] as const,
   channelVideos: (handle: string) => ['channels', handle, 'videos'] as const,
   playlistVideos: (id: string) => ['playlists', id, 'videos'] as const,
   recentVideos: ['videos', 'recent'] as const,
@@ -62,6 +68,22 @@ export function usePlaylists(): UseQueryResult<PlaylistListItem[], Error> {
     queryKey: queryKeys.playlists,
     queryFn: fetchPlaylists,
     refetchInterval: LIBRARY_INTERVAL_MS,
+  })
+}
+
+export function useCategories(): UseQueryResult<CategoryList, Error> {
+  return useQuery({
+    queryKey: queryKeys.categories,
+    queryFn: listCategories,
+    refetchInterval: LIBRARY_INTERVAL_MS,
+  })
+}
+
+export function useCategoryVideos(id: string): UseQueryResult<HomeVideo[], Error> {
+  return useQuery({
+    queryKey: queryKeys.categoryVideos(id),
+    queryFn: () => listCategoryVideos(id),
+    refetchInterval: LIVE_INTERVAL_MS,
   })
 }
 

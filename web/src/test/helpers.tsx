@@ -6,6 +6,8 @@ import { vi } from 'vitest'
 import type {
   Announcement,
   AppVersion,
+  Category,
+  CategoryList,
   ChannelListItem,
   HomeVideo,
   PlaylistListItem,
@@ -191,6 +193,29 @@ export function aVersion(overrides: Partial<AppVersion> = {}): AppVersion {
       subject: 'Fix sync',
       date: '2026-10-19T10:00:00Z',
     },
+    ...overrides,
+  }
+}
+
+export function aCategory(overrides: Partial<Category> = {}): Category {
+  uniqueId += 1
+  return {
+    id: `category-${uniqueId}`,
+    name: `Category ${uniqueId}`,
+    unwatched_count: 0,
+    channels: [],
+    playlists: [],
+    ...overrides,
+  }
+}
+
+export function aCategoryList(
+  categories: Category[] = [],
+  overrides: Partial<CategoryList> = {},
+): CategoryList {
+  return {
+    categories,
+    unwatched_total: 0,
     ...overrides,
   }
 }

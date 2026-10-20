@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Ellipsis, Plus, RotateCw } from 'lucide-react'
+import { Ellipsis, Plus, RotateCw } from 'lucide-react'
 import {
   queryKeys,
   useChannels,
@@ -29,6 +29,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { EditChannelDialog } from './EditChannelDialog'
 import { EditPlaylistDialog } from './EditPlaylistDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
+import { SidebarSectionHeading } from './SidebarSectionHeading'
 import { Thumbnail } from './Thumbnail'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -211,33 +212,13 @@ function SidebarSection({
 
   return (
     <div>
-      <h3 className="mb-1 font-heading text-base font-semibold tracking-tight text-foreground">
-        <button
-          type="button"
-          className={cn(
-            'flex w-full items-center gap-1 rounded-md px-2 py-1 text-left transition-colors hover:text-primary',
-            headingActive && 'bg-accent text-primary',
-          )}
-          aria-expanded={!folded}
-          aria-current={headingActive || undefined}
-          onClick={onToggleFolded}
-        >
-          {folded ? (
-            <ChevronRight className="size-4 shrink-0" />
-          ) : (
-            <ChevronDown className="size-4 shrink-0" />
-          )}
-          {title}
-          {folded && foldedTotal !== undefined && foldedTotal > 0 && (
-            <span
-              className="ml-1 text-xs font-normal text-muted-foreground"
-              aria-label={`${foldedTotal} unwatched`}
-            >
-              {foldedTotal}
-            </span>
-          )}
-        </button>
-      </h3>
+      <SidebarSectionHeading
+        title={title}
+        folded={folded}
+        onToggleFolded={onToggleFolded}
+        headingActive={headingActive}
+        foldedTotal={foldedTotal}
+      />
       {!folded && (
         <>
           {/* Closing first lets the mobile drawer get out of the dialog's way;
