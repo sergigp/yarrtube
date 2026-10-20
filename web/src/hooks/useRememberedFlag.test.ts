@@ -16,4 +16,12 @@ describe('useRememberedFlag', () => {
 
     expect(result.current[0]).toBe(true)
   })
+
+  it('restores the remembered value', () => {
+    window.localStorage.setItem('yarrtube.test.flag', 'true')
+
+    const { result } = renderHook(() => useRememberedFlag('yarrtube.test.flag', false))
+
+    expect(result.current[0]).toBe(true)
+  })
 })
