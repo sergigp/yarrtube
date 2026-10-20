@@ -1,5 +1,14 @@
 import { useState, type ReactNode } from 'react'
-import { CheckCheck, EllipsisVertical, Eye, EyeOff, SlidersHorizontal, Trash2 } from 'lucide-react'
+import {
+  Bell,
+  BellOff,
+  CheckCheck,
+  EllipsisVertical,
+  Eye,
+  EyeOff,
+  SlidersHorizontal,
+  Trash2,
+} from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,14 +57,22 @@ export function EntryActionsMenu({
   onMarkWatched,
   excludedFromHome,
   onSetExcludedFromHome,
+  unwatchedCountHidden,
+  onSetUnwatchedCountHidden,
   onEditRequest,
   onDeleteRequest,
   className,
 }: EntryActionsMenuProps) {
   const [markingWatched, setMarkingWatched] = useState(false)
   const offersHomeItem = excludedFromHome !== undefined && onSetExcludedFromHome !== undefined
+  const offersUnwatchedCountItem =
+    unwatchedCountHidden !== undefined && onSetUnwatchedCountHidden !== undefined
   const hasItemsAboveDelete =
-    Boolean(leadingItems) || Boolean(onMarkWatched) || offersHomeItem || Boolean(onEditRequest)
+    Boolean(leadingItems) ||
+    Boolean(onMarkWatched) ||
+    offersHomeItem ||
+    offersUnwatchedCountItem ||
+    Boolean(onEditRequest)
 
   return (
     // Non-modal so opening the delete confirmation from it doesn't leave the
@@ -104,6 +121,12 @@ export function EntryActionsMenu({
           >
             {excludedFromHome ? <Eye /> : <EyeOff />}
             {excludedFromHome ? 'Include in home' : 'Exclude from home'}
+          </DropdownMenuItem>
+        )}
+        {offersUnwatchedCountItem && (
+          <DropdownMenuItem onSelect={() => onSetUnwatchedCountHidden(!unwatchedCountHidden)}>
+            {unwatchedCountHidden ? <Bell /> : <BellOff />}
+            {unwatchedCountHidden ? 'Show unwatched count' : 'Hide unwatched count'}
           </DropdownMenuItem>
         )}
         {onEditRequest && (

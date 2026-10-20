@@ -32,7 +32,7 @@
 - [x] 2.12 Vitest `Sidebar.test.tsx`, `shows a playlist's unwatched badge unless hidden`.
 - [x] 2.13 Vitest `Sidebar.test.tsx`, `orders playlists by unwatched count`.
 - [x] 2.14 Vitest `Sidebar.test.tsx`, `marks a playlist watched from its row menu`: `POST /api/playlists/PL1/watched`, then the badge is gone after the refetch.
-- [ ] 2.15 Vitest `Sidebar.test.tsx`, `hides and shows a playlist's unwatched count from its row menu`: the PATCH body is `{hide_unwatched_count: true}`, and the menu label flips.
+- [x] 2.15 Vitest `Sidebar.test.tsx`, `hides and shows a playlist's unwatched count from its row menu`: the PATCH body is `{hide_unwatched_count: true}`, and the menu label flips.
 - [ ] 2.16 Vitest `Sidebar.test.tsx`, `alerts when hiding a playlist's count fails`: the alert text comes from `unwatchedCountSettingAction`, and the badge stays.
 - [ ] 2.17 Vitest `Sidebar.test.tsx`, `offers playlist row actions in order`: sync, "Mark all watched", home, hide count, "Edit settings", delete. This replaces the "no mark-watched" test.
 - [ ] 2.18 Vitest `PlaylistDetail.test.tsx`, `summarizes the playlist's unwatched count`: "3 videos · 2 unwatched", also when the count is hidden.

@@ -259,7 +259,14 @@ export function useSetPlaylistExcludedFromHome(): (id: string, excluded: boolean
 
 /** Sets whether a playlist's unwatched count is hidden, then refetches the library. */
 export function useSetPlaylistUnwatchedCountHidden(): (id: string, hidden: boolean) => Promise<void> {
-  return useCallback(async (_id: string, _hidden: boolean) => {}, [])
+  const invalidateLibrary = useInvalidateLibrary()
+  return useCallback(
+    async (id: string, hidden: boolean) => {
+      await updatePlaylist(id, { hide_unwatched_count: hidden })
+      await invalidateLibrary()
+    },
+    [invalidateLibrary],
+  )
 }
 
 /**

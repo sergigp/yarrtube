@@ -507,6 +507,42 @@ describe('Sidebar', () => {
     expect(await screen.findByRole('menuitem', { name: 'Exclude from home' })).toBeInTheDocument()
   })
 
+  it("hides and shows a playlist's unwatched count from its row menu", async () => {
+    let playlist = aPlaylist({ id: 'PL1', name: 'Music', unwatched_count: 3 })
+    const update = vi.fn(() => {
+      playlist = { ...playlist, hide_unwatched_count: !playlist.hide_unwatched_count }
+      return playlist
+    })
+    const fetchMock = mockApi({
+      'GET /api/channels': [],
+      'GET /api/playlists': () => [playlist],
+      'GET /api/categories': aCategoryList(),
+      'PATCH /api/playlists/PL1': update,
+    })
+    renderWithProviders(
+      <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}}
+      onAddCategory={() => {}}
+    />,
+    )
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Music' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Hide unwatched count' }))
+
+    expect(update).toHaveBeenCalledOnce()
+    const patchCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PATCH',
+    ) as [string, RequestInit]
+    expect(JSON.parse(patchCall[1].body as string)).toEqual({ hide_unwatched_count: true })
+    await waitFor(() => expect(screen.queryByTitle('3 unwatched')).not.toBeInTheDocument())
+    await user.click(await screen.findByRole('button', { name: 'Actions for Music' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Show unwatched count' }))
+
+    expect(await screen.findByTitle('3 unwatched')).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Music' }))
+    expect(await screen.findByRole('menuitem', { name: 'Hide unwatched count' })).toBeInTheDocument()
+  })
+
   it('a channel row menu offers no home item', async () => {
     renderSidebar({
       'GET /api/channels': [aChannel({ name: 'Chan A' })],
