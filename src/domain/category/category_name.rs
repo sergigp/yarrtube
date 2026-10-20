@@ -54,4 +54,24 @@ mod tests {
             Ok(CategoryName("Chess".to_string()))
         );
     }
+
+    #[test]
+    fn it_should_reject_an_empty_name() {
+        assert_eq!(
+            CategoryName::new(""),
+            Err(error("Category name must not be empty"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_blank_name() {
+        assert_eq!(
+            CategoryName::new("   "),
+            Err(error("Category name must not be empty"))
+        );
+    }
+
+    fn error(message: &str) -> ValidationError {
+        ValidationError(message.to_string())
+    }
 }
