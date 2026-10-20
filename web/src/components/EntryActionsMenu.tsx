@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { errorMessage } from '@/lib/errorMessage'
 import { homeSettingAction } from '@/lib/homeSetting'
+import { unwatchedCountSettingAction } from '@/lib/unwatchedCountSetting'
 import { cn } from '@/lib/utils'
 
 interface EntryActionsMenuProps {
@@ -47,7 +48,7 @@ interface EntryActionsMenuProps {
 /**
  * A "⋮" menu of actions on one channel or playlist, shared by its sidebar row
  * and its page header. It alerts when marking watched or changing the home
- * setting fails, leaving the entry as it was.
+ * or unwatched count setting fails, leaving the entry as it was.
  */
 export function EntryActionsMenu({
   name,
@@ -124,7 +125,17 @@ export function EntryActionsMenu({
           </DropdownMenuItem>
         )}
         {offersUnwatchedCountItem && (
-          <DropdownMenuItem onSelect={() => onSetUnwatchedCountHidden(!unwatchedCountHidden)}>
+          <DropdownMenuItem
+            onSelect={async () => {
+              try {
+                await onSetUnwatchedCountHidden(!unwatchedCountHidden)
+              } catch (err) {
+                window.alert(
+                  `Failed to ${unwatchedCountSettingAction(!unwatchedCountHidden, name)}: ${errorMessage(err)}`,
+                )
+              }
+            }}
+          >
             {unwatchedCountHidden ? <Bell /> : <BellOff />}
             {unwatchedCountHidden ? 'Show unwatched count' : 'Hide unwatched count'}
           </DropdownMenuItem>

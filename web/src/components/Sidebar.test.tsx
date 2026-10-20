@@ -656,6 +656,26 @@ describe('Sidebar', () => {
     expect(await screen.findByRole('menuitem', { name: 'Exclude from home' })).toBeInTheDocument()
   })
 
+  it("alerts when hiding a playlist's count fails", async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'Music', unwatched_count: 3 })],
+      'PATCH /api/playlists/PL1': { status: 500, error: 'database is locked' },
+    })
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Music' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Hide unwatched count' }))
+
+    await waitFor(() =>
+      expect(alert).toHaveBeenCalledWith(
+        'Failed to hide the unwatched count of "Music": database is locked',
+      ),
+    )
+    expect(screen.getByTitle('3 unwatched')).toBeInTheDocument()
+  })
+
   it('closes when Escape is pressed while open', async () => {
     mockApi({
       'GET /api/channels': [],
