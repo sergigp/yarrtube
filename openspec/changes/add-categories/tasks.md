@@ -35,7 +35,7 @@ Backend acceptance tests:
 - [x] 2.24 `it_should_list_videos_for_a_category` — across members, newest sync first, with source
 - [x] 2.25 `it_should_list_a_shared_video_once_from_the_channel`
 - [x] 2.26 `it_should_list_only_downloaded_videos_for_a_category`
-- [ ] 2.27 `it_should_list_videos_of_a_playlist_excluded_from_home_for_a_category`
+- [x] 2.27 `it_should_list_videos_of_a_playlist_excluded_from_home_for_a_category`
 - [ ] 2.28 `it_should_list_no_videos_for_a_category_without_members`
 - [ ] 2.29 `it_should_fail_to_list_videos_for_a_missing_category`
 - [ ] 2.30 `it_should_remove_the_channel_from_every_category` (channel-deleted subscriber)
