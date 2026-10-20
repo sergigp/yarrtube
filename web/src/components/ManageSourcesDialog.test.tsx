@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { Category } from '@/api/types'
 import { ManageSourcesDialog } from './ManageSourcesDialog'
 import {
@@ -59,5 +60,43 @@ describe('ManageSourcesDialog', () => {
         hidden: true,
       }),
     ).toHaveAttribute('src', '/avatars/hikaru.jpg')
+  })
+
+  it('stages toggles, summarises them and saves the full set at once', async () => {
+    const save = vi.fn(() => null)
+    const { fetchMock, onOpenChange } = renderDialog(chess, {
+      ...library,
+      'PUT /api/categories/chess/members': save,
+      'GET /api/categories': { categories: [chess], unwatched_total: 0 },
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'GothamChess' }))
+    await user.click(screen.getByRole('button', { name: 'Endgame course' }))
+    await user.click(screen.getByRole('button', { name: 'Hikaru' }))
+    const staged = {
+      channels: await chipsOf('Channels'),
+      playlists: await chipsOf('Playlists'),
+      summary: screen.getByText(/added/).textContent,
+      savedYet: save.mock.calls.length,
+    }
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(staged).toEqual({
+      channels: [
+        ['GothamChess', true],
+        ['Hikaru', false],
+      ],
+      playlists: [['Endgame course', true]],
+      summary: '+2 added, −1 removed',
+      savedYet: 0,
+    })
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    const puts = fetchMock.mock.calls.filter(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PUT',
+    )
+    expect(puts.map(([, init]) => JSON.parse((init as RequestInit).body as string))).toEqual([
+      { channels: ['@gotham'], playlists: ['PLend'] },
+    ])
   })
 })
