@@ -19,8 +19,8 @@ None: no adapter changes.
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass.
-- [ ] 4.2 `scripts/run-smoke-tests.sh` passes.
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass.
+- [x] 4.2 `scripts/run-smoke-tests.sh` passes.
 
 ## Workflow follow-up
 
