@@ -244,6 +244,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_create_a_playlist_showing_its_unwatched_count() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let playlist_creator = PlaylistCreator::new(
+            playlist_repository.clone(),
+            Arc::new(FakeYoutubePlaylistRepository {
+                resolved: Some(resolved_playlist()),
+            }),
+            event_publisher(&db),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let response = create(playlist_creator, create_request("PL1")).await;
+
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                PlaylistResponse {
+                    hide_unwatched_count: false,
+                    ..playlist_response("PL1", DEFAULT_PATH)
+                }
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![Playlist {
+                hide_unwatched_count: false,
+                ..playlist("PL1", DEFAULT_PATH)
+            }]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_create_a_playlist_with_the_default_interval() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
