@@ -71,7 +71,7 @@ Web (Vitest):
 - [x] 2.54 `CategoriesView` › deletes the selected category after confirmation
 - [x] 2.55 `CategoriesView` › shows list or details on a narrow viewport
 - [x] 2.56 `CategoryDetail` › shows the members and video cards newest first
-- [ ] 2.57 `CategoryDetail` › marks all watched
+- [x] 2.57 `CategoryDetail` › marks all watched
 - [ ] 2.58 `CategoryDetail` › explains an empty category and an unknown one
 - [ ] 2.59 `CategoryPicker` › picks, removes and creates categories
 - [ ] 2.60 `AddChannelDialog` › adds a channel into the chosen categories, and reports categories that failed to save

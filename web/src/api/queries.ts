@@ -11,6 +11,7 @@ import {
   fetchVideos,
   listCategories,
   listCategoryVideos,
+  markCategoryWatched,
   markVideoWatched,
   previewChannel,
   previewPlaylist,
@@ -220,6 +221,21 @@ export function useMarkVideoWatched(): (youtubeId: string) => Promise<void> {
   return useCallback(
     async (youtubeId: string) => {
       await markVideoWatched(youtubeId)
+      await invalidateLibraryAndHome()
+    },
+    [invalidateLibraryAndHome],
+  )
+}
+
+/**
+ * Returns a function that marks every downloaded video of a category watched,
+ * then refetches the library (category videos included) and the home videos.
+ */
+export function useMarkCategoryWatched(): (id: string) => Promise<void> {
+  const invalidateLibraryAndHome = useInvalidateLibraryAndHome()
+  return useCallback(
+    async (id: string) => {
+      await markCategoryWatched(id)
       await invalidateLibraryAndHome()
     },
     [invalidateLibraryAndHome],

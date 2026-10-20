@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { CategoryDetail } from './CategoryDetail'
 import {
@@ -53,5 +54,35 @@ describe('CategoryDetail', () => {
       'Newest',
       'Older',
     ])
+  })
+
+  it('marks all watched', async () => {
+    let watched = false
+    let category = aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 2 })
+    const markWatched = vi.fn(() => {
+      watched = true
+      category = { ...category, unwatched_count: 0 }
+      return null
+    })
+    const { fetchMock } = renderCategory({
+      'GET /api/categories': () => aCategoryList([category]),
+      'GET /api/channels': [aChannel({ id: '@hikaru', name: 'Hikaru' })],
+      'GET /api/categories/chess/videos': () => [
+        aHomeVideo({ id: 'v1', watched }),
+        aHomeVideo({ id: 'v2', watched }),
+      ],
+      'POST /api/categories/chess/watched': markWatched,
+    })
+
+    await screen.findAllByRole('listitem')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Mark all watched' }))
+
+    expect(await screen.findAllByRole('img', { name: 'Watched' })).toHaveLength(2)
+    expect(markWatched).toHaveBeenCalledOnce()
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter(([url]) => url === '/api/categories').length,
+      ).toBeGreaterThan(1),
+    )
   })
 })
