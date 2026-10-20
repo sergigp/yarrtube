@@ -15,9 +15,9 @@ const REPORT_INTERVAL_MS = 15000
  * than a ref object, so it re-attaches whenever the element mounts later
  * than the video is selected (e.g. while the view is still loading).
  * When a non-beacon report comes back with a watched state different from
- * the last known one, it refetches the channel list, so unwatched badges
- * follow a video crossing the watched threshold without refetching on every
- * report.
+ * the last known one, it refetches the channel and category lists, so
+ * unwatched badges follow a video crossing the watched threshold without
+ * refetching on every report.
  * Playback is tracked in sessions: one begins when a video attaches, and
  * every report states whether the video was watched then. A report that
  * changes the watched state (playback crossing the watched threshold, or a
@@ -87,6 +87,7 @@ export function useWatchProgress(videoElement: HTMLVideoElement | null, video: V
             session.watched = nowWatched
             session.lastWatched = nowWatched
             queryClient.invalidateQueries({ queryKey: queryKeys.channels, exact: true })
+            queryClient.invalidateQueries({ queryKey: queryKeys.categories, exact: true })
           }
         })
         .catch(() => {})

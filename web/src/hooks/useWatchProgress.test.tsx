@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useWatchProgress } from './useWatchProgress'
-import { aVideo, mockApi } from '@/test/helpers'
+import { useCategories } from '@/api/queries'
+import { aCategoryList, aVideo, mockApi } from '@/test/helpers'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -329,5 +330,31 @@ describe('useWatchProgress', () => {
     element.dispatchEvent(new Event('pause'))
 
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refetches categories when a report flips the watched state', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const fetchMock = mockApi({
+      'GET /api/categories': aCategoryList(),
+      'POST /api/videos/abc/progress': { watched: true },
+    })
+    const element = fakeVideoElement({ currentTime: 95, duration: 100, paused: false })
+    const video = aVideo({ id: 'abc', watched: false })
+    renderHook(
+      () => {
+        useCategories()
+        useWatchProgress(element, video)
+      },
+      { wrapper: Wrapper },
+    )
+    await settle()
+    const categoryFetches = () =>
+      fetchMock.mock.calls.filter(([url]) => url === '/api/categories').length
+    const before = categoryFetches()
+
+    playUntilNextReport(element)
+    await settle()
+
+    await waitFor(() => expect([before, categoryFetches()]).toEqual([1, 2]))
   })
 })
