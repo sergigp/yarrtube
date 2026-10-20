@@ -1,4 +1,5 @@
 pub mod blocking;
+pub mod categories;
 pub mod channels;
 pub mod directories;
 pub mod error;
@@ -9,10 +10,11 @@ pub mod version;
 pub mod videos;
 
 use crate::domain::services::{
-    ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler,
-    ChannelViewSearcher, DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer,
-    PlaylistSearcher, PlaylistUpdater, PlaylistVideoReconciler, SubtitleReader, TaskViewSearcher,
-    VideoSearcher, VideoWatchStateUpdater,
+    CategoryCreator, CategoryDeleter, CategoryUpdater, CategoryViewSearcher, ChannelCreator,
+    ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler, ChannelViewSearcher,
+    DirectorySearcher, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher,
+    PlaylistUpdater, PlaylistVideoReconciler, SubtitleReader, TaskViewSearcher, VideoSearcher,
+    VideoWatchStateUpdater,
 };
 use crate::infrastructure::shared::app_version::AppVersion;
 use axum::Router;
@@ -50,6 +52,10 @@ pub struct ApiServices {
     pub directory_searcher: DirectorySearcher,
     pub video_watch_state_updater: VideoWatchStateUpdater,
     pub subtitle_reader: SubtitleReader,
+    pub category_creator: CategoryCreator,
+    pub category_updater: CategoryUpdater,
+    pub category_deleter: CategoryDeleter,
+    pub category_view_searcher: CategoryViewSearcher,
     pub videos_root: VideosRoot,
     pub running_version: RunningVersion,
 }
@@ -107,6 +113,26 @@ pub fn api_router(api_services: ApiServices) -> Router {
         .route(
             "/channels/{handle}/watched",
             post(channels::mark_channel_watched),
+        )
+        .route(
+            "/categories",
+            post(categories::create_category).get(categories::list_categories),
+        )
+        .route(
+            "/categories/{id}",
+            axum::routing::delete(categories::delete_category).patch(categories::update_category),
+        )
+        .route(
+            "/categories/{id}/members",
+            axum::routing::put(categories::set_category_members),
+        )
+        .route(
+            "/categories/{id}/videos",
+            get(videos::list_videos_for_category),
+        )
+        .route(
+            "/categories/{id}/watched",
+            post(categories::mark_category_watched),
         )
         .with_state(api_services)
 }

@@ -1,3 +1,4 @@
+pub mod category;
 pub mod channel;
 pub mod channel_video;
 pub mod directory;

@@ -1,9 +1,12 @@
+use crate::domain::category::CategoryId;
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
+use crate::domain::services::CategoryVideoCollector;
 use crate::domain::video::{
     HomeLimits, HomeVideoView, HomeVideos, ListVideosError, SourcedVideo, Video, VideoId,
     VideoSource, VideoStatus, VideoView,
 };
+use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -15,7 +18,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashSet;
 use std::sync::Arc;
 
-/// Reads videos, listed by playlist or by channel.
+/// Reads videos, listed by playlist, by channel, by category or for home.
 #[derive(Clone)]
 pub struct VideoSearcher {
     playlist_repository: Arc<dyn PlaylistRepository>,
@@ -25,6 +28,8 @@ pub struct VideoSearcher {
     video_repository: Arc<dyn VideoRepository>,
     video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     clock: Arc<dyn Clock>,
+    category_repository: Arc<dyn CategoryRepository>,
+    category_video_collector: CategoryVideoCollector,
 }
 
 impl VideoSearcher {
@@ -36,6 +41,8 @@ impl VideoSearcher {
         video_repository: Arc<dyn VideoRepository>,
         video_metadata_repository: Arc<dyn VideoMetadataRepository>,
         clock: Arc<dyn Clock>,
+        category_repository: Arc<dyn CategoryRepository>,
+        category_video_collector: CategoryVideoCollector,
     ) -> Self {
         Self {
             playlist_repository,
@@ -45,6 +52,8 @@ impl VideoSearcher {
             video_repository,
             video_metadata_repository,
             clock,
+            category_repository,
+            category_video_collector,
         }
     }
 }
@@ -71,6 +80,10 @@ pub trait VideoSearcherApi: Send + Sync {
     /// then latest videos (once per source, newest sync first) without the
     /// videos shown in either. Only shown videos are left out further down.
     fn list_home(&self, limits: HomeLimits) -> Result<HomeVideos, ListVideosError>;
+
+    /// Downloaded videos of the category's members, once per YouTube video
+    /// (channel copy preferred), newest sync first.
+    fn list_for_category(&self, id: &CategoryId) -> Result<Vec<HomeVideoView>, ListVideosError>;
 }
 
 impl VideoSearcherApi for VideoSearcher {
@@ -133,6 +146,10 @@ impl VideoSearcherApi for VideoSearcher {
             quick_watches: Self::views(quick_watches),
             latest: Self::views(latest),
         })
+    }
+
+    fn list_for_category(&self, _id: &CategoryId) -> Result<Vec<HomeVideoView>, ListVideosError> {
+        Ok(Vec::new())
     }
 }
 

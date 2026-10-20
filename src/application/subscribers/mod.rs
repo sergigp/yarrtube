@@ -9,6 +9,8 @@ pub mod fetch_thumbnail_on_video_added_to_channel;
 pub mod fetch_thumbnail_on_video_added_to_playlist;
 pub mod reconcile_on_channel_created;
 pub mod reconcile_on_playlist_created;
+pub mod remove_channel_from_categories_on_channel_deleted;
+pub mod remove_playlist_from_categories_on_playlist_deleted;
 pub mod scan_plex_folder_on_video_downloaded;
 pub mod scan_plex_folder_on_video_subtitles_fetched;
 
@@ -16,7 +18,9 @@ use crate::domain::channel::{ChannelCreated, ChannelDeleted};
 use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
 use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
-use crate::domain::services::{ChannelVideoReconciler, PlaylistVideoReconciler, PlexFolderScanner};
+use crate::domain::services::{
+    CategoryMemberRemover, ChannelVideoReconciler, PlaylistVideoReconciler, PlexFolderScanner,
+};
 use crate::domain::video::{VideoDownloaded, VideoSubtitlesFetched};
 use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -34,6 +38,8 @@ use fetch_thumbnail_on_video_added_to_channel::FetchThumbnailOnVideoAddedToChann
 use fetch_thumbnail_on_video_added_to_playlist::FetchThumbnailOnVideoAddedToPlaylist;
 use reconcile_on_channel_created::ReconcileOnChannelCreated;
 use reconcile_on_playlist_created::ReconcileOnPlaylistCreated;
+use remove_channel_from_categories_on_channel_deleted::RemoveChannelFromCategoriesOnChannelDeleted;
+use remove_playlist_from_categories_on_playlist_deleted::RemovePlaylistFromCategoriesOnPlaylistDeleted;
 use scan_plex_folder_on_video_downloaded::ScanPlexFolderOnVideoDownloaded;
 use scan_plex_folder_on_video_subtitles_fetched::ScanPlexFolderOnVideoSubtitlesFetched;
 use std::collections::HashMap;
@@ -51,6 +57,7 @@ pub fn registry(
     clock: Arc<dyn Clock>,
     videos_path: impl Into<String>,
     plex_folder_scanner: Option<PlexFolderScanner>,
+    category_member_remover: CategoryMemberRemover,
 ) -> SubscriberRegistry {
     let videos_path = videos_path.into();
     let mut registry: SubscriberRegistry = HashMap::new();
@@ -120,17 +127,27 @@ pub fn registry(
     );
     registry.insert(
         PlaylistDeleted::EVENT_TYPE.to_string(),
-        vec![Arc::new(DeletePlaylistFilesOnPlaylistDeleted::new(
-            task_repository.clone(),
-            clock.clone(),
-        ))],
+        vec![
+            Arc::new(DeletePlaylistFilesOnPlaylistDeleted::new(
+                task_repository.clone(),
+                clock.clone(),
+            )),
+            Arc::new(RemovePlaylistFromCategoriesOnPlaylistDeleted::new(
+                category_member_remover.clone(),
+            )),
+        ],
     );
     registry.insert(
         ChannelDeleted::EVENT_TYPE.to_string(),
-        vec![Arc::new(DeleteChannelFilesOnChannelDeleted::new(
-            task_repository.clone(),
-            clock.clone(),
-        ))],
+        vec![
+            Arc::new(DeleteChannelFilesOnChannelDeleted::new(
+                task_repository.clone(),
+                clock.clone(),
+            )),
+            Arc::new(RemoveChannelFromCategoriesOnChannelDeleted::new(
+                category_member_remover,
+            )),
+        ],
     );
     registry.insert(
         VideoDownloaded::EVENT_TYPE.to_string(),

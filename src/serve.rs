@@ -1,12 +1,14 @@
 use crate::application::http::{self, ApiServices, RunningVersion, VideosRoot};
 use crate::application::{subscribers, tasks};
 use crate::domain::services::{
-    ChannelAvatarRestorer, ChannelCreator, ChannelDeleter, ChannelPreviewer, ChannelUpdater,
-    ChannelVideoReconciler, ChannelViewSearcher, DirectorySearcher, InternalVideoReconciler,
-    LayoutMigrator, MetadataGenerator, PlaylistCreator, PlaylistDeleter, PlaylistPreviewer,
-    PlaylistSearcher, PlaylistUpdater, PlaylistVideoReconciler, PlexFolderScanner, ShowFileWriter,
-    SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoDownloader,
-    VideoFileDeleter, VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
+    CategoryCreator, CategoryDeleter, CategoryMemberRemover, CategoryUpdater,
+    CategoryVideoCollector, CategoryViewSearcher, ChannelAvatarRestorer, ChannelCreator,
+    ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler, ChannelViewSearcher,
+    DirectorySearcher, InternalVideoReconciler, LayoutMigrator, MetadataGenerator, PlaylistCreator,
+    PlaylistDeleter, PlaylistPreviewer, PlaylistSearcher, PlaylistUpdater, PlaylistVideoReconciler,
+    PlexFolderScanner, ShowFileWriter, SubtitleFetcher, SubtitleReader, TaskViewSearcher,
+    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoRelocator, VideoSearcher,
+    VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -379,6 +381,8 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.video_repository.clone(),
             infrastructure.video_metadata_repository.clone(),
             infrastructure.clock.clone(),
+            infrastructure.category_repository.clone(),
+            category_video_collector(infrastructure),
         ),
         task_view_searcher: TaskViewSearcher::new(
             infrastructure.task_repository.clone(),
@@ -422,6 +426,8 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_repository.clone(),
             infrastructure.channel_video_repository.clone(),
             infrastructure.clock.clone(),
+            infrastructure.category_repository.clone(),
+            category_video_collector(infrastructure),
         ),
         subtitle_reader: SubtitleReader::new(
             infrastructure.playlist_repository.clone(),
@@ -434,7 +440,33 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         ),
         videos_root: VideosRoot(videos_path()),
         running_version: RunningVersion(AppVersion::current()),
+        category_creator: CategoryCreator::new(
+            infrastructure.category_repository.clone(),
+            infrastructure.clock.clone(),
+        ),
+        category_updater: CategoryUpdater::new(
+            infrastructure.category_repository.clone(),
+            infrastructure.channel_repository.clone(),
+            infrastructure.playlist_repository.clone(),
+        ),
+        category_deleter: CategoryDeleter::new(infrastructure.category_repository.clone()),
+        category_view_searcher: CategoryViewSearcher::new(
+            infrastructure.category_repository.clone(),
+            infrastructure.channel_repository.clone(),
+            infrastructure.playlist_repository.clone(),
+            category_video_collector(infrastructure),
+        ),
     }
+}
+
+fn category_video_collector(infrastructure: &InfrastructureContainer) -> CategoryVideoCollector {
+    CategoryVideoCollector::new(
+        infrastructure.channel_repository.clone(),
+        infrastructure.channel_video_repository.clone(),
+        infrastructure.playlist_repository.clone(),
+        infrastructure.playlist_video_repository.clone(),
+        infrastructure.video_repository.clone(),
+    )
 }
 
 fn event_consumer(
@@ -461,6 +493,7 @@ fn event_subscribers(
         infrastructure.clock.clone(),
         videos_path(),
         plex.map(plex_folder_scanner),
+        CategoryMemberRemover::new(infrastructure.category_repository.clone()),
     )
 }
 
@@ -962,9 +995,9 @@ mod tests {
                 .collect::<BTreeMap<_, _>>(),
             BTreeMap::from([
                 ("channel_created", 1),
-                ("channel_deleted", 1),
+                ("channel_deleted", 2),
                 ("playlist_created", 1),
-                ("playlist_deleted", 1),
+                ("playlist_deleted", 2),
                 ("video_added_to_channel", 2),
                 ("video_added_to_playlist", 2),
                 ("video_downloaded", 1),
@@ -1036,7 +1069,7 @@ mod tests {
         assert_eq!(
             ["playlist_deleted", "channel_deleted"]
                 .map(|event_type| subscribers.get(event_type).map(Vec::len)),
-            [Some(1), Some(1)]
+            [Some(2), Some(2)]
         );
     }
 

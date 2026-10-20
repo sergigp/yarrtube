@@ -11,6 +11,9 @@ use crate::infrastructure::repositories::filesystem_show_file_repository::{
 use crate::infrastructure::repositories::filesystem_video_file_repository::{
     FilesystemVideoFileRepository, VideoFileRepository,
 };
+use crate::infrastructure::repositories::sqlite_category_repository::{
+    CategoryRepository, SqliteCategoryRepository,
+};
 use crate::infrastructure::repositories::sqlite_channel_repository::{
     ChannelRepository, SqliteChannelRepository,
 };
@@ -82,6 +85,7 @@ pub struct InfrastructureContainer {
     pub clock: Arc<dyn Clock>,
     pub playlist_repository: Arc<dyn PlaylistRepository>,
     pub channel_repository: Arc<dyn ChannelRepository>,
+    pub category_repository: Arc<dyn CategoryRepository>,
     pub video_repository: Arc<dyn VideoRepository>,
     pub playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     pub channel_video_repository: Arc<dyn ChannelVideoRepository>,
@@ -118,6 +122,7 @@ impl InfrastructureContainer {
         Ok(Self {
             playlist_repository: Arc::new(SqlitePlaylistRepository::new(db.clone())),
             channel_repository: Arc::new(SqliteChannelRepository::new(db.clone())),
+            category_repository: Arc::new(SqliteCategoryRepository::new(db.clone())),
             video_repository: Arc::new(SqliteVideoRepository::new(db.clone())),
             playlist_video_repository: Arc::new(SqlitePlaylistVideoRepository::new(db.clone())),
             channel_video_repository: Arc::new(SqliteChannelVideoRepository::new(db.clone())),

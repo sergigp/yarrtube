@@ -1,7 +1,10 @@
+use crate::domain::category::CategoryId;
 use crate::domain::channel::ChannelHandle;
+use crate::domain::services::CategoryVideoCollector;
 use crate::domain::video::{
     PlaybackPosition, UpdateWatchStateError, Video, VideoDuration, VideoId,
 };
+use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -19,6 +22,8 @@ pub struct VideoWatchStateUpdater {
     channel_repository: Arc<dyn ChannelRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     clock: Arc<dyn Clock>,
+    category_repository: Arc<dyn CategoryRepository>,
+    category_video_collector: CategoryVideoCollector,
 }
 
 impl VideoWatchStateUpdater {
@@ -27,12 +32,16 @@ impl VideoWatchStateUpdater {
         channel_repository: Arc<dyn ChannelRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         clock: Arc<dyn Clock>,
+        category_repository: Arc<dyn CategoryRepository>,
+        category_video_collector: CategoryVideoCollector,
     ) -> Self {
         Self {
             video_repository,
             channel_repository,
             channel_video_repository,
             clock,
+            category_repository,
+            category_video_collector,
         }
     }
 }
@@ -55,6 +64,9 @@ pub trait VideoWatchStateUpdaterApi: Send + Sync {
     /// stored copy of each; pending/in-flight videos are left unchanged.
     fn mark_channel_watched(&self, channel_id: &ChannelHandle)
     -> Result<(), UpdateWatchStateError>;
+    /// Marks every downloaded video of the category watched, every copy of
+    /// each; pending/in-flight videos are left unchanged.
+    fn mark_category_watched(&self, id: &CategoryId) -> Result<(), UpdateWatchStateError>;
 }
 
 impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
@@ -98,6 +110,10 @@ impl VideoWatchStateUpdaterApi for VideoWatchStateUpdater {
         self.unwatched_downloaded_youtube_ids(channel_id)?
             .iter()
             .try_for_each(|youtube_id| self.mark_copies_watched(youtube_id, now))
+    }
+
+    fn mark_category_watched(&self, _id: &CategoryId) -> Result<(), UpdateWatchStateError> {
+        Ok(())
     }
 }
 

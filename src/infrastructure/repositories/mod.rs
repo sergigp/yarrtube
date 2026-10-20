@@ -5,6 +5,7 @@ pub mod filesystem_directory_repository;
 pub mod filesystem_show_file_repository;
 pub mod filesystem_video_file_repository;
 pub mod plex_library_repository;
+pub mod sqlite_category_repository;
 pub mod sqlite_channel_repository;
 pub mod sqlite_channel_video_repository;
 pub mod sqlite_playlist_repository;

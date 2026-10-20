@@ -1,3 +1,9 @@
+pub mod category_creator;
+pub mod category_deleter;
+pub mod category_member_remover;
+pub mod category_updater;
+pub mod category_video_collector;
+pub mod category_view_searcher;
 pub mod channel_avatar_restorer;
 pub mod channel_creator;
 pub mod channel_deleter;
@@ -27,6 +33,12 @@ pub mod video_relocator;
 pub mod video_searcher;
 pub mod video_watch_state_updater;
 
+pub use category_creator::{CategoryCreator, CategoryCreatorApi};
+pub use category_deleter::{CategoryDeleter, CategoryDeleterApi};
+pub use category_member_remover::{CategoryMemberRemover, CategoryMemberRemoverApi};
+pub use category_updater::{CategoryUpdater, CategoryUpdaterApi};
+pub use category_video_collector::{CategoryVideoCollector, CategoryVideoCollectorApi};
+pub use category_view_searcher::{CategoryViewSearcher, CategoryViewSearcherApi};
 pub use channel_avatar_restorer::{ChannelAvatarRestorer, ChannelAvatarRestorerApi};
 pub use channel_creator::{ChannelCreator, ChannelCreatorApi, CreateChannelOutcome};
 pub use channel_deleter::{ChannelDeleter, ChannelDeleterApi};
