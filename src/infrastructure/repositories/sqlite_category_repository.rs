@@ -229,6 +229,20 @@ mod tests {
         assert_eq!(repository.find(&chess.id).unwrap(), Some(chess));
     }
 
+    #[test]
+    fn it_should_list_categories_by_name_ignoring_case() {
+        let db = TestDatabase::new();
+        let repository = SqliteCategoryRepository::new(db.database());
+        let science = category("science", &[]);
+        let chess = category("Chess", &[]);
+        let sports = category("Sports", &[]);
+        [&science, &chess, &sports]
+            .into_iter()
+            .for_each(|category| repository.insert(category).unwrap());
+
+        assert_eq!(repository.list().unwrap(), vec![chess, science, sports]);
+    }
+
     fn category(name: &str, members: &[CategoryMember]) -> Category {
         Category::create(CategoryName::new(name).unwrap(), fixed_timestamp())
             .with_members(members.to_vec())
