@@ -18,6 +18,9 @@ export function SettingsMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto min-w-40">
         <DropdownMenuItem asChild>
+          <Link to="/categories">Categories</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
           <Link to="/tasks">Tasks</Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -78,7 +78,7 @@ Web (Vitest):
 - [x] 2.61 `AddPlaylistDialog` › adds a playlist into the chosen categories
 - [x] 2.62 `EditChannelDialog` › saves a change of categories alone
 - [x] 2.63 `EditPlaylistDialog` › saves a change of categories alone
-- [ ] 2.64 `SettingsMenu` › offers Categories
+- [x] 2.64 `SettingsMenu` › offers Categories
 - [ ] 2.65 `useWatchProgress` › refetches categories when a report flips the watched state (other badge-changing actions go through `useInvalidateLibrary`, which now includes categories)
 
 ## 3. Infrastructure adapters (TDD)
