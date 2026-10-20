@@ -159,6 +159,11 @@ function ManageSourcesContent({ category, onClose }: { category: Category; onClo
         </ToggleGroup>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto border-t border-border px-6 py-4">
+        {channels?.length === 0 && playlists?.length === 0 && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No channels or playlists to add yet. Track one from the sidebar, then come back.
+          </p>
+        )}
         <ChipGroup title="Channels" chips={shownChannels} staged={staged} onToggle={toggle} />
         <ChipGroup title="Playlists" chips={shownPlaylists} staged={staged} onToggle={toggle} />
       </div>

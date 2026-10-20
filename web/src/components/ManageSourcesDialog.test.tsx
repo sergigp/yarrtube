@@ -203,4 +203,15 @@ describe('ManageSourcesDialog', () => {
     expect(screen.getByText('+1 added')).toBeInTheDocument()
     expect(onOpenChange).not.toHaveBeenCalled()
   })
+
+  it('says when nothing is tracked', async () => {
+    renderDialog(chess, {})
+
+    expect(
+      await screen.findByText(
+        'No channels or playlists to add yet. Track one from the sidebar, then come back.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryAllByRole('toolbar')).toEqual([])
+  })
 })
