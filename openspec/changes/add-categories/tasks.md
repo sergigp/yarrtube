@@ -29,7 +29,7 @@ Backend acceptance tests:
 - [x] 2.18 `it_should_let_a_source_be_in_several_categories`
 - [x] 2.19 `it_should_fail_to_set_members_if_a_source_is_not_tracked`
 - [x] 2.20 `it_should_fail_to_set_members_if_a_handle_is_invalid`
-- [ ] 2.21 `it_should_fail_to_set_members_of_a_missing_category`
+- [x] 2.21 `it_should_fail_to_set_members_of_a_missing_category`
 - [ ] 2.22 `it_should_mark_a_category_watched` — every downloaded video of every member and its copies watched, pending ones left
 - [ ] 2.23 `it_should_fail_to_mark_a_missing_category_watched`
 - [ ] 2.24 `it_should_list_videos_for_a_category` — across members, newest sync first, with source

@@ -753,6 +753,26 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_set_members_of_a_missing_category() {
+        let db = TestDatabase::new();
+        let category_updater = CategoryUpdater::new(
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = set_members(category_updater, "missing", members_request(&[], &[])).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "category missing not found"
+            ))
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
