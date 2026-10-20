@@ -24,6 +24,7 @@ import {
   activeIdFrom,
   orderByUnwatched,
   sectionView,
+  shownUnwatchedCount,
   unwatchedTotal,
 } from '@/lib/sidebarSections'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -115,7 +116,7 @@ function SidebarRow({
   showAvatar,
   onNavigate,
 }: SidebarRowProps) {
-  const unwatchedCount = item.unwatched_count ?? 0
+  const unwatchedCount = shownUnwatchedCount(item)
   return (
     <li className={cn('flex items-center gap-1 rounded-md pr-1', active && 'bg-accent')}>
       <Link

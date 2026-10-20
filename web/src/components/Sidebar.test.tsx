@@ -38,6 +38,20 @@ describe('Sidebar', () => {
     expect(screen.getByTitle('3 unwatched')).toHaveTextContent('3')
   })
 
+  it("shows a playlist's unwatched badge unless hidden", async () => {
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [
+        aPlaylist({ name: 'Courses', unwatched_count: 2 }),
+        aPlaylist({ name: 'Music', unwatched_count: 40, hide_unwatched_count: true }),
+      ],
+    })
+
+    expect(await screen.findByText('Music')).toBeInTheDocument()
+    expect(screen.getByTitle('2 unwatched')).toHaveTextContent('2')
+    expect(screen.queryByTitle('40 unwatched')).not.toBeInTheDocument()
+  })
+
   it('orders channels by unwatched count', async () => {
     renderSidebar({
       'GET /api/channels': [

@@ -29,7 +29,7 @@
 - [x] 2.9 `it_should_fail_to_mark_watched_if_invalid_playlist_id_provided`: 400.
 - [x] 2.10 Vitest `sidebarSections.test.ts`, `orders entries by shown unwatched count`: hidden counts sort as 0, and the order is otherwise stable.
 - [x] 2.11 Vitest `sidebarSections.test.ts`, `shows no unwatched count for an entry that hides it`.
-- [ ] 2.12 Vitest `Sidebar.test.tsx`, `shows a playlist's unwatched badge unless hidden`.
+- [x] 2.12 Vitest `Sidebar.test.tsx`, `shows a playlist's unwatched badge unless hidden`.
 - [ ] 2.13 Vitest `Sidebar.test.tsx`, `orders playlists by unwatched count`.
 - [ ] 2.14 Vitest `Sidebar.test.tsx`, `marks a playlist watched from its row menu`: `POST /api/playlists/PL1/watched`, then the badge is gone after the refetch.
 - [ ] 2.15 Vitest `Sidebar.test.tsx`, `hides and shows a playlist's unwatched count from its row menu`: the PATCH body is `{hide_unwatched_count: true}`, and the menu label flips.
