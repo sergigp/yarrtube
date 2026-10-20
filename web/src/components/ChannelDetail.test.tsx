@@ -215,6 +215,23 @@ describe('ChannelDetail', () => {
     expect(await screen.findByText('home page')).toBeInTheDocument()
   })
 
+  it('a channel page header menu offers no unwatched count item', async () => {
+    renderChannel(
+      {
+        'GET /api/channels': [aChannel({ id: 'chan', name: 'The Channel', unwatched_count: 2 })],
+        'GET /api/channels/chan/videos': [],
+      },
+      '/channels/chan',
+    )
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Channel' }))
+
+    expect(
+      (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
+    ).toEqual(['Mark all watched', 'Edit settings', 'Delete'])
+  })
+
   it('marks the channel watched from its page header menu', async () => {
     const first = aVideo({ title: 'First Video' })
     const second = aVideo({ title: 'Second Video' })

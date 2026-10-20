@@ -564,7 +564,7 @@ describe('Sidebar', () => {
     expect(await screen.findByRole('menuitem', { name: 'Hide unwatched count' })).toBeInTheDocument()
   })
 
-  it('a channel row menu offers no home item', async () => {
+  it('a channel row menu offers no home or unwatched count item', async () => {
     renderSidebar({
       'GET /api/channels': [aChannel({ name: 'Chan A' })],
       'GET /api/playlists': [],
