@@ -11,7 +11,7 @@
 - [x] 2.1 `it_should_keep_the_watch_state_recorded_while_downloading`: a successful download keeps the watch state stored mid-download.
 - [x] 2.2 `it_should_keep_the_watch_state_recorded_while_a_failed_download_ran`: an errored-retrying save keeps it.
 - [x] 2.3 `it_should_keep_the_watch_state_recorded_while_downloading_an_excluded_video`: an excluded save keeps it.
-- [ ] 2.4 `it_should_keep_the_watch_state_recorded_while_downloading_if_placing_fails`: the placement-error path keeps it, plus the episode number. It may already pass, since that path re-reads the video; then keep it as a regression test.
+- [x] 2.4 `it_should_keep_the_watch_state_recorded_while_downloading_if_placing_fails`: the placement-error path keeps it, plus the episode number. It may already pass, since that path re-reads the video; then keep it as a regression test.
 
 ## 3. Infrastructure adapters (TDD)
 

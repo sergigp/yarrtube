@@ -1326,6 +1326,55 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_the_watch_state_recorded_while_downloading_if_placing_fails() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        let staged_media =
+            PathBuf::from(format!("/videos/.downloads/{}/yt1.mp4", video.id.as_str()));
+        video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let watching_repository = video_repository.clone();
+        let watched_id = video.id.clone();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(
+                FakeVideoDownloaderRepository::succeeding_with(staged_download()).with_on_download(
+                    move || record_watch_state_meanwhile(&watching_repository, &watched_id),
+                ),
+            ),
+            Arc::new(FakeVideoFileRepository::default().with_failing_move(staged_media.clone())),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), true);
+
+        assert_eq!(
+            result,
+            Err(format!("permission denied moving {staged_media:?}"))
+        );
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![with_watch_state_recorded_meanwhile(
+                video
+                    .start_download(fixed_timestamp())
+                    .mark_errored(fixed_timestamp())
+                    .with_episode_number(published_episode(), fixed_timestamp())
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_use_the_sanitized_title_as_filename() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
