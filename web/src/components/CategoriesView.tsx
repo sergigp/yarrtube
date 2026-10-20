@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { renameCategory } from '@/api/client'
-import { useCategories, useInvalidateLibrary } from '@/api/queries'
-import type { Category } from '@/api/types'
-import { memberCount } from '@/lib/categories'
+import { avatarMediaUrl, renameCategory, setCategoryMembers } from '@/api/client'
+import { useCategories, useChannels, useInvalidateLibrary, usePlaylists } from '@/api/queries'
+import type { Category, LibraryItem } from '@/api/types'
+import { memberCount, withoutMember, type SourceRef } from '@/lib/categories'
 import { errorMessage } from '@/lib/errorMessage'
+import { Thumbnail } from './Thumbnail'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
@@ -88,10 +90,95 @@ function CategoryNameField({ category }: { category: Category }) {
   )
 }
 
+interface MemberGroupProps {
+  title: string
+  items: LibraryItem[]
+  showAvatar?: boolean
+  onRemove: (item: LibraryItem) => void
+}
+
+function MemberGroup({ title, items, showAvatar, onRemove }: MemberGroupProps) {
+  const headingId = useId()
+  return (
+    <div className="flex flex-col gap-1">
+      <h3 id={headingId} className="text-sm font-medium text-muted-foreground">
+        {title}
+      </h3>
+      <ul aria-labelledby={headingId} className="flex flex-col">
+        {items.map((item) => (
+          <li key={item.id} className="flex items-center gap-2 rounded-md px-2 py-1 text-sm">
+            <span className="flex min-w-0 flex-1 items-center gap-2">
+              {showAvatar && (
+                <Thumbnail
+                  src={item.avatar_filename ? avatarMediaUrl(item.avatar_filename) : null}
+                  className="size-5 shrink-0 rounded-full object-cover"
+                />
+              )}
+              <span className="truncate">{item.name}</span>
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={`Remove ${item.name}`}
+              onClick={() => onRemove(item)}
+            >
+              Remove
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** The category's members, by kind, each removable at once. */
+function CategoryMembers({ category }: { category: Category }) {
+  const { data: channels } = useChannels()
+  const { data: playlists } = usePlaylists()
+  const invalidateLibrary = useInvalidateLibrary()
+  const headingId = useId()
+
+  const remove = async (source: SourceRef) => {
+    try {
+      await setCategoryMembers(category.id, withoutMember(category, source))
+      await invalidateLibrary()
+    } catch (err) {
+      window.alert(`Failed to remove it from "${category.name}": ${errorMessage(err)}`)
+    }
+  }
+
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-3">
+      <h2 id={headingId} className="font-heading text-base font-semibold">
+        In {category.name}
+      </h2>
+      <MemberGroup
+        title="Channels"
+        items={byName(channels?.filter((channel) => category.channels.includes(channel.id)))}
+        showAvatar
+        onRemove={(channel) => void remove({ kind: 'channel', id: channel.id })}
+      />
+      <MemberGroup
+        title="Playlists"
+        items={byName(playlists?.filter((playlist) => category.playlists.includes(playlist.id)))}
+        onRemove={(playlist) => void remove({ kind: 'playlist', id: playlist.id })}
+      />
+    </section>
+  )
+}
+
+function byName<T extends LibraryItem>(items: T[] | undefined): T[] {
+  return [...(items ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+  )
+}
+
 function CategoryEditor({ category }: { category: Category }) {
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-6">
       <CategoryNameField key={category.id} category={category} />
+      <CategoryMembers category={category} />
     </section>
   )
 }

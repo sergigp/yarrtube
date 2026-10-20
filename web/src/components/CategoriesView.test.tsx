@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CategoriesView } from './CategoriesView'
 import {
   aCategory,
   aCategoryList,
+  aChannel,
+  aPlaylist,
   mockApi,
   renderWithProviders,
   type Routes,
@@ -74,5 +76,45 @@ describe('CategoriesView', () => {
         .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH')
         .map(([, init]) => JSON.parse((init as RequestInit).body as string)),
     ).toEqual([{ name: 'Board games' }, { name: 'Science' }])
+  })
+
+  it('groups members by kind and removes one', async () => {
+    let chess = aCategory({
+      id: 'chess',
+      name: 'Chess',
+      channels: ['@hikaru', '@gotham'],
+      playlists: ['PLend'],
+    })
+    const { fetchMock } = renderView(
+      {
+        'GET /api/categories': () => aCategoryList([chess]),
+        'GET /api/channels': [
+          aChannel({ id: '@hikaru', name: 'Hikaru' }),
+          aChannel({ id: '@gotham', name: 'GothamChess' }),
+        ],
+        'GET /api/playlists': [aPlaylist({ id: 'PLend', name: 'Endgame course' })],
+        'PUT /api/categories/chess/members': () => {
+          chess = { ...chess, channels: ['@gotham'] }
+          return null
+        },
+      },
+      { route: '/categories?selected=chess' },
+    )
+    const members = await screen.findByRole('region', { name: 'In Chess' })
+    const namesOf = (kind: string) =>
+      within(within(members).getByRole('list', { name: kind }))
+        .queryAllByRole('listitem')
+        .map((item) => item.firstChild?.textContent)
+    await within(members).findByText('Hikaru')
+    const before = [namesOf('Channels'), namesOf('Playlists')]
+
+    await userEvent.setup().click(within(members).getByRole('button', { name: 'Remove Hikaru' }))
+
+    await waitFor(() => expect(within(members).queryByText('Hikaru')).not.toBeInTheDocument())
+    expect(before).toEqual([['GothamChess', 'Hikaru'], ['Endgame course']])
+    const [, init] = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'PUT',
+    ) as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({ channels: ['@gotham'], playlists: ['PLend'] })
   })
 })
