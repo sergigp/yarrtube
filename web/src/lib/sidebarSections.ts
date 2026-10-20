@@ -34,8 +34,11 @@ export interface SectionView {
 /** The rows a section shows: every match while searching, otherwise every row. */
 export function sectionView(
   items: LibraryItem[] | undefined,
-  { searchText }: SectionViewOptions,
+  { searchText, folded }: SectionViewOptions,
 ): SectionView {
+  if (folded) {
+    return { folded: true, headingActive: false, rows: [] }
+  }
   const rows = items && searchText ? items.filter((item) => matchesSearch(item, searchText)) : items
   return { folded: false, headingActive: false, rows }
 }

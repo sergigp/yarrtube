@@ -47,4 +47,12 @@ describe('sectionView', () => {
 
     expect(view).toEqual({ folded: false, headingActive: false, rows: items })
   })
+
+  it('shows nothing but the heading when folded', () => {
+    const items = [aChannel(), aChannel()]
+
+    const view = sectionView(items, { searchText: '', folded: true, activeId: null })
+
+    expect(view).toEqual({ folded: true, headingActive: false, rows: [] })
+  })
 })
