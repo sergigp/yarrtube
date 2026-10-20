@@ -24,7 +24,9 @@ impl RemoveChannelFromCategoriesOnChannelDeleted {
 impl EventSubscriber for RemoveChannelFromCategoriesOnChannelDeleted {
     fn handle(&self, payload: &str) -> anyhow::Result<()> {
         let payload: ChannelDeletedPayload = serde_json::from_str(payload)?;
-        let handle = ChannelHandle::new(payload.channel_id)?;
+        let Ok(handle) = ChannelHandle::new(payload.channel_id) else {
+            return Ok(());
+        };
 
         self.remover
             .remove_from_all(&CategoryMember::Channel(handle))
@@ -39,8 +41,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
     };
-    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use chrono::{DateTime, Utc};
+    use rusqlite::Connection;
     use std::sync::Arc;
 
     #[test]
@@ -80,6 +83,26 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn it_should_ignore_an_invalid_channel_id() {
+        let result = handle(
+            &any_subscriber(),
+            r#"{"channel_id": "", "name": "Hikaru", "path": "channels/hikaru"}"#,
+        );
+
+        assert_eq!(result, Ok(()));
+    }
+
+    /// A subscriber for tests whose payload is rejected before removing
+    /// anything. Its repository sits on an unmigrated in-memory database, so
+    /// a payload that wrongly got through would fail loudly instead of
+    /// passing.
+    fn any_subscriber() -> RemoveChannelFromCategoriesOnChannelDeleted {
+        RemoveChannelFromCategoriesOnChannelDeleted::new(CategoryMemberRemover::new(Arc::new(
+            SqliteCategoryRepository::new(Database::single(Connection::open_in_memory().unwrap())),
+        )))
     }
 
     fn category(name: &str, members: &[CategoryMember]) -> Category {
