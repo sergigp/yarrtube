@@ -1290,6 +1290,42 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_the_watch_state_recorded_while_downloading_an_excluded_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let watching_repository = video_repository.clone();
+        let watched_id = video.id.clone();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(
+                FakeVideoDownloaderRepository::new(false)
+                    .with_diagnosed_reason("This video has been removed by the uploader.")
+                    .with_on_download(move || {
+                        record_watch_state_meanwhile(&watching_repository, &watched_id)
+                    }),
+            ),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &payload_for(video.id.as_str()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![with_watch_state_recorded_meanwhile(
+                video
+                    .start_download(fixed_timestamp())
+                    .mark_excluded(fixed_timestamp())
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_use_the_sanitized_title_as_filename() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
