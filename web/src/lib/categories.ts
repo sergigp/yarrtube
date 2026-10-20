@@ -25,13 +25,20 @@ export function categoryIdsOf(categories: Category[], source: SourceRef): string
 }
 
 /** The category's members with `source` added. */
-export function withMember(_category: Category, _source: SourceRef): CategoryMembers {
-  return { channels: [], playlists: [] }
+export function withMember(category: Category, source: SourceRef): CategoryMembers {
+  return replaceMembersOfKind(category, source.kind, [
+    ...membersOfKind(category, source.kind),
+    source.id,
+  ])
 }
 
 /** The category's members with `source` removed. */
-export function withoutMember(_category: Category, _source: SourceRef): CategoryMembers {
-  return { channels: [], playlists: [] }
+export function withoutMember(category: Category, source: SourceRef): CategoryMembers {
+  return replaceMembersOfKind(
+    category,
+    source.kind,
+    membersOfKind(category, source.kind).filter((id) => id !== source.id),
+  )
 }
 
 /** The category's members with every one of `sources` added. */
@@ -41,13 +48,31 @@ export function withMembers(_category: Category, _sources: SourceRef[]): Categor
 
 /** The members PUT each category needs so `source` is in exactly `chosenIds`. */
 export function membershipChanges(
-  _categories: Category[],
-  _source: SourceRef,
-  _chosenIds: string[],
+  categories: Category[],
+  source: SourceRef,
+  chosenIds: string[],
 ): { id: string; members: CategoryMembers }[] {
-  return []
+  const memberOf = categoryIdsOf(categories, source)
+  return categories.flatMap((category) => {
+    const chosen = chosenIds.includes(category.id)
+    if (chosen === memberOf.includes(category.id)) {
+      return []
+    }
+    const members = chosen ? withMember(category, source) : withoutMember(category, source)
+    return [{ id: category.id, members }]
+  })
 }
 
 function membersOfKind(category: Category, kind: SourceRef['kind']): string[] {
   return kind === 'channel' ? category.channels : category.playlists
+}
+
+function replaceMembersOfKind(
+  category: Category,
+  kind: SourceRef['kind'],
+  ids: string[],
+): CategoryMembers {
+  return kind === 'channel'
+    ? { channels: ids, playlists: category.playlists }
+    : { channels: category.channels, playlists: ids }
 }

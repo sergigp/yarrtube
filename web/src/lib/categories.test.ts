@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categoryIdsOf, orderCategories } from './categories'
+import { categoryIdsOf, membershipChanges, orderCategories } from './categories'
 import { aCategory } from '@/test/helpers'
 
 describe('categories', () => {
@@ -38,5 +38,24 @@ describe('categories', () => {
       categoryIdsOf(categories, { kind: 'playlist', id: 'PLendgames' }),
       categoryIdsOf(categories, { kind: 'channel', id: '@Nobody' }),
     ]).toEqual([['chess', 'streams'], ['chess'], []])
+  })
+
+  it('computes membership changes: adds, removes, leaves unchanged ones out', () => {
+    const categories = [
+      aCategory({ id: 'chess', channels: ['@Hikaru'], playlists: ['PLendgames'] }),
+      aCategory({ id: 'streams', channels: ['@Ludwig', '@Hikaru'], playlists: ['PLclips'] }),
+      aCategory({ id: 'cooking', channels: ['@Babish'] }),
+      aCategory({ id: 'science' }),
+    ]
+
+    const changes = membershipChanges(categories, { kind: 'channel', id: '@Hikaru' }, [
+      'chess',
+      'cooking',
+    ])
+
+    expect(changes).toEqual([
+      { id: 'streams', members: { channels: ['@Ludwig'], playlists: ['PLclips'] } },
+      { id: 'cooking', members: { channels: ['@Babish', '@Hikaru'], playlists: [] } },
+    ])
   })
 })
