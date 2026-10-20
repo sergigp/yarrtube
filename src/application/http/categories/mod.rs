@@ -736,10 +736,35 @@ mod tests {
         assert_eq!(repository.list().unwrap(), vec![chess]);
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_set_members_if_a_handle_is_invalid() {
+        let response = set_members(
+            any_category_updater(),
+            "category-1",
+            members_request(&["Hikaru"], &[]),
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Channel handle must start with \"@\" (got \"Hikaru\")"
+            ))
+        );
+    }
+
     fn any_category_creator() -> CategoryCreator {
         CategoryCreator::new(
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
             Arc::new(FixedClock(fixed_timestamp())),
+        )
+    }
+
+    fn any_category_updater() -> CategoryUpdater {
+        CategoryUpdater::new(
+            Arc::new(SqliteCategoryRepository::new(unused_connection())),
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
         )
     }
 
