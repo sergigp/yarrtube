@@ -70,10 +70,10 @@ export function EditableTitle({ name, onRename }: EditableTitleProps) {
       setSaving(false)
     }
   }
-  
-    return (
-      <div className="flex min-w-0 flex-col gap-1">
-        <Input
+
+  return (
+    <div className="flex w-full max-w-sm min-w-0 flex-col gap-1">
+      <Input
         aria-label="Name"
         value={draft}
         autoFocus
@@ -87,10 +87,10 @@ export function EditableTitle({ name, onRename }: EditableTitleProps) {
           } else if (event.key === 'Escape') {
             event.preventDefault()
             close()
-        }
-      }}
-      className="h-auto min-w-0 px-2 py-0.5 font-heading text-lg font-semibold md:text-xl"
-    />
+          }
+        }}
+        className="h-auto min-w-0 px-2 py-0.5 font-heading text-lg font-semibold md:text-xl"
+      />
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   )

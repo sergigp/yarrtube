@@ -96,7 +96,7 @@ function ManageSourcesContent({ category, onClose }: { category: Category; onClo
       }}
       onEscapeKeyDown={guardDismiss}
       onInteractOutside={guardDismiss}
-      className="flex max-h-[calc(100dvh-2rem)] w-full flex-col gap-0 overflow-hidden p-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-full max-sm:rounded-none sm:max-w-2xl"
+      className="flex max-h-[calc(100dvh-2rem)] w-full flex-col gap-0 overflow-hidden p-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-full max-sm:rounded-none sm:h-[min(40rem,calc(100dvh-2rem))] sm:max-w-2xl"
     >
       <div className="flex items-start gap-3 px-6 pt-6 pb-4">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -142,6 +142,7 @@ function ManageSourcesContent({ category, onClose }: { category: Category; onClo
           variant="outline"
           size="sm"
           aria-label="Show"
+          className="flex-wrap"
           value={filter}
           onValueChange={(value) => {
             if (value) {
