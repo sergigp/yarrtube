@@ -74,6 +74,21 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('button', { name: 'Add channel' })).not.toBeInTheDocument()
   })
 
+  it('unfolds a folded section', async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A' })],
+      'GET /api/playlists': [],
+    })
+
+    await screen.findByText('Chan A')
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Channels' }))
+    await user.click(screen.getByRole('button', { name: 'Channels' }))
+
+    expect(screen.getByText('Chan A')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add channel' })).toBeInTheDocument()
+  })
+
   it('offers search only above the threshold and filters both sections', async () => {
     const channels = Array.from({ length: 10 }, (_, index) =>
       aChannel({ name: `Chan ${index}`, unwatched_count: 1 }),
