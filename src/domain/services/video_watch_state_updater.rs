@@ -4,7 +4,7 @@ use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
 use crate::domain::video::{
-    PlaybackPosition, UpdateWatchStateError, Video, VideoDuration, VideoId,
+    PlaybackPosition, UpdateWatchStateError, Video, VideoDuration, VideoId, VideoRecordId,
 };
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -205,14 +205,11 @@ impl VideoWatchStateUpdater {
         self.channel_video_repository
             .list_for_channel(channel_id)
             .and_then(|channel_videos| {
-                channel_videos
-                    .iter()
-                    .filter_map(|channel_video| {
-                        self.video_repository
-                            .find(&channel_video.video_id)
-                            .transpose()
-                    })
-                    .collect()
+                let ids: Vec<VideoRecordId> = channel_videos
+                    .into_iter()
+                    .map(|channel_video| channel_video.video_id)
+                    .collect();
+                self.video_repository.find_many(&ids)
             })
             .map_err(UpdateWatchStateError::Repository)
     }
@@ -224,14 +221,11 @@ impl VideoWatchStateUpdater {
         self.playlist_video_repository
             .list_for_playlist(playlist_id)
             .and_then(|playlist_videos| {
-                playlist_videos
-                    .iter()
-                    .filter_map(|playlist_video| {
-                        self.video_repository
-                            .find(&playlist_video.video_id)
-                            .transpose()
-                    })
-                    .collect()
+                let ids: Vec<VideoRecordId> = playlist_videos
+                    .into_iter()
+                    .map(|playlist_video| playlist_video.video_id)
+                    .collect();
+                self.video_repository.find_many(&ids)
             })
             .map_err(UpdateWatchStateError::Repository)
     }
