@@ -53,7 +53,7 @@ SQLite playlist video repository:
 
 Migrations:
 
-- [ ] 3.3 `it_should_default_existing_playlists_to_show_their_unwatched_count_when_migrating`: a pre-0011 playlist reads `hide_unwatched_count = 0`.
+- [x] 3.3 `it_should_default_existing_playlists_to_show_their_unwatched_count_when_migrating`: a pre-0011 playlist reads `hide_unwatched_count = 0`.
 
 ## 4. Verification
 
