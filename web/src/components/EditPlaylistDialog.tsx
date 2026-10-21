@@ -41,7 +41,14 @@ export function EditPlaylistDialog({
   }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-5 p-6 sm:max-w-md">
+      {/* Focus the first setting, not the Location line's "Move…" above it. */}
+      <DialogContent
+        className="gap-5 p-6 sm:max-w-md"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          document.getElementById('edit-playlist-interval')?.focus()
+        }}
+      >
         <DialogTitle>Edit {playlist.name} settings</DialogTitle>
         <DialogDescription className="sr-only">
           Change how often {playlist.name} is checked for new videos.

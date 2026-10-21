@@ -6,7 +6,14 @@ import { FolderBrowser } from './FolderBrowser'
  * The always-visible "Save to" single-choice list of suggested parent
  * folders, with the folder browser inline behind "Choose another folder…".
  */
-export function SaveToField({ location }: { location: SaveLocation }) {
+export function SaveToField({
+  location,
+  stagedNote,
+}: {
+  location: SaveLocation
+  /** Overrides the folder browser's note on a folder that doesn't exist yet. */
+  stagedNote?: string
+}) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <p className="text-sm leading-none font-medium">Save to</p>
@@ -16,6 +23,7 @@ export function SaveToField({ location }: { location: SaveLocation }) {
           root={location.root}
           occupied={location.occupied}
           stagedFrom={location.stagedFrom}
+          stagedNote={stagedNote}
           onNavigate={location.selectParent}
           onStage={location.stage}
           onClose={location.closeBrowser}

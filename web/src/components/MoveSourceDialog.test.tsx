@@ -97,6 +97,20 @@ describe('MoveSourceDialog', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  it('says a new folder is created by the move', async () => {
+    renderDialog({
+      'GET /api/directories?path=music': { root: '/videos', path: 'music', entries: [{ name: 'chill' }] },
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Choose another folder…' }))
+    await user.click(await screen.findByRole('button', { name: 'New folder' }))
+    await user.type(screen.getByLabelText('New folder name'), 'archive')
+    await user.click(screen.getByRole('button', { name: 'Use folder' }))
+
+    expect(await screen.findByText('Does not exist yet — created by the move.')).toBeInTheDocument()
+  })
+
   it('sends nothing when cancelled', async () => {
     const { fetchMock, onClose } = renderDialog()
     const user = userEvent.setup()

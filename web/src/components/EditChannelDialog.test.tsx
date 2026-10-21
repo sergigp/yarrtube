@@ -248,4 +248,10 @@ describe('EditChannelDialog', () => {
     expect(await screen.findByRole('radio', { name: 'channels/' })).toBeChecked()
     expect(onSave).not.toHaveBeenCalled()
   })
+
+  it('focuses its first setting, not "Move…", when opened', () => {
+    renderDialog(aChannel())
+
+    expect(screen.getByRole('combobox', { name: /Video quality/ })).toHaveFocus()
+  })
 })

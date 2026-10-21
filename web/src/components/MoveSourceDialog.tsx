@@ -87,7 +87,7 @@ function MoveSourceForm({ kind, name, currentPath, onMove, onClose }: MoveSource
 
   return (
     <form className="flex min-w-0 flex-col gap-5" onSubmit={handleSubmit}>
-      <SaveToField location={location} />
+      <SaveToField location={location} stagedNote="Does not exist yet — created by the move." />
       <FolderNameField location={location} id="move-source-folder-name" />
       <MoveNotice location={location.value} />
 

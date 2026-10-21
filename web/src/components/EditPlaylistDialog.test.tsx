@@ -142,4 +142,10 @@ describe('EditPlaylistDialog', () => {
     expect(await screen.findByRole('radio', { name: 'music/' })).toBeChecked()
     expect(onSave).not.toHaveBeenCalled()
   })
+
+  it('focuses its first setting, not "Move…", when opened', () => {
+    renderDialog(aPlaylist())
+
+    expect(screen.getByLabelText('Check for new videos every')).toHaveFocus()
+  })
 })

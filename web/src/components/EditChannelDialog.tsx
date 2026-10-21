@@ -44,7 +44,14 @@ export function EditChannelDialog({ channel, open, onOpenChange, onSave }: EditC
   }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-5 p-6 sm:max-w-md">
+      {/* Focus the first setting, not the Location line's "Move…" above it. */}
+      <DialogContent
+        className="gap-5 p-6 sm:max-w-md"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          document.getElementById('edit-channel-quality')?.focus()
+        }}
+      >
         <DialogTitle>Edit {channel.name} settings</DialogTitle>
         <DialogDescription className="sr-only">
           Change the video quality, video limit and check interval of {channel.name}.
