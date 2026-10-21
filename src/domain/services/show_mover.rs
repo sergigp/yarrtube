@@ -101,6 +101,7 @@ impl ShowMoverApi for ShowMover {
         let channel = self.find_channel(&id)?;
         self.ensure_destination_free(&channel.path, &path)?;
         let (old_dir, new_dir) = (self.show_dir(&channel.path), self.show_dir(&path));
+        self.ensure_settled(&self.channel_video_ids(&id)?, &old_dir)?;
         let moved = channel.with_path(path);
         self.relocate(&old_dir, &new_dir, || self.update_channel(&moved))?;
         self.publish_show_moved(&old_dir, &new_dir);
@@ -156,6 +157,16 @@ impl ShowMover {
             .map_err(MoveShowError::Repository)?
             .into_iter()
             .map(|playlist_video| playlist_video.video_id)
+            .collect())
+    }
+
+    fn channel_video_ids(&self, id: &ChannelHandle) -> Result<Vec<VideoRecordId>, MoveShowError> {
+        Ok(self
+            .channel_video_repository
+            .list_for_channel(id)
+            .map_err(MoveShowError::Repository)?
+            .into_iter()
+            .map(|channel_video| channel_video.video_id)
             .collect())
     }
 
