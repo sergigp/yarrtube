@@ -144,6 +144,9 @@ describe('SidebarCategories', () => {
     const description = within(dialog).getByText(/holds/).textContent
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(screen.queryByText('Chess')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'Current route' })).toHaveTextContent(/^\/$/),
+    )
     const routeAfterDelete = screen.getByRole('status', { name: 'Current route' }).textContent
     await user.click(screen.getByRole('button', { name: 'Actions for Science' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Manage sources' }))
