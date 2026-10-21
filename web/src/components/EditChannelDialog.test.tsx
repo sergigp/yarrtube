@@ -224,4 +224,28 @@ describe('EditChannelDialog', () => {
     expect(onOpenChange).not.toHaveBeenCalled()
     expect(onSave).not.toHaveBeenCalled()
   })
+  it('shows where the channel is stored', () => {
+    renderDialog(aChannel({ name: 'Veritasium', path: 'channels/veritasium' }))
+
+    expect(screen.getByText('Location')).toBeInTheDocument()
+    expect(screen.getByText('channels/veritasium')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Move…' })).toBeInTheDocument()
+  })
+
+  it('opens the move dialog without saving', async () => {
+    const { onSave } = renderDialog(aChannel({ name: 'Veritasium', path: 'channels/veritasium' }), vi.fn(async () => {}), {
+      'GET /api/categories': aCategoryList(),
+      'GET /api/playlists': [],
+      'GET /api/channels': [],
+      'GET /api/directories': { root: '/videos', path: '', entries: [] },
+    })
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Move…' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Move Veritasium' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Edit Veritasium settings' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('radio', { name: 'channels/' })).toBeChecked()
+    expect(onSave).not.toHaveBeenCalled()
+  })
 })
