@@ -121,6 +121,9 @@ impl ShowMover {
         if self.source_paths()?.iter().any(|used| used.overlaps(path)) {
             return Err(MoveShowError::DestinationInUse(path.clone()));
         }
+        if self.video_file_repository.dir_exists(&self.show_dir(path)) {
+            return Err(MoveShowError::DestinationExists(path.clone()));
+        }
         Ok(())
     }
 

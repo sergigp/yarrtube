@@ -17,7 +17,7 @@
 - [x] 2.9 `it_should_fail_to_move_to_a_path_used_by_a_channel`: 409.
 - [x] 2.10 `it_should_fail_to_move_into_its_own_path`: 409.
 - [x] 2.11 `it_should_fail_to_move_inside_another_playlist`: 409.
-- [ ] 2.12 `it_should_fail_to_move_if_destination_exists_on_disk`: 409, nothing renamed.
+- [x] 2.12 `it_should_fail_to_move_if_destination_exists_on_disk`: 409, nothing renamed.
 - [ ] 2.13 `it_should_fail_to_move_if_a_video_is_pending`: 409.
 - [ ] 2.14 `it_should_fail_to_move_if_a_thumbnail_fetch_is_queued`: 409 driven by a task whose `output_dir` is the show dir.
 - [ ] 2.15 `it_should_fail_to_move_while_reconciling`: show lock held, 409.
