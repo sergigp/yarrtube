@@ -66,4 +66,4 @@
 - [x] 5.6 Web: `EditPlaylistDialog`/`EditChannelDialog` test "Move…" disabled with "Downloads in progress — you can move it once they finish." while `work_in_progress`; implement in `LocationLine`. Verify: `npm run check`.
 - [x] 5.7 Web: `usePlaylists`/`useChannels` poll every 3 s (`LIVE_INTERVAL_MS`) while any listed source has `work_in_progress`, 60 s otherwise; test the interval choice as a pure function in `src/lib/`. Verify: `npm run check`.
 - [x] 5.8 Docs: mention the disabled "Move…" in `doc/INSTALLATION.md`'s moving section.
-- [ ] 5.9 `cargo test --locked`, `cargo fmt --all -- --check`, clippy, `npm run check` pass; manual (agent): in the Playwright MCP browser, a source still downloading shows "Move…" disabled with the explanation, and it becomes enabled once settled without a reload.
+- [x] 5.9 `cargo test --locked`, `cargo fmt --all -- --check`, clippy, `npm run check` pass; manual (agent): in the Playwright MCP browser, a source still downloading shows "Move…" disabled with the explanation, and it becomes enabled once settled without a reload.
