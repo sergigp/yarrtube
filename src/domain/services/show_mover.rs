@@ -80,7 +80,7 @@ pub trait ShowMoverApi: Send + Sync {
 impl ShowMoverApi for ShowMover {
     fn move_playlist(&self, id: PlaylistId, path: PlaylistPath) -> Result<Playlist, MoveShowError> {
         let playlist = self.find_playlist(&id)?;
-        Self::ensure_destination_free(&playlist.path, &path)?;
+        self.ensure_destination_free(&playlist.path, &path)?;
         let old_dir = self.show_dir(&playlist.path);
         let new_dir = self.show_dir(&path);
         self.rename(&old_dir, &new_dir)?;
@@ -111,13 +111,34 @@ impl ShowMover {
     }
 
     fn ensure_destination_free(
+        &self,
         current: &PlaylistPath,
         path: &PlaylistPath,
     ) -> Result<(), MoveShowError> {
         if current == path {
             return Err(MoveShowError::SamePath);
         }
+        if self.source_paths()?.iter().any(|used| used == path) {
+            return Err(MoveShowError::DestinationInUse(path.clone()));
+        }
         Ok(())
+    }
+
+    /// The stored path of every playlist and channel.
+    fn source_paths(&self) -> Result<Vec<PlaylistPath>, MoveShowError> {
+        let playlists = self
+            .playlist_repository
+            .list()
+            .map_err(MoveShowError::Repository)?;
+        let channels = self
+            .channel_repository
+            .list()
+            .map_err(MoveShowError::Repository)?;
+        Ok(playlists
+            .into_iter()
+            .map(|playlist| playlist.path)
+            .chain(channels.into_iter().map(|channel| channel.path))
+            .collect())
     }
 
     fn show_dir(&self, path: &PlaylistPath) -> PathBuf {

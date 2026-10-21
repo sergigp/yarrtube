@@ -14,7 +14,7 @@
 - [x] 2.6 `it_should_fail_to_move_if_path_invalid`: 400.
 - [x] 2.7 `it_should_fail_to_move_a_missing_playlist`: 404.
 - [x] 2.8 `it_should_fail_to_move_to_the_same_path`: 409.
-- [ ] 2.9 `it_should_fail_to_move_to_a_path_used_by_a_channel`: 409.
+- [x] 2.9 `it_should_fail_to_move_to_a_path_used_by_a_channel`: 409.
 - [ ] 2.10 `it_should_fail_to_move_into_its_own_path`: 409.
 - [ ] 2.11 `it_should_fail_to_move_inside_another_playlist`: 409.
 - [ ] 2.12 `it_should_fail_to_move_if_destination_exists_on_disk`: 409, nothing renamed.

@@ -172,7 +172,7 @@ pub async fn mark_playlist_watched(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::channel::ChannelHandle;
+    use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName};
@@ -198,7 +198,9 @@ mod tests {
     use crate::infrastructure::repositories::filesystem_show_file_repository::FakeShowFileRepository;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
-    use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
+    use crate::infrastructure::repositories::sqlite_channel_repository::{
+        ChannelRepository, SqliteChannelRepository,
+    };
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
     };
@@ -2582,6 +2584,39 @@ mod tests {
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_move_to_a_path_used_by_a_channel() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let channel_repository = SqliteChannelRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        channel_repository
+            .insert(&channel("@somechannel", "creators/somechannel"))
+            .unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(show_mover, "PL1", move_request("creators/somechannel")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "path \"creators/somechannel\" overlaps the path of a playlist or channel"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/chill")]
+        );
+        assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -3148,6 +3183,20 @@ mod tests {
             event_publisher(db),
             Arc::new(ShowLocks::default()),
             "/videos",
+        )
+    }
+
+    fn channel(handle: &str, path: &str) -> Channel {
+        Channel::create(
+            ChannelHandle::new(handle).unwrap(),
+            "Some Channel",
+            "UC123",
+            Quality::High,
+            VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
+            PlaylistPath::new(path).unwrap(),
+            None,
+            fixed_timestamp(),
         )
     }
 

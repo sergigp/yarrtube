@@ -25,7 +25,7 @@ impl fmt::Display for MoveShowError {
             Self::SamePath => write!(f, "playlist or channel is already stored at that path"),
             Self::DestinationInUse(path) => write!(
                 f,
-                "path \"{path}\" is used by, inside or contains another playlist or channel"
+                "path \"{path}\" overlaps the path of a playlist or channel"
             ),
             Self::DestinationExists(path) => write!(f, "path \"{path}\" already exists on disk"),
             Self::Filesystem(e) => write!(f, "{e}"),
