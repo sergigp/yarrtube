@@ -24,7 +24,7 @@
 - [x] 2.16 `it_should_fail_to_move_if_rename_fails`: 500, path unchanged, no event.
 - [x] 2.17 `it_should_rename_back_if_recording_the_path_fails`: 500, renamed back, no event.
 - [x] 2.18 `it_should_move_a_channel`: channel handler wired end to end.
-- [ ] 2.19 `it_should_fail_to_move_a_missing_channel`: 404.
+- [x] 2.19 `it_should_fail_to_move_a_missing_channel`: 404.
 - [ ] 2.20 `it_should_fail_to_move_if_a_channel_video_is_pending`: 409 via channel videos.
 - [ ] 2.21 `it_should_wait_for_a_move_before_reconciling` (reconcile_playlist_task): reconcile blocks on the lock and then reconciles the new path.
 - [ ] 2.22 `it_should_wait_for_a_move_before_reconciling` (reconcile_channel_task): same for channels.
