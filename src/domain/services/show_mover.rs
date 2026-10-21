@@ -2,6 +2,7 @@ use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::{Playlist, PlaylistId, PlaylistPath};
 use crate::domain::show::{MoveShowError, ShowMoved};
+use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -81,6 +82,7 @@ impl ShowMoverApi for ShowMover {
     fn move_playlist(&self, id: PlaylistId, path: PlaylistPath) -> Result<Playlist, MoveShowError> {
         let playlist = self.find_playlist(&id)?;
         self.ensure_destination_free(&playlist.path, &path)?;
+        self.ensure_videos_settled(&self.playlist_video_ids(&id)?)?;
         let old_dir = self.show_dir(&playlist.path);
         let new_dir = self.show_dir(&path);
         self.rename(&old_dir, &new_dir)?;
@@ -123,6 +125,29 @@ impl ShowMover {
         }
         if self.video_file_repository.dir_exists(&self.show_dir(path)) {
             return Err(MoveShowError::DestinationExists(path.clone()));
+        }
+        Ok(())
+    }
+
+    fn playlist_video_ids(&self, id: &PlaylistId) -> Result<Vec<VideoRecordId>, MoveShowError> {
+        Ok(self
+            .playlist_video_repository
+            .list_for_playlist(id)
+            .map_err(MoveShowError::Repository)?
+            .into_iter()
+            .map(|playlist_video| playlist_video.video_id)
+            .collect())
+    }
+
+    /// Every one of the source's videos is Downloaded, Errored or Excluded:
+    /// nothing will write into its show directory on its own.
+    fn ensure_videos_settled(&self, ids: &[VideoRecordId]) -> Result<(), MoveShowError> {
+        let videos = self
+            .video_repository
+            .find_many(ids)
+            .map_err(MoveShowError::Repository)?;
+        if !videos.iter().all(|video| video.is_download_settled()) {
+            return Err(MoveShowError::WorkInProgress);
         }
         Ok(())
     }

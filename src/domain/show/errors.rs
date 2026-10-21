@@ -20,7 +20,7 @@ impl fmt::Display for MoveShowError {
             Self::Reconciling => write!(f, "is being synced, try again once it finishes"),
             Self::WorkInProgress => write!(
                 f,
-                "still has work in progress, try again once its downloads finish"
+                "playlist or channel still has work in progress, try again once its downloads finish"
             ),
             Self::SamePath => write!(f, "playlist or channel is already stored at that path"),
             Self::DestinationInUse(path) => write!(

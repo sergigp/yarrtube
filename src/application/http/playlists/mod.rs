@@ -2672,7 +2672,10 @@ mod tests {
         );
         assert_eq!(
             playlist_repository.list().unwrap(),
-            vec![playlist("PL1", "music/lofi"), playlist("PL2", "music/chill")]
+            vec![
+                playlist("PL1", "music/lofi"),
+                playlist("PL2", "music/chill")
+            ]
         );
         assert_eq!(video_file_repository.renamed_dirs(), vec![]);
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
@@ -2700,6 +2703,51 @@ mod tests {
             Err(ApiError::new(
                 StatusCode::CONFLICT,
                 "path \"music/lofi\" already exists on disk"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/chill")]
+        );
+        assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_move_if_a_video_is_pending() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        save_downloaded_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            "vid_downloaded",
+            0,
+        );
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            "vid_pending",
+            1,
+        );
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "playlist or channel still has work in progress, try again once its downloads finish"
             ))
         );
         assert_eq!(
