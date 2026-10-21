@@ -55,6 +55,21 @@ The system SHALL accept a move only when every video of the source is Downloaded
 - **WHEN** a move is requested for a source that has no videos yet
 - **THEN** the move succeeds
 
+### Requirement: Listings Report Work In Progress
+The playlist and channel listings SHALL report, for every source, whether it has work in progress, by exactly the rule a move is accepted under (see "Move Requires A Settled Source"), so a client can tell beforehand whether a move would be refused for it.
+
+#### Scenario: Video still pending
+- **WHEN** a source with a video that is not Downloaded, Errored or Excluded is listed
+- **THEN** it is listed with work in progress
+
+#### Scenario: Per-video task queued
+- **WHEN** a source whose videos are all Downloaded, with a thumbnail or subtitle fetch queued in its show folder, is listed
+- **THEN** it is listed with work in progress
+
+#### Scenario: Settled source
+- **WHEN** a source whose videos are all Downloaded, Errored or Excluded, with no per-video task queued or running in its show folder, is listed
+- **THEN** it is listed without work in progress
+
 ### Requirement: Move Destination Validation
 The system SHALL reject a move whose path is invalid by the same rules as on creation, equals the current path, is the stored path of another playlist or channel, is inside or contains the stored path of any playlist or channel (itself included), or already exists on disk. An invalid path SHALL be a bad request; any other rejection SHALL be a conflict. A rejected move changes nothing.
 

@@ -55,3 +55,14 @@
 - [x] 4.2 Smoke tests: add specs in `smoke-tests/tests/` moving a playlist and a channel through the edit dialog's "Move…" (covers both new routes for the route-coverage reporter); `scripts/run-smoke-tests.sh` passes.
 - [x] 4.3 Manual (agent): `scripts/run-local.sh --port <free port> --fresh-videos`; create a small playlist via the API and wait until all its videos and thumbnails are downloaded; in the Playwright MCP browser open its edit dialog, check Location, use "Move…" to move it to `archive/<name>`; assert the sidebar/listing shows the new path, the files exist under the new dir and not the old one, a video still plays; then trigger "Sync now" and assert no re-download task appears. Also assert a move attempted while a video is still downloading shows the conflict error in the dialog. Stop the server, delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.4 Manual (human): with Plex configured, move a source and confirm Plex shows it at the new location and drops the old show; confirm the move dialog's folder browser looks right on mobile.
+
+## 5. Move availability
+
+- [ ] 5.1 Walking skeleton: `domain/show/show_work.rs` `has_work_in_progress` (trivial body), `work_in_progress` on `PlaylistView`/`ChannelView` and the list item DTOs, task repository + videos root in both view searchers (wired in `serve.rs`); web `work_in_progress` on the list types and builders (default `false`). Verify: `cargo test --locked` and `npm run check` pass.
+- [ ] 5.2 `it_should_list_a_playlist_with_a_pending_video_as_work_in_progress`.
+- [ ] 5.3 `it_should_list_a_playlist_with_a_queued_task_as_work_in_progress`.
+- [ ] 5.4 `it_should_list_a_channel_with_a_pending_video_as_work_in_progress`.
+- [ ] 5.5 Refactor: `ShowMover` uses `has_work_in_progress`; its move tests stay green.
+- [ ] 5.6 Web: `EditPlaylistDialog`/`EditChannelDialog` test "Move…" disabled with "Downloads in progress — you can move it once they finish." while `work_in_progress`; implement in `LocationLine`. Verify: `npm run check`.
+- [ ] 5.7 Docs: mention the disabled "Move…" in `doc/INSTALLATION.md`'s moving section.
+- [ ] 5.8 `cargo test --locked`, `cargo fmt --all -- --check`, clippy, `npm run check` pass; manual (agent): in the Playwright MCP browser, a source still downloading shows "Move…" disabled with the explanation, and it becomes enabled once settled without a reload.

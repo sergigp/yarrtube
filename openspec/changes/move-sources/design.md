@@ -36,6 +36,12 @@ task queue, so the light lane alone cannot keep moves and reconciles apart.
   non-completed task whose `output_dir` is the show directory.** Every
   per-video task carries `output_dir`, including `delete_video_file`, which
   has no video id.
+- **Listings report work in progress by the mover's own rule.** The
+  settledness rule lives in one domain function (`domain/show/show_work.rs`)
+  used by `ShowMover` and by both view searchers, so the edit dialog can
+  disable "Move…" exactly when a move would be refused for work in
+  progress. A running reconcile is not reported (it lasts seconds); its
+  409 still reaches the dialog.
 - **Plex via a `ShowMoved` event** handled by a subscriber registered only
   when Plex is configured, reusing the outbox's async retry.
 
@@ -44,7 +50,11 @@ task queue, so the light lane alone cannot keep moves and reconciles apart.
 - `src/domain/show/show_key.rs`: `ShowKey`, the lock key (playlist or channel).
 - `src/domain/show/errors.rs`: `MoveShowError`.
 - `src/domain/show/events.rs`: `ShowMoved` event.
+- `src/domain/show/show_work.rs`: `has_work_in_progress`, the settledness rule shared by the mover and the listings.
 - `src/domain/show/mod.rs`: export the new modules.
+- `src/domain/playlist/playlist_view.rs`, `src/domain/channel/channel_view.rs`: `work_in_progress` field.
+- `src/domain/services/playlist_view_searcher.rs`, `channel_view_searcher.rs`: compute it (+ task repository, videos root).
+- `src/application/http/{playlists,channels}/dto.rs`: `work_in_progress` on the list item responses.
 - `src/domain/event/domain_event.rs`: `DomainEvent::ShowMoved` variant.
 - `src/domain/playlist/playlist.rs`: `Playlist::with_path`.
 - `src/domain/channel/channel.rs`: `Channel::with_path`.
@@ -70,7 +80,8 @@ task queue, so the light lane alone cannot keep moves and reconciles apart.
 - `web/src/api/{client,types}.ts`: `movePlaylist`, `moveChannel`.
 - `web/src/hooks/useSaveLocation.ts`: optional initial path; current path not "occupied"; don't remember parent on move.
 - `web/src/components/MoveSourceDialog.tsx` (+ test): the move dialog.
-- `web/src/components/LocationLine.tsx`: the "Location" line with "Move…", shared by both edit dialogs.
+- `web/src/components/LocationLine.tsx`: the "Location" line with "Move…", shared by both edit dialogs; "Move…" disabled with an explanation while the source has work in progress.
+- `web/src/api/types.ts`, `web/src/test/helpers.tsx`: `work_in_progress` on `PlaylistListItem`/`ChannelListItem` and their builders.
 - `web/src/components/EditPlaylistDialog.tsx` / `EditChannelDialog.tsx` (+ tests): Location line; each owns a `moving` state and renders `MoveSourceDialog` itself, so callers are unchanged.
 - `smoke-tests/tests/moveSources.spec.js`: specs moving a playlist and a channel through the UI (route wiring).
 
@@ -110,6 +121,14 @@ pub fn overlaps(&self, other: &PlaylistPath) -> bool;
 pub fn output_dir_of(task_type: &str, payload: &str) -> Option<String>;
 // domain/task/scheduled_task.rs
 pub fn output_dir(&self) -> Option<String>;
+
+// domain/show/show_work.rs
+/// A video not Downloaded/Errored/Excluded, or a non-completed task whose
+/// output_dir is `show_dir`.
+pub fn has_work_in_progress(videos: &[Video], tasks: &[ScheduledTask], show_dir: &Path) -> bool;
+
+// domain/playlist/playlist_view.rs, domain/channel/channel_view.rs
+pub work_in_progress: bool,
 
 // infrastructure/shared/show_locks.rs
 #[derive(Default)]
@@ -257,6 +276,11 @@ ShowMoved (outbox) -> ScanPlexFolderOnShowMoved::handle(payload)
    32. `it_should_fail_to_rename_onto_an_existing_directory`.
    33. `it_should_report_whether_a_directory_exists`.
 
+   Listings (`application/http/playlists` / `channels`, `list_*`):
+   - `it_should_list_a_playlist_with_a_pending_video_as_work_in_progress`.
+   - `it_should_list_a_playlist_with_a_queued_task_as_work_in_progress`.
+   - `it_should_list_a_channel_with_a_pending_video_as_work_in_progress`.
+
 3. Web (Vitest, `mockApi`)
    34. `MoveSourceDialog`: prefilled parent/folder; save disabled when unchanged; posts `POST /api/playlists/PL1/move` with new path and closes; shows server error and stays open; cancel sends nothing.
-   35. `EditPlaylistDialog` / `EditChannelDialog`: shows Location; "Move…" opens the move dialog without saving.
+   35. `EditPlaylistDialog` / `EditChannelDialog`: shows Location; "Move…" opens the move dialog without saving; "Move…" disabled with the explanation while the source has work in progress.

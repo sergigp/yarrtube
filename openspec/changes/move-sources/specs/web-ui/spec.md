@@ -9,6 +9,10 @@ The edit playlist and edit channel dialogs SHALL show a "Location" line with the
 - **WHEN** a user opens the edit dialog of a playlist stored at `music/chill`
 - **THEN** the dialog shows "Location" with `music/chill` and a "Move…" control
 
+#### Scenario: Move unavailable while work is in progress
+- **WHEN** a user opens the edit dialog of a source listed with work in progress
+- **THEN** the "Move…" control is disabled and the dialog says "Downloads in progress — you can move it once they finish."
+
 #### Scenario: Opening the move dialog
 - **WHEN** a user activates "Move…" in a channel's edit dialog
 - **THEN** the edit dialog closes, nothing is saved, and the move dialog for that channel opens
