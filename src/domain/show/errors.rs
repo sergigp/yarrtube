@@ -17,7 +17,10 @@ impl fmt::Display for MoveShowError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotFound => write!(f, "playlist or channel not found"),
-            Self::Reconciling => write!(f, "is being synced, try again once it finishes"),
+            Self::Reconciling => write!(
+                f,
+                "playlist or channel is being synced, try again once it finishes"
+            ),
             Self::WorkInProgress => write!(
                 f,
                 "playlist or channel still has work in progress, try again once its downloads finish"

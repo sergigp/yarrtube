@@ -1,7 +1,7 @@
 use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::{Playlist, PlaylistId, PlaylistPath};
-use crate::domain::show::{MoveShowError, ShowMoved};
+use crate::domain::show::{MoveShowError, ShowKey, ShowMoved};
 use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -11,7 +11,7 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::Playl
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
-use crate::infrastructure::shared::show_locks::ShowLocks;
+use crate::infrastructure::shared::show_locks::{ShowLockGuard, ShowLocks};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -80,17 +80,14 @@ pub trait ShowMoverApi: Send + Sync {
 
 impl ShowMoverApi for ShowMover {
     fn move_playlist(&self, id: PlaylistId, path: PlaylistPath) -> Result<Playlist, MoveShowError> {
+        let _guard = self.lock(ShowKey::Playlist(id.clone()))?;
         let playlist = self.find_playlist(&id)?;
         self.ensure_destination_free(&playlist.path, &path)?;
-        let old_dir = self.show_dir(&playlist.path);
-        self.ensure_videos_settled(&self.playlist_video_ids(&id)?)?;
-        self.ensure_no_tasks_in(&old_dir)?;
-        let new_dir = self.show_dir(&path);
+        let (old_dir, new_dir) = (self.show_dir(&playlist.path), self.show_dir(&path));
+        self.ensure_settled(&self.playlist_video_ids(&id)?, &old_dir)?;
         self.rename(&old_dir, &new_dir)?;
         let moved = playlist.with_path(path);
-        self.playlist_repository
-            .update(&moved)
-            .map_err(MoveShowError::Repository)?;
+        self.update_playlist(&moved)?;
         self.publish_show_moved(&old_dir, &new_dir);
         info!(playlist_id = %id, path = %moved.path, "moved playlist");
         Ok(moved)
@@ -106,6 +103,14 @@ impl ShowMoverApi for ShowMover {
 }
 
 impl ShowMover {
+    /// A reconcile can hold the show for as long as its YouTube calls take,
+    /// so a move doesn't wait for it: it's refused.
+    fn lock(&self, key: ShowKey) -> Result<ShowLockGuard<'_>, MoveShowError> {
+        self.show_locks
+            .try_lock(key)
+            .ok_or(MoveShowError::Reconciling)
+    }
+
     fn find_playlist(&self, id: &PlaylistId) -> Result<Playlist, MoveShowError> {
         self.playlist_repository
             .find(id)
@@ -140,8 +145,15 @@ impl ShowMover {
             .collect())
     }
 
-    /// Every one of the source's videos is Downloaded, Errored or Excluded:
-    /// nothing will write into its show directory on its own.
+    /// Nothing writes into the show directory on its own any more: every
+    /// one of the source's videos is settled and no per-video task is queued
+    /// or running there.
+    fn ensure_settled(&self, ids: &[VideoRecordId], show_dir: &Path) -> Result<(), MoveShowError> {
+        self.ensure_videos_settled(ids)?;
+        self.ensure_no_tasks_in(show_dir)
+    }
+
+    /// Every one of the videos is Downloaded, Errored or Excluded.
     fn ensure_videos_settled(&self, ids: &[VideoRecordId]) -> Result<(), MoveShowError> {
         let videos = self
             .video_repository
@@ -200,6 +212,12 @@ impl ShowMover {
         self.video_file_repository
             .rename_dir(from, to)
             .map_err(MoveShowError::Filesystem)
+    }
+
+    fn update_playlist(&self, playlist: &Playlist) -> Result<(), MoveShowError> {
+        self.playlist_repository
+            .update(playlist)
+            .map_err(MoveShowError::Repository)
     }
 
     /// Best effort: the move is done once the new path is stored, so a lost

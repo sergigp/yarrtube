@@ -186,7 +186,7 @@ mod tests {
     use crate::domain::services::SubtitleFetcher;
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::services::VideoRelocator;
-    use crate::domain::show::ShowMoved;
+    use crate::domain::show::{ShowKey, ShowMoved};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::Video;
@@ -2796,6 +2796,48 @@ mod tests {
             Err(ApiError::new(
                 StatusCode::CONFLICT,
                 "playlist or channel still has work in progress, try again once its downloads finish"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/chill")]
+        );
+        assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_move_while_reconciling() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        let show_locks = Arc::new(ShowLocks::default());
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        let show_mover = ShowMover::new(
+            playlist_repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            task_repository(&db),
+            video_file_repository.clone(),
+            event_publisher(&db),
+            show_locks.clone(),
+            "/videos",
+        );
+        let _reconciling = show_locks.lock(ShowKey::Playlist(playlist_id("PL1")));
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "playlist or channel is being synced, try again once it finishes"
             ))
         );
         assert_eq!(
