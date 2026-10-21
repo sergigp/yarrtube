@@ -1,7 +1,7 @@
 use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::{Playlist, PlaylistId, PlaylistPath};
-use crate::domain::show::{MoveShowError, ShowKey, ShowMoved};
+use crate::domain::show::{MoveShowError, ShowKey, ShowMoved, has_work_in_progress};
 use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -169,38 +169,18 @@ impl ShowMover {
             .collect())
     }
 
-    /// Nothing writes into the show directory on its own any more: every
-    /// one of the source's videos is settled and no per-video task is queued
-    /// or running there.
+    /// Nothing writes into the show directory on its own any more (see
+    /// `has_work_in_progress`).
     fn ensure_settled(&self, ids: &[VideoRecordId], show_dir: &Path) -> Result<(), MoveShowError> {
-        self.ensure_videos_settled(ids)?;
-        self.ensure_no_tasks_in(show_dir)
-    }
-
-    /// Every one of the videos is Downloaded, Errored or Excluded.
-    fn ensure_videos_settled(&self, ids: &[VideoRecordId]) -> Result<(), MoveShowError> {
         let videos = self
             .video_repository
             .find_many(ids)
             .map_err(MoveShowError::Repository)?;
-        if !videos.iter().all(|video| video.is_download_settled()) {
-            return Err(MoveShowError::WorkInProgress);
-        }
-        Ok(())
-    }
-
-    /// No per-video task (download, thumbnail or subtitle fetch, file
-    /// deletion) is queued or running in the show directory.
-    fn ensure_no_tasks_in(&self, show_dir: &Path) -> Result<(), MoveShowError> {
-        let show_dir = show_dir.to_string_lossy();
         let tasks = self
             .task_repository
             .list_non_completed()
             .map_err(MoveShowError::Repository)?;
-        if tasks
-            .iter()
-            .any(|task| task.output_dir().is_some_and(|dir| dir == show_dir))
-        {
+        if has_work_in_progress(&videos, &tasks, show_dir) {
             return Err(MoveShowError::WorkInProgress);
         }
         Ok(())

@@ -62,7 +62,7 @@
 - [x] 5.2 `it_should_list_a_playlist_with_a_pending_video_as_work_in_progress`.
 - [x] 5.3 `it_should_list_a_playlist_with_a_queued_task_as_work_in_progress`.
 - [x] 5.4 `it_should_list_a_channel_with_a_pending_video_as_work_in_progress`.
-- [ ] 5.5 Refactor: `ShowMover` uses `has_work_in_progress`; its move tests stay green.
+- [x] 5.5 Refactor: `ShowMover` uses `has_work_in_progress`; its move tests stay green.
 - [ ] 5.6 Web: `EditPlaylistDialog`/`EditChannelDialog` test "Move…" disabled with "Downloads in progress — you can move it once they finish." while `work_in_progress`; implement in `LocationLine`. Verify: `npm run check`.
 - [ ] 5.7 Web: `usePlaylists`/`useChannels` poll every 3 s (`LIVE_INTERVAL_MS`) while any listed source has `work_in_progress`, 60 s otherwise; test the interval choice as a pure function in `src/lib/`. Verify: `npm run check`.
 - [ ] 5.8 Docs: mention the disabled "Move…" in `doc/INSTALLATION.md`'s moving section.
