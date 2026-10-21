@@ -42,3 +42,23 @@ impl Drop for ShowLockGuard<'_> {
         self.locks.released.notify_all();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::playlist::PlaylistId;
+
+    #[test]
+    fn it_should_refuse_try_lock_while_held() {
+        let locks = ShowLocks::default();
+        let _held = locks.lock(playlist("PL1"));
+
+        let second = locks.try_lock(playlist("PL1"));
+
+        assert!(second.is_none());
+    }
+
+    fn playlist(id: &str) -> ShowKey {
+        ShowKey::Playlist(PlaylistId::new(id).unwrap())
+    }
+}

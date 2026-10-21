@@ -39,7 +39,7 @@
 ## 3. Infrastructure adapters (TDD)
 
 `infrastructure/shared/show_locks.rs`
-- [ ] 3.1 `it_should_refuse_try_lock_while_held`
+- [x] 3.1 `it_should_refuse_try_lock_while_held`
 - [ ] 3.2 `it_should_release_on_drop`
 - [ ] 3.3 `it_should_block_lock_until_released`
 - [ ] 3.4 `it_should_not_contend_across_keys`
