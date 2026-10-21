@@ -39,13 +39,15 @@ import { anyWorkInProgress } from '@/lib/libraryPolling'
 // own actions; views showing live download progress poll quickly.
 const LIBRARY_INTERVAL_MS = 60_000
 const LIVE_INTERVAL_MS = 3_000
+// Slower than the live views: each list reads every video and queued task.
+const BUSY_SOURCES_INTERVAL_MS = 5_000
 
 /**
- * The channel and playlist lists poll quickly while a source has work in
+ * The channel and playlist lists poll faster while a source has work in
  * progress, so its "Move…" enables within seconds of it settling.
  */
 function sourcesInterval(items: { work_in_progress: boolean }[] | undefined): number {
-  return anyWorkInProgress(items) ? LIVE_INTERVAL_MS : LIBRARY_INTERVAL_MS
+  return anyWorkInProgress(items) ? BUSY_SOURCES_INTERVAL_MS : LIBRARY_INTERVAL_MS
 }
 
 export const queryKeys = {

@@ -41,7 +41,7 @@ task queue, so the light lane alone cannot keep moves and reconciles apart.
   used by `ShowMover` and by both view searchers, so the edit dialog can
   disable "Move…" exactly when a move would be refused for work in
   progress. A running reconcile is not reported (it lasts seconds); its
-  409 still reaches the dialog. The listings poll every 3 s while any
+  409 still reaches the dialog. The listings poll every 5 s while any
   source has work in progress (60 s otherwise), so "Move…" enables within
   seconds of the source settling.
 - **Plex via a `ShowMoved` event** handled by a subscriber registered only
