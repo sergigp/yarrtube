@@ -1555,6 +1555,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_a_playlist_with_a_queued_task_as_work_in_progress() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = task_repository(&db);
+        playlist_repository
+            .insert(&playlist("PL1", "music/busy"))
+            .unwrap();
+        let video = save_downloaded_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid_downloaded",
+            0,
+        );
+        task_repository
+            .schedule(
+                &Task::FetchSubtitles {
+                    video_id: video.id.as_str().to_string(),
+                    output_dir: "/videos/music/busy".to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            video_repository,
+            task_repository,
+            "/videos",
+        );
+
+        let response = list(playlist_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![PlaylistListItemResponse {
+                unwatched_count: 1,
+                work_in_progress: true,
+                ..playlist_list_item_response("PL1", "music/busy")
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_playlists_with_their_hide_unwatched_count() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));

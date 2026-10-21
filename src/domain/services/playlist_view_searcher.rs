@@ -1,5 +1,6 @@
 use crate::domain::playlist::{Playlist, PlaylistId, PlaylistView};
 use crate::domain::show::has_work_in_progress;
+use crate::domain::task::ScheduledTask;
 use crate::domain::video::{Video, VideoRecordId};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
@@ -15,7 +16,6 @@ pub struct PlaylistViewSearcher {
     repository: Arc<dyn PlaylistRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     video_repository: Arc<dyn VideoRepository>,
-    #[allow(dead_code)]
     task_repository: Arc<dyn TaskRepository>,
     videos_root: PathBuf,
 }
@@ -46,11 +46,12 @@ impl PlaylistViewSearcherApi for PlaylistViewSearcher {
     fn search_all(&self) -> anyhow::Result<Vec<PlaylistView>> {
         let playlists = self.repository.list()?;
         let videos = self.videos_by_playlist()?;
+        let tasks = self.task_repository.list_non_completed()?;
         Ok(playlists
             .into_iter()
             .map(|playlist| {
                 let playlist_videos = videos.get(&playlist.id).map(Vec::as_slice).unwrap_or(&[]);
-                self.playlist_view(playlist, playlist_videos)
+                self.playlist_view(playlist, playlist_videos, &tasks)
             })
             .collect())
     }
@@ -86,14 +87,19 @@ impl PlaylistViewSearcher {
             }))
     }
 
-    fn playlist_view(&self, playlist: Playlist, videos: &[Video]) -> PlaylistView {
+    fn playlist_view(
+        &self,
+        playlist: Playlist,
+        videos: &[Video],
+        tasks: &[ScheduledTask],
+    ) -> PlaylistView {
         let show_dir = self.videos_root.join(playlist.path.as_str());
         PlaylistView {
             unwatched_count: videos
                 .iter()
                 .filter(|video| video.is_downloaded_and_unwatched())
                 .count(),
-            work_in_progress: has_work_in_progress(videos, &[], &show_dir),
+            work_in_progress: has_work_in_progress(videos, tasks, &show_dir),
             id: playlist.id,
             name: playlist.name,
             path: playlist.path,
