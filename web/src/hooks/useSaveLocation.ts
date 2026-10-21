@@ -56,6 +56,10 @@ function parentOf(path: string): string | null {
   return cut > 0 ? path.slice(0, cut) : null
 }
 
+function nameOf(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1)
+}
+
 /**
  * Whether `path` is the staged parent or sits below it. A staged parent does
  * not exist on disk, so neither it nor anything under it can be listed.
@@ -72,20 +76,27 @@ function isStaged(path: string, stagedFrom: string | null): boolean {
  *
  * Meant to live in a component that unmounts when the dialog closes, so each
  * dialog session starts fresh.
+ *
+ * With an `initialPath` (the move dialog: a source's current location) the
+ * parent and folder name start from it instead, the path itself doesn't
+ * count as occupied, and the parent is never remembered.
  */
 export function useSaveLocation(
   mode: SaveMode,
   nameSource: string,
-  _initialPath?: string,
+  initialPath?: string,
 ): SaveLocation {
   const defaultParent = DEFAULT_PARENTS[mode]
-  const [parent, setParent] = useState(defaultParent)
-  const [parentTouched, setParentTouched] = useState(false)
-  const [sessionCandidate, setSessionCandidate] = useState<string | null>(null)
+  const initialParent = initialPath === undefined ? null : (parentOf(initialPath) ?? '')
+  const [parent, setParent] = useState(initialParent ?? defaultParent)
+  const [parentTouched, setParentTouched] = useState(initialParent !== null)
+  const [sessionCandidate, setSessionCandidate] = useState<string | null>(initialParent)
   const [stagedFrom, setStagedFrom] = useState<string | null>(null)
   const [browserOpen, setBrowserOpen] = useState(false)
-  const [editedFolderName, setEditedFolderName] = useState('')
-  const [folderNameEdited, setFolderNameEdited] = useState(false)
+  const [editedFolderName, setEditedFolderName] = useState(
+    initialPath === undefined ? '' : nameOf(initialPath),
+  )
+  const [folderNameEdited, setFolderNameEdited] = useState(initialPath !== undefined)
   const [root, setRoot] = useState('')
 
   const playlists = usePlaylists()
@@ -111,8 +122,11 @@ export function useSaveLocation(
     const taken = new Map<string, string>()
     playlists.data?.forEach((playlist) => taken.set(playlist.path, playlist.name))
     channels.data?.forEach((channel) => taken.set(channel.path, channel.name))
+    if (initialPath !== undefined) {
+      taken.delete(initialPath)
+    }
     return taken
-  }, [playlists.data, channels.data])
+  }, [playlists.data, channels.data, initialPath])
 
   // Suggestions derive from the dialog's own kind only: the other kind's
   // folders are where the user files the other kind.
@@ -209,6 +223,10 @@ export function useSaveLocation(
     stagedFrom,
     stage,
     value: { path: destinationPath, destination, valid, occupiedBy },
-    remember: () => writeRememberedParent(mode, parent),
+    remember: () => {
+      if (initialPath === undefined) {
+        writeRememberedParent(mode, parent)
+      }
+    },
   }
 }

@@ -19,7 +19,6 @@ use tracing::{error, info, warn};
 /// Moves a tracked playlist's or channel's show directory to a new storage
 /// path, keeping every video record, episode number and watch state.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub struct ShowMover {
     playlist_repository: Arc<dyn PlaylistRepository>,
     channel_repository: Arc<dyn ChannelRepository>,
