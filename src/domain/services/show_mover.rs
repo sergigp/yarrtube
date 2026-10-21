@@ -94,10 +94,18 @@ impl ShowMoverApi for ShowMover {
 
     fn move_channel(
         &self,
-        _id: ChannelHandle,
-        _path: PlaylistPath,
+        id: ChannelHandle,
+        path: PlaylistPath,
     ) -> Result<Channel, MoveShowError> {
-        Err(MoveShowError::NotFound)
+        let _guard = self.lock(ShowKey::Channel(id.clone()))?;
+        let channel = self.find_channel(&id)?;
+        self.ensure_destination_free(&channel.path, &path)?;
+        let (old_dir, new_dir) = (self.show_dir(&channel.path), self.show_dir(&path));
+        let moved = channel.with_path(path);
+        self.relocate(&old_dir, &new_dir, || self.update_channel(&moved))?;
+        self.publish_show_moved(&old_dir, &new_dir);
+        info!(channel_id = %id, path = %moved.path, "moved channel");
+        Ok(moved)
     }
 }
 
@@ -112,6 +120,13 @@ impl ShowMover {
 
     fn find_playlist(&self, id: &PlaylistId) -> Result<Playlist, MoveShowError> {
         self.playlist_repository
+            .find(id)
+            .map_err(MoveShowError::Repository)?
+            .ok_or(MoveShowError::NotFound)
+    }
+
+    fn find_channel(&self, id: &ChannelHandle) -> Result<Channel, MoveShowError> {
+        self.channel_repository
             .find(id)
             .map_err(MoveShowError::Repository)?
             .ok_or(MoveShowError::NotFound)
@@ -239,6 +254,12 @@ impl ShowMover {
     fn update_playlist(&self, playlist: &Playlist) -> Result<(), MoveShowError> {
         self.playlist_repository
             .update(playlist)
+            .map_err(MoveShowError::Repository)
+    }
+
+    fn update_channel(&self, channel: &Channel) -> Result<(), MoveShowError> {
+        self.channel_repository
+            .update(channel)
             .map_err(MoveShowError::Repository)
     }
 

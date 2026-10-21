@@ -188,6 +188,7 @@ mod tests {
     use crate::domain::services::SubtitleFetcher;
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::services::VideoRelocator;
+    use crate::domain::show::ShowMoved;
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::VideoId;
     use crate::domain::video::{PlaybackPosition, Video};
@@ -2157,6 +2158,56 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_move_a_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/creators/somechannel"));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(
+            show_mover,
+            "@somechannel",
+            move_request("science/somechannel"),
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Ok(ChannelResponse {
+                path: "science/somechannel".to_string(),
+                ..some_channel_response()
+            })
+        );
+        assert_eq!(
+            channel_repository.list().unwrap(),
+            vec![
+                channel("@somechannel")
+                    .with_path(PlaylistPath::new("science/somechannel").unwrap())
+            ]
+        );
+        assert_eq!(
+            video_file_repository.renamed_dirs(),
+            vec![(
+                std::path::PathBuf::from("/videos/creators/somechannel"),
+                std::path::PathBuf::from("/videos/science/somechannel")
+            )]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::ShowMoved(ShowMoved {
+                    from: "/videos/creators/somechannel".to_string(),
+                    to: "/videos/science/somechannel".to_string(),
+                })
+            )]
+        );
+    }
+
     fn any_channel_creator() -> ChannelCreator {
         ChannelCreator::new(
             Arc::new(SqliteChannelRepository::new(unused_connection())),
@@ -2704,6 +2755,50 @@ mod tests {
             Path(channel_handle.to_string()),
         )
         .await
+    }
+
+    async fn move_(
+        show_mover: ShowMover,
+        channel_handle: &str,
+        request: MoveChannelRequest,
+    ) -> Result<ChannelResponse, ApiError> {
+        move_channel(
+            State(show_mover),
+            Path(channel_handle.to_string()),
+            Json(request),
+        )
+        .await
+        .map(|Json(channel)| channel)
+    }
+
+    /// Builds a mover on `db` (where each test seeds and asserts sources,
+    /// videos, tasks and events) under the videos root `/videos`, with its
+    /// own show locks, nobody else holds.
+    fn show_mover(
+        db: &TestDatabase,
+        video_file_repository: Arc<FakeVideoFileRepository>,
+    ) -> ShowMover {
+        ShowMover::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            video_file_repository,
+            event_publisher(db),
+            Arc::new(ShowLocks::default()),
+            "/videos",
+        )
+    }
+
+    fn move_request(path: &str) -> MoveChannelRequest {
+        MoveChannelRequest {
+            path: Some(path.to_string()),
+        }
     }
 
     async fn reconcile(
