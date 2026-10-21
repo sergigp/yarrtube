@@ -2447,6 +2447,49 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_move_a_playlist_with_errored_and_excluded_videos() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        save_downloaded_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            "vid_downloaded",
+            0,
+        );
+        save_playlist_video_as(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            playlist_episode("vid_errored", "Errored", 2).mark_errored(fixed_timestamp()),
+            1,
+        );
+        save_playlist_video_as(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            playlist_episode("vid_excluded", "Excluded", 3).mark_excluded(fixed_timestamp()),
+            2,
+        );
+        let show_mover = show_mover(&db, video_file_repository);
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(response, Ok(playlist_response("PL1", "music/lofi")));
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/lofi")]
+        );
+    }
+
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -3014,6 +3057,25 @@ mod tests {
             Arc::new(ShowLocks::default()),
             "/videos",
         )
+    }
+
+    /// Saves `video` as it is and its playlist membership.
+    fn save_playlist_video_as(
+        video_repository: &dyn VideoRepository,
+        playlist_video_repository: &dyn PlaylistVideoRepository,
+        playlist: &str,
+        video: Video,
+        position: i64,
+    ) {
+        video_repository.save(&video).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                playlist_id(playlist),
+                video.id.clone(),
+                position,
+                fixed_timestamp(),
+            ))
+            .unwrap();
     }
 
     fn move_request(path: &str) -> MovePlaylistRequest {
