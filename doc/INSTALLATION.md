@@ -114,6 +114,10 @@ to" (or "Choose another folder…") and the folder name, then **Move**. Its
 show folder is renamed in place: nothing is downloaded again, and every
 episode keeps its number and watch progress.
 
+While the source still has downloads or fetches in progress, "Move…" is
+disabled with "Downloads in progress — you can move it once they finish."
+and becomes available by itself a few seconds after they do.
+
 A move is refused, with nothing changed, while:
 
 - any of its videos is still waiting to download or downloading, or a
