@@ -2877,6 +2877,54 @@ mod tests {
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
+    #[tokio::test]
+    async fn it_should_rename_back_if_recording_the_path_fails() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        let show_mover = ShowMover::new(
+            Arc::new(FailingUpdatePlaylistRepository(
+                SqlitePlaylistRepository::new(db.database()),
+            )),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            task_repository(&db),
+            video_file_repository.clone(),
+            event_publisher(&db),
+            Arc::new(ShowLocks::default()),
+            "/videos",
+        );
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(response, Err(ApiError::internal("disk I/O error")));
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/chill")]
+        );
+        assert_eq!(
+            video_file_repository.renamed_dirs(),
+            vec![
+                (
+                    std::path::PathBuf::from("/videos/music/chill"),
+                    std::path::PathBuf::from("/videos/music/lofi")
+                ),
+                (
+                    std::path::PathBuf::from("/videos/music/lofi"),
+                    std::path::PathBuf::from("/videos/music/chill")
+                ),
+            ]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -3062,6 +3110,40 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
         )
+    }
+
+    /// The real playlist repository, except that `update` fails: the one
+    /// write SQLite can't be made to fail on its own.
+    struct FailingUpdatePlaylistRepository(SqlitePlaylistRepository);
+
+    impl PlaylistRepository for FailingUpdatePlaylistRepository {
+        fn find(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
+            self.0.find(id)
+        }
+
+        fn insert(&self, playlist: &Playlist) -> anyhow::Result<()> {
+            self.0.insert(playlist)
+        }
+
+        fn update(&self, _playlist: &Playlist) -> anyhow::Result<()> {
+            anyhow::bail!("disk I/O error")
+        }
+
+        fn record_last_episode(
+            &self,
+            id: &PlaylistId,
+            number: PlaylistEpisodeNumber,
+        ) -> anyhow::Result<()> {
+            self.0.record_last_episode(id, number)
+        }
+
+        fn delete(&self, id: &PlaylistId) -> anyhow::Result<()> {
+            self.0.delete(id)
+        }
+
+        fn list(&self) -> anyhow::Result<Vec<Playlist>> {
+            self.0.list()
+        }
     }
 
     struct FailingYoutubePlaylistRepository;

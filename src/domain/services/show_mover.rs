@@ -14,7 +14,7 @@ use crate::infrastructure::shared::domain_events::event_publisher::EventPublishe
 use crate::infrastructure::shared::show_locks::{ShowLockGuard, ShowLocks};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 /// Moves a tracked playlist's or channel's show directory to a new storage
 /// path, keeping every video record, episode number and watch state.
@@ -85,9 +85,8 @@ impl ShowMoverApi for ShowMover {
         self.ensure_destination_free(&playlist.path, &path)?;
         let (old_dir, new_dir) = (self.show_dir(&playlist.path), self.show_dir(&path));
         self.ensure_settled(&self.playlist_video_ids(&id)?, &old_dir)?;
-        self.rename(&old_dir, &new_dir)?;
         let moved = playlist.with_path(path);
-        self.update_playlist(&moved)?;
+        self.relocate(&old_dir, &new_dir, || self.update_playlist(&moved))?;
         self.publish_show_moved(&old_dir, &new_dir);
         info!(playlist_id = %id, path = %moved.path, "moved playlist");
         Ok(moved)
@@ -203,15 +202,38 @@ impl ShowMover {
         self.videos_root.join(path.as_str())
     }
 
-    /// A source that never stored a file has no show directory: there is
-    /// nothing to rename, only the new path to record.
-    fn rename(&self, from: &Path, to: &Path) -> Result<(), MoveShowError> {
+    /// Renames the show directory, then `record`s the new path; a failure to
+    /// record it renames the directory back.
+    fn relocate(
+        &self,
+        from: &Path,
+        to: &Path,
+        record: impl FnOnce() -> Result<(), MoveShowError>,
+    ) -> Result<(), MoveShowError> {
+        let renamed = self.rename(from, to)?;
+        record().inspect_err(|_| {
+            if renamed {
+                self.rename_back(to, from);
+            }
+        })
+    }
+
+    /// Whether there was a directory to rename. A source that never stored
+    /// a file has no show directory: there is only the new path to record.
+    fn rename(&self, from: &Path, to: &Path) -> Result<bool, MoveShowError> {
         if !self.video_file_repository.dir_exists(from) {
-            return Ok(());
+            return Ok(false);
         }
         self.video_file_repository
             .rename_dir(from, to)
+            .map(|()| true)
             .map_err(MoveShowError::Filesystem)
+    }
+
+    fn rename_back(&self, from: &Path, to: &Path) {
+        if let Err(e) = self.video_file_repository.rename_dir(from, to) {
+            error!(from = ?from, to = ?to, error = %e, "failed to rename show directory back");
+        }
     }
 
     fn update_playlist(&self, playlist: &Playlist) -> Result<(), MoveShowError> {
