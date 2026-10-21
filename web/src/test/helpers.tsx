@@ -103,6 +103,7 @@ export function aChannel(overrides: Partial<ChannelListItem> = {}): ChannelListI
     reconcile_interval_minutes: 180,
     avatar_filename: null,
     unwatched_count: 0,
+    work_in_progress: false,
     ...overrides,
   }
 }
@@ -120,6 +121,7 @@ export function aPlaylist(overrides: Partial<PlaylistListItem> = {}): PlaylistLi
     reconcile_interval_minutes: 180,
     created_at: '2026-01-01T00:00:00Z',
     unwatched_count: 0,
+    work_in_progress: false,
     ...overrides,
   }
 }

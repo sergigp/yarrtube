@@ -3,8 +3,10 @@ use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Reads playlists as `PlaylistView`s.
@@ -13,6 +15,10 @@ pub struct PlaylistViewSearcher {
     repository: Arc<dyn PlaylistRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    #[allow(dead_code)]
+    task_repository: Arc<dyn TaskRepository>,
+    #[allow(dead_code)]
+    videos_root: PathBuf,
 }
 
 impl PlaylistViewSearcher {
@@ -20,11 +26,15 @@ impl PlaylistViewSearcher {
         repository: Arc<dyn PlaylistRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         video_repository: Arc<dyn VideoRepository>,
+        task_repository: Arc<dyn TaskRepository>,
+        videos_root: impl Into<PathBuf>,
     ) -> Self {
         Self {
             repository,
             playlist_video_repository,
             video_repository,
+            task_repository,
+            videos_root: videos_root.into(),
         }
     }
 }
@@ -77,6 +87,7 @@ impl PlaylistViewSearcher {
 
     fn playlist_view(playlist: Playlist, counts: &HashMap<PlaylistId, usize>) -> PlaylistView {
         PlaylistView {
+            work_in_progress: false,
             unwatched_count: counts.get(&playlist.id).copied().unwrap_or(0),
             id: playlist.id,
             name: playlist.name,

@@ -1605,6 +1605,11 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(channel_view_searcher).await;
@@ -1621,6 +1626,11 @@ mod tests {
             channel_repository,
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(channel_view_searcher).await;
@@ -1650,6 +1660,11 @@ mod tests {
             channel_repository,
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(channel_view_searcher).await;
@@ -1687,6 +1702,11 @@ mod tests {
             channel_repository,
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(channel_view_searcher).await;
@@ -1720,6 +1740,11 @@ mod tests {
             channel_repository,
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(channel_view_searcher).await;
@@ -1783,6 +1808,11 @@ mod tests {
             channel_repository,
             channel_video_repository,
             video_repository,
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(channel_view_searcher).await;
@@ -2765,6 +2795,7 @@ mod tests {
             reconcile_interval_minutes: 180,
             avatar_filename: None,
             unwatched_count: 0,
+            work_in_progress: false,
         }
     }
 

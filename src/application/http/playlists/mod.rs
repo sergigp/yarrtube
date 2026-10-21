@@ -1277,6 +1277,11 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1298,6 +1303,11 @@ mod tests {
             playlist_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1328,6 +1338,11 @@ mod tests {
             playlist_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1358,6 +1373,11 @@ mod tests {
             playlist_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1391,6 +1411,11 @@ mod tests {
             playlist_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1456,6 +1481,11 @@ mod tests {
             playlist_repository,
             playlist_video_repository,
             video_repository,
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(playlist_view_searcher).await;
@@ -1492,6 +1522,11 @@ mod tests {
             playlist_repository,
             playlist_video_repository,
             video_repository,
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
         );
 
         let response = list(playlist_view_searcher).await;
@@ -3440,6 +3475,7 @@ mod tests {
             reconcile_interval_minutes: 180,
             created_at: fixed_timestamp(),
             unwatched_count: 0,
+            work_in_progress: false,
         }
     }
 

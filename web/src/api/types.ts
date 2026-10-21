@@ -20,6 +20,8 @@ export interface ChannelListItem {
   reconcile_interval_minutes: number
   avatar_filename: string | null
   unwatched_count: number
+  /** Still downloading or fetching something: it can't be moved yet. */
+  work_in_progress: boolean
 }
 
 /** An entry of `GET /api/playlists`. Playlists don't report an unwatched count. */
@@ -34,6 +36,8 @@ export interface PlaylistListItem {
   reconcile_interval_minutes: number
   created_at: string
   unwatched_count: number
+  /** Still downloading or fetching something: it can't be moved yet. */
+  work_in_progress: boolean
 }
 
 /** A sidebar/detail library entry: what channels and playlists share. */

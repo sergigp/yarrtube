@@ -3,8 +3,10 @@ use crate::domain::channel_video::ChannelVideo;
 use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
+use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Reads channels as `ChannelView`s.
@@ -13,6 +15,10 @@ pub struct ChannelViewSearcher {
     repository: Arc<dyn ChannelRepository>,
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    #[allow(dead_code)]
+    task_repository: Arc<dyn TaskRepository>,
+    #[allow(dead_code)]
+    videos_root: PathBuf,
 }
 
 impl ChannelViewSearcher {
@@ -20,11 +26,15 @@ impl ChannelViewSearcher {
         repository: Arc<dyn ChannelRepository>,
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         video_repository: Arc<dyn VideoRepository>,
+        task_repository: Arc<dyn TaskRepository>,
+        videos_root: impl Into<PathBuf>,
     ) -> Self {
         Self {
             repository,
             channel_video_repository,
             video_repository,
+            task_repository,
+            videos_root: videos_root.into(),
         }
     }
 }
@@ -77,6 +87,7 @@ impl ChannelViewSearcher {
 
     fn channel_view(channel: Channel, counts: &HashMap<ChannelHandle, usize>) -> ChannelView {
         ChannelView {
+            work_in_progress: false,
             unwatched_count: counts.get(&channel.id).copied().unwrap_or(0),
             id: channel.id,
             name: channel.name,
