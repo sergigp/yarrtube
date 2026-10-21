@@ -2510,6 +2510,16 @@ mod tests {
         assert_eq!(video_file_repository.renamed_dirs(), vec![]);
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_move_if_path_missing() {
+        let response = move_(any_show_mover(), "PL1", MovePlaylistRequest { path: None }).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("Playlist path must not be empty"))
+        );
+    }
+
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -3096,6 +3106,26 @@ mod tests {
                 fixed_timestamp(),
             ))
             .unwrap();
+    }
+
+    /// A mover for tests whose request is rejected before reaching it, on an
+    /// unmigrated in-memory database.
+    fn any_show_mover() -> ShowMover {
+        ShowMover::new(
+            Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            Arc::new(SqliteChannelRepository::new(unused_connection())),
+            Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+            Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+            Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqliteTaskRepository::new(
+                unused_connection(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            unused_event_publisher(),
+            Arc::new(ShowLocks::default()),
+            "/videos",
+        )
     }
 
     fn move_request(path: &str) -> MovePlaylistRequest {
