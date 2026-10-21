@@ -78,7 +78,10 @@ episodes on its own, and the scan trigger below just makes it immediate.
 
 With the scan trigger on, yarrtube asks Plex to scan a show as soon as one
 of its videos finishes downloading, and again once that video's subtitle
-file is written. You need:
+file is written. After you
+[move a playlist or channel](INSTALLATION.md#moving-a-playlist-or-channel),
+it asks Plex to scan both the show's new folder and its old one, so Plex
+picks the show up at its new location and drops it from the old. You need:
 
 - A Plex token (`X-Plex-Token`) to authenticate yarrtube's requests.
 - The path at which the Plex server sees yarrtube's videos root.

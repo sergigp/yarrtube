@@ -34,7 +34,7 @@
 - [x] 2.26 `video.rs`: `it_should_be_settled_only_when_downloaded_errored_or_excluded`.
 - [x] 2.27 Web: `MoveSourceDialog` tests (prefilled location, save disabled when unchanged, posts the move and closes, shows server error and stays open, cancel sends nothing); implement the dialog and `useSaveLocation` `initialPath` (current path not flagged as occupied, parent not remembered). Verify: `npm run check`.
 - [x] 2.28 Web: `EditPlaylistDialog`/`EditChannelDialog` tests (Location line shows current path, "Move…" opens the move dialog without saving); implement. Verify: `npm run check`.
-- [ ] 2.29 Docs: describe moving a playlist/channel, its preconditions and the same-filesystem limit in `doc/INSTALLATION.md` (or the usage section it links), and the post-move scan in `doc/PLEX.md`. Verify: the documented steps match the UI.
+- [x] 2.29 Docs: describe moving a playlist/channel, its preconditions and the same-filesystem limit in `doc/INSTALLATION.md` (or the usage section it links), and the post-move scan in `doc/PLEX.md`. Verify: the documented steps match the UI.
 
 ## 3. Infrastructure adapters (TDD)
 

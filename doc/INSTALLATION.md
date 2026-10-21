@@ -105,6 +105,28 @@ Each playlist and channel is saved as a TV show (layout in
 filesystem: downloads are staged in a hidden `.downloads` folder there and
 moved into place when complete.
 
+### Moving a playlist or channel
+
+To put a playlist's or channel's videos somewhere else, open its edit
+dialog (the source's menu → "Edit settings"), check its current
+**Location** and choose **Move…**. Pick the new parent folder under "Save
+to" (or "Choose another folder…") and the folder name, then **Move**. Its
+show folder is renamed in place: nothing is downloaded again, and every
+episode keeps its number and watch progress.
+
+A move is refused, with nothing changed, while:
+
+- any of its videos is still waiting to download or downloading, or a
+  thumbnail, subtitle fetch or file deletion for it is queued or running
+  (failed and excluded videos don't count);
+- the source is being synced (try again once the sync finishes);
+- the new path is the current one, is used by another playlist or channel,
+  sits inside one's folder or contains one (its own included);
+- a file or folder already exists at the new path.
+
+Moves are renames within the videos root's filesystem: a destination on
+another mount is rejected, and the files stay where they were.
+
 ## Plex
 
 Point a Plex **TV Shows** library (Plex NFO Series agent) at your videos
