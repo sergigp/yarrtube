@@ -6,6 +6,7 @@ use crate::domain::services::{
     ChannelAvatarRestorer, ChannelAvatarRestorerApi, DesiredState, InternalVideoReconciler,
     InternalVideoReconcilerApi, MembershipDelta, ShowFileWriter, ShowFileWriterApi,
 };
+use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -18,7 +19,7 @@ use crate::infrastructure::repositories::youtube_channel_videos_repository::{
 };
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::error_report;
-use crate::infrastructure::shared::show_locks::ShowLocks;
+use crate::infrastructure::shared::show_locks::{ShowLockGuard, ShowLocks};
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
@@ -102,6 +103,7 @@ pub trait ChannelVideoReconcilerApi: Send + Sync {
 
 impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
     fn reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
+        let _guard = self.lock(&id);
         let Some(channel) = self.find_channel(&id)? else {
             return Ok(());
         };
@@ -111,6 +113,7 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
     }
 
     fn initial_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
+        let _guard = self.lock(&id);
         let Some(channel) = self.find_channel(&id)? else {
             return Ok(());
         };
@@ -120,6 +123,7 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
     }
 
     fn force_reconcile(&self, id: ChannelHandle) -> anyhow::Result<()> {
+        let _guard = self.lock(&id);
         let Some(channel) = self.find_channel(&id)? else {
             return Ok(());
         };
@@ -129,6 +133,12 @@ impl ChannelVideoReconcilerApi for ChannelVideoReconciler {
 }
 
 impl ChannelVideoReconciler {
+    /// Waits for a move of the channel to finish, so the pass reads the
+    /// channel, and works in its folder, only once it has moved.
+    fn lock(&self, id: &ChannelHandle) -> ShowLockGuard<'_> {
+        self.show_locks.lock(ShowKey::Channel(id.clone()))
+    }
+
     fn find_channel(&self, id: &ChannelHandle) -> anyhow::Result<Option<Channel>> {
         let channel = self.channel_repository.find(id)?;
         if channel.is_none() {
