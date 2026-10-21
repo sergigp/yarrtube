@@ -161,6 +161,10 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
     }
 
     fn rename_dir(&self, from: &Path, to: &Path) -> anyhow::Result<()> {
+        // `rename` would silently replace an empty directory at `to`.
+        if std::fs::symlink_metadata(to).is_ok() {
+            anyhow::bail!("failed to rename {from:?} to {to:?}: destination already exists");
+        }
         create_parent(to)?;
         std::fs::rename(from, to)
             .inspect_err(
@@ -754,6 +758,25 @@ mod tests {
             Some(b"media".to_vec())
         );
         assert!(!dir.join("music/chill").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_fail_to_rename_onto_an_existing_directory() {
+        let dir = unique_temp_dir("video-file-repository-rename-dir-existing");
+        std::fs::create_dir_all(dir.join("music/chill")).unwrap();
+        std::fs::write(dir.join("music/chill/tvshow.nfo"), b"show").unwrap();
+        std::fs::create_dir_all(dir.join("music/lofi")).unwrap();
+
+        let result = FilesystemVideoFileRepository
+            .rename_dir(&dir.join("music/chill"), &dir.join("music/lofi"));
+
+        assert!(result.is_err());
+        assert_eq!(
+            std::fs::read(dir.join("music/chill/tvshow.nfo")).ok(),
+            Some(b"show".to_vec())
+        );
+        assert!(dir.join("music/lofi").is_dir());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

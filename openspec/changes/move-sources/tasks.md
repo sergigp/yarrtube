@@ -46,7 +46,7 @@
 
 `infrastructure/repositories/filesystem_video_file_repository.rs`
 - [x] 3.5 `it_should_rename_a_directory_creating_missing_parents`
-- [ ] 3.6 `it_should_fail_to_rename_onto_an_existing_directory`
+- [x] 3.6 `it_should_fail_to_rename_onto_an_existing_directory`
 - [ ] 3.7 `it_should_report_whether_a_directory_exists`
 
 ## 4. Verification
