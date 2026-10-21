@@ -42,7 +42,7 @@
 - [x] 3.1 `it_should_refuse_try_lock_while_held`
 - [x] 3.2 `it_should_release_on_drop`
 - [x] 3.3 `it_should_block_lock_until_released`
-- [ ] 3.4 `it_should_not_contend_across_keys`
+- [x] 3.4 `it_should_not_contend_across_keys`
 
 `infrastructure/repositories/filesystem_video_file_repository.rs`
 - [ ] 3.5 `it_should_rename_a_directory_creating_missing_parents`

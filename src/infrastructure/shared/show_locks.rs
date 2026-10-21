@@ -46,6 +46,7 @@ impl Drop for ShowLockGuard<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::channel::ChannelHandle;
     use crate::domain::playlist::PlaylistId;
 
     #[test]
@@ -82,6 +83,23 @@ mod tests {
         });
 
         assert_eq!((waited, acquired), (true, true));
+    }
+
+    #[test]
+    fn it_should_not_contend_across_keys() {
+        let locks = ShowLocks::default();
+        let _held = locks.lock(playlist("PL1"));
+
+        let others = [
+            locks.try_lock(playlist("PL2")).is_some(),
+            locks
+                .try_lock(ShowKey::Channel(
+                    ChannelHandle::new("@somechannel").unwrap(),
+                ))
+                .is_some(),
+        ];
+
+        assert_eq!(others, [true, true]);
     }
 
     fn playlist(id: &str) -> ShowKey {
