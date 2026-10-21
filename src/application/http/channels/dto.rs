@@ -27,6 +27,12 @@ pub struct UpdateChannelRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct MoveChannelRequest {
+    #[serde(default)]
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct PreviewChannelQuery {
     #[serde(default)]
     pub channel: Option<String>,

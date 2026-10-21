@@ -19,6 +19,7 @@ use crate::infrastructure::repositories::youtube_playlist_items_repository::{
 };
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::error_report;
+use crate::infrastructure::shared::show_locks::ShowLocks;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
@@ -40,6 +41,8 @@ pub struct PlaylistVideoReconciler {
     internal_video_reconciler: Arc<InternalVideoReconciler>,
     show_file_writer: Arc<ShowFileWriter>,
     clock: Arc<dyn Clock>,
+    #[allow(dead_code)]
+    show_locks: Arc<ShowLocks>,
 }
 
 impl PlaylistVideoReconciler {
@@ -55,6 +58,7 @@ impl PlaylistVideoReconciler {
         internal_video_reconciler: Arc<InternalVideoReconciler>,
         show_file_writer: Arc<ShowFileWriter>,
         clock: Arc<dyn Clock>,
+        show_locks: Arc<ShowLocks>,
     ) -> Self {
         Self {
             playlist_repository,
@@ -67,6 +71,7 @@ impl PlaylistVideoReconciler {
             internal_video_reconciler,
             show_file_writer,
             clock,
+            show_locks,
         }
     }
 }

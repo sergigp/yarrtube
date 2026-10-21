@@ -43,6 +43,10 @@ impl Channel {
         }
     }
 
+    pub fn with_path(self, path: PlaylistPath) -> Self {
+        Self { path, ..self }
+    }
+
     pub fn with_quality(self, quality: Quality) -> Self {
         Self { quality, ..self }
     }

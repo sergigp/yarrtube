@@ -73,7 +73,11 @@ function isStaged(path: string, stagedFrom: string | null): boolean {
  * Meant to live in a component that unmounts when the dialog closes, so each
  * dialog session starts fresh.
  */
-export function useSaveLocation(mode: SaveMode, nameSource: string): SaveLocation {
+export function useSaveLocation(
+  mode: SaveMode,
+  nameSource: string,
+  _initialPath?: string,
+): SaveLocation {
   const defaultParent = DEFAULT_PARENTS[mode]
   const [parent, setParent] = useState(defaultParent)
   const [parentTouched, setParentTouched] = useState(false)

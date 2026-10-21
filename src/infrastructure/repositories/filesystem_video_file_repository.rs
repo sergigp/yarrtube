@@ -48,6 +48,14 @@ pub trait VideoFileRepository: Send + Sync {
     /// Reads the UTF-8 content of the file at `output_dir.join(filename)`.
     /// A missing file is `Ok(None)`, not an error.
     fn read_to_string(&self, output_dir: &Path, filename: &str) -> anyhow::Result<Option<String>>;
+
+    /// Returns whether a file or directory exists at `dir`.
+    fn dir_exists(&self, dir: &Path) -> bool;
+
+    /// Renames the directory `from` to `to`, creating `to`'s missing parents
+    /// first. A rename in place, never a copy: a `to` on another filesystem,
+    /// or one that already exists, fails with nothing moved.
+    fn rename_dir(&self, from: &Path, to: &Path) -> anyhow::Result<()>;
 }
 
 pub struct FilesystemVideoFileRepository;
@@ -153,6 +161,14 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
             }
         }
     }
+
+    fn dir_exists(&self, _dir: &Path) -> bool {
+        false
+    }
+
+    fn rename_dir(&self, _from: &Path, _to: &Path) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 /// The entries directly in `output_dir`, excluding yt-dlp's in-progress
@@ -219,6 +235,12 @@ pub struct FakeVideoFileRepository {
     pub(crate) failing_moves: Vec<std::path::PathBuf>,
     /// Files `read_to_string` finds, keyed by their full path.
     pub(crate) files: Vec<(std::path::PathBuf, String)>,
+    /// Directories `dir_exists` finds.
+    pub(crate) dirs: Vec<std::path::PathBuf>,
+    /// Every successful `rename_dir`, in call order.
+    pub(crate) renamed_dirs: std::sync::Mutex<Vec<(std::path::PathBuf, std::path::PathBuf)>>,
+    /// Whether every `rename_dir` fails, as a cross-filesystem rename would.
+    pub(crate) failing_renames: bool,
 }
 
 #[cfg(test)]
@@ -268,6 +290,26 @@ impl FakeVideoFileRepository {
             files: [self.files, vec![(path.into(), content.to_string())]].concat(),
             ..self
         }
+    }
+
+    /// The same fake, holding a directory at `dir`.
+    pub fn with_dir(self, dir: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            dirs: [self.dirs, vec![dir.into()]].concat(),
+            ..self
+        }
+    }
+
+    /// A fake whose every `rename_dir` fails.
+    pub fn with_failing_renames() -> Self {
+        Self {
+            failing_renames: true,
+            ..Self::default()
+        }
+    }
+
+    pub fn renamed_dirs(&self) -> Vec<(std::path::PathBuf, std::path::PathBuf)> {
+        self.renamed_dirs.lock().unwrap().clone()
     }
 
     pub fn with_file_exists(exists: bool) -> Self {
@@ -348,6 +390,14 @@ impl VideoFileRepository for FakeVideoFileRepository {
             .iter()
             .find(|(file, _)| *file == path)
             .map(|(_, content)| content.clone()))
+    }
+
+    fn dir_exists(&self, _dir: &Path) -> bool {
+        false
+    }
+
+    fn rename_dir(&self, _from: &Path, _to: &Path) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 

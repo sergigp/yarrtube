@@ -11,6 +11,7 @@ pub mod reconcile_on_channel_created;
 pub mod reconcile_on_playlist_created;
 pub mod remove_channel_from_categories_on_channel_deleted;
 pub mod remove_playlist_from_categories_on_playlist_deleted;
+pub mod scan_plex_folder_on_show_moved;
 pub mod scan_plex_folder_on_video_downloaded;
 pub mod scan_plex_folder_on_video_subtitles_fetched;
 
@@ -21,6 +22,7 @@ use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlayli
 use crate::domain::services::{
     CategoryMemberRemover, ChannelVideoReconciler, PlaylistVideoReconciler, PlexFolderScanner,
 };
+use crate::domain::show::ShowMoved;
 use crate::domain::video::{VideoDownloaded, VideoSubtitlesFetched};
 use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -40,6 +42,7 @@ use reconcile_on_channel_created::ReconcileOnChannelCreated;
 use reconcile_on_playlist_created::ReconcileOnPlaylistCreated;
 use remove_channel_from_categories_on_channel_deleted::RemoveChannelFromCategoriesOnChannelDeleted;
 use remove_playlist_from_categories_on_playlist_deleted::RemovePlaylistFromCategoriesOnPlaylistDeleted;
+use scan_plex_folder_on_show_moved::ScanPlexFolderOnShowMoved;
 use scan_plex_folder_on_video_downloaded::ScanPlexFolderOnVideoDownloaded;
 use scan_plex_folder_on_video_subtitles_fetched::ScanPlexFolderOnVideoSubtitlesFetched;
 use std::collections::HashMap;
@@ -166,8 +169,12 @@ pub fn registry(
         registry.insert(
             VideoSubtitlesFetched::EVENT_TYPE.to_string(),
             vec![Arc::new(ScanPlexFolderOnVideoSubtitlesFetched::new(
-                scanner,
+                scanner.clone(),
             ))],
+        );
+        registry.insert(
+            ShowMoved::EVENT_TYPE.to_string(),
+            vec![Arc::new(ScanPlexFolderOnShowMoved::new(scanner))],
         );
     }
     registry

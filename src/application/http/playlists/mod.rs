@@ -1,7 +1,7 @@
 pub mod dto;
 
 use super::blocking::run_blocking;
-use super::error::ApiError;
+use super::error::{ApiError, move_show_error};
 use super::validation::{MISSING_QUALITY, required};
 use super::videos::update_watch_state_error;
 use crate::domain::playlist::PlaylistId;
@@ -13,15 +13,16 @@ use crate::domain::services::{
     CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi, PlaylistDeleter,
     PlaylistDeleterApi, PlaylistPreviewer, PlaylistPreviewerApi, PlaylistUpdater,
     PlaylistUpdaterApi, PlaylistVideoReconciler, PlaylistVideoReconcilerApi, PlaylistViewSearcher,
-    PlaylistViewSearcherApi, VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
+    PlaylistViewSearcherApi, ShowMover, ShowMoverApi, VideoWatchStateUpdater,
+    VideoWatchStateUpdaterApi,
 };
 use crate::domain::shared::{Quality, ReconcileInterval};
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use dto::{
-    CreatePlaylistRequest, PlaylistListItemResponse, PlaylistPreviewResponse, PlaylistResponse,
-    PreviewPlaylistQuery, UpdatePlaylistRequest,
+    CreatePlaylistRequest, MovePlaylistRequest, PlaylistListItemResponse, PlaylistPreviewResponse,
+    PlaylistResponse, PreviewPlaylistQuery, UpdatePlaylistRequest,
 };
 
 const MISSING_PATH: &str = "Playlist path must not be empty";
@@ -127,6 +128,20 @@ pub async fn reconcile_playlist(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn move_playlist(
+    State(show_mover): State<ShowMover>,
+    Path(id): Path<String>,
+    Json(request): Json<MovePlaylistRequest>,
+) -> Result<Json<PlaylistResponse>, ApiError> {
+    let id = PlaylistId::new(id)?;
+    let path = PlaylistPath::new(required(request.path, MISSING_PATH)?)?;
+
+    run_blocking(move || show_mover.move_playlist(id, path))
+        .await?
+        .map(|playlist| Json(PlaylistResponse::from(playlist)))
+        .map_err(move_show_error)
+}
+
 pub async fn list_playlists(
     State(playlist_view_searcher): State<PlaylistViewSearcher>,
 ) -> Result<Json<Vec<PlaylistListItemResponse>>, ApiError> {
@@ -214,6 +229,7 @@ mod tests {
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,
     };
+    use crate::infrastructure::shared::show_locks::ShowLocks;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
@@ -2177,6 +2193,7 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         );
 
         let response = reconcile(playlist_video_reconciler, "PL1").await;
@@ -2484,6 +2501,7 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         )
     }
 
@@ -2548,6 +2566,7 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         )
     }
 

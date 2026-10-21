@@ -268,6 +268,13 @@ impl Task {
         }?;
         Some(format!("video:{video_id}"))
     }
+
+    /// The show directory a per-video task (`download_video`,
+    /// `fetch_thumbnail`, `fetch_subtitles`, `delete_video_file`) writes to
+    /// or deletes from; `None` for any other task type.
+    pub fn output_dir_of(_task_type: &str, _payload: &str) -> Option<String> {
+        None
+    }
 }
 
 #[cfg(test)]

@@ -62,6 +62,7 @@ use crate::infrastructure::shared::domain_events::event_publisher::{
 use crate::infrastructure::shared::domain_events::event_repository::{
     EventRepository, SqliteEventRepository,
 };
+use crate::infrastructure::shared::show_locks::ShowLocks;
 use crate::infrastructure::shared::sqlite_connection;
 use crate::infrastructure::shared::system_clock::{Clock, SystemClock};
 use anyhow::Result;
@@ -105,6 +106,8 @@ pub struct InfrastructureContainer {
     pub channel_avatar_repository: Arc<dyn ChannelAvatarRepository>,
     pub directory_repository: Arc<dyn DirectoryRepository>,
     pub ytdlp_updater: Arc<dyn YtdlpUpdater>,
+    /// The one registry every move and reconcile locks its show in.
+    pub show_locks: Arc<ShowLocks>,
 }
 
 impl InfrastructureContainer {
@@ -158,6 +161,7 @@ impl InfrastructureContainer {
                 settings.videos_path,
             )),
             ytdlp_updater: Arc::new(RealYtdlpUpdater),
+            show_locks: Arc::new(ShowLocks::default()),
             clock,
         })
     }

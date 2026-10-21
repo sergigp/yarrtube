@@ -149,6 +149,15 @@ export function updatePlaylist(id: string, body: UpdatePlaylistRequest): Promise
   })
 }
 
+/** Moves a playlist's show folder to `path`, relative to the videos root. */
+export function movePlaylist(id: string, path: string): Promise<PlaylistListItem> {
+  return request(`/playlists/${encodeURIComponent(id)}/move`, {
+    method: 'POST',
+    body: { path },
+    label: `move playlist ${id}`,
+  })
+}
+
 export async function deletePlaylist(id: string): Promise<void> {
   await send(`/playlists/${encodeURIComponent(id)}`, {
     method: 'DELETE',
@@ -203,6 +212,15 @@ export function updateChannel(handle: string, body: UpdateChannelRequest): Promi
     method: 'PATCH',
     body,
     label: `update channel ${handle}`,
+  })
+}
+
+/** Moves a channel's show folder to `path`, relative to the videos root. */
+export function moveChannel(handle: string, path: string): Promise<CreatedChannel> {
+  return request(`/channels/${encodeURIComponent(handle)}/move`, {
+    method: 'POST',
+    body: { path },
+    label: `move channel ${handle}`,
   })
 }
 

@@ -69,6 +69,7 @@ mod tests {
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,
     };
+    use crate::infrastructure::shared::show_locks::ShowLocks;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
@@ -175,6 +176,7 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = handle(&subscriber, r#"{"playlist_id": "PL1"}"#);
@@ -274,6 +276,7 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = handle(&subscriber, r#"{"playlist_id": "PL1"}"#);
@@ -358,6 +361,7 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = handle(&subscriber, r#"{"playlist_id": "PL1"}"#);
@@ -460,6 +464,7 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         )
     }
 
@@ -529,6 +534,7 @@ mod tests {
                 "/videos",
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ))
     }
 

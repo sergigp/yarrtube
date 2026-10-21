@@ -6,9 +6,9 @@ use crate::domain::services::{
     ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler, ChannelViewSearcher,
     DirectorySearcher, InternalVideoReconciler, LayoutMigrator, MetadataGenerator, PlaylistCreator,
     PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater, PlaylistVideoReconciler,
-    PlaylistViewSearcher, PlexFolderScanner, ShowFileWriter, SubtitleFetcher, SubtitleReader,
-    TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoRelocator,
-    VideoSearcher, VideoWatchStateUpdater,
+    PlaylistViewSearcher, PlexFolderScanner, ShowFileWriter, ShowMover, SubtitleFetcher,
+    SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter,
+    VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -462,6 +462,18 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.playlist_repository.clone(),
             category_video_collector(infrastructure),
         ),
+        show_mover: ShowMover::new(
+            infrastructure.playlist_repository.clone(),
+            infrastructure.channel_repository.clone(),
+            infrastructure.playlist_video_repository.clone(),
+            infrastructure.channel_video_repository.clone(),
+            infrastructure.video_repository.clone(),
+            infrastructure.task_repository.clone(),
+            infrastructure.video_file_repository.clone(),
+            infrastructure.event_publisher.clone(),
+            infrastructure.show_locks.clone(),
+            videos_path(),
+        ),
     }
 }
 
@@ -545,6 +557,7 @@ fn playlist_video_reconciler(infrastructure: &InfrastructureContainer) -> Playli
         internal_video_reconciler(infrastructure),
         show_file_writer(infrastructure),
         infrastructure.clock.clone(),
+        infrastructure.show_locks.clone(),
     )
 }
 
@@ -565,6 +578,7 @@ fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> Channel
             infrastructure.channel_avatar_repository.clone(),
         )),
         infrastructure.clock.clone(),
+        infrastructure.show_locks.clone(),
     )
 }
 

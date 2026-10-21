@@ -18,6 +18,7 @@ use crate::infrastructure::repositories::youtube_channel_videos_repository::{
 };
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::error_report;
+use crate::infrastructure::shared::show_locks::ShowLocks;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
@@ -41,6 +42,8 @@ pub struct ChannelVideoReconciler {
     show_file_writer: Arc<ShowFileWriter>,
     channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
     clock: Arc<dyn Clock>,
+    #[allow(dead_code)]
+    show_locks: Arc<ShowLocks>,
 }
 
 impl ChannelVideoReconciler {
@@ -57,6 +60,7 @@ impl ChannelVideoReconciler {
         show_file_writer: Arc<ShowFileWriter>,
         channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
         clock: Arc<dyn Clock>,
+        show_locks: Arc<ShowLocks>,
     ) -> Self {
         Self {
             channel_repository,
@@ -70,6 +74,7 @@ impl ChannelVideoReconciler {
             show_file_writer,
             channel_avatar_restorer,
             clock,
+            show_locks,
         }
     }
 }

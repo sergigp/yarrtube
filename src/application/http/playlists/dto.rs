@@ -26,6 +26,12 @@ pub struct UpdatePlaylistRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct MovePlaylistRequest {
+    #[serde(default)]
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct PreviewPlaylistQuery {
     #[serde(default)]
     pub playlist: Option<String>,

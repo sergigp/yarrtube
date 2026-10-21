@@ -85,6 +85,7 @@ mod tests {
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,
     };
+    use crate::infrastructure::shared::show_locks::ShowLocks;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
@@ -402,6 +403,7 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -873,6 +875,7 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -978,6 +981,7 @@ mod tests {
                 avatar_repository.clone(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1082,6 +1086,7 @@ mod tests {
                 avatar_repository.clone(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1179,6 +1184,7 @@ mod tests {
                 avatar_repository.clone(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1287,6 +1293,7 @@ mod tests {
                 avatar_repository.clone(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1395,6 +1402,7 @@ mod tests {
                 avatar_repository.clone(),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -1516,6 +1524,7 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -2273,6 +2282,7 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -2402,6 +2412,7 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -2496,6 +2507,7 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ));
 
         let result = run(&task, &payload_for("@somechannel"));
@@ -2649,6 +2661,7 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         )
     }
 
@@ -2723,6 +2736,7 @@ mod tests {
                 Arc::new(FakeChannelAvatarRepository::default()),
             )),
             Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(ShowLocks::default()),
         ))
     }
 

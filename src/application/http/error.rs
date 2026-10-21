@@ -1,4 +1,5 @@
 use crate::domain::shared::ValidationError;
+use crate::domain::show::MoveShowError;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -53,5 +54,19 @@ impl IntoResponse for ApiError {
             }),
         )
             .into_response()
+    }
+}
+
+/// Maps a failed move of a playlist or channel, the same for both.
+pub fn move_show_error(error: MoveShowError) -> ApiError {
+    match error {
+        e @ MoveShowError::NotFound => ApiError::new(StatusCode::NOT_FOUND, e),
+        e @ MoveShowError::Reconciling => ApiError::new(StatusCode::CONFLICT, e),
+        e @ MoveShowError::WorkInProgress => ApiError::new(StatusCode::CONFLICT, e),
+        e @ MoveShowError::SamePath => ApiError::new(StatusCode::CONFLICT, e),
+        e @ MoveShowError::DestinationInUse(_) => ApiError::new(StatusCode::CONFLICT, e),
+        e @ MoveShowError::DestinationExists(_) => ApiError::new(StatusCode::CONFLICT, e),
+        e @ MoveShowError::Filesystem(_) => ApiError::internal(e),
+        e @ MoveShowError::Repository(_) => ApiError::internal(e),
     }
 }
