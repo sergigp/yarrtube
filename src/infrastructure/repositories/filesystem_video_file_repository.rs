@@ -156,13 +156,13 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
         }
     }
 
-    fn dir_exists(&self, _dir: &Path) -> bool {
-        false
+    fn dir_exists(&self, dir: &Path) -> bool {
+        std::fs::symlink_metadata(dir).is_ok()
     }
 
     fn rename_dir(&self, from: &Path, to: &Path) -> anyhow::Result<()> {
         // `rename` would silently replace an empty directory at `to`.
-        if std::fs::symlink_metadata(to).is_ok() {
+        if self.dir_exists(to) {
             anyhow::bail!("failed to rename {from:?} to {to:?}: destination already exists");
         }
         create_parent(to)?;
@@ -777,6 +777,21 @@ mod tests {
             Some(b"show".to_vec())
         );
         assert!(dir.join("music/lofi").is_dir());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_report_whether_a_directory_exists() {
+        let dir = unique_temp_dir("video-file-repository-dir-exists");
+        std::fs::create_dir_all(dir.join("music/chill")).unwrap();
+        std::fs::write(dir.join("music/notes.txt"), b"notes").unwrap();
+
+        let exists: Vec<bool> = ["music/chill", "music/notes.txt", "music/lofi"]
+            .iter()
+            .map(|path| FilesystemVideoFileRepository.dir_exists(&dir.join(path)))
+            .collect();
+
+        assert_eq!(exists, vec![true, true, false]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
