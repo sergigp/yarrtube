@@ -1,6 +1,7 @@
 use crate::domain::channel::{Channel, ChannelHandle};
+use crate::domain::event::DomainEvent;
 use crate::domain::playlist::{Playlist, PlaylistId, PlaylistPath};
-use crate::domain::show::MoveShowError;
+use crate::domain::show::{MoveShowError, ShowMoved};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -10,8 +11,9 @@ use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::show_locks::ShowLocks;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tracing::{info, warn};
 
 /// Moves a tracked playlist's or channel's show directory to a new storage
 /// path, keeping every video record, episode number and watch state.
@@ -76,12 +78,18 @@ pub trait ShowMoverApi: Send + Sync {
 }
 
 impl ShowMoverApi for ShowMover {
-    fn move_playlist(
-        &self,
-        _id: PlaylistId,
-        _path: PlaylistPath,
-    ) -> Result<Playlist, MoveShowError> {
-        Err(MoveShowError::NotFound)
+    fn move_playlist(&self, id: PlaylistId, path: PlaylistPath) -> Result<Playlist, MoveShowError> {
+        let playlist = self.find_playlist(&id)?;
+        let old_dir = self.show_dir(&playlist.path);
+        let new_dir = self.show_dir(&path);
+        self.rename(&old_dir, &new_dir)?;
+        let moved = playlist.with_path(path);
+        self.playlist_repository
+            .update(&moved)
+            .map_err(MoveShowError::Repository)?;
+        self.publish_show_moved(&old_dir, &new_dir);
+        info!(playlist_id = %id, path = %moved.path, "moved playlist");
+        Ok(moved)
     }
 
     fn move_channel(
@@ -90,5 +98,36 @@ impl ShowMoverApi for ShowMover {
         _path: PlaylistPath,
     ) -> Result<Channel, MoveShowError> {
         Err(MoveShowError::NotFound)
+    }
+}
+
+impl ShowMover {
+    fn find_playlist(&self, id: &PlaylistId) -> Result<Playlist, MoveShowError> {
+        self.playlist_repository
+            .find(id)
+            .map_err(MoveShowError::Repository)?
+            .ok_or(MoveShowError::NotFound)
+    }
+
+    fn show_dir(&self, path: &PlaylistPath) -> PathBuf {
+        self.videos_root.join(path.as_str())
+    }
+
+    fn rename(&self, from: &Path, to: &Path) -> Result<(), MoveShowError> {
+        self.video_file_repository
+            .rename_dir(from, to)
+            .map_err(MoveShowError::Filesystem)
+    }
+
+    /// Best effort: the move is done once the new path is stored, so a lost
+    /// event only costs the Plex scan it would trigger.
+    fn publish_show_moved(&self, from: &Path, to: &Path) {
+        let event = DomainEvent::ShowMoved(ShowMoved {
+            from: from.to_string_lossy().into_owned(),
+            to: to.to_string_lossy().into_owned(),
+        });
+        if let Err(e) = self.event_publisher.publish(&event) {
+            warn!(from = ?from, to = ?to, error = %e, "failed to publish show moved");
+        }
     }
 }

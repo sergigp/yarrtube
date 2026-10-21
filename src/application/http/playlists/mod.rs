@@ -186,6 +186,7 @@ mod tests {
     use crate::domain::services::SubtitleFetcher;
     use crate::domain::services::ThumbnailFetcher;
     use crate::domain::services::VideoRelocator;
+    use crate::domain::show::ShowMoved;
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::Video;
@@ -2383,6 +2384,38 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_move_a_playlist() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(response, Ok(playlist_response("PL1", "music/lofi")));
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/lofi")]
+        );
+        assert_eq!(
+            video_file_repository.renamed_dirs(),
+            vec![(
+                std::path::PathBuf::from("/videos/music/chill"),
+                std::path::PathBuf::from("/videos/music/lofi")
+            )]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(1, show_moved("music/chill", "music/lofi"))]
+        );
+    }
+
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
@@ -2919,6 +2952,51 @@ mod tests {
         id: &str,
     ) -> Result<StatusCode, ApiError> {
         reconcile_playlist(State(playlist_video_reconciler), Path(id.to_string())).await
+    }
+
+    async fn move_(
+        show_mover: ShowMover,
+        id: &str,
+        request: MovePlaylistRequest,
+    ) -> Result<PlaylistResponse, ApiError> {
+        move_playlist(State(show_mover), Path(id.to_string()), Json(request))
+            .await
+            .map(|Json(playlist)| playlist)
+    }
+
+    /// Builds a mover on `db` (where each test seeds and asserts sources,
+    /// videos, tasks and events) under the videos root `/videos`, with its
+    /// own show locks, nobody else holds.
+    fn show_mover(
+        db: &TestDatabase,
+        video_file_repository: Arc<FakeVideoFileRepository>,
+    ) -> ShowMover {
+        ShowMover::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            task_repository(db),
+            video_file_repository,
+            event_publisher(db),
+            Arc::new(ShowLocks::default()),
+            "/videos",
+        )
+    }
+
+    fn move_request(path: &str) -> MovePlaylistRequest {
+        MovePlaylistRequest {
+            path: Some(path.to_string()),
+        }
+    }
+
+    /// `ShowMoved` for a show moved between two paths under `/videos`.
+    fn show_moved(from: &str, to: &str) -> DomainEvent {
+        DomainEvent::ShowMoved(ShowMoved {
+            from: format!("/videos/{from}"),
+            to: format!("/videos/{to}"),
+        })
     }
 
     /// The collector the updater reads category videos through, on `db` like

@@ -392,11 +392,15 @@ impl VideoFileRepository for FakeVideoFileRepository {
             .map(|(_, content)| content.clone()))
     }
 
-    fn dir_exists(&self, _dir: &Path) -> bool {
-        false
+    fn dir_exists(&self, dir: &Path) -> bool {
+        self.dirs.iter().any(|existing| existing == dir)
     }
 
-    fn rename_dir(&self, _from: &Path, _to: &Path) -> anyhow::Result<()> {
+    fn rename_dir(&self, from: &Path, to: &Path) -> anyhow::Result<()> {
+        self.renamed_dirs
+            .lock()
+            .unwrap()
+            .push((from.to_path_buf(), to.to_path_buf()));
         Ok(())
     }
 }
