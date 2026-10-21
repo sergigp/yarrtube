@@ -2520,6 +2520,18 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_move_if_path_invalid() {
+        let response = move_(any_show_mover(), "PL1", move_request("/music/lofi")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Playlist path must not be an absolute path"
+            ))
+        );
+    }
+
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
