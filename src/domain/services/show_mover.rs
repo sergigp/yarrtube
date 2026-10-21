@@ -82,8 +82,9 @@ impl ShowMoverApi for ShowMover {
     fn move_playlist(&self, id: PlaylistId, path: PlaylistPath) -> Result<Playlist, MoveShowError> {
         let playlist = self.find_playlist(&id)?;
         self.ensure_destination_free(&playlist.path, &path)?;
-        self.ensure_videos_settled(&self.playlist_video_ids(&id)?)?;
         let old_dir = self.show_dir(&playlist.path);
+        self.ensure_videos_settled(&self.playlist_video_ids(&id)?)?;
+        self.ensure_no_tasks_in(&old_dir)?;
         let new_dir = self.show_dir(&path);
         self.rename(&old_dir, &new_dir)?;
         let moved = playlist.with_path(path);
@@ -147,6 +148,23 @@ impl ShowMover {
             .find_many(ids)
             .map_err(MoveShowError::Repository)?;
         if !videos.iter().all(|video| video.is_download_settled()) {
+            return Err(MoveShowError::WorkInProgress);
+        }
+        Ok(())
+    }
+
+    /// No per-video task (download, thumbnail or subtitle fetch, file
+    /// deletion) is queued or running in the show directory.
+    fn ensure_no_tasks_in(&self, show_dir: &Path) -> Result<(), MoveShowError> {
+        let show_dir = show_dir.to_string_lossy();
+        let tasks = self
+            .task_repository
+            .list_non_completed()
+            .map_err(MoveShowError::Repository)?;
+        if tasks
+            .iter()
+            .any(|task| task.output_dir().is_some_and(|dir| dir == show_dir))
+        {
             return Err(MoveShowError::WorkInProgress);
         }
         Ok(())

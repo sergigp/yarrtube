@@ -272,8 +272,13 @@ impl Task {
     /// The show directory a per-video task (`download_video`,
     /// `fetch_thumbnail`, `fetch_subtitles`, `delete_video_file`) writes to
     /// or deletes from; `None` for any other task type.
-    pub fn output_dir_of(_task_type: &str, _payload: &str) -> Option<String> {
-        None
+    pub fn output_dir_of(task_type: &str, payload: &str) -> Option<String> {
+        match task_type {
+            "fetch_thumbnail" => Self::decode_fetch_thumbnail_payload(payload)
+                .ok()
+                .map(|(_, output_dir)| output_dir),
+            _ => None,
+        }
     }
 }
 

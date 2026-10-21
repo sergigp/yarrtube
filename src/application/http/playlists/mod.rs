@@ -2758,6 +2758,54 @@ mod tests {
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_move_if_a_thumbnail_fetch_is_queued() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let task_repository = task_repository(&db);
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository =
+            Arc::new(FakeVideoFileRepository::default().with_dir("/videos/music/chill"));
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        let video = save_downloaded_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            "vid_downloaded",
+            0,
+        );
+        task_repository
+            .schedule(
+                &Task::FetchThumbnail {
+                    video_id: video.id.as_str().to_string(),
+                    output_dir: "/videos/music/chill".to_string(),
+                },
+                fixed_timestamp(),
+            )
+            .unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "playlist or channel still has work in progress, try again once its downloads finish"
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/chill")]
+        );
+        assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
