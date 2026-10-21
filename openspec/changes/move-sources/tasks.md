@@ -12,7 +12,7 @@
 - [x] 2.4 `it_should_record_the_new_path_if_the_show_directory_is_missing`: no rename, new path stored.
 - [x] 2.5 `it_should_fail_to_move_if_path_missing`: 400.
 - [x] 2.6 `it_should_fail_to_move_if_path_invalid`: 400.
-- [ ] 2.7 `it_should_fail_to_move_a_missing_playlist`: 404.
+- [x] 2.7 `it_should_fail_to_move_a_missing_playlist`: 404.
 - [ ] 2.8 `it_should_fail_to_move_to_the_same_path`: 409.
 - [ ] 2.9 `it_should_fail_to_move_to_a_path_used_by_a_channel`: 409.
 - [ ] 2.10 `it_should_fail_to_move_into_its_own_path`: 409.
