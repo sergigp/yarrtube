@@ -113,7 +113,12 @@ impl ShowMover {
         self.videos_root.join(path.as_str())
     }
 
+    /// A source that never stored a file has no show directory: there is
+    /// nothing to rename, only the new path to record.
     fn rename(&self, from: &Path, to: &Path) -> Result<(), MoveShowError> {
+        if !self.video_file_repository.dir_exists(from) {
+            return Ok(());
+        }
         self.video_file_repository
             .rename_dir(from, to)
             .map_err(MoveShowError::Filesystem)

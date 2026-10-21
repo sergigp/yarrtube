@@ -2490,6 +2490,26 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_record_the_new_path_if_the_show_directory_is_missing() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_file_repository = Arc::new(FakeVideoFileRepository::default());
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(response, Ok(playlist_response("PL1", "music/lofi")));
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/lofi")]
+        );
+        assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+    }
+
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.
