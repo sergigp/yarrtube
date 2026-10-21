@@ -58,6 +58,16 @@ mod tests {
         assert!(second.is_none());
     }
 
+    #[test]
+    fn it_should_release_on_drop() {
+        let locks = ShowLocks::default();
+        drop(locks.lock(playlist("PL1")));
+
+        let again = locks.try_lock(playlist("PL1"));
+
+        assert!(again.is_some());
+    }
+
     fn playlist(id: &str) -> ShowKey {
         ShowKey::Playlist(PlaylistId::new(id).unwrap())
     }
