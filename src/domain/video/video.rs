@@ -848,4 +848,21 @@ mod tests {
 
         assert_eq!(fetchable, [true, false, false]);
     }
+
+    #[test]
+    fn it_should_be_settled_only_when_downloaded_errored_or_excluded() {
+        let now = DateTime::<Utc>::from_timestamp(100, 0).unwrap();
+        let videos = [
+            video(),
+            video().start_download(now),
+            video().mark_downloaded(Quality::High, "My Video.mp4", None, None, now),
+            video().mark_errored_retrying(now),
+            video().mark_errored(now),
+            video().mark_excluded(now),
+        ];
+
+        let settled: Vec<bool> = videos.iter().map(Video::is_download_settled).collect();
+
+        assert_eq!(settled, vec![false, false, true, false, true, true]);
+    }
 }
