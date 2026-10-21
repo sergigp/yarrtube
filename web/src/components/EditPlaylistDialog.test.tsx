@@ -148,4 +148,13 @@ describe('EditPlaylistDialog', () => {
 
     expect(screen.getByLabelText('Check for new videos every')).toHaveFocus()
   })
+
+  it('disables "Move…" while the playlist has work in progress', () => {
+    renderDialog(aPlaylist({ work_in_progress: true }))
+
+    expect(screen.getByRole('button', { name: 'Move…' })).toBeDisabled()
+    expect(
+      screen.getByText('Downloads in progress — you can move it once they finish.'),
+    ).toBeInTheDocument()
+  })
 })

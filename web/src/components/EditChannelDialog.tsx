@@ -122,7 +122,11 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
 
   return (
     <form className="flex min-w-0 flex-col gap-5" onSubmit={handleSubmit}>
-      <LocationLine path={channel.path} onMove={onMoveRequest} />
+      <LocationLine
+        path={channel.path}
+        onMove={onMoveRequest}
+        moveBlocked={channel.work_in_progress}
+      />
       <div className="flex flex-col gap-1.5">
         <VideoQualityField
           id="edit-channel-quality"

@@ -254,4 +254,13 @@ describe('EditChannelDialog', () => {
 
     expect(screen.getByRole('combobox', { name: /Video quality/ })).toHaveFocus()
   })
+
+  it('disables "Move…" while the channel has work in progress', () => {
+    renderDialog(aChannel({ work_in_progress: true }))
+
+    expect(screen.getByRole('button', { name: 'Move…' })).toBeDisabled()
+    expect(
+      screen.getByText('Downloads in progress — you can move it once they finish.'),
+    ).toBeInTheDocument()
+  })
 })

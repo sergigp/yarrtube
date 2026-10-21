@@ -109,7 +109,11 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
 
   return (
     <form className="flex min-w-0 flex-col gap-5" onSubmit={handleSubmit}>
-      <LocationLine path={playlist.path} onMove={onMoveRequest} />
+      <LocationLine
+        path={playlist.path}
+        onMove={onMoveRequest}
+        moveBlocked={playlist.work_in_progress}
+      />
       <ReconcileIntervalField id="edit-playlist-interval" value={interval} onChange={changeInterval} />
       <CategoryPicker value={categories.value} onChange={categories.onChange} />
 
