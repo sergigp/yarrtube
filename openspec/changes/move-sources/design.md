@@ -48,7 +48,8 @@ task queue, so the light lane alone cannot keep moves and reconciles apart.
 - `src/domain/event/domain_event.rs`: `DomainEvent::ShowMoved` variant.
 - `src/domain/playlist/playlist.rs`: `Playlist::with_path`.
 - `src/domain/channel/channel.rs`: `Channel::with_path`.
-- `src/domain/video/video.rs`: `Video::is_settled`.
+- `src/domain/video/video.rs`: a test pinning the reused `Video::is_download_settled` (Downloaded, Errored or Excluded); no new predicate.
+- `src/domain/playlist/playlist_path.rs`: `PlaylistPath::overlaps` (+ value object tests).
 - `src/domain/task/task.rs`: `Task::output_dir_of`, mirrors `exclusivity_key`.
 - `src/domain/task/scheduled_task.rs`: `ScheduledTask::output_dir`.
 - `src/domain/services/show_mover.rs`: the move use case.
@@ -69,8 +70,9 @@ task queue, so the light lane alone cannot keep moves and reconciles apart.
 - `web/src/api/{client,types}.ts`: `movePlaylist`, `moveChannel`.
 - `web/src/hooks/useSaveLocation.ts`: optional initial path; current path not "occupied"; don't remember parent on move.
 - `web/src/components/MoveSourceDialog.tsx` (+ test): the move dialog.
-- `web/src/components/EditPlaylistDialog.tsx` / `EditChannelDialog.tsx` (+ tests): Location line, "Move…" switches to the move dialog.
-- `smoke-tests/`: specs moving a playlist and a channel through the UI (route wiring).
+- `web/src/components/LocationLine.tsx`: the "Location" line with "Move…", shared by both edit dialogs.
+- `web/src/components/EditPlaylistDialog.tsx` / `EditChannelDialog.tsx` (+ tests): Location line; each owns a `moving` state and renders `MoveSourceDialog` itself, so callers are unchanged.
+- `smoke-tests/tests/moveSources.spec.js`: specs moving a playlist and a channel through the UI (route wiring).
 
 ## Types & Signatures
 
@@ -98,9 +100,10 @@ impl ShowMoved { pub const EVENT_TYPE: &str = "show_moved"; }
 // domain/playlist/playlist.rs, domain/channel/channel.rs
 pub fn with_path(self, path: PlaylistPath) -> Self;
 
-// domain/video/video.rs
-/// Downloaded, Errored or Excluded: nothing more will happen to it on its own.
-pub fn is_settled(&self) -> bool;
+// domain/playlist/playlist_path.rs
+/// The same folder, or one inside the other, segment-wise.
+pub fn overlaps(&self, other: &PlaylistPath) -> bool;
+// (settledness reuses the existing Video::is_download_settled)
 
 // domain/task/task.rs
 /// The show directory a per-video task writes to or deletes from.
@@ -118,9 +121,12 @@ impl ShowLocks {
 }
 
 // infrastructure/repositories/filesystem_video_file_repository.rs (VideoFileRepository)
+/// Any file or directory at the path.
 fn dir_exists(&self, dir: &Path) -> bool;
-/// Creates `to`'s missing parents, then renames in place (never copies).
+/// Fails if `to` exists (POSIX rename would replace an empty dir), creates
+/// `to`'s missing parents, then renames in place (never copies).
 fn rename_dir(&self, from: &Path, to: &Path) -> anyhow::Result<()>;
+// FakeVideoFileRepository: with_dir(..), with_failing_renames(), renamed_dirs()
 
 // domain/services/show_mover.rs
 pub struct ShowMover {
@@ -147,8 +153,9 @@ pub trait ShowMoverApi: Send + Sync {
 
 ```ts
 // web/src/api/client.ts
-export function movePlaylist(id: string, path: string): Promise<Playlist>
-export function moveChannel(handle: string, path: string): Promise<Channel>
+// mirror updatePlaylist/updateChannel's response types
+export function movePlaylist(id: string, path: string): Promise<PlaylistListItem>
+export function moveChannel(handle: string, path: string): Promise<CreatedChannel>
 // web/src/hooks/useSaveLocation.ts
 export function useSaveLocation(mode: SaveMode, nameSource: string, initialPath?: string): SaveLocation
 // web/src/components/MoveSourceDialog.tsx
@@ -172,11 +179,11 @@ POST /api/playlists/{id}/move {path}
       ensure_destination_free(&playlist.path, &path)
         path == current                                  => SamePath
         playlist_repository.list() + channel_repository.list()
-          any path equal / ancestor / descendant         => DestinationInUse
+          any used.overlaps(&path)                       => DestinationInUse
         video_file_repository.dir_exists(root/path)      => DestinationExists
       ensure_settled(videos, &old_dir)
         playlist_video_repository.list_for_playlist(&id) -> video_repository.find_many(ids)
-          any !video.is_settled()                        => WorkInProgress
+          any !video.is_download_settled()               => WorkInProgress
         task_repository.list_non_completed()
           any task.output_dir() == old_dir               => WorkInProgress
       relocate(&old_dir, &new_dir, || playlist_repository.update(&playlist.with_path(path)))
@@ -234,7 +241,8 @@ ShowMoved (outbox) -> ScanPlexFolderOnShowMoved::handle(payload)
 
    Domain units:
    25. `task.rs`: `it_should_read_the_output_dir_of_every_per_video_task`, `it_should_have_no_output_dir_for_reconciles`.
-   26. `video.rs`: `it_should_be_settled_only_when_downloaded_errored_or_excluded`.
+   26. `video.rs`: `it_should_be_settled_only_when_downloaded_errored_or_excluded` (on `is_download_settled`).
+   `playlist_path.rs`: overlap value object tests (same path, inside, containing, prefix-sharing sibling, sibling).
 
 2. Infrastructure tests
 

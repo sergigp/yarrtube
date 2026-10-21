@@ -95,6 +95,11 @@ uncaught page error or a 5xx `/api` response.
 - **Channel video limit** (`tests/channelVideoLimit.spec.js`): a channel
   with two downloaded videos, edited down to one: the next sync drops the
   older video from the list and its files from disk, keeping the newer.
+- **Moving sources** (`tests/moveSources.spec.js`): once the fixture
+  playlist, then the fixture channel, has downloaded and settled, its edit
+  dialog shows its Location and "Move…" renames its show folder: the
+  episode is on disk at the new path and gone from the old, Plex is asked
+  to scan both folders, and the video still plays.
 - **Categories** (`tests/categories.spec.js`): create a category from the
   sidebar (landing in its manage sources dialog), rename it in place,
   assign the fixture channel to it from the Add channel dialog, remove it

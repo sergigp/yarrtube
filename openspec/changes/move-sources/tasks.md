@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [x] 1.1 Create every file, type and signature from design.md (## Files, ## Types & Signatures): `ShowKey`, `MoveShowError`, `ShowMoved` + `DomainEvent::ShowMoved`, `Playlist/Channel::with_path`, `Video::is_settled`, `Task::output_dir_of`, `ScheduledTask::output_dir`, `ShowLocks`/`ShowLockGuard`, `VideoFileRepository::{dir_exists, rename_dir}` (+ fake recording renames and a failing constructor), `ShowMover` + `ShowMoverApi`, `ShowLocks` passed to both reconcilers, `move_playlist`/`move_channel` handlers + request DTOs + `move_show_error` mapping + routes, `ScanPlexFolderOnShowMoved` registered when Plex is configured, shared `Arc<ShowLocks>` in the container and `serve.rs`; web `movePlaylist`/`moveChannel`, `useSaveLocation` `initialPath` param, `MoveSourceDialog` stub. Trivial bodies only. Verify: `cargo build` and `cargo test --locked` pass, `npm run check` passes in `web/`.
+- [x] 1.1 Create every file, type and signature from design.md (## Files, ## Types & Signatures): `ShowKey`, `MoveShowError`, `ShowMoved` + `DomainEvent::ShowMoved`, `Playlist/Channel::with_path`, `Task::output_dir_of`, `ScheduledTask::output_dir`, `ShowLocks`/`ShowLockGuard`, `VideoFileRepository::{dir_exists, rename_dir}` (+ fake recording renames and a failing constructor), `ShowMover` + `ShowMoverApi`, `ShowLocks` passed to both reconcilers, `move_playlist`/`move_channel` handlers + request DTOs + `move_show_error` mapping + routes, `ScanPlexFolderOnShowMoved` registered when Plex is configured, shared `Arc<ShowLocks>` in the container and `serve.rs`; web `movePlaylist`/`moveChannel`, `useSaveLocation` `initialPath` param, `MoveSourceDialog` stub. Trivial bodies only. Verify: `cargo build` and `cargo test --locked` pass, `npm run check` passes in `web/`.
 
 ## 2. Behaviour (TDD)
 
@@ -31,7 +31,7 @@
 - [x] 2.23 `it_should_scan_the_new_and_old_folders` (scan_plex_folder_on_show_moved).
 - [x] 2.24 `it_should_fail_if_plex_is_unreachable` (scan_plex_folder_on_show_moved): error returned so the event retries.
 - [x] 2.25 `task.rs`: `it_should_read_the_output_dir_of_every_per_video_task` and `it_should_have_no_output_dir_for_reconciles`.
-- [x] 2.26 `video.rs`: `it_should_be_settled_only_when_downloaded_errored_or_excluded`.
+- [x] 2.26 `video.rs`: `it_should_be_settled_only_when_downloaded_errored_or_excluded` (on the reused `is_download_settled`).
 - [x] 2.27 Web: `MoveSourceDialog` tests (prefilled location, save disabled when unchanged, posts the move and closes, shows server error and stays open, cancel sends nothing); implement the dialog and `useSaveLocation` `initialPath` (current path not flagged as occupied, parent not remembered). Verify: `npm run check`.
 - [x] 2.28 Web: `EditPlaylistDialog`/`EditChannelDialog` tests (Location line shows current path, "Move…" opens the move dialog without saving); implement. Verify: `npm run check`.
 - [x] 2.29 Docs: describe moving a playlist/channel, its preconditions and the same-filesystem limit in `doc/INSTALLATION.md` (or the usage section it links), and the post-move scan in `doc/PLEX.md`. Verify: the documented steps match the UI.
@@ -52,6 +52,6 @@
 ## 4. Verification
 
 - [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `npm run check` in `web/` all pass.
-- [ ] 4.2 Smoke tests: add specs in `smoke-tests/tests/` moving a playlist and a channel through the edit dialog's "Move…" (covers both new routes for the route-coverage reporter); `scripts/run-smoke-tests.sh` passes.
+- [x] 4.2 Smoke tests: add specs in `smoke-tests/tests/` moving a playlist and a channel through the edit dialog's "Move…" (covers both new routes for the route-coverage reporter); `scripts/run-smoke-tests.sh` passes.
 - [ ] 4.3 Manual (agent): `scripts/run-local.sh --port <free port> --fresh-videos`; create a small playlist via the API and wait until all its videos and thumbnails are downloaded; in the Playwright MCP browser open its edit dialog, check Location, use "Move…" to move it to `archive/<name>`; assert the sidebar/listing shows the new path, the files exist under the new dir and not the old one, a video still plays; then trigger "Sync now" and assert no re-download task appears. Also assert a move attempted while a video is still downloading shows the conflict error in the dialog. Stop the server, delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.4 Manual (human): with Plex configured, move a source and confirm Plex shows it at the new location and drops the old show; confirm the move dialog's folder browser looks right on mobile.
