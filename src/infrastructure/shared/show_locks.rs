@@ -68,6 +68,22 @@ mod tests {
         assert!(again.is_some());
     }
 
+    #[test]
+    fn it_should_block_lock_until_released() {
+        let locks = ShowLocks::default();
+        let held = locks.lock(playlist("PL1"));
+
+        let (waited, acquired) = std::thread::scope(|scope| {
+            let waiting = scope.spawn(|| drop(locks.lock(playlist("PL1"))));
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let waited = !waiting.is_finished();
+            drop(held);
+            (waited, waiting.join().is_ok())
+        });
+
+        assert_eq!((waited, acquired), (true, true));
+    }
+
     fn playlist(id: &str) -> ShowKey {
         ShowKey::Playlist(PlaylistId::new(id).unwrap())
     }
