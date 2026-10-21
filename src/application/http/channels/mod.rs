@@ -1618,6 +1618,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_a_channel_with_a_pending_video_as_work_in_progress() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            "vid_pending",
+            0,
+        );
+        let channel_view_searcher = ChannelViewSearcher::new(
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            "/videos",
+        );
+
+        let response = list(channel_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![ChannelListItemResponse {
+                work_in_progress: true,
+                ..some_channel_list_item_response()
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_all_channels() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
@@ -1821,6 +1857,7 @@ mod tests {
             response,
             Ok(vec![ChannelListItemResponse {
                 unwatched_count: 2,
+                work_in_progress: true,
                 ..some_channel_list_item_response()
             }])
         );
