@@ -28,7 +28,7 @@
 - [x] 2.20 `it_should_fail_to_move_if_a_channel_video_is_pending`: 409 via channel videos.
 - [x] 2.21 `it_should_wait_for_a_move_before_reconciling` (reconcile_playlist_task): reconcile blocks on the lock and then reconciles the new path.
 - [x] 2.22 `it_should_wait_for_a_move_before_reconciling` (reconcile_channel_task): same for channels.
-- [ ] 2.23 `it_should_scan_the_new_and_old_folders` (scan_plex_folder_on_show_moved).
+- [x] 2.23 `it_should_scan_the_new_and_old_folders` (scan_plex_folder_on_show_moved).
 - [ ] 2.24 `it_should_fail_if_plex_is_unreachable` (scan_plex_folder_on_show_moved): error returned so the event retries.
 - [ ] 2.25 `task.rs`: `it_should_read_the_output_dir_of_every_per_video_task` and `it_should_have_no_output_dir_for_reconciles`.
 - [ ] 2.26 `video.rs`: `it_should_be_settled_only_when_downloaded_errored_or_excluded`.
