@@ -65,6 +65,22 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_fail_if_plex_is_unreachable() {
+        let subscriber = ScanPlexFolderOnShowMoved::new(PlexFolderScanner::new(
+            "/videos",
+            "/volume1/media/yarrtube",
+            Arc::new(FakePlexLibraryRepository::failing()),
+        ));
+
+        let result = handle(
+            &subscriber,
+            &payload("/videos/music/chill", "/videos/archive/chill"),
+        );
+
+        assert_eq!(result, Err("Plex is unreachable".to_string()));
+    }
+
     fn payload(from: &str, to: &str) -> String {
         serde_json::json!({ "from": from, "to": to }).to_string()
     }
