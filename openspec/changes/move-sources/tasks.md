@@ -7,7 +7,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `it_should_move_a_playlist`: renames the show dir, stores the new path, publishes `ShowMoved`, returns the moved playlist.
-- [ ] 2.2 `it_should_keep_the_pending_reconcile_when_moving`: the pending recurring reconcile is untouched.
+- [x] 2.2 `it_should_keep_the_pending_reconcile_when_moving`: the pending recurring reconcile is untouched.
 - [ ] 2.3 `it_should_move_a_playlist_with_errored_and_excluded_videos`: Errored/Excluded count as settled.
 - [ ] 2.4 `it_should_record_the_new_path_if_the_show_directory_is_missing`: no rename, new path stored.
 - [ ] 2.5 `it_should_fail_to_move_if_path_missing`: 400.
