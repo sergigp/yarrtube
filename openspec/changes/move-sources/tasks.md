@@ -59,7 +59,7 @@
 ## 5. Move availability
 
 - [x] 5.1 Walking skeleton: `domain/show/show_work.rs` `has_work_in_progress` (trivial body), `work_in_progress` on `PlaylistView`/`ChannelView` and the list item DTOs, task repository + videos root in both view searchers (wired in `serve.rs`); web `work_in_progress` on the list types and builders (default `false`). Verify: `cargo test --locked` and `npm run check` pass.
-- [ ] 5.2 `it_should_list_a_playlist_with_a_pending_video_as_work_in_progress`.
+- [x] 5.2 `it_should_list_a_playlist_with_a_pending_video_as_work_in_progress`.
 - [ ] 5.3 `it_should_list_a_playlist_with_a_queued_task_as_work_in_progress`.
 - [ ] 5.4 `it_should_list_a_channel_with_a_pending_video_as_work_in_progress`.
 - [ ] 5.5 Refactor: `ShowMover` uses `has_work_in_progress`; its move tests stay green.

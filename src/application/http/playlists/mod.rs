@@ -1495,9 +1495,61 @@ mod tests {
             Ok(vec![
                 PlaylistListItemResponse {
                     unwatched_count: 2,
+                    work_in_progress: true,
                     ..playlist_list_item_response("PL1", "music/first")
                 },
                 playlist_list_item_response("PL2", "music/second"),
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_a_playlist_with_a_pending_video_as_work_in_progress() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", "music/busy"))
+            .unwrap();
+        playlist_repository
+            .insert(&playlist("PL2", "music/settled"))
+            .unwrap();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid_pending",
+            0,
+        );
+        save_downloaded_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL2",
+            "vid_downloaded",
+            0,
+        );
+        let playlist_view_searcher = PlaylistViewSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            video_repository,
+            task_repository(&db),
+            "/videos",
+        );
+
+        let response = list(playlist_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                PlaylistListItemResponse {
+                    work_in_progress: true,
+                    ..playlist_list_item_response("PL1", "music/busy")
+                },
+                PlaylistListItemResponse {
+                    unwatched_count: 1,
+                    ..playlist_list_item_response("PL2", "music/settled")
+                },
             ])
         );
     }
