@@ -118,7 +118,7 @@ impl ShowMover {
         if current == path {
             return Err(MoveShowError::SamePath);
         }
-        if self.source_paths()?.iter().any(|used| used == path) {
+        if self.source_paths()?.iter().any(|used| used.overlaps(path)) {
             return Err(MoveShowError::DestinationInUse(path.clone()));
         }
         Ok(())

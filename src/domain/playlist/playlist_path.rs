@@ -45,6 +45,17 @@ impl PlaylistPath {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Whether the two paths are the same folder or one is inside the
+    /// other, segment-wise (`music` overlaps `music/chill`, not `musical`).
+    pub fn overlaps(&self, other: &PlaylistPath) -> bool {
+        let (shorter, longer) = if self.0.len() <= other.0.len() {
+            (&self.0, &other.0)
+        } else {
+            (&other.0, &self.0)
+        };
+        longer == shorter || longer.starts_with(&format!("{shorter}/"))
+    }
 }
 
 impl fmt::Display for PlaylistPath {
@@ -154,6 +165,35 @@ mod tests {
             PlaylistPath::new("music/*"),
             Err(error(UNSAFE_CHARACTERS_MESSAGE))
         );
+    }
+
+    #[test]
+    fn it_should_overlap_the_same_path() {
+        assert!(path("music/chill").overlaps(&path("music/chill")));
+    }
+
+    #[test]
+    fn it_should_overlap_a_path_inside_it() {
+        assert!(path("music").overlaps(&path("music/chill")));
+    }
+
+    #[test]
+    fn it_should_overlap_a_path_containing_it() {
+        assert!(path("music/chill/extra").overlaps(&path("music/chill")));
+    }
+
+    #[test]
+    fn it_should_not_overlap_a_sibling_sharing_a_prefix() {
+        assert!(!path("music").overlaps(&path("musical")));
+    }
+
+    #[test]
+    fn it_should_not_overlap_a_sibling() {
+        assert!(!path("music/chill").overlaps(&path("music/lofi")));
+    }
+
+    fn path(value: &str) -> PlaylistPath {
+        PlaylistPath::new(value).unwrap()
     }
 
     fn error(message: &str) -> ValidationError {
