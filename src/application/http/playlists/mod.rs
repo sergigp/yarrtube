@@ -2848,6 +2848,35 @@ mod tests {
         assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_move_if_rename_fails() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video_file_repository = Arc::new(
+            FakeVideoFileRepository::with_failing_renames().with_dir("/videos/music/chill"),
+        );
+        playlist_repository
+            .insert(&playlist("PL1", "music/chill"))
+            .unwrap();
+        let show_mover = show_mover(&db, video_file_repository.clone());
+
+        let response = move_(show_mover, "PL1", move_request("music/lofi")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::internal(
+                "cross-device link renaming \"/videos/music/chill\""
+            ))
+        );
+        assert_eq!(
+            playlist_repository.list().unwrap(),
+            vec![playlist("PL1", "music/chill")]
+        );
+        assert_eq!(video_file_repository.renamed_dirs(), vec![]);
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
     /// A creator for tests whose request is rejected before reaching it. Its
     /// repositories sit on an unmigrated in-memory database, so a request that
     /// wrongly got through would fail loudly instead of passing.

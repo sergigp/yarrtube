@@ -397,6 +397,9 @@ impl VideoFileRepository for FakeVideoFileRepository {
     }
 
     fn rename_dir(&self, from: &Path, to: &Path) -> anyhow::Result<()> {
+        if self.failing_renames {
+            anyhow::bail!("cross-device link renaming {from:?}");
+        }
         self.renamed_dirs
             .lock()
             .unwrap()

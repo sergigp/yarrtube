@@ -21,7 +21,7 @@
 - [x] 2.13 `it_should_fail_to_move_if_a_video_is_pending`: 409.
 - [x] 2.14 `it_should_fail_to_move_if_a_thumbnail_fetch_is_queued`: 409 driven by a task whose `output_dir` is the show dir.
 - [x] 2.15 `it_should_fail_to_move_while_reconciling`: show lock held, 409.
-- [ ] 2.16 `it_should_fail_to_move_if_rename_fails`: 500, path unchanged, no event.
+- [x] 2.16 `it_should_fail_to_move_if_rename_fails`: 500, path unchanged, no event.
 - [ ] 2.17 `it_should_rename_back_if_recording_the_path_fails`: 500, renamed back, no event.
 - [ ] 2.18 `it_should_move_a_channel`: channel handler wired end to end.
 - [ ] 2.19 `it_should_fail_to_move_a_missing_channel`: 404.
