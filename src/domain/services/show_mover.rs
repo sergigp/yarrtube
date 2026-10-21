@@ -80,6 +80,7 @@ pub trait ShowMoverApi: Send + Sync {
 impl ShowMoverApi for ShowMover {
     fn move_playlist(&self, id: PlaylistId, path: PlaylistPath) -> Result<Playlist, MoveShowError> {
         let playlist = self.find_playlist(&id)?;
+        Self::ensure_destination_free(&playlist.path, &path)?;
         let old_dir = self.show_dir(&playlist.path);
         let new_dir = self.show_dir(&path);
         self.rename(&old_dir, &new_dir)?;
@@ -107,6 +108,16 @@ impl ShowMover {
             .find(id)
             .map_err(MoveShowError::Repository)?
             .ok_or(MoveShowError::NotFound)
+    }
+
+    fn ensure_destination_free(
+        current: &PlaylistPath,
+        path: &PlaylistPath,
+    ) -> Result<(), MoveShowError> {
+        if current == path {
+            return Err(MoveShowError::SamePath);
+        }
+        Ok(())
     }
 
     fn show_dir(&self, path: &PlaylistPath) -> PathBuf {

@@ -22,7 +22,7 @@ impl fmt::Display for MoveShowError {
                 f,
                 "still has work in progress, try again once its downloads finish"
             ),
-            Self::SamePath => write!(f, "is already stored at that path"),
+            Self::SamePath => write!(f, "playlist or channel is already stored at that path"),
             Self::DestinationInUse(path) => write!(
                 f,
                 "path \"{path}\" is used by, inside or contains another playlist or channel"
