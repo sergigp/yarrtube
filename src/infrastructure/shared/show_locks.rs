@@ -8,7 +8,6 @@ use std::sync::{Condvar, Mutex};
 #[derive(Default)]
 pub struct ShowLocks {
     held: Mutex<HashSet<ShowKey>>,
-    #[allow(dead_code)]
     released: Condvar,
 }
 
@@ -21,7 +20,12 @@ pub struct ShowLockGuard<'a> {
 impl ShowLocks {
     /// Locks `key`, waiting for whoever holds it to release it.
     pub fn lock(&self, key: ShowKey) -> ShowLockGuard<'_> {
-        self.held.lock().unwrap().insert(key.clone());
+        let held = self.held.lock().unwrap();
+        let mut held = self
+            .released
+            .wait_while(held, |held| held.contains(&key))
+            .unwrap();
+        held.insert(key.clone());
         ShowLockGuard { locks: self, key }
     }
 
@@ -35,5 +39,6 @@ impl ShowLocks {
 impl Drop for ShowLockGuard<'_> {
     fn drop(&mut self) {
         self.locks.held.lock().unwrap().remove(&self.key);
+        self.locks.released.notify_all();
     }
 }

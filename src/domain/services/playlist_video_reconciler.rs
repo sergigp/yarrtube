@@ -7,6 +7,7 @@ use crate::domain::services::{
     DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
     ShowFileWriter, ShowFileWriterApi,
 };
+use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -19,7 +20,7 @@ use crate::infrastructure::repositories::youtube_playlist_items_repository::{
 };
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::error_report;
-use crate::infrastructure::shared::show_locks::ShowLocks;
+use crate::infrastructure::shared::show_locks::{ShowLockGuard, ShowLocks};
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
@@ -41,7 +42,6 @@ pub struct PlaylistVideoReconciler {
     internal_video_reconciler: Arc<InternalVideoReconciler>,
     show_file_writer: Arc<ShowFileWriter>,
     clock: Arc<dyn Clock>,
-    #[allow(dead_code)]
     show_locks: Arc<ShowLocks>,
 }
 
@@ -103,6 +103,7 @@ pub trait PlaylistVideoReconcilerApi: Send + Sync {
 
 impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
     fn reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
+        let _guard = self.lock(&id);
         let Some(playlist) = self.find_playlist(&id)? else {
             return Ok(());
         };
@@ -112,6 +113,7 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
     }
 
     fn initial_reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
+        let _guard = self.lock(&id);
         let Some(playlist) = self.find_playlist(&id)? else {
             return Ok(());
         };
@@ -121,6 +123,7 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
     }
 
     fn force_reconcile(&self, id: PlaylistId) -> anyhow::Result<()> {
+        let _guard = self.lock(&id);
         let Some(playlist) = self.find_playlist(&id)? else {
             return Ok(());
         };
@@ -130,6 +133,12 @@ impl PlaylistVideoReconcilerApi for PlaylistVideoReconciler {
 }
 
 impl PlaylistVideoReconciler {
+    /// Waits for a move of the playlist to finish, so the pass reads the
+    /// playlist, and works in its folder, only once it has moved.
+    fn lock(&self, id: &PlaylistId) -> ShowLockGuard<'_> {
+        self.show_locks.lock(ShowKey::Playlist(id.clone()))
+    }
+
     fn find_playlist(&self, id: &PlaylistId) -> anyhow::Result<Option<Playlist>> {
         let playlist = self.playlist_repository.find(id)?;
         if playlist.is_none() {

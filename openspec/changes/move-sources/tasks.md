@@ -26,7 +26,7 @@
 - [x] 2.18 `it_should_move_a_channel`: channel handler wired end to end.
 - [x] 2.19 `it_should_fail_to_move_a_missing_channel`: 404.
 - [x] 2.20 `it_should_fail_to_move_if_a_channel_video_is_pending`: 409 via channel videos.
-- [ ] 2.21 `it_should_wait_for_a_move_before_reconciling` (reconcile_playlist_task): reconcile blocks on the lock and then reconciles the new path.
+- [x] 2.21 `it_should_wait_for_a_move_before_reconciling` (reconcile_playlist_task): reconcile blocks on the lock and then reconciles the new path.
 - [ ] 2.22 `it_should_wait_for_a_move_before_reconciling` (reconcile_channel_task): same for channels.
 - [ ] 2.23 `it_should_scan_the_new_and_old_folders` (scan_plex_folder_on_show_moved).
 - [ ] 2.24 `it_should_fail_if_plex_is_unreachable` (scan_plex_folder_on_show_moved): error returned so the event retries.

@@ -42,7 +42,6 @@ pub struct ChannelVideoReconciler {
     show_file_writer: Arc<ShowFileWriter>,
     channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
     clock: Arc<dyn Clock>,
-    #[allow(dead_code)]
     show_locks: Arc<ShowLocks>,
 }
 
