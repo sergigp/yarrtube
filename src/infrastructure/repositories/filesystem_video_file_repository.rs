@@ -119,13 +119,7 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
     }
 
     fn move_file(&self, from: &Path, to: &Path) -> anyhow::Result<()> {
-        if let Some(parent) = to.parent() {
-            std::fs::create_dir_all(parent)
-                .inspect_err(
-                    |e| tracing::error!(dir = ?parent, error = %e, "failed to create directory"),
-                )
-                .map_err(|e| anyhow::anyhow!("failed to create directory {parent:?}: {e}"))?;
-        }
+        create_parent(to)?;
         std::fs::rename(from, to)
             .inspect_err(
                 |e| tracing::error!(from = ?from, to = ?to, error = %e, "failed to move file"),
@@ -166,13 +160,27 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
         false
     }
 
-    fn rename_dir(&self, _from: &Path, _to: &Path) -> anyhow::Result<()> {
-        Ok(())
+    fn rename_dir(&self, from: &Path, to: &Path) -> anyhow::Result<()> {
+        create_parent(to)?;
+        std::fs::rename(from, to)
+            .inspect_err(
+                |e| tracing::error!(from = ?from, to = ?to, error = %e, "failed to rename directory"),
+            )
+            .map_err(|e| anyhow::anyhow!("failed to rename {from:?} to {to:?}: {e}"))
     }
 }
 
 /// The entries directly in `output_dir`, excluding yt-dlp's in-progress
 /// temp files; a missing `output_dir` has none.
+fn create_parent(path: &Path) -> anyhow::Result<()> {
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+    std::fs::create_dir_all(parent)
+        .inspect_err(|e| tracing::error!(dir = ?parent, error = %e, "failed to create directory"))
+        .map_err(|e| anyhow::anyhow!("failed to create directory {parent:?}: {e}"))
+}
+
 fn list_entries(output_dir: &Path) -> anyhow::Result<Vec<String>> {
     let entries = match std::fs::read_dir(output_dir) {
         Ok(entries) => entries,
@@ -728,6 +736,24 @@ mod tests {
                 "failed to read {path:?}: stream did not contain valid UTF-8"
             ))
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn it_should_rename_a_directory_creating_missing_parents() {
+        let dir = unique_temp_dir("video-file-repository-rename-dir");
+        std::fs::create_dir_all(dir.join("music/chill/Season 1")).unwrap();
+        std::fs::write(dir.join("music/chill/Season 1/S01E001 - One.mp4"), b"media").unwrap();
+
+        let result = FilesystemVideoFileRepository
+            .rename_dir(&dir.join("music/chill"), &dir.join("archive/2026/chill"));
+
+        assert!(result.is_ok());
+        assert_eq!(
+            std::fs::read(dir.join("archive/2026/chill/Season 1/S01E001 - One.mp4")).ok(),
+            Some(b"media".to_vec())
+        );
+        assert!(!dir.join("music/chill").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

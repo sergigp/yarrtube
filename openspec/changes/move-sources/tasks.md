@@ -45,7 +45,7 @@
 - [x] 3.4 `it_should_not_contend_across_keys`
 
 `infrastructure/repositories/filesystem_video_file_repository.rs`
-- [ ] 3.5 `it_should_rename_a_directory_creating_missing_parents`
+- [x] 3.5 `it_should_rename_a_directory_creating_missing_parents`
 - [ ] 3.6 `it_should_fail_to_rename_onto_an_existing_directory`
 - [ ] 3.7 `it_should_report_whether_a_directory_exists`
 
