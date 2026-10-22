@@ -66,3 +66,16 @@ test('it should auto-fill the folder name under advanced options', async ({ page
   await expect(dialog.getByLabel('Folder name')).toBeVisible()
   await expect(dialog.getByLabel('Folder name')).toHaveValue(slugOf(PLAYLIST_TITLE))
 })
+
+test('unknown playlist id is reported in the Add playlist dialog', async ({ page }) => {
+  await page.goto('/')
+  await openAddPlaylistDialog(page)
+  const dialog = page.getByRole('dialog')
+
+  await dialog.getByLabel('Playlist ID or URL').fill(`PLyarrtubeMissing${Date.now()}`)
+
+  const notice = destinationNotice(dialog)
+  await expect(notice).toContainText('does not exist', { timeout: 15_000 })
+  await expect(notice).toHaveClass(/text-destructive/)
+  await expect(dialog.getByRole('button', { name: /^Create Playlist/ })).toBeDisabled()
+})
