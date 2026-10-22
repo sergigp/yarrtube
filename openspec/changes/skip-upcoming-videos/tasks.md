@@ -22,6 +22,6 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass
+- [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass
 - [ ] 4.2 `scripts/run-smoke-tests.sh` passes
-- [ ] 4.3 Manual (agent): run real `yt-dlp --flat-playlist --print-json` against a channel with a scheduled premiere and confirm the `live_status` values match what is filtered; for a playlist, confirm `videos.list` returns `liveBroadcastContent: "upcoming"` for a scheduled premiere
+- [x] 4.3 Manual (agent): run real `yt-dlp --flat-playlist --print-json` against a channel with a scheduled premiere and confirm the `live_status` values match what is filtered; for a playlist, confirm `videos.list` returns `liveBroadcastContent: "upcoming"` for a scheduled premiere
