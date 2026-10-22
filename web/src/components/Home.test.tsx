@@ -66,6 +66,29 @@ describe('Home', () => {
     expect(screen.getAllByRole('progressbar')).toHaveLength(2)
   })
 
+  it('shows no progress for watched or durationless cards', async () => {
+    mockApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        quick_watches: [],
+        latest: [
+          aHomeVideo({ title: 'Seen', watched: true, duration_seconds: 600 }),
+          aHomeVideo({ title: 'Unknown Length', position_seconds: 60, duration_seconds: null }),
+        ],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    const [seen, unknownLength] = (await screen.findAllByRole('listitem')) as [
+      HTMLElement,
+      HTMLElement,
+    ]
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(within(seen).getByText('10:00')).toBeInTheDocument()
+    expect(within(unknownLength).queryByText(/left$|^\d+:\d{2}$/)).not.toBeInTheDocument()
+  })
+
   it('links a video card to its source detail view with a deep link', async () => {
     mockApi({
       'GET /api/videos/home': {

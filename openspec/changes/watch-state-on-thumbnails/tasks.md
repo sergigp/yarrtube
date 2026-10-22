@@ -24,7 +24,7 @@
 - [x] 2.8 `PlaylistDetail.test.tsx`, `shows progress and time left on an in-progress row`.
 - [x] 2.9 `CategoryDetail.test.tsx`, `shows progress and time left on an in-progress card`: card size.
 - [x] 2.10 `Home.test.tsx`, `shows progress on in-progress cards in every section`: replaces the `it.todo` from 1.1.
-- [ ] 2.11 `Home.test.tsx`, `shows no progress for watched or durationless cards`.
+- [x] 2.11 `Home.test.tsx`, `shows no progress for watched or durationless cards`.
 - [ ] 2.12 Styling, no test (see design.md Test Plan note):
   - Bar: `h-1.5` on cards, `h-1` on rows, `bg-black/50` track.
   - The tick and badge are raised above the bar when it's shown.
