@@ -78,7 +78,7 @@ The storage path identifies where the channel's videos are saved, relative to th
 - **THEN** the system persists the channel with that exact video limit and returns it unchanged
 
 #### Scenario: Missing or invalid path
-- **WHEN** a request omits path, supplies an empty path, or supplies a path that is absolute, contains a `..` segment, or contains an empty segment (e.g. leading/trailing/doubled `/`)
+- **WHEN** a request omits path, supplies an empty path, or supplies a path that is absolute, contains a `.` or `..` segment, or contains an empty segment (e.g. leading/trailing/doubled `/`)
 - **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request with a meaningful error description
 
 ### Requirement: Preview a YouTube Channel

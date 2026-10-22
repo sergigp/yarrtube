@@ -62,7 +62,7 @@ Every playlist created through this endpoint has kind `youtube_linked`.
 - **THEN** the system makes no change, ignores the request's `exclude_from_home` value, and returns the existing record with its original setting
 
 #### Scenario: Missing or invalid path
-- **WHEN** a request omits path, supplies an empty path, or supplies a path that is absolute, contains a `..` segment, or contains an empty segment (e.g. leading/trailing/doubled `/`)
+- **WHEN** a request omits path, supplies an empty path, or supplies a path that is absolute, contains a `.` or `..` segment, or contains an empty segment (e.g. leading/trailing/doubled `/`)
 - **THEN** the system rejects the request without persisting anything and without checking YouTube and returns a bad request with a meaningful error description
 
 #### Scenario: Missing or invalid quality
