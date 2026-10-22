@@ -9,6 +9,7 @@ import {
 import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow } from '../helpers/video.js'
 import { expectEpisodeOnDisk, expectGoneFromDisk } from '../helpers/library.js'
 import { expectPlexScanned } from '../helpers/plex.js'
+import { deleteSeeded, seedDownloadedPlaylist } from '../helpers/seed.js'
 import {
   syncItem,
   deleteItem,
@@ -31,14 +32,35 @@ function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-test('playlist lifecycle: add, download, play, sync, duplicate error, delete', async ({ page }) => {
+function playlistRow(page) {
+  return sectionRows(page, 'Playlists').filter({ hasText: PLAYLIST_NAME })
+}
+
+function continueWatching(page) {
+  return page.locator('section', { has: page.getByRole('heading', { name: 'Continue watching' }) })
+}
+
+/**
+ * Pauses the selected video halfway through, which records the position.
+ * The playlist's video (Big Buck Bunny, about 10 minutes) is long enough that
+ * halfway is past the 30 seconds a video must reach to count as started, so
+ * the home view offers it to continue watching.
+ */
+async function recordHalfway(page) {
+  const progressReported = page.waitForResponse(
+    (response) => response.url().endsWith('/progress') && response.request().method() === 'POST',
+  )
+  await page.locator('video').evaluate((el) => {
+    el.currentTime = el.duration / 2
+    el.pause()
+  })
+  expect((await progressReported).status()).toBe(200)
+}
+
+test('playlist golden path: add, download, on disk, scanned by Plex, badge, delete', async ({ page }) => {
   await page.goto('/')
 
   const sidebarLink = sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME })
-  const playlistRow = sectionRows(page, 'Playlists').filter({ hasText: PLAYLIST_NAME })
-  const continueWatching = page.locator('section', {
-    has: page.getByRole('heading', { name: 'Continue watching' }),
-  })
 
   await test.step('add it from the sidebar', async () => {
     // Add via the sidebar's "Add playlist" and confirm it lands in the sidebar.
@@ -47,7 +69,7 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     await expect(sidebarLink).toBeVisible()
   })
 
-  const videoTitle = await test.step('wait for the download, on disk and scanned by Plex', async () => {
+  await test.step('wait for the download, on disk and scanned by Plex', async () => {
     // Follow it into the detail view and wait for the download to finish.
     await sidebarLink.click()
     await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 240_000 })
@@ -62,55 +84,79 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     })
     // And Plex was asked to scan it in.
     await expectPlexScanned(page.request, PLAYLIST_PATH)
-    return videoTitle
   })
 
-  await test.step('show its unwatched badge, hide it and show it again', async () => {
+  await test.step('unwatched badge appears via periodic refresh without reload', async () => {
     // The downloaded, unwatched video shows as a badge on the playlist's row,
     // brought in by the sidebar's periodic refresh (every 5s while the
     // playlist has work in progress, every 60s after), with no reload.
-    // Hiding the count removes the badge and showing it brings it back
-    // (covers PATCH /playlists/{id} with hide_unwatched_count).
-    await expect(unwatchedBadge(playlistRow)).toHaveText('1', { timeout: 70_000 })
-    await setItemUnwatchedCountHidden(page, { section: 'Playlists', name: PLAYLIST_NAME, hidden: true })
-    await expect(unwatchedBadge(playlistRow)).toHaveCount(0)
-    await setItemUnwatchedCountHidden(page, { section: 'Playlists', name: PLAYLIST_NAME, hidden: false })
-    await expect(unwatchedBadge(playlistRow)).toHaveText('1')
+    await expect(unwatchedBadge(playlistRow(page))).toHaveText('1', { timeout: 70_000 })
   })
 
-  await test.step('play it and record the position', async () => {
-    // Thumbnail + duration render in the detail view's video list. Scoped to
-    // `main` so a leftover sidebar row (e.g. a channel avatar, if a previous
-    // test left one behind) can never be picked up instead.
+  await test.step('delete it', async () => {
+    // Delete from the sidebar; it disappears from the sidebar, the home feed
+    // (which, the library being otherwise empty, now has nothing to show) and
+    // the disk.
+    await deleteItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
+    await expect(sectionRows(page, 'Playlists')).toHaveCount(0)
+    await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
+    await expect(page.getByText('No videos synced yet.')).toBeVisible()
+    await expectGoneFromDisk(PLAYLIST_PATH)
+  })
+})
+
+// Each test below runs on its own against the same downloaded playlist; the
+// ones that mark the video watched come last, since nothing unmarks it.
+test.describe('with a downloaded playlist', () => {
+  test.use({ keepLibrary: true })
+
+  let seeded
+  test.beforeAll(async ({ request }) => {
+    seeded = await seedDownloadedPlaylist(request)
+  })
+
+  test.afterAll(async ({ request }) => {
+    await deleteSeeded(request, seeded)
+  })
+
+  const openPlaylist = (page) => page.goto(`/playlists/${encodeURIComponent(seeded.id)}`)
+
+  test('hides its unwatched badge and shows it again', async ({ page }) => {
+    // Covers PATCH /playlists/{id} with hide_unwatched_count.
+    await openPlaylist(page)
+    await expect(unwatchedBadge(playlistRow(page))).toHaveText('1')
+    await setItemUnwatchedCountHidden(page, { section: 'Playlists', name: PLAYLIST_NAME, hidden: true })
+    await expect(unwatchedBadge(playlistRow(page))).toHaveCount(0)
+    await setItemUnwatchedCountHidden(page, { section: 'Playlists', name: PLAYLIST_NAME, hidden: false })
+    await expect(unwatchedBadge(playlistRow(page))).toHaveText('1')
+  })
+
+  test('lists it with thumbnail and duration, plays it and records the position', async ({ page }) => {
+    // Scoped to `main` so a sidebar row's avatar can never be picked up instead.
+    await openPlaylist(page)
     const detailListItem = page.locator('main ul li', { has: page.locator('img') }).first()
     await expect(detailListItem.locator('img')).toBeVisible()
     await expect(detailListItem.getByText(/^\d+:\d{2}(:\d{2})?$/)).toBeVisible()
 
     await assertVideoPlays(page)
-
-    // Pausing halfway through records the position. The playlist's video (Big
-    // Buck Bunny, about 10 minutes) is long enough that halfway is past the 30
-    // seconds a video must reach to count as started, so the home view offers
-    // it to continue watching.
-    const progressReported = page.waitForResponse(
-      (response) => response.url().endsWith('/progress') && response.request().method() === 'POST',
-    )
-    await page.locator('video').evaluate((el) => {
-      el.currentTime = el.duration / 2
-      el.pause()
-    })
-    expect((await progressReported).status()).toBe(200)
+    await recordHalfway(page)
   })
 
-  await test.step('show its subtitles', async () => {
+  test('shows its subtitles', async ({ page }) => {
+    await openPlaylist(page)
     await assertSubtitlesShow(page)
   })
 
-  await test.step('show it on the home feed', async () => {
+  test('shows it on the home feed', async ({ page }) => {
+    const videoTitle = seeded.video.title
+    await openPlaylist(page)
+    await assertVideoPlays(page)
+    await recordHalfway(page)
+
     // Same video, with thumbnail + duration, on the home feed.
     await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
-    await expect(continueWatching.getByText(videoTitle, { exact: true })).toBeVisible()
-    await expect(continueWatching.getByRole('progressbar', { name: 'Watch progress' })).toBeVisible()
+    await expect(continueWatching(page).getByText(videoTitle, { exact: true })).toBeVisible()
+    await expect(continueWatching(page).getByRole('progressbar', { name: 'Watch progress' })).toBeVisible()
     // A video shows in one home section only, so it isn't repeated below.
     const latestVideos = page.locator('section', {
       has: page.getByRole('heading', { name: 'Latest videos' }),
@@ -127,9 +173,7 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
         const headings = await page.locator('main h2').allInnerTexts()
         return headings.filter((heading) => homeSections.includes(heading))
       })
-      .toEqual(
-        expect.arrayContaining(['Continue watching', 'Latest videos']),
-      )
+      .toEqual(expect.arrayContaining(['Continue watching', 'Latest videos']))
     const headings = (await page.locator('main h2').allInnerTexts()).filter((heading) =>
       homeSections.includes(heading),
     )
@@ -141,34 +185,45 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     await expect(homeCard.getByText(TIME_LEFT)).toBeVisible()
   })
 
-  await test.step('exclude it from home and include it again', async () => {
+  test('excludes it from home and includes it again', async ({ page }) => {
     // Excluding the playlist from home through a card's menu takes its cards
     // off home; including it again from the sidebar brings them back.
+    const videoTitle = seeded.video.title
+    await openPlaylist(page)
+    await assertVideoPlays(page)
+    await recordHalfway(page)
+    await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
+    await expect(continueWatching(page).getByText(videoTitle, { exact: true })).toBeVisible()
+
     const excluded = page.waitForResponse(
       (response) => response.request().method() === 'PATCH' && response.url().includes('/playlists/'),
     )
-    await continueWatching.getByRole('button', { name: `Actions for ${videoTitle}` }).click()
+    await continueWatching(page).getByRole('button', { name: `Actions for ${videoTitle}` }).click()
     await page.getByRole('menuitem', { name: `Exclude "${PLAYLIST_NAME}" from home` }).click()
     expect((await excluded).status()).toBe(200)
     await expect(page.locator('main').getByText(videoTitle, { exact: true })).toHaveCount(0)
     await includeItemInHome(page, { section: 'Playlists', name: PLAYLIST_NAME })
-    await expect(continueWatching.getByText(videoTitle, { exact: true })).toBeVisible()
+    await expect(continueWatching(page).getByText(videoTitle, { exact: true })).toBeVisible()
   })
 
-  await test.step("show its progress in the playlist's video list", async () => {
+  test("shows its progress in the playlist's video list", async ({ page }) => {
     // The half-watched video shows the same progress bar and time left in its
     // playlist's list as on home, not only under "Continue watching".
-    await sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME }).click()
+    const videoTitle = seeded.video.title
+    await openPlaylist(page)
+    await assertVideoPlays(page)
+    await recordHalfway(page)
     const row = page.getByRole('button', { name: new RegExp(`^(?!Actions for).*${escapeRegExp(videoTitle)}$`) })
     await expect(row.getByRole('progressbar', { name: 'Watch progress' })).toBeVisible()
     await expect(row.getByText(TIME_LEFT)).toBeVisible()
   })
 
-  await test.step('sync changes nothing when up to date', async () => {
+  test('sync changes nothing when up to date', async ({ page }) => {
     // Sync from the sidebar completes without an error dialog/alert, and
     // syncing an up-to-date playlist changes nothing: the same videos, still
     // downloaded, and nothing queued to download again.
-    const videosUrl = `/api/playlists/${encodeURIComponent(PLAYLIST_ID)}/videos`
+    await openPlaylist(page)
+    const videosUrl = `/api/playlists/${encodeURIComponent(seeded.id)}/videos`
     const videoState = async () =>
       (await (await page.request.get(videosUrl)).json()).map(({ id, status, filename }) => ({ id, status, filename }))
     const videosBeforeSync = await videoState()
@@ -178,11 +233,11 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     expect(tasks.filter((task) => task.task_type === 'download_video')).toEqual([])
   })
 
-  await test.step('edit the check interval', async () => {
+  test('edits the check interval', async ({ page }) => {
     // Change how often the playlist is checked from its page header's "⋮"
     // menu; reopening the dialog shows the saved value (covers PATCH
     // /playlists/{id} with an interval).
-    await sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME }).click()
+    await openPlaylist(page)
     const editPlaylist = async () => {
       await page.getByRole('button', { name: /^More actions for / }).click()
       await page.getByRole('menuitem', { name: 'Edit settings' }).click()
@@ -209,9 +264,10 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     await expectPendingSync(page, { label: `Syncing playlist ${PLAYLIST_NAME}`, due: /^in (29|30)m$/ })
   })
 
-  await test.step('run its sync now from the Tasks view', async () => {
-    // The sync can also be run straight away from its row (covers the Tasks
-    // view's "Run now").
+  test('runs its sync now from the Tasks view', async ({ page }) => {
+    // Covers the Tasks view's "Run now".
+    await page.goto('/tasks')
+    await page.getByRole('tab', { name: /^Syncs/ }).click()
     const syncRow = page.locator('main li', { hasText: `Syncing playlist ${PLAYLIST_NAME}` })
     const ranNow = page.waitForResponse(
       (response) => response.url().endsWith('/reconcile') && response.request().method() === 'POST',
@@ -222,11 +278,23 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     await expect(syncRow.getByText(/^Sync failed/)).toHaveCount(0)
   })
 
-  await test.step('mark it watched while playing', async () => {
+  test('rejects adding it twice', async ({ page }) => {
+    // Adding the same playlist again is caught in the dialog, before
+    // submission: the notice names what it was added as and the submit button
+    // stays disabled.
+    await page.goto('/')
+    await openAddPlaylistDialog(page)
+    const dialog = await fillPlaylist(page, { url: PLAYLIST_ID })
+    await expect(destinationNotice(dialog)).toHaveText(`Already added as “${PLAYLIST_NAME}”`)
+    await expect(dialog.getByRole('button', { name: /^Create Playlist/ })).toBeDisabled()
+    await dialog.getByRole('button', { name: 'Close' }).click()
+  })
+
+  test('marks it watched while playing', async ({ page }) => {
     // Playing past the watched threshold marks the video watched without
     // interrupting playback: once the list shows it watched, the player is
     // still playing where it was, not rewound and paused.
-    await sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME }).click()
+    await openPlaylist(page)
     await assertVideoPlays(page)
     const player = page.locator('video')
     const markedWatched = page.waitForResponse(
@@ -247,33 +315,12 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     expect(await player.evaluate((el) => el.currentTime)).toBeGreaterThan(nearEnd)
   })
 
-  await test.step('mark it all watched from its row menu', async () => {
+  test('marks it all watched from its row menu', async ({ page }) => {
     // Covers POST /playlists/{id}/watched; with its only video watched, the
     // row shows no badge.
+    await openPlaylist(page)
     await markItemWatched(page, { section: 'Playlists', name: PLAYLIST_NAME })
-    await expect(unwatchedBadge(playlistRow)).toHaveCount(0)
-  })
-
-  await test.step('reject adding it twice', async () => {
-    // Adding the same playlist again is caught in the dialog, before
-    // submission: the notice names what it was added as and the submit button
-    // stays disabled.
-    await openAddPlaylistDialog(page)
-    const dialog = await fillPlaylist(page, { url: PLAYLIST_ID })
-    await expect(destinationNotice(dialog)).toHaveText(`Already added as “${PLAYLIST_NAME}”`)
-    await expect(dialog.getByRole('button', { name: /^Create Playlist/ })).toBeDisabled()
-    await dialog.getByRole('button', { name: 'Close' }).click()
-  })
-
-  await test.step('delete it', async () => {
-    // Delete from the sidebar; it disappears from the sidebar, the home feed
-    // (which, the library being otherwise empty, now has nothing to show) and
-    // the disk.
-    await deleteItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
-    await expect(sectionRows(page, 'Playlists')).toHaveCount(0)
-    await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
-    await expect(page.getByText('No videos synced yet.')).toBeVisible()
-    await expectGoneFromDisk(PLAYLIST_PATH)
+    await expect(unwatchedBadge(playlistRow(page))).toHaveCount(0)
   })
 })
 
