@@ -16,8 +16,8 @@ import { existsSync } from 'node:fs'
  *   Plex server forgets the scans earlier tests caused;
  * - fails on an uncaught page error, a `console.error` not in
  *   `consoleErrorAllowlist`, any 5xx `/api` response, or a 4xx one not in
- *   `expectedApiErrors`, which no individual assertion would otherwise
- *   notice;
+ *   `expectedApiErrors`, or a failed `/media` or `/avatars` request, which
+ *   no individual assertion would otherwise notice;
  * - records the `/api` routes the browser hit, checked against the router
  *   by `routeCoverageReporter.js`.
  */
@@ -58,8 +58,21 @@ export const test = base.extend({
         problems.push(`console.error: ${message.text()}`)
       }
     })
+    page.on('requestfailed', (request) => {
+      const { pathname } = new URL(request.url())
+      // The browser cancels media requests itself (seeking, leaving the
+      // page); only a request that couldn't complete is a failure.
+      const cancelled = /ERR_ABORTED|cancelled/i.test(request.failure()?.errorText ?? '')
+      if (isFileRequest(pathname) && !cancelled) {
+        problems.push(`${request.failure()?.errorText} for ${request.method()} ${pathname}`)
+      }
+    })
     page.on('response', (response) => {
       const url = new URL(response.url())
+      if (isFileRequest(url.pathname) && response.status() >= 400) {
+        problems.push(`${response.status()} from ${response.request().method()} ${url.pathname}`)
+        return
+      }
       if (!url.pathname.startsWith('/api/')) {
         return
       }
@@ -78,6 +91,11 @@ export const test = base.extend({
 })
 
 export { expect }
+
+// The videos and channel avatars the daemon serves.
+function isFileRequest(pathname) {
+  return pathname.startsWith('/media/') || pathname.startsWith('/avatars/')
+}
 
 // An entry's `path` is the request's pathname, or a RegExp matching it.
 function isExpectedApiError(expectedApiErrors, { method, pathname, status }) {
