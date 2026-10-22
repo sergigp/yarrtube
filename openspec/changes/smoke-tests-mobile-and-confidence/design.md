@@ -17,7 +17,7 @@
 - `smoke-tests/tests/playbackSpeed.spec.js` (new): speed menu changes `playbackRate`.
 - `smoke-tests/tests/deepLinks.spec.js` (new): reload every route; unknown playlist → "Playlist not found.".
 - `smoke-tests/tests/deleteDuringDownload.spec.js` (new): delete mid-download leaves no folder.
-- `smoke-tests/tests/playlist.spec.js`: split into independent tests on `seedDownloadedPlaylist`; add quality edit + Downloads tab (fresh add); one badge check without reload.
+- `smoke-tests/tests/playlist.spec.js`: split into independent tests on `seedDownloadedPlaylist`; add Downloads tab (fresh add); one badge check without reload.
 - `smoke-tests/tests/categories.spec.js`: drop `setViewportSize` test into `@mobile`; add category card → plays.
 - `smoke-tests/tests/channel.spec.js`: remove duplicated invalid-handle step; avatar loaded check.
 - `smoke-tests/tests/addPlaylistDialog.spec.js`: unknown playlist id test.
@@ -91,13 +91,12 @@ These are Playwright specs against existing behaviour, so most should pass on fi
    12. `speed menu sets playbackRate to 1.5`
    13. `reloading each route shows its view; unknown playlist says Playlist not found.`
    14. `unknown playlist id is reported in the Add playlist dialog`
-   15. `playlist quality edit is kept`
-   16. `Downloads tab lists a running download`
-   17. `downloaded video is h264/aac mp4`
-   18. `media answers a Range request with 206`
-   19. `channel avatar loads`
-   20. `deleting a playlist mid-download leaves no folder`
-   21. `unwatched badge appears via periodic refresh without reload`
+   15. `Downloads tab lists a running download`
+   16. `downloaded video is h264/aac mp4`
+   17. `media answers a Range request with 206`
+   18. `channel avatar loads`
+   19. `deleting a playlist mid-download leaves no folder`
+   20. `unwatched badge appears via periodic refresh without reload`
 2. Suite infrastructure (helpers and fixtures). Each check is proven by a throwaway failing case, then reverted:
    1. `console.error not allowlisted fails the test`
    2. `unexpected 4xx /api fails the test; declared one passes`

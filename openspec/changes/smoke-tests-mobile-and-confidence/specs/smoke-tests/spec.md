@@ -91,8 +91,8 @@ The suite SHALL verify that a category's view lists the downloaded videos of its
 The suite SHALL verify that choosing a speed from the video detail's speed menu changes the player's playback rate and that the menu shows the chosen speed.
 
 #### Scenario: Change speed
-- **WHEN** a user chooses 1.5× from the speed menu of a downloaded video
-- **THEN** the player's playback rate is 1.5 and the menu shows 1.5×
+- **WHEN** a user chooses 1.5x from the speed menu of a downloaded video
+- **THEN** the player's playback rate is 1.5 and the menu shows 1.5x
 
 ### Requirement: Deep Link Coverage
 The suite SHALL verify that reloading the page on each client route (home, playlist, channel, category, tasks) shows that view, and that opening the route of a source that is not tracked shows an error state rather than a blank page.
@@ -106,11 +106,7 @@ The suite SHALL verify that reloading the page on each client route (home, playl
 - **THEN** the view says "Playlist not found."
 
 ### Requirement: Source Settings And Task Coverage
-The suite SHALL verify that a playlist's video quality can be edited and is kept, that the Tasks view's Downloads tab lists a download while it is running, and that channel avatars load.
-
-#### Scenario: Edit playlist quality
-- **WHEN** a user sets a playlist's quality to Low in Edit settings and reopens the dialog
-- **THEN** the dialog shows Low
+The suite SHALL verify that the Tasks view's Downloads tab lists a download while it is running, and that channel avatars load.
 
 #### Scenario: Download listed while running
 - **WHEN** a newly added playlist's video is downloading

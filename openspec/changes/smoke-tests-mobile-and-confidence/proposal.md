@@ -23,7 +23,6 @@ The smoke suite runs only in desktop Chromium. Its "mobile" specs just resize th
   - the playback speed menu changes the player's rate
   - an unknown playlist id is reported in the Add playlist dialog
   - reloading a deep link works for every client route, and an unknown source shows an error state
-  - editing a playlist's quality is saved
   - the Downloads tab shows an in-progress download
   - deleting a source while its downloads are still running leaves no files behind
   - channel avatars load
