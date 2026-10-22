@@ -113,7 +113,8 @@ actually loaded rather than the placeholder a broken one is swapped for.
   and checks its folder is removed. On a seeded download, independent tests
   hide and show its badge, list it with a loaded thumbnail and duration,
   play it and record the position, show its subtitles, show it on the home
-  feed, exclude it from home and include it again, sync it (changing
+  feed (its card showing the time left), show its progress bar and time left
+  in the playlist's list, exclude it from home and include it again, sync it (changing
   nothing), edit its check interval, run its sync from the Tasks view,
   reject adding it twice, mark it watched while playing and mark it all
   watched. On a fresh add, the Tasks view's Downloads tab lists its
