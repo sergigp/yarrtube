@@ -14,11 +14,11 @@ export function watchProgress(video: {
   position_seconds: number
   duration_seconds: number | null
 }): WatchProgress | null {
-  if (video.position_seconds <= 0) {
+  const duration = video.duration_seconds
+  if (video.watched || video.position_seconds <= 0 || !duration || duration <= 0) {
     return null
   }
 
-  const duration = video.duration_seconds ?? 0
   return {
     percent: (video.position_seconds / duration) * 100,
     secondsLeft: duration - video.position_seconds,

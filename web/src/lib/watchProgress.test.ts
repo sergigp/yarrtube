@@ -8,4 +8,11 @@ describe('watchProgress', () => {
       secondsLeft: 480,
     })
   })
+
+  it('returns null for an unstarted, watched or durationless video', () => {
+    expect(watchProgress({ watched: false, position_seconds: 0, duration_seconds: 600 })).toBeNull()
+    expect(watchProgress({ watched: true, position_seconds: 120, duration_seconds: 600 })).toBeNull()
+    expect(watchProgress({ watched: false, position_seconds: 120, duration_seconds: null })).toBeNull()
+    expect(watchProgress({ watched: false, position_seconds: 120, duration_seconds: 0 })).toBeNull()
+  })
 })
