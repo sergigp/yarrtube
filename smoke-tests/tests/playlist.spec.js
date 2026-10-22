@@ -24,6 +24,12 @@ import { expectPendingSync } from '../helpers/tasks.js'
 const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
 const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
 const PLAYLIST_PATH = `playlists/${slugOf(PLAYLIST_NAME)}`
+// The badge of an in-progress thumbnail: "<1m left", "8m left", "1h 5m left".
+const TIME_LEFT = /^(<1m|\d+m|\d+h( \d+m)?) left$/
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
 test('playlist lifecycle: add, download, play, sync, duplicate error, delete', async ({ page }) => {
   await page.goto('/')
@@ -128,9 +134,11 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
       homeSections.includes(heading),
     )
     expect(headings).toEqual(homeSections.filter((section) => headings.includes(section)))
+    // The first card is the half-watched one under "Continue watching": it
+    // shows the time left instead of the duration.
     const homeCard = page.locator('main').getByRole('link').filter({ has: page.locator('img') }).first()
     await expect(homeCard).toBeVisible()
-    await expect(homeCard.getByText(/^\d+:\d{2}(:\d{2})?$/)).toBeVisible()
+    await expect(homeCard.getByText(TIME_LEFT)).toBeVisible()
   })
 
   await test.step('exclude it from home and include it again', async () => {
@@ -145,6 +153,15 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     await expect(page.locator('main').getByText(videoTitle, { exact: true })).toHaveCount(0)
     await includeItemInHome(page, { section: 'Playlists', name: PLAYLIST_NAME })
     await expect(continueWatching.getByText(videoTitle, { exact: true })).toBeVisible()
+  })
+
+  await test.step("show its progress in the playlist's video list", async () => {
+    // The half-watched video shows the same progress bar and time left in its
+    // playlist's list as on home, not only under "Continue watching".
+    await sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME }).click()
+    const row = page.getByRole('button', { name: new RegExp(`^(?!Actions for).*${escapeRegExp(videoTitle)}$`) })
+    await expect(row.getByRole('progressbar', { name: 'Watch progress' })).toBeVisible()
+    await expect(row.getByText(TIME_LEFT)).toBeVisible()
   })
 
   await test.step('sync changes nothing when up to date', async () => {

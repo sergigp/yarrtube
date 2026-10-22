@@ -1,9 +1,8 @@
 import { TriangleAlert } from 'lucide-react'
 import { videoMediaUrl } from '@/api/client'
 import type { Video, VideoStatus } from '@/api/types'
-import { formatDuration } from '@/lib/formatDuration'
 import { Thumbnail } from './Thumbnail'
-import { WatchedTick } from './WatchedTick'
+import { ThumbnailOverlay } from './ThumbnailOverlay'
 import { Beacon } from './Beacon'
 import { VideoActionsMenu } from './VideoActionsMenu'
 import { cn } from '@/lib/utils'
@@ -44,7 +43,7 @@ interface VideoListPaneProps {
 
 /**
  * The scrollable video list beside a detail view's player: one row per
- * video with its thumbnail, watched tick, duration, download status and
+ * video with its thumbnail, watch state, duration, download status and
  * actions menu, highlighting the selected one. The menu sits beside the
  * row's select button, not inside it, so opening it never selects the video;
  * the selected row has none, since its detail pane shows one.
@@ -87,19 +86,26 @@ export function VideoListPane({
                           ? videoMediaUrl(basePath, video.thumbnail_filename)
                           : null
                       }
-                      className="aspect-video w-24 rounded-md object-cover"
+                      className={cn(
+                        'aspect-video w-24 rounded-md object-cover',
+                        video.watched && 'opacity-60',
+                      )}
                     />
-                    <WatchedTick watched={video.watched} />
-                    {formatDuration(video.duration_seconds) && (
-                      <span className="absolute right-1 bottom-1 rounded bg-black/75 px-1 py-0.5 text-[10px] font-medium text-white">
-                        {formatDuration(video.duration_seconds)}
-                      </span>
-                    )}
+                    <ThumbnailOverlay
+                      watched={video.watched}
+                      positionSeconds={video.position_seconds}
+                      durationSeconds={video.duration_seconds}
+                      size="row"
+                    />
                   </div>
                   <span
                     className={cn(
-                      'min-w-0 flex-1 text-sm leading-snug text-foreground',
-                      active && 'font-medium text-primary',
+                      'min-w-0 flex-1 text-sm leading-snug',
+                      active
+                        ? 'font-medium text-primary'
+                        : video.watched
+                          ? 'text-muted-foreground'
+                          : 'text-foreground',
                     )}
                   >
                     {video.title}

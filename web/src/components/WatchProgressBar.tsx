@@ -1,23 +1,26 @@
+import { cn } from '@/lib/utils'
+import type { ThumbnailSize } from './ThumbnailOverlay'
+
+/** Thicker on cards; rounded to match each thumbnail's corners. */
+const SIZE_CLASSES: Record<ThumbnailSize, string> = {
+  card: 'h-1.5 rounded-b-lg',
+  row: 'h-1 rounded-b-md',
+}
+
 interface WatchProgressBarProps {
-  positionSeconds: number
-  durationSeconds: number | null
+  /** 0..100. */
+  percent: number
+  size: ThumbnailSize
 }
 
 /**
- * A thin bar along the bottom of a video thumbnail showing how far the video
- * has been watched, as its saved position over its duration. Renders nothing
- * without a known duration. Its parent must be positioned (`relative`).
+ * A bar along the bottom of a video thumbnail showing how far the video has
+ * been watched. Its parent must be positioned (`relative`).
  */
-export function WatchProgressBar({ positionSeconds, durationSeconds }: WatchProgressBarProps) {
-  if (!durationSeconds || durationSeconds <= 0) {
-    return null
-  }
-
-  const percent = Math.min(100, Math.max(0, (positionSeconds / durationSeconds) * 100))
-
+export function WatchProgressBar({ percent, size }: WatchProgressBarProps) {
   return (
     <div
-      className="absolute inset-x-0 bottom-0 h-1 overflow-hidden rounded-b-lg bg-white/30"
+      className={cn('absolute inset-x-0 bottom-0 overflow-hidden bg-black/50', SIZE_CLASSES[size])}
       role="progressbar"
       aria-label="Watch progress"
       aria-valuemin={0}

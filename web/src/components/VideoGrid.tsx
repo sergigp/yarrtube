@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom'
 import { videoMediaUrl, avatarMediaUrl } from '@/api/client'
 import type { HomeVideo, HomeVideoSource } from '@/api/types'
-import { formatDuration } from '@/lib/formatDuration'
+import { cn } from '@/lib/utils'
 import { Thumbnail } from './Thumbnail'
-import { WatchedTick } from './WatchedTick'
-import { WatchProgressBar } from './WatchProgressBar'
+import { ThumbnailOverlay } from './ThumbnailOverlay'
 import { VideoActionsMenu } from './VideoActionsMenu'
 
 function videoDetailPath(source: HomeVideoSource): string {
@@ -13,7 +12,7 @@ function videoDetailPath(source: HomeVideoSource): string {
 }
 
 /** Home-style video cards, each linking to its video in its source. */
-export function VideoGrid({ videos, showProgress }: { videos: HomeVideo[]; showProgress?: boolean }) {
+export function VideoGrid({ videos }: { videos: HomeVideo[] }) {
   if (videos.length === 0) {
     return <p className="text-sm text-muted-foreground">No videos synced yet.</p>
   }
@@ -37,20 +36,17 @@ export function VideoGrid({ videos, showProgress }: { videos: HomeVideo[]; showP
                       ? videoMediaUrl(video.source.path, video.thumbnail_filename)
                       : null
                   }
-                  className="aspect-video w-full rounded-lg object-cover transition-opacity group-hover:opacity-90"
+                  className={cn(
+                    'aspect-video w-full rounded-lg object-cover transition-opacity',
+                    video.watched ? 'opacity-60 group-hover:opacity-100' : 'group-hover:opacity-90',
+                  )}
                 />
-                <WatchedTick watched={video.watched} />
-                {showProgress && (
-                  <WatchProgressBar
-                    positionSeconds={video.position_seconds}
-                    durationSeconds={video.duration_seconds}
-                  />
-                )}
-                {formatDuration(video.duration_seconds) && (
-                  <span className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-xs font-medium text-white">
-                    {formatDuration(video.duration_seconds)}
-                  </span>
-                )}
+                <ThumbnailOverlay
+                  watched={video.watched}
+                  positionSeconds={video.position_seconds}
+                  durationSeconds={video.duration_seconds}
+                  size="card"
+                />
               </Link>
               <div className="flex items-start gap-2">
                 {channelPath && (
@@ -68,7 +64,10 @@ export function VideoGrid({ videos, showProgress }: { videos: HomeVideo[]; showP
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <Link
                     to={videoPath}
-                    className="line-clamp-2 text-sm leading-snug font-medium text-foreground no-underline"
+                    className={cn(
+                      'line-clamp-2 text-sm leading-snug font-medium no-underline',
+                      video.watched ? 'text-muted-foreground' : 'text-foreground',
+                    )}
                   >
                     {video.title}
                   </Link>

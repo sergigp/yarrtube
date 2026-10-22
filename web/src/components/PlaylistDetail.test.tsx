@@ -54,6 +54,30 @@ describe('PlaylistDetail', () => {
     }
   })
 
+  it('shows progress and time left on an in-progress row', async () => {
+    renderPlaylist(
+      {
+        'GET /api/playlists': [aPlaylist({ id: 'PL1' })],
+        'GET /api/playlists/PL1/videos': [
+          aVideo({ title: 'Fresh Video', duration_seconds: 120 }),
+          aVideo({ title: 'Started Video', position_seconds: 120, duration_seconds: 600 }),
+        ],
+      },
+      '/playlists/PL1',
+    )
+
+    // Each row's select button, not its "Actions for …" menu button.
+    const started = await screen.findByRole('button', { name: /^(?!Actions for).*Started Video$/ })
+    expect(within(started).getByRole('progressbar', { name: 'Watch progress' })).toHaveAttribute(
+      'aria-valuenow',
+      '20',
+    )
+    expect(within(started).getByText('8m left')).toBeInTheDocument()
+    const fresh = screen.getByRole('button', { name: /^(?!Actions for).*Fresh Video$/ })
+    expect(within(fresh).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(within(fresh).getByText('2:00')).toBeInTheDocument()
+  })
+
   it('reports an unknown playlist', async () => {
     renderPlaylist(
       {

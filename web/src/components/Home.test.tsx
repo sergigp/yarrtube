@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Home } from './Home'
 import type { HomeVideoSource } from '@/api/types'
@@ -37,8 +37,56 @@ describe('Home', () => {
     expect(await screen.findByText('Continue watching')).toBeInTheDocument()
     expect(screen.getByText('Quick watches')).toBeInTheDocument()
     expect(screen.getByText('Latest videos')).toBeInTheDocument()
-    // Only the continue-watching section draws progress bars.
-    expect(screen.getAllByRole('progressbar')).toHaveLength(1)
+  })
+
+  it('shows progress on in-progress cards in every section', async () => {
+    mockApi({
+      'GET /api/videos/home': {
+        continue_watching: [aHomeVideo({ position_seconds: 60, duration_seconds: 600 })],
+        quick_watches: [],
+        latest: [
+          aHomeVideo({ title: 'Fresh Video' }),
+          aHomeVideo({ title: 'Started Elsewhere', position_seconds: 120, duration_seconds: 600 }),
+        ],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    const heading = await screen.findByRole('heading', { name: 'Latest videos' })
+    const latest = heading.closest('section') as HTMLElement
+    const cards = await within(latest).findAllByRole('listitem')
+    const [fresh, started] = cards as [HTMLElement, HTMLElement]
+    expect(within(started).getByRole('progressbar', { name: 'Watch progress' })).toHaveAttribute(
+      'aria-valuenow',
+      '20',
+    )
+    expect(within(started).getByText('8m left')).toBeInTheDocument()
+    expect(within(fresh).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('progressbar')).toHaveLength(2)
+  })
+
+  it('shows no progress for watched or durationless cards', async () => {
+    mockApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        quick_watches: [],
+        latest: [
+          aHomeVideo({ title: 'Seen', watched: true, duration_seconds: 600 }),
+          aHomeVideo({ title: 'Unknown Length', position_seconds: 60, duration_seconds: null }),
+        ],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    const [seen, unknownLength] = (await screen.findAllByRole('listitem')) as [
+      HTMLElement,
+      HTMLElement,
+    ]
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(within(seen).getByText('10:00')).toBeInTheDocument()
+    expect(within(unknownLength).queryByText(/left$|^\d+:\d{2}$/)).not.toBeInTheDocument()
   })
 
   it('links a video card to its source detail view with a deep link', async () => {
