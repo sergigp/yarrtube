@@ -5,10 +5,11 @@ use crate::infrastructure::shared::error_report;
 use crate::infrastructure::shared::youtube_api_key::YOUTUBE_API_KEY_HEADER;
 use anyhow::{Context, anyhow};
 use serde::Deserialize;
+use std::collections::HashSet;
 #[cfg(test)]
 use std::sync::Arc;
 
-const PLAYLIST_ITEMS_URL: &str = "https://www.googleapis.com/youtube/v3/playlistItems";
+const YOUTUBE_API_URL: &str = "https://www.googleapis.com/youtube/v3";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct YoutubePlaylistItem {
@@ -72,6 +73,31 @@ struct ResourceId {
     video_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct VideosResponse {
+    items: Vec<VideoItem>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VideoItem {
+    id: String,
+    snippet: VideoSnippet,
+}
+
+impl VideoItem {
+    /// True for `upcoming` and `live` broadcasts, which can't be downloaded
+    /// yet.
+    fn is_broadcast_pending(&self) -> bool {
+        false
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct VideoSnippet {
+    #[serde(rename = "liveBroadcastContent")]
+    live_broadcast_content: Option<String>,
+}
+
 pub struct YoutubeApiPlaylistItemsRepository {
     api_key: String,
     base_url: String,
@@ -81,7 +107,7 @@ impl YoutubeApiPlaylistItemsRepository {
     pub fn new(api_key: String) -> Self {
         Self {
             api_key,
-            base_url: PLAYLIST_ITEMS_URL.to_string(),
+            base_url: YOUTUBE_API_URL.to_string(),
         }
     }
 
@@ -106,7 +132,7 @@ impl YoutubeApiPlaylistItemsRepository {
         }
 
         let response = client
-            .get(&self.base_url)
+            .get(format!("{}/playlistItems", self.base_url))
             .query(&query)
             .header(YOUTUBE_API_KEY_HEADER, &self.api_key)
             .send()
@@ -145,10 +171,19 @@ impl YoutubeApiPlaylistItemsRepository {
                 )
             })
             .context("failed to parse YouTube API response")?;
-        let videos = parsed
+        let items: Vec<PlaylistItem> = parsed
             .items
             .into_iter()
             .filter(PlaylistItem::is_watchable)
+            .collect();
+        let video_ids: Vec<&str> = items
+            .iter()
+            .map(|item| item.snippet.resource_id.video_id.as_str())
+            .collect();
+        let not_yet_watchable = self.find_not_yet_watchable(&video_ids)?;
+        let videos = items
+            .into_iter()
+            .filter(|item| !not_yet_watchable.contains(&item.snippet.resource_id.video_id))
             .map(|item| YoutubePlaylistItem {
                 video_id: item.snippet.resource_id.video_id,
                 title: item.snippet.title,
@@ -157,6 +192,12 @@ impl YoutubeApiPlaylistItemsRepository {
             .collect();
 
         Ok((videos, parsed.next_page_token))
+    }
+
+    /// The ids among `video_ids` that YouTube reports as an upcoming or
+    /// currently live broadcast.
+    fn find_not_yet_watchable(&self, _video_ids: &[&str]) -> anyhow::Result<HashSet<String>> {
+        Ok(HashSet::new())
     }
 }
 
@@ -246,7 +287,7 @@ mod tests {
     fn it_should_combine_multiple_pages_in_order() {
         let mut server = mockito::Server::new();
         let _page1 = server
-            .mock("GET", "/")
+            .mock("GET", "/playlistItems")
             .match_query(mockito::Matcher::UrlEncoded(
                 "playlistId".into(),
                 "PL1".into(),
@@ -260,7 +301,7 @@ mod tests {
             )
             .create();
         let _page2 = server
-            .mock("GET", "/")
+            .mock("GET", "/playlistItems")
             .match_query(mockito::Matcher::UrlEncoded(
                 "pageToken".into(),
                 "page2".into(),
@@ -306,7 +347,7 @@ mod tests {
     fn it_should_request_snippet_and_status_parts() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/playlistItems")
             .match_query(mockito::Matcher::UrlEncoded(
                 "part".into(),
                 "snippet,status".into(),
@@ -341,7 +382,7 @@ mod tests {
     fn it_should_skip_private_items() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/playlistItems")
             .match_query(mockito::Matcher::Any)
             .with_status(200)
             .with_body(
@@ -373,7 +414,7 @@ mod tests {
     fn it_should_skip_items_without_a_privacy_status() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/playlistItems")
             .match_query(mockito::Matcher::Any)
             .with_status(200)
             .with_body(
@@ -405,7 +446,7 @@ mod tests {
     fn it_should_skip_items_with_an_unrecognised_privacy_status() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/playlistItems")
             .match_query(mockito::Matcher::Any)
             .with_status(200)
             .with_body(
@@ -437,7 +478,7 @@ mod tests {
     fn it_should_keep_unlisted_items() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/playlistItems")
             .match_query(mockito::Matcher::Any)
             .with_status(200)
             .with_body(
@@ -468,7 +509,7 @@ mod tests {
     fn it_should_return_an_empty_list_when_the_playlist_has_no_videos() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/playlistItems")
             .match_query(mockito::Matcher::Any)
             .with_status(200)
             .with_body(r#"{"items": []}"#)

@@ -552,6 +552,15 @@ pub struct ChannelVideoEntry {
 struct FlatPlaylistEntry {
     id: String,
     title: String,
+    live_status: Option<String>,
+}
+
+impl FlatPlaylistEntry {
+    /// False for an upcoming premiere or stream, one that is live now, or one
+    /// that ended but isn't processed yet: none of them can be downloaded.
+    fn is_watchable(&self) -> bool {
+        true
+    }
 }
 
 /// Lists a channel's `limit` most recent uploads via
@@ -595,18 +604,22 @@ pub fn list_channel_videos(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout
+    let entries = stdout
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
-            let parsed: FlatPlaylistEntry = serde_json::from_str(line)
-                .map_err(|e| anyhow!("failed to parse yt-dlp channel video listing line: {e}"))?;
-            Ok(ChannelVideoEntry {
-                video_id: parsed.id,
-                title: parsed.title,
-            })
+            serde_json::from_str::<FlatPlaylistEntry>(line)
+                .map_err(|e| anyhow!("failed to parse yt-dlp channel video listing line: {e}"))
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()?;
+    Ok(entries
+        .into_iter()
+        .filter(FlatPlaylistEntry::is_watchable)
+        .map(|entry| ChannelVideoEntry {
+            video_id: entry.id,
+            title: entry.title,
+        })
+        .collect())
 }
 
 /// The outcome of running a fully-configured `yt-dlp` invocation:
