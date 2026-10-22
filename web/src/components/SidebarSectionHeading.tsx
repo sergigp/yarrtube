@@ -2,6 +2,8 @@ import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface SidebarSectionHeadingProps {
+  /** The heading's id, for the section's list to be named after it. */
+  id?: string | undefined
   title: string
   folded: boolean
   onToggleFolded: () => void
@@ -14,6 +16,7 @@ interface SidebarSectionHeadingProps {
 
 /** A sidebar section's heading: a fold toggle, plus an optional add control. */
 export function SidebarSectionHeading({
+  id,
   title,
   folded,
   onToggleFolded,
@@ -23,7 +26,10 @@ export function SidebarSectionHeading({
 }: SidebarSectionHeadingProps) {
   return (
     <div className="mb-1 flex items-center gap-1">
-      <h3 className="flex min-w-0 flex-1 font-heading text-base font-semibold tracking-tight text-foreground">
+      <h3
+        id={id}
+        className="flex min-w-0 flex-1 font-heading text-base font-semibold tracking-tight text-foreground"
+      >
         <button
           type="button"
           className={cn(

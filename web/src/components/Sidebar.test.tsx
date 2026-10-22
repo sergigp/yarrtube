@@ -89,6 +89,17 @@ describe('Sidebar', () => {
     ).toEqual(['watch later', 'Courses', 'Ambient', 'Music'])
   })
 
+  it('should expose each sidebar section as a list named after its heading', async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A' })],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList(),
+    })
+
+    expect(await screen.findByRole('list', { name: 'Channels' })).toHaveTextContent('Chan A')
+    expect(await screen.findByRole('list', { name: 'Playlists' })).toHaveTextContent('List B')
+  })
+
   it('lists every channel of an unfolded section with no show-more control', async () => {
     const channels = Array.from({ length: 40 }, (_, index) =>
       aChannel({ name: `Chan ${index}`, unwatched_count: 0 }),
