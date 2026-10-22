@@ -17,4 +17,8 @@ test('downloaded video is h264/aac mp4', async () => {
   await expectH264Mp4(`${seeded.path}/${seeded.video.filename}`)
 })
 
-test.fixme('media answers a Range request with 206', async () => {})
+test('media answers a Range request with 206', async ({ request }) => {
+  // The URL the player loads (see `videoMediaUrl` in the web UI).
+  const encode = (path) => path.split('/').map(encodeURIComponent).join('/')
+  await expectRangeSupported(request, `/media/${encode(seeded.path)}/${encode(seeded.video.filename)}`)
+})
