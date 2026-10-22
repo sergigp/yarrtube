@@ -2,6 +2,7 @@ import { test, expect } from '../helpers/fixtures.js'
 import { openAddChannelDialog, fillChannel } from '../helpers/addDialog.js'
 import { deleteSeeded, seedDownloadedChannel } from '../helpers/seed.js'
 import { assertVideoPlays } from '../helpers/video.js'
+import { expectImageLoaded } from '../helpers/media.js'
 import {
   expectDrawerClosed,
   openDrawer,
@@ -202,6 +203,9 @@ test.describe('with a downloaded channel in a category', () => {
   test('category card opens its video in the channel view and plays', async ({ page }) => {
     const [{ id, title }] = seeded.videos
     await page.goto(`/categories/${encodeURIComponent(categoryId)}`)
+
+    const card = page.locator('main li').filter({ hasText: title })
+    await expectImageLoaded(card.locator('img').first())
 
     await page.locator('main').getByRole('link', { name: title, exact: true }).first().click()
 

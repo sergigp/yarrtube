@@ -10,6 +10,7 @@ import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow } from '../he
 import { expectEpisodeOnDisk, expectGoneFromDisk } from '../helpers/library.js'
 import { expectPlexScanned } from '../helpers/plex.js'
 import { deleteSeeded, seedDownloadedPlaylist } from '../helpers/seed.js'
+import { expectImageLoaded } from '../helpers/media.js'
 import {
   syncItem,
   deleteItem,
@@ -135,7 +136,7 @@ test.describe('with a downloaded playlist', () => {
     // Scoped to `main` so a sidebar row's avatar can never be picked up instead.
     await openPlaylist(page)
     const detailListItem = page.locator('main ul li', { has: page.locator('img') }).first()
-    await expect(detailListItem.locator('img')).toBeVisible()
+    await expectImageLoaded(detailListItem.locator('img'))
     await expect(detailListItem.getByText(/^\d+:\d{2}(:\d{2})?$/)).toBeVisible()
 
     await assertVideoPlays(page)
@@ -181,7 +182,7 @@ test.describe('with a downloaded playlist', () => {
     // The first card is the half-watched one under "Continue watching": it
     // shows the time left instead of the duration.
     const homeCard = page.locator('main').getByRole('link').filter({ has: page.locator('img') }).first()
-    await expect(homeCard).toBeVisible()
+    await expectImageLoaded(homeCard.locator('img').first())
     await expect(homeCard.getByText(TIME_LEFT)).toBeVisible()
   })
 
