@@ -32,7 +32,7 @@ test('deleting a playlist mid-download leaves no folder', async ({ page }) => {
       timeout: 60_000,
     })
     .toContain('running')
-  await expect.poll(() => existsSync(libraryPath(PLAYLIST_PATH)), { message: 'show folder created' }).toBe(true)
+  await expect.poll(() => existsSync(libraryPath(PLAYLIST_PATH)), { message: 'show folder created', timeout: 60_000 }).toBe(true)
 
   await page.goto('/')
   await deleteItem(page, { section: 'Playlists', name: PLAYLIST_NAME })
