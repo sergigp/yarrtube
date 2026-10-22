@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Home } from './Home'
 import type { HomeVideoSource } from '@/api/types'
@@ -39,8 +39,32 @@ describe('Home', () => {
     expect(screen.getByText('Latest videos')).toBeInTheDocument()
   })
 
-  // Task 2.10 replaces the old continue-watching-only progress bar count.
-  it.todo('shows progress on in-progress cards in every section')
+  it('shows progress on in-progress cards in every section', async () => {
+    mockApi({
+      'GET /api/videos/home': {
+        continue_watching: [aHomeVideo({ position_seconds: 60, duration_seconds: 600 })],
+        quick_watches: [],
+        latest: [
+          aHomeVideo({ title: 'Fresh Video' }),
+          aHomeVideo({ title: 'Started Elsewhere', position_seconds: 120, duration_seconds: 600 }),
+        ],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    const heading = await screen.findByRole('heading', { name: 'Latest videos' })
+    const latest = heading.closest('section') as HTMLElement
+    const cards = await within(latest).findAllByRole('listitem')
+    const [fresh, started] = cards as [HTMLElement, HTMLElement]
+    expect(within(started).getByRole('progressbar', { name: 'Watch progress' })).toHaveAttribute(
+      'aria-valuenow',
+      '20',
+    )
+    expect(within(started).getByText('8m left')).toBeInTheDocument()
+    expect(within(fresh).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('progressbar')).toHaveLength(2)
+  })
 
   it('links a video card to its source detail view with a deep link', async () => {
     mockApi({
