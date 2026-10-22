@@ -14,9 +14,10 @@ interface ThumbnailOverlayProps {
   size: ThumbnailSize
 }
 
-const BADGE_CLASSES: Record<ThumbnailSize, string> = {
-  card: 'right-1.5 bottom-1.5 px-1.5 text-xs',
-  row: 'right-1 bottom-1 px-1 text-[10px]',
+/** Badge placement per size: clear of the progress bar when one is shown. */
+const BADGE_CLASSES: Record<ThumbnailSize, { flush: string; raised: string }> = {
+  card: { flush: 'right-1.5 bottom-1.5 px-1.5 text-xs', raised: 'right-1.5 bottom-3 px-1.5 text-xs' },
+  row: { flush: 'right-1 bottom-1 px-1 text-[10px]', raised: 'right-1 bottom-2 px-1 text-[10px]' },
 }
 
 /**
@@ -45,7 +46,7 @@ export function ThumbnailOverlay({
         <span
           className={cn(
             'absolute rounded bg-black/75 py-0.5 font-medium text-white',
-            BADGE_CLASSES[size],
+            BADGE_CLASSES[size][progress ? 'raised' : 'flush'],
           )}
         >
           {badge}

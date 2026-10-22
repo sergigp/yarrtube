@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { videoMediaUrl, avatarMediaUrl } from '@/api/client'
 import type { HomeVideo, HomeVideoSource } from '@/api/types'
+import { cn } from '@/lib/utils'
 import { Thumbnail } from './Thumbnail'
 import { ThumbnailOverlay } from './ThumbnailOverlay'
 import { VideoActionsMenu } from './VideoActionsMenu'
@@ -35,7 +36,10 @@ export function VideoGrid({ videos }: { videos: HomeVideo[] }) {
                       ? videoMediaUrl(video.source.path, video.thumbnail_filename)
                       : null
                   }
-                  className="aspect-video w-full rounded-lg object-cover transition-opacity group-hover:opacity-90"
+                  className={cn(
+                    'aspect-video w-full rounded-lg object-cover transition-opacity',
+                    video.watched ? 'opacity-60 group-hover:opacity-100' : 'group-hover:opacity-90',
+                  )}
                 />
                 <ThumbnailOverlay
                   watched={video.watched}
@@ -60,7 +64,10 @@ export function VideoGrid({ videos }: { videos: HomeVideo[] }) {
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <Link
                     to={videoPath}
-                    className="line-clamp-2 text-sm leading-snug font-medium text-foreground no-underline"
+                    className={cn(
+                      'line-clamp-2 text-sm leading-snug font-medium no-underline',
+                      video.watched ? 'text-muted-foreground' : 'text-foreground',
+                    )}
                   >
                     {video.title}
                   </Link>

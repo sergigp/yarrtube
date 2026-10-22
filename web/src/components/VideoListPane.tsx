@@ -86,7 +86,10 @@ export function VideoListPane({
                           ? videoMediaUrl(basePath, video.thumbnail_filename)
                           : null
                       }
-                      className="aspect-video w-24 rounded-md object-cover"
+                      className={cn(
+                        'aspect-video w-24 rounded-md object-cover',
+                        video.watched && 'opacity-60',
+                      )}
                     />
                     <ThumbnailOverlay
                       watched={video.watched}
@@ -97,8 +100,12 @@ export function VideoListPane({
                   </div>
                   <span
                     className={cn(
-                      'min-w-0 flex-1 text-sm leading-snug text-foreground',
-                      active && 'font-medium text-primary',
+                      'min-w-0 flex-1 text-sm leading-snug',
+                      active
+                        ? 'font-medium text-primary'
+                        : video.watched
+                          ? 'text-muted-foreground'
+                          : 'text-foreground',
                     )}
                   >
                     {video.title}
