@@ -19,7 +19,7 @@ Each smoke spec: write it, run it against `scripts/run-local.sh` or the smoke im
 - [x] 2.3 `tapping a drawer entry navigates and closes it @mobile`: seed a playlist via the API, tap it in the drawer, URL is `/playlists/…` and the drawer is closed.
 - [ ] 2.4 `dismissing the drawer keeps the scroll position and the page behind stays still @mobile`: wheel over the backdrop leaves `scrollY` unchanged, and closing restores it.
 - [x] 2.5 `no view scrolls horizontally @mobile`: `expectNoHorizontalOverflow` on `/`, playlist, channel, category and `/tasks` with a seeded library.
-- [ ] 2.6 `home card opens the video selected, plays and resumes after reload @mobile`: uses `seedDownloadedPlaylist`.
+- [x] 2.6 `home card opens the video selected, plays and resumes after reload @mobile`: uses `seedDownloadedPlaylist`.
 - [ ] 2.7 `player sticks under the header while the list scrolls @mobile`: the player's top equals the header's bottom after scrolling `main`.
 - [ ] 2.8 `video details start collapsed and More expands them @mobile`: "Open on YouTube" is hidden, then visible after tapping More.
 - [ ] 2.9 `add, edit-settings and delete dialogs fit the screen and submit @mobile`: `expectWithinViewport` on each dialog and its submit button; each submits successfully.
