@@ -36,7 +36,7 @@ Each smoke spec: write it, run it against `scripts/run-local.sh` or the smoke im
 - [x] 2.20 `media answers a Range request with 206`: `media.spec.js`, `expectRangeSupported` on `/media/<path>/<filename>`.
 - [x] 2.21 `channel avatar loads`: in `channel.spec.js`, `expectImageLoaded` on the sidebar avatar (the daemon's downloaded `/avatars` copy; the Add dialog notice avatar loads from YouTube's image host, which rate-limits, so it is not checked — user decision); also remove the duplicated invalid-handle step.
 - [x] 2.22 `deleting a playlist mid-download leaves no folder`: `deleteDuringDownload.spec.js`; delete while a download task is running, then `expectGoneFromDisk` stays gone after waiting out the task.
-- [ ] 2.23 `unwatched badge appears via periodic refresh without reload`: in the playlist specs; poll the badge within the sidebar refresh interval, no `page.reload()`.
+- [x] 2.23 `unwatched badge appears via periodic refresh without reload`: in the playlist specs; poll the badge within the sidebar refresh interval, no `page.reload()`.
 - [ ] 2.24 Split `playlist.spec.js` into independent tests on `seedDownloadedPlaylist`, keeping one UI-add golden path. Every former step still exists as a test and the file passes.
 - [ ] 2.25 Replace `networkidle` in `announcements.spec.js` with awaiting the announcements response; the spec passes.
 

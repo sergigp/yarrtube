@@ -66,12 +66,12 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
   })
 
   await test.step('show its unwatched badge, hide it and show it again', async () => {
-    // The downloaded, unwatched video shows as a badge on the playlist's row;
-    // reloading skips waiting for the sidebar's periodic refresh. Hiding the
-    // count removes the badge and showing it brings it back (covers PATCH
-    // /playlists/{id} with hide_unwatched_count).
-    await page.reload()
-    await expect(unwatchedBadge(playlistRow)).toHaveText('1')
+    // The downloaded, unwatched video shows as a badge on the playlist's row,
+    // brought in by the sidebar's periodic refresh (every 5s while the
+    // playlist has work in progress, every 60s after), with no reload.
+    // Hiding the count removes the badge and showing it brings it back
+    // (covers PATCH /playlists/{id} with hide_unwatched_count).
+    await expect(unwatchedBadge(playlistRow)).toHaveText('1', { timeout: 70_000 })
     await setItemUnwatchedCountHidden(page, { section: 'Playlists', name: PLAYLIST_NAME, hidden: true })
     await expect(unwatchedBadge(playlistRow)).toHaveCount(0)
     await setItemUnwatchedCountHidden(page, { section: 'Playlists', name: PLAYLIST_NAME, hidden: false })
