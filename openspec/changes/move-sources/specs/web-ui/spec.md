@@ -32,6 +32,10 @@ The move dialog SHALL be titled "Move <source name>" and pick the destination wi
 - **WHEN** the destination equals the source's current path
 - **THEN** the save control is disabled
 
+#### Scenario: Folder name `.` or `..`
+- **WHEN** a user names the folder `.` or `..`, or creates a new folder with either name in the folder browser
+- **THEN** the dialog shows an error and the save control is disabled
+
 #### Scenario: Move rejected
 - **WHEN** the move is rejected, e.g. because the source still has downloads in progress or the destination is in use
 - **THEN** the dialog stays open and shows the server's error message, and the source keeps its location

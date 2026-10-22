@@ -32,10 +32,24 @@ task queue, so the light lane alone cannot keep moves and reconciles apart.
 - **Pending recurring reconcile left alone** rather than paused and
   re-added: pausing doesn't cover running or on-demand reconciles and
   risks losing the chain on a crash.
-- **"Work in progress" = a video not Downloaded/Errored/Excluded, or a
-  non-completed task whose `output_dir` is the show directory.** Every
+- **"Work in progress" = a video not Downloaded/Errored/Excluded, a
+  non-completed task whose `output_dir` is the show directory, or a pending
+  `video_downloaded` event whose `output_dir` is the show directory.** Every
   per-video task carries `output_dir`, including `delete_video_file`, which
-  has no video id.
+  has no video id. The event counts because its subscriber schedules the
+  subtitles fetch with that absolute directory: until it is handled (5 s
+  poll, longer while it retries) a move would send the fetch to the old
+  folder. The consumer schedules the task before deleting the event, so
+  there is no gap between the two.
+- **Pending deletes count as used paths.** A deleted source's folder is
+  removed recursively later, by a `delete_{playlist,channel}_files` task
+  scheduled from its `*Deleted` event. A destination that overlaps the path
+  of a non-completed delete task or a pending delete event is
+  `DestinationInUse`, or the delete would wipe the moved show.
+- **`PlaylistPath` rejects `.` segments**, like `..`: `overlaps` compares
+  segments as strings, so `a/./b` would slip past it. This applies on
+  creation too; the web folder name and new-folder inputs reject `.` and
+  `..`.
 - **Listings report work in progress by the mover's own rule.** The
   settledness rule lives in one domain function (`domain/show/show_work.rs`)
   used by `ShowMover` and by both view searchers, so the edit dialog can
@@ -55,15 +69,16 @@ task queue, so the light lane alone cannot keep moves and reconciles apart.
 - `src/domain/show/show_work.rs`: `has_work_in_progress`, the settledness rule shared by the mover and the listings.
 - `src/domain/show/mod.rs`: export the new modules.
 - `src/domain/playlist/playlist_view.rs`, `src/domain/channel/channel_view.rs`: `work_in_progress` field.
-- `src/domain/services/playlist_view_searcher.rs`, `channel_view_searcher.rs`: compute it (+ task repository, videos root).
+- `src/domain/services/playlist_view_searcher.rs`, `channel_view_searcher.rs`: compute it (+ task repository, event repository, videos root).
 - `src/application/http/{playlists,channels}/dto.rs`: `work_in_progress` on the list item responses.
 - `src/domain/event/domain_event.rs`: `DomainEvent::ShowMoved` variant.
 - `src/domain/playlist/playlist.rs`: `Playlist::with_path`.
 - `src/domain/channel/channel.rs`: `Channel::with_path`.
 - `src/domain/video/video.rs`: a test pinning the reused `Video::is_download_settled` (Downloaded, Errored or Excluded); no new predicate.
-- `src/domain/playlist/playlist_path.rs`: `PlaylistPath::overlaps` (+ value object tests).
-- `src/domain/task/task.rs`: `Task::output_dir_of`, mirrors `exclusivity_key`.
-- `src/domain/task/scheduled_task.rs`: `ScheduledTask::output_dir`.
+- `src/domain/playlist/playlist_path.rs`: `PlaylistPath::overlaps`; reject `.` segments (+ value object tests).
+- `src/domain/task/task.rs`: `Task::output_dir_of`, mirrors `exclusivity_key`; `Task::deleted_path_of`.
+- `src/domain/task/scheduled_task.rs`: `ScheduledTask::output_dir`, `ScheduledTask::deleted_path`.
+- `src/domain/event/scheduled_event.rs`: `ScheduledEvent::output_dir` (`video_downloaded`), `ScheduledEvent::deleted_path` (`*Deleted`).
 - `src/domain/services/show_mover.rs`: the move use case.
 - `src/domain/services/mod.rs`: export `ShowMover`.
 - `src/domain/services/playlist_video_reconciler.rs`: take the show lock in every entry point.
@@ -80,7 +95,8 @@ task queue, so the light lane alone cannot keep moves and reconciles apart.
 - `src/application/subscribers/mod.rs`: register it when Plex is configured.
 - `src/serve.rs`: wire `ShowMover`, pass `ShowLocks` to reconcilers.
 - `web/src/api/{client,types}.ts`: `movePlaylist`, `moveChannel`.
-- `web/src/hooks/useSaveLocation.ts`: optional initial path; current path not "occupied"; don't remember parent on move.
+- `web/src/hooks/useSaveLocation.ts`: optional initial path; current path not "occupied"; don't remember parent on move; folder name `.`/`..` rejected.
+- `web/src/components/FolderBrowser.tsx` (+ `SaveToField.test.tsx`): new-folder name `.`/`..` rejected.
 - `web/src/components/MoveSourceDialog.tsx` (+ test): the move dialog.
 - `web/src/components/LocationLine.tsx`: the "Location" line with "Move…", shared by both edit dialogs; "Move…" disabled with an explanation while the source has work in progress.
 - `web/src/api/types.ts`, `web/src/test/helpers.tsx`: `work_in_progress` on `PlaylistListItem`/`ChannelListItem` and their builders.
@@ -100,7 +116,7 @@ pub enum MoveShowError {
     Reconciling,                    // 409
     WorkInProgress,                 // 409
     SamePath,                       // 409
-    DestinationInUse(PlaylistPath), // 409: equal to / nested with a source's path
+    DestinationInUse(PlaylistPath), // 409: equal to / nested with a source's path or a pending delete's path
     DestinationExists(PlaylistPath),// 409: on disk
     Filesystem(anyhow::Error),      // 500: rename failed (e.g. EXDEV)
     Repository(anyhow::Error),      // 500
@@ -121,13 +137,19 @@ pub fn overlaps(&self, other: &PlaylistPath) -> bool;
 // domain/task/task.rs
 /// The show directory a per-video task writes to or deletes from.
 pub fn output_dir_of(task_type: &str, payload: &str) -> Option<String>;
+/// The source path a delete_{playlist,channel}_files task removes.
+pub fn deleted_path_of(task_type: &str, payload: &str) -> Option<String>;
 // domain/task/scheduled_task.rs
 pub fn output_dir(&self) -> Option<String>;
+pub fn deleted_path(&self) -> Option<String>;
+// domain/event/scheduled_event.rs
+pub fn output_dir(&self) -> Option<String>;   // video_downloaded only
+pub fn deleted_path(&self) -> Option<String>; // playlist_deleted / channel_deleted
 
 // domain/show/show_work.rs
-/// A video not Downloaded/Errored/Excluded, or a non-completed task whose
-/// output_dir is `show_dir`.
-pub fn has_work_in_progress(videos: &[Video], tasks: &[ScheduledTask], show_dir: &Path) -> bool;
+/// A video not Downloaded/Errored/Excluded, or a non-completed task or a
+/// pending event whose output_dir is `show_dir`.
+pub fn has_work_in_progress(videos: &[Video], tasks: &[ScheduledTask], events: &[ScheduledEvent], show_dir: &Path) -> bool;
 
 // domain/playlist/playlist_view.rs, domain/channel/channel_view.rs
 pub work_in_progress: bool,
@@ -157,6 +179,7 @@ pub struct ShowMover {
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     video_repository: Arc<dyn VideoRepository>,
     task_repository: Arc<dyn TaskRepository>,
+    event_repository: Arc<dyn EventRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     show_locks: Arc<ShowLocks>,
@@ -197,16 +220,21 @@ POST /api/playlists/{id}/move {path}
     run_blocking -> ShowMover::move_playlist(id, path)
       show_locks.try_lock(ShowKey::Playlist(id))         -> None => Reconciling
       playlist_repository.find(&id)                      -> None => NotFound
+      move_show(current, path, video_ids, record)         // private, shared with move_channel
       ensure_destination_free(&playlist.path, &path)
         path == current                                  => SamePath
         playlist_repository.list() + channel_repository.list()
+        + task_repository.list_non_completed() -> task.deleted_path()
+        + event_repository.list_eligible()     -> event.deleted_path()
           any used.overlaps(&path)                       => DestinationInUse
         video_file_repository.dir_exists(root/path)      => DestinationExists
-      ensure_settled(videos, &old_dir)
+      ensure_settled(videos, &old_dir) -> has_work_in_progress(..)
         playlist_video_repository.list_for_playlist(&id) -> video_repository.find_many(ids)
           any !video.is_download_settled()               => WorkInProgress
         task_repository.list_non_completed()
           any task.output_dir() == old_dir               => WorkInProgress
+        event_repository.list_eligible()
+          any event.output_dir() == old_dir              => WorkInProgress
       relocate(&old_dir, &new_dir, || playlist_repository.update(&playlist.with_path(path)))
         dir_exists(old_dir) ? rename_dir(old_dir, new_dir) : skip   (Err => Filesystem)
         update(..) Err => rename_dir(new_dir, old_dir); Repository
@@ -246,6 +274,9 @@ ShowMoved (outbox) -> ScanPlexFolderOnShowMoved::handle(payload)
    15. `it_should_fail_to_move_while_reconciling`: lock held via `ShowLocks::lock` in test; 409.
    16. `it_should_fail_to_move_if_rename_fails`: failing fake; 500, path unchanged, no event.
    17. `it_should_rename_back_if_recording_the_path_fails`: playlist repository double whose `update` fails (the one place SQLite can't be made to fail); 500, renames recorded `a->b` then `b->a`, no event.
+   - `it_should_fail_to_move_while_a_downloaded_video_is_not_yet_handled`: pending `video_downloaded` event in the show dir; 409, event still pending.
+   - `it_should_fail_to_move_into_the_folder_of_a_source_being_deleted`: queued `delete_playlist_files` for `archive`, move to `archive/b`; 409, no rename.
+   - `it_should_fail_to_move_into_the_folder_of_a_source_whose_deletion_is_not_yet_handled`: pending `playlist_deleted` event; 409.
 
    `application/http/channels` — `move_channel` (what differs + wiring):
    18. `it_should_move_a_channel`: 200, new path, rename recorded, `ShowMoved`.
@@ -263,7 +294,9 @@ ShowMoved (outbox) -> ScanPlexFolderOnShowMoved::handle(payload)
    Domain units:
    25. `task.rs`: `it_should_read_the_output_dir_of_every_per_video_task`, `it_should_have_no_output_dir_for_reconciles`.
    26. `video.rs`: `it_should_be_settled_only_when_downloaded_errored_or_excluded` (on `is_download_settled`).
-   `playlist_path.rs`: overlap value object tests (same path, inside, containing, prefix-sharing sibling, sibling).
+   `playlist_path.rs`: overlap value object tests (same path, inside, containing, prefix-sharing sibling, sibling); `.` segment rejected (`.`, `./a`, `a/./b`, `a/.`).
+   `task.rs`: `deleted_path_of` for source file deletions, none for other tasks or undecodable payloads.
+   `scheduled_event.rs`: `output_dir` of `video_downloaded`, `deleted_path` of `*_deleted`, none for other events or undecodable payloads.
 
 2. Infrastructure tests
 
@@ -282,7 +315,11 @@ ShowMoved (outbox) -> ScanPlexFolderOnShowMoved::handle(payload)
    - `it_should_list_a_playlist_with_a_pending_video_as_work_in_progress`.
    - `it_should_list_a_playlist_with_a_queued_task_as_work_in_progress`.
    - `it_should_list_a_channel_with_a_pending_video_as_work_in_progress`.
+   - `it_should_list_a_playlist_with_an_unhandled_downloaded_video_as_work_in_progress`.
 
 3. Web (Vitest, `mockApi`)
    34. `MoveSourceDialog`: prefilled parent/folder; save disabled when unchanged; posts `POST /api/playlists/PL1/move` with new path and closes; shows server error and stays open; cancel sends nothing.
    35. `EditPlaylistDialog` / `EditChannelDialog`: shows Location; "Move…" opens the move dialog without saving; "Move…" disabled with the explanation while the source has work in progress.
+   36. `MoveSourceDialog`: refuses a folder name of `.` / `..`; `SaveToField`: rejects a new folder named `.` / `..`.
+
+4. Smoke: `moveSources.spec.js` waits for the listing's `work_in_progress` to be false before moving.

@@ -67,3 +67,11 @@
 - [x] 5.7 Web: `usePlaylists`/`useChannels` poll every 5 s (`BUSY_SOURCES_INTERVAL_MS`; each list reads every video and queued task, so slower than the 3 s live views) while any listed source has `work_in_progress`, 60 s otherwise; test the interval choice as a pure function in `src/lib/`. Verify: `npm run check`.
 - [x] 5.8 Docs: mention the disabled "Move…" in `doc/INSTALLATION.md`'s moving section.
 - [x] 5.9 `cargo test --locked`, `cargo fmt --all -- --check`, clippy, `npm run check` pass; manual (agent): in the Playwright MCP browser, a source still downloading shows "Move…" disabled with the explanation, and it becomes enabled once settled without a reload.
+
+## 6. Audit fixes
+
+- [x] 6.1 A pending `video_downloaded` event in the show dir counts as work in progress (`ScheduledEvent::output_dir`; `has_work_in_progress` takes events; event repository in `ShowMover` and both view searchers): `it_should_fail_to_move_while_a_downloaded_video_is_not_yet_handled`, `it_should_list_a_playlist_with_an_unhandled_downloaded_video_as_work_in_progress`. Smoke `waitUntilSettled` polls the listing's `work_in_progress`.
+- [x] 6.2 `PlaylistPath::new` rejects `.` segments (VO tests); web folder name and new-folder inputs reject `.`/`..` (Vitest).
+- [x] 6.3 Pending deletes block the destination (`Task::deleted_path_of`, `ScheduledTask::deleted_path`, `ScheduledEvent::deleted_path`): `it_should_fail_to_move_into_the_folder_of_a_source_being_deleted`, `it_should_fail_to_move_into_the_folder_of_a_source_whose_deletion_is_not_yet_handled`.
+- [x] 6.4 Behaviour-preserving cleanups: private `ShowMover::move_show` shared by both moves, `move_show_error` arms collapsed, `list_entries` doc restored, `or_default` in the view searchers.
+- [x] 6.5 `cargo test --locked`, clippy, fmt, `npm run check` pass; `scripts/run-smoke-tests.sh` passes twice in a row.

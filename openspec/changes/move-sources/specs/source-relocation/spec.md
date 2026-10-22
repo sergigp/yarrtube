@@ -37,7 +37,7 @@ The system SHALL provide an HTTP endpoint that moves a channel, identified by it
 - **THEN** the system returns not found and changes nothing
 
 ### Requirement: Move Requires A Settled Source
-The system SHALL accept a move only when every video of the source is Downloaded, Errored or Excluded, and no download, thumbnail fetch, subtitle fetch or video file deletion task for any of its videos is pending or running. The source's pending recurring reconcile SHALL NOT block a move. Otherwise the system SHALL reject the move with a conflict, a message saying the source still has work in progress, and change nothing.
+The system SHALL accept a move only when every video of the source is Downloaded, Errored or Excluded, and no download, thumbnail fetch, subtitle fetch or video file deletion task for any of its videos is pending or running, and no downloaded video of it is still awaiting its follow-up handling (the scheduling of its subtitle fetch). The source's pending recurring reconcile SHALL NOT block a move. Otherwise the system SHALL reject the move with a conflict, a message saying the source still has work in progress, and change nothing.
 
 #### Scenario: Video still pending download
 - **WHEN** a move is requested for a source with a video that is Pending, downloading, or errored with a retry still due
@@ -45,6 +45,10 @@ The system SHALL accept a move only when every video of the source is Downloaded
 
 #### Scenario: Thumbnail or subtitle fetch queued
 - **WHEN** every video of a source is Downloaded but a thumbnail or subtitle fetch for one of them is pending
+- **THEN** the system rejects the move with a conflict and changes nothing
+
+#### Scenario: Download just finished
+- **WHEN** every video of a source is Downloaded and no task is queued, but a just-finished download's follow-up (scheduling its subtitle fetch) has not been handled yet
 - **THEN** the system rejects the move with a conflict and changes nothing
 
 #### Scenario: Errored and excluded videos do not block
@@ -66,15 +70,19 @@ The playlist and channel listings SHALL report, for every source, whether it has
 - **WHEN** a source whose videos are all Downloaded, with a thumbnail or subtitle fetch queued in its show folder, is listed
 - **THEN** it is listed with work in progress
 
+#### Scenario: Download just finished
+- **WHEN** a source whose videos are all Downloaded, with no task queued but a just-finished download's follow-up not yet handled, is listed
+- **THEN** it is listed with work in progress
+
 #### Scenario: Settled source
 - **WHEN** a source whose videos are all Downloaded, Errored or Excluded, with no per-video task queued or running in its show folder, is listed
 - **THEN** it is listed without work in progress
 
 ### Requirement: Move Destination Validation
-The system SHALL reject a move whose path is invalid by the same rules as on creation, equals the current path, is the stored path of another playlist or channel, is inside or contains the stored path of any playlist or channel (itself included), or already exists on disk. An invalid path SHALL be a bad request; any other rejection SHALL be a conflict. A rejected move changes nothing.
+The system SHALL reject a move whose path is invalid by the same rules as on creation, equals the current path, is the stored path of another playlist or channel, is inside or contains the stored path of any playlist or channel (itself included), is equal to, inside or contains the path of a source whose deletion is still pending, or already exists on disk. An invalid path SHALL be a bad request; any other rejection SHALL be a conflict. A rejected move changes nothing.
 
 #### Scenario: Invalid path
-- **WHEN** a move request supplies an empty or absolute path, or one containing a `..` or empty segment
+- **WHEN** a move request supplies an empty or absolute path, or one containing a `.`, `..` or empty segment
 - **THEN** the system returns a bad request and changes nothing
 
 #### Scenario: Path used by another source
@@ -87,6 +95,10 @@ The system SHALL reject a move whose path is invalid by the same rules as on cre
 
 #### Scenario: Path nested in another source's path
 - **WHEN** a source is moved to `music/chill/extra` while another playlist is stored at `music/chill`
+- **THEN** the system returns a conflict and changes nothing
+
+#### Scenario: Path inside a folder being deleted
+- **WHEN** a playlist stored at `archive` was just deleted and its folder is not removed yet, and another source is moved to `archive/b`
 - **THEN** the system returns a conflict and changes nothing
 
 #### Scenario: Destination exists on disk
