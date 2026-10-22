@@ -6,7 +6,8 @@ import { join } from 'node:path'
 // check what actually landed on disk rather than only what the UI reports.
 const VIDEOS_DIR = process.env.SMOKE_VIDEOS_DIR
 
-const MEDIA_EXTENSIONS = ['mp4', 'mkv', 'webm']
+// Downloads are merged into `.mp4`, the container iPhone Safari plays.
+const MEDIA_EXTENSIONS = ['mp4']
 
 /** The host path of `relative` (a path under the videos root). */
 export function libraryPath(relative) {
