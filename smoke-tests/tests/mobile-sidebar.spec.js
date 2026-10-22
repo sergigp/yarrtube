@@ -54,7 +54,14 @@ test('it should close the drawer and open the add channel dialog @mobile', async
   await expect(page.getByRole('dialog', { name: 'Add channel' })).toBeVisible()
 })
 
-test.fixme('drawer closes on Escape @mobile', async () => {})
+test('drawer closes on Escape @mobile', async ({ page }) => {
+  await page.goto('/')
+
+  await openDrawer(page)
+  await page.keyboard.press('Escape')
+
+  await expectDrawerClosed(page)
+})
 
 test.fixme('tapping a drawer entry navigates and closes it @mobile', async () => {})
 
