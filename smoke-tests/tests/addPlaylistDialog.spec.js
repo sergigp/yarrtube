@@ -19,19 +19,24 @@ test('it should show no notice until a playlist is entered', async ({ page }) =>
   await expect(dialog.getByRole('button', { name: /^Create Playlist/ })).toBeDisabled()
 })
 
-test('it should explain a value that is not a playlist', async ({ page }) => {
-  await page.goto('/')
-  await openAddPlaylistDialog(page)
-  const dialog = page.getByRole('dialog')
+test.describe(() => {
+  // The lookup rejects the value, which the notice explains.
+  test.use({ expectedApiErrors: [{ method: 'GET', path: '/api/playlists/preview', status: 400 }] })
 
-  await dialog.getByLabel('Playlist ID or URL').fill('https://www.youtube.com/watch?v=abc')
+  test('it should explain a value that is not a playlist', async ({ page }) => {
+    await page.goto('/')
+    await openAddPlaylistDialog(page)
+    const dialog = page.getByRole('dialog')
 
-  const notice = destinationNotice(dialog)
-  await expect(notice).toHaveText(
-    'YouTube URL is missing a "list" query parameter (got "https://www.youtube.com/watch?v=abc")',
-  )
-  await expect(notice).toHaveClass(/text-destructive/)
-  await expect(dialog.getByRole('button', { name: /^Create Playlist/ })).toBeDisabled()
+    await dialog.getByLabel('Playlist ID or URL').fill('https://www.youtube.com/watch?v=abc')
+
+    const notice = destinationNotice(dialog)
+    await expect(notice).toHaveText(
+      'YouTube URL is missing a "list" query parameter (got "https://www.youtube.com/watch?v=abc")',
+    )
+    await expect(notice).toHaveClass(/text-destructive/)
+    await expect(dialog.getByRole('button', { name: /^Create Playlist/ })).toBeDisabled()
+  })
 })
 
 test('it should state the title, count and destination', async ({ page }) => {
@@ -67,15 +72,20 @@ test('it should auto-fill the folder name under advanced options', async ({ page
   await expect(dialog.getByLabel('Folder name')).toHaveValue(slugOf(PLAYLIST_TITLE))
 })
 
-test('unknown playlist id is reported in the Add playlist dialog', async ({ page }) => {
-  await page.goto('/')
-  await openAddPlaylistDialog(page)
-  const dialog = page.getByRole('dialog')
+test.describe(() => {
+  // The lookup misses, which the notice reports.
+  test.use({ expectedApiErrors: [{ method: 'GET', path: '/api/playlists/preview', status: 404 }] })
 
-  await dialog.getByLabel('Playlist ID or URL').fill(`PLyarrtubeMissing${Date.now()}`)
+  test('unknown playlist id is reported in the Add playlist dialog', async ({ page }) => {
+    await page.goto('/')
+    await openAddPlaylistDialog(page)
+    const dialog = page.getByRole('dialog')
 
-  const notice = destinationNotice(dialog)
-  await expect(notice).toContainText('does not exist', { timeout: 15_000 })
-  await expect(notice).toHaveClass(/text-destructive/)
-  await expect(dialog.getByRole('button', { name: /^Create Playlist/ })).toBeDisabled()
+    await dialog.getByLabel('Playlist ID or URL').fill(`PLyarrtubeMissing${Date.now()}`)
+
+    const notice = destinationNotice(dialog)
+    await expect(notice).toContainText('does not exist', { timeout: 15_000 })
+    await expect(notice).toHaveClass(/text-destructive/)
+    await expect(dialog.getByRole('button', { name: /^Create Playlist/ })).toBeDisabled()
+  })
 })

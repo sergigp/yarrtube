@@ -11,6 +11,11 @@ import {
 
 const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 
+// Deleting the open category can refetch its videos before the view leaves it.
+test.use({
+  expectedApiErrors: [{ method: 'GET', path: /^\/api\/categories\/[^/]+\/videos$/, status: 404 }],
+})
+
 test('category on mobile: add from the drawer, manage sources full screen, then add from the heading @mobile', async ({ page }) => {
   await page.goto('/')
 

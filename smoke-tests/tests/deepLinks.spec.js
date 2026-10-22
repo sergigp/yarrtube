@@ -5,6 +5,11 @@ const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
 const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
 const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 
+// The untracked playlist's videos are refused, which the view reports.
+test.use({
+  expectedApiErrors: [{ method: 'GET', path: '/api/playlists/PLyarrtubeNotTracked/videos', status: 400 }],
+})
+
 test('reloading each route shows its view; unknown playlist says Playlist not found.', async ({ page }) => {
   // Each view only needs its source to be tracked, so they are added through
   // the API, with the Add dialogs' bodies, and their downloads aren't waited on.

@@ -28,17 +28,22 @@ test('it should show no notice until a handle is entered', async ({ page }) => {
   await expect(destinationNotice(dialog)).toBeVisible()
 })
 
-test('it should explain a value that is not a channel', async ({ page }) => {
-  await page.goto('/')
-  await openAddChannelDialog(page)
-  const dialog = page.getByRole('dialog')
+test.describe(() => {
+  // The lookup rejects the value, which the notice explains.
+  test.use({ expectedApiErrors: [{ method: 'GET', path: '/api/channels/preview', status: 400 }] })
 
-  await dialog.getByLabel('Channel Handle or URL').fill('somechannel')
+  test('it should explain a value that is not a channel', async ({ page }) => {
+    await page.goto('/')
+    await openAddChannelDialog(page)
+    const dialog = page.getByRole('dialog')
 
-  const notice = destinationNotice(dialog)
-  await expect(notice).toHaveText('Channel handle must start with "@" (got "somechannel")')
-  await expect(notice).toHaveClass(/text-destructive/)
-  await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
+    await dialog.getByLabel('Channel Handle or URL').fill('somechannel')
+
+    const notice = destinationNotice(dialog)
+    await expect(notice).toHaveText('Channel handle must start with "@" (got "somechannel")')
+    await expect(notice).toHaveClass(/text-destructive/)
+    await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
+  })
 })
 
 test('it should state the video limit, title and destination for a handle', async ({ page }) => {
@@ -103,15 +108,20 @@ test('it should auto-fill the folder name under advanced options', async ({ page
   await expect(dialog.getByLabel('Folder name')).toHaveValue(slugOf(CHANNEL_HANDLE))
 })
 
-test("it should report a channel YouTube doesn't know", async ({ page }) => {
-  await page.goto('/')
-  await openAddChannelDialog(page)
-  const dialog = page.getByRole('dialog')
+test.describe(() => {
+  // The lookup misses, which the notice reports.
+  test.use({ expectedApiErrors: [{ method: 'GET', path: '/api/channels/preview', status: 404 }] })
 
-  await dialog.getByLabel('Channel Handle or URL').fill(`@yarrtube-missing-${Date.now()}`)
+  test("it should report a channel YouTube doesn't know", async ({ page }) => {
+    await page.goto('/')
+    await openAddChannelDialog(page)
+    const dialog = page.getByRole('dialog')
 
-  const notice = destinationNotice(dialog)
-  await expect(notice).toContainText('does not exist', { timeout: 15_000 })
-  await expect(notice).toHaveClass(/text-destructive/)
-  await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
+    await dialog.getByLabel('Channel Handle or URL').fill(`@yarrtube-missing-${Date.now()}`)
+
+    const notice = destinationNotice(dialog)
+    await expect(notice).toContainText('does not exist', { timeout: 15_000 })
+    await expect(notice).toHaveClass(/text-destructive/)
+    await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
+  })
 })

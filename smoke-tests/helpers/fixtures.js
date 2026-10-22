@@ -15,8 +15,9 @@ import { existsSync } from 'node:fs'
  *   sidebar rows in the tests after it (or in its own retry), and the stub
  *   Plex server forgets the scans earlier tests caused;
  * - fails on an uncaught page error, a `console.error` not in
- *   `consoleErrorAllowlist`, or any 5xx `/api` response, which no individual
- *   assertion would otherwise notice;
+ *   `consoleErrorAllowlist`, any 5xx `/api` response, or a 4xx one not in
+ *   `expectedApiErrors`, which no individual assertion would otherwise
+ *   notice;
  * - records the `/api` routes the browser hit, checked against the router
  *   by `routeCoverageReporter.js`.
  */
@@ -62,9 +63,13 @@ export const test = base.extend({
       if (!url.pathname.startsWith('/api/')) {
         return
       }
-      recordApiRoute(response.request().method(), url.pathname)
-      if (response.status() >= 500) {
-        problems.push(`${response.status()} from ${response.request().method()} ${url.pathname}`)
+      const method = response.request().method()
+      const status = response.status()
+      recordApiRoute(method, url.pathname, status)
+      if (status >= 500) {
+        problems.push(`${status} from ${method} ${url.pathname}`)
+      } else if (status >= 400 && !isExpectedApiError(expectedApiErrors, { method, pathname: url.pathname, status })) {
+        problems.push(`unexpected ${status} from ${method} ${url.pathname}`)
       }
     })
     await use(page)
@@ -73,6 +78,16 @@ export const test = base.extend({
 })
 
 export { expect }
+
+// An entry's `path` is the request's pathname, or a RegExp matching it.
+function isExpectedApiError(expectedApiErrors, { method, pathname, status }) {
+  return expectedApiErrors.some(
+    (expected) =>
+      expected.method === method &&
+      expected.status === status &&
+      (expected.path instanceof RegExp ? expected.path.test(pathname) : expected.path === pathname),
+  )
+}
 
 export async function deleteAllSources(request) {
   await deleteAllCategories(request)
