@@ -50,7 +50,7 @@ Suite helpers: prove each check with a throwaway failing case, then revert it.
 - [x] 3.4 `route answered only 4xx is reported uncovered`: `recordApiRoute(…, status)`, and `hitRoutes()` returns only routes with a 2xx. Prove it with a hit file holding only a 4xx line.
 - [x] 3.5 `expectImageLoaded fails on a broken src`: implement it and use it in every thumbnail assertion (playlist detail list, home card, category card).
 - [x] 3.6 `expectEpisodeOnDisk rejects a .webm`: set `MEDIA_EXTENSIONS = ['mp4']`. Prove it on a temporary dir.
-- [ ] 3.7 Switch `sectionList`/`sectionRows`/`sectionEmptyMessage` in `helpers/sidebar.js` to role-based lookups once 4.2 lands. All sidebar-using specs pass.
+- [x] 3.7 Switch `sectionList`/`sectionRows`/`sectionEmptyMessage` in `helpers/sidebar.js` to role-based lookups once 4.1 lands. The empty message has no role of its own, so each sidebar section also becomes a `<section aria-labelledby>` region (user decision; Vitest `should expose each sidebar section as a region named after its heading`), and `sectionEmptyMessage` is the region's paragraph. All sidebar-using specs pass.
 - [ ] 3.8 Make `dialogErrorText` in `helpers/addDialog.js` use `getByRole('alert')` once 4.3 lands. Replace the `toHaveClass(/text-destructive/)` assertions where an accessible equivalent exists. The specs pass.
 
 ## 4. Web UI a11y (Vitest TDD, `web/`)

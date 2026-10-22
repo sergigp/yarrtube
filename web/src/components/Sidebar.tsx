@@ -226,7 +226,7 @@ function SidebarSection({
   const empty = !error && items?.length === 0
 
   return (
-    <div>
+    <section aria-labelledby={headingId}>
       <SidebarSectionHeading
         id={headingId}
         title={title}
@@ -305,7 +305,7 @@ function SidebarSection({
           }
         }}
       />
-    </div>
+    </section>
   )
 }
 

@@ -1,21 +1,22 @@
 import { expect } from '@playwright/test'
 
-// The heading's row (its `h3` plus the add "+"), which the section's add row,
-// list and empty/error messages follow as siblings.
-function headingRow(section) {
-  return `div:has(> h3 > button:text-is("${section}"))`
+// Each section is a region named after its heading, and its entries a list
+// named the same. While folded the heading's name also carries the section's
+// unwatched total ("Channels 3 unwatched").
+function sectionRegion(page, section) {
+  return page.getByRole('region', { name: new RegExp(`^${section}( \\d+ unwatched)?$`) })
 }
 
 export function sectionList(page, section) {
-  return page.locator(`${headingRow(section)} ~ ul`)
+  return page.getByRole('list', { name: section, exact: true })
 }
 
 export function sectionRows(page, section) {
-  return sectionList(page, section).locator('li')
+  return sectionList(page, section).getByRole('listitem')
 }
 
 export function sectionEmptyMessage(page, section) {
-  return page.locator(`${headingRow(section)} ~ p`)
+  return sectionRegion(page, section).getByRole('paragraph')
 }
 
 // The heading toggle that folds a section; while folded its name also

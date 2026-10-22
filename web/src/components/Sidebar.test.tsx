@@ -100,6 +100,20 @@ describe('Sidebar', () => {
     expect(await screen.findByRole('list', { name: 'Playlists' })).toHaveTextContent('List B')
   })
 
+  it('should expose each sidebar section as a region named after its heading', async () => {
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList(),
+    })
+
+    const channels = await screen.findByRole('region', { name: 'Channels' })
+    expect(await within(channels).findByText('None tracked yet.')).toBeInTheDocument()
+    const playlists = screen.getByRole('region', { name: 'Playlists' })
+    expect(await within(playlists).findByText('List B')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Categories' })).toBeInTheDocument()
+  })
+
   it('lists every channel of an unfolded section with no show-more control', async () => {
     const channels = Array.from({ length: 40 }, (_, index) =>
       aChannel({ name: `Chan ${index}`, unwatched_count: 0 }),

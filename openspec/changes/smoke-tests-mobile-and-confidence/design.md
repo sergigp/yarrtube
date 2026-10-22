@@ -24,7 +24,7 @@
 - `smoke-tests/tests/sidebarFolding.spec.js`: mobile test → `@mobile`, drawer helpers.
 - `smoke-tests/tests/announcements.spec.js`: replace `networkidle` with awaiting the announcements response.
 - `smoke-tests/README.md`: projects, `@mobile` tag, new coverage, out-of-scope list.
-- `web/src/components/Sidebar.tsx`, `SidebarSectionHeading.tsx`: heading gets an `id`, `<ul aria-labelledby>` (Categories already has `aria-label`).
+- `web/src/components/Sidebar.tsx`, `SidebarCategories.tsx`, `SidebarSectionHeading.tsx`: heading gets an `id`; each section is a `<section aria-labelledby>` (a named region) and its `<ul aria-labelledby>` a named list.
 - `web/src/components/AddChannelDialog.tsx`, `AddPlaylistDialog.tsx`: submit error `<p role="alert">`.
 - `web/src/components/Sidebar.test.tsx`, `AddPlaylistDialog.test.tsx`, `AddChannelDialog.test.tsx`: Vitest coverage for the two a11y changes.
 
@@ -53,6 +53,7 @@ export async function expectWithinViewport(page, locator)     // bbox inside vie
 
 // helpers/sidebar.js
 export function sectionList(page, section)                    // getByRole('list', { name: section })
+// sectionEmptyMessage: getByRole('region', { name: section }).getByRole('paragraph')
 export async function openDrawer(page)
 export async function closeDrawer(page)
 export async function expectDrawerOpen(page)                  // toggle aria-expanded=true, #app-sidebar in viewport
