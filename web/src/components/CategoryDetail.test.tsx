@@ -77,6 +77,29 @@ describe('CategoryDetail', () => {
     ])
   })
 
+  it('shows progress and time left on an in-progress card', async () => {
+    renderCategory({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'] }),
+      ]),
+      'GET /api/channels': [aChannel({ id: '@hikaru', name: 'Hikaru' })],
+      'GET /api/categories/chess/videos': [
+        aHomeVideo({ title: 'Fresh', duration_seconds: 120 }),
+        aHomeVideo({ title: 'Started', position_seconds: 120, duration_seconds: 600 }),
+      ],
+    })
+
+    const cards = await screen.findAllByRole('listitem')
+    const [fresh, started] = cards as [HTMLElement, HTMLElement]
+    expect(within(started).getByRole('progressbar', { name: 'Watch progress' })).toHaveAttribute(
+      'aria-valuenow',
+      '20',
+    )
+    expect(within(started).getByText('8m left')).toBeInTheDocument()
+    expect(within(fresh).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(within(fresh).getByText('2:00')).toBeInTheDocument()
+  })
+
   it('marks all watched and deletes from the actions menu', async () => {
     let watched = false
     let category = aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 2 })
