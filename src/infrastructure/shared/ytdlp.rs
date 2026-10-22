@@ -2334,6 +2334,38 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn it_should_keep_entries_with_a_finished_or_absent_live_status() {
+        let stdout = "{\"id\": \"vod\", \"title\": \"Past stream\", \"live_status\": \"was_live\"}\n{\"id\": \"vid1\", \"title\": \"One\", \"live_status\": \"not_live\"}\n{\"id\": \"vid2\", \"title\": \"Two\"}\n";
+        let fake = test_support::FakeYtDlp::with_stdout(stdout);
+
+        let videos = list_channel_videos(
+            &fake.path,
+            "https://www.youtube.com/@somechannel/videos",
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(
+            videos,
+            vec![
+                ChannelVideoEntry {
+                    video_id: "vod".to_string(),
+                    title: "Past stream".to_string()
+                },
+                ChannelVideoEntry {
+                    video_id: "vid1".to_string(),
+                    title: "One".to_string()
+                },
+                ChannelVideoEntry {
+                    video_id: "vid2".to_string(),
+                    title: "Two".to_string()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn it_should_pass_the_limit_through_the_index_range_flag() {
         let fake = test_support::FakeYtDlp::with_stdout("");
 
