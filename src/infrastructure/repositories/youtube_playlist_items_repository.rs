@@ -616,6 +616,52 @@ mod tests {
     }
 
     #[test]
+    fn it_should_request_live_status_for_the_page_video_ids() {
+        let mut server = mockito::Server::new();
+        let _items = server
+            .mock("GET", "/playlistItems")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"items": [
+                    {"snippet": {"title": "One", "resourceId": {"videoId": "1"}, "position": 0}, "status": {"privacyStatus": "public"}},
+                    {"snippet": {"title": "Two", "resourceId": {"videoId": "2"}, "position": 1}, "status": {"privacyStatus": "public"}}
+                ]}"#,
+            )
+            .create();
+        let _videos = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("part".into(), "snippet".into()),
+                mockito::Matcher::UrlEncoded("id".into(), "1,2".into()),
+            ]))
+            .match_header("x-goog-api-key", "api-key")
+            .with_status(200)
+            .with_body(
+                r#"{"items": [
+                    {"id": "1", "snippet": {"liveBroadcastContent": "upcoming"}}
+                ]}"#,
+            )
+            .create();
+
+        let repository =
+            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+
+        let videos = repository
+            .list_current_videos(&PlaylistId::new("PL1").unwrap())
+            .map_err(|e| e.to_string());
+
+        assert_eq!(
+            videos,
+            Ok(vec![YoutubePlaylistItem {
+                video_id: "2".to_string(),
+                title: "Two".to_string(),
+                position: 1,
+            }])
+        );
+    }
+
+    #[test]
     fn it_should_return_an_empty_list_when_the_playlist_has_no_videos() {
         let mut server = mockito::Server::new();
         let _videos = no_broadcasts(&mut server);
