@@ -57,4 +57,16 @@ test('player sticks under the header while the list scrolls @mobile', async ({ p
     .toBe(Math.round(header.y + header.height))
 })
 
-test.fixme('video details start collapsed and More expands them @mobile', async () => {})
+test('video details start collapsed and More expands them @mobile', async ({ page }) => {
+  await page.goto(playlistPage(seeded))
+  await expect(page.locator('main h3').first()).toHaveText(seeded.video.title)
+
+  const more = page.getByRole('button', { name: 'More', exact: true })
+  await expect(more).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByRole('link', { name: 'Open on YouTube' })).toHaveCount(0)
+
+  await more.tap()
+
+  await expect(page.getByRole('button', { name: 'Less', exact: true })).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByRole('link', { name: 'Open on YouTube' })).toBeVisible()
+})
