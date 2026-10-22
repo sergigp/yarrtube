@@ -16,7 +16,7 @@ Each smoke spec: write it, run it against `scripts/run-local.sh` or the smoke im
 
 - [x] 2.1 `mobile sidebar opens and closes via toggle and backdrop @mobile`: rewrite `mobile-sidebar.spec.js` with the drawer helpers (`aria-expanded` plus `#app-sidebar` in the viewport); passes on `mobile-safari`.
 - [x] 2.2 `drawer closes on Escape @mobile`: passes on `mobile-safari`.
-- [ ] 2.3 `tapping a drawer entry navigates and closes it @mobile`: seed a playlist via the API, tap it in the drawer, URL is `/playlists/…` and the drawer is closed.
+- [x] 2.3 `tapping a drawer entry navigates and closes it @mobile`: seed a playlist via the API, tap it in the drawer, URL is `/playlists/…` and the drawer is closed.
 - [ ] 2.4 `dismissing the drawer keeps the scroll position and the page behind stays still @mobile`: wheel over the backdrop leaves `scrollY` unchanged, and closing restores it.
 - [ ] 2.5 `no view scrolls horizontally @mobile`: `expectNoHorizontalOverflow` on `/`, playlist, channel, category and `/tasks` with a seeded library.
 - [ ] 2.6 `home card opens the video selected, plays and resumes after reload @mobile`: uses `seedDownloadedPlaylist`.
