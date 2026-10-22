@@ -16,6 +16,9 @@ Web only.
   - Watched row: dimmed thumbnail and a muted title. The active row keeps `text-primary`.
 - `web/src/components/Home.tsx`: drops `showProgress`.
 
+Smoke:
+- `smoke-tests/tests/playlist.spec.js`: the home card shows the time left, and a new step checks the progress bar and time left in the playlist's video list.
+
 ## Types & Signatures
 
 ```ts

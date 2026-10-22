@@ -39,7 +39,11 @@ None: no backend change.
 ## 4. Verification
 
 - [x] 4.1 `npm run check` passes in `web/`. `cargo build --release` embeds the new dist, and `cargo test --locked`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` still pass.
-- [ ] 4.2 `scripts/run-smoke-tests.sh` passes (existing `Watched` tick assertions in `categories.spec.js` must still hold).
+- [x] 4.2 Smoke: in `smoke-tests/tests/playlist.spec.js`:
+  - The home card assertion expects the time left, since the played video now shows that instead of its duration.
+  - A new step checks the playlist's video list shows the progress bar and time left.
+
+  Then `scripts/run-smoke-tests.sh` passes (existing `Watched` tick assertions in `categories.spec.js` must still hold).
 - [x] 4.3 Manual (agent):
   1. Start `scripts/run-local.sh --port <free port> --fresh-videos`.
   2. Through the HTTP API, add a channel, wait for a few downloads, then use `POST /api/videos/:id/progress` to put one video at ~30% and mark another watched.
