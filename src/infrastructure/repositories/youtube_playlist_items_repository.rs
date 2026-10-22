@@ -201,13 +201,42 @@ impl YoutubeApiPlaylistItemsRepository {
     /// currently live broadcast.
     fn find_not_yet_watchable(&self, video_ids: &[&str]) -> anyhow::Result<HashSet<String>> {
         let ids = video_ids.join(",");
-        let parsed: VideosResponse = reqwest::blocking::Client::new()
+        let response = reqwest::blocking::Client::new()
             .get(format!("{}/videos", self.base_url))
             .query(&[("part", "snippet"), ("id", ids.as_str())])
             .header(YOUTUBE_API_KEY_HEADER, &self.api_key)
             .send()
-            .context("YouTube API request failed")?
+            .map_err(|e| anyhow::Error::new(e).context("YouTube API request failed"))
+            .inspect_err(|e| {
+                tracing::error!(
+                    video_ids = %ids,
+                    error = %error_report::cause_chain(e),
+                    "YouTube API request failed"
+                )
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().unwrap_or_default();
+            let error = anyhow!("YouTube API request failed with status {status}: {body}");
+            tracing::error!(
+                video_ids = %ids,
+                status = %status,
+                error = %error_report::cause_chain(&error),
+                "YouTube API request failed"
+            );
+            return Err(error);
+        }
+
+        let parsed: VideosResponse = response
             .json()
+            .inspect_err(|e| {
+                tracing::error!(
+                    video_ids = %ids,
+                    error = %e,
+                    "failed to parse YouTube API response"
+                )
+            })
             .context("failed to parse YouTube API response")?;
 
         Ok(parsed
@@ -658,6 +687,91 @@ mod tests {
                 title: "Two".to_string(),
                 position: 1,
             }])
+        );
+    }
+
+    #[test]
+    fn it_should_keep_items_missing_from_the_videos_response() {
+        let mut server = mockito::Server::new();
+        let _items = server
+            .mock("GET", "/playlistItems")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"items": [
+                    {"snippet": {"title": "One", "resourceId": {"videoId": "1"}, "position": 0}, "status": {"privacyStatus": "public"}},
+                    {"snippet": {"title": "Two", "resourceId": {"videoId": "2"}, "position": 1}, "status": {"privacyStatus": "public"}}
+                ]}"#,
+            )
+            .create();
+        let _videos = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"items": [
+                    {"id": "2", "snippet": {"liveBroadcastContent": "none"}}
+                ]}"#,
+            )
+            .create();
+
+        let repository =
+            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+
+        let videos = repository
+            .list_current_videos(&PlaylistId::new("PL1").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            videos,
+            vec![
+                YoutubePlaylistItem {
+                    video_id: "1".to_string(),
+                    title: "One".to_string(),
+                    position: 0,
+                },
+                YoutubePlaylistItem {
+                    video_id: "2".to_string(),
+                    title: "Two".to_string(),
+                    position: 1,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_fail_when_the_live_status_lookup_fails() {
+        let mut server = mockito::Server::new();
+        let _items = server
+            .mock("GET", "/playlistItems")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"items": [
+                    {"snippet": {"title": "One", "resourceId": {"videoId": "1"}, "position": 0}, "status": {"privacyStatus": "public"}}
+                ]}"#,
+            )
+            .create();
+        let _videos = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(500)
+            .with_body("backend error")
+            .create();
+
+        let repository =
+            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+
+        let result = repository
+            .list_current_videos(&PlaylistId::new("PL1").unwrap())
+            .map_err(|e| e.to_string());
+
+        assert_eq!(
+            result,
+            Err(
+                "YouTube API request failed with status 500 Internal Server Error: backend error"
+                    .to_string()
+            )
         );
     }
 
