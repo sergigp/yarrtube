@@ -1,5 +1,7 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { openAddChannelDialog, fillChannel } from '../helpers/addDialog.js'
+import { deleteSeeded, seedDownloadedChannel } from '../helpers/seed.js'
+import { assertVideoPlays } from '../helpers/video.js'
 import {
   expectDrawerClosed,
   openDrawer,
@@ -171,4 +173,35 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
   })
 })
 
-test.fixme('category card opens its video in the channel view and plays', async () => {})
+test.describe('with a downloaded channel in a category', () => {
+  test.use({ keepLibrary: true })
+
+  let seeded
+  let categoryId
+  test.beforeAll(async ({ request }) => {
+    seeded = await seedDownloadedChannel(request, { videoLimit: 1 })
+    const category = await request.post('/api/categories', { data: { name: 'Watch later' } })
+    expect(category.ok(), await category.text()).toBeTruthy()
+    categoryId = (await category.json()).id
+    const members = await request.put(`/api/categories/${categoryId}/members`, {
+      data: { channels: [seeded.handle], playlists: [] },
+    })
+    expect(members.ok(), await members.text()).toBeTruthy()
+  })
+
+  test.afterAll(async ({ request }) => {
+    await request.delete(`/api/categories/${categoryId}`)
+    await deleteSeeded(request, seeded)
+  })
+
+  test('category card opens its video in the channel view and plays', async ({ page }) => {
+    const [{ id, title }] = seeded.videos
+    await page.goto(`/categories/${encodeURIComponent(categoryId)}`)
+
+    await page.locator('main').getByRole('link', { name: title, exact: true }).first().click()
+
+    await expect(page).toHaveURL(new RegExp(`/channels/[^?]+\\?video=${id}$`))
+    await expect(page.locator('main h3').first()).toHaveText(title)
+    await assertVideoPlays(page)
+  })
+})
