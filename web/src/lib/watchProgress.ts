@@ -14,8 +14,15 @@ export function watchProgress(video: {
   position_seconds: number
   duration_seconds: number | null
 }): WatchProgress | null {
-  void video
-  return null
+  if (video.position_seconds <= 0) {
+    return null
+  }
+
+  const duration = video.duration_seconds ?? 0
+  return {
+    percent: (video.position_seconds / duration) * 100,
+    secondsLeft: duration - video.position_seconds,
+  }
 }
 
 /** Formats seconds left as "<1m left", "8m left", "1h left" or "1h 5m left", minutes rounded down. */
