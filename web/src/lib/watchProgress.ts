@@ -28,9 +28,15 @@ export function watchProgress(video: {
 
 /** Formats seconds left as "<1m left", "8m left", "1h left" or "1h 5m left", minutes rounded down. */
 export function formatTimeLeft(seconds: number): string {
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 1) {
+  const totalMinutes = Math.floor(seconds / 60)
+  if (totalMinutes < 1) {
     return '<1m left'
   }
-  return `${minutes}m left`
+
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours === 0) {
+    return `${minutes}m left`
+  }
+  return minutes === 0 ? `${hours}h left` : `${hours}h ${minutes}m left`
 }
