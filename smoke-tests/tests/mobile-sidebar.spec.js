@@ -72,10 +72,10 @@ test('drawer closes on Escape @mobile', async ({ page }) => {
   await expectDrawerClosed(page)
 })
 
-test('tapping a drawer entry navigates and closes it @mobile', async ({ page }) => {
-  // Only the sidebar entry is under test, so the playlist is added through
-  // the API, with the Add dialog's body.
-  const created = await page.request.post('/api/playlists', {
+// Only the views it leads to are under test, so the playlist is added
+// through the API, with the Add dialog's body, and isn't waited on.
+async function addPlaylist(request) {
+  const created = await request.post('/api/playlists', {
     data: {
       playlist: PLAYLIST_ID,
       path: `playlists/${slugOf(PLAYLIST_NAME)}`,
@@ -85,6 +85,10 @@ test('tapping a drawer entry navigates and closes it @mobile', async ({ page }) 
     },
   })
   expect(created.ok(), await created.text()).toBeTruthy()
+}
+
+test('tapping a drawer entry navigates and closes it @mobile', async ({ page }) => {
+  await addPlaylist(page.request)
   await page.goto('/')
 
   await openDrawer(page)
@@ -95,4 +99,28 @@ test('tapping a drawer entry navigates and closes it @mobile', async ({ page }) 
   await expectDrawerClosed(page)
 })
 
-test.fixme('dismissing the drawer keeps the scroll position and the page behind stays still @mobile', async () => {})
+test('dismissing the drawer keeps the scroll position and the page behind stays still @mobile', async ({ page }) => {
+  await addPlaylist(page.request)
+  await page.goto(`/playlists/${encodeURIComponent(PLAYLIST_ID)}`)
+  // Expanded details make the page tall enough to scroll on a phone.
+  await page.getByRole('button', { name: 'More', exact: true }).tap()
+  await expect(page.getByRole('link', { name: 'Open on YouTube' })).toBeVisible()
+  const scrollY = () => page.evaluate(() => window.scrollY)
+
+  // Mobile WebKit has no mouse wheel, so the page is scrolled from the
+  // keyboard, which, unlike a scripted scroll, honours the scroll lock.
+  await page.keyboard.press('PageDown')
+  await expect.poll(scrollY).toBeGreaterThan(0)
+  const before = await scrollY()
+
+  await openDrawer(page)
+  await page.keyboard.press('PageDown')
+  // Give a scroll that shouldn't happen the time it would take.
+  await page.waitForTimeout(500)
+  expect(await scrollY()).toBe(before)
+
+  const { width } = page.viewportSize()
+  await backdrop(page).tap({ position: { x: width - 20, y: 20 } })
+  await expectDrawerClosed(page)
+  expect(await scrollY()).toBe(before)
+})
