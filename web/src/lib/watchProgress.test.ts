@@ -15,4 +15,11 @@ describe('watchProgress', () => {
     expect(watchProgress({ watched: false, position_seconds: 120, duration_seconds: null })).toBeNull()
     expect(watchProgress({ watched: false, position_seconds: 120, duration_seconds: 0 })).toBeNull()
   })
+
+  it('clamps a position past the duration', () => {
+    expect(watchProgress({ watched: false, position_seconds: 700, duration_seconds: 600 })).toEqual({
+      percent: 100,
+      secondsLeft: 0,
+    })
+  })
 })

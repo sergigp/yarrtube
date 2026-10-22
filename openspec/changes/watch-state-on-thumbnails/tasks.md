@@ -16,7 +16,7 @@
 
 - [x] 2.1 `watchProgress.test.ts`, `returns progress for an unwatched started video`.
 - [x] 2.2 `watchProgress.test.ts`, `returns null for an unstarted, watched or durationless video`.
-- [ ] 2.3 `watchProgress.test.ts`, `clamps a position past the duration`.
+- [x] 2.3 `watchProgress.test.ts`, `clamps a position past the duration`.
 - [ ] 2.4 `watchProgress.test.ts`, `formats time left in minutes`.
 - [ ] 2.5 `watchProgress.test.ts`, `formats time left under a minute`.
 - [ ] 2.6 `watchProgress.test.ts`, `formats time left from one hour`.

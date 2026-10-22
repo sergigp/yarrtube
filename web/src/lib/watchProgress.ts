@@ -19,9 +19,10 @@ export function watchProgress(video: {
     return null
   }
 
+  const position = Math.min(video.position_seconds, duration)
   return {
-    percent: (video.position_seconds / duration) * 100,
-    secondsLeft: duration - video.position_seconds,
+    percent: (position / duration) * 100,
+    secondsLeft: duration - position,
   }
 }
 
