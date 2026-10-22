@@ -120,4 +120,46 @@ test('add, edit-settings and delete dialogs fit the screen and submit @mobile', 
   })
 })
 
-test.fixme('icon-only Tasks tabs and Run now work by accessible name @mobile', async () => {})
+test('icon-only Tasks tabs and Run now work by accessible name @mobile', async ({ page }) => {
+  // A tracked playlist brings a sync to run; it is added through the API, with
+  // the Add dialog's body, since only the Tasks view's controls are under test.
+  const created = await page.request.post('/api/playlists', {
+    data: {
+      playlist: PLAYLIST_ID,
+      path: 'playlists/mobile-tasks',
+      quality: 'low',
+      exclude_from_home: false,
+      reconcile_interval_minutes: 180,
+    },
+  })
+  expect(created.ok(), await created.text()).toBeTruthy()
+  const reconciled = (page) =>
+    page.waitForResponse(
+      (response) => response.url().endsWith('/reconcile') && response.request().method() === 'POST',
+    )
+
+  await test.step("the header's Sync", async () => {
+    await page.goto(`/playlists/${encodeURIComponent(PLAYLIST_ID)}`)
+    const sync = page.getByRole('button', { name: 'Sync', exact: true })
+    // Only its icon shows on a phone.
+    await expect(sync).toHaveText('', { useInnerText: true })
+    const synced = reconciled(page)
+    await sync.tap()
+    expect((await synced).ok()).toBe(true)
+  })
+
+  await test.step('the Syncs tab and its Run now', async () => {
+    await page.goto('/tasks')
+    const syncsTab = page.getByRole('tab', { name: /^Syncs/ })
+    await syncsTab.tap()
+    await expect(syncsTab).toHaveAttribute('aria-selected', 'true')
+
+    const syncRow = page.locator('main li', { hasText: `Syncing playlist ${PLAYLIST_NAME}` })
+    const runNow = syncRow.getByRole('button', { name: /^Run now: / })
+    await expect(runNow).toHaveText('', { useInnerText: true })
+    const ranNow = reconciled(page)
+    await runNow.tap()
+    expect((await ranNow).ok()).toBe(true)
+    await expect(syncRow.getByText(/^Sync failed/)).toHaveCount(0)
+  })
+})
