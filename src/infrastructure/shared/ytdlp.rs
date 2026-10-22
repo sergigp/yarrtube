@@ -559,7 +559,10 @@ impl FlatPlaylistEntry {
     /// False for an upcoming premiere or stream, one that is live now, or one
     /// that ended but isn't processed yet: none of them can be downloaded.
     fn is_watchable(&self) -> bool {
-        !matches!(self.live_status.as_deref(), Some("is_upcoming"))
+        !matches!(
+            self.live_status.as_deref(),
+            Some("is_upcoming" | "is_live" | "post_live")
+        )
     }
 }
 
@@ -2304,6 +2307,28 @@ mod tests {
                     title: "Two".to_string()
                 },
             ]
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_skip_live_and_post_live_entries_when_listing_channel_videos() {
+        let stdout = "{\"id\": \"live\", \"title\": \"Live now\", \"live_status\": \"is_live\"}\n{\"id\": \"processing\", \"title\": \"Just ended\", \"live_status\": \"post_live\"}\n{\"id\": \"vid1\", \"title\": \"One\"}\n";
+        let fake = test_support::FakeYtDlp::with_stdout(stdout);
+
+        let videos = list_channel_videos(
+            &fake.path,
+            "https://www.youtube.com/@somechannel/videos",
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(
+            videos,
+            vec![ChannelVideoEntry {
+                video_id: "vid1".to_string(),
+                title: "One".to_string()
+            }]
         );
     }
 
