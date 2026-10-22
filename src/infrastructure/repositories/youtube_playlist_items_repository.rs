@@ -90,7 +90,7 @@ impl VideoItem {
     fn is_broadcast_pending(&self) -> bool {
         matches!(
             self.snippet.live_broadcast_content.as_deref(),
-            Some("upcoming")
+            Some("upcoming" | "live")
         )
     }
 }
@@ -550,6 +550,49 @@ mod tests {
             .with_body(
                 r#"{"items": [
                     {"id": "1", "snippet": {"liveBroadcastContent": "upcoming"}},
+                    {"id": "2", "snippet": {"liveBroadcastContent": "none"}}
+                ]}"#,
+            )
+            .create();
+
+        let repository =
+            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+
+        let videos = repository
+            .list_current_videos(&PlaylistId::new("PL1").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            videos,
+            vec![YoutubePlaylistItem {
+                video_id: "2".to_string(),
+                title: "Two".to_string(),
+                position: 1,
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_skip_items_reported_as_live() {
+        let mut server = mockito::Server::new();
+        let _items = server
+            .mock("GET", "/playlistItems")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"items": [
+                    {"snippet": {"title": "Live now", "resourceId": {"videoId": "1"}, "position": 0}, "status": {"privacyStatus": "public"}},
+                    {"snippet": {"title": "Two", "resourceId": {"videoId": "2"}, "position": 1}, "status": {"privacyStatus": "public"}}
+                ]}"#,
+            )
+            .create();
+        let _videos = server
+            .mock("GET", "/videos")
+            .match_query(mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(
+                r#"{"items": [
+                    {"id": "1", "snippet": {"liveBroadcastContent": "live"}},
                     {"id": "2", "snippet": {"liveBroadcastContent": "none"}}
                 ]}"#,
             )
