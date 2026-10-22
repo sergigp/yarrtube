@@ -559,7 +559,7 @@ impl FlatPlaylistEntry {
     /// False for an upcoming premiere or stream, one that is live now, or one
     /// that ended but isn't processed yet: none of them can be downloaded.
     fn is_watchable(&self) -> bool {
-        true
+        !matches!(self.live_status.as_deref(), Some("is_upcoming"))
     }
 }
 
@@ -2255,6 +2255,34 @@ mod tests {
     fn it_should_parse_one_json_line_per_discovered_video() {
         let stdout =
             "{\"id\": \"vid1\", \"title\": \"One\"}\n{\"id\": \"vid2\", \"title\": \"Two\"}\n";
+        let fake = test_support::FakeYtDlp::with_stdout(stdout);
+
+        let videos = list_channel_videos(
+            &fake.path,
+            "https://www.youtube.com/@somechannel/videos",
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(
+            videos,
+            vec![
+                ChannelVideoEntry {
+                    video_id: "vid1".to_string(),
+                    title: "One".to_string()
+                },
+                ChannelVideoEntry {
+                    video_id: "vid2".to_string(),
+                    title: "Two".to_string()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_skip_upcoming_entries_when_listing_channel_videos() {
+        let stdout = "{\"id\": \"premiere\", \"title\": \"Soon\", \"live_status\": \"is_upcoming\"}\n{\"id\": \"vid1\", \"title\": \"One\", \"live_status\": null}\n{\"id\": \"vid2\", \"title\": \"Two\"}\n";
         let fake = test_support::FakeYtDlp::with_stdout(stdout);
 
         let videos = list_channel_videos(

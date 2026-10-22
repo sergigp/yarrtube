@@ -9,7 +9,7 @@
 ## 3. Infrastructure adapters (TDD)
 
 ### ytdlp::list_channel_videos
-- [ ] 3.1 `it_should_skip_upcoming_entries_when_listing_channel_videos`: implement `is_watchable` + filter; test passes
+- [x] 3.1 `it_should_skip_upcoming_entries_when_listing_channel_videos`: implement `is_watchable` + filter; test passes
 - [ ] 3.2 `it_should_skip_live_and_post_live_entries_when_listing_channel_videos`: test passes
 - [ ] 3.3 `it_should_keep_entries_with_a_finished_or_absent_live_status`: test passes
 
