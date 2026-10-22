@@ -4,7 +4,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 None: reconciler behaviour is unchanged (see design.md Test Plan). Verify by checking that the existing channel/playlist reconciler add and evict tests still pass.
+- [x] 2.1 None: reconciler behaviour is unchanged (see design.md Test Plan). Verify by checking that the existing channel/playlist reconciler add and evict tests still pass.
 
 ## 3. Infrastructure adapters (TDD)
 
