@@ -289,6 +289,21 @@ impl Task {
             _ => None,
         }
     }
+
+    /// The source path (relative to the videos root) a `delete_playlist_files`
+    /// or `delete_channel_files` task removes recursively; `None` for any
+    /// other task type.
+    pub fn deleted_path_of(task_type: &str, payload: &str) -> Option<String> {
+        match task_type {
+            "delete_playlist_files" => Self::decode_delete_playlist_files_payload(payload)
+                .ok()
+                .map(|(_, path)| path),
+            "delete_channel_files" => Self::decode_delete_channel_files_payload(payload)
+                .ok()
+                .map(|(_, path)| path),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -633,5 +648,53 @@ mod tests {
             .collect();
 
         assert_eq!(output_dirs, vec![None, None]);
+    }
+
+    #[test]
+    fn it_should_read_the_deleted_path_of_source_file_deletions() {
+        let tasks = [
+            Task::DeletePlaylistFiles {
+                playlist_id: "PL1".to_string(),
+                path: "music/chill".to_string(),
+            },
+            Task::DeleteChannelFiles {
+                channel_id: "@somechannel".to_string(),
+                path: "music/chill".to_string(),
+            },
+        ];
+
+        let deleted_paths: Vec<Option<String>> = tasks
+            .iter()
+            .map(|task| Task::deleted_path_of(task.task_type(), &task.payload().to_string()))
+            .collect();
+
+        assert_eq!(deleted_paths, vec![Some("music/chill".to_string()); 2]);
+    }
+
+    #[test]
+    fn it_should_have_no_deleted_path_for_other_tasks() {
+        let tasks = [
+            Task::ReconcilePlaylist {
+                playlist_id: "PL1".to_string(),
+            },
+            Task::DeleteVideoFile {
+                filename: Some("My Video.mp4".to_string()),
+                thumbnail_filename: None,
+                subtitle_filename: None,
+                output_dir: "/videos/music".to_string(),
+            },
+        ];
+
+        let deleted_paths: Vec<Option<String>> = tasks
+            .iter()
+            .map(|task| Task::deleted_path_of(task.task_type(), &task.payload().to_string()))
+            .collect();
+
+        assert_eq!(deleted_paths, vec![None, None]);
+    }
+
+    #[test]
+    fn it_should_have_no_deleted_path_for_an_undecodable_payload() {
+        assert_eq!(Task::deleted_path_of("delete_playlist_files", "{}"), None);
     }
 }

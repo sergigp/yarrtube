@@ -108,6 +108,12 @@ impl ScheduledTask {
         Task::output_dir_of(&self.task_type, &self.payload)
     }
 
+    /// The source path a `delete_playlist_files` / `delete_channel_files`
+    /// task removes; `None` for any other.
+    pub fn deleted_path(&self) -> Option<String> {
+        Task::deleted_path_of(&self.task_type, &self.payload)
+    }
+
     /// Runs no later than `run_at`; a task already due earlier keeps its time.
     pub fn bring_forward(self, run_at: DateTime<Utc>, now: DateTime<Utc>) -> Self {
         if self.run_at <= run_at {

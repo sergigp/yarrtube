@@ -1,4 +1,5 @@
 use crate::domain::channel::{Channel, ChannelHandle, ChannelView};
+use crate::domain::event::ScheduledEvent;
 use crate::domain::show::has_work_in_progress;
 use crate::domain::task::ScheduledTask;
 use crate::domain::video::{Video, VideoRecordId};
@@ -6,6 +7,7 @@ use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepos
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::shared::domain_events::event_repository::EventRepository;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,6 +19,7 @@ pub struct ChannelViewSearcher {
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     video_repository: Arc<dyn VideoRepository>,
     task_repository: Arc<dyn TaskRepository>,
+    event_repository: Arc<dyn EventRepository>,
     videos_root: PathBuf,
 }
 
@@ -26,6 +29,7 @@ impl ChannelViewSearcher {
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         video_repository: Arc<dyn VideoRepository>,
         task_repository: Arc<dyn TaskRepository>,
+        event_repository: Arc<dyn EventRepository>,
         videos_root: impl Into<PathBuf>,
     ) -> Self {
         Self {
@@ -33,6 +37,7 @@ impl ChannelViewSearcher {
             channel_video_repository,
             video_repository,
             task_repository,
+            event_repository,
             videos_root: videos_root.into(),
         }
     }
@@ -47,11 +52,12 @@ impl ChannelViewSearcherApi for ChannelViewSearcher {
         let channels = self.repository.list()?;
         let videos = self.videos_by_channel()?;
         let tasks = self.task_repository.list_non_completed()?;
+        let events = self.event_repository.list_eligible()?;
         Ok(channels
             .into_iter()
             .map(|channel| {
                 let channel_videos = videos.get(&channel.id).map(Vec::as_slice).unwrap_or(&[]);
-                self.channel_view(channel, channel_videos, &tasks)
+                self.channel_view(channel, channel_videos, &tasks, &events)
             })
             .collect())
     }
@@ -79,10 +85,7 @@ impl ChannelViewSearcher {
                 Some((channel_video.channel_id, video))
             })
             .fold(HashMap::new(), |mut grouped, (channel_id, video)| {
-                grouped
-                    .entry(channel_id)
-                    .or_insert_with(Vec::new)
-                    .push(video);
+                grouped.entry(channel_id).or_default().push(video);
                 grouped
             }))
     }
@@ -92,6 +95,7 @@ impl ChannelViewSearcher {
         channel: Channel,
         videos: &[Video],
         tasks: &[ScheduledTask],
+        events: &[ScheduledEvent],
     ) -> ChannelView {
         let show_dir = self.videos_root.join(channel.path.as_str());
         ChannelView {
@@ -99,7 +103,7 @@ impl ChannelViewSearcher {
                 .iter()
                 .filter(|video| video.is_downloaded_and_unwatched())
                 .count(),
-            work_in_progress: has_work_in_progress(videos, tasks, &show_dir),
+            work_in_progress: has_work_in_progress(videos, tasks, events, &show_dir),
             id: channel.id,
             name: channel.name,
             path: channel.path,

@@ -12,23 +12,25 @@ const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 const CHANNEL_PATH = `channels/${slugOf(CHANNEL_HANDLE)}`
 
 /**
- * Waits until the source at `path` is settled, as a move requires: its
- * videos downloaded with thumbnails and no per-video task (thumbnail or
- * subtitle fetch, ...) left queued in its show folder.
+ * Waits until the source `id` is settled by the server's own rule, the one a
+ * move checks: its `listUrl` entry no longer reports `work_in_progress` (a
+ * video still downloading, a per-video task queued in its show folder, or a
+ * downloaded video whose event isn't handled yet), and its videos are
+ * downloaded with thumbnails, so the page shows one to play.
  */
-async function waitUntilSettled(request, { videosUrl, path }) {
+async function waitUntilSettled(request, { listUrl, id, videosUrl }) {
   await expect
     .poll(
       async () => {
+        const sources = await (await request.get(listUrl)).json()
         const videos = await (await request.get(videosUrl)).json()
-        const tasks = await (await request.get('/api/tasks')).json()
+        const source = sources.find((candidate) => candidate.id === id)
         const downloaded =
           videos.length > 0 &&
           videos.every((video) => video.status === 'DOWNLOADED' && video.thumbnail_filename)
-        const busy = tasks.some((task) => task.payload.output_dir?.endsWith(`/${path}`))
-        return downloaded && !busy
+        return source?.work_in_progress === false && downloaded
       },
-      { message: `${path} settled`, timeout: 240_000 },
+      { message: `${id} settled`, timeout: 240_000 },
     )
     .toBe(true)
 }
@@ -74,8 +76,9 @@ test('moving a playlist renames its show folder and keeps its videos', async ({ 
   expect(created.ok(), await created.text()).toBeTruthy()
   const playlist = await created.json()
   await waitUntilSettled(page.request, {
+    listUrl: '/api/playlists',
+    id: playlist.id,
     videosUrl: `/api/playlists/${playlist.id}/videos`,
-    path: PLAYLIST_PATH,
   })
   await resetPlexStub(page.request)
 
@@ -110,8 +113,9 @@ test('moving a channel renames its show folder and keeps its videos', async ({ p
   expect(created.ok(), await created.text()).toBeTruthy()
   const channel = await created.json()
   await waitUntilSettled(page.request, {
+    listUrl: '/api/channels',
+    id: channel.id,
     videosUrl: `/api/channels/${encodeURIComponent(channel.id)}/videos`,
-    path: CHANNEL_PATH,
   })
   await resetPlexStub(page.request)
 

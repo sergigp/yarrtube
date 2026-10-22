@@ -176,15 +176,6 @@ impl VideoFileRepository for FilesystemVideoFileRepository {
 
 /// The entries directly in `output_dir`, excluding yt-dlp's in-progress
 /// temp files; a missing `output_dir` has none.
-fn create_parent(path: &Path) -> anyhow::Result<()> {
-    let Some(parent) = path.parent() else {
-        return Ok(());
-    };
-    std::fs::create_dir_all(parent)
-        .inspect_err(|e| tracing::error!(dir = ?parent, error = %e, "failed to create directory"))
-        .map_err(|e| anyhow::anyhow!("failed to create directory {parent:?}: {e}"))
-}
-
 fn list_entries(output_dir: &Path) -> anyhow::Result<Vec<String>> {
     let entries = match std::fs::read_dir(output_dir) {
         Ok(entries) => entries,
@@ -215,6 +206,16 @@ fn list_entries(output_dir: &Path) -> anyhow::Result<Vec<String>> {
             }))
         })
         .collect()
+}
+
+/// Creates the parent directory of `path` if it has one.
+fn create_parent(path: &Path) -> anyhow::Result<()> {
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+    std::fs::create_dir_all(parent)
+        .inspect_err(|e| tracing::error!(dir = ?parent, error = %e, "failed to create directory"))
+        .map_err(|e| anyhow::anyhow!("failed to create directory {parent:?}: {e}"))
 }
 
 fn is_in_progress_temp_file(path: &Path) -> bool {

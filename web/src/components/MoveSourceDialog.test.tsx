@@ -111,6 +111,22 @@ describe('MoveSourceDialog', () => {
     expect(await screen.findByText('Does not exist yet — created by the move.')).toBeInTheDocument()
   })
 
+  it.each(['.', '..'])('refuses to move into a folder named "%s"', async (name) => {
+    renderDialog()
+    const user = userEvent.setup()
+    const folderName = screen.getByLabelText('Folder name')
+
+    await user.clear(folderName)
+    await user.type(folderName, name)
+
+    expect(
+      await screen.findByText(
+        'Folder name must not be "." or "..". Choose the parent folder from the list instead.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Move' })).toBeDisabled()
+  })
+
   it('sends nothing when cancelled', async () => {
     const { fetchMock, onClose } = renderDialog()
     const user = userEvent.setup()

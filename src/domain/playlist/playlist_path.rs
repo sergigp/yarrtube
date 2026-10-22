@@ -31,6 +31,11 @@ impl PlaylistPath {
                     "Playlist path must not contain \"..\" segments".to_string(),
                 ));
             }
+            if segment == "." {
+                return Err(ValidationError(
+                    "Playlist path must not contain \".\" segments".to_string(),
+                ));
+            }
             if segment.contains(FILESYSTEM_UNSAFE_CHARS) {
                 return Err(ValidationError(format!(
                     "Playlist path segments must not contain any of these characters: {}",
@@ -140,6 +145,38 @@ mod tests {
         assert_eq!(
             PlaylistPath::new(".."),
             Err(error("Playlist path must not contain \"..\" segments"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_that_is_a_current_directory_segment() {
+        assert_eq!(
+            PlaylistPath::new("."),
+            Err(error("Playlist path must not contain \".\" segments"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_starting_with_a_current_directory_segment() {
+        assert_eq!(
+            PlaylistPath::new("./a"),
+            Err(error("Playlist path must not contain \".\" segments"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_containing_a_current_directory_segment() {
+        assert_eq!(
+            PlaylistPath::new("a/./b"),
+            Err(error("Playlist path must not contain \".\" segments"))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_path_ending_with_a_current_directory_segment() {
+        assert_eq!(
+            PlaylistPath::new("a/."),
+            Err(error("Playlist path must not contain \".\" segments"))
         );
     }
 

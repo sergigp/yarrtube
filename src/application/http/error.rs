@@ -61,12 +61,11 @@ impl IntoResponse for ApiError {
 pub fn move_show_error(error: MoveShowError) -> ApiError {
     match error {
         e @ MoveShowError::NotFound => ApiError::new(StatusCode::NOT_FOUND, e),
-        e @ MoveShowError::Reconciling => ApiError::new(StatusCode::CONFLICT, e),
-        e @ MoveShowError::WorkInProgress => ApiError::new(StatusCode::CONFLICT, e),
-        e @ MoveShowError::SamePath => ApiError::new(StatusCode::CONFLICT, e),
-        e @ MoveShowError::DestinationInUse(_) => ApiError::new(StatusCode::CONFLICT, e),
-        e @ MoveShowError::DestinationExists(_) => ApiError::new(StatusCode::CONFLICT, e),
-        e @ MoveShowError::Filesystem(_) => ApiError::internal(e),
-        e @ MoveShowError::Repository(_) => ApiError::internal(e),
+        e @ (MoveShowError::Reconciling
+        | MoveShowError::WorkInProgress
+        | MoveShowError::SamePath
+        | MoveShowError::DestinationInUse(_)
+        | MoveShowError::DestinationExists(_)) => ApiError::new(StatusCode::CONFLICT, e),
+        e @ (MoveShowError::Filesystem(_) | MoveShowError::Repository(_)) => ApiError::internal(e),
     }
 }

@@ -377,6 +377,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.playlist_video_repository.clone(),
             infrastructure.video_repository.clone(),
             infrastructure.task_repository.clone(),
+            infrastructure.event_repository.clone(),
             videos_path(),
         ),
         video_searcher: VideoSearcher::new(
@@ -425,6 +426,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_video_repository.clone(),
             infrastructure.video_repository.clone(),
             infrastructure.task_repository.clone(),
+            infrastructure.event_repository.clone(),
             videos_path(),
         ),
         channel_video_reconciler: channel_video_reconciler(infrastructure),
@@ -473,6 +475,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_video_repository.clone(),
             infrastructure.video_repository.clone(),
             infrastructure.task_repository.clone(),
+            infrastructure.event_repository.clone(),
             infrastructure.video_file_repository.clone(),
             infrastructure.event_publisher.clone(),
             infrastructure.show_locks.clone(),

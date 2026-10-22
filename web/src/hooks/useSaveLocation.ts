@@ -198,6 +198,9 @@ export function useSaveLocation(
     if (folderName.includes('/')) {
       return 'Folder name must not contain "/". Choose the parent folder from the list instead.'
     }
+    if (folderName === '.' || folderName === '..') {
+      return 'Folder name must not be "." or "..". Choose the parent folder from the list instead.'
+    }
     return null
   }, [folderName])
 

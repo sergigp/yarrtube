@@ -1609,6 +1609,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
         );
 
@@ -1639,6 +1640,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
         );
 
@@ -1666,6 +1668,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
         );
 
@@ -1700,6 +1703,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
         );
 
@@ -1742,6 +1746,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
         );
 
@@ -1780,6 +1785,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
         );
 
@@ -1848,6 +1854,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteEventRepository::new(db.database())),
             "/videos",
         );
 
@@ -2925,6 +2932,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteEventRepository::new(db.database())),
             video_file_repository,
             event_publisher(db),
             Arc::new(ShowLocks::default()),

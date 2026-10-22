@@ -119,6 +119,10 @@ export function FolderBrowser({
       setNewFolderError('Folder name must not contain "/".')
       return
     }
+    if (name === '.' || name === '..') {
+      setNewFolderError('Folder name must not be "." or "..".')
+      return
+    }
 
     const next = join(parent, name)
     if (entries.includes(name)) {
