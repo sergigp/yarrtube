@@ -1,5 +1,5 @@
 import { test, expect } from '../helpers/fixtures.js'
-import { sectionHeading } from '../helpers/sidebar.js'
+import { expectDrawerOpen, openDrawer, sectionHeading } from '../helpers/sidebar.js'
 
 test('a folded sidebar section stays folded after a reload', async ({ page }) => {
   await page.goto('/')
@@ -24,21 +24,18 @@ test('a folded sidebar section stays folded after a reload', async ({ page }) =>
 test('a section folded in the mobile drawer stays folded after a reload @mobile', async ({ page }) => {
   await page.goto('/')
 
-  // Scoped below the app root, as in mobile-sidebar.spec.js.
-  const overlay = page.locator('#root div[aria-hidden="true"]')
-  await page.getByRole('button', { name: 'Open menu' }).click()
-  await expect(overlay).toBeVisible()
-  await sectionHeading(page, 'Channels').click()
+  await openDrawer(page)
+  await sectionHeading(page, 'Channels').tap()
   // Folding happens inside the drawer, which stays open.
-  await expect(overlay).toBeVisible()
+  await expectDrawerOpen(page)
   await expect(sectionHeading(page, 'Channels')).toHaveAttribute('aria-expanded', 'false')
   await expect(page.getByRole('button', { name: 'Add channel', exact: true })).toHaveCount(0)
 
   await page.reload()
-  await page.getByRole('button', { name: 'Open menu' }).click()
+  await openDrawer(page)
   await expect(sectionHeading(page, 'Channels')).toHaveAttribute('aria-expanded', 'false')
   await expect(page.getByRole('button', { name: 'Add channel', exact: true })).toHaveCount(0)
 
-  await sectionHeading(page, 'Channels').click()
+  await sectionHeading(page, 'Channels').tap()
   await expect(page.getByRole('button', { name: 'Add channel', exact: true })).toBeVisible()
 })
