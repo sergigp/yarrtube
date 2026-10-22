@@ -58,7 +58,7 @@ export const test = base.extend({
 
 export { expect }
 
-async function deleteAllSources(request) {
+export async function deleteAllSources(request) {
   await deleteAllCategories(request)
   const leftovers = []
   for (const kind of ['playlists', 'channels']) {

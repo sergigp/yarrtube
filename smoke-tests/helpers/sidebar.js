@@ -126,10 +126,32 @@ export async function includeItemInHome(page, { section, name }) {
   expect((await updated).status()).toBe(200)
 }
 
-export async function openDrawer(page) {}
+// The mobile drawer is the sidebar (`#app-sidebar`) slid into view; the
+// header's menu toggle controls it and reports its state in `aria-expanded`.
+function drawerToggle(page) {
+  return page.locator('button[aria-controls="app-sidebar"]')
+}
 
-export async function closeDrawer(page) {}
+function drawer(page) {
+  return page.locator('#app-sidebar')
+}
 
-export async function expectDrawerOpen(page) {}
+export async function openDrawer(page) {
+  await drawerToggle(page).tap()
+  await expectDrawerOpen(page)
+}
 
-export async function expectDrawerClosed(page) {}
+export async function closeDrawer(page) {
+  await drawerToggle(page).tap()
+  await expectDrawerClosed(page)
+}
+
+export async function expectDrawerOpen(page) {
+  await expect(drawerToggle(page)).toHaveAttribute('aria-expanded', 'true')
+  await expect(drawer(page)).toBeInViewport()
+}
+
+export async function expectDrawerClosed(page) {
+  await expect(drawerToggle(page)).toHaveAttribute('aria-expanded', 'false')
+  await expect(drawer(page)).not.toBeInViewport()
+}

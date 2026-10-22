@@ -1,25 +1,27 @@
 import { test, expect } from '../helpers/fixtures.js'
+import { closeDrawer, expectDrawerClosed, expectDrawerOpen, openDrawer } from '../helpers/sidebar.js'
+
+// The dimmed backdrop behind the open drawer. Scoped below the app root:
+// while a dialog is open, Radix marks the root itself `aria-hidden`, and the
+// dialog's own overlay is portalled to body.
+function backdrop(page) {
+  return page.locator('#root div[aria-hidden="true"]')
+}
 
 test('mobile sidebar opens and closes via toggle and backdrop @mobile', async ({ page }) => {
   await page.goto('/')
+  await expectDrawerClosed(page)
 
-  const overlay = page.locator('#root div[aria-hidden="true"]')
-  await expect(overlay).toHaveCount(0)
+  await openDrawer(page)
+  await closeDrawer(page)
 
-  await page.getByRole('button', { name: 'Open menu' }).click()
-  await expect(overlay).toBeVisible()
-
-  await page.getByRole('button', { name: 'Close menu' }).click()
-  await expect(overlay).toHaveCount(0)
-
-  await page.getByRole('button', { name: 'Open menu' }).click()
-  await expect(overlay).toBeVisible()
-
-  // Click a point clear of the sidebar itself (up to 288px wide, left-aligned)
-  // rather than the overlay's default center, which at this viewport width
-  // would fall under the higher-stacked sidebar and could intercept the click.
-  await overlay.click({ position: { x: 370, y: 20 } })
-  await expect(overlay).toHaveCount(0)
+  await openDrawer(page)
+  // Tap a point clear of the drawer itself (at most 85% of the width,
+  // left-aligned) rather than the backdrop's center, which the
+  // higher-stacked drawer covers.
+  const { width } = page.viewportSize()
+  await backdrop(page).tap({ position: { x: width - 20, y: 20 } })
+  await expectDrawerClosed(page)
 })
 
 test('mobile sidebar stays closable when the announcement appears after it opened @mobile', async ({ page }) => {
@@ -35,28 +37,20 @@ test('mobile sidebar stays closable when the announcement appears after it opene
   })
   await page.goto('/')
 
-  const overlay = page.locator('#root div[aria-hidden="true"]')
-  await page.getByRole('button', { name: 'Open menu' }).click()
-  await expect(overlay).toBeVisible()
+  await openDrawer(page)
   releaseAnnouncements()
   await expect(page.getByRole('region', { name: 'Announcement' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Close menu' }).click({ timeout: 5000 })
-  await expect(overlay).toHaveCount(0)
+  await closeDrawer(page)
 })
 
 test('it should close the drawer and open the add channel dialog @mobile', async ({ page }) => {
   await page.goto('/')
 
-  // Scoped below the app root: while the dialog is open, Radix marks the root
-  // itself `aria-hidden`, and the dialog's own overlay is portalled to body.
-  const overlay = page.locator('#root div[aria-hidden="true"]')
-  await page.getByRole('button', { name: 'Open menu' }).click()
-  await expect(overlay).toBeVisible()
+  await openDrawer(page)
+  await page.getByRole('button', { name: 'Add channel', exact: true }).tap()
 
-  await page.getByRole('button', { name: 'Add channel', exact: true }).click()
-
-  await expect(overlay).toHaveCount(0)
+  await expectDrawerClosed(page)
   await expect(page.getByRole('dialog', { name: 'Add channel' })).toBeVisible()
 })
 
