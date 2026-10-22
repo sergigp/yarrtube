@@ -29,4 +29,9 @@ describe('formatTimeLeft', () => {
     expect(formatTimeLeft(480)).toBe('8m left')
     expect(formatTimeLeft(539)).toBe('8m left')
   })
+
+  it('formats time left under a minute', () => {
+    expect(formatTimeLeft(45)).toBe('<1m left')
+    expect(formatTimeLeft(0)).toBe('<1m left')
+  })
 })

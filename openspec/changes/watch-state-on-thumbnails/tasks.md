@@ -18,7 +18,7 @@
 - [x] 2.2 `watchProgress.test.ts`, `returns null for an unstarted, watched or durationless video`.
 - [x] 2.3 `watchProgress.test.ts`, `clamps a position past the duration`.
 - [x] 2.4 `watchProgress.test.ts`, `formats time left in minutes`.
-- [ ] 2.5 `watchProgress.test.ts`, `formats time left under a minute`.
+- [x] 2.5 `watchProgress.test.ts`, `formats time left under a minute`.
 - [ ] 2.6 `watchProgress.test.ts`, `formats time left from one hour`.
 - [ ] 2.7 `ChannelDetail.test.tsx`, `shows progress and time left on an in-progress row`: drives the bar and time-left badge in `ThumbnailOverlay` (row size).
 - [ ] 2.8 `PlaylistDetail.test.tsx`, `shows progress and time left on an in-progress row`.
