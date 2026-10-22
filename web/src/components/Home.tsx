@@ -8,7 +8,6 @@ interface HomeSectionProps {
   videos: HomeVideo[] | undefined
   error: Error | null
   hideWhenEmpty?: boolean
-  showProgress?: boolean
 }
 
 /**
@@ -16,7 +15,7 @@ interface HomeSectionProps {
  * the whole section, heading included, renders nothing unless it has videos
  * to show; otherwise it reports loading, errors and emptiness in place.
  */
-function HomeSection({ title, name, videos, error, hideWhenEmpty, showProgress }: HomeSectionProps) {
+function HomeSection({ title, name, videos, error, hideWhenEmpty }: HomeSectionProps) {
   if (hideWhenEmpty && (error || !videos || videos.length === 0)) {
     return null
   }
@@ -30,7 +29,7 @@ function HomeSection({ title, name, videos, error, hideWhenEmpty, showProgress }
         </p>
       )}
       {!error && !videos && <p className="text-sm text-muted-foreground">Loading {name}…</p>}
-      {!error && videos && <VideoGrid videos={videos} showProgress={showProgress} />}
+      {!error && videos && <VideoGrid videos={videos} />}
     </section>
   )
 }
@@ -46,7 +45,6 @@ export function Home() {
         videos={home?.continue_watching}
         error={error}
         hideWhenEmpty
-        showProgress
       />
       <HomeSection
         title="Quick watches"

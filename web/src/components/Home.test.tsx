@@ -37,9 +37,10 @@ describe('Home', () => {
     expect(await screen.findByText('Continue watching')).toBeInTheDocument()
     expect(screen.getByText('Quick watches')).toBeInTheDocument()
     expect(screen.getByText('Latest videos')).toBeInTheDocument()
-    // Only the continue-watching section draws progress bars.
-    expect(screen.getAllByRole('progressbar')).toHaveLength(1)
   })
+
+  // Task 2.10 replaces the old continue-watching-only progress bar count.
+  it.todo('shows progress on in-progress cards in every section')
 
   it('links a video card to its source detail view with a deep link', async () => {
     mockApi({
