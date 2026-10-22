@@ -14,7 +14,7 @@
 - [x] 3.3 `it_should_keep_entries_with_a_finished_or_absent_live_status`: test passes
 
 ### YoutubeApiPlaylistItemsRepository
-- [ ] 3.4 `it_should_skip_items_reported_as_upcoming`: call `find_not_yet_watchable` per page and drop returned ids; add `/videos` mocks (empty items) to existing tests; test passes
+- [x] 3.4 `it_should_skip_items_reported_as_upcoming`: call `find_not_yet_watchable` per page and drop returned ids; add `/videos` mocks (empty items) to existing tests; test passes
 - [ ] 3.5 `it_should_skip_items_reported_as_live`: test passes
 - [ ] 3.6 `it_should_request_live_status_for_the_page_video_ids`: test passes
 - [ ] 3.7 `it_should_keep_items_missing_from_the_videos_response`: test passes
