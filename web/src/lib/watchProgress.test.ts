@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { watchProgress } from './watchProgress'
+import { formatTimeLeft, watchProgress } from './watchProgress'
 
 describe('watchProgress', () => {
   it('returns progress for an unwatched started video', () => {
@@ -21,5 +21,12 @@ describe('watchProgress', () => {
       percent: 100,
       secondsLeft: 0,
     })
+  })
+})
+
+describe('formatTimeLeft', () => {
+  it('formats time left in minutes', () => {
+    expect(formatTimeLeft(480)).toBe('8m left')
+    expect(formatTimeLeft(539)).toBe('8m left')
   })
 })
