@@ -52,7 +52,7 @@ test.describe('with a downloaded playlist, a channel and a category', () => {
       },
       {
         path: `/categories/${encodeURIComponent(categoryId)}`,
-        shown: page.getByRole('heading', { name: 'Mobile layout' }),
+        shown: page.getByRole('heading', { level: 2, name: 'Mobile layout', exact: true }),
       },
       { path: '/tasks', shown: page.getByRole('tab').first() },
     ]

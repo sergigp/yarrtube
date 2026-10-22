@@ -28,7 +28,7 @@ Each smoke spec: write it, run it against `scripts/run-local.sh` or the smoke im
 - [x] 2.12 Retag the mobile test in `sidebarFolding.spec.js` `@mobile` and use the drawer helpers; passes on `mobile-safari`.
 - [x] 2.13 `category card opens its video in the channel view and plays`: add it to `categories.spec.js`; URL is `/channels/…?video=…`, title matches, `assertVideoPlays`.
 - [x] 2.14 `speed menu sets playbackRate to 1.5`: `playbackSpeed.spec.js` on `seedDownloadedPlaylist`; `el.playbackRate === 1.5` and the menu shows 1.5×.
-- [ ] 2.15 `reloading each route shows its view; unknown playlist says Playlist not found.`: `deepLinks.spec.js`.
+- [x] 2.15 `reloading each route shows its view; unknown playlist says Playlist not found.`: `deepLinks.spec.js`.
 - [ ] 2.16 `unknown playlist id is reported in the Add playlist dialog`: `addPlaylistDialog.spec.js`; the notice contains "does not exist", has `role`/tone error, and Create is disabled.
 - [ ] 2.17 `playlist quality edit is kept`: Edit settings → Low → reopen shows Low.
 - [ ] 2.18 `Downloads tab lists a running download`: add the playlist via the API at high quality, then the Downloads tab lists `Downloading …` before it finishes.
