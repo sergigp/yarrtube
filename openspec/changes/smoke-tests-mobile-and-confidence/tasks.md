@@ -56,7 +56,7 @@ Suite helpers: prove each check with a throwaway failing case, then revert it.
 ## 4. Web UI a11y (Vitest TDD, `web/`)
 
 - [x] 4.1 `it should expose each sidebar section as a list named after its heading`: give the heading an `id` and the `<ul>` `aria-labelledby` in `Sidebar.tsx`/`SidebarSectionHeading.tsx`; `npm --prefix web run check` passes.
-- [ ] 4.2 `it should show the add playlist submit error as an alert`: `role="alert"` in `AddPlaylistDialog.tsx`; check passes.
+- [x] 4.2 `it should show the add playlist submit error as an alert`: `role="alert"` in `AddPlaylistDialog.tsx`; check passes.
 - [ ] 4.3 `it should show the add channel submit error as an alert`: `role="alert"` in `AddChannelDialog.tsx`; check passes.
 
 ## 5. Verification
