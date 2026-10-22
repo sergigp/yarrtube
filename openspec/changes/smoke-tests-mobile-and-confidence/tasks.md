@@ -44,7 +44,7 @@ Each smoke spec: write it, run it against `scripts/run-local.sh` or the smoke im
 
 Suite helpers: prove each check with a throwaway failing case, then revert it.
 
-- [ ] 3.1 `console.error not allowlisted fails the test`: enforce `consoleErrorAllowlist` in `fixtures.js`. Prove it with a temporary `page.evaluate(() => console.error('x'))`.
+- [x] 3.1 `console.error not allowlisted fails the test`: enforce `consoleErrorAllowlist` in `fixtures.js`. Prove it with a temporary `page.evaluate(() => console.error('x'))`.
 - [ ] 3.2 `unexpected 4xx /api fails the test; declared one passes`: enforce `expectedApiErrors`. Declare the expected errors on every existing spec that triggers 4xx (duplicate, invalid, preview misses).
 - [ ] 3.3 `failed /media request fails the test`: `requestfailed` and ≥400 responses for `/media` and `/avatars`. Prove it with a request to a missing media path.
 - [ ] 3.4 `route answered only 4xx is reported uncovered`: `recordApiRoute(…, status)`, and `hitRoutes()` returns only routes with a 2xx. Prove it with a hit file holding only a 4xx line.

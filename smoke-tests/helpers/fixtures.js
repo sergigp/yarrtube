@@ -14,8 +14,9 @@ import { existsSync } from 'node:fs'
  *   out, so one failure can't cascade into "Already added" or ambiguous
  *   sidebar rows in the tests after it (or in its own retry), and the stub
  *   Plex server forgets the scans earlier tests caused;
- * - fails on an uncaught page error or any 5xx `/api` response, which no
- *   individual assertion would otherwise notice;
+ * - fails on an uncaught page error, a `console.error` not in
+ *   `consoleErrorAllowlist`, or any 5xx `/api` response, which no individual
+ *   assertion would otherwise notice;
  * - records the `/api` routes the browser hit, checked against the router
  *   by `routeCoverageReporter.js`.
  */
@@ -41,6 +42,21 @@ export const test = base.extend({
   page: async ({ page, expectedApiErrors, consoleErrorAllowlist }, use) => {
     const problems = []
     page.on('pageerror', (error) => problems.push(`page error: ${error.message}`))
+    page.on('console', (message) => {
+      // A failed resource load is logged as an error too; the request checks
+      // below own those, and know which ones the test expects.
+      if (message.type() !== 'error' || message.text().startsWith('Failed to load resource')) {
+        return
+      }
+      // Playwright's WebKit logs these for its own native video controls'
+      // icons (picture in picture, AirPlay), whatever the page does.
+      if (/^Button failed to load, iconName = [\w-]+-placard,/.test(message.text())) {
+        return
+      }
+      if (!consoleErrorAllowlist.some((allowed) => allowed.test(message.text()))) {
+        problems.push(`console.error: ${message.text()}`)
+      }
+    })
     page.on('response', (response) => {
       const url = new URL(response.url())
       if (!url.pathname.startsWith('/api/')) {
@@ -52,7 +68,7 @@ export const test = base.extend({
       }
     })
     await use(page)
-    expect(problems, 'page errors / 5xx API responses during the test').toEqual([])
+    expect(problems, 'page errors, console errors and failed requests during the test').toEqual([])
   },
 })
 
