@@ -24,7 +24,7 @@ Each smoke spec: write it, run it against `scripts/run-local.sh` or the smoke im
 - [x] 2.8 `video details start collapsed and More expands them @mobile`: "Open on YouTube" is hidden, then visible after tapping More.
 - [x] 2.9 `add, edit-settings and delete dialogs fit the screen and submit @mobile`: `expectWithinViewport` on each dialog and its submit button; each submits successfully.
 - [x] 2.10 `icon-only Tasks tabs and Run now work by accessible name @mobile`: select Syncs by name, Run now posts `/reconcile` with a 2xx response.
-- [ ] 2.11 Move the mobile category test in `categories.spec.js` to `@mobile` (no `setViewportSize`, dialog box compared with `viewportSize()`); passes on `mobile-safari`.
+- [x] 2.11 Move the mobile category test in `categories.spec.js` to `@mobile` (no `setViewportSize`, dialog box compared with `viewportSize()`); passes on `mobile-safari`.
 - [ ] 2.12 Retag the mobile test in `sidebarFolding.spec.js` `@mobile` and use the drawer helpers; passes on `mobile-safari`.
 - [ ] 2.13 `category card opens its video in the channel view and plays`: add it to `categories.spec.js`; URL is `/channels/…?video=…`, title matches, `assertVideoPlays`.
 - [ ] 2.14 `speed menu sets playbackRate to 1.5`: `playbackSpeed.spec.js` on `seedDownloadedPlaylist`; `el.playbackRate === 1.5` and the menu shows 1.5×.
