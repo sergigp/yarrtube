@@ -145,6 +145,31 @@ describe('ChannelDetail', () => {
     expect(screen.getByRole('heading', { name: 'First Video' })).toBeInTheDocument()
   })
 
+  it('shows progress and time left on an in-progress row', async () => {
+    const channel = aChannel({ id: 'chan' })
+    renderChannel(
+      {
+        'GET /api/channels': [channel],
+        'GET /api/channels/chan/videos': [
+          aVideo({ title: 'Fresh Video', duration_seconds: 120 }),
+          aVideo({ title: 'Started Video', position_seconds: 120, duration_seconds: 600 }),
+        ],
+      },
+      '/channels/chan',
+    )
+
+    // Each row's select button, not its "Actions for …" menu button.
+    const started = await screen.findByRole('button', { name: /^(?!Actions for).*Started Video$/ })
+    expect(within(started).getByRole('progressbar', { name: 'Watch progress' })).toHaveAttribute(
+      'aria-valuenow',
+      '20',
+    )
+    expect(within(started).getByText('8m left')).toBeInTheDocument()
+    const fresh = screen.getByRole('button', { name: /^(?!Actions for).*Fresh Video$/ })
+    expect(within(fresh).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(within(fresh).getByText('2:00')).toBeInTheDocument()
+  })
+
   it('the selected row shows no menu', async () => {
     const channel = aChannel({ id: 'chan' })
     renderChannel(
