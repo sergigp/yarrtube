@@ -1,8 +1,8 @@
 import { hitRoutes, routerRoutes } from './helpers/routeCoverage.js'
 
 /**
- * Fails a passing full run when the browser never hit one of the router's
- * `/api` routes: Rust handler tests bypass the router, so this suite is
+ * Fails a passing full run when the browser never got a 2xx from one of the
+ * router's `/api` routes: Rust handler tests bypass the router, so this suite is
  * the only coverage of its wiring. Enabled by `SMOKE_CHECK_ROUTE_COVERAGE`
  * (set by `scripts/run-smoke-tests.sh`), since a filtered run legitimately
  * misses routes.
@@ -18,7 +18,7 @@ export default class RouteCoverageReporter {
       console.log('All /api routes were exercised by the suite.')
       return
     }
-    console.error(`/api routes no spec exercised through the UI:\n  ${missed.join('\n  ')}`)
+    console.error(`/api routes no spec got a 2xx from through the UI:\n  ${missed.join('\n  ')}`)
     return { status: 'failed' }
   }
 

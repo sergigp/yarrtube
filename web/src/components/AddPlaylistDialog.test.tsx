@@ -378,6 +378,21 @@ describe('AddPlaylistDialog', () => {
     expect(onOpenChange).not.toHaveBeenCalledWith(false)
   })
 
+  it('should show the add playlist submit error as an alert', async () => {
+    renderDialog({
+      'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
+      'POST /api/playlists': { status: 422, error: 'destination already used' },
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
+    const submit = screen.getByRole('button', { name: 'Create Playlist' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('destination already used')
+  })
+
   it('flags a destination already used by another entry', async () => {
     renderDialog({
       'GET /api/playlists': [aPlaylist({ id: 'other', name: 'Other Mix', path: 'playlists/my-mix' })],

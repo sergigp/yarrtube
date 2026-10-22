@@ -126,13 +126,14 @@ run_playwright() {
     SMOKE_CHANNEL_VIDEO_LIMIT="$SMOKE_CHANNEL_VIDEO_LIMIT" \
     SMOKE_VIDEOS_DIR="$TMP_DIR/videos" \
     SMOKE_PLEX_STUB_URL="http://localhost:$PLEX_STUB_PORT" \
+    SMOKE_CONTAINER_NAME="$CONTAINER_NAME" \
     "$@" \
     npm --prefix "$REPO_ROOT/smoke-tests" test
 }
 
 echo "==> installing smoke-tests dependencies"
 npm --prefix "$REPO_ROOT/smoke-tests" ci
-npx --prefix "$REPO_ROOT/smoke-tests" playwright install --with-deps chromium
+npx --prefix "$REPO_ROOT/smoke-tests" playwright install --with-deps chromium webkit
 
 # Upgrade check: the released image builds up a library, then this build
 # starts on the same database and videos and must carry it on as it was.

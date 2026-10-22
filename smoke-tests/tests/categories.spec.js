@@ -1,24 +1,33 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { openAddChannelDialog, fillChannel } from '../helpers/addDialog.js'
-import { sectionHeading, sectionRows } from '../helpers/sidebar.js'
+import { deleteSeeded, seedDownloadedChannel } from '../helpers/seed.js'
+import { assertVideoPlays } from '../helpers/video.js'
+import { expectImageLoaded } from '../helpers/media.js'
+import {
+  expectDrawerClosed,
+  openDrawer,
+  sectionHeading,
+  sectionRows,
+} from '../helpers/sidebar.js'
 
 const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 
-test('category on mobile: add from the drawer, manage sources full screen, then add from the heading', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
+// Deleting the open category can refetch its videos before the view leaves it.
+test.use({
+  expectedApiErrors: [{ method: 'GET', path: /^\/api\/categories\/[^/]+\/videos$/, status: 404 }],
+})
+
+test('category on mobile: add from the drawer, manage sources full screen, then add from the heading @mobile', async ({ page }) => {
   await page.goto('/')
 
-  // Scoped below the app root, as in mobile-sidebar.spec.js.
-  const overlay = page.locator('#root div[aria-hidden="true"]')
   const dialog = page.getByRole('dialog')
   const addCategory = page.getByRole('button', { name: 'Add category', exact: true })
 
   await test.step('the add row closes the drawer before its dialog opens', async () => {
-    await page.getByRole('button', { name: 'Open menu' }).click()
-    await expect(overlay).toBeVisible()
+    await openDrawer(page)
     await expect(addCategory).toHaveText('Add category')
-    await addCategory.click()
-    await expect(overlay).toHaveCount(0)
+    await addCategory.tap()
+    await expectDrawerClosed(page)
     await expect(dialog).toContainText('Add category')
   })
 
@@ -29,18 +38,19 @@ test('category on mobile: add from the drawer, manage sources full screen, then 
     await expect(dialog).toContainText('Manage sources in Chess')
     await expect(dialog).toContainText('No channels or playlists to add yet.')
     const box = await dialog.boundingBox()
-    expect([box.x, box.y, box.width, box.height].map(Math.round)).toEqual([0, 0, 390, 844])
+    const { width, height } = page.viewportSize()
+    expect([box.x, box.y, box.width, box.height].map(Math.round)).toEqual([0, 0, width, height])
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
     await dialog.waitFor({ state: 'hidden' })
   })
 
   await test.step('with a category, the heading "+" adds the next one', async () => {
-    await page.getByRole('button', { name: 'Open menu' }).click()
+    await openDrawer(page)
     await expect(sectionRows(page, 'Categories')).toHaveText(['Chess'])
     // The "+" is an icon: its name comes from its label, it has no text.
     await expect(addCategory).toHaveText('')
-    await addCategory.click()
-    await expect(overlay).toHaveCount(0)
+    await addCategory.tap()
+    await expectDrawerClosed(page)
     await expect(dialog).toContainText('Add category')
   })
 })
@@ -166,5 +176,41 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
     await expect(categoryRows).toHaveCount(0)
     await expect(page).toHaveURL(/\/$/)
     await expect(sectionRows(page, 'Channels')).toHaveCount(1)
+  })
+})
+
+test.describe('with a downloaded channel in a category', () => {
+  test.use({ keepLibrary: true })
+
+  let seeded
+  let categoryId
+  test.beforeAll(async ({ request }) => {
+    seeded = await seedDownloadedChannel(request, { videoLimit: 1 })
+    const category = await request.post('/api/categories', { data: { name: 'Watch later' } })
+    expect(category.ok(), await category.text()).toBeTruthy()
+    categoryId = (await category.json()).id
+    const members = await request.put(`/api/categories/${categoryId}/members`, {
+      data: { channels: [seeded.handle], playlists: [] },
+    })
+    expect(members.ok(), await members.text()).toBeTruthy()
+  })
+
+  test.afterAll(async ({ request }) => {
+    await request.delete(`/api/categories/${categoryId}`)
+    await deleteSeeded(request, seeded)
+  })
+
+  test('category card opens its video in the channel view and plays', async ({ page }) => {
+    const [{ id, title }] = seeded.videos
+    await page.goto(`/categories/${encodeURIComponent(categoryId)}`)
+
+    const card = page.locator('main li').filter({ hasText: title })
+    await expectImageLoaded(card.locator('img').first())
+
+    await page.locator('main').getByRole('link', { name: title, exact: true }).first().click()
+
+    await expect(page).toHaveURL(new RegExp(`/channels/[^?]+\\?video=${id}$`))
+    await expect(page.locator('main h3').first()).toHaveText(title)
+    await assertVideoPlays(page)
   })
 })

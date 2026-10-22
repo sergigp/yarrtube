@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 const SMOKE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
 const ROUTER_SOURCE = join(SMOKE_DIR, '..', 'src', 'application', 'http', 'mod.rs')
 
-/** Where the routes the browser hit are appended, one `METHOD /path` per line. */
+/** Where the routes the browser hit are appended, one `METHOD /path STATUS` per line. */
 export const HIT_ROUTES_FILE = join(SMOKE_DIR, 'test-results', 'api-routes-hit.txt')
 
 /**
@@ -27,19 +27,29 @@ export function routerRoutes() {
   return routes
 }
 
-/** Appends the route `pathname` (a concrete `/api/...` path) matches. */
-export function recordApiRoute(method, pathname) {
+/** Appends the route `pathname` (a concrete `/api/...` path) matches, with the status it answered. */
+export function recordApiRoute(method, pathname, status) {
   mkdirSync(dirname(HIT_ROUTES_FILE), { recursive: true })
-  appendFileSync(HIT_ROUTES_FILE, `${method} ${toTemplate(pathname)}\n`)
+  appendFileSync(HIT_ROUTES_FILE, `${method} ${toTemplate(pathname)} ${status}\n`)
 }
 
-/** The routes recorded so far in this run. */
+/**
+ * The routes answered with a 2xx at least once so far in this run: a route
+ * only ever hit with errors hasn't shown its wiring works.
+ */
 export function hitRoutes() {
+  let lines
   try {
-    return new Set(readFileSync(HIT_ROUTES_FILE, 'utf8').split('\n').filter(Boolean))
+    lines = readFileSync(HIT_ROUTES_FILE, 'utf8').split('\n').filter(Boolean)
   } catch {
     return new Set()
   }
+  return new Set(
+    lines
+      .map((line) => line.match(/^(\S+ \S+) (\d{3})$/))
+      .filter((match) => match && match[2].startsWith('2'))
+      .map((match) => match[1]),
+  )
 }
 
 // `/api/playlists/PL123/videos` → `/api/playlists/{id}/videos`, and a

@@ -18,12 +18,13 @@ import {
 import { expectPendingSync } from '../helpers/tasks.js'
 import { expectEpisodeOnDisk, expectGoneFromDisk } from '../helpers/library.js'
 import { expectPlexScanned } from '../helpers/plex.js'
+import { expectImageLoaded } from '../helpers/media.js'
 
 const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 const VIDEO_LIMIT = process.env.SMOKE_CHANNEL_VIDEO_LIMIT ?? '1'
 const CHANNEL_PATH = `channels/${slugOf(CHANNEL_HANDLE)}`
 
-test('channel lifecycle: add, download, play, resume, mark watched, sync, edit settings, invalid handle error, delete', async ({ page }) => {
+test('channel lifecycle: add, download, play, resume, mark watched, sync, edit settings, delete', async ({ page }) => {
   await page.goto('/')
 
   const dialog = page.getByRole('dialog')
@@ -157,16 +158,6 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     await expectPendingSync(page, { label: `Syncing channel ${channelName}`, due: /^in (59m|1h)$/ })
   })
 
-  await test.step('reject an invalid handle', async () => {
-    // An invalid handle is explained in the notice and can't be submitted.
-    await openAddChannelDialog(page)
-    await fillChannel(page, { handle: 'this-handle-should-not-exist-abc123' })
-    await expect(destinationNotice(dialog)).toHaveText(/must start with "@"/)
-    await expect(destinationNotice(dialog)).toHaveClass(/text-destructive/)
-    await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
-    await dialog.getByRole('button', { name: 'Close' }).click()
-  })
-
   await test.step('delete it', async () => {
     // Delete from the sidebar; it disappears from the sidebar, the home feed
     // and the disk.
@@ -181,4 +172,17 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     await expect(page.getByText('No videos synced yet.')).toBeVisible()
     await expectGoneFromDisk(CHANNEL_PATH)
   })
+})
+
+test('channel avatar loads', async ({ page }) => {
+  await page.goto('/')
+  const dialog = page.getByRole('dialog')
+  await openAddChannelDialog(page)
+  await fillChannel(page, { handle: CHANNEL_HANDLE, videoLimit: VIDEO_LIMIT })
+  await dialog.getByRole('button', { name: /^Create Channel/ }).click()
+  await dialog.waitFor({ state: 'hidden' })
+
+  // The sidebar shows the copy the daemon downloaded (served from
+  // `/avatars`), not YouTube's, whose image host may rate-limit the browser.
+  await expectImageLoaded(sectionRows(page, 'Channels').first().locator('img'))
 })

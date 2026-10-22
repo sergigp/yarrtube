@@ -1,21 +1,22 @@
 import { expect } from '@playwright/test'
 
-// The heading's row (its `h3` plus the add "+"), which the section's add row,
-// list and empty/error messages follow as siblings.
-function headingRow(section) {
-  return `div:has(> h3 > button:text-is("${section}"))`
+// Each section is a region named after its heading, and its entries a list
+// named the same. While folded the heading's name also carries the section's
+// unwatched total ("Channels 3 unwatched").
+function sectionRegion(page, section) {
+  return page.getByRole('region', { name: new RegExp(`^${section}( \\d+ unwatched)?$`) })
 }
 
 export function sectionList(page, section) {
-  return page.locator(`${headingRow(section)} ~ ul`)
+  return page.getByRole('list', { name: section, exact: true })
 }
 
 export function sectionRows(page, section) {
-  return sectionList(page, section).locator('li')
+  return sectionList(page, section).getByRole('listitem')
 }
 
 export function sectionEmptyMessage(page, section) {
-  return page.locator(`${headingRow(section)} ~ p`)
+  return sectionRegion(page, section).getByRole('paragraph')
 }
 
 // The heading toggle that folds a section; while folded its name also
@@ -124,4 +125,34 @@ export async function includeItemInHome(page, { section, name }) {
   )
   await chooseRowAction(page, row, 'Include in home')
   expect((await updated).status()).toBe(200)
+}
+
+// The mobile drawer is the sidebar (`#app-sidebar`) slid into view; the
+// header's menu toggle controls it and reports its state in `aria-expanded`.
+function drawerToggle(page) {
+  return page.locator('button[aria-controls="app-sidebar"]')
+}
+
+function drawer(page) {
+  return page.locator('#app-sidebar')
+}
+
+export async function openDrawer(page) {
+  await drawerToggle(page).tap()
+  await expectDrawerOpen(page)
+}
+
+export async function closeDrawer(page) {
+  await drawerToggle(page).tap()
+  await expectDrawerClosed(page)
+}
+
+export async function expectDrawerOpen(page) {
+  await expect(drawerToggle(page)).toHaveAttribute('aria-expanded', 'true')
+  await expect(drawer(page)).toBeInViewport()
+}
+
+export async function expectDrawerClosed(page) {
+  await expect(drawerToggle(page)).toHaveAttribute('aria-expanded', 'false')
+  await expect(drawer(page)).not.toBeInViewport()
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Ellipsis, Plus, Settings2 } from 'lucide-react'
 import { deleteCategory } from '@/api/client'
@@ -90,10 +90,12 @@ export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesP
   }
   // No categories yet gets a full-width add row; otherwise a compact `+` on the heading.
   const empty = categories?.length === 0
+  const headingId = useId()
 
   return (
-    <div>
+    <section aria-labelledby={headingId}>
       <SidebarSectionHeading
+        id={headingId}
         title="Categories"
         folded={folded}
         onToggleFolded={toggleFolded}
@@ -114,7 +116,7 @@ export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesP
             </button>
           )}
           {categories && categories.length > 0 && (
-            <ul className="flex flex-col" aria-label="Categories">
+            <ul className="flex flex-col" aria-labelledby={headingId}>
               {categories.map((category) => (
                 <CategoryRow
                   key={category.id}
@@ -147,6 +149,6 @@ export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesP
           }
         })}
       />
-    </div>
+    </section>
   )
 }

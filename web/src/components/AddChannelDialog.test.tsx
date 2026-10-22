@@ -106,6 +106,25 @@ describe('AddChannelDialog', () => {
     })
   })
 
+  it('should show the add channel submit error as an alert', async () => {
+    renderDialog({
+      'GET /api/channels/preview?channel=%40chan': {
+        id: '@chan',
+        title: 'The Channel',
+        avatar_url: null,
+      },
+      'POST /api/channels': { status: 422, error: 'destination already used' },
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Channel Handle or URL'), '@chan')
+    const submit = screen.getByRole('button', { name: 'Create Channel' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    await user.click(submit)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('destination already used')
+  })
+
   it('creates the channel with the interval set under advanced options', async () => {
     const { fetchMock, onOpenChange } = renderDialog({
       'GET /api/channels/preview?channel=%40chan': {

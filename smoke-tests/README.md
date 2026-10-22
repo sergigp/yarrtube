@@ -60,12 +60,40 @@ Optional overrides (defaults shown):
 | `SMOKE_PLEX_STUB_PORT`       | `18324`                  |
 | `SMOKE_UPGRADE_FROM_IMAGE`   | `ghcr.io/sergigp/yarrtube:latest` (`none` skips the upgrade check) |
 
+## Browsers
+
+Two Playwright projects run against the same container:
+
+- **`chromium`** (Desktop Chrome) runs every spec *not* tagged `@mobile`.
+- **`mobile-safari`** (`iPhone 13`: WebKit, touch, mobile viewport and user
+  agent) runs only the specs tagged `@mobile` (a `@mobile` suffix in the
+  test's title). Phone layouts are tested here, never by resizing the desktop
+  browser. There is no Android/Chromium phone project yet, to keep run time
+  down.
+
 ## What every test gets
 
 Specs import `test`/`expect` from `helpers/fixtures.js`, not
 `@playwright/test`. Each test starts from an empty library (leftovers from
-an earlier failed test are deleted through the API), and fails on an
-uncaught page error or a 5xx `/api` response.
+an earlier failed test are deleted through the API), unless it opts out
+with `test.use({ keepLibrary: true })`, and fails on:
+
+- an uncaught page error;
+- a `console.error` not matched by the test's `consoleErrorAllowlist`
+  (failed resource loads are left to the request checks, and WebKit's own
+  video-control icon errors are ignored);
+- a failed or ≥400 `/media` or `/avatars` request (requests the browser
+  cancels itself, e.g. while seeking, don't count);
+- a 5xx `/api` response, or a 4xx one the test didn't declare in
+  `expectedApiErrors` (`[{ method, path, status }]`, `path` a pathname or a
+  RegExp).
+
+Specs that share one download seed it in `beforeAll` with
+`helpers/seed.js` (`seedDownloadedPlaylist` / `seedDownloadedChannel`: added
+through the API at low quality and waited on until downloaded and settled),
+so each of their tests runs on its own. Image assertions use
+`expectImageLoaded` (`helpers/media.js`), which requires the image to have
+actually loaded rather than the placeholder a broken one is swapped for.
 
 ## What's covered
 
@@ -77,21 +105,28 @@ uncaught page error or a 5xx `/api` response.
   download again) with its position, play it from the playlist's URL and
   keep its next sync scheduled. This is also the suite's restart check.
 
-- **Playlist lifecycle** (`tests/playlist.spec.js`): add the fixture
-  playlist via the Add dialog, wait for its video to download, verify it
-  shows up (with thumbnail + duration) in the playlist detail view and the
-  home feed and on disk as a Plex episode (`Season 1/S01E…` media, `.nfo`,
-  thumbnail, `tvshow.nfo`) and that Plex was asked to scan its folder in
-  the section holding it, play it back, sync it (changing nothing), run
-  its sync from the Tasks view, hit the duplicate-path error, then delete
-  it and check its folder is removed.
-- **Channel lifecycle** (`tests/channel.spec.js`): same flow for the
-  fixture channel (episodes under `Season <year>`, plus a `poster.jpg`),
-  including marking a single video watched, with loose (non-title)
-  assertions since the channel's newest video can change, plus the
-  invalid-handle error case. While the video is unwatched, the folded
-  Channels heading shows the section's unwatched total and is marked
-  active on the channel's route; the total goes once the video is watched.
+- **Playlist** (`tests/playlist.spec.js`): one golden path adds the fixture
+  playlist via the Add dialog, waits for its download, checks it on disk as
+  a Plex episode (`Season 1/S01E…` media, `.nfo`, thumbnail, `tvshow.nfo`)
+  and that Plex was asked to scan its folder, sees its unwatched badge
+  arrive through the sidebar's periodic refresh (no reload), then deletes it
+  and checks its folder is removed. On a seeded download, independent tests
+  hide and show its badge, list it with a loaded thumbnail and duration,
+  play it and record the position, show its subtitles, show it on the home
+  feed (its card showing the time left), show its progress bar and time left
+  in the playlist's list, exclude it from home and include it again, sync it (changing
+  nothing), edit its check interval, run its sync from the Tasks view,
+  reject adding it twice, mark it watched while playing and mark it all
+  watched. On a fresh add, the Tasks view's Downloads tab lists its
+  download while it runs.
+- **Channel** (`tests/channel.spec.js`): the same lifecycle for the fixture
+  channel (episodes under `Season <year>`, plus a `poster.jpg`), including
+  marking a single video watched, editing its quality and check interval,
+  with loose (non-title) assertions since the channel's newest video can
+  change. While the video is unwatched, the folded Channels heading shows
+  the section's unwatched total and is marked active on the channel's
+  route. Separately, the channel's avatar in the sidebar (the copy the
+  daemon downloaded) loads.
 - **Channel video limit** (`tests/channelVideoLimit.spec.js`): a channel
   with two downloaded videos, edited down to one: the next sync drops the
   older video from the list and its files from disk, keeping the newer.
@@ -100,39 +135,84 @@ uncaught page error or a 5xx `/api` response.
   dialog shows its Location and "Move…" renames its show folder: the
   episode is on disk at the new path and gone from the old, Plex is asked
   to scan both folders, and the video still plays.
+- **Delete during download** (`tests/deleteDuringDownload.spec.js`):
+  deleting a playlist while its download is running removes its folder, and
+  it doesn't reappear once the download ends.
+- **Media** (`tests/media.spec.js`): the downloaded video is an `.mp4` with
+  H.264 video and AAC audio (read with `ffprobe` inside the container
+  named by `SMOKE_CONTAINER_NAME`), and `/media` answers
+  `Range: bytes=0-1023` with a `206`, a `Content-Range` and 1024 bytes.
+  Every episode checked on disk must be `.mp4`.
+- **Playback speed** (`tests/playbackSpeed.spec.js`): choosing 1.5x from the
+  speed menu sets the player's `playbackRate` and the menu shows it.
+- **Deep links** (`tests/deepLinks.spec.js`): reloading home, a playlist, a
+  channel, a category and the Tasks view shows that view again, and an
+  untracked playlist's route says "Playlist not found.".
+- **Add dialogs** (`tests/addPlaylistDialog.spec.js`,
+  `tests/addChannelDialog.spec.js`, `tests/addDialogLocation.spec.js`): the
+  destination notice (title, count, absolute path), values that aren't a
+  playlist or channel, playlists and channels YouTube doesn't know,
+  auto-filled folder names, and choosing, staging and blocking destinations
+  with the folder browser.
 - **Categories** (`tests/categories.spec.js`): create a category from the
   sidebar (landing in its manage sources dialog), rename it in place,
   assign the fixture channel to it from the Add channel dialog, remove it
   and add it back with the source chips, mark it all watched once the video
   downloads, fold the section and delete the category from its actions
-  menu, keeping the channel. At a mobile viewport, the "Add category" row
+  menu, keeping the channel. A category's card opens its video, selected,
+  in the channel's view and plays it. On the iPhone, the "Add category" row
   closes the drawer before its dialog opens, a new category's manage
   sources dialog fills the screen, and once a category exists the
   heading's "+" adds the next one.
-- **Mobile sidebar** (`tests/mobile-sidebar.spec.js`): opening/closing the
-  sidebar at a narrow viewport.
+- **Mobile drawer** (`tests/mobile-sidebar.spec.js`, iPhone): the menu
+  toggle opens and closes the drawer (its `aria-expanded` follows), as do
+  the backdrop and Escape; it stays closable when an announcement appears
+  after it opened; tapping an entry navigates and closes it; while it is
+  open the page behind doesn't scroll (PageDown, as mobile WebKit has no
+  mouse wheel), and closing it keeps the scroll position.
+- **Mobile watching** (`tests/mobileWatch.spec.js`, iPhone): a home card
+  opens its video, selected, which plays in WebKit and resumes after a
+  reload; the player sticks under the header while the page scrolls; video
+  details start collapsed and "More" expands them.
+- **Mobile layout** (`tests/mobileLayout.spec.js`, iPhone): home, playlist,
+  channel, category and Tasks views never scroll sideways; the Add (with
+  the folder browser open), Edit settings and Delete dialogs fit the screen
+  and submit; the icon-only Sync, Tasks tabs and Run now work by their
+  accessible names.
 - **Sidebar folding** (`tests/sidebarFolding.spec.js`): a folded section
   stays folded across a reload while the other keeps its own state, on
-  desktop and in the mobile drawer.
+  desktop and in the iPhone drawer.
 - **Tasks view** (`tests/tasks.spec.js`): the recurring yt-dlp self-update
   task the daemon seeds at startup is listed as pending.
+- **Announcements** (`tests/announcements.spec.js`): the bar shows, links,
+  dismisses and remembers dismissals, and stays hidden when the fetch fails.
+- **Version** (`tests/version.spec.js`): the header shows the running version.
 
 Together these are also the only coverage of the HTTP API's route wiring
 (Rust handler tests call handlers directly, bypassing the router), so every
 `/api` route must be exercised by at least one spec. This is enforced: the
-browser's `/api` requests are recorded, and `routeCoverageReporter.js` fails
-a passing full run (`SMOKE_CHECK_ROUTE_COVERAGE=1`, set by
-`run-smoke-tests.sh`) if any route parsed from
-`src/application/http/mod.rs` was never hit.
+browser's `/api` responses are recorded with their status, and
+`routeCoverageReporter.js` fails a passing full run
+(`SMOKE_CHECK_ROUTE_COVERAGE=1`, set by `run-smoke-tests.sh`) if any route
+parsed from `src/application/http/mod.rs` was never answered with a 2xx.
 
 After the suite, `run-smoke-tests.sh` also fails the run if the container
 logged a panic.
+
+### Not covered yet
+
+- An errored download being surfaced: it needs a maintainer-owned playlist
+  holding an unavailable video.
+- Sidebar search and Tasks search: they only show with more than 15 sources
+  or tasks, more than the fixtures track.
+- On a real iPhone (checked by hand): native captions menu, fullscreen and
+  rotation, sound, and the home-screen web app.
 
 ## Local development
 
 ```bash
 npm --prefix smoke-tests ci
-npx --prefix smoke-tests playwright install --with-deps chromium
+npx --prefix smoke-tests playwright install --with-deps chromium webkit
 ```
 
 Then start the Plex stub (`node smoke-tests/plex-stub.js`) and, against an
@@ -146,5 +226,11 @@ BASE_URL=http://localhost:8080 \
   SMOKE_PLAYLIST_ID=... \
   SMOKE_VIDEOS_DIR=$PWD/videos \
   SMOKE_PLEX_STUB_URL=http://localhost:18324 \
+  SMOKE_CONTAINER_NAME=<the container, for ffprobe> \
   npm --prefix smoke-tests test
 ```
+
+`SMOKE_CONTAINER_NAME` names the Docker container serving `BASE_URL`; only
+`tests/media.spec.js` uses it, to run `ffprobe` on the downloaded file, so
+against a `cargo run` instance that spec can't pass. Add
+`--project=chromium` or `--project=mobile-safari` to run one browser only.

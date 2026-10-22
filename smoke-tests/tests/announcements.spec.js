@@ -27,19 +27,22 @@ test('announcements bar shows, links, dismisses and remembers dismissals', async
   await bar.getByRole('button', { name: 'Dismiss announcement' }).click()
   await expect(bar).toHaveCount(0)
 
+  // Wait for the announcements themselves, so the bar's absence isn't just
+  // "not fetched yet".
+  const announcementsLoaded = page.waitForResponse(ANNOUNCEMENTS_URL)
   await page.reload()
-  // Wait for the app shell so the bar's absence isn't just "not rendered yet".
+  await announcementsLoaded
   await expect(page.getByRole('banner')).toBeVisible()
-  await page.waitForLoadState('networkidle')
   await expect(bar).toHaveCount(0)
 })
 
 test('announcements bar stays hidden when the fetch fails', async ({ page }) => {
   await page.route(ANNOUNCEMENTS_URL, (route) => route.abort())
+  const announcementsFailed = page.waitForEvent('requestfailed', (request) => request.url() === ANNOUNCEMENTS_URL)
   await page.goto('/')
+  await announcementsFailed
 
   await expect(page.getByRole('banner')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Add channel', exact: true })).toBeVisible()
-  await page.waitForLoadState('networkidle')
   await expect(page.getByRole('region', { name: 'Announcement' })).toHaveCount(0)
 })
