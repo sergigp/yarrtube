@@ -62,7 +62,7 @@ Suite helpers: prove each check with a throwaway failing case, then revert it.
 ## 5. Verification
 
 - [x] 5.1 `npm --prefix web run check`, `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
-- [ ] 5.2 `./scripts/run-smoke-tests.sh` passes end to end on both projects (`chromium`, `mobile-safari`), including the upgrade check and route coverage (2xx-only). Record the total run time.
+- [x] 5.2 `./scripts/run-smoke-tests.sh` passes end to end on both projects (`chromium`, `mobile-safari`), including the upgrade check and route coverage (2xx-only). Record the total run time. Recorded 2026-10-22, rebased on `main` (8000e61): 62 passed (47 chromium, 15 mobile-safari), all `/api` routes answered 2xx; 16m06s from launch to exit (image build 17s cached, upgrade check 53s, suite 15m13s, about 7m of it seeding downloads in `beforeAll`).
 - [x] 5.3 Update `smoke-tests/README.md`: projects and the `@mobile` tag, new coverage, health checks, and the out-of-scope list (errored-download fixture, Sidebar/Tasks search). The README matches the spec files.
 - [ ] 5.4 Manual (human), on a real iPhone (Safari, plus the home-screen web app):
   - open home, tap a card, the video plays with sound, and it resumes after a reload
