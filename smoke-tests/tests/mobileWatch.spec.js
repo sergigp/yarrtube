@@ -13,6 +13,10 @@ test.afterAll(async ({ request }) => {
   await deleteSeeded(request, seeded)
 })
 
+function playlistPage(seeded) {
+  return `/playlists/${encodeURIComponent(seeded.id)}?video=${encodeURIComponent(seeded.video.id)}`
+}
+
 test('home card opens the video selected, plays and resumes after reload @mobile', async ({ page }) => {
   const { title } = seeded.video
   await page.goto('/')
@@ -37,6 +41,20 @@ test('home card opens the video selected, plays and resumes after reload @mobile
   await expect.poll(() => video.evaluate((el) => el.currentTime), { timeout: 15_000 }).toBeGreaterThan(0)
 })
 
-test.fixme('player sticks under the header while the list scrolls @mobile', async () => {})
+test('player sticks under the header while the list scrolls @mobile', async ({ page }) => {
+  await page.goto(playlistPage(seeded))
+  // Expanded details make the page tall enough to scroll on a phone.
+  await page.getByRole('button', { name: 'More', exact: true }).tap()
+  await expect(page.getByRole('link', { name: 'Open on YouTube' })).toBeVisible()
+
+  // On a phone the document scrolls, not `main`.
+  await page.evaluate(() => window.scrollBy(0, 400))
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+
+  const header = await page.getByRole('banner').boundingBox()
+  await expect
+    .poll(async () => Math.round((await page.locator('video').boundingBox()).y))
+    .toBe(Math.round(header.y + header.height))
+})
 
 test.fixme('video details start collapsed and More expands them @mobile', async () => {})
