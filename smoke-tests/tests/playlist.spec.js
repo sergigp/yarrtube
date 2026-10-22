@@ -276,3 +276,27 @@ test('playlist lifecycle: add, download, play, sync, duplicate error, delete', a
     await expectGoneFromDisk(PLAYLIST_PATH)
   })
 })
+
+test('Downloads tab lists a running download', async ({ page }) => {
+  // Added through the API at high quality, so the download lasts long enough
+  // to be seen running.
+  const created = await page.request.post('/api/playlists', {
+    data: {
+      playlist: PLAYLIST_ID,
+      path: PLAYLIST_PATH,
+      quality: 'high',
+      exclude_from_home: false,
+      reconcile_interval_minutes: 180,
+    },
+  })
+  expect(created.ok(), await created.text()).toBeTruthy()
+
+  await page.goto('/tasks')
+  await page.getByRole('tab', { name: /^Downloads/ }).click()
+
+  const download = page.locator('main li', { hasText: new RegExp(`^Downloading .+ in ${PLAYLIST_NAME}`) })
+  await expect(download).toHaveCount(1, { timeout: 60_000 })
+  // Still listed while it runs: the video isn't downloaded yet.
+  const [video] = await (await page.request.get(`/api/playlists/${encodeURIComponent(PLAYLIST_ID)}/videos`)).json()
+  expect(video.status).not.toBe('DOWNLOADED')
+})

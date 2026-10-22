@@ -31,7 +31,7 @@ Each smoke spec: write it, run it against `scripts/run-local.sh` or the smoke im
 - [x] 2.15 `reloading each route shows its view; unknown playlist says Playlist not found.`: `deepLinks.spec.js`.
 - [x] 2.16 `unknown playlist id is reported in the Add playlist dialog`: `addPlaylistDialog.spec.js`; the notice contains "does not exist", has `role`/tone error, and Create is disabled.
 - [x] 2.17 ~~`playlist quality edit is kept`~~ Dropped (user decision): playlists have no editable quality (no field in Edit settings, not accepted by `PATCH /api/playlists/{id}`); channel quality edit is covered in `channel.spec.js`.
-- [ ] 2.18 `Downloads tab lists a running download`: add the playlist via the API at high quality, then the Downloads tab lists `Downloading …` before it finishes.
+- [x] 2.18 `Downloads tab lists a running download`: add the playlist via the API at high quality, then the Downloads tab lists `Downloading …` before it finishes.
 - [ ] 2.19 `downloaded video is h264/aac mp4`: `media.spec.js`, `expectH264Mp4` on the seeded video.
 - [ ] 2.20 `media answers a Range request with 206`: `media.spec.js`, `expectRangeSupported` on `/media/<path>/<filename>`.
 - [ ] 2.21 `channel avatar loads`: in `channel.spec.js`, `expectImageLoaded` on the sidebar avatar and the notice avatar; also remove the duplicated invalid-handle step.
