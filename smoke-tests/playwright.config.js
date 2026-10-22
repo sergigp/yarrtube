@@ -31,10 +31,19 @@ export default defineConfig({
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
+  // Specs tagged `@mobile` run only on an emulated iPhone (WebKit, touch,
+  // mobile viewport); everything else only on desktop Chromium, whose
+  // layout has no drawer.
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      grepInvert: /@mobile/,
+    },
+    {
+      name: 'mobile-safari',
+      use: { ...devices['iPhone 13'] },
+      grep: /@mobile/,
     },
   ],
 })

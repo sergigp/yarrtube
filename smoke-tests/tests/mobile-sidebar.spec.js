@@ -1,7 +1,6 @@
 import { test, expect } from '../helpers/fixtures.js'
 
-test('mobile sidebar opens via the menu button and closes', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
+test('mobile sidebar opens and closes via toggle and backdrop @mobile', async ({ page }) => {
   await page.goto('/')
 
   const overlay = page.locator('#root div[aria-hidden="true"]')
@@ -23,8 +22,7 @@ test('mobile sidebar opens via the menu button and closes', async ({ page }) => 
   await expect(overlay).toHaveCount(0)
 })
 
-test('mobile sidebar stays closable when the announcement appears after it opened', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
+test('mobile sidebar stays closable when the announcement appears after it opened @mobile', async ({ page }) => {
   // Hold the announcements response until the sidebar is open, so the bar
   // appears above the header afterwards and pushes it down.
   let releaseAnnouncements
@@ -47,8 +45,7 @@ test('mobile sidebar stays closable when the announcement appears after it opene
   await expect(overlay).toHaveCount(0)
 })
 
-test('it should close the drawer and open the add channel dialog', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
+test('it should close the drawer and open the add channel dialog @mobile', async ({ page }) => {
   await page.goto('/')
 
   // Scoped below the app root: while the dialog is open, Radix marks the root
@@ -62,3 +59,9 @@ test('it should close the drawer and open the add channel dialog', async ({ page
   await expect(overlay).toHaveCount(0)
   await expect(page.getByRole('dialog', { name: 'Add channel' })).toBeVisible()
 })
+
+test.fixme('drawer closes on Escape @mobile', async () => {})
+
+test.fixme('tapping a drawer entry navigates and closes it @mobile', async () => {})
+
+test.fixme('dismissing the drawer keeps the scroll position and the page behind stays still @mobile', async () => {})

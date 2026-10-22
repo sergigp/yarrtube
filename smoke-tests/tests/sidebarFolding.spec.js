@@ -21,8 +21,7 @@ test('a folded sidebar section stays folded after a reload', async ({ page }) =>
   await expect(page.getByRole('button', { name: 'Add playlist', exact: true })).toBeVisible()
 })
 
-test('a section folded in the mobile drawer stays folded after a reload', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
+test('a section folded in the mobile drawer stays folded after a reload @mobile', async ({ page }) => {
   await page.goto('/')
 
   // Scoped below the app root, as in mobile-sidebar.spec.js.

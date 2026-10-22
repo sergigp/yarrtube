@@ -125,3 +125,11 @@ export async function includeItemInHome(page, { section, name }) {
   await chooseRowAction(page, row, 'Include in home')
   expect((await updated).status()).toBe(200)
 }
+
+export async function openDrawer(page) {}
+
+export async function closeDrawer(page) {}
+
+export async function expectDrawerOpen(page) {}
+
+export async function expectDrawerClosed(page) {}

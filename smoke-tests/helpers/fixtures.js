@@ -21,6 +21,11 @@ import { existsSync } from 'node:fs'
  */
 export const test = base.extend({
   keepLibrary: [false, { option: true }],
+  // `/api` 4xx responses the test triggers on purpose, e.g.
+  // `[{ method: 'POST', path: '/api/playlists', status: 409 }]`.
+  expectedApiErrors: [[], { option: true }],
+  // `console.error` messages the test tolerates, as RegExps.
+  consoleErrorAllowlist: [[], { option: true }],
 
   cleanLibrary: [
     async ({ request, keepLibrary }, use) => {
@@ -33,7 +38,7 @@ export const test = base.extend({
     { auto: true },
   ],
 
-  page: async ({ page }, use) => {
+  page: async ({ page, expectedApiErrors, consoleErrorAllowlist }, use) => {
     const problems = []
     page.on('pageerror', (error) => problems.push(`page error: ${error.message}`))
     page.on('response', (response) => {

@@ -4,8 +4,7 @@ import { sectionHeading, sectionRows } from '../helpers/sidebar.js'
 
 const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
 
-test('category on mobile: add from the drawer, manage sources full screen, then add from the heading', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
+test('category on mobile: add from the drawer, manage sources full screen, then add from the heading @mobile', async ({ page }) => {
   await page.goto('/')
 
   // Scoped below the app root, as in mobile-sidebar.spec.js.
@@ -168,3 +167,5 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
     await expect(sectionRows(page, 'Channels')).toHaveCount(1)
   })
 })
+
+test.fixme('category card opens its video in the channel view and plays', async () => {})

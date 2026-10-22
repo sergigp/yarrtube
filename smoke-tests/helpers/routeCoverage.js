@@ -28,7 +28,7 @@ export function routerRoutes() {
 }
 
 /** Appends the route `pathname` (a concrete `/api/...` path) matches. */
-export function recordApiRoute(method, pathname) {
+export function recordApiRoute(method, pathname, status) {
   mkdirSync(dirname(HIT_ROUTES_FILE), { recursive: true })
   appendFileSync(HIT_ROUTES_FILE, `${method} ${toTemplate(pathname)}\n`)
 }
