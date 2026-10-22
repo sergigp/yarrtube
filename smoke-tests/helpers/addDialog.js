@@ -160,6 +160,7 @@ export async function fillChannel(page, { handle, videoLimit, parent, folderName
   return dialog
 }
 
+// The dialog announces a failed create as an alert.
 export function dialogErrorText(page) {
-  return page.getByRole('dialog').locator('p.text-destructive')
+  return page.getByRole('dialog').getByRole('alert')
 }
