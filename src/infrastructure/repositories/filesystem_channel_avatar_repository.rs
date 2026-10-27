@@ -358,14 +358,14 @@ mod youtube_contract_tests {
     use crate::infrastructure::repositories::youtube_channel_repository::{
         YoutubeApiChannelRepository, YoutubeChannelRepository,
     };
-    use crate::infrastructure::shared::youtube_contract::{CHANNEL_HANDLE, api_key};
+    use crate::infrastructure::shared::youtube_contract::{CHANNEL_HANDLE, api_key, api_url};
     use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
 
     #[test]
     #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
     fn it_should_store_a_channel_avatar() {
         let handle = ChannelHandle::new(CHANNEL_HANDLE).unwrap();
-        let avatar_url = YoutubeApiChannelRepository::new(api_key())
+        let avatar_url = YoutubeApiChannelRepository::new(api_key(), api_url())
             .resolve(&handle)
             .unwrap()
             .and_then(|channel| channel.avatar_url)

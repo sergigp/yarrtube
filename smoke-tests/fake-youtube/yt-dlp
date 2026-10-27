@@ -1,0 +1,5 @@
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env
+// The stand-in yt-dlp the smoke suite's daemon runs (YTDLP_PATH), answering
+// each way the daemon calls yt-dlp from catalogue.json and samples/.
+console.error('ERROR: the stand-in yt-dlp does not answer this yet')
+Deno.exit(1)

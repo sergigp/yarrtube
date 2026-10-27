@@ -47,6 +47,7 @@ const DEFAULT_RETRY_BASE_DELAY_SECONDS: i64 = 150;
 const DEFAULT_VIDEOS_PATH: &str = "/videos";
 const DEFAULT_DOWNLOAD_CONCURRENCY: usize = 2;
 const DEFAULT_AVATARS_PATH: &str = "avatars";
+pub(crate) const DEFAULT_YOUTUBE_API_URL: &str = "https://www.googleapis.com/youtube/v3";
 /// The parent directories the add dialog's folder browser defaults to, seeded
 /// under the videos root at startup so the browser is never empty on a fresh
 /// install.
@@ -142,6 +143,7 @@ pub(crate) fn build_infrastructure() -> Result<InfrastructureContainer> {
     InfrastructureContainer::new(InfrastructureSettings {
         db_path: db_path(),
         youtube_api_key: youtube_api_key(),
+        youtube_api_url: youtube_api_url(),
         videos_path: PathBuf::from(videos_path()),
         avatars_path: avatars_path(),
         ytdlp_path: target_path(),
@@ -192,6 +194,23 @@ fn parse_download_concurrency(value: Option<String>) -> usize {
         .and_then(|v| v.parse::<usize>().ok())
         .filter(|concurrency| *concurrency > 0)
         .unwrap_or(DEFAULT_DOWNLOAD_CONCURRENCY)
+}
+
+/// Where the YouTube Data API requests go: Google's, unless pointed at a
+/// fake YouTube (`YARRTUBE_YOUTUBE_API_URL`).
+fn youtube_api_url() -> String {
+    DEFAULT_YOUTUBE_API_URL.to_string()
+}
+
+/// Whether the daemon keeps its `yt-dlp` up to date; `YARRTUBE_YTDLP_SELF_UPDATE=false`
+/// turns it off, for running against a stand-in `yt-dlp`.
+fn ytdlp_self_update_enabled() -> bool {
+    parse_ytdlp_self_update(std::env::var("YARRTUBE_YTDLP_SELF_UPDATE").ok())
+}
+
+/// Only `false` turns the self-update off.
+fn parse_ytdlp_self_update(_value: Option<String>) -> bool {
+    true
 }
 
 fn videos_path() -> String {
@@ -549,6 +568,7 @@ fn task_handlers(infrastructure: &InfrastructureContainer) -> HandlerRegistry {
         infrastructure.clock.clone(),
         infrastructure.ytdlp_updater.clone(),
         target_path(),
+        ytdlp_self_update_enabled(),
     )
 }
 
@@ -1159,6 +1179,7 @@ mod tests {
         InfrastructureContainer::new(InfrastructureSettings {
             db_path: db.path(),
             youtube_api_key: String::new(),
+            youtube_api_url: DEFAULT_YOUTUBE_API_URL.to_string(),
             videos_path: unique_temp_dir("serve-registry-videos"),
             avatars_path: unique_temp_dir("serve-registry-avatars"),
             ytdlp_path: PathBuf::from("yt-dlp"),

@@ -1,0 +1,227 @@
+{
+  "_comment": "The fake YouTube's world, served by youtube-stub.js (Data API) and yt-dlp (downloads). Every video is the same Creative-Commons clip (samples/c-dQKjG5ffc.*, see samples/CREDITS.txt) with our own subtitles (samples/fixture.en.srt). behaviour: normal | slow (the download takes ~20 s) | failing (it always fails). liveBroadcastContent: none | upcoming (a premiere).",
+  "sample": "c-dQKjG5ffc",
+  "subtitles": "fixture.en.srt",
+  "videos": [
+    {
+      "id": "yarrtube001",
+      "title": "Snails at work",
+      "description": "Snails at work, from the Creative-Commons clip \"How Snails move\" (samples/CREDITS.txt).",
+      "publishedAt": "2024-03-01T10:00:00Z",
+      "durationSeconds": 61,
+      "tags": [
+        "snails",
+        "fixture"
+      ],
+      "categoryId": "15",
+      "behaviour": "normal",
+      "liveBroadcastContent": "none"
+    },
+    {
+      "id": "yarrtube002",
+      "title": "Snails at rest",
+      "description": "Snails at rest, from the Creative-Commons clip \"How Snails move\" (samples/CREDITS.txt).",
+      "publishedAt": "2024-03-02T10:00:00Z",
+      "durationSeconds": 61,
+      "tags": [
+        "snails",
+        "fixture"
+      ],
+      "categoryId": "15",
+      "behaviour": "normal",
+      "liveBroadcastContent": "none"
+    },
+    {
+      "id": "yarrtube003",
+      "title": "Snails at dawn",
+      "description": "Snails at dawn, from the Creative-Commons clip \"How Snails move\" (samples/CREDITS.txt).",
+      "publishedAt": "2024-05-02T08:00:00Z",
+      "durationSeconds": 61,
+      "tags": [
+        "snails",
+        "fixture"
+      ],
+      "categoryId": "15",
+      "behaviour": "normal",
+      "liveBroadcastContent": "none"
+    },
+    {
+      "id": "yarrtube004",
+      "title": "Snails at dusk",
+      "description": "Snails at dusk, from the Creative-Commons clip \"How Snails move\" (samples/CREDITS.txt).",
+      "publishedAt": "2024-05-01T20:00:00Z",
+      "durationSeconds": 61,
+      "tags": [
+        "snails",
+        "fixture"
+      ],
+      "categoryId": "15",
+      "behaviour": "normal",
+      "liveBroadcastContent": "none"
+    },
+    {
+      "id": "yarrtubeslw",
+      "title": "Slow snails",
+      "description": "Slow snails, from the Creative-Commons clip \"How Snails move\" (samples/CREDITS.txt).",
+      "publishedAt": "2024-04-01T10:00:00Z",
+      "durationSeconds": 61,
+      "tags": [
+        "snails",
+        "fixture"
+      ],
+      "categoryId": "15",
+      "behaviour": "slow",
+      "liveBroadcastContent": "none"
+    },
+    {
+      "id": "yarrtubeerr",
+      "title": "Broken snails",
+      "description": "Broken snails, from the Creative-Commons clip \"How Snails move\" (samples/CREDITS.txt).",
+      "publishedAt": "2024-04-02T10:00:00Z",
+      "durationSeconds": 61,
+      "tags": [
+        "snails",
+        "fixture"
+      ],
+      "categoryId": "15",
+      "behaviour": "failing",
+      "liveBroadcastContent": "none"
+    },
+    {
+      "id": "yarrtubeprm",
+      "title": "Snails premiere",
+      "description": "Snails premiere, from the Creative-Commons clip \"How Snails move\" (samples/CREDITS.txt).",
+      "publishedAt": "2030-01-01T10:00:00Z",
+      "durationSeconds": 61,
+      "tags": [
+        "snails",
+        "fixture"
+      ],
+      "categoryId": "15",
+      "behaviour": "normal",
+      "liveBroadcastContent": "upcoming"
+    }
+  ],
+  "playlists": [
+    {
+      "id": "PLyarrtubeFixtureTest",
+      "title": "test",
+      "videos": [
+        "yarrtube001"
+      ]
+    },
+    {
+      "id": "PLyarrtubeFixtureSlow",
+      "title": "slow",
+      "videos": [
+        "yarrtubeslw"
+      ]
+    },
+    {
+      "id": "PLyarrtubeFixtureBroken",
+      "title": "broken",
+      "videos": [
+        "yarrtubeerr"
+      ]
+    },
+    {
+      "id": "PLyarrtubeFixturePremiere",
+      "title": "premiere",
+      "videos": [
+        "yarrtubeprm",
+        "yarrtube002"
+      ]
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch01",
+      "title": "Search 01",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch02",
+      "title": "Search 02",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch03",
+      "title": "Search 03",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch04",
+      "title": "Search 04",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch05",
+      "title": "Search 05",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch06",
+      "title": "Search 06",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch07",
+      "title": "Search 07",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch08",
+      "title": "Search 08",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch09",
+      "title": "Search 09",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch10",
+      "title": "Search 10",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch11",
+      "title": "Search 11",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch12",
+      "title": "Search 12",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch13",
+      "title": "Search 13",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch14",
+      "title": "Search 14",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch15",
+      "title": "Search 15",
+      "videos": []
+    },
+    {
+      "id": "PLyarrtubeFixtureSearch16",
+      "title": "Search 16",
+      "videos": []
+    }
+  ],
+  "channels": [
+    {
+      "id": "UCyarrtubeFixture000000",
+      "handle": "@yarrtubefixture",
+      "title": "Yarrtube Fixture",
+      "videos": [
+        "yarrtube003",
+        "yarrtube004"
+      ]
+    }
+  ]
+}

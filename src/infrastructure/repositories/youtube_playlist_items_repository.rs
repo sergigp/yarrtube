@@ -107,7 +107,7 @@ pub struct YoutubeApiPlaylistItemsRepository {
 }
 
 impl YoutubeApiPlaylistItemsRepository {
-    pub fn new(api_key: String) -> Self {
+    pub fn new(api_key: String, _api_url: String) -> Self {
         Self {
             api_key,
             base_url: YOUTUBE_API_URL.to_string(),
@@ -831,13 +831,13 @@ mod tests {
 mod youtube_contract_tests {
     use super::*;
     use crate::infrastructure::shared::youtube_contract::{
-        CAPTIONED_VIDEO_ID, PLAYLIST_ID, api_key,
+        CAPTIONED_VIDEO_ID, PLAYLIST_ID, api_key, api_url,
     };
 
     #[test]
     #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
     fn it_should_list_the_playlist_videos() {
-        let repository = YoutubeApiPlaylistItemsRepository::new(api_key());
+        let repository = YoutubeApiPlaylistItemsRepository::new(api_key(), api_url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new(PLAYLIST_ID).unwrap())

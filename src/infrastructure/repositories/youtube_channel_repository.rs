@@ -70,7 +70,7 @@ pub struct YoutubeApiChannelRepository {
 }
 
 impl YoutubeApiChannelRepository {
-    pub fn new(api_key: String) -> Self {
+    pub fn new(api_key: String, _api_url: String) -> Self {
         Self {
             api_key,
             base_url: CHANNELS_URL.to_string(),
@@ -300,12 +300,12 @@ mod tests {
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
-    use crate::infrastructure::shared::youtube_contract::{CHANNEL_HANDLE, api_key};
+    use crate::infrastructure::shared::youtube_contract::{CHANNEL_HANDLE, api_key, api_url};
 
     #[test]
     #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
     fn it_should_resolve_a_channel_handle() {
-        let repository = YoutubeApiChannelRepository::new(api_key());
+        let repository = YoutubeApiChannelRepository::new(api_key(), api_url());
 
         let channel = repository
             .resolve(&ChannelHandle::new(CHANNEL_HANDLE).unwrap())
@@ -336,7 +336,7 @@ mod youtube_contract_tests {
     #[test]
     #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
     fn it_should_not_resolve_an_unknown_handle() {
-        let repository = YoutubeApiChannelRepository::new(api_key());
+        let repository = YoutubeApiChannelRepository::new(api_key(), api_url());
 
         let channel = repository
             .resolve(&ChannelHandle::new("@yarrtube-contract-missing-handle").unwrap())

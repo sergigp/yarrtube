@@ -51,7 +51,7 @@ pub struct YoutubeApiMetadataRepository {
 }
 
 impl YoutubeApiMetadataRepository {
-    pub fn new(api_key: String) -> Self {
+    pub fn new(api_key: String, _api_url: String) -> Self {
         Self {
             api_key,
             base_url: VIDEOS_URL.to_string(),
@@ -315,13 +315,13 @@ mod tests {
 mod youtube_contract_tests {
     use super::*;
     use crate::infrastructure::shared::youtube_contract::{
-        CAPTIONED_VIDEO_ID, MISSING_VIDEO_ID, api_key,
+        CAPTIONED_VIDEO_ID, MISSING_VIDEO_ID, api_key, api_url,
     };
 
     #[test]
     #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
     fn it_should_find_a_video_metadata() {
-        let repository = YoutubeApiMetadataRepository::new(api_key());
+        let repository = YoutubeApiMetadataRepository::new(api_key(), api_url());
 
         let metadata = repository
             .find(&VideoId::new(CAPTIONED_VIDEO_ID).unwrap())
@@ -349,7 +349,7 @@ mod youtube_contract_tests {
     #[test]
     #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
     fn it_should_not_find_an_unknown_video() {
-        let repository = YoutubeApiMetadataRepository::new(api_key());
+        let repository = YoutubeApiMetadataRepository::new(api_key(), api_url());
 
         let metadata = repository
             .find(&VideoId::new(MISSING_VIDEO_ID).unwrap())

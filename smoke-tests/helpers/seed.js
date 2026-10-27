@@ -96,3 +96,10 @@ async function waitUntilSettled(request, { listUrl, id, videosUrl, count }) {
 function sameHandle(a, b) {
   return a.toLowerCase() === b.toLowerCase()
 }
+
+/** Adds a fake-YouTube playlist (see `fakeYoutube.js`) through the API. */
+export async function addPlaylist(request, playlist, { downloaded = true } = {}) {}
+
+/** Adds the fake-YouTube channel through the API, keeping its `videoLimit` newest videos. */
+export async function addChannel(request, channel, { videoLimit, downloaded = true }) {}
+

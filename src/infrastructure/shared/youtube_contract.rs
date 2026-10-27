@@ -29,6 +29,11 @@ pub(crate) fn ytdlp_path() -> PathBuf {
     PathBuf::from(std::env::var("YTDLP_PATH").unwrap_or_else(|_| "yt-dlp".to_string()))
 }
 
+/// The real YouTube Data API's root.
+pub(crate) fn api_url() -> String {
+    crate::serve::DEFAULT_YOUTUBE_API_URL.to_string()
+}
+
 /// `YOUTUBE_API_KEY`, which the contract tests can't run without.
 pub(crate) fn api_key() -> String {
     std::env::var("YOUTUBE_API_KEY")

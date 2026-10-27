@@ -47,6 +47,7 @@ pub fn registry(
     clock: Arc<dyn Clock>,
     ytdlp_updater: Arc<dyn YtdlpUpdater>,
     ytdlp_path: PathBuf,
+    ytdlp_self_update_enabled: bool,
 ) -> HandlerRegistry {
     let mut registry: HandlerRegistry = HashMap::new();
     registry.insert(
@@ -89,6 +90,7 @@ pub fn registry(
         Arc::new(UpdateYtdlpTask::new(
             ytdlp_updater,
             ytdlp_path,
+            ytdlp_self_update_enabled,
             task_repository,
             clock,
         )),

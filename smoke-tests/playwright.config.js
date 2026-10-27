@@ -1,17 +1,22 @@
 import { defineConfig, devices } from '@playwright/test'
 
-// Without these the lifecycle specs can't run, and silently skipping them
-// would leave a green suite that never downloaded anything.
-const REQUIRED_ENV = ['SMOKE_PLAYLIST_ID', 'SMOKE_VIDEOS_DIR', 'SMOKE_PLEX_STUB_URL']
-const missing = REQUIRED_ENV.filter((name) => !process.env[name])
-if (missing.length > 0) {
-  throw new Error(`smoke tests need ${missing.join(', ')} set (see smoke-tests/README.md)`)
-}
-
 // `run-smoke-tests.sh` runs the upgrade check's phases (`upgrade/seed.spec.js`
 // against the released image, `upgrade/verify.spec.js` against this build)
 // on their own, before the main suite.
 const UPGRADE_PHASE = process.env.SMOKE_UPGRADE_PHASE
+
+// Without these the specs can't run, and silently skipping them would leave a
+// green suite that never downloaded anything. Only the upgrade check uses a
+// playlist on the real YouTube.
+const REQUIRED_ENV = [
+  'SMOKE_VIDEOS_DIR',
+  'SMOKE_PLEX_STUB_URL',
+  ...(UPGRADE_PHASE ? ['SMOKE_PLAYLIST_ID'] : ['SMOKE_YOUTUBE_STUB_PORT']),
+]
+const missing = REQUIRED_ENV.filter((name) => !process.env[name])
+if (missing.length > 0) {
+  throw new Error(`smoke tests need ${missing.join(', ')} set (see smoke-tests/README.md)`)
+}
 
 export default defineConfig({
   ...(UPGRADE_PHASE

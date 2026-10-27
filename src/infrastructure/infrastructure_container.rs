@@ -73,6 +73,8 @@ use std::sync::Arc;
 pub struct InfrastructureSettings {
     pub db_path: PathBuf,
     pub youtube_api_key: String,
+    /// The YouTube Data API's root, e.g. `https://www.googleapis.com/youtube/v3`.
+    pub youtube_api_url: String,
     pub videos_path: PathBuf,
     pub avatars_path: PathBuf,
     pub ytdlp_path: PathBuf,
@@ -136,15 +138,19 @@ impl InfrastructureContainer {
             event_repository: Arc::new(SqliteEventRepository::new(db.clone())),
             youtube_playlist_repository: Arc::new(YoutubeApiPlaylistRepository::new(
                 settings.youtube_api_key.clone(),
+                settings.youtube_api_url.clone(),
             )),
             youtube_playlist_items_repository: Arc::new(YoutubeApiPlaylistItemsRepository::new(
                 settings.youtube_api_key.clone(),
+                settings.youtube_api_url.clone(),
             )),
             youtube_metadata_repository: Arc::new(YoutubeApiMetadataRepository::new(
                 settings.youtube_api_key.clone(),
+                settings.youtube_api_url.clone(),
             )),
             youtube_channel_repository: Arc::new(YoutubeApiChannelRepository::new(
                 settings.youtube_api_key,
+                settings.youtube_api_url,
             )),
             channel_videos_repository: Arc::new(YtDlpChannelVideosRepository::new(
                 settings.ytdlp_path.clone(),

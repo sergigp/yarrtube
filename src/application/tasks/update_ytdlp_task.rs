@@ -21,6 +21,9 @@ pub const UPDATE_INTERVAL_SECONDS: i64 = 3600;
 pub struct UpdateYtdlpTask {
     updater: Arc<dyn YtdlpUpdater>,
     ytdlp_path: PathBuf,
+    /// Off when running against a stand-in `yt-dlp`, which an update would
+    /// replace with the real one.
+    self_update_enabled: bool,
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
 }
@@ -29,12 +32,14 @@ impl UpdateYtdlpTask {
     pub fn new(
         updater: Arc<dyn YtdlpUpdater>,
         ytdlp_path: PathBuf,
+        self_update_enabled: bool,
         task_repository: Arc<dyn TaskRepository>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             updater,
             ytdlp_path,
+            self_update_enabled,
             task_repository,
             clock,
         }
@@ -104,6 +109,7 @@ mod tests {
         let task = UpdateYtdlpTask::new(
             Arc::new(FakeYtdlpUpdater { succeeds: true }),
             PathBuf::from("/app/bin/yt-dlp"),
+            true,
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -131,6 +137,7 @@ mod tests {
         let task = UpdateYtdlpTask::new(
             Arc::new(FakeYtdlpUpdater { succeeds: false }),
             PathBuf::from("/app/bin/yt-dlp"),
+            true,
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
         );

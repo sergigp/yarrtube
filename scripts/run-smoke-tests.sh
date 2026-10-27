@@ -15,6 +15,7 @@ CONTAINER_NAME="yarrtube-smoke"
 PORT="${YARRTUBE_PORT:-8080}"
 READY_TIMEOUT_SECONDS="${SMOKE_READY_TIMEOUT_SECONDS:-120}"
 PLEX_STUB_PORT="${SMOKE_PLEX_STUB_PORT:-18324}"
+YOUTUBE_STUB_PORT="${SMOKE_YOUTUBE_STUB_PORT:-18326}"
 LOG_FILE="$REPO_ROOT/smoke-tests/container.log"
 
 if [[ -f "$REPO_ROOT/.env" ]]; then
@@ -24,8 +25,15 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
   set +a
 fi
 
-: "${YOUTUBE_API_KEY:?YOUTUBE_API_KEY must be set (in the environment or $REPO_ROOT/.env)}"
-# The maintainer-owned "yarrtube-smoke-tests" playlist (see smoke-tests/README.md).
+# The suite runs against a fake YouTube (see smoke-tests/README.md). Only
+# the upgrade check needs the real one, since the released image it starts
+# can't be pointed at the fake: it runs only with a real YOUTUBE_API_KEY.
+if [[ "$UPGRADE_FROM_IMAGE" != "none" && -z "${YOUTUBE_API_KEY:-}" ]]; then
+  echo "==> no YOUTUBE_API_KEY: skipping the upgrade check, which needs the real YouTube"
+  UPGRADE_FROM_IMAGE="none"
+fi
+# The upgrade check's fixture: the maintainer-owned "test" playlist on the
+# real YouTube.
 SMOKE_PLAYLIST_ID="${SMOKE_PLAYLIST_ID:-PLXWRoRTUXjks}"
 SMOKE_PLAYLIST_NAME="${SMOKE_PLAYLIST_NAME:-test}"
 SMOKE_CHANNEL_HANDLE="${SMOKE_CHANNEL_HANDLE:-@BlenderOfficial}"
@@ -34,6 +42,7 @@ SMOKE_CHANNEL_VIDEO_LIMIT="${SMOKE_CHANNEL_VIDEO_LIMIT:-1}"
 TMP_DIR=""
 CONTAINER_STARTED=false
 PLEX_STUB_PID=""
+YOUTUBE_STUB_PID=""
 
 cleanup() {
   local exit_code=$?
@@ -46,6 +55,9 @@ cleanup() {
   fi
   if [[ -n "$PLEX_STUB_PID" ]]; then
     kill "$PLEX_STUB_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$YOUTUBE_STUB_PID" ]]; then
+    kill "$YOUTUBE_STUB_PID" 2>/dev/null || true
   fi
   if [[ -n "$TMP_DIR" ]]; then
     rm -rf "$TMP_DIR"
@@ -80,19 +92,46 @@ echo "==> starting Plex stub on port $PLEX_STUB_PORT"
 SMOKE_PLEX_STUB_PORT="$PLEX_STUB_PORT" node "$REPO_ROOT/smoke-tests/plex-stub.js" &
 PLEX_STUB_PID=$!
 
+# The fake YouTube Data API on the host; the stand-in yt-dlp is mounted into
+# the container (see smoke-tests/fake-youtube/).
+echo "==> starting YouTube stub on port $YOUTUBE_STUB_PORT"
+SMOKE_YOUTUBE_STUB_PORT="$YOUTUBE_STUB_PORT" node "$REPO_ROOT/smoke-tests/fake-youtube/youtube-stub.js" &
+YOUTUBE_STUB_PID=$!
+
+# `fake` points this build at the fake YouTube; `real` (the released image
+# of the upgrade check) uses the real one.
 start_container() {
   local image="$1"
-  echo "==> starting $image on port $PORT"
+  local youtube="$2"
+  local youtube_args=()
+  if [[ "$youtube" == fake ]]; then
+    youtube_args=(
+      -e YOUTUBE_API_KEY=fake-youtube-key
+      -e "YARRTUBE_YOUTUBE_API_URL=http://host.docker.internal:$YOUTUBE_STUB_PORT/youtube/v3"
+      -e YTDLP_PATH=/fake-youtube/yt-dlp
+      -e YARRTUBE_YTDLP_SELF_UPDATE=false
+      -e DENO_DIR=/tmp/deno
+      # Nothing flaky to wait out, and the errored-download spec runs every retry.
+      -e YARRTUBE_RETRY_BASE_DELAY_SECONDS=1
+      -v "$REPO_ROOT/smoke-tests/fake-youtube:/fake-youtube:ro"
+      -v "$REPO_ROOT/smoke-tests/samples:/samples:ro"
+    )
+  else
+    youtube_args=(
+      -e YOUTUBE_API_KEY
+      -e "YARRTUBE_RETRY_BASE_DELAY_SECONDS=${SMOKE_RETRY_BASE_DELAY_SECONDS:-10}"
+    )
+  fi
+  echo "==> starting $image on port $PORT ($youtube YouTube)"
   docker run -d --name "$CONTAINER_NAME" \
     -p "$PORT:$PORT" \
     --add-host=host.docker.internal:host-gateway \
     -e "YARRTUBE_PLEX_URL=http://host.docker.internal:$PLEX_STUB_PORT" \
     -e YARRTUBE_PLEX_TOKEN=smoke-token \
     -e YARRTUBE_PLEX_VIDEOS_PATH=/plex/yarrtube \
-    -e YOUTUBE_API_KEY \
+    "${youtube_args[@]}" \
     -e "YARRTUBE_PORT=$PORT" \
     -e YARRTUBE_VIDEOS_PATH=/videos \
-    -e "YARRTUBE_RETRY_BASE_DELAY_SECONDS=${SMOKE_RETRY_BASE_DELAY_SECONDS:-10}" \
     -v "$TMP_DIR/videos:/videos" \
     -v "$TMP_DIR/config:/config" \
     "$image" >/dev/null
@@ -119,13 +158,14 @@ stop_container() {
 # of the main suite (see playwright.config.js).
 run_playwright() {
   BASE_URL="http://localhost:$PORT" \
-    YOUTUBE_API_KEY="$YOUTUBE_API_KEY" \
+    YOUTUBE_API_KEY="${YOUTUBE_API_KEY:-}" \
     SMOKE_PLAYLIST_ID="$SMOKE_PLAYLIST_ID" \
     SMOKE_PLAYLIST_NAME="$SMOKE_PLAYLIST_NAME" \
     SMOKE_CHANNEL_HANDLE="$SMOKE_CHANNEL_HANDLE" \
     SMOKE_CHANNEL_VIDEO_LIMIT="$SMOKE_CHANNEL_VIDEO_LIMIT" \
     SMOKE_VIDEOS_DIR="$TMP_DIR/videos" \
     SMOKE_PLEX_STUB_URL="http://localhost:$PLEX_STUB_PORT" \
+    SMOKE_YOUTUBE_STUB_PORT="$YOUTUBE_STUB_PORT" \
     SMOKE_CONTAINER_NAME="$CONTAINER_NAME" \
     "$@" \
     npm --prefix "$REPO_ROOT/smoke-tests" test
@@ -140,12 +180,12 @@ npx --prefix "$REPO_ROOT/smoke-tests" playwright install --with-deps chromium we
 if [[ "$UPGRADE_FROM_IMAGE" != "none" ]]; then
   echo "==> upgrade check: seeding a library with $UPGRADE_FROM_IMAGE"
   docker pull "$UPGRADE_FROM_IMAGE"
-  start_container "$UPGRADE_FROM_IMAGE"
+  start_container "$UPGRADE_FROM_IMAGE" real
   run_playwright env SMOKE_UPGRADE_PHASE=seed
   stop_container
 fi
 
-start_container "$IMAGE_TAG"
+start_container "$IMAGE_TAG" fake
 
 if [[ "$UPGRADE_FROM_IMAGE" != "none" ]]; then
   echo "==> upgrade check: verifying the seeded library on $IMAGE_TAG"

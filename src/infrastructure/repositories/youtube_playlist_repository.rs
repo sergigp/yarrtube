@@ -45,7 +45,7 @@ pub struct YoutubeApiPlaylistRepository {
 }
 
 impl YoutubeApiPlaylistRepository {
-    pub fn new(api_key: String) -> Self {
+    pub fn new(api_key: String, _api_url: String) -> Self {
         Self {
             api_key,
             base_url: PLAYLISTS_URL.to_string(),
@@ -189,12 +189,12 @@ mod tests {
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
-    use crate::infrastructure::shared::youtube_contract::{PLAYLIST_ID, api_key};
+    use crate::infrastructure::shared::youtube_contract::{PLAYLIST_ID, api_key, api_url};
 
     #[test]
     #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
     fn it_should_resolve_a_playlist() {
-        let repository = YoutubeApiPlaylistRepository::new(api_key());
+        let repository = YoutubeApiPlaylistRepository::new(api_key(), api_url());
 
         let playlist = repository
             .resolve(&PlaylistId::new(PLAYLIST_ID).unwrap())
@@ -212,7 +212,7 @@ mod youtube_contract_tests {
     #[test]
     #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
     fn it_should_not_resolve_an_unknown_playlist() {
-        let repository = YoutubeApiPlaylistRepository::new(api_key());
+        let repository = YoutubeApiPlaylistRepository::new(api_key(), api_url());
 
         let playlist = repository
             .resolve(&PlaylistId::new("PLyarrtubeContractMissing").unwrap())
