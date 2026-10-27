@@ -18,8 +18,9 @@ a fresh temp database/videos directory, waits for it to become ready, then
 runs this Playwright suite against it. Before that, it runs the upgrade
 check (see below) unless `E2E_UPGRADE_FROM_IMAGE=none`. The container and temp directories
 are always removed afterward; on failure, the container's logs are saved to
-`e2e-tests/container.log` and Playwright's traces/videos are kept under
-`e2e-tests/test-results/`.
+`e2e-tests/test-results/container.log` and Playwright's traces/videos are kept under
+`e2e-tests/test-results/`. Each run uses its own container, image tag and
+free ports, so the suite can run from several worktrees at the same time.
 
 ## The fake YouTube
 
@@ -50,10 +51,10 @@ Overrides (defaults shown):
 
 | Env var                      | Default                 |
 | ----------------------------- | ------------------------ |
-| `YARRTUBE_PORT`               | `8080`                   |
+| `E2E_PORT`                    | a free port              |
 | `E2E_READY_TIMEOUT_SECONDS` | `120`                    |
-| `E2E_PLEX_STUB_PORT`        | `18324`                  |
-| `E2E_YOUTUBE_STUB_PORT`     | `18326`                  |
+| `E2E_PLEX_STUB_PORT`          | a free port              |
+| `E2E_YOUTUBE_STUB_PORT`       | a free port              |
 | `E2E_UPGRADE_FROM_IMAGE`    | `ghcr.io/sergigp/yarrtube:latest` (`none` skips the upgrade check) |
 
 The upgrade check starts the released image, which can't be pointed at the

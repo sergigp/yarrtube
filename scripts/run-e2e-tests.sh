@@ -6,17 +6,31 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE_TAG="yarrtube:e2e"
+# Everything a run creates carries its own id and ports, so runs from
+# different worktrees can go at the same time.
+RUN_ID="$(date +%s)-$$"
+IMAGE_TAG="yarrtube:e2e-$RUN_ID"
 # The image the upgrade check starts from: the latest release, so every
 # change is checked against the data the version users run today leaves
 # behind. `none` skips the check.
 UPGRADE_FROM_IMAGE="${E2E_UPGRADE_FROM_IMAGE:-ghcr.io/sergigp/yarrtube:latest}"
-CONTAINER_NAME="yarrtube-e2e"
-PORT="${YARRTUBE_PORT:-8080}"
+CONTAINER_NAME="yarrtube-e2e-$RUN_ID"
 READY_TIMEOUT_SECONDS="${E2E_READY_TIMEOUT_SECONDS:-120}"
-PLEX_STUB_PORT="${E2E_PLEX_STUB_PORT:-18324}"
-YOUTUBE_STUB_PORT="${E2E_YOUTUBE_STUB_PORT:-18326}"
-LOG_FILE="$REPO_ROOT/e2e-tests/container.log"
+# Free ports for the daemon and both stubs, unless set; asked for together so
+# the three can't collide.
+read -r FREE_PORT FREE_PLEX_STUB_PORT FREE_YOUTUBE_STUB_PORT < <(node -e '
+  const net = require("node:net")
+  const servers = [0, 1, 2].map(() => net.createServer().listen(0, "127.0.0.1"))
+  Promise.all(servers.map((s) => new Promise((resolve) => s.on("listening", resolve)))).then(() => {
+    console.log(servers.map((s) => s.address().port).join(" "))
+    servers.forEach((s) => s.close())
+  })
+')
+PORT="${E2E_PORT:-$FREE_PORT}"
+PLEX_STUB_PORT="${E2E_PLEX_STUB_PORT:-$FREE_PLEX_STUB_PORT}"
+YOUTUBE_STUB_PORT="${E2E_YOUTUBE_STUB_PORT:-$FREE_YOUTUBE_STUB_PORT}"
+# Kept with this worktree's test results when the run fails.
+LOG_FILE="$REPO_ROOT/e2e-tests/test-results/container.log"
 
 if [[ -f "$REPO_ROOT/.env" ]]; then
   set -a
@@ -47,6 +61,7 @@ cleanup() {
   if [[ "$CONTAINER_STARTED" == true ]]; then
     if [[ $exit_code -ne 0 ]]; then
       echo "==> run failed (exit $exit_code); saving container logs to $LOG_FILE"
+      mkdir -p "$(dirname "$LOG_FILE")"
       docker logs "$CONTAINER_NAME" >"$LOG_FILE" 2>&1 || true
     fi
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
@@ -60,6 +75,8 @@ cleanup() {
   if [[ -n "$TMP_DIR" ]]; then
     rm -rf "$TMP_DIR"
   fi
+  # Only the tag goes; its layers stay cached for the next run's build.
+  docker image rm "$IMAGE_TAG" >/dev/null 2>&1 || true
   exit $exit_code
 }
 trap cleanup EXIT
@@ -77,9 +94,6 @@ wait_for_status() {
 
 echo "==> building $IMAGE_TAG"
 docker build -t "$IMAGE_TAG" "$REPO_ROOT"
-
-# In case a previous run was killed before its cleanup trap could fire.
-docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
 TMP_DIR="$(mktemp -d /tmp/yarrtube-e2e.XXXXXX)"
 mkdir -p "$TMP_DIR/videos" "$TMP_DIR/config"
