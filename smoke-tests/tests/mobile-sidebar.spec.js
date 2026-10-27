@@ -1,6 +1,7 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { slugOf } from '../helpers/addDialog.js'
-import { PLAYLIST } from '../helpers/fakeYoutube.js'
+import { LONG_PLAYLIST, PLAYLIST } from '../helpers/fakeYoutube.js'
+import { addPlaylist as addDownloadedPlaylist } from '../helpers/seed.js'
 import {
   closeDrawer,
   expectDrawerClosed,
@@ -101,11 +102,10 @@ test('tapping a drawer entry navigates and closes it @mobile', async ({ page }) 
 })
 
 test('dismissing the drawer keeps the scroll position and the page behind stays still @mobile', async ({ page }) => {
-  await addPlaylist(page.request)
-  await page.goto(`/playlists/${encodeURIComponent(PLAYLIST_ID)}`)
-  // Expanded details make the page tall enough to scroll on a phone.
-  await page.getByRole('button', { name: 'More', exact: true }).tap()
-  await expect(page.getByRole('link', { name: 'Open on YouTube' })).toBeVisible()
+  // Six videos make the page taller than a phone's screen.
+  const playlist = await addDownloadedPlaylist(page.request, LONG_PLAYLIST)
+  await page.goto(`/playlists/${encodeURIComponent(playlist.id)}`)
+  await expect(page.locator('main ul li')).toHaveCount(LONG_PLAYLIST.videos.length)
   const scrollY = () => page.evaluate(() => window.scrollY)
 
   // Mobile WebKit has no mouse wheel, so the page is scrolled from the
