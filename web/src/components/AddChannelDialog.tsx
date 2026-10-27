@@ -208,7 +208,11 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      {error && <p className="text-sm text-destructive">{error.message}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error.message}
+        </p>
+      )}
       <Button type="submit" disabled={!canSubmit} className="self-start">
         {submitting ? 'Creating…' : 'Create Channel'}
       </Button>

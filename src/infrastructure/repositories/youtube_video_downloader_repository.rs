@@ -469,3 +469,196 @@ mod tests {
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 }
+
+/// Against the real `yt-dlp` and YouTube: run with
+/// `scripts/run-tests.sh --only contract` (see `shared::youtube_contract`).
+#[cfg(test)]
+mod youtube_contract_tests {
+    use super::*;
+    use crate::domain::video_transcript::{CaptionLanguage, CaptionSource, CaptionTracks};
+    use crate::infrastructure::shared::youtube_contract::{
+        CAPTIONED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs, video_url, ytdlp_path,
+    };
+    use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
+    use crate::infrastructure::shared::ytdlp::{
+        DownloadedVideo, FetchedSubtitles, FetchedThumbnail,
+    };
+    use chrono::DateTime;
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_download_a_playable_mp4() {
+        let staging_dir = unique_temp_dir("contract-download");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let attempt = repository
+            .download(&video_url(SHORT_VIDEO_ID), Quality::Low, &staging_dir)
+            .unwrap();
+
+        // Whether YouTube runs its SABR streaming experiment on a download
+        // varies run to run and only ever adds a notice, so it's taken as
+        // reported.
+        let sabr_notice = match &attempt {
+            DownloadAttempt::Succeeded(video) => video.sabr_notice.clone(),
+            DownloadAttempt::Failed { .. } => None,
+        };
+        let media_path = staging_dir.join(format!("{SHORT_VIDEO_ID}.mp4"));
+        assert_eq!(
+            attempt,
+            DownloadAttempt::Succeeded(DownloadedVideo {
+                media_path: media_path.clone(),
+                thumbnail_path: Some(staging_dir.join(format!("{SHORT_VIDEO_ID}.jpg"))),
+                duration_seconds: Some(14),
+                published_at: DateTime::from_timestamp(1_550_518_860, 0),
+                sabr_notice,
+            })
+        );
+        // H.264 + AAC, what every browser (iPhone Safari included) plays,
+        // plus the thumbnail `--embed-thumbnail` adds as cover art.
+        assert_eq!(
+            stream_codecs(&media_path),
+            vec![
+                ("video".to_string(), "h264".to_string()),
+                ("audio".to_string(), "aac".to_string()),
+                ("video".to_string(), "mjpeg".to_string()),
+            ]
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_fail_to_download_a_missing_video() {
+        let staging_dir = unique_temp_dir("contract-download-missing");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let attempt = repository
+            .download(&video_url(MISSING_VIDEO_ID), Quality::Low, &staging_dir)
+            .unwrap();
+
+        assert_eq!(
+            attempt,
+            DownloadAttempt::Failed {
+                stderr: Some(format!(
+                    "ERROR: [youtube] {MISSING_VIDEO_ID}: This video is unavailable"
+                )),
+                sabr_notice: None,
+            }
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_fetch_only_the_thumbnail() {
+        let staging_dir = unique_temp_dir("contract-thumbnail");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let fetch = repository
+            .fetch_thumbnail(&video_url(SHORT_VIDEO_ID), &staging_dir)
+            .unwrap();
+
+        let thumbnail = staging_dir.join(format!("{SHORT_VIDEO_ID}.jpg"));
+        assert_eq!(
+            fetch,
+            ThumbnailFetch::Fetched(FetchedThumbnail {
+                path: thumbnail.clone(),
+                published_at: DateTime::from_timestamp(1_550_518_860, 0),
+            })
+        );
+        assert_eq!(staged_files(&staging_dir), vec![thumbnail]);
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_diagnose_no_failure_for_a_playable_video() {
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let reason = repository.diagnose(&video_url(SHORT_VIDEO_ID)).unwrap();
+
+        assert_eq!(reason, None);
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_diagnose_why_a_missing_video_failed() {
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let reason = repository.diagnose(&video_url(MISSING_VIDEO_ID)).unwrap();
+
+        assert_eq!(reason, Some("This video is unavailable".to_string()));
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_probe_the_caption_tracks() {
+        let staging_dir = unique_temp_dir("contract-captions");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let probe = repository
+            .probe_captions(&video_url(CAPTIONED_VIDEO_ID), &staging_dir)
+            .unwrap();
+
+        // YouTube's auto-translated captions (over a hundred languages) and
+        // the warnings it prints alongside vary run to run, so they're taken
+        // as reported; the English auto-captions must be among them.
+        assert!(probe.tracks.automatic.contains(&"en".to_string()));
+        assert_eq!(
+            probe,
+            CaptionProbe {
+                tracks: CaptionTracks {
+                    original_language: Some("en".to_string()),
+                    manual: vec!["en".to_string(), "fr".to_string()],
+                    automatic: probe.tracks.automatic.clone(),
+                },
+                published_at: DateTime::from_timestamp(1_212_060_266, 0),
+                info_json: staging_dir.join("info.json"),
+                warnings: probe.warnings.clone(),
+            }
+        );
+        assert!(probe.info_json.is_file());
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_fetch_the_uploaded_subtitles_as_srt() {
+        let staging_dir = unique_temp_dir("contract-subtitles");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+        let probe = repository
+            .probe_captions(&video_url(CAPTIONED_VIDEO_ID), &staging_dir)
+            .unwrap();
+        let english = CaptionTrack {
+            key: "en".to_string(),
+            language: CaptionLanguage::new("en").unwrap(),
+            source: CaptionSource::Manual,
+        };
+
+        let subtitles = repository
+            .fetch_subtitles(&probe, &english, &staging_dir)
+            .unwrap();
+
+        assert_eq!(
+            subtitles,
+            FetchedSubtitles {
+                path: staging_dir.join(format!("{CAPTIONED_VIDEO_ID}.en.srt")),
+                srt: subtitles.srt.clone(),
+            }
+        );
+        // SubRip: numbered cues, each with a `start --> end` timing line.
+        let mut lines = subtitles.srt.lines();
+        assert_eq!(lines.next(), Some("1"));
+        assert!(lines.next().is_some_and(|timing| timing.contains(" --> ")));
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    fn staged_files(staging_dir: &Path) -> Vec<PathBuf> {
+        let mut files: Vec<PathBuf> = std::fs::read_dir(staging_dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        files.sort();
+        files
+    }
+}

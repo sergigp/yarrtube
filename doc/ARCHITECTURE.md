@@ -179,7 +179,7 @@ Several layers, from fast/isolated to slow/real:
   for pure logic in `src/lib/` and hooks, and component tests that render
   through the real `QueryClient`/router with only `fetch` mocked. Assert
   user-visible behavior.
-- **Smoke tests** (`smoke-tests/`, Playwright) — end-to-end against the
+- **End-to-end tests** (`e2e-tests/`, Playwright) — end-to-end against the
   real Docker image, hitting the real YouTube API and downloading a real
   video with `yt-dlp`. No doubles. Covers the full create → download →
   playback flow; run manually (locally or via the `workflow_dispatch`

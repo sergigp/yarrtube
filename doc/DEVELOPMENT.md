@@ -79,17 +79,40 @@ against the mocked API, so the suite finishes in seconds.
 
 ## Checks
 
-These are what CI runs:
+One script runs every test suite, locally and in CI:
 
 ```bash
-cargo fmt --all -- --check
-cargo clippy --all-targets --all-features --locked -- -D warnings
-cargo test --locked
-(cd web && npm run check)   # typecheck + lint + tests
+scripts/run-tests.sh                 # everything
+scripts/run-tests.sh --only e2e      # one suite: web, rust, contract or e2e
+scripts/run-tests.sh --ci            # what CI runs (also when CI=true)
+scripts/run-tests.sh --workers 2     # end-to-end tests at once (default 3)
 ```
 
-End-to-end tests against a real container live in `smoke-tests/` (see its
-README) and run with `scripts/run-smoke-tests.sh`.
+The suites are the web UI's checks, Rust formatting, clippy and tests, the
+YouTube contract tests and the end-to-end suite (`e2e-tests/`, see its
+README: the Docker image driven through real browsers against a fake
+YouTube). CI runs all of them except the contract tests, which need the real
+YouTube, on every pull request and push to `main`. The script only checks:
+it installs and builds nothing, so install the web UI's and `e2e-tests/`'s
+dependencies (and the Playwright browsers) and build the web UI first. Each
+end-to-end worker runs its own container on its own ports, so the suite runs
+in parallel and worktrees can run it at the same time. The script ends with a
+summary of each phase's time and test counts.
+
+### YouTube contract tests
+
+The adapters that talk to YouTube (`yt-dlp` downloads, thumbnails,
+captions, channel listings, and the Data API's playlists, videos, channels
+and avatars) have tests against the real thing, in modules named
+`youtube_contract_tests` next to each adapter. They're `#[ignore]`d, so
+`cargo test` and CI skip them; run them with
+`scripts/run-tests.sh --only contract`. It needs `yt-dlp` and `ffprobe` on `PATH` (or `YTDLP_PATH`), the network,
+and `YOUTUBE_API_KEY` (from the environment or `.env`), and takes about ten
+seconds. Run it after upgrading `yt-dlp` or when downloads start failing,
+to tell a change on YouTube's side from a bug of ours. The fixtures (a short
+Creative-Commons clip, Big Buck Bunny, the project's "test" playlist and an
+inactive Creative-Commons channel) are listed with their credits in
+`src/infrastructure/shared/youtube_contract.rs`.
 
 ## Deploy
 

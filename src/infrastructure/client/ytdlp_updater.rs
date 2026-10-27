@@ -156,12 +156,32 @@ fn install_binary(bytes: &[u8], target_path: &Path) -> Result<()> {
 
 #[cfg(test)]
 pub struct FakeYtdlpUpdater {
-    pub succeeds: bool,
+    succeeds: bool,
+    /// Every target path an update was attempted on.
+    pub updated: std::sync::Mutex<Vec<PathBuf>>,
+}
+
+#[cfg(test)]
+impl FakeYtdlpUpdater {
+    pub fn succeeding() -> Self {
+        Self {
+            succeeds: true,
+            updated: std::sync::Mutex::new(vec![]),
+        }
+    }
+
+    pub fn failing() -> Self {
+        Self {
+            succeeds: false,
+            updated: std::sync::Mutex::new(vec![]),
+        }
+    }
 }
 
 #[cfg(test)]
 impl YtdlpUpdater for FakeYtdlpUpdater {
-    fn update(&self, _target_path: &Path) -> anyhow::Result<()> {
+    fn update(&self, target_path: &Path) -> anyhow::Result<()> {
+        self.updated.lock().unwrap().push(target_path.to_path_buf());
         if self.succeeds {
             Ok(())
         } else {

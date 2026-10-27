@@ -1,5 +1,13 @@
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import {
+  hashKey,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+  type QueryFunctionContext,
+  type QueryKey,
+  type UseQueryResult,
+} from '@tanstack/react-query'
 import {
   fetchAnnouncements,
   fetchChannels,
@@ -130,7 +138,7 @@ export function useChannelPreview(value: string): UseQueryResult<ChannelPreview,
 export function useChannelVideos(handle: string): UseQueryResult<Video[], Error> {
   return useQuery({
     queryKey: queryKeys.channelVideos(handle),
-    queryFn: () => fetchChannelVideos(handle),
+    queryFn: liveVideos(() => fetchChannelVideos(handle)),
     refetchInterval: LIVE_INTERVAL_MS,
   })
 }
@@ -138,7 +146,7 @@ export function useChannelVideos(handle: string): UseQueryResult<Video[], Error>
 export function usePlaylistVideos(id: string): UseQueryResult<Video[], Error> {
   return useQuery({
     queryKey: queryKeys.playlistVideos(id),
-    queryFn: () => fetchVideos(id),
+    queryFn: liveVideos(() => fetchVideos(id)),
     refetchInterval: LIVE_INTERVAL_MS,
   })
 }
@@ -331,15 +339,72 @@ function useInvalidateLibraryAndHome(): () => Promise<unknown> {
 }
 
 /**
- * Returns a function that drops a cached query outright, e.g. a deleted
- * entry's video list, so refetching the library doesn't request it again.
+ * Returns a function that deletes a channel or playlist (`remove`), given its
+ * video list's key. The list stops polling while the delete is in flight and
+ * is dropped once no page shows it, so a page still open on the source never
+ * asks the server for it after it's gone. A failed delete leaves it polling.
  */
-export function useRemoveQuery(): (queryKey: readonly unknown[]) => void {
+export function useDeleteSource(): (
+  videosKey: QueryKey,
+  remove: () => Promise<unknown>,
+) => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(
-    (queryKey: readonly unknown[]) => {
-      queryClient.removeQueries({ queryKey, exact: true })
+    async (videosKey: QueryKey, remove: () => Promise<unknown>) => {
+      const deleting = videoListsBeingDeleted(queryClient)
+      const hash = hashKey(videosKey)
+      deleting.add(hash)
+      try {
+        await queryClient.cancelQueries({ queryKey: videosKey, exact: true })
+        await remove()
+      } catch (error) {
+        deleting.delete(hash)
+        throw error
+      }
+      whenUnobserved(queryClient, videosKey, () => {
+        queryClient.removeQueries({ queryKey: videosKey, exact: true })
+        deleting.delete(hash)
+      })
     },
     [queryClient],
   )
+}
+
+// The video lists of the sources being deleted, per client (see
+// `useDeleteSource`).
+const beingDeleted = new WeakMap<QueryClient, Set<string>>()
+
+function videoListsBeingDeleted(client: QueryClient): Set<string> {
+  let hashes = beingDeleted.get(client)
+  if (!hashes) {
+    hashes = new Set()
+    beingDeleted.set(client, hashes)
+  }
+  return hashes
+}
+
+/** A video list's query function: it keeps what it has while its source is being deleted. */
+function liveVideos(
+  fetch: () => Promise<Video[]>,
+): (context: QueryFunctionContext) => Promise<Video[]> {
+  return ({ client, queryKey }) =>
+    videoListsBeingDeleted(client).has(hashKey(queryKey))
+      ? Promise.resolve(client.getQueryData<Video[]>(queryKey) ?? [])
+      : fetch()
+}
+
+/** Runs `then` once no observer (a mounted page) is subscribed to the query. */
+function whenUnobserved(client: QueryClient, queryKey: QueryKey, then: () => void): void {
+  const cache = client.getQueryCache()
+  const query = cache.find({ queryKey, exact: true })
+  if (!query || query.getObserversCount() === 0) {
+    then()
+    return
+  }
+  const unsubscribe = cache.subscribe((event) => {
+    if (event.query === query && event.type === 'observerRemoved' && query.getObserversCount() === 0) {
+      unsubscribe()
+      then()
+    }
+  })
 }

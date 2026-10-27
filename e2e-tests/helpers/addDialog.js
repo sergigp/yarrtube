@@ -1,0 +1,166 @@
+import { expect } from '@playwright/test'
+
+async function openFromSidebar(page, label) {
+  await page.getByRole('button', { name: label, exact: true }).click()
+  await page.getByRole('dialog').waitFor({ state: 'visible' })
+}
+
+export async function openAddChannelDialog(page) {
+  await openFromSidebar(page, 'Add channel')
+}
+
+export async function openAddPlaylistDialog(page) {
+  await openFromSidebar(page, 'Add playlist')
+}
+
+export async function openAdvancedOptions(dialog) {
+  const toggle = dialog.getByRole('button', { name: /Advanced options/ })
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    await toggle.click()
+  }
+}
+
+export async function openFolderBrowser(dialog) {
+  // The browser lives inline in the always-visible "Save to" field, revealed
+  // by "Choose another folder…"; once open, the list (and that button) is
+  // replaced by the breadcrumb browser, so opening is a no-op when it already
+  // shows.
+  const browser = dialog.getByRole('navigation', { name: 'Folder path' })
+  if (await browser.isVisible()) {
+    return
+  }
+  await dialog.getByRole('button', { name: 'Choose another folder…' }).click()
+  await browser.waitFor({ state: 'visible' })
+}
+
+function escapeForRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * The browser's entry for `name`. An occupied entry's accessible name carries
+ * a trailing "in use by …", so this anchors on the start rather than matching
+ * the whole string.
+ */
+export function folderEntry(dialog, name) {
+  return dialog
+    .getByRole('listitem')
+    .getByRole('button', { name: new RegExp(`^${escapeForRegExp(name)}(\\s|$)`) })
+}
+
+export function breadcrumbLinks(dialog) {
+  return dialog.getByRole('navigation', { name: 'Folder path' }).getByRole('button')
+}
+
+/** The folder name the dialogs derive from a title (see `web/src/slugify.js`). */
+export function slugOf(title) {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+export function destinationNotice(dialog) {
+  return dialog.getByTestId('destination-notice')
+}
+
+async function isPresent(locator, timeout = 3000) {
+  try {
+    await locator.first().waitFor({ state: 'visible', timeout })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Walks the parent browser to `parent` (a path relative to the videos root),
+ * starting from the root so the walk does not depend on where the dialog
+ * opened. A segment that is already on disk is descended into; one that is
+ * not is named in the create-folder step, which stages it.
+ */
+export async function browseToParent(dialog, parent) {
+  await openFolderBrowser(dialog)
+
+  const crumbs = breadcrumbLinks(dialog)
+  if ((await crumbs.count()) > 0) {
+    await crumbs.first().click()
+  }
+
+  for (const segment of parent.split('/').filter(Boolean)) {
+    const entry = folderEntry(dialog, segment)
+    if (await isPresent(entry)) {
+      await entry.first().click()
+    } else {
+      await dialog.getByRole('button', { name: 'New folder' }).click()
+      await dialog.getByLabel('New folder name').fill(segment)
+      await dialog.getByRole('button', { name: 'Use folder' }).click()
+    }
+  }
+}
+
+async function setLocation(dialog, { parent, folderName }) {
+  if (parent !== undefined) {
+    await browseToParent(dialog, parent)
+  }
+  if (folderName !== undefined) {
+    await dialog.getByLabel('Folder name').fill(folderName)
+  }
+}
+
+async function submitAndSettle(dialog) {
+  await Promise.race([
+    dialog.waitFor({ state: 'hidden' }),
+    dialogErrorText(dialog.page()).waitFor({ state: 'visible' }),
+  ])
+}
+
+/**
+ * Enters `url` and waits for the lookup to settle, so the folder name has
+ * been derived from the playlist's title before any location is set. The
+ * playlist dialog keeps its location inside "Advanced options".
+ */
+export async function fillPlaylist(page, { url, parent, folderName }) {
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Playlist ID or URL').fill(url)
+  const notice = destinationNotice(dialog)
+  await expect(notice).toBeVisible()
+  await expect(notice).not.toHaveText(/Looking up playlist/, { timeout: 15_000 })
+  if (parent !== undefined || folderName !== undefined) {
+    await openAdvancedOptions(dialog)
+  }
+  await setLocation(dialog, { parent, folderName })
+  return dialog
+}
+
+export async function submitPlaylist(page, { url, parent, folderName }) {
+  const dialog = await fillPlaylist(page, { url, parent, folderName })
+  await dialog.getByRole('button', { name: /^Create Playlist/ }).click()
+  await submitAndSettle(dialog)
+}
+
+/**
+ * Enters `handle` and waits for the lookup to settle, so the notice shows
+ * the channel (or why it can't be added) before anything else is changed.
+ */
+export async function fillChannel(page, { handle, videoLimit, parent, folderName }) {
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Channel Handle or URL').fill(handle)
+  const notice = destinationNotice(dialog)
+  await expect(notice).toBeVisible()
+  await expect(notice).not.toHaveText(/Looking up channel/, { timeout: 15_000 })
+  // The channel dialog keeps its location inside "Advanced options".
+  if (parent !== undefined || folderName !== undefined || videoLimit !== undefined) {
+    await openAdvancedOptions(dialog)
+  }
+  await setLocation(dialog, { parent, folderName })
+  if (videoLimit !== undefined) {
+    await dialog.getByLabel('Video Limit').fill(String(videoLimit))
+  }
+  return dialog
+}
+
+// The dialog announces a failed create as an alert.
+export function dialogErrorText(page) {
+  return page.getByRole('dialog').getByRole('alert')
+}

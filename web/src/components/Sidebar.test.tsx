@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Route, Routes as RouteTable } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
+import { PlaylistDetail } from './PlaylistDetail'
+import { queryKeys } from '@/api/queries'
 import {
   aCategoryList,
   aChannel,
   aPlaylist,
+  heldUntilReleased,
   mockApi,
   renderWithProviders,
   type Routes,
@@ -87,6 +91,31 @@ describe('Sidebar', () => {
     expect(
       screen.getAllByRole('link').map((link) => (link.textContent ?? '').replace(/\d+$/, '')),
     ).toEqual(['watch later', 'Courses', 'Ambient', 'Music'])
+  })
+
+  it('should expose each sidebar section as a list named after its heading', async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A' })],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList(),
+    })
+
+    expect(await screen.findByRole('list', { name: 'Channels' })).toHaveTextContent('Chan A')
+    expect(await screen.findByRole('list', { name: 'Playlists' })).toHaveTextContent('List B')
+  })
+
+  it('should expose each sidebar section as a region named after its heading', async () => {
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [aPlaylist({ name: 'List B' })],
+      'GET /api/categories': aCategoryList(),
+    })
+
+    const channels = await screen.findByRole('region', { name: 'Channels' })
+    expect(await within(channels).findByText('None tracked yet.')).toBeInTheDocument()
+    const playlists = screen.getByRole('region', { name: 'Playlists' })
+    expect(await within(playlists).findByText('List B')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Categories' })).toBeInTheDocument()
   })
 
   it('lists every channel of an unfolded section with no show-more control', async () => {
@@ -350,6 +379,45 @@ describe('Sidebar', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.queryByText('Doomed')).not.toBeInTheDocument())
+  })
+
+  it("deleting the open playlist stops its page asking for its videos", async () => {
+    const playlist = aPlaylist({ id: 'PL1', name: 'Doomed' })
+    const videos = vi.fn(() => [])
+    const remove = heldUntilReleased()
+    mockApi({
+      'GET /api/channels': [],
+      'GET /api/playlists': [playlist],
+      'GET /api/categories': aCategoryList(),
+      'GET /api/playlists/PL1/videos': videos,
+      'DELETE /api/playlists/PL1': remove.route,
+    })
+    const { queryClient } = renderWithProviders(
+      <>
+        <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}}
+          onAddCategory={() => {}}
+        />
+        <RouteTable>
+          <Route path="/playlists/:id" element={<PlaylistDetail />} />
+          <Route path="/" element={<p>home page</p>} />
+        </RouteTable>
+      </>,
+      { route: '/playlists/PL1' },
+    )
+    await waitFor(() => expect(videos).toHaveBeenCalledOnce())
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Doomed' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(remove.route).toHaveBeenCalledOnce())
+
+    // A poll lands while the delete is in flight.
+    await queryClient.refetchQueries({ queryKey: queryKeys.playlistVideos('PL1') })
+    remove.release()
+
+    expect(await screen.findByText('home page')).toBeInTheDocument()
+    expect(videos).toHaveBeenCalledOnce()
   })
 
   it('syncs a channel from its row menu', async () => {

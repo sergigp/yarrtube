@@ -7,4 +7,6 @@ pub mod sqlite_migrations;
 pub mod system_clock;
 pub mod web_assets;
 pub mod youtube_api_key;
+#[cfg(test)]
+pub(crate) mod youtube_contract;
 pub mod ytdlp;

@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Ellipsis, Plus, RotateCw } from 'lucide-react'
 import {
   queryKeys,
   useChannels,
+  useDeleteSource,
   useLibraryAction,
   usePlaylists,
-  useRemoveQuery,
   useSetPlaylistExcludedFromHome,
   useSetPlaylistUnwatchedCountHidden,
   useUpdatePlaylistSettings,
@@ -215,6 +215,7 @@ function SidebarSection({
   onNavigate,
 }: SidebarSectionProps) {
   const [pendingDelete, setPendingDelete] = useState<LibraryItem | null>(null)
+  const headingId = useId()
   // Closing first lets the mobile drawer get out of the dialog's way;
   // on desktop the sidebar is static and `onClose` changes nothing.
   const add = () => {
@@ -225,8 +226,9 @@ function SidebarSection({
   const empty = !error && items?.length === 0
 
   return (
-    <div>
+    <section aria-labelledby={headingId}>
       <SidebarSectionHeading
+        id={headingId}
         title={title}
         folded={folded}
         onToggleFolded={onToggleFolded}
@@ -254,7 +256,7 @@ function SidebarSection({
             <p className="px-2 text-sm text-muted-foreground">None tracked yet.</p>
           )}
           {!error && items && items.length > 0 && (
-            <ul className="flex flex-col">
+            <ul className="flex flex-col" aria-labelledby={headingId}>
               {items.map((item) => (
                 <SidebarRow
                   key={item.id}
@@ -303,7 +305,7 @@ function SidebarSection({
           }
         }}
       />
-    </div>
+    </section>
   )
 }
 
@@ -332,7 +334,7 @@ export function Sidebar({
   const { data: channels, error: channelsError } = useChannels()
   const { data: playlists, error: playlistsError } = usePlaylists()
   const refreshing = useLibraryAction()
-  const removeQuery = useRemoveQuery()
+  const deleteSource = useDeleteSource()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
   const setPlaylistUnwatchedCountHidden = useSetPlaylistUnwatchedCountHidden()
   const saveChannelSettings = useSaveChannelSettings()
@@ -451,8 +453,7 @@ export function Sidebar({
             onMarkWatched={refreshing(markChannelWatched)}
             onEditRequest={setEditingChannelId}
             onDelete={refreshing(async (id: string) => {
-              await deleteChannel(id)
-              removeQuery(queryKeys.channelVideos(id))
+              await deleteSource(queryKeys.channelVideos(id), () => deleteChannel(id))
               if (activeChannelId === id) {
                 navigate('/')
               }
@@ -480,8 +481,7 @@ export function Sidebar({
             onSetUnwatchedCountHidden={setPlaylistUnwatchedCountHidden}
             onEditRequest={setEditingPlaylistId}
             onDelete={refreshing(async (id: string) => {
-              await deletePlaylist(id)
-              removeQuery(queryKeys.playlistVideos(id))
+              await deleteSource(queryKeys.playlistVideos(id), () => deletePlaylist(id))
               if (activePlaylistId === id) {
                 navigate('/')
               }

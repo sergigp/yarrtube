@@ -93,6 +93,14 @@ Environment variables read by Yarrtube are listed below. Every variable except `
 | `YARRTUBE_PLEX_TOKEN`                 | —                     | Plex authentication token (`X-Plex-Token`)                                                                                                                                                                    |
 | `YARRTUBE_PLEX_VIDEOS_PATH`           | —                     | Where the Plex server sees yarrtube's videos root (`YARRTUBE_VIDEOS_PATH`), e.g. the host path `/volume1/data/media/yarrtube` mounted at `/videos`. Plex is asked to scan a show's folder after each download |
 
+Three more variables exist only for running Yarrtube against a fake
+YouTube in its own tests; leave them unset:
+`YARRTUBE_YOUTUBE_API_URL` (where YouTube Data API requests go, default
+`https://www.googleapis.com/youtube/v3`), `YARRTUBE_YTDLP_SELF_UPDATE`
+(`false` stops the hourly `yt-dlp` self-update) and
+`YARRTUBE_BACKGROUND_POLL_INTERVAL_MS` (how often background work is
+picked up, default `5000`).
+
 How often each channel and playlist is checked for new videos is not an
 environment variable: it is set per source in the web UI ("Check for new
 videos every" under "Advanced options" when adding it, or "Edit settings"

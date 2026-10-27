@@ -1,0 +1,126 @@
+import { test, expect } from '../helpers/fixtures.js'
+import {
+  openAddChannelDialog,
+  openAdvancedOptions,
+  destinationNotice,
+  slugOf,
+} from '../helpers/addDialog.js'
+import { CHANNEL } from '../helpers/fakeYoutube.js'
+import { expectImageLoaded } from '../helpers/media.js'
+
+const CHANNEL_HANDLE = CHANNEL.handle
+
+/** The channel as the dialog's lookup reports it: `{ id, title, avatar_url }`. */
+async function channelPreview(page, handle) {
+  const response = await page.request.get(
+    `/api/channels/preview?channel=${encodeURIComponent(handle)}`,
+  )
+  expect(response.ok()).toBeTruthy()
+  return response.json()
+}
+
+test('it should show no notice until a handle is entered', async ({ page }) => {
+  await page.goto('/')
+  await openAddChannelDialog(page)
+  const dialog = page.getByRole('dialog')
+
+  await expect(destinationNotice(dialog)).toHaveCount(0)
+
+  await dialog.getByLabel('Channel Handle or URL').fill(CHANNEL_HANDLE)
+  await expect(destinationNotice(dialog)).toBeVisible()
+})
+
+test.describe(() => {
+  // The lookup rejects the value, which the notice explains.
+  test.use({ expectedApiErrors: [{ method: 'GET', path: '/api/channels/preview', status: 400 }] })
+
+  test('it should explain a value that is not a channel', async ({ page }) => {
+    await page.goto('/')
+    await openAddChannelDialog(page)
+    const dialog = page.getByRole('dialog')
+
+    await dialog.getByLabel('Channel Handle or URL').fill('somechannel')
+
+    const notice = destinationNotice(dialog)
+    await expect(notice).toHaveText('Channel handle must start with "@" (got "somechannel")')
+    await expect(notice).toHaveClass(/text-destructive/)
+    await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
+  })
+})
+
+test('it should state the video limit, title and destination for a handle', async ({ page }) => {
+  await page.goto('/')
+  const { title, avatar_url: avatarUrl } = await channelPreview(page, CHANNEL_HANDLE)
+  await openAddChannelDialog(page)
+  const dialog = page.getByRole('dialog')
+
+  await dialog.getByLabel('Channel Handle or URL').fill(CHANNEL_HANDLE)
+
+  const notice = destinationNotice(dialog)
+  await expect(notice).toContainText(`The latest 3 videos from “${title}” will be downloaded to`, {
+    timeout: 15_000,
+  })
+  // The avatar the lookup reports, served by the fake YouTube.
+  await expectImageLoaded(notice.locator(`img[src="${avatarUrl}"]`))
+  // Absolute: the videos root, the default `channels` parent and the slug.
+  await expect(notice.locator('code')).toHaveText(
+    new RegExp(`^/.+/channels/${slugOf(CHANNEL_HANDLE)}$`),
+  )
+  await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeEnabled()
+  await expect(dialog.getByRole('button', { name: /Advanced options/ })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+})
+
+test('it should update the notice from the advanced options', async ({ page }) => {
+  await page.goto('/')
+  await openAddChannelDialog(page)
+  const { title } = await channelPreview(page, CHANNEL_HANDLE)
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Channel Handle or URL').fill(CHANNEL_HANDLE)
+  await dialog.getByRole('button', { name: /Advanced options/ }).click()
+
+  await dialog.getByLabel('Video Limit').fill('1')
+  await dialog.getByLabel('Folder name').fill('renamed')
+
+  const notice = destinationNotice(dialog)
+  await expect(notice).toContainText(`The latest video from “${title}” will be downloaded to`, {
+    timeout: 15_000,
+  })
+  await expect(notice.locator('code')).toHaveText(/^\/.+\/channels\/renamed$/)
+
+  // Out of range, the count is left out rather than stated wrongly.
+  await dialog.getByLabel('Video Limit').fill('0')
+  await expect(notice).toContainText(`Videos from “${title}” will be downloaded to`)
+})
+
+test('it should auto-fill the folder name under advanced options', async ({ page }) => {
+  await page.goto('/')
+  await openAddChannelDialog(page)
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Channel Handle or URL').fill(CHANNEL_HANDLE)
+
+  await openAdvancedOptions(dialog)
+
+  await expect(dialog.getByLabel('Folder name')).toBeVisible()
+  await expect(dialog.getByLabel('Folder name')).toHaveValue(slugOf(CHANNEL_HANDLE))
+})
+
+test.describe(() => {
+  // The lookup misses, which the notice reports.
+  test.use({ expectedApiErrors: [{ method: 'GET', path: '/api/channels/preview', status: 404 }] })
+
+  test("it should report a channel YouTube doesn't know", async ({ page }) => {
+    await page.goto('/')
+    await openAddChannelDialog(page)
+    const dialog = page.getByRole('dialog')
+
+    await dialog.getByLabel('Channel Handle or URL').fill(`@yarrtube-missing-${Date.now()}`)
+
+    const notice = destinationNotice(dialog)
+    await expect(notice).toContainText('does not exist', { timeout: 15_000 })
+    await expect(notice).toHaveClass(/text-destructive/)
+    await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
+  })
+})

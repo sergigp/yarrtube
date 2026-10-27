@@ -1,0 +1,19 @@
+## 1. Walking skeleton
+
+- [x] 1.1 Create `e2e-tests/helpers/daemon.js` (`startDaemon` returning the current single container's URL and env, `stop` doing nothing), export `startPlexStub` from `plex-stub.js` (standalone run unchanged), the worker-scoped `daemon` fixture and `baseURL` from it in `fixtures.js`, call-time env reads in `library.js`/`plex.js`, `E2E_WORKERS` (default 1) in `playwright.config.js`, and `--workers` parsed and passed by `scripts/run-tests.sh` (the script still starts the main-suite container). Done when `scripts/run-tests.sh --only e2e --workers 1` passes as today.
+
+## 2. Behaviour (TDD)
+
+- [x] 2.1 Each worker starts its own daemon: `startDaemon` runs the container, Plex stub and temp dirs, `stop` saves the log, checks for a panic and removes everything; the script stops starting the main-suite container. `scripts/run-tests.sh --only e2e --workers 1` passes (65).
+- [x] 2.2 `fullyParallel: true`; `scripts/run-tests.sh --only e2e --workers 3` passes, with at most 3 of the run's daemons alive at once and none left afterwards.
+- [x] 2.3 Defaults: half the CPU cores (at most 4) locally, 2 under `--ci`; invalid `--workers` values rejected. Time `--workers 1, 2, 3, 4` locally and run the default 3 times without a flaky test; fix or slow down any timing-sensitive test that flakes under load. Measured (14 cores, Playwright suite): 1 → 4.6 min, 2 → 2.3 min, 3 → 1.6 min, 4 → 1.4 min. The first 3 default runs caught a UI race (a page open on a playlist polled its videos during the delete and got a 400); fixed in the UI (`useDeleteSource`), then 3 default runs passed clean.
+- [x] 2.4 `ci.yml` passes `--workers <measured>`; the GitHub run passes and its e2e step time is recorded (needs a push). `--workers 3`; run 40563397788: Playwright suite 2.0 min (was 4.5 min serial), Tests job 5m14s (warm image cache). The first run passed every test but failed cleanup on Linux (the daemon's root-owned files); workers now empty their mounts from inside the container.
+
+## 3. Infrastructure adapters (TDD)
+
+None: no Rust changes.
+
+## 4. Verification
+
+- [x] 4.1 `e2e-tests/README.md` (workers, containers per run, per-worker logs) and one line in `doc/DEVELOPMENT.md` for `--workers`; `scripts/run-tests.sh` passes locally (upgrade check included). Full run passed in 2m38s (was 5m43s), upgrade check included.
+- [x] 4.2 Default workers 3 everywhere (`ci.yml` drops `--workers 3`, same behaviour); `scripts/run-tests.sh` ends with a summary of each phase's time and test counts, printed on failure too. A full run shows it (2m50s, 3 workers); a failing phase is marked FAILED.

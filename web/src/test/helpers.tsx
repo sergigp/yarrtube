@@ -52,6 +52,21 @@ export function pendingForever(): () => Promise<RouteResponse> {
   return () => new Promise<RouteResponse>(() => {})
 }
 
+/**
+ * A route value held until `release()`, e.g. a delete still in flight; `route`
+ * is a mock, so a test can wait for the request to have been sent.
+ */
+export function heldUntilReleased(value: RouteResponse = null): {
+  route: ReturnType<typeof vi.fn>
+  release: () => void
+} {
+  let release = () => {}
+  const held = new Promise<RouteResponse>((resolve) => {
+    release = () => resolve(value)
+  })
+  return { route: vi.fn(() => held), release: () => release() }
+}
+
 function isHttpError(value: unknown): value is { status: number; error: string } {
   return (
     typeof value === 'object' &&

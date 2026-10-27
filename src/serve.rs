@@ -47,6 +47,7 @@ const DEFAULT_RETRY_BASE_DELAY_SECONDS: i64 = 150;
 const DEFAULT_VIDEOS_PATH: &str = "/videos";
 const DEFAULT_DOWNLOAD_CONCURRENCY: usize = 2;
 const DEFAULT_AVATARS_PATH: &str = "avatars";
+pub(crate) const DEFAULT_YOUTUBE_API_URL: &str = "https://www.googleapis.com/youtube/v3";
 /// The parent directories the add dialog's folder browser defaults to, seeded
 /// under the videos root at startup so the browser is never empty on a fresh
 /// install.
@@ -54,7 +55,7 @@ const DEFAULT_STORAGE_DIRECTORIES: &[&str] = &["playlists", "channels"];
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 /// How long shutdown waits for in-flight blocking work before exiting.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
-const BACKGROUND_POLL_INTERVAL: Duration = Duration::from_secs(5);
+const DEFAULT_BACKGROUND_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 pub fn run() -> ExitCode {
     tracing_subscriber::fmt()
@@ -97,7 +98,11 @@ pub fn run() -> ExitCode {
     // These use a blocking HTTP client, so they run on this thread outside the
     // tokio runtime rather than inside it (a blocking client can't run on a
     // tokio worker thread).
-    run_startup_ytdlp_update();
+    if ytdlp_self_update_enabled() {
+        run_startup_ytdlp_update();
+    } else {
+        info!("yt-dlp self-update is off, leaving yt-dlp as it is");
+    }
     run_startup_database_check();
     run_startup_youtube_api_key_check();
     run_startup_storage_directories_check();
@@ -142,6 +147,7 @@ pub(crate) fn build_infrastructure() -> Result<InfrastructureContainer> {
     InfrastructureContainer::new(InfrastructureSettings {
         db_path: db_path(),
         youtube_api_key: youtube_api_key(),
+        youtube_api_url: youtube_api_url(),
         videos_path: PathBuf::from(videos_path()),
         avatars_path: avatars_path(),
         ytdlp_path: target_path(),
@@ -192,6 +198,46 @@ fn parse_download_concurrency(value: Option<String>) -> usize {
         .and_then(|v| v.parse::<usize>().ok())
         .filter(|concurrency| *concurrency > 0)
         .unwrap_or(DEFAULT_DOWNLOAD_CONCURRENCY)
+}
+
+/// Where the YouTube Data API requests go: Google's, unless pointed at a
+/// fake YouTube (`YARRTUBE_YOUTUBE_API_URL`).
+fn youtube_api_url() -> String {
+    parse_youtube_api_url(std::env::var("YARRTUBE_YOUTUBE_API_URL").ok())
+}
+
+/// The configured root without a trailing `/`, defaulting when unset or empty.
+fn parse_youtube_api_url(value: Option<String>) -> String {
+    value
+        .map(|url| url.trim_end_matches('/').to_string())
+        .filter(|url| !url.is_empty())
+        .unwrap_or_else(|| DEFAULT_YOUTUBE_API_URL.to_string())
+}
+
+/// Whether the daemon keeps its `yt-dlp` up to date; `YARRTUBE_YTDLP_SELF_UPDATE=false`
+/// turns it off, for running against a stand-in `yt-dlp`.
+fn ytdlp_self_update_enabled() -> bool {
+    parse_ytdlp_self_update(std::env::var("YARRTUBE_YTDLP_SELF_UPDATE").ok())
+}
+
+/// Only `false` turns the self-update off.
+fn parse_ytdlp_self_update(value: Option<String>) -> bool {
+    value.as_deref().map(str::trim) != Some("false")
+}
+
+/// How often the task executor and the event consumer check for work;
+/// `YARRTUBE_BACKGROUND_POLL_INTERVAL_MS` shortens it for tests.
+fn background_poll_interval() -> Duration {
+    parse_background_poll_interval(std::env::var("YARRTUBE_BACKGROUND_POLL_INTERVAL_MS").ok())
+}
+
+/// A positive number of milliseconds, defaulting otherwise.
+fn parse_background_poll_interval(value: Option<String>) -> Duration {
+    value
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|millis| *millis > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(DEFAULT_BACKGROUND_POLL_INTERVAL)
 }
 
 fn videos_path() -> String {
@@ -549,6 +595,7 @@ fn task_handlers(infrastructure: &InfrastructureContainer) -> HandlerRegistry {
         infrastructure.clock.clone(),
         infrastructure.ytdlp_updater.clone(),
         target_path(),
+        ytdlp_self_update_enabled(),
     )
 }
 
@@ -723,8 +770,9 @@ async fn run_async(
     shutdown: oneshot::Receiver<()>,
 ) -> ExitCode {
     tokio::spawn(heartbeat_loop());
-    tokio::spawn(Arc::new(event_consumer(&infrastructure, plex)).run(BACKGROUND_POLL_INTERVAL));
-    tokio::spawn(task_executor.run(BACKGROUND_POLL_INTERVAL));
+    let poll_interval = background_poll_interval();
+    tokio::spawn(Arc::new(event_consumer(&infrastructure, plex)).run(poll_interval));
+    tokio::spawn(task_executor.run(poll_interval));
 
     tokio::select! {
         result = serve_http(port(), api_services(&infrastructure)) => {
@@ -1101,6 +1149,58 @@ mod tests {
     }
 
     #[test]
+    fn it_should_read_the_youtube_api_url_or_default_it() {
+        let urls: Vec<String> = [
+            None,
+            Some(""),
+            Some("http://stub:1/youtube/v3"),
+            Some("http://stub:1/youtube/v3/"),
+        ]
+        .into_iter()
+        .map(|value| parse_youtube_api_url(value.map(str::to_string)))
+        .collect();
+
+        assert_eq!(
+            urls,
+            vec![
+                DEFAULT_YOUTUBE_API_URL.to_string(),
+                DEFAULT_YOUTUBE_API_URL.to_string(),
+                "http://stub:1/youtube/v3".to_string(),
+                "http://stub:1/youtube/v3".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_turn_the_ytdlp_self_update_off_only_if_false() {
+        let enabled: Vec<bool> = [None, Some("true"), Some("abc"), Some("false")]
+            .into_iter()
+            .map(|value| parse_ytdlp_self_update(value.map(str::to_string)))
+            .collect();
+
+        assert_eq!(enabled, vec![true, true, true, false]);
+    }
+
+    #[test]
+    fn it_should_read_the_background_poll_interval_or_default_it() {
+        let intervals: Vec<Duration> = [None, Some("0"), Some("-1"), Some("abc"), Some("250")]
+            .into_iter()
+            .map(|value| parse_background_poll_interval(value.map(str::to_string)))
+            .collect();
+
+        assert_eq!(
+            intervals,
+            vec![
+                Duration::from_secs(5),
+                Duration::from_secs(5),
+                Duration::from_secs(5),
+                Duration::from_secs(5),
+                Duration::from_millis(250),
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_default_download_concurrency_when_invalid() {
         let concurrencies: Vec<usize> = [None, Some("0"), Some("-1"), Some("abc"), Some("4")]
             .into_iter()
@@ -1159,6 +1259,7 @@ mod tests {
         InfrastructureContainer::new(InfrastructureSettings {
             db_path: db.path(),
             youtube_api_key: String::new(),
+            youtube_api_url: DEFAULT_YOUTUBE_API_URL.to_string(),
             videos_path: unique_temp_dir("serve-registry-videos"),
             avatars_path: unique_temp_dir("serve-registry-avatars"),
             ytdlp_path: PathBuf::from("yt-dlp"),
