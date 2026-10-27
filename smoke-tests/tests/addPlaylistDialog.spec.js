@@ -6,9 +6,10 @@ import {
   fillPlaylist,
   slugOf,
 } from '../helpers/addDialog.js'
+import { PLAYLIST } from '../helpers/fakeYoutube.js'
 
-const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
-const PLAYLIST_TITLE = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
+const PLAYLIST_ID = PLAYLIST.id
+const PLAYLIST_TITLE = PLAYLIST.title
 
 test('it should show no notice until a playlist is entered', async ({ page }) => {
   await page.goto('/')

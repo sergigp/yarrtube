@@ -5,8 +5,10 @@ import {
   destinationNotice,
   slugOf,
 } from '../helpers/addDialog.js'
+import { CHANNEL } from '../helpers/fakeYoutube.js'
+import { expectImageLoaded } from '../helpers/media.js'
 
-const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
+const CHANNEL_HANDLE = CHANNEL.handle
 
 /** The channel as the dialog's lookup reports it: `{ id, title, avatar_url }`. */
 async function channelPreview(page, handle) {
@@ -58,11 +60,8 @@ test('it should state the video limit, title and destination for a handle', asyn
   await expect(notice).toContainText(`The latest 3 videos from “${title}” will be downloaded to`, {
     timeout: 15_000,
   })
-  // The avatar YouTube reports, or the placeholder `Thumbnail` falls back to
-  // when YouTube's image host fails to serve it.
-  const avatar = notice.locator(`img[src="${avatarUrl}"]`)
-  const placeholder = notice.locator(':scope > span:first-child')
-  await expect(avatar.or(placeholder)).toBeVisible()
+  // The avatar the lookup reports, served by the fake YouTube.
+  await expectImageLoaded(notice.locator(`img[src="${avatarUrl}"]`))
   // Absolute: the videos root, the default `channels` parent and the slug.
   await expect(notice.locator('code')).toHaveText(
     new RegExp(`^/.+/channels/${slugOf(CHANNEL_HANDLE)}$`),

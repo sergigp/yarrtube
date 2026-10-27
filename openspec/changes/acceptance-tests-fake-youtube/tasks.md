@@ -9,7 +9,7 @@
 - [x] 2.3 Smoke: `playlist.spec.js` fully on the fixture playlist (seeded tests use `addPlaylist`); the file passes.
 - [x] 2.4 Smoke: `channel.spec.js` and `channelVideoLimit.spec.js` on the fixture channel; both pass.
 - [x] 2.5 Smoke: `moveSources.spec.js` and `categories.spec.js`; both pass.
-- [ ] 2.6 Smoke: the add-dialog specs (`addDialogLocation`, `addPlaylistDialog`, `addChannelDialog`, incl. unknown ids and the avatar in the notice); all pass.
+- [x] 2.6 Smoke: the add-dialog specs (`addDialogLocation`, `addPlaylistDialog`, `addChannelDialog`, incl. unknown ids and the avatar in the notice); all pass.
 - [ ] 2.7 Smoke: `deepLinks`, `deleteDuringDownload` (slow fixture video), `media` (Range only), `playbackSpeed`; all pass.
 - [ ] 2.8 Smoke: the `@mobile` specs (`mobile-sidebar`, `mobileWatch`, `mobileLayout`); pass on `mobile-safari`.
 - [ ] 2.9 Smoke: `a download that keeps failing is shown as errored with its reason` (`erroredDownload.spec.js`) passes.

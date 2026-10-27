@@ -41,6 +41,11 @@ export const test = base.extend({
   ],
 
   page: async ({ page, expectedApiErrors, consoleErrorAllowlist }, use) => {
+    // The fake YouTube hands out image URLs on the host the daemon's container
+    // reaches it by; the browser runs on the host itself.
+    await page.route(/^http:\/\/host\.docker\.internal:\d+\//, (route) =>
+      route.continue({ url: route.request().url().replace('host.docker.internal', 'localhost') }),
+    )
     const problems = []
     page.on('pageerror', (error) => problems.push(`page error: ${error.message}`))
     page.on('console', (message) => {
