@@ -14,7 +14,7 @@
 - [x] 2.8 Smoke: the `@mobile` specs (`mobile-sidebar`, `mobileWatch`, `mobileLayout`); pass on `mobile-safari`.
 - [x] 2.9 Smoke: `a download that keeps failing is shown as errored with its reason` (`erroredDownload.spec.js`) passes.
 - [x] 2.10 Smoke: `sidebar search lists only matching playlists` and `tasks search lists only matching tasks` (`search.spec.js`) pass.
-- [ ] 2.11 Smoke: `an upcoming premiere is neither listed nor downloaded` (`premiere.spec.js`) passes.
+- [x] 2.11 Smoke: `an upcoming premiere is neither listed nor downloaded` (`premiere.spec.js`) passes.
 
 ## 3. Infrastructure adapters (TDD)
 
