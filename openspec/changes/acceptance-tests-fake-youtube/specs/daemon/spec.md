@@ -11,6 +11,17 @@ The system SHALL send its YouTube Data API requests to `https://www.googleapis.c
 - **WHEN** a base URL is configured
 - **THEN** every playlist, video and channel lookup goes to that base URL, with the same paths and parameters
 
+### Requirement: Configurable Background Poll Interval
+The system SHALL check for due tasks and unhandled domain events every 5 seconds unless another interval is configured, in which case both background loops SHALL use that interval. The setting exists so tests against a fake YouTube don't wait seconds between pipeline steps.
+
+#### Scenario: Default interval
+- **WHEN** no background poll interval is configured, or the configured value is not a positive number of milliseconds
+- **THEN** the task executor and the event consumer each check for work every 5 seconds
+
+#### Scenario: Configured interval
+- **WHEN** a background poll interval of 250 milliseconds is configured
+- **THEN** the task executor and the event consumer each check for work every 250 milliseconds
+
 ## MODIFIED Requirements
 
 ### Requirement: Startup Self-Update

@@ -55,7 +55,7 @@ const DEFAULT_STORAGE_DIRECTORIES: &[&str] = &["playlists", "channels"];
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 /// How long shutdown waits for in-flight blocking work before exiting.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
-const BACKGROUND_POLL_INTERVAL: Duration = Duration::from_secs(5);
+const DEFAULT_BACKGROUND_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 pub fn run() -> ExitCode {
     tracing_subscriber::fmt()
@@ -223,6 +223,21 @@ fn ytdlp_self_update_enabled() -> bool {
 /// Only `false` turns the self-update off.
 fn parse_ytdlp_self_update(value: Option<String>) -> bool {
     value.as_deref().map(str::trim) != Some("false")
+}
+
+/// How often the task executor and the event consumer check for work;
+/// `YARRTUBE_BACKGROUND_POLL_INTERVAL_MS` shortens it for tests.
+fn background_poll_interval() -> Duration {
+    parse_background_poll_interval(std::env::var("YARRTUBE_BACKGROUND_POLL_INTERVAL_MS").ok())
+}
+
+/// A positive number of milliseconds, defaulting otherwise.
+fn parse_background_poll_interval(value: Option<String>) -> Duration {
+    value
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|millis| *millis > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(DEFAULT_BACKGROUND_POLL_INTERVAL)
 }
 
 fn videos_path() -> String {
@@ -755,8 +770,9 @@ async fn run_async(
     shutdown: oneshot::Receiver<()>,
 ) -> ExitCode {
     tokio::spawn(heartbeat_loop());
-    tokio::spawn(Arc::new(event_consumer(&infrastructure, plex)).run(BACKGROUND_POLL_INTERVAL));
-    tokio::spawn(task_executor.run(BACKGROUND_POLL_INTERVAL));
+    let poll_interval = background_poll_interval();
+    tokio::spawn(Arc::new(event_consumer(&infrastructure, plex)).run(poll_interval));
+    tokio::spawn(task_executor.run(poll_interval));
 
     tokio::select! {
         result = serve_http(port(), api_services(&infrastructure)) => {
@@ -1163,6 +1179,25 @@ mod tests {
             .collect();
 
         assert_eq!(enabled, vec![true, true, true, false]);
+    }
+
+    #[test]
+    fn it_should_read_the_background_poll_interval_or_default_it() {
+        let intervals: Vec<Duration> = [None, Some("0"), Some("-1"), Some("abc"), Some("250")]
+            .into_iter()
+            .map(|value| parse_background_poll_interval(value.map(str::to_string)))
+            .collect();
+
+        assert_eq!(
+            intervals,
+            vec![
+                Duration::from_secs(5),
+                Duration::from_secs(5),
+                Duration::from_secs(5),
+                Duration::from_secs(5),
+                Duration::from_millis(250),
+            ]
+        );
     }
 
     #[test]

@@ -1,6 +1,6 @@
 ## Files
 
-- `src/serve.rs`: reads `YARRTUBE_YOUTUBE_API_URL` (default `https://www.googleapis.com/youtube/v3`) and `YARRTUBE_YTDLP_SELF_UPDATE` (`false` turns it off; anything else, or unset, leaves it on), skips the startup update when off, and passes both on.
+- `src/serve.rs`: reads `YARRTUBE_YOUTUBE_API_URL` (default `https://www.googleapis.com/youtube/v3`), `YARRTUBE_YTDLP_SELF_UPDATE` (`false` turns it off; anything else, or unset, leaves it on) and `YARRTUBE_BACKGROUND_POLL_INTERVAL_MS` (default 5000; the task executor's and event consumer's poll), skips the startup update when off, and passes them on.
 - `src/infrastructure/infrastructure_container.rs`: `InfrastructureSettings` gains `youtube_api_url`, given to the four Data API adapters.
 - `src/infrastructure/repositories/youtube_playlist_repository.rs`, `youtube_playlist_items_repository.rs`, `youtube_metadata_repository.rs`, `youtube_channel_repository.rs`: `new(api_key, api_url)` takes the API root and appends its own path (`/playlists`, `/playlistItems` + `/videos`, `/videos`, `/channels`); the per-file endpoint constants and test-only `with_base_url` go.
 - `src/application/tasks/update_ytdlp_task.rs`: `UpdateYtdlpTask` takes whether the self-update is on; when off, a run skips the update and still reschedules.
@@ -14,7 +14,7 @@
 - `smoke-tests/helpers/fixtures.js`: rewrites the stub's container-side host (`host.docker.internal`) to `localhost` for the browser, so fixture avatars load in the Add channel dialog.
 - `smoke-tests/tests/*.spec.js`: every spec using `SMOKE_PLAYLIST_*`, `SMOKE_CHANNEL_*` or the seeded downloads moves to the fixture sources; `media.spec.js` loses the codec test.
 - `smoke-tests/tests/erroredDownload.spec.js`, `search.spec.js`, `premiere.spec.js` (new): the new coverage.
-- `scripts/run-smoke-tests.sh`: starts the YouTube stub, mounts `smoke-tests/fake-youtube/` and `smoke-tests/samples/` read-only, configures the container (`YTDLP_PATH`, `YARRTUBE_YOUTUBE_API_URL`, `YARRTUBE_YTDLP_SELF_UPDATE=false`, a dummy `YOUTUBE_API_KEY`, `YARRTUBE_RETRY_BASE_DELAY_SECONDS=1`), and runs the upgrade check only with a real `YOUTUBE_API_KEY`.
+- `scripts/run-smoke-tests.sh`: starts the YouTube stub, mounts `smoke-tests/fake-youtube/` and `smoke-tests/samples/` read-only, configures the container (`YTDLP_PATH`, `YARRTUBE_YOUTUBE_API_URL`, `YARRTUBE_YTDLP_SELF_UPDATE=false`, a dummy `YOUTUBE_API_KEY`, `YARRTUBE_RETRY_BASE_DELAY_SECONDS=1`, `YARRTUBE_BACKGROUND_POLL_INTERVAL_MS=250`), and runs the upgrade check only with a real `YOUTUBE_API_KEY`.
 - `smoke-tests/README.md`: the fake YouTube, its catalogue, and what still needs the real one.
 
 ## Types & Signatures
@@ -25,6 +25,8 @@ const DEFAULT_YOUTUBE_API_URL: &str = "https://www.googleapis.com/youtube/v3";
 fn youtube_api_url() -> String;                                   // YARRTUBE_YOUTUBE_API_URL
 fn ytdlp_self_update_enabled() -> bool;                           // YARRTUBE_YTDLP_SELF_UPDATE
 fn parse_ytdlp_self_update(value: Option<String>) -> bool;        // only "false" turns it off
+fn background_poll_interval() -> Duration;                        // YARRTUBE_BACKGROUND_POLL_INTERVAL_MS
+fn parse_background_poll_interval(value: Option<String>) -> Duration; // positive ms, else 5 s
 
 // src/infrastructure/infrastructure_container.rs
 pub struct InfrastructureSettings { /* … */ pub youtube_api_url: String }
@@ -57,7 +59,7 @@ export async function addChannel(request, channel, { videoLimit, downloaded = tr
 
 ## Call Stack
 
-- Run: `run-smoke-tests.sh` → `node smoke-tests/fake-youtube/youtube-stub.js` (host port) → `docker run … -v fake-youtube:/fake-youtube:ro -v samples:/fake-youtube/samples:ro -e YTDLP_PATH=/fake-youtube/yt-dlp -e YARRTUBE_YOUTUBE_API_URL=http://host.docker.internal:<port>/youtube/v3 -e YARRTUBE_YTDLP_SELF_UPDATE=false` → Playwright.
+- Run: `run-smoke-tests.sh` → `node smoke-tests/fake-youtube/youtube-stub.js` (host port) → `docker run … -v fake-youtube:/fake-youtube:ro -v samples:/samples:ro -e YTDLP_PATH=/fake-youtube/yt-dlp -e YARRTUBE_YOUTUBE_API_URL=http://host.docker.internal:<port>/youtube/v3 -e YARRTUBE_YTDLP_SELF_UPDATE=false -e YARRTUBE_BACKGROUND_POLL_INTERVAL_MS=250` → Playwright.
 - Data API: adapter → `GET <api_url>/playlists?part=snippet,contentDetails&id=` | `/playlistItems?part=snippet,status&maxResults=50&playlistId=` | `/videos?part=snippet&id=` | `/channels?part=id,snippet&forHandle=` → stub → catalogue → the JSON fields each adapter reads (thumbnail and avatar URLs point back at the stub).
 - yt-dlp: daemon → `/fake-youtube/yt-dlp <args> <url>` → video id from the URL (or the info JSON for `--load-info-json`) → per mode: download copies the sample `.mp4` and `.jpg` as `<id>.*` and prints timestamp, upload date, duration, filename (`slow` sleeps first, `failing` prints an `ERROR:` and exits 1); thumbnail-only copies the `.jpg`; `-J` prints the info JSON (`en` uploaded subtitles); `--load-info-json` writes `<id>.en.srt`; `--simulate` exits 0 (`failing`: the error); `--flat-playlist` prints the channel's videos newest first, as JSON lines.
 - Spec: `addPlaylist(request, PLAYLIST)` → `POST /api/playlists` → poll `/api/playlists/{id}/videos` until downloaded (seconds) → the test drives the UI.
@@ -70,6 +72,7 @@ export async function addChannel(request, channel, { videoLimit, downloaded = tr
    - `serve.rs` settings:
      1. `it_should_read_the_youtube_api_url_or_default_it`: unset → the default; set → that URL.
      2. `it_should_turn_the_ytdlp_self_update_off_only_if_false`: `None`, `"true"`, `"abc"` → on; `"false"` → off.
+     3. `it_should_read_the_background_poll_interval_or_default_it`: `None`, `"0"`, `"-1"`, `"abc"` → 5 s; `"250"` → 250 ms.
    - Data API adapters: their existing mock-server tests move to `new(api_key, server.url())` and match the endpoint path (`/playlists`, `/playlistItems`, `/videos`, `/channels`), proving each appends its path to the configured root.
 3. Smoke (Playwright, against the fake YouTube), each run with `scripts/run-smoke-tests.sh`:
    1. The stand-in and stub: `playlist golden path` passes on the fixture playlist (download in seconds, on disk, Plex scan, badge, delete).

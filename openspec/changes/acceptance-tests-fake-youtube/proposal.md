@@ -4,7 +4,7 @@ A full smoke run takes ~14–16 minutes, about 12 of them downloading real video
 
 ## What Changes
 
-- Two daemon settings, both for running against a fake YouTube: the YouTube Data API base URL (today hardcoded in each adapter) and turning the `yt-dlp` self-update off (it would replace a stand-in `yt-dlp` with the real one at startup and every hour). `YTDLP_PATH` is already configurable.
+- Three daemon settings, all for running against a fake YouTube: the YouTube Data API base URL (today hardcoded in each adapter), turning the `yt-dlp` self-update off (it would replace a stand-in `yt-dlp` with the real one at startup and every hour), and the background poll interval (with downloads instant, the 5 s between pipeline steps makes each added source take ~20 s to settle). `YTDLP_PATH` is already configurable.
 - In `smoke-tests/`: a fake YouTube Data API server (like `plex-stub.js`) and a stand-in `yt-dlp` (run by the Deno the image already ships), both serving one fixture catalogue: playlists, a channel, videos and their metadata, built on a short Creative-Commons clip (`smoke-tests/samples/`), its thumbnail and a subtitle file of our own. Special fixture videos download slowly, fail, or are upcoming premieres.
 - Specs add the sources they need themselves through the API (a download takes about a second), so `helpers/seed.js`'s shared seeded downloads go away and no test relies on another's state. The fixture playlist and channel replace the maintainer-owned YouTube playlist and `@BlenderOfficial`.
 - New coverage the real YouTube couldn't give reliably: an errored download is surfaced, Sidebar and Tasks search (more than 15 sources), and premieres are skipped until watchable.
@@ -19,7 +19,7 @@ A full smoke run takes ~14–16 minutes, about 12 of them downloading real video
 
 ### Modified Capabilities
 - `smoke-tests`: runs against a fake YouTube; tests own their sources; the golden paths use fixture sources; codec coverage moves out; new errored-download, search and premiere coverage.
-- `daemon`: a YouTube Data API base-URL setting; the startup self-update can be turned off.
+- `daemon`: a YouTube Data API base-URL setting; a background poll interval setting; the startup self-update can be turned off.
 - `ytdlp-self-update`: the automatic updates can be turned off.
 
 ## Impact

@@ -22,6 +22,8 @@
 - [x] 3.2 `it_should_turn_the_ytdlp_self_update_off_only_if_false` (`serve.rs`) passes.
 - [x] 3.3 The four Data API adapters append their endpoint to the configured root: their mock-server tests use `new(api_key, server.url())` and the endpoint path, and pass; the contract tests (`scripts/run-youtube-contract-tests.sh`) still pass.
 
+- [x] 3.4 `it_should_read_the_background_poll_interval_or_default_it` (`serve.rs`) passes; both background loops use it and the smoke container sets 250 ms.
+
 ## 4. Verification
 
-- [ ] 4.1 `doc/INSTALLATION.md` (the two settings, for testing) and `smoke-tests/README.md` (the fake YouTube, its catalogue, what still needs the real one) updated; `scripts/run-tests.sh` passes, and `scripts/run-smoke-tests.sh` passes with no `YOUTUBE_API_KEY` (upgrade check skipped) and with one (upgrade check run). Record both run times.
+- [ ] 4.1 `doc/INSTALLATION.md` (the three settings, for testing) and `smoke-tests/README.md` (the fake YouTube, its catalogue, what still needs the real one) updated; `scripts/run-tests.sh` passes, and `scripts/run-smoke-tests.sh` passes with no `YOUTUBE_API_KEY` (upgrade check skipped) and with one (upgrade check run). Record both run times.
