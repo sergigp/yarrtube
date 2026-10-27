@@ -349,3 +349,36 @@ mod tests {
         assert!(!exists);
     }
 }
+
+/// Against the real YouTube Data API and image host: run with
+/// `scripts/run-youtube-contract-tests.sh` (see `shared::youtube_contract`).
+#[cfg(test)]
+mod youtube_contract_tests {
+    use super::*;
+    use crate::infrastructure::repositories::youtube_channel_repository::{
+        YoutubeApiChannelRepository, YoutubeChannelRepository,
+    };
+    use crate::infrastructure::shared::youtube_contract::{CHANNEL_HANDLE, api_key};
+    use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_store_a_channel_avatar() {
+        let handle = ChannelHandle::new(CHANNEL_HANDLE).unwrap();
+        let avatar_url = YoutubeApiChannelRepository::new(api_key())
+            .resolve(&handle)
+            .unwrap()
+            .and_then(|channel| channel.avatar_url)
+            .unwrap();
+        let avatars_dir = unique_temp_dir("contract-avatars");
+        let repository = FilesystemChannelAvatarRepository::new(avatars_dir.clone());
+
+        let stored = repository.store(&handle, &avatar_url).unwrap();
+
+        assert_eq!(stored, Some(format!("{CHANNEL_HANDLE}.jpg")));
+        // A JPEG, not an error page saved under an image name.
+        let bytes = std::fs::read(avatars_dir.join(format!("{CHANNEL_HANDLE}.jpg"))).unwrap();
+        assert!(bytes.starts_with(&[0xFF, 0xD8]), "not a JPEG: {} bytes", bytes.len());
+        std::fs::remove_dir_all(&avatars_dir).unwrap();
+    }
+}

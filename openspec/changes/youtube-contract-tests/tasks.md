@@ -38,7 +38,7 @@ Each is a real-YouTube test of an existing adapter, `#[ignore]`d in a `youtube_c
 - [x] 3.15 `it_should_not_resolve_an_unknown_handle`: passes via the script.
 
 `FilesystemChannelAvatarRepository`:
-- [ ] 3.16 `it_should_store_a_channel_avatar`: passes via the script.
+- [x] 3.16 `it_should_store_a_channel_avatar`: passes via the script.
 
 ## 4. Verification
 
