@@ -332,4 +332,16 @@ mod youtube_contract_tests {
             }
         );
     }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_not_resolve_an_unknown_handle() {
+        let repository = YoutubeApiChannelRepository::new(api_key());
+
+        let channel = repository
+            .resolve(&ChannelHandle::new("@yarrtube-contract-missing-handle").unwrap())
+            .unwrap();
+
+        assert_eq!(channel, None);
+    }
 }
