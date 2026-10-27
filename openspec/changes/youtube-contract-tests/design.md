@@ -66,7 +66,7 @@ These assert existing adapters against real YouTube, so they are expected to pas
    - `YoutubeApiPlaylistItemsRepository`:
      11. `it_should_list_the_playlist_videos`: `[YoutubePlaylistItem { video_id: "YE7VzlLtp-4", title: "Big Buck Bunny", position: 0 }]`.
    - `YoutubeApiMetadataRepository`:
-     12. `it_should_find_a_video_metadata`: the whole `YoutubeMetadata` of `mqWUW6ypo6w`.
+     12. `it_should_find_a_video_metadata`: the whole `YoutubeMetadata` of `YE7VzlLtp-4` (Big Buck Bunny).
      13. `it_should_not_find_an_unknown_video`: `Ok(None)`.
    - `YoutubeApiChannelRepository`:
      14. `it_should_resolve_a_channel_handle`: `ResolvedChannel { youtube_channel_id: "UCJ0BmJOn_bRKiApjc45QZ1w", title: "Free HD videos - no copyright", avatar_url: Some(https://yt3.ggpht.com/…) }`.
