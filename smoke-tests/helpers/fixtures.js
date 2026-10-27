@@ -21,6 +21,9 @@ import { existsSync } from 'node:fs'
  * - records the `/api` routes the browser hit, checked against the router
  *   by `routeCoverageReporter.js`.
  */
+const ANNOUNCEMENTS_URL =
+  'https://raw.githubusercontent.com/sergigp/yarrtube/main/announcements/announcements.json'
+
 export const test = base.extend({
   keepLibrary: [false, { option: true }],
   // `/api` 4xx responses the test triggers on purpose, e.g.
@@ -46,6 +49,9 @@ export const test = base.extend({
     await page.route(/^http:\/\/host\.docker\.internal:\d+\//, (route) =>
       route.continue({ url: route.request().url().replace('host.docker.internal', 'localhost') }),
     )
+    // No announcements unless a test serves its own (a route added later wins):
+    // the live file on GitHub changes the layout as it changes.
+    await page.route(ANNOUNCEMENTS_URL, (route) => route.fulfill({ json: [] }))
     const problems = []
     page.on('pageerror', (error) => problems.push(`page error: ${error.message}`))
     page.on('console', (message) => {

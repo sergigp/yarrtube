@@ -1,5 +1,6 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { slugOf } from '../helpers/addDialog.js'
+import { PLAYLIST } from '../helpers/fakeYoutube.js'
 import {
   closeDrawer,
   expectDrawerClosed,
@@ -7,8 +8,8 @@ import {
   sectionList,
 } from '../helpers/sidebar.js'
 
-const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
-const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
+const PLAYLIST_ID = PLAYLIST.id
+const PLAYLIST_NAME = PLAYLIST.title
 
 // The dimmed backdrop behind the open drawer. Scoped below the app root:
 // while a dialog is open, Radix marks the root itself `aria-hidden`, and the
@@ -110,8 +111,19 @@ test('dismissing the drawer keeps the scroll position and the page behind stays 
   // Mobile WebKit has no mouse wheel, so the page is scrolled from the
   // keyboard, which, unlike a scripted scroll, honours the scroll lock.
   await page.keyboard.press('PageDown')
-  await expect.poll(scrollY).toBeGreaterThan(0)
-  const before = await scrollY()
+  // PageDown scrolls smoothly: read the position once it has stopped moving.
+  let before = -1
+  await expect
+    .poll(
+      async () => {
+        const now = await scrollY()
+        const settled = now > 0 && now === before
+        before = now
+        return settled
+      },
+      { intervals: [250] },
+    )
+    .toBe(true)
 
   await openDrawer(page)
   await page.keyboard.press('PageDown')

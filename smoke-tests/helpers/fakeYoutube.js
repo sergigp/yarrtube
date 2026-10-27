@@ -18,6 +18,8 @@ export const PLAYLIST = playlist('PLyarrtubeFixtureTest')
 export const SLOW_PLAYLIST = playlist('PLyarrtubeFixtureSlow')
 /** Its video's download always fails. */
 export const BROKEN_PLAYLIST = playlist('PLyarrtubeFixtureBroken')
+/** Six regular videos, for a list longer than a phone's screen. */
+export const LONG_PLAYLIST = playlist('PLyarrtubeFixtureLong')
 /** An upcoming premiere, then a regular video. */
 export const PREMIERE_PLAYLIST = playlist('PLyarrtubeFixturePremiere')
 /** 16 empty playlists, enough for the search boxes to show. */

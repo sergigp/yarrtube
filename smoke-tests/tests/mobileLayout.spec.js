@@ -1,31 +1,21 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { fillPlaylist, openFolderBrowser, openAdvancedOptions } from '../helpers/addDialog.js'
 import { expectNoHorizontalOverflow, expectWithinViewport } from '../helpers/layout.js'
-import { deleteSeeded, seedDownloadedPlaylist } from '../helpers/seed.js'
+import { addChannel, addPlaylist } from '../helpers/seed.js'
+import { CHANNEL, PLAYLIST } from '../helpers/fakeYoutube.js'
 import { openDrawer } from '../helpers/sidebar.js'
 
-const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
-const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
-const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
+const CHANNEL_HANDLE = CHANNEL.handle
+const PLAYLIST_ID = PLAYLIST.id
+const PLAYLIST_NAME = PLAYLIST.title
 
 test.describe('with a downloaded playlist, a channel and a category', () => {
-  test.use({ keepLibrary: true })
-
   let seeded
   let categoryId
-  test.beforeAll(async ({ request }) => {
-    seeded = await seedDownloadedPlaylist(request)
-    // The channel's view renders whether or not its video has downloaded yet.
-    const channel = await request.post('/api/channels', {
-      data: {
-        channel: CHANNEL_HANDLE,
-        quality: 'low',
-        video_limit: 1,
-        path: 'channels/mobile-layout',
-        reconcile_interval_minutes: 180,
-      },
-    })
-    expect(channel.ok(), await channel.text()).toBeTruthy()
+  test.beforeEach(async ({ request }) => {
+    const playlist = await addPlaylist(request, PLAYLIST)
+    seeded = { ...playlist, video: playlist.videos[0] }
+    await addChannel(request, CHANNEL, { videoLimit: 1 })
     const category = await request.post('/api/categories', { data: { name: 'Mobile layout' } })
     expect(category.ok(), await category.text()).toBeTruthy()
     categoryId = (await category.json()).id
@@ -33,10 +23,6 @@ test.describe('with a downloaded playlist, a channel and a category', () => {
       data: { channels: [CHANNEL_HANDLE], playlists: [seeded.id] },
     })
     expect(members.ok(), await members.text()).toBeTruthy()
-  })
-
-  test.afterAll(async ({ request }) => {
-    await deleteSeeded(request, seeded)
   })
 
   test('no view scrolls horizontally @mobile', async ({ page }) => {
