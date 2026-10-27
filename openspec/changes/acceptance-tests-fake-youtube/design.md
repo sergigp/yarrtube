@@ -14,7 +14,7 @@
 - `smoke-tests/helpers/fixtures.js`: rewrites the stub's container-side host (`host.docker.internal`) to `localhost` for the browser, so fixture avatars load in the Add channel dialog.
 - `smoke-tests/tests/*.spec.js`: every spec using `SMOKE_PLAYLIST_*`, `SMOKE_CHANNEL_*` or the seeded downloads moves to the fixture sources; `media.spec.js` loses the codec test.
 - `smoke-tests/tests/erroredDownload.spec.js`, `search.spec.js`, `premiere.spec.js` (new): the new coverage.
-- `scripts/run-smoke-tests.sh`: starts the YouTube stub, mounts `smoke-tests/fake-youtube/` and `smoke-tests/samples/` read-only, configures the container (`YTDLP_PATH`, `YARRTUBE_YOUTUBE_API_URL`, `YARRTUBE_YTDLP_SELF_UPDATE=false`, a dummy `YOUTUBE_API_KEY`, `YARRTUBE_RETRY_BASE_DELAY_SECONDS=1`, `YARRTUBE_BACKGROUND_POLL_INTERVAL_MS=250`), and runs the upgrade check only with a real `YOUTUBE_API_KEY`.
+- `scripts/run-smoke-tests.sh`: starts the YouTube stub, mounts `smoke-tests/fake-youtube/` and `smoke-tests/samples/` read-only, configures the container (`YTDLP_PATH`, `YARRTUBE_YOUTUBE_API_URL`, `YARRTUBE_YTDLP_SELF_UPDATE=false`, a dummy `YOUTUBE_API_KEY`, `YARRTUBE_RETRY_BASE_DELAY_SECONDS=0` (a failing fixture download takes 2 s per attempt), `YARRTUBE_BACKGROUND_POLL_INTERVAL_MS=250`), and runs the upgrade check only with a real `YOUTUBE_API_KEY`.
 - `smoke-tests/README.md`: the fake YouTube, its catalogue, and what still needs the real one.
 
 ## Types & Signatures

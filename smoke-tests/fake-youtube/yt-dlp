@@ -10,6 +10,8 @@ const CATALOGUE = JSON.parse(Deno.readTextFileSync(new URL('./catalogue.json', i
 const SAMPLES = new URL('../samples/', import.meta.url)
 const SLOW_DOWNLOAD_MS = 8_000
 const FAILURE_REASON = 'Unable to download video data: HTTP Error 503: Service Unavailable'
+// How long a `failing` download takes to fail, so its retries can be seen.
+const FAILING_ATTEMPT_MS = 2_000
 
 const args = Deno.args
 const has = (flag) => args.includes(flag)
@@ -111,8 +113,9 @@ function fetchThumbnail() {
 // duration and the media's filename.
 async function download() {
   const video = videoOf(url)
-  if (video.behaviour === 'slow') {
-    await new Promise((resolve) => setTimeout(resolve, SLOW_DOWNLOAD_MS))
+  const delay = { slow: SLOW_DOWNLOAD_MS, failing: FAILING_ATTEMPT_MS }[video.behaviour]
+  if (delay) {
+    await new Promise((resolve) => setTimeout(resolve, delay))
   }
   failIfBroken(video)
   copySample('mp4', `${video.id}.mp4`)

@@ -111,8 +111,9 @@ start_container() {
       -e YTDLP_PATH=/fake-youtube/yt-dlp
       -e YARRTUBE_YTDLP_SELF_UPDATE=false
       -e DENO_DIR=/tmp/deno
-      # Nothing flaky to wait out, and the errored-download spec runs every retry.
-      -e YARRTUBE_RETRY_BASE_DELAY_SECONDS=1
+      # Nothing flaky to wait out: a failing download is retried right away, so
+      # the errored-download spec sees its retries run out in seconds.
+      -e YARRTUBE_RETRY_BASE_DELAY_SECONDS=0
       # Downloads are instant, so steps shouldn't wait seconds for the next poll.
       -e YARRTUBE_BACKGROUND_POLL_INTERVAL_MS=250
       -v "$REPO_ROOT/smoke-tests/fake-youtube:/fake-youtube:ro"
