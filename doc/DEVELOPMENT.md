@@ -91,6 +91,26 @@ cargo test --locked
 End-to-end tests against a real container live in `smoke-tests/` (see its
 README) and run with `scripts/run-smoke-tests.sh`.
 
+### YouTube contract tests
+
+The adapters that talk to YouTube (`yt-dlp` downloads, thumbnails,
+captions, channel listings, and the Data API's playlists, videos, channels
+and avatars) have tests against the real thing, in modules named
+`youtube_contract_tests` next to each adapter. They're `#[ignore]`d, so
+`cargo test` and CI skip them; run them with:
+
+```bash
+scripts/run-youtube-contract-tests.sh
+```
+
+It needs `yt-dlp` and `ffprobe` on `PATH` (or `YTDLP_PATH`), the network,
+and `YOUTUBE_API_KEY` (from the environment or `.env`), and takes about ten
+seconds. Run it after upgrading `yt-dlp` or when downloads start failing,
+to tell a change on YouTube's side from a bug of ours. The fixtures (a short
+Creative-Commons clip, Big Buck Bunny, the project's "test" playlist and an
+inactive Creative-Commons channel) are listed with their credits in
+`src/infrastructure/shared/youtube_contract.rs`.
+
 ## Deploy
 
 Images are published to `ghcr.io/sergigp/yarrtube` by

@@ -475,13 +475,14 @@ mod tests {
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
+    use crate::domain::video_transcript::{CaptionLanguage, CaptionSource, CaptionTracks};
     use crate::infrastructure::shared::youtube_contract::{
-        CAPTIONED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs, video_url,
-        ytdlp_path,
+        CAPTIONED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs, video_url, ytdlp_path,
     };
     use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
-    use crate::domain::video_transcript::{CaptionLanguage, CaptionSource, CaptionTracks};
-    use crate::infrastructure::shared::ytdlp::{DownloadedVideo, FetchedSubtitles, FetchedThumbnail};
+    use crate::infrastructure::shared::ytdlp::{
+        DownloadedVideo, FetchedSubtitles, FetchedThumbnail,
+    };
     use chrono::DateTime;
 
     #[test]

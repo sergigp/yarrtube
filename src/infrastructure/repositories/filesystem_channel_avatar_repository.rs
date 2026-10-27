@@ -378,7 +378,11 @@ mod youtube_contract_tests {
         assert_eq!(stored, Some(format!("{CHANNEL_HANDLE}.jpg")));
         // A JPEG, not an error page saved under an image name.
         let bytes = std::fs::read(avatars_dir.join(format!("{CHANNEL_HANDLE}.jpg"))).unwrap();
-        assert!(bytes.starts_with(&[0xFF, 0xD8]), "not a JPEG: {} bytes", bytes.len());
+        assert!(
+            bytes.starts_with(&[0xFF, 0xD8]),
+            "not a JPEG: {} bytes",
+            bytes.len()
+        );
         std::fs::remove_dir_all(&avatars_dir).unwrap();
     }
 }

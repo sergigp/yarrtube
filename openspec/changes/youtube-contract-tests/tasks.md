@@ -42,4 +42,4 @@ Each is a real-YouTube test of an existing adapter, `#[ignore]`d in a `youtube_c
 
 ## 4. Verification
 
-- [ ] 4.1 Document the contract tests in `doc/DEVELOPMENT.md` (what they check, prerequisites, the command, that CI skips them); `cargo test --locked` (contract tests reported as ignored), `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass, and `scripts/run-youtube-contract-tests.sh` passes all 16. No smoke run needed: no production code changes.
+- [x] 4.1 Document the contract tests in `doc/DEVELOPMENT.md` (what they check, prerequisites, the command, that CI skips them); `cargo test --locked` (contract tests reported as ignored), `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass, and `scripts/run-youtube-contract-tests.sh` passes all 16. No smoke run needed: no production code changes.
