@@ -480,8 +480,8 @@ mod youtube_contract_tests {
         ytdlp_path,
     };
     use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
-    use crate::domain::video_transcript::CaptionTracks;
-    use crate::infrastructure::shared::ytdlp::{DownloadedVideo, FetchedThumbnail};
+    use crate::domain::video_transcript::{CaptionLanguage, CaptionSource, CaptionTracks};
+    use crate::infrastructure::shared::ytdlp::{DownloadedVideo, FetchedSubtitles, FetchedThumbnail};
     use chrono::DateTime;
 
     #[test]
@@ -617,6 +617,38 @@ mod youtube_contract_tests {
             }
         );
         assert!(probe.info_json.is_file());
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_fetch_the_uploaded_subtitles_as_srt() {
+        let staging_dir = unique_temp_dir("contract-subtitles");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+        let probe = repository
+            .probe_captions(&video_url(CAPTIONED_VIDEO_ID), &staging_dir)
+            .unwrap();
+        let english = CaptionTrack {
+            key: "en".to_string(),
+            language: CaptionLanguage::new("en").unwrap(),
+            source: CaptionSource::Manual,
+        };
+
+        let subtitles = repository
+            .fetch_subtitles(&probe, &english, &staging_dir)
+            .unwrap();
+
+        assert_eq!(
+            subtitles,
+            FetchedSubtitles {
+                path: staging_dir.join(format!("{CAPTIONED_VIDEO_ID}.en.srt")),
+                srt: subtitles.srt.clone(),
+            }
+        );
+        // SubRip: numbered cues, each with a `start --> end` timing line.
+        let mut lines = subtitles.srt.lines();
+        assert_eq!(lines.next(), Some("1"));
+        assert!(lines.next().is_some_and(|timing| timing.contains(" --> ")));
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
 
