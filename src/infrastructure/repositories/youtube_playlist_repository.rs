@@ -183,3 +183,29 @@ mod tests {
         );
     }
 }
+
+/// Against the real YouTube Data API: run with
+/// `scripts/run-youtube-contract-tests.sh` (see `shared::youtube_contract`).
+#[cfg(test)]
+mod youtube_contract_tests {
+    use super::*;
+    use crate::infrastructure::shared::youtube_contract::{PLAYLIST_ID, api_key};
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_resolve_a_playlist() {
+        let repository = YoutubeApiPlaylistRepository::new(api_key());
+
+        let playlist = repository
+            .resolve(&PlaylistId::new(PLAYLIST_ID).unwrap())
+            .unwrap();
+
+        assert_eq!(
+            playlist,
+            Some(ResolvedPlaylist {
+                title: "test".to_string(),
+                item_count: 1,
+            })
+        );
+    }
+}
