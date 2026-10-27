@@ -94,7 +94,8 @@ builds nothing, so install the web UI's dependencies and build it first
 one alone.
 
 End-to-end tests against a real container live in `e2e-tests/` (see its
-README) and run with `scripts/run-e2e-tests.sh`.
+README) and run with `scripts/run-e2e-tests.sh`. Each run uses its own
+container and ports, so worktrees can run it at the same time.
 
 ### YouTube contract tests
 
