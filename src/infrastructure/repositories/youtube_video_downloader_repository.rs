@@ -567,6 +567,16 @@ mod youtube_contract_tests {
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
 
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_diagnose_no_failure_for_a_playable_video() {
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let reason = repository.diagnose(&video_url(SHORT_VIDEO_ID)).unwrap();
+
+        assert_eq!(reason, None);
+    }
+
     fn staged_files(staging_dir: &Path) -> Vec<PathBuf> {
         let mut files: Vec<PathBuf> = std::fs::read_dir(staging_dir)
             .unwrap()
