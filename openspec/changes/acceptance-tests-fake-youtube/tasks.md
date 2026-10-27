@@ -19,7 +19,7 @@
 ## 3. Infrastructure adapters (TDD)
 
 - [x] 3.1 `it_should_read_the_youtube_api_url_or_default_it` (`serve.rs`) passes.
-- [ ] 3.2 `it_should_turn_the_ytdlp_self_update_off_only_if_false` (`serve.rs`) passes.
+- [x] 3.2 `it_should_turn_the_ytdlp_self_update_off_only_if_false` (`serve.rs`) passes.
 - [ ] 3.3 The four Data API adapters append their endpoint to the configured root: their mock-server tests use `new(api_key, server.url())` and the endpoint path, and pass; the contract tests (`scripts/run-youtube-contract-tests.sh`) still pass.
 
 ## 4. Verification

@@ -221,8 +221,8 @@ fn ytdlp_self_update_enabled() -> bool {
 }
 
 /// Only `false` turns the self-update off.
-fn parse_ytdlp_self_update(_value: Option<String>) -> bool {
-    true
+fn parse_ytdlp_self_update(value: Option<String>) -> bool {
+    value.as_deref().map(str::trim) != Some("false")
 }
 
 fn videos_path() -> String {
@@ -1153,6 +1153,16 @@ mod tests {
                 "http://stub:1/youtube/v3".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn it_should_turn_the_ytdlp_self_update_off_only_if_false() {
+        let enabled: Vec<bool> = [None, Some("true"), Some("abc"), Some("false")]
+            .into_iter()
+            .map(|value| parse_ytdlp_self_update(value.map(str::to_string)))
+            .collect();
+
+        assert_eq!(enabled, vec![true, true, true, false]);
     }
 
     #[test]
