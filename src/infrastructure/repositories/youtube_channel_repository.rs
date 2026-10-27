@@ -294,3 +294,42 @@ mod tests {
         );
     }
 }
+
+/// Against the real YouTube Data API: run with
+/// `scripts/run-youtube-contract-tests.sh` (see `shared::youtube_contract`).
+#[cfg(test)]
+mod youtube_contract_tests {
+    use super::*;
+    use crate::infrastructure::shared::youtube_contract::{CHANNEL_HANDLE, api_key};
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_resolve_a_channel_handle() {
+        let repository = YoutubeApiChannelRepository::new(api_key());
+
+        let channel = repository
+            .resolve(&ChannelHandle::new(CHANNEL_HANDLE).unwrap())
+            .unwrap()
+            .unwrap();
+
+        // The avatar's URL carries a signature YouTube rotates, so only its
+        // host is pinned; storing it is covered by the avatar repository's
+        // contract test.
+        assert!(
+            channel
+                .avatar_url
+                .as_deref()
+                .is_some_and(|url| url.starts_with("https://yt3.ggpht.com/")),
+            "avatar URL: {:?}",
+            channel.avatar_url
+        );
+        assert_eq!(
+            channel,
+            ResolvedChannel {
+                youtube_channel_id: "UCJ0BmJOn_bRKiApjc45QZ1w".to_string(),
+                title: "Free HD videos - no copyright".to_string(),
+                avatar_url: channel.avatar_url.clone(),
+            }
+        );
+    }
+}
