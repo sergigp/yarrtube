@@ -10,10 +10,11 @@
 # Usage: scripts/run-tests.sh [--ci] [--workers <N>] [--only <suite>]...
 #
 # `--only` (repeatable) runs just those suites. `--workers` sets how many
-# end-to-end tests run at once. In CI (`--ci`, or `CI=true`,
-# which GitHub Actions sets) the contract tests are left out: YouTube
-# bot-checks CI runners. It only runs checks: dependencies, the Playwright
-# browsers and the web UI build must already be in place.
+# end-to-end tests run at once, each worker against its own daemon
+# (default: half the cores, at most 4; 2 in CI). In CI (`--ci`, or
+# `CI=true`, which GitHub Actions sets) the contract tests are left out:
+# YouTube bot-checks CI runners. It only runs checks: dependencies, the
+# Playwright browsers and the web UI build must already be in place.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,7 +25,7 @@ if [[ "${CI:-}" == "true" ]]; then
   CI_MODE=true
 fi
 ONLY=()
-WORKERS=1
+WORKERS=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --ci)
@@ -40,11 +41,15 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --workers)
-      WORKERS="${2:-}"
+      if [[ -z "${2:-}" ]]; then
+        echo "--workers takes a positive number" >&2
+        exit 1
+      fi
+      WORKERS="$2"
       shift 2
       ;;
     -h | --help)
-      sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -53,6 +58,21 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# End-to-end workers: as asked, else 2 in CI (GitHub's runners have 4 vCPUs)
+# and half the cores, at most 4, locally.
+if [[ -n "$WORKERS" ]]; then
+  if [[ ! "$WORKERS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "--workers takes a positive number (got \"$WORKERS\")" >&2
+    exit 1
+  fi
+elif [[ "$CI_MODE" == true ]]; then
+  WORKERS=2
+else
+  CORES="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
+  WORKERS=$(( CORES / 2 ))
+  WORKERS=$(( WORKERS < 1 ? 1 : WORKERS > 4 ? 4 : WORKERS ))
+fi
 
 if [[ -f "$REPO_ROOT/.env" ]]; then
   set -a

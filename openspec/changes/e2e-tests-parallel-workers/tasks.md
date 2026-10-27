@@ -6,7 +6,7 @@
 
 - [x] 2.1 Each worker starts its own daemon: `startDaemon` runs the container, Plex stub and temp dirs, `stop` saves the log, checks for a panic and removes everything; the script stops starting the main-suite container. `scripts/run-tests.sh --only e2e --workers 1` passes (65).
 - [x] 2.2 `fullyParallel: true`; `scripts/run-tests.sh --only e2e --workers 3` passes, with at most 3 of the run's daemons alive at once and none left afterwards.
-- [ ] 2.3 Defaults: half the CPU cores (at most 4) locally, 2 under `--ci`; invalid `--workers` values rejected. Time `--workers 1, 2, 3, 4` locally and run the default 3 times without a flaky test; fix or slow down any timing-sensitive test that flakes under load.
+- [x] 2.3 Defaults: half the CPU cores (at most 4) locally, 2 under `--ci`; invalid `--workers` values rejected. Time `--workers 1, 2, 3, 4` locally and run the default 3 times without a flaky test; fix or slow down any timing-sensitive test that flakes under load. Measured (14 cores, Playwright suite): 1 → 4.6 min, 2 → 2.3 min, 3 → 1.6 min, 4 → 1.4 min. The first 3 default runs caught a UI race (a page open on a playlist polled its videos during the delete and got a 400); fixed in the UI (`useDeleteSource`), then 3 default runs passed clean.
 - [ ] 2.4 `ci.yml` passes `--workers <measured>`; the GitHub run passes and its e2e step time is recorded (needs a push).
 
 ## 3. Infrastructure adapters (TDD)
