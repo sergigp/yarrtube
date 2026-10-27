@@ -79,14 +79,19 @@ against the mocked API, so the suite finishes in seconds.
 
 ## Checks
 
-These are what CI runs:
+One script runs every test suite, locally and in CI:
 
 ```bash
-cargo fmt --all -- --check
-cargo clippy --all-targets --all-features --locked -- -D warnings
-cargo test --locked
-(cd web && npm run check)   # typecheck + lint + tests
+scripts/run-tests.sh        # everything
+scripts/run-tests.sh --ci   # what CI runs (also when CI=true)
 ```
+
+It runs the web UI's checks, Rust formatting, clippy and tests, the YouTube
+contract tests and the smoke suite. In CI it skips the suites that need the
+real YouTube, which bot-checks CI runners. It only checks: it installs and
+builds nothing, so install the web UI's dependencies and build it first
+(see [Web UI](#web-ui)). Each suite also has its own command, for running
+one alone.
 
 End-to-end tests against a real container live in `smoke-tests/` (see its
 README) and run with `scripts/run-smoke-tests.sh`.

@@ -33,7 +33,7 @@ jobs:
           fi
 
   ci:
-    name: fmt, clippy, build, test
+    name: Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -54,27 +54,16 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - name: Check web UI (typecheck, lint, test)
+      - name: Install web UI dependencies and build it
         working-directory: web
         run: |
           npm ci
-          npm run check
+          npm run build
 
-      - name: Build web UI
-        working-directory: web
-        run: npm run build
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features --locked -- -D warnings
-
-      - name: Build
-        run: cargo build --all-targets --locked
-
-      - name: Test
-        run: cargo test --locked
+      # The same script developers run locally; in CI it skips the suites
+      # that need the real YouTube (see the script).
+      - name: Run tests
+        run: scripts/run-tests.sh --ci
 
   # Every merge to main that passes CI is published as :edge +
   # :sha-<short> (see release.yml). Stable releases (:latest) are only cut by
