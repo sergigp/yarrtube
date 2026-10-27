@@ -824,3 +824,32 @@ mod tests {
             .create()
     }
 }
+
+/// Against the real YouTube Data API: run with
+/// `scripts/run-youtube-contract-tests.sh` (see `shared::youtube_contract`).
+#[cfg(test)]
+mod youtube_contract_tests {
+    use super::*;
+    use crate::infrastructure::shared::youtube_contract::{
+        CAPTIONED_VIDEO_ID, PLAYLIST_ID, api_key,
+    };
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_list_the_playlist_videos() {
+        let repository = YoutubeApiPlaylistItemsRepository::new(api_key());
+
+        let videos = repository
+            .list_current_videos(&PlaylistId::new(PLAYLIST_ID).unwrap())
+            .unwrap();
+
+        assert_eq!(
+            videos,
+            vec![YoutubePlaylistItem {
+                video_id: CAPTIONED_VIDEO_ID.to_string(),
+                title: "Big Buck Bunny".to_string(),
+                position: 0,
+            }]
+        );
+    }
+}
