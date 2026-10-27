@@ -476,7 +476,7 @@ mod tests {
 mod youtube_contract_tests {
     use super::*;
     use crate::infrastructure::shared::youtube_contract::{
-        SHORT_VIDEO_ID, stream_codecs, video_url, ytdlp_path,
+        MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs, video_url, ytdlp_path,
     };
     use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
     use crate::infrastructure::shared::ytdlp::DownloadedVideo;
@@ -519,6 +519,28 @@ mod youtube_contract_tests {
                 ("audio".to_string(), "aac".to_string()),
                 ("video".to_string(), "mjpeg".to_string()),
             ]
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_fail_to_download_a_missing_video() {
+        let staging_dir = unique_temp_dir("contract-download-missing");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let attempt = repository
+            .download(&video_url(MISSING_VIDEO_ID), Quality::Low, &staging_dir)
+            .unwrap();
+
+        assert_eq!(
+            attempt,
+            DownloadAttempt::Failed {
+                stderr: Some(format!(
+                    "ERROR: [youtube] {MISSING_VIDEO_ID}: This video is unavailable"
+                )),
+                sabr_notice: None,
+            }
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }

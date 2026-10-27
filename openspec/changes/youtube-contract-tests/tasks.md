@@ -12,7 +12,7 @@ Each is a real-YouTube test of an existing adapter, `#[ignore]`d in a `youtube_c
 
 `YtDlpVideoDownloaderRepository`:
 - [x] 3.1 `it_should_download_a_playable_mp4`: passes via the script.
-- [ ] 3.2 `it_should_fail_to_download_a_missing_video`: passes via the script.
+- [x] 3.2 `it_should_fail_to_download_a_missing_video`: passes via the script.
 - [ ] 3.3 `it_should_fetch_only_the_thumbnail`: passes via the script.
 - [ ] 3.4 `it_should_diagnose_no_failure_for_a_playable_video`: passes via the script.
 - [ ] 3.5 `it_should_diagnose_why_a_missing_video_failed`: passes via the script.
