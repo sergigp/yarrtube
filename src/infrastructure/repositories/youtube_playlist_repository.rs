@@ -208,4 +208,16 @@ mod youtube_contract_tests {
             })
         );
     }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_not_resolve_an_unknown_playlist() {
+        let repository = YoutubeApiPlaylistRepository::new(api_key());
+
+        let playlist = repository
+            .resolve(&PlaylistId::new("PLyarrtubeContractMissing").unwrap())
+            .unwrap();
+
+        assert_eq!(playlist, None);
+    }
 }

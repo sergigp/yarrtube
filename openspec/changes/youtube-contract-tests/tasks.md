@@ -24,7 +24,7 @@ Each is a real-YouTube test of an existing adapter, `#[ignore]`d in a `youtube_c
 
 `YoutubeApiPlaylistRepository`:
 - [x] 3.9 `it_should_resolve_a_playlist`: passes via the script.
-- [ ] 3.10 `it_should_not_resolve_an_unknown_playlist`: passes via the script.
+- [x] 3.10 `it_should_not_resolve_an_unknown_playlist`: passes via the script.
 
 `YoutubeApiPlaylistItemsRepository`:
 - [ ] 3.11 `it_should_list_the_playlist_videos`: passes via the script.
