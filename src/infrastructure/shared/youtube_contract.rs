@@ -36,6 +36,23 @@ pub(crate) fn api_key() -> String {
 }
 
 /// `(codec_type, codec_name)` of every stream in `media`, via `ffprobe`.
-pub(crate) fn stream_codecs(_media: &Path) -> Vec<(String, String)> {
-    vec![]
+pub(crate) fn stream_codecs(media: &Path) -> Vec<(String, String)> {
+    let output = std::process::Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type,codec_name",
+            "-of",
+            "csv=p=0",
+        ])
+        .arg(media)
+        .output()
+        .expect("ffprobe must be installed (it comes with ffmpeg)");
+    assert!(output.status.success(), "ffprobe failed on {media:?}");
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.split_once(','))
+        .map(|(name, kind)| (kind.to_string(), name.to_string()))
+        .collect()
 }

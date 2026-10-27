@@ -469,3 +469,57 @@ mod tests {
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 }
+
+/// Against the real `yt-dlp` and YouTube: run with
+/// `scripts/run-youtube-contract-tests.sh` (see `shared::youtube_contract`).
+#[cfg(test)]
+mod youtube_contract_tests {
+    use super::*;
+    use crate::infrastructure::shared::youtube_contract::{
+        SHORT_VIDEO_ID, stream_codecs, video_url, ytdlp_path,
+    };
+    use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
+    use crate::infrastructure::shared::ytdlp::DownloadedVideo;
+    use chrono::DateTime;
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_download_a_playable_mp4() {
+        let staging_dir = unique_temp_dir("contract-download");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let attempt = repository
+            .download(&video_url(SHORT_VIDEO_ID), Quality::Low, &staging_dir)
+            .unwrap();
+
+        // Whether YouTube runs its SABR streaming experiment on a download
+        // varies run to run and only ever adds a notice, so it's taken as
+        // reported.
+        let sabr_notice = match &attempt {
+            DownloadAttempt::Succeeded(video) => video.sabr_notice.clone(),
+            DownloadAttempt::Failed { .. } => None,
+        };
+        let media_path = staging_dir.join(format!("{SHORT_VIDEO_ID}.mp4"));
+        assert_eq!(
+            attempt,
+            DownloadAttempt::Succeeded(DownloadedVideo {
+                media_path: media_path.clone(),
+                thumbnail_path: Some(staging_dir.join(format!("{SHORT_VIDEO_ID}.jpg"))),
+                duration_seconds: Some(14),
+                published_at: DateTime::from_timestamp(1_550_518_860, 0),
+                sabr_notice,
+            })
+        );
+        // H.264 + AAC, what every browser (iPhone Safari included) plays,
+        // plus the thumbnail `--embed-thumbnail` adds as cover art.
+        assert_eq!(
+            stream_codecs(&media_path),
+            vec![
+                ("video".to_string(), "h264".to_string()),
+                ("audio".to_string(), "aac".to_string()),
+                ("video".to_string(), "mjpeg".to_string()),
+            ]
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+}

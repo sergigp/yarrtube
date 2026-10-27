@@ -40,9 +40,9 @@ No production type or signature changes.
 ## Call Stack
 
 - Run: `scripts/run-youtube-contract-tests.sh` → `cargo test --locked -- --ignored youtube_contract` → each `#[ignore]`d `it_should_*` in a `youtube_contract_tests` module.
-- yt-dlp test: test → `YoutubeVideoDownloaderRepository::new(ytdlp_path())` / `YoutubeChannelVideosRepository::new(ytdlp_path())` → port method (`download(url, Quality::Low, staging)`, `fetch_thumbnail`, `diagnose`, `probe_captions`, `fetch_subtitles`, `list_current_videos(handle, 2)`) → real `yt-dlp` → YouTube; staging dirs from `test_support::unique_temp_dir`, removed at the end.
-- Data API test: test → `Youtube*Repository::new(api_key())` → port method (`resolve`, `list_current_videos`, `find`) → `https://www.googleapis.com/youtube/v3/...`.
-- Avatar test: `YoutubeChannelRepository::resolve(handle)` → `avatar_url` → `FilesystemChannelAvatarRepository::new(dir).store(handle, url)` → yt3 image host.
+- yt-dlp test: test → `YtDlpVideoDownloaderRepository::new(ytdlp_path())` / `YtDlpChannelVideosRepository::new(ytdlp_path())` → port method (`download(url, Quality::Low, staging)`, `fetch_thumbnail`, `diagnose`, `probe_captions`, `fetch_subtitles`, `list_current_videos(handle, 2)`) → real `yt-dlp` → YouTube; staging dirs from `test_support::unique_temp_dir`, removed at the end.
+- Data API test: test → `YoutubeApi*Repository::new(api_key())` → port method (`resolve`, `list_current_videos`, `find`) → `https://www.googleapis.com/youtube/v3/...`.
+- Avatar test: `YoutubeApiChannelRepository::resolve(handle)` → `avatar_url` → `FilesystemChannelAvatarRepository::new(dir).store(handle, url)` → yt3 image host.
 
 ## Test Plan
 
@@ -50,7 +50,7 @@ These assert existing adapters against real YouTube, so they are expected to pas
 
 1. Behaviour tests: none (no application-layer behaviour changes).
 2. Infrastructure tests:
-   - `YoutubeVideoDownloaderRepository`:
+   - `YtDlpVideoDownloaderRepository`:
      1. `it_should_download_a_playable_mp4`: `Succeeded(DownloadedVideo { media_path: <staging>/mqWUW6ypo6w.mp4, thumbnail_path: Some(<staging>/mqWUW6ypo6w.jpg), duration_seconds: Some(14), published_at: Some(<its publish time>), .. })`, and `ffprobe` finds an `h264` video and an `aac` audio stream.
      2. `it_should_fail_to_download_a_missing_video`: `Failed { stderr: Some("ERROR: [youtube] aaaaaaaaaaa: This video is unavailable"), sabr_notice: None }`.
      3. `it_should_fetch_only_the_thumbnail`: `Fetched(FetchedThumbnail { path: <staging>/mqWUW6ypo6w.jpg, published_at })`, and the staging dir holds only that file.
@@ -58,17 +58,17 @@ These assert existing adapters against real YouTube, so they are expected to pas
      5. `it_should_diagnose_why_a_missing_video_failed`: `Ok(Some(<YouTube's reason>))`.
      6. `it_should_probe_the_caption_tracks`: `CaptionTracks { original_language, manual: ["en", "fr"], automatic }` (automatic: non-empty, includes `en`), its publish time, and the info JSON written to the staging dir.
      7. `it_should_fetch_the_uploaded_subtitles_as_srt`: `FetchedSubtitles { path: <staging>/YE7VzlLtp-4.en.srt, srt }` whose `srt` opens with cue `1` and a `-->` timing line.
-   - `YoutubeChannelVideosRepository`:
+   - `YtDlpChannelVideosRepository`:
      8. `it_should_list_the_newest_channel_videos`: the two newest uploads `[mUxzKVrSAjs, dj3Hfai1xEE]` with titles, positions `0, 1`.
-   - `YoutubePlaylistRepository`:
+   - `YoutubeApiPlaylistRepository`:
      9. `it_should_resolve_a_playlist`: `Some(ResolvedPlaylist { title: "test", item_count: 1 })`.
      10. `it_should_not_resolve_an_unknown_playlist`: `Ok(None)`.
-   - `YoutubePlaylistItemsRepository`:
+   - `YoutubeApiPlaylistItemsRepository`:
      11. `it_should_list_the_playlist_videos`: `[YoutubePlaylistItem { video_id: "YE7VzlLtp-4", title: "Big Buck Bunny", position: 0 }]`.
-   - `YoutubeMetadataRepository`:
+   - `YoutubeApiMetadataRepository`:
      12. `it_should_find_a_video_metadata`: the whole `YoutubeMetadata` of `mqWUW6ypo6w`.
      13. `it_should_not_find_an_unknown_video`: `Ok(None)`.
-   - `YoutubeChannelRepository`:
+   - `YoutubeApiChannelRepository`:
      14. `it_should_resolve_a_channel_handle`: `ResolvedChannel { youtube_channel_id: "UCJ0BmJOn_bRKiApjc45QZ1w", title: "Free HD videos - no copyright", avatar_url: Some(https://yt3.ggpht.com/…) }`.
      15. `it_should_not_resolve_an_unknown_handle`: `Ok(None)`.
    - `FilesystemChannelAvatarRepository`:
