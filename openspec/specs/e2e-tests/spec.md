@@ -94,11 +94,15 @@ The system SHALL verify, through the browser against the real image, that the an
 - **THEN** no announcements bar is shown and the header and sidebar render normally
 
 ### Requirement: Continuous Integration
-The system SHALL run the end-to-end suite automatically in CI on every pull request and on every push to `main`, using a `YOUTUBE_API_KEY` provided as a repository secret.
+The system SHALL run the end-to-end suite automatically in CI on every pull request and on every push to `main`, together with the other test suites and without a YouTube API key; the upgrade check, which needs the real YouTube, is skipped there. A failing run SHALL keep its Playwright results and the container's log as artifacts of the run.
 
 #### Scenario: Pull request opened
 - **WHEN** a pull request is opened or updated
-- **THEN** the e2e-tests workflow runs the dockerized suite and reports its result on the pull request
+- **THEN** CI runs the end-to-end suite against an image built from the pull request and reports its result on the pull request
+
+#### Scenario: Run fails
+- **WHEN** an end-to-end test fails in CI
+- **THEN** the run's Playwright traces and videos and the container's log are uploaded as artifacts
 
 ### Requirement: Mobile Browser Projects
 The suite SHALL run every spec tagged as mobile in an emulated iPhone browser running WebKit, with touch input and a mobile viewport, and only there. Specs SHALL NOT emulate a phone by resizing the desktop browser. Untagged specs SHALL run in desktop Chromium only.
