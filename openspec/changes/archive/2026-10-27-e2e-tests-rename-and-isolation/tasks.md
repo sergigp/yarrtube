@@ -13,4 +13,4 @@ None: no Rust changes.
 
 ## 4. Verification
 
-- [ ] 4.1 `scripts/run-tests.sh` passes (the end-to-end suite with the upgrade check). Docs (`doc/DEVELOPMENT.md`, `e2e-tests/README.md`) describe the new names and isolated runs.
+- [x] 4.1 `scripts/run-tests.sh` passes (the end-to-end suite with the upgrade check). Docs (`doc/DEVELOPMENT.md`, `e2e-tests/README.md`) describe the new names and isolated runs. Recorded 2026-10-27: `scripts/run-tests.sh` passed in 4m47s (web 422, Rust 1189, contract 16, upgrade check, end-to-end 65/65 in 3.5m); two worktrees ran `scripts/run-e2e-tests.sh` at once, both 65/65 in ~4.6 min.

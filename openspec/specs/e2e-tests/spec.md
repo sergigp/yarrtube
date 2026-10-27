@@ -1,8 +1,8 @@
-# smoke-tests Specification
+# e2e-tests Specification
 
 ## Purpose
 
-Gives yarrtube an automated, end-to-end smoke suite that proves the real Docker image serves a working webapp — creating playlists/channels, downloading real videos via yt-dlp, and playing them back — runnable both in CI on every change and on demand before/after large refactors.
+Gives yarrtube an automated end-to-end suite that drives the real Docker image through a browser against a fake YouTube (a stand-in Data API and `yt-dlp`): adding playlists and channels, downloading their videos and playing them back, on desktop and on an emulated iPhone, runnable on demand and, unlike the YouTube contract tests, without YouTube.
 
 ## Requirements
 
@@ -82,7 +82,7 @@ The system SHALL verify, in the iPhone browser, that the sidebar can be opened v
 The system SHALL verify, through the browser against the real image, that the announcements bar displays, links, dismisses, and persists correctly. The GitHub announcements URL SHALL be stubbed with a fixed fixture so the test does not depend on the live file.
 
 #### Scenario: Show, follow link target, dismiss, persist
-- **WHEN** the announcements URL is stubbed to return `[{"id":"smoke-b","text":"Second [docs](https://example.com/docs)"},{"id":"smoke-a","text":"First"}]` and the user opens `/` in a fresh browser context
+- **WHEN** the announcements URL is stubbed to return `[{"id":"e2e-b","text":"Second [docs](https://example.com/docs)"},{"id":"e2e-a","text":"First"}]` and the user opens `/` in a fresh browser context
 - **THEN** a bar shows `Second docs`, where `docs` is a link to `https://example.com/docs` with `target="_blank"`
 - **WHEN** the user clicks `Dismiss announcement`
 - **THEN** the bar shows `First`
@@ -94,11 +94,11 @@ The system SHALL verify, through the browser against the real image, that the an
 - **THEN** no announcements bar is shown and the header and sidebar render normally
 
 ### Requirement: Continuous Integration
-The system SHALL run the smoke suite automatically in CI on every pull request and on every push to `main`, using a `YOUTUBE_API_KEY` provided as a repository secret.
+The system SHALL run the end-to-end suite automatically in CI on every pull request and on every push to `main`, using a `YOUTUBE_API_KEY` provided as a repository secret.
 
 #### Scenario: Pull request opened
 - **WHEN** a pull request is opened or updated
-- **THEN** the smoke-tests workflow runs the dockerized suite and reports its result on the pull request
+- **THEN** the e2e-tests workflow runs the dockerized suite and reports its result on the pull request
 
 ### Requirement: Mobile Browser Projects
 The suite SHALL run every spec tagged as mobile in an emulated iPhone browser running WebKit, with touch input and a mobile viewport, and only there. Specs SHALL NOT emulate a phone by resizing the desktop browser. Untagged specs SHALL run in desktop Chromium only.
@@ -276,3 +276,14 @@ The suite SHALL verify that the media endpoint answers a byte-range request with
 #### Scenario: Range request
 - **WHEN** the suite requests the video's media URL with `Range: bytes=0-1023`
 - **THEN** the response is `206` with a `Content-Range` header and 1024 bytes
+
+### Requirement: Isolated Runs
+The suite's run script SHALL give each run its own container, image tag and ports, so that runs started from different worktrees at the same time neither stop each other's containers nor collide on ports, and SHALL keep a failed run's container log with that worktree's test results.
+
+#### Scenario: Two worktrees at once
+- **WHEN** the suite is started from two worktrees at the same time
+- **THEN** each run starts and removes only its own container, its services listen on ports of their own, and both runs complete
+
+#### Scenario: Ports chosen by the developer
+- **WHEN** a developer sets the suite's port variables
+- **THEN** the run uses those ports instead of free ones
