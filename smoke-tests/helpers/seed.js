@@ -97,9 +97,49 @@ function sameHandle(a, b) {
   return a.toLowerCase() === b.toLowerCase()
 }
 
-/** Adds a fake-YouTube playlist (see `fakeYoutube.js`) through the API. */
-export async function addPlaylist(request, playlist, { downloaded = true } = {}) {}
+/**
+ * Adds a fake-YouTube playlist (see `fakeYoutube.js`) through the API, with
+ * the Add dialog's body, and by default waits until its videos are
+ * downloaded and nothing more is in flight (about a second against the fake
+ * YouTube). Returns it as the API lists it, with its videos.
+ */
+export async function addPlaylist(request, playlist, { downloaded = true } = {}) {
+  const created = await request.post('/api/playlists', {
+    data: {
+      playlist: playlist.id,
+      path: `playlists/${slugOf(playlist.title)}`,
+      quality: 'low',
+      exclude_from_home: false,
+      reconcile_interval_minutes: 180,
+    },
+  })
+  expect(created.ok(), await created.text()).toBeTruthy()
+  const { id, name, path } = await created.json()
+  const videosUrl = `/api/playlists/${encodeURIComponent(id)}/videos`
+  if (downloaded) {
+    await waitUntilSettled(request, { listUrl: '/api/playlists', id, videosUrl, count: playlist.videos.length })
+  }
+  const videos = await (await request.get(videosUrl)).json()
+  return { id, name, path, videos }
+}
 
-/** Adds the fake-YouTube channel through the API, keeping its `videoLimit` newest videos. */
-export async function addChannel(request, channel, { videoLimit, downloaded = true }) {}
-
+/** As `addPlaylist`, for the fake-YouTube channel's `videoLimit` newest videos. */
+export async function addChannel(request, channel, { videoLimit, downloaded = true }) {
+  const created = await request.post('/api/channels', {
+    data: {
+      channel: channel.handle,
+      quality: 'low',
+      video_limit: videoLimit,
+      path: `channels/${slugOf(channel.handle)}`,
+      reconcile_interval_minutes: 180,
+    },
+  })
+  expect(created.ok(), await created.text()).toBeTruthy()
+  const { name, path } = await created.json()
+  const videosUrl = `/api/channels/${encodeURIComponent(channel.handle)}/videos`
+  if (downloaded) {
+    await waitUntilSettled(request, { listUrl: '/api/channels', id: channel.handle, videosUrl, count: videoLimit })
+  }
+  const videos = await (await request.get(videosUrl)).json()
+  return { handle: channel.handle, name, path, videos }
+}

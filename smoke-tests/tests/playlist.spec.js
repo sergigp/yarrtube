@@ -9,8 +9,8 @@ import {
 import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow } from '../helpers/video.js'
 import { expectEpisodeOnDisk, expectGoneFromDisk } from '../helpers/library.js'
 import { expectPlexScanned } from '../helpers/plex.js'
-import { deleteSeeded, seedDownloadedPlaylist } from '../helpers/seed.js'
-import { PLAYLIST } from '../helpers/fakeYoutube.js'
+import { addPlaylist } from '../helpers/seed.js'
+import { PLAYLIST, SLOW_PLAYLIST } from '../helpers/fakeYoutube.js'
 import { expectImageLoaded } from '../helpers/media.js'
 import {
   syncItem,
@@ -43,17 +43,17 @@ function continueWatching(page) {
 }
 
 /**
- * Pauses the selected video halfway through, which records the position.
- * The playlist's video (Big Buck Bunny, about 10 minutes) is long enough that
- * halfway is past the 30 seconds a video must reach to count as started, so
- * the home view offers it to continue watching.
+ * Pauses the selected video at 40 s, which records the position: past the
+ * 30 s a video must reach to count as started (so the home view offers it to
+ * continue watching) and well short of the 90% that marks it watched, on the
+ * 61 s fixture clip.
  */
-async function recordHalfway(page) {
+async function recordPosition(page) {
   const progressReported = page.waitForResponse(
     (response) => response.url().endsWith('/progress') && response.request().method() === 'POST',
   )
   await page.locator('video').evaluate((el) => {
-    el.currentTime = el.duration / 2
+    el.currentTime = 40
     el.pause()
   })
   expect((await progressReported).status()).toBe(200)
@@ -107,18 +107,13 @@ test('playlist golden path: add, download, on disk, scanned by Plex, badge, dele
   })
 })
 
-// Each test below runs on its own against the same downloaded playlist; the
-// ones that mark the video watched come last, since nothing unmarks it.
 test.describe('with a downloaded playlist', () => {
-  test.use({ keepLibrary: true })
-
+  // Each test adds its own: against the fake YouTube it downloads in about
+  // a second.
   let seeded
-  test.beforeAll(async ({ request }) => {
-    seeded = await seedDownloadedPlaylist(request)
-  })
-
-  test.afterAll(async ({ request }) => {
-    await deleteSeeded(request, seeded)
+  test.beforeEach(async ({ request }) => {
+    const playlist = await addPlaylist(request, PLAYLIST)
+    seeded = { ...playlist, video: playlist.videos[0] }
   })
 
   const openPlaylist = (page) => page.goto(`/playlists/${encodeURIComponent(seeded.id)}`)
@@ -141,7 +136,7 @@ test.describe('with a downloaded playlist', () => {
     await expect(detailListItem.getByText(/^\d+:\d{2}(:\d{2})?$/)).toBeVisible()
 
     await assertVideoPlays(page)
-    await recordHalfway(page)
+    await recordPosition(page)
   })
 
   test('shows its subtitles', async ({ page }) => {
@@ -153,7 +148,7 @@ test.describe('with a downloaded playlist', () => {
     const videoTitle = seeded.video.title
     await openPlaylist(page)
     await assertVideoPlays(page)
-    await recordHalfway(page)
+    await recordPosition(page)
 
     // Same video, with thumbnail + duration, on the home feed.
     await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
@@ -193,7 +188,7 @@ test.describe('with a downloaded playlist', () => {
     const videoTitle = seeded.video.title
     await openPlaylist(page)
     await assertVideoPlays(page)
-    await recordHalfway(page)
+    await recordPosition(page)
     await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
     await expect(continueWatching(page).getByText(videoTitle, { exact: true })).toBeVisible()
 
@@ -214,7 +209,7 @@ test.describe('with a downloaded playlist', () => {
     const videoTitle = seeded.video.title
     await openPlaylist(page)
     await assertVideoPlays(page)
-    await recordHalfway(page)
+    await recordPosition(page)
     const row = page.getByRole('button', { name: new RegExp(`^(?!Actions for).*${escapeRegExp(videoTitle)}$`) })
     await expect(row.getByRole('progressbar', { name: 'Watch progress' })).toBeVisible()
     await expect(row.getByText(TIME_LEFT)).toBeVisible()
@@ -306,8 +301,11 @@ test.describe('with a downloaded playlist', () => {
         (await response.json()).watched === true,
       { timeout: 30_000 },
     )
+    // The player reports every 15 s while playing; at quarter speed the
+    // short fixture clip is still playing then, past 90%.
     const nearEnd = await player.evaluate(async (el) => {
-      el.currentTime = el.duration * 0.92
+      el.playbackRate = 0.25
+      el.currentTime = el.duration * 0.91
       await el.play()
       return el.currentTime
     })
@@ -327,25 +325,16 @@ test.describe('with a downloaded playlist', () => {
 })
 
 test('Downloads tab lists a running download', async ({ page }) => {
-  // Added through the API at high quality, so the download lasts long enough
-  // to be seen running.
-  const created = await page.request.post('/api/playlists', {
-    data: {
-      playlist: PLAYLIST_ID,
-      path: PLAYLIST_PATH,
-      quality: 'high',
-      exclude_from_home: false,
-      reconcile_interval_minutes: 180,
-    },
-  })
-  expect(created.ok(), await created.text()).toBeTruthy()
+  // The slow fixture video takes about 20 s to download, long enough to be
+  // seen running.
+  const playlist = await addPlaylist(page.request, SLOW_PLAYLIST, { downloaded: false })
 
   await page.goto('/tasks')
   await page.getByRole('tab', { name: /^Downloads/ }).click()
 
-  const download = page.locator('main li', { hasText: new RegExp(`^Downloading .+ in ${PLAYLIST_NAME}`) })
-  await expect(download).toHaveCount(1, { timeout: 60_000 })
+  const download = page.locator('main li', { hasText: new RegExp(`^Downloading .+ in ${playlist.name}`) })
+  await expect(download).toHaveCount(1, { timeout: 15_000 })
   // Still listed while it runs: the video isn't downloaded yet.
-  const [video] = await (await page.request.get(`/api/playlists/${encodeURIComponent(PLAYLIST_ID)}/videos`)).json()
+  const [video] = await (await page.request.get(`/api/playlists/${encodeURIComponent(playlist.id)}/videos`)).json()
   expect(video.status).not.toBe('DOWNLOADED')
 })
