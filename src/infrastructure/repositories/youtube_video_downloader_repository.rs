@@ -476,9 +476,11 @@ mod tests {
 mod youtube_contract_tests {
     use super::*;
     use crate::infrastructure::shared::youtube_contract::{
-        MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs, video_url, ytdlp_path,
+        CAPTIONED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs, video_url,
+        ytdlp_path,
     };
     use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
+    use crate::domain::video_transcript::CaptionTracks;
     use crate::infrastructure::shared::ytdlp::{DownloadedVideo, FetchedThumbnail};
     use chrono::DateTime;
 
@@ -585,6 +587,37 @@ mod youtube_contract_tests {
         let reason = repository.diagnose(&video_url(MISSING_VIDEO_ID)).unwrap();
 
         assert_eq!(reason, Some("This video is unavailable".to_string()));
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_probe_the_caption_tracks() {
+        let staging_dir = unique_temp_dir("contract-captions");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let probe = repository
+            .probe_captions(&video_url(CAPTIONED_VIDEO_ID), &staging_dir)
+            .unwrap();
+
+        // YouTube's auto-translated captions (over a hundred languages) and
+        // the warnings it prints alongside vary run to run, so they're taken
+        // as reported; the English auto-captions must be among them.
+        assert!(probe.tracks.automatic.contains(&"en".to_string()));
+        assert_eq!(
+            probe,
+            CaptionProbe {
+                tracks: CaptionTracks {
+                    original_language: Some("en".to_string()),
+                    manual: vec!["en".to_string(), "fr".to_string()],
+                    automatic: probe.tracks.automatic.clone(),
+                },
+                published_at: DateTime::from_timestamp(1_212_060_266, 0),
+                info_json: staging_dir.join("info.json"),
+                warnings: probe.warnings.clone(),
+            }
+        );
+        assert!(probe.info_json.is_file());
+        std::fs::remove_dir_all(&staging_dir).unwrap();
     }
 
     fn staged_files(staging_dir: &Path) -> Vec<PathBuf> {
