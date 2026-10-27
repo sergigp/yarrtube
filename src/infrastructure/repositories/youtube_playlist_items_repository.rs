@@ -9,8 +9,6 @@ use std::collections::HashSet;
 #[cfg(test)]
 use std::sync::Arc;
 
-const YOUTUBE_API_URL: &str = "https://www.googleapis.com/youtube/v3";
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct YoutubePlaylistItem {
     pub video_id: String,
@@ -103,20 +101,13 @@ struct VideoSnippet {
 
 pub struct YoutubeApiPlaylistItemsRepository {
     api_key: String,
-    base_url: String,
+    /// The YouTube Data API's root, e.g. `https://www.googleapis.com/youtube/v3`.
+    api_url: String,
 }
 
 impl YoutubeApiPlaylistItemsRepository {
-    pub fn new(api_key: String, _api_url: String) -> Self {
-        Self {
-            api_key,
-            base_url: YOUTUBE_API_URL.to_string(),
-        }
-    }
-
-    #[cfg(test)]
-    fn with_base_url(api_key: String, base_url: String) -> Self {
-        Self { api_key, base_url }
+    pub fn new(api_key: String, api_url: String) -> Self {
+        Self { api_key, api_url }
     }
 
     fn fetch_page(
@@ -135,7 +126,7 @@ impl YoutubeApiPlaylistItemsRepository {
         }
 
         let response = client
-            .get(format!("{}/playlistItems", self.base_url))
+            .get(format!("{}/playlistItems", self.api_url))
             .query(&query)
             .header(YOUTUBE_API_KEY_HEADER, &self.api_key)
             .send()
@@ -202,7 +193,7 @@ impl YoutubeApiPlaylistItemsRepository {
     fn find_not_yet_watchable(&self, video_ids: &[&str]) -> anyhow::Result<HashSet<String>> {
         let ids = video_ids.join(",");
         let response = reqwest::blocking::Client::new()
-            .get(format!("{}/videos", self.base_url))
+            .get(format!("{}/videos", self.api_url))
             .query(&[("part", "snippet"), ("id", ids.as_str())])
             .header(YOUTUBE_API_KEY_HEADER, &self.api_key)
             .send()
@@ -363,7 +354,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -411,7 +402,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -444,7 +435,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -477,7 +468,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -510,7 +501,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -542,7 +533,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -585,7 +576,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -628,7 +619,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -674,7 +665,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -716,7 +707,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -760,7 +751,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let result = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -787,7 +778,7 @@ mod tests {
             .create();
 
         let repository =
-            YoutubeApiPlaylistItemsRepository::with_base_url("api-key".to_string(), server.url());
+            YoutubeApiPlaylistItemsRepository::new("api-key".to_string(), server.url());
 
         let videos = repository
             .list_current_videos(&PlaylistId::new("PL1").unwrap())
@@ -798,7 +789,7 @@ mod tests {
 
     #[test]
     fn it_should_keep_the_api_key_out_of_a_connection_error() {
-        let repository = YoutubeApiPlaylistItemsRepository::with_base_url(
+        let repository = YoutubeApiPlaylistItemsRepository::new(
             "secret-api-key".to_string(),
             UNREACHABLE_URL.to_string(),
         );

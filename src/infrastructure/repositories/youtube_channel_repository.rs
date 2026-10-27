@@ -3,8 +3,6 @@ use crate::infrastructure::shared::youtube_api_key::YOUTUBE_API_KEY_HEADER;
 use anyhow::Context;
 use serde::Deserialize;
 
-const CHANNELS_URL: &str = "https://www.googleapis.com/youtube/v3/channels";
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedChannel {
     pub youtube_channel_id: String,
@@ -66,20 +64,13 @@ impl ChannelSnippet {
 
 pub struct YoutubeApiChannelRepository {
     api_key: String,
-    base_url: String,
+    /// The YouTube Data API's root, e.g. `https://www.googleapis.com/youtube/v3`.
+    api_url: String,
 }
 
 impl YoutubeApiChannelRepository {
-    pub fn new(api_key: String, _api_url: String) -> Self {
-        Self {
-            api_key,
-            base_url: CHANNELS_URL.to_string(),
-        }
-    }
-
-    #[cfg(test)]
-    fn with_base_url(api_key: String, base_url: String) -> Self {
-        Self { api_key, base_url }
+    pub fn new(api_key: String, api_url: String) -> Self {
+        Self { api_key, api_url }
     }
 }
 
@@ -87,7 +78,7 @@ impl YoutubeChannelRepository for YoutubeApiChannelRepository {
     fn resolve(&self, handle: &ChannelHandle) -> anyhow::Result<Option<ResolvedChannel>> {
         let client = reqwest::blocking::Client::new();
         let response = client
-            .get(&self.base_url)
+            .get(format!("{}/channels", self.api_url))
             .query(&[("part", "id,snippet"), ("forHandle", handle.as_str())])
             .header(YOUTUBE_API_KEY_HEADER, &self.api_key)
             .send()
@@ -139,7 +130,7 @@ mod tests {
     fn it_should_return_the_resolved_channel_when_the_handle_exists() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/channels")
             .match_query(mockito::Matcher::AllOf(vec![
                 mockito::Matcher::UrlEncoded("forHandle".into(), "@somechannel".into()),
                 mockito::Matcher::UrlEncoded("part".into(), "id,snippet".into()),
@@ -149,8 +140,7 @@ mod tests {
             .with_body(r#"{"items": [{"id": "UC123", "snippet": {"title": "Some Channel"}}]}"#)
             .create();
 
-        let repository =
-            YoutubeApiChannelRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiChannelRepository::new("api-key".to_string(), server.url());
         let handle = ChannelHandle::new("@somechannel").unwrap();
 
         let resolved = repository.resolve(&handle).unwrap().unwrap();
@@ -162,14 +152,13 @@ mod tests {
     fn it_should_return_no_avatar_url_when_the_response_has_no_thumbnails() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/channels")
             .match_query(mockito::Matcher::Any)
             .with_status(200)
             .with_body(r#"{"items": [{"id": "UC123", "snippet": {"title": "Some Channel"}}]}"#)
             .create();
 
-        let repository =
-            YoutubeApiChannelRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiChannelRepository::new("api-key".to_string(), server.url());
         let handle = ChannelHandle::new("@somechannel").unwrap();
 
         let resolved = repository.resolve(&handle).unwrap().unwrap();
@@ -180,7 +169,7 @@ mod tests {
     fn it_should_prefer_the_medium_thumbnail_as_the_avatar_url() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/channels")
             .match_query(mockito::Matcher::Any)
             .with_status(200)
             .with_body(
@@ -192,8 +181,7 @@ mod tests {
             )
             .create();
 
-        let repository =
-            YoutubeApiChannelRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiChannelRepository::new("api-key".to_string(), server.url());
         let handle = ChannelHandle::new("@somechannel").unwrap();
 
         let resolved = repository.resolve(&handle).unwrap().unwrap();
@@ -207,7 +195,7 @@ mod tests {
     fn it_should_fall_back_to_the_default_thumbnail_when_medium_is_absent() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/channels")
             .match_query(mockito::Matcher::Any)
             .with_status(200)
             .with_body(
@@ -217,8 +205,7 @@ mod tests {
             )
             .create();
 
-        let repository =
-            YoutubeApiChannelRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiChannelRepository::new("api-key".to_string(), server.url());
         let handle = ChannelHandle::new("@somechannel").unwrap();
 
         let resolved = repository.resolve(&handle).unwrap().unwrap();
@@ -232,7 +219,7 @@ mod tests {
     fn it_should_return_none_when_the_handle_does_not_resolve_to_a_channel() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/channels")
             .match_query(mockito::Matcher::AllOf(vec![
                 mockito::Matcher::UrlEncoded("forHandle".into(), "@missing".into()),
                 mockito::Matcher::UrlEncoded("part".into(), "id,snippet".into()),
@@ -241,8 +228,7 @@ mod tests {
             .with_body(r#"{"items": []}"#)
             .create();
 
-        let repository =
-            YoutubeApiChannelRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiChannelRepository::new("api-key".to_string(), server.url());
         let handle = ChannelHandle::new("@missing").unwrap();
 
         assert!(repository.resolve(&handle).unwrap().is_none());
@@ -252,7 +238,7 @@ mod tests {
     fn it_should_return_none_when_youtube_omits_items() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/channels")
             .match_query(mockito::Matcher::AllOf(vec![
                 mockito::Matcher::UrlEncoded("forHandle".into(), "@missing".into()),
                 mockito::Matcher::UrlEncoded("part".into(), "id,snippet".into()),
@@ -268,8 +254,7 @@ mod tests {
             )
             .create();
 
-        let repository =
-            YoutubeApiChannelRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiChannelRepository::new("api-key".to_string(), server.url());
         let handle = ChannelHandle::new("@missing").unwrap();
 
         let resolved = repository.resolve(&handle).map_err(|e| e.to_string());
@@ -279,7 +264,7 @@ mod tests {
 
     #[test]
     fn it_should_keep_the_api_key_out_of_a_connection_error() {
-        let repository = YoutubeApiChannelRepository::with_base_url(
+        let repository = YoutubeApiChannelRepository::new(
             "secret-api-key".to_string(),
             UNREACHABLE_URL.to_string(),
         );

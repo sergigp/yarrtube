@@ -4,8 +4,6 @@ use anyhow::Context;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
-const VIDEOS_URL: &str = "https://www.googleapis.com/youtube/v3/videos";
-
 /// A video's full YouTube snippet, fetched for episode NFO generation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct YoutubeMetadata {
@@ -47,20 +45,13 @@ struct VideoItemSnippet {
 
 pub struct YoutubeApiMetadataRepository {
     api_key: String,
-    base_url: String,
+    /// The YouTube Data API's root, e.g. `https://www.googleapis.com/youtube/v3`.
+    api_url: String,
 }
 
 impl YoutubeApiMetadataRepository {
-    pub fn new(api_key: String, _api_url: String) -> Self {
-        Self {
-            api_key,
-            base_url: VIDEOS_URL.to_string(),
-        }
-    }
-
-    #[cfg(test)]
-    fn with_base_url(api_key: String, base_url: String) -> Self {
-        Self { api_key, base_url }
+    pub fn new(api_key: String, api_url: String) -> Self {
+        Self { api_key, api_url }
     }
 }
 
@@ -68,7 +59,7 @@ impl YoutubeMetadataRepository for YoutubeApiMetadataRepository {
     fn find(&self, id: &VideoId) -> anyhow::Result<Option<YoutubeMetadata>> {
         let client = reqwest::blocking::Client::new();
         let response = client
-            .get(&self.base_url)
+            .get(format!("{}/videos", self.api_url))
             .query(&[("part", "snippet"), ("id", id.as_str())])
             .header(YOUTUBE_API_KEY_HEADER, &self.api_key)
             .send()
@@ -183,7 +174,7 @@ mod tests {
     fn it_should_return_the_metadata_when_the_video_exists() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/videos")
             .match_query(mockito::Matcher::AllOf(vec![
                 mockito::Matcher::UrlEncoded("id".into(), "vid1".into()),
                 mockito::Matcher::UrlEncoded("part".into(), "snippet".into()),
@@ -202,8 +193,7 @@ mod tests {
             )
             .create();
 
-        let repository =
-            YoutubeApiMetadataRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiMetadataRepository::new("api-key".to_string(), server.url());
         let id = VideoId::new("vid1").unwrap();
 
         let found = repository.find(&id).unwrap().unwrap();
@@ -219,7 +209,7 @@ mod tests {
     fn it_should_default_tags_and_category_id_when_absent() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/videos")
             .match_query(mockito::Matcher::Any)
             .with_status(200)
             .with_body(
@@ -232,8 +222,7 @@ mod tests {
             )
             .create();
 
-        let repository =
-            YoutubeApiMetadataRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiMetadataRepository::new("api-key".to_string(), server.url());
         let id = VideoId::new("vid1").unwrap();
 
         let found = repository.find(&id).unwrap().unwrap();
@@ -245,7 +234,7 @@ mod tests {
     fn it_should_return_none_when_the_video_does_not_exist() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/videos")
             .match_query(mockito::Matcher::AllOf(vec![
                 mockito::Matcher::UrlEncoded("id".into(), "missing".into()),
                 mockito::Matcher::UrlEncoded("part".into(), "snippet".into()),
@@ -254,8 +243,7 @@ mod tests {
             .with_body(r#"{"items": []}"#)
             .create();
 
-        let repository =
-            YoutubeApiMetadataRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiMetadataRepository::new("api-key".to_string(), server.url());
         let id = VideoId::new("missing").unwrap();
 
         assert!(repository.find(&id).unwrap().is_none());
@@ -265,14 +253,13 @@ mod tests {
     fn it_should_return_an_error_when_the_api_request_fails() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/videos")
             .match_query(mockito::Matcher::Any)
             .with_status(500)
             .with_body("internal error")
             .create();
 
-        let repository =
-            YoutubeApiMetadataRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiMetadataRepository::new("api-key".to_string(), server.url());
         let id = VideoId::new("vid1").unwrap();
 
         assert!(repository.find(&id).is_err());
@@ -280,7 +267,7 @@ mod tests {
 
     #[test]
     fn it_should_keep_the_api_key_out_of_a_connection_error() {
-        let repository = YoutubeApiMetadataRepository::with_base_url(
+        let repository = YoutubeApiMetadataRepository::new(
             "secret-api-key".to_string(),
             UNREACHABLE_URL.to_string(),
         );

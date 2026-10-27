@@ -3,8 +3,6 @@ use crate::infrastructure::shared::youtube_api_key::YOUTUBE_API_KEY_HEADER;
 use anyhow::Context;
 use serde::Deserialize;
 
-const PLAYLISTS_URL: &str = "https://www.googleapis.com/youtube/v3/playlists";
-
 /// What YouTube reports about a playlist: its title and how many items it holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedPlaylist {
@@ -41,20 +39,13 @@ struct PlaylistContentDetails {
 
 pub struct YoutubeApiPlaylistRepository {
     api_key: String,
-    base_url: String,
+    /// The YouTube Data API's root, e.g. `https://www.googleapis.com/youtube/v3`.
+    api_url: String,
 }
 
 impl YoutubeApiPlaylistRepository {
-    pub fn new(api_key: String, _api_url: String) -> Self {
-        Self {
-            api_key,
-            base_url: PLAYLISTS_URL.to_string(),
-        }
-    }
-
-    #[cfg(test)]
-    fn with_base_url(api_key: String, base_url: String) -> Self {
-        Self { api_key, base_url }
+    pub fn new(api_key: String, api_url: String) -> Self {
+        Self { api_key, api_url }
     }
 }
 
@@ -62,7 +53,7 @@ impl YoutubePlaylistRepository for YoutubeApiPlaylistRepository {
     fn resolve(&self, id: &PlaylistId) -> anyhow::Result<Option<ResolvedPlaylist>> {
         let client = reqwest::blocking::Client::new();
         let response = client
-            .get(&self.base_url)
+            .get(format!("{}/playlists", self.api_url))
             .query(&[("part", "snippet,contentDetails"), ("id", id.as_str())])
             .header(YOUTUBE_API_KEY_HEADER, &self.api_key)
             .send()
@@ -117,7 +108,7 @@ mod tests {
     fn it_should_resolve_the_playlist_title_and_item_count() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/playlists")
             .match_query(mockito::Matcher::AllOf(vec![
                 mockito::Matcher::UrlEncoded("id".into(), "PLexists".into()),
                 mockito::Matcher::UrlEncoded("part".into(), "snippet,contentDetails".into()),
@@ -133,8 +124,7 @@ mod tests {
             )
             .create();
 
-        let repository =
-            YoutubeApiPlaylistRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiPlaylistRepository::new("api-key".to_string(), server.url());
         let id = PlaylistId::new("PLexists").unwrap();
 
         assert_eq!(
@@ -150,7 +140,7 @@ mod tests {
     fn it_should_resolve_nothing_if_the_playlist_does_not_exist() {
         let mut server = mockito::Server::new();
         let _mock = server
-            .mock("GET", "/")
+            .mock("GET", "/playlists")
             .match_query(mockito::Matcher::AllOf(vec![
                 mockito::Matcher::UrlEncoded("id".into(), "PLmissing".into()),
                 mockito::Matcher::UrlEncoded("part".into(), "snippet,contentDetails".into()),
@@ -159,8 +149,7 @@ mod tests {
             .with_body(r#"{"items": []}"#)
             .create();
 
-        let repository =
-            YoutubeApiPlaylistRepository::with_base_url("api-key".to_string(), server.url());
+        let repository = YoutubeApiPlaylistRepository::new("api-key".to_string(), server.url());
         let id = PlaylistId::new("PLmissing").unwrap();
 
         assert_eq!(repository.resolve(&id).unwrap(), None);
@@ -168,7 +157,7 @@ mod tests {
 
     #[test]
     fn it_should_keep_the_api_key_out_of_a_connection_error() {
-        let repository = YoutubeApiPlaylistRepository::with_base_url(
+        let repository = YoutubeApiPlaylistRepository::new(
             "secret-api-key".to_string(),
             UNREACHABLE_URL.to_string(),
         );
