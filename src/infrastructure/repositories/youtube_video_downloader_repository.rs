@@ -577,6 +577,16 @@ mod youtube_contract_tests {
         assert_eq!(reason, None);
     }
 
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_diagnose_why_a_missing_video_failed() {
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let reason = repository.diagnose(&video_url(MISSING_VIDEO_ID)).unwrap();
+
+        assert_eq!(reason, Some("This video is unavailable".to_string()));
+    }
+
     fn staged_files(staging_dir: &Path) -> Vec<PathBuf> {
         let mut files: Vec<PathBuf> = std::fs::read_dir(staging_dir)
             .unwrap()
