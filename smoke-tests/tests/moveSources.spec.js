@@ -1,14 +1,15 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { slugOf } from '../helpers/addDialog.js'
+import { CHANNEL, PLAYLIST } from '../helpers/fakeYoutube.js'
 import { expectEpisodeOnDisk, libraryPath } from '../helpers/library.js'
 import { expectPlexScanned, resetPlexStub } from '../helpers/plex.js'
 import { assertVideoPlays, waitForVideoStatus } from '../helpers/video.js'
 import { existsSync } from 'node:fs'
 
-const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
-const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
+const PLAYLIST_ID = PLAYLIST.id
+const PLAYLIST_NAME = PLAYLIST.title
 const PLAYLIST_PATH = `playlists/${slugOf(PLAYLIST_NAME)}`
-const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
+const CHANNEL_HANDLE = CHANNEL.handle
 const CHANNEL_PATH = `channels/${slugOf(CHANNEL_HANDLE)}`
 
 /**

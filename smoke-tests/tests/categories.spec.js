@@ -1,6 +1,7 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { openAddChannelDialog, fillChannel } from '../helpers/addDialog.js'
-import { deleteSeeded, seedDownloadedChannel } from '../helpers/seed.js'
+import { addChannel } from '../helpers/seed.js'
+import { CHANNEL } from '../helpers/fakeYoutube.js'
 import { assertVideoPlays } from '../helpers/video.js'
 import { expectImageLoaded } from '../helpers/media.js'
 import {
@@ -10,7 +11,7 @@ import {
   sectionRows,
 } from '../helpers/sidebar.js'
 
-const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
+const CHANNEL_HANDLE = CHANNEL.handle
 
 // Deleting the open category can refetch its videos before the view leaves it.
 test.use({
@@ -180,12 +181,10 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
 })
 
 test.describe('with a downloaded channel in a category', () => {
-  test.use({ keepLibrary: true })
-
   let seeded
   let categoryId
-  test.beforeAll(async ({ request }) => {
-    seeded = await seedDownloadedChannel(request, { videoLimit: 1 })
+  test.beforeEach(async ({ request }) => {
+    seeded = await addChannel(request, CHANNEL, { videoLimit: 1 })
     const category = await request.post('/api/categories', { data: { name: 'Watch later' } })
     expect(category.ok(), await category.text()).toBeTruthy()
     categoryId = (await category.json()).id
@@ -193,11 +192,6 @@ test.describe('with a downloaded channel in a category', () => {
       data: { channels: [seeded.handle], playlists: [] },
     })
     expect(members.ok(), await members.text()).toBeTruthy()
-  })
-
-  test.afterAll(async ({ request }) => {
-    await request.delete(`/api/categories/${categoryId}`)
-    await deleteSeeded(request, seeded)
   })
 
   test('category card opens its video in the channel view and plays', async ({ page }) => {
