@@ -6,7 +6,7 @@ The end-to-end suite is now the longest part of CI (~5.4 min of a ~9 min run on 
 
 - Each Playwright worker starts its own yarrtube container (fresh database and videos directory, free ports, its own Plex stub) and removes it when it ends; tests in a worker talk only to that worker's daemon. The read-only fake YouTube Data API stays one shared process. At most N containers are alive at once; a run starts about one per worker per browser project, plus one per failed test (Playwright replaces a worker after a failure).
 - Tests run fully in parallel across workers (`fullyParallel`), since each test already starts from an empty library.
-- `scripts/run-tests.sh --workers <N>` sets the number of end-to-end workers: by default half the CPU cores, at most 4, locally, and 2 in CI; `.github/workflows/ci.yml` passes its own value once measured. `--workers 1` runs as today.
+- `scripts/run-tests.sh --workers <N>` sets the number of end-to-end workers: 3 by default, locally and in CI (measured: on 14 cores 1 → 4.6 min, 3 → 1.6 min; on GitHub's 4 vCPUs 3 workers → 2.0 min). The script also ends with a summary: each phase's time and test counts. `--workers 1` runs as today.
 - The script no longer starts a container for the main suite; the upgrade check (only with a YouTube API key) still runs before the suite, in its own containers, one after the other.
 - Container logs are saved per worker in `e2e-tests/test-results/`; a panic in any worker's daemon fails the run.
 

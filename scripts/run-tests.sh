@@ -11,10 +11,10 @@
 #
 # `--only` (repeatable) runs just those suites. `--workers` sets how many
 # end-to-end tests run at once, each worker against its own daemon
-# (default: half the cores, at most 4; 2 in CI). In CI (`--ci`, or
-# `CI=true`, which GitHub Actions sets) the contract tests are left out:
-# YouTube bot-checks CI runners. It only runs checks: dependencies, the
-# Playwright browsers and the web UI build must already be in place.
+# (default 3). In CI (`--ci`, or `CI=true`, which GitHub Actions sets) the
+# contract tests are left out: YouTube bot-checks CI runners. It only runs
+# checks: dependencies, the Playwright browsers and the web UI build must
+# already be in place. It ends with a summary: each phase's time and tests.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -59,19 +59,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# End-to-end workers: as asked, else 2 in CI (GitHub's runners have 4 vCPUs)
-# and half the cores, at most 4, locally.
-if [[ -n "$WORKERS" ]]; then
-  if [[ ! "$WORKERS" =~ ^[1-9][0-9]*$ ]]; then
-    echo "--workers takes a positive number (got \"$WORKERS\")" >&2
-    exit 1
-  fi
-elif [[ "$CI_MODE" == true ]]; then
-  WORKERS=2
-else
-  CORES="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
-  WORKERS=$(( CORES / 2 ))
-  WORKERS=$(( WORKERS < 1 ? 1 : WORKERS > 4 ? 4 : WORKERS ))
+# End-to-end workers: 3 unless asked otherwise, fast on a laptop and on
+# GitHub's 4-vCPU runners alike.
+WORKERS="${WORKERS:-3}"
+if [[ ! "$WORKERS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "--workers takes a positive number (got \"$WORKERS\")" >&2
+  exit 1
 fi
 
 if [[ -f "$REPO_ROOT/.env" ]]; then
@@ -85,6 +78,102 @@ step() {
   echo
   echo "==> $*"
 }
+
+# The summary printed at the end: each phase appends a line (name, seconds,
+# tests) to SUMMARY_FILE, the end-to-end suite's subshell too. A phase still
+# open when the script exits is the one that failed.
+SUMMARY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/yarrtube-tests.XXXXXX")"
+SUMMARY_FILE="$SUMMARY_DIR/summary"
+: >"$SUMMARY_FILE"
+PHASE_NAME=""
+SCRIPT_START=$(date +%s)
+
+phase_begin() {
+  PHASE_NAME="$1"
+  PHASE_START=$(date +%s)
+}
+
+phase_end() {
+  printf '%s\t%s\t%s\n' "$PHASE_NAME" "$(( $(date +%s) - PHASE_START ))" "${1:-}" >>"$SUMMARY_FILE"
+  PHASE_NAME=""
+}
+
+# Records the open phase, if any, as failed.
+phase_fail_open() {
+  if [[ -n "$PHASE_NAME" ]]; then
+    phase_end "FAILED"
+  fi
+}
+
+# Runs a command with its output shown and also kept in `log`, to count its
+# tests from.
+run_logged() {
+  local log="$1"
+  shift
+  "$@" 2>&1 | tee "$log"
+}
+
+strip_colors() {
+  sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$@"
+}
+
+# "426 passed" from Vitest's closing "Tests  426 passed (426)".
+count_vitest() {
+  strip_colors "$1" | sed -nE 's/^ *Tests +(.*) \([0-9]+\) *$/\1/p' | tail -1
+}
+
+# Every cargo test binary's "test result:" line, added up.
+count_cargo() {
+  strip_colors "$1" | awk '/^test result:/ {
+      for (i = 1; i <= NF; i++) {
+        if ($(i + 1) ~ /^passed/) passed += $i
+        if ($(i + 1) ~ /^ignored/) ignored += $i
+      }
+    }
+    END { printf "%d passed", passed; if (ignored) printf ", %d ignored", ignored }'
+}
+
+# Playwright's closing counts ("65 passed (1.4m)", "1 flaky", ...) of every
+# given log, added up per kind.
+count_playwright() {
+  strip_colors "$@" | awk '/^ +[0-9]+ (passed|failed|flaky|skipped|did not run)/ {
+      n = $1; $1 = ""; sub(/^ /, ""); sub(/ \(.*\)$/, ""); count[$0] += n
+      if (!($0 in seen)) { seen[$0] = 1; order[++kinds] = $0 }
+    }
+    END { for (i = 1; i <= kinds; i++) printf "%s%d %s", (i > 1 ? ", " : ""), count[order[i]], order[i] }'
+}
+
+duration() {
+  local seconds="$1"
+  if (( seconds < 60 )); then
+    echo "${seconds}s"
+  else
+    printf '%dm%02ds\n' $(( seconds / 60 )) $(( seconds % 60 ))
+  fi
+}
+
+print_summary() {
+  local exit_code=$?
+  phase_fail_open
+  step "summary"
+  local name seconds tests
+  while IFS=$'\t' read -r name seconds tests; do
+    if [[ "$seconds" == "-" ]]; then
+      printf '  %-28s %7s  %s\n' "$name" "" "$tests"
+    else
+      printf '  %-28s %7s  %s\n' "$name" "$(duration "$seconds")" "$tests"
+    fi
+  done <"$SUMMARY_FILE"
+  printf '  %-28s %7s\n' "total" "$(duration $(( $(date +%s) - SCRIPT_START )))"
+  rm -rf "$SUMMARY_DIR"
+  if [[ $exit_code -eq 0 ]]; then
+    step "all selected suites passed"
+  else
+    step "failed (exit $exit_code)"
+  fi
+  exit $exit_code
+}
+trap print_summary EXIT
 
 selected() {
   local suite="$1"
@@ -106,18 +195,26 @@ require_dir() {
 run_web() {
   require_dir web/node_modules "npm --prefix web ci"
   step "web UI: typecheck, lint, test"
-  npm --prefix "$REPO_ROOT/web" run check
+  phase_begin "web UI checks"
+  run_logged "$SUMMARY_DIR/web.log" npm --prefix "$REPO_ROOT/web" run check
+  phase_end "$(count_vitest "$SUMMARY_DIR/web.log")"
 }
 
 run_rust() {
   # The Rust binary embeds the built web UI.
   require_dir web/dist "npm --prefix web ci && npm --prefix web run build"
   step "Rust: formatting"
+  phase_begin "Rust formatting"
   cargo fmt --all -- --check
+  phase_end
   step "Rust: clippy"
+  phase_begin "Rust clippy"
   cargo clippy --all-targets --all-features --locked -- -D warnings
+  phase_end
   step "Rust: tests"
-  cargo test --locked
+  phase_begin "Rust tests"
+  run_logged "$SUMMARY_DIR/rust.log" cargo test --locked
+  phase_end "$(count_cargo "$SUMMARY_DIR/rust.log")"
 }
 
 # The adapters' `#[ignore]`d tests against the real yt-dlp and YouTube Data
@@ -137,8 +234,10 @@ run_contract() {
     exit 1
   fi
   step "YouTube contract tests (yt-dlp $("$ytdlp_path" --version) at $ytdlp_path)"
+  phase_begin "YouTube contract tests"
   YOUTUBE_API_KEY="$YOUTUBE_API_KEY" YTDLP_PATH="$ytdlp_path" \
-    cargo test --locked -- --ignored youtube_contract
+    run_logged "$SUMMARY_DIR/contract.log" cargo test --locked -- --ignored youtube_contract
+  phase_end "$(count_cargo "$SUMMARY_DIR/contract.log")"
 }
 
 # Builds the release Docker image (or takes `E2E_IMAGE`), runs it with fresh
@@ -202,7 +301,9 @@ run_e2e() {
     echo "==> testing $IMAGE_TAG"
   else
     echo "==> building $IMAGE_TAG"
+    phase_begin "e2e image build"
     docker build -t "$IMAGE_TAG" "$REPO_ROOT"
+    phase_end
   fi
 
   # The fake YouTube Data API on the host, shared by every daemon (it only
@@ -222,31 +323,36 @@ run_e2e() {
     PLEX_STUB_PID=$!
 
     echo "==> upgrade check: seeding a library with $UPGRADE_FROM_IMAGE"
+    phase_begin "e2e upgrade check"
     docker pull "$UPGRADE_FROM_IMAGE"
     e2e_start_container "$UPGRADE_FROM_IMAGE" real
-    e2e_run_upgrade_phase seed
+    run_logged "$SUMMARY_DIR/upgrade-seed.log" e2e_run_upgrade_phase seed
     e2e_stop_container
 
     echo "==> upgrade check: verifying the seeded library on $IMAGE_TAG"
     e2e_start_container "$IMAGE_TAG" fake
-    e2e_run_upgrade_phase verify
+    run_logged "$SUMMARY_DIR/upgrade-verify.log" e2e_run_upgrade_phase verify
     e2e_fail_on_panic
     e2e_stop_container
+    phase_end "$(count_playwright "$SUMMARY_DIR"/upgrade-*.log)"
   fi
 
   # Each worker starts its own daemon from the image (see
   # e2e-tests/helpers/daemon.js).
   echo "==> running Playwright suite on $WORKERS worker(s)"
+  phase_begin "e2e suite ($WORKERS workers)"
   E2E_IMAGE="$IMAGE_TAG" \
     E2E_RUN_ID="$run_id" \
     E2E_YOUTUBE_STUB_PORT="$YOUTUBE_STUB_PORT" \
     E2E_WORKERS="$WORKERS" \
     E2E_CHECK_ROUTE_COVERAGE=1 \
-    npm --prefix "$REPO_ROOT/e2e-tests" test
+    run_logged "$SUMMARY_DIR/e2e.log" npm --prefix "$REPO_ROOT/e2e-tests" test
+  phase_end "$(count_playwright "$SUMMARY_DIR/e2e.log")"
 }
 
 e2e_cleanup() {
   local exit_code=$?
+  phase_fail_open
   if [[ "$CONTAINER_STARTED" == true ]]; then
     if [[ $exit_code -ne 0 ]]; then
       echo "==> run failed (exit $exit_code); saving container logs to $LOG_FILE"
@@ -374,7 +480,6 @@ for suite in "${ALL_SUITES[@]}"; do
     esac
   else
     step "skipped: $suite"
+    printf '%s\t-\tskipped\n' "$suite" >>"$SUMMARY_FILE"
   fi
 done
-
-step "all selected suites passed"

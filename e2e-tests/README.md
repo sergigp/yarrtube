@@ -15,8 +15,8 @@ Run it with:
 
 from the repository root. It builds the release Docker image, runs the
 upgrade check (see below) unless `E2E_UPGRADE_FROM_IMAGE=none`, then runs
-this Playwright suite on `--workers N` workers (default: half the cores, at
-most 4; 2 in CI), every test free to run alongside any other.
+this Playwright suite on `--workers N` workers (default 3), every test free
+to run alongside any other.
 
 Each worker starts its own daemon (`helpers/daemon.js`, a worker-scoped
 fixture): a container of the image with a fresh temp database and videos

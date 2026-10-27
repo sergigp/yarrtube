@@ -5,7 +5,7 @@
 - `e2e-tests/plex-stub.js`: exports `startPlexStub(port)`; still runs standalone (the upgrade check's container uses one the script starts).
 - `e2e-tests/helpers/library.js`, `e2e-tests/helpers/plex.js`: read `E2E_VIDEOS_DIR` / `E2E_PLEX_STUB_URL` when called instead of at import, so the `daemon` fixture can set them for its own worker process (each worker is a separate process).
 - `e2e-tests/playwright.config.js`: `workers` from `E2E_WORKERS` (default 1), `fullyParallel: true`; the main suite no longer requires `E2E_VIDEOS_DIR` / `E2E_PLEX_STUB_URL` (each worker makes its own) but requires `E2E_IMAGE` and `E2E_YOUTUBE_STUB_PORT`.
-- `scripts/run-tests.sh`: `--workers <N>` (positive integer; default half the CPU cores, at most 4, or 2 under `--ci`), passed as `E2E_WORKERS`; the e2e suite builds (or takes) the image, starts the shared YouTube stub, runs the upgrade check in its own containers when there's a key, then runs Playwright with `E2E_IMAGE` and `E2E_RUN_ID`; the main-suite container, its Plex stub and the panic check move to the workers.
+- `scripts/run-tests.sh`: `--workers <N>` (positive integer; default 3, locally and in CI), passed as `E2E_WORKERS`; a closing summary of each phase's time and test counts (counted from each phase's output, also printed when a phase fails); the e2e suite builds (or takes) the image, starts the shared YouTube stub, runs the upgrade check in its own containers when there's a key, then runs Playwright with `E2E_IMAGE` and `E2E_RUN_ID`; the main-suite container, its Plex stub and the panic check move to the workers.
 - `.github/workflows/ci.yml`: `scripts/run-tests.sh --ci --workers <measured>`.
 - `e2e-tests/README.md`, `doc/DEVELOPMENT.md`: workers (one line in DEVELOPMENT).
 

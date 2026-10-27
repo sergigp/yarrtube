@@ -16,3 +16,4 @@ None: no Rust changes.
 ## 4. Verification
 
 - [x] 4.1 `e2e-tests/README.md` (workers, containers per run, per-worker logs) and one line in `doc/DEVELOPMENT.md` for `--workers`; `scripts/run-tests.sh` passes locally (upgrade check included). Full run passed in 2m38s (was 5m43s), upgrade check included.
+- [x] 4.2 Default workers 3 everywhere (`ci.yml` drops `--workers 3`, same behaviour); `scripts/run-tests.sh` ends with a summary of each phase's time and test counts, printed on failure too. A full run shows it (2m50s, 3 workers); a failing phase is marked FAILED.
