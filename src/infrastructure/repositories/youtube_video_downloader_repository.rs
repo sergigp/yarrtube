@@ -479,7 +479,7 @@ mod youtube_contract_tests {
         MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs, video_url, ytdlp_path,
     };
     use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
-    use crate::infrastructure::shared::ytdlp::DownloadedVideo;
+    use crate::infrastructure::shared::ytdlp::{DownloadedVideo, FetchedThumbnail};
     use chrono::DateTime;
 
     #[test]
@@ -543,5 +543,36 @@ mod youtube_contract_tests {
             }
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_fetch_only_the_thumbnail() {
+        let staging_dir = unique_temp_dir("contract-thumbnail");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let fetch = repository
+            .fetch_thumbnail(&video_url(SHORT_VIDEO_ID), &staging_dir)
+            .unwrap();
+
+        let thumbnail = staging_dir.join(format!("{SHORT_VIDEO_ID}.jpg"));
+        assert_eq!(
+            fetch,
+            ThumbnailFetch::Fetched(FetchedThumbnail {
+                path: thumbnail.clone(),
+                published_at: DateTime::from_timestamp(1_550_518_860, 0),
+            })
+        );
+        assert_eq!(staged_files(&staging_dir), vec![thumbnail]);
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    fn staged_files(staging_dir: &Path) -> Vec<PathBuf> {
+        let mut files: Vec<PathBuf> = std::fs::read_dir(staging_dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        files.sort();
+        files
     }
 }
