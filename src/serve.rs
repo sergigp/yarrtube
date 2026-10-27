@@ -203,7 +203,15 @@ fn parse_download_concurrency(value: Option<String>) -> usize {
 /// Where the YouTube Data API requests go: Google's, unless pointed at a
 /// fake YouTube (`YARRTUBE_YOUTUBE_API_URL`).
 fn youtube_api_url() -> String {
-    DEFAULT_YOUTUBE_API_URL.to_string()
+    parse_youtube_api_url(std::env::var("YARRTUBE_YOUTUBE_API_URL").ok())
+}
+
+/// The configured root without a trailing `/`, defaulting when unset or empty.
+fn parse_youtube_api_url(value: Option<String>) -> String {
+    value
+        .map(|url| url.trim_end_matches('/').to_string())
+        .filter(|url| !url.is_empty())
+        .unwrap_or_else(|| DEFAULT_YOUTUBE_API_URL.to_string())
 }
 
 /// Whether the daemon keeps its `yt-dlp` up to date; `YARRTUBE_YTDLP_SELF_UPDATE=false`
@@ -1121,6 +1129,29 @@ mod tests {
             ["playlist_deleted", "channel_deleted"]
                 .map(|event_type| subscribers.get(event_type).map(Vec::len)),
             [Some(2), Some(2)]
+        );
+    }
+
+    #[test]
+    fn it_should_read_the_youtube_api_url_or_default_it() {
+        let urls: Vec<String> = [
+            None,
+            Some(""),
+            Some("http://stub:1/youtube/v3"),
+            Some("http://stub:1/youtube/v3/"),
+        ]
+        .into_iter()
+        .map(|value| parse_youtube_api_url(value.map(str::to_string)))
+        .collect();
+
+        assert_eq!(
+            urls,
+            vec![
+                DEFAULT_YOUTUBE_API_URL.to_string(),
+                DEFAULT_YOUTUBE_API_URL.to_string(),
+                "http://stub:1/youtube/v3".to_string(),
+                "http://stub:1/youtube/v3".to_string(),
+            ]
         );
     }
 
