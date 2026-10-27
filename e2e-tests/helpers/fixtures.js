@@ -3,6 +3,7 @@ import { recordApiRoute } from './routeCoverage.js'
 import { libraryPath } from './library.js'
 import { resetPlexStub } from './plex.js'
 import { existsSync } from 'node:fs'
+import { startDaemon } from './daemon.js'
 
 /**
  * Every spec imports `test`/`expect` from here instead of
@@ -25,6 +26,25 @@ const ANNOUNCEMENTS_URL =
   'https://raw.githubusercontent.com/sergigp/yarrtube/main/announcements/announcements.json'
 
 export const test = base.extend({
+  // This worker's own daemon: tests talk only to it (through `baseURL`), and
+  // the helpers that read the videos root and the Plex stub get its values.
+  daemon: [
+    async ({}, use, workerInfo) => {
+      const daemon = await startDaemon({
+        runId: process.env.E2E_RUN_ID,
+        workerIndex: workerInfo.workerIndex,
+        image: process.env.E2E_IMAGE,
+        youtubeStubPort: process.env.E2E_YOUTUBE_STUB_PORT,
+      })
+      process.env.E2E_VIDEOS_DIR = daemon.videosDir
+      process.env.E2E_PLEX_STUB_URL = daemon.plexStubUrl
+      await use(daemon)
+      await daemon.stop()
+    },
+    { scope: 'worker', auto: true },
+  ],
+  baseURL: async ({ daemon }, use) => use(daemon.url),
+
   keepLibrary: [false, { option: true }],
   // `/api` 4xx responses the test triggers on purpose, e.g.
   // `[{ method: 'POST', path: '/api/playlists', status: 409 }]`.

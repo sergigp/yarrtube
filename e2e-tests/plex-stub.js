@@ -9,8 +9,7 @@
 // Control endpoints for specs: `GET /__requests` (recorded requests),
 // `POST /__reset` (clears them).
 import { createServer } from 'node:http'
-
-const PORT = Number(process.env.E2E_PLEX_STUB_PORT ?? 18324)
+import { fileURLToPath } from 'node:url'
 
 const SECTIONS = {
   MediaContainer: {
@@ -22,31 +21,44 @@ const SECTIONS = {
   },
 }
 
-let requests = []
-
-createServer((req, res) => {
-  const url = new URL(req.url, 'http://stub')
-  if (url.pathname === '/__requests') {
-    return json(res, requests)
-  }
-  if (url.pathname === '/__reset' && req.method === 'POST') {
-    requests = []
-    return json(res, {})
-  }
-  requests.push({
-    method: req.method,
-    path: url.pathname,
-    query: Object.fromEntries(url.searchParams),
-    token: req.headers['x-plex-token'] ?? null,
+/** Starts a stub on `port` (every interface, so a container can reach it). */
+export function startPlexStub(port) {
+  let requests = []
+  const server = createServer((req, res) => {
+    const url = new URL(req.url, 'http://stub')
+    if (url.pathname === '/__requests') {
+      return json(res, requests)
+    }
+    if (url.pathname === '/__reset' && req.method === 'POST') {
+      requests = []
+      return json(res, {})
+    }
+    requests.push({
+      method: req.method,
+      path: url.pathname,
+      query: Object.fromEntries(url.searchParams),
+      token: req.headers['x-plex-token'] ?? null,
+    })
+    if (req.method === 'GET' && url.pathname === '/library/sections') {
+      return json(res, SECTIONS)
+    }
+    if (req.method === 'GET' && /^\/library\/sections\/\d+\/refresh$/.test(url.pathname)) {
+      return json(res, {})
+    }
+    res.writeHead(404).end()
   })
-  if (req.method === 'GET' && url.pathname === '/library/sections') {
-    return json(res, SECTIONS)
-  }
-  if (req.method === 'GET' && /^\/library\/sections\/\d+\/refresh$/.test(url.pathname)) {
-    return json(res, {})
-  }
-  res.writeHead(404).end()
-}).listen(PORT, '0.0.0.0', () => console.log(`plex stub listening on ${PORT}`))
+  return new Promise((resolve) => {
+    server.listen(port, '0.0.0.0', () =>
+      resolve({ port, close: () => new Promise((done) => server.close(done)) }),
+    )
+  })
+}
+
+// Run on its own (`node plex-stub.js`), it listens on E2E_PLEX_STUB_PORT.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const port = Number(process.env.E2E_PLEX_STUB_PORT ?? 18324)
+  startPlexStub(port).then(() => console.log(`plex stub listening on ${port}`))
+}
 
 function json(res, body) {
   res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(body))

@@ -2,16 +2,17 @@ import { expect } from '@playwright/test'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-// The host directory mounted as the container's videos root, so specs can
-// check what actually landed on disk rather than only what the UI reports.
-const VIDEOS_DIR = process.env.E2E_VIDEOS_DIR
-
 // Downloads are merged into `.mp4`, the container iPhone Safari plays.
 const MEDIA_EXTENSIONS = ['mp4']
 
-/** The host path of `relative` (a path under the videos root). */
+/**
+ * The host path of `relative` (a path under the videos root). The root is
+ * the host directory mounted as this worker's daemon's videos root (see
+ * `daemon.js`), so specs can check what actually landed on disk rather than
+ * only what the UI reports.
+ */
 export function libraryPath(relative) {
-  return join(VIDEOS_DIR, relative)
+  return join(process.env.E2E_VIDEOS_DIR, relative)
 }
 
 /**

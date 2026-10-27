@@ -1,21 +1,20 @@
 import { expect } from '@playwright/test'
 
-// The stub Plex server `scripts/run-tests.sh` starts (see `plex-stub.js`), and
-// what the container is configured to reach it with.
-const PLEX_STUB_URL = process.env.E2E_PLEX_STUB_URL
+// What the daemon's container is configured to reach its stub Plex server
+// with (see `plex-stub.js`; each worker runs its own, see `daemon.js`).
 const PLEX_TOKEN = 'e2e-token'
 const PLEX_VIDEOS_PATH = '/plex/yarrtube'
 const SECTION_FOR = { playlists: '1', channels: '2' }
 
 async function plexRequests(request) {
-  const response = await request.get(`${PLEX_STUB_URL}/__requests`)
+  const response = await request.get(`${process.env.E2E_PLEX_STUB_URL}/__requests`)
   expect(response.ok()).toBeTruthy()
   return response.json()
 }
 
 /** Forgets what the stub recorded, so a test only sees its own scans. */
 export async function resetPlexStub(request) {
-  const response = await request.post(`${PLEX_STUB_URL}/__reset`)
+  const response = await request.post(`${process.env.E2E_PLEX_STUB_URL}/__reset`)
   expect(response.ok()).toBeTruthy()
 }
 

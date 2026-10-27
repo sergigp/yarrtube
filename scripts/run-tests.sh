@@ -7,9 +7,10 @@
 #   e2e       the end-to-end suite: the Docker image driven through real
 #             browsers against a fake YouTube (needs Docker)
 #
-# Usage: scripts/run-tests.sh [--ci] [--only <suite>]...
+# Usage: scripts/run-tests.sh [--ci] [--workers <N>] [--only <suite>]...
 #
-# `--only` (repeatable) runs just those suites. In CI (`--ci`, or `CI=true`,
+# `--only` (repeatable) runs just those suites. `--workers` sets how many
+# end-to-end tests run at once. In CI (`--ci`, or `CI=true`,
 # which GitHub Actions sets) the contract tests are left out: YouTube
 # bot-checks CI runners. It only runs checks: dependencies, the Playwright
 # browsers and the web UI build must already be in place.
@@ -23,6 +24,7 @@ if [[ "${CI:-}" == "true" ]]; then
   CI_MODE=true
 fi
 ONLY=()
+WORKERS=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --ci)
@@ -37,8 +39,12 @@ while [[ $# -gt 0 ]]; do
       ONLY+=("$2")
       shift 2
       ;;
+    --workers)
+      WORKERS="${2:-}"
+      shift 2
+      ;;
     -h | --help)
-      sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -325,6 +331,7 @@ e2e_run_playwright() {
     E2E_VIDEOS_DIR="$TMP_DIR/videos" \
     E2E_PLEX_STUB_URL="http://localhost:$PLEX_STUB_PORT" \
     E2E_YOUTUBE_STUB_PORT="$YOUTUBE_STUB_PORT" \
+    E2E_WORKERS="$WORKERS" \
     "$@" \
     npm --prefix "$REPO_ROOT/e2e-tests" test
 }
