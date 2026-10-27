@@ -1,10 +1,11 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { slugOf } from '../helpers/addDialog.js'
+import { CHANNEL } from '../helpers/fakeYoutube.js'
 import { libraryPath } from '../helpers/library.js'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
-const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
+const CHANNEL_HANDLE = CHANNEL.handle
 const CHANNEL_PATH = `channels/${slugOf(CHANNEL_HANDLE)}`
 const VIDEOS_URL = `/api/channels/${encodeURIComponent(CHANNEL_HANDLE)}/videos`
 

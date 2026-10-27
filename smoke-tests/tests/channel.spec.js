@@ -19,9 +19,11 @@ import { expectPendingSync } from '../helpers/tasks.js'
 import { expectEpisodeOnDisk, expectGoneFromDisk } from '../helpers/library.js'
 import { expectPlexScanned } from '../helpers/plex.js'
 import { expectImageLoaded } from '../helpers/media.js'
+import { CHANNEL } from '../helpers/fakeYoutube.js'
 
-const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
-const VIDEO_LIMIT = process.env.SMOKE_CHANNEL_VIDEO_LIMIT ?? '1'
+const CHANNEL_HANDLE = CHANNEL.handle
+const VIDEO_LIMIT = '1'
+const CHANNEL_NEWEST_VIDEO_TITLE = 'Snails at dawn'
 const CHANNEL_PATH = `channels/${slugOf(CHANNEL_HANDLE)}`
 
 test('channel lifecycle: add, download, play, resume, mark watched, sync, edit settings, delete', async ({ page }) => {
@@ -50,7 +52,7 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     // The channel just added can't be added again, whatever the handle's case:
     // YouTube treats `@Name` and `@name` as the same channel.
     await openAddChannelDialog(page)
-    await fillChannel(page, { handle: CHANNEL_HANDLE.toLowerCase() })
+    await fillChannel(page, { handle: CHANNEL_HANDLE.toUpperCase() })
     await expect(destinationNotice(dialog)).toContainText('Already added as “')
     await expect(destinationNotice(dialog)).toHaveClass(/text-destructive/)
     await expect(dialog.getByRole('button', { name: /^Create Channel/ })).toBeDisabled()
@@ -58,13 +60,14 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
   })
 
   const { videoTitle, channelName } = await test.step('wait for the download, on disk and scanned by Plex', async () => {
-    // Follow it into the detail view and wait for a video to download. No
-    // fixed title is asserted, since the channel's newest video can change;
-    // instead the actual title is read back to check the home feed later.
+    // Follow it into the detail view and wait for its newest video, the one
+    // within the limit, to download.
     await sidebarLink.click()
-    await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 240_000 })
+    await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 30_000 })
     const videoTitle = await page.locator('main h3').first().innerText()
+    expect(videoTitle).toBe(CHANNEL_NEWEST_VIDEO_TITLE)
     const [{ name: channelName }] = await (await page.request.get('/api/channels')).json()
+    expect(channelName).toBe(CHANNEL.title)
     await expectEpisodeOnDisk({ showPath: CHANNEL_PATH, kind: 'channel', showTitle: channelName, videoTitle })
     await expectPlexScanned(page.request, CHANNEL_PATH)
     await assertVideoPlays(page)
