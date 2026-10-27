@@ -156,8 +156,9 @@ run_e2e() {
   PORT="${E2E_PORT:-$free_port}"
   PLEX_STUB_PORT="${E2E_PLEX_STUB_PORT:-$free_plex_stub_port}"
   YOUTUBE_STUB_PORT="${E2E_YOUTUBE_STUB_PORT:-$free_youtube_stub_port}"
-  # Kept with this worktree's test results when the run fails.
-  LOG_FILE="$REPO_ROOT/e2e-tests/test-results/container.log"
+  # The upgrade check's container log, kept with this worktree's test results
+  # when the check fails (each worker keeps its own daemon's, see daemon.js).
+  LOG_FILE="$REPO_ROOT/e2e-tests/test-results/upgrade-container.log"
 
   # The suite runs against a fake YouTube (see e2e-tests/README.md). Only
   # the upgrade check needs the real one, since the released image it starts
@@ -184,45 +185,44 @@ run_e2e() {
     docker build -t "$IMAGE_TAG" "$REPO_ROOT"
   fi
 
-  TMP_DIR="$(mktemp -d /tmp/yarrtube-e2e.XXXXXX)"
-  mkdir -p "$TMP_DIR/videos" "$TMP_DIR/config"
-
-  # A stand-in Plex server on the host, so specs can check yarrtube asks Plex
-  # to scan what it downloads (see e2e-tests/plex-stub.js).
-  echo "==> starting Plex stub on port $PLEX_STUB_PORT"
-  E2E_PLEX_STUB_PORT="$PLEX_STUB_PORT" node "$REPO_ROOT/e2e-tests/plex-stub.js" &
-  PLEX_STUB_PID=$!
-
-  # The fake YouTube Data API on the host; the stand-in yt-dlp is mounted into
-  # the container (see e2e-tests/fake-youtube/).
+  # The fake YouTube Data API on the host, shared by every daemon (it only
+  # reads); the stand-in yt-dlp is mounted into each container (see
+  # e2e-tests/fake-youtube/).
   echo "==> starting YouTube stub on port $YOUTUBE_STUB_PORT"
   E2E_YOUTUBE_STUB_PORT="$YOUTUBE_STUB_PORT" node "$REPO_ROOT/e2e-tests/fake-youtube/youtube-stub.js" &
   YOUTUBE_STUB_PID=$!
 
   if [[ "$UPGRADE_FROM_IMAGE" != "none" ]]; then
+    TMP_DIR="$(mktemp -d /tmp/yarrtube-e2e.XXXXXX)"
+    mkdir -p "$TMP_DIR/videos" "$TMP_DIR/config"
+    # A stand-in Plex server on the host, so the check can see yarrtube asks
+    # Plex to scan what it downloads (see e2e-tests/plex-stub.js).
+    echo "==> starting Plex stub on port $PLEX_STUB_PORT"
+    E2E_PLEX_STUB_PORT="$PLEX_STUB_PORT" node "$REPO_ROOT/e2e-tests/plex-stub.js" &
+    PLEX_STUB_PID=$!
+
     echo "==> upgrade check: seeding a library with $UPGRADE_FROM_IMAGE"
     docker pull "$UPGRADE_FROM_IMAGE"
     e2e_start_container "$UPGRADE_FROM_IMAGE" real
-    e2e_run_playwright env E2E_UPGRADE_PHASE=seed
+    e2e_run_upgrade_phase seed
+    e2e_stop_container
+
+    echo "==> upgrade check: verifying the seeded library on $IMAGE_TAG"
+    e2e_start_container "$IMAGE_TAG" fake
+    e2e_run_upgrade_phase verify
+    e2e_fail_on_panic
     e2e_stop_container
   fi
 
-  e2e_start_container "$IMAGE_TAG" fake
-
-  if [[ "$UPGRADE_FROM_IMAGE" != "none" ]]; then
-    echo "==> upgrade check: verifying the seeded library on $IMAGE_TAG"
-    e2e_run_playwright env E2E_UPGRADE_PHASE=verify
-  fi
-
-  echo "==> running Playwright suite"
-  e2e_run_playwright env E2E_CHECK_ROUTE_COVERAGE=1
-
-  # A panic in a background task fails nothing the browser can see, so the
-  # suite passing isn't enough on its own.
-  if docker logs "$CONTAINER_NAME" 2>&1 | grep -q "panicked at"; then
-    echo "error: the container panicked during the run (see $LOG_FILE)" >&2
-    exit 1
-  fi
+  # Each worker starts its own daemon from the image (see
+  # e2e-tests/helpers/daemon.js).
+  echo "==> running Playwright suite on $WORKERS worker(s)"
+  E2E_IMAGE="$IMAGE_TAG" \
+    E2E_RUN_ID="$run_id" \
+    E2E_YOUTUBE_STUB_PORT="$YOUTUBE_STUB_PORT" \
+    E2E_WORKERS="$WORKERS" \
+    E2E_CHECK_ROUTE_COVERAGE=1 \
+    npm --prefix "$REPO_ROOT/e2e-tests" test
 }
 
 e2e_cleanup() {
@@ -321,19 +321,26 @@ e2e_stop_container() {
   CONTAINER_STARTED=false
 }
 
-# `E2E_UPGRADE_PHASE` selects the `upgrade/<phase>.spec.js` project instead of
-# the main suite (see playwright.config.js).
-e2e_run_playwright() {
+# Runs the upgrade check's `upgrade/<phase>.spec.js` against the script's
+# container (see playwright.config.js).
+e2e_run_upgrade_phase() {
   BASE_URL="http://localhost:$PORT" \
     YOUTUBE_API_KEY="${YOUTUBE_API_KEY:-}" \
+    E2E_UPGRADE_PHASE="$1" \
     E2E_PLAYLIST_ID="$E2E_PLAYLIST_ID" \
     E2E_PLAYLIST_NAME="$E2E_PLAYLIST_NAME" \
     E2E_VIDEOS_DIR="$TMP_DIR/videos" \
     E2E_PLEX_STUB_URL="http://localhost:$PLEX_STUB_PORT" \
-    E2E_YOUTUBE_STUB_PORT="$YOUTUBE_STUB_PORT" \
-    E2E_WORKERS="$WORKERS" \
-    "$@" \
     npm --prefix "$REPO_ROOT/e2e-tests" test
+}
+
+# A panic in a background task fails nothing the browser can see, so passing
+# specs aren't enough on their own.
+e2e_fail_on_panic() {
+  if docker logs "$CONTAINER_NAME" 2>&1 | grep -q "panicked at"; then
+    echo "error: the container panicked during the run (see $LOG_FILE)" >&2
+    exit 1
+  fi
 }
 
 cd "$REPO_ROOT"

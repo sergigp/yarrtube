@@ -6,13 +6,12 @@ import { defineConfig, devices } from '@playwright/test'
 const UPGRADE_PHASE = process.env.E2E_UPGRADE_PHASE
 
 // Without these the specs can't run, and silently skipping them would leave a
-// green suite that never downloaded anything. Only the upgrade check uses a
-// playlist on the real YouTube.
-const REQUIRED_ENV = [
-  'E2E_VIDEOS_DIR',
-  'E2E_PLEX_STUB_URL',
-  ...(UPGRADE_PHASE ? ['E2E_PLAYLIST_ID'] : ['E2E_YOUTUBE_STUB_PORT']),
-]
+// green suite that never downloaded anything. The upgrade check runs against
+// the script's container; the main suite's workers start their own daemons
+// from `E2E_IMAGE` (see helpers/daemon.js).
+const REQUIRED_ENV = UPGRADE_PHASE
+  ? ['BASE_URL', 'E2E_VIDEOS_DIR', 'E2E_PLEX_STUB_URL', 'E2E_PLAYLIST_ID']
+  : ['E2E_IMAGE', 'E2E_RUN_ID', 'E2E_YOUTUBE_STUB_PORT']
 const missing = REQUIRED_ENV.filter((name) => !process.env[name])
 if (missing.length > 0) {
   throw new Error(`end-to-end tests need ${missing.join(', ')} set (see e2e-tests/README.md)`)
@@ -33,7 +32,6 @@ export default defineConfig({
   timeout: UPGRADE_PHASE ? 300_000 : 120_000,
   reporter: [['list'], ['./routeCoverageReporter.js']],
   use: {
-    baseURL: process.env.BASE_URL ?? 'http://localhost:8080',
     trace: 'retain-on-failure',
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',
