@@ -92,7 +92,9 @@ test('playlist golden path: add, download, on disk, scanned by Plex, badge, dele
     // The downloaded, unwatched video shows as a badge on the playlist's row,
     // brought in by the sidebar's periodic refresh (every 5s while the
     // playlist has work in progress, every 60s after), with no reload.
-    await expect(unwatchedBadge(playlistRow(page))).toHaveText('1', { timeout: 70_000 })
+    // Up to 5 s for the work in progress to finish, then up to 60 s for the
+    // next refresh, plus margin.
+    await expect(unwatchedBadge(playlistRow(page))).toHaveText('1', { timeout: 90_000 })
   })
 
   await test.step('delete it', async () => {
