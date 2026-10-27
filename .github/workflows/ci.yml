@@ -87,7 +87,7 @@ jobs:
       - name: Run tests
         env:
           E2E_IMAGE: yarrtube:e2e-ci
-        run: scripts/run-tests.sh --ci
+        run: scripts/run-tests.sh --ci --workers 3
 
       - name: Upload end-to-end results
         if: failure()
