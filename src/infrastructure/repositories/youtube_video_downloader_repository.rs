@@ -471,7 +471,7 @@ mod tests {
 }
 
 /// Against the real `yt-dlp` and YouTube: run with
-/// `scripts/run-youtube-contract-tests.sh` (see `shared::youtube_contract`).
+/// `scripts/run-tests.sh --only contract` (see `shared::youtube_contract`).
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
@@ -486,7 +486,7 @@ mod youtube_contract_tests {
     use chrono::DateTime;
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_download_a_playable_mp4() {
         let staging_dir = unique_temp_dir("contract-download");
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
@@ -527,7 +527,7 @@ mod youtube_contract_tests {
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_fail_to_download_a_missing_video() {
         let staging_dir = unique_temp_dir("contract-download-missing");
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
@@ -549,7 +549,7 @@ mod youtube_contract_tests {
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_fetch_only_the_thumbnail() {
         let staging_dir = unique_temp_dir("contract-thumbnail");
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
@@ -571,7 +571,7 @@ mod youtube_contract_tests {
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_diagnose_no_failure_for_a_playable_video() {
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
 
@@ -581,7 +581,7 @@ mod youtube_contract_tests {
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_diagnose_why_a_missing_video_failed() {
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
 
@@ -591,7 +591,7 @@ mod youtube_contract_tests {
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_probe_the_caption_tracks() {
         let staging_dir = unique_temp_dir("contract-captions");
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
@@ -622,7 +622,7 @@ mod youtube_contract_tests {
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_fetch_the_uploaded_subtitles_as_srt() {
         let staging_dir = unique_temp_dir("contract-subtitles");
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());

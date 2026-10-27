@@ -2,7 +2,7 @@
 // (YARRTUBE_YOUTUBE_API_URL), serving catalogue.json in the shape each of
 // the daemon's Data API adapters reads (see their contract tests for what
 // the real API returns). Also serves the fixture images: video thumbnails
-// and the channel's avatar. Started by scripts/run-e2e-tests.sh on
+// and the channel's avatar. Started by scripts/run-tests.sh on
 // E2E_YOUTUBE_STUB_PORT.
 import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'

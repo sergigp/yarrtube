@@ -52,7 +52,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            e2e-tests/package-lock.json
 
       - name: Install web UI dependencies and build it
         working-directory: web
@@ -60,10 +62,40 @@ jobs:
           npm ci
           npm run build
 
-      # The same script developers run locally; in CI it skips the suites
-      # that need the real YouTube (see the script).
+      - name: Install end-to-end test dependencies and browsers
+        run: |
+          npm --prefix e2e-tests ci
+          npx --prefix e2e-tests playwright install --with-deps chromium webkit
+
+      # The image the end-to-end suite tests, built once with its layers
+      # cached between runs, and handed to the suite as E2E_IMAGE.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the image under test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: yarrtube:e2e-ci
+          cache-from: type=gha,scope=e2e
+          cache-to: type=gha,scope=e2e,mode=max
+
+      # The same script developers run locally; in CI it leaves out the
+      # YouTube contract tests, which need the real YouTube. Without a
+      # YouTube API key the end-to-end suite skips its upgrade check too.
       - name: Run tests
+        env:
+          E2E_IMAGE: yarrtube:e2e-ci
         run: scripts/run-tests.sh --ci
+
+      - name: Upload end-to-end results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-tests-results
+          path: e2e-tests/test-results
+          retention-days: 7
 
   # Every merge to main that passes CI is published as :edge +
   # :sha-<short> (see release.yml). Stable releases (:latest) are only cut by

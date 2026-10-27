@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
-// `run-e2e-tests.sh` runs the upgrade check's phases (`upgrade/seed.spec.js`
+// `scripts/run-tests.sh` runs the upgrade check's phases (`upgrade/seed.spec.js`
 // against the released image, `upgrade/verify.spec.js` against this build)
 // on their own, before the main suite.
 const UPGRADE_PHASE = process.env.E2E_UPGRADE_PHASE

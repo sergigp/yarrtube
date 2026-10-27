@@ -281,14 +281,14 @@ mod tests {
 }
 
 /// Against the real YouTube Data API: run with
-/// `scripts/run-youtube-contract-tests.sh` (see `shared::youtube_contract`).
+/// `scripts/run-tests.sh --only contract` (see `shared::youtube_contract`).
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
     use crate::infrastructure::shared::youtube_contract::{CHANNEL_HANDLE, api_key, api_url};
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_resolve_a_channel_handle() {
         let repository = YoutubeApiChannelRepository::new(api_key(), api_url());
 
@@ -319,7 +319,7 @@ mod youtube_contract_tests {
     }
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_not_resolve_an_unknown_handle() {
         let repository = YoutubeApiChannelRepository::new(api_key(), api_url());
 

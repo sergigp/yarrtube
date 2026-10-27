@@ -351,7 +351,7 @@ mod tests {
 }
 
 /// Against the real YouTube Data API and image host: run with
-/// `scripts/run-youtube-contract-tests.sh` (see `shared::youtube_contract`).
+/// `scripts/run-tests.sh --only contract` (see `shared::youtube_contract`).
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
@@ -362,7 +362,7 @@ mod youtube_contract_tests {
     use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
 
     #[test]
-    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
     fn it_should_store_a_channel_avatar() {
         let handle = ChannelHandle::new(CHANNEL_HANDLE).unwrap();
         let avatar_url = YoutubeApiChannelRepository::new(api_key(), api_url())

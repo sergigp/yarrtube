@@ -82,20 +82,20 @@ against the mocked API, so the suite finishes in seconds.
 One script runs every test suite, locally and in CI:
 
 ```bash
-scripts/run-tests.sh        # everything
-scripts/run-tests.sh --ci   # what CI runs (also when CI=true)
+scripts/run-tests.sh                 # everything
+scripts/run-tests.sh --only e2e      # one suite: web, rust, contract or e2e
+scripts/run-tests.sh --ci            # what CI runs (also when CI=true)
 ```
 
-It runs the web UI's checks, Rust formatting, clippy and tests, the YouTube
-contract tests and the end-to-end suite. In CI it skips the suites that need the
-real YouTube, which bot-checks CI runners. It only checks: it installs and
-builds nothing, so install the web UI's dependencies and build it first
-(see [Web UI](#web-ui)). Each suite also has its own command, for running
-one alone.
-
-End-to-end tests against a real container live in `e2e-tests/` (see its
-README) and run with `scripts/run-e2e-tests.sh`. Each run uses its own
-container and ports, so worktrees can run it at the same time.
+The suites are the web UI's checks, Rust formatting, clippy and tests, the
+YouTube contract tests and the end-to-end suite (`e2e-tests/`, see its
+README: the Docker image driven through real browsers against a fake
+YouTube). CI runs all of them except the contract tests, which need the real
+YouTube, on every pull request and push to `main`. The script only checks:
+it installs and builds nothing, so install the web UI's and `e2e-tests/`'s
+dependencies (and the Playwright browsers) and build the web UI first. Each
+end-to-end run uses its own container and ports, so worktrees can run it at
+the same time.
 
 ### YouTube contract tests
 
@@ -103,13 +103,8 @@ The adapters that talk to YouTube (`yt-dlp` downloads, thumbnails,
 captions, channel listings, and the Data API's playlists, videos, channels
 and avatars) have tests against the real thing, in modules named
 `youtube_contract_tests` next to each adapter. They're `#[ignore]`d, so
-`cargo test` and CI skip them; run them with:
-
-```bash
-scripts/run-youtube-contract-tests.sh
-```
-
-It needs `yt-dlp` and `ffprobe` on `PATH` (or `YTDLP_PATH`), the network,
+`cargo test` and CI skip them; run them with
+`scripts/run-tests.sh --only contract`. It needs `yt-dlp` and `ffprobe` on `PATH` (or `YTDLP_PATH`), the network,
 and `YOUTUBE_API_KEY` (from the environment or `.env`), and takes about ten
 seconds. Run it after upgrading `yt-dlp` or when downloads start failing,
 to tell a change on YouTube's side from a bug of ours. The fixtures (a short

@@ -4,7 +4,7 @@ import { hitRoutes, routerRoutes } from './helpers/routeCoverage.js'
  * Fails a passing full run when the browser never got a 2xx from one of the
  * router's `/api` routes: Rust handler tests bypass the router, so this suite is
  * the only coverage of its wiring. Enabled by `E2E_CHECK_ROUTE_COVERAGE`
- * (set by `scripts/run-e2e-tests.sh`), since a filtered run legitimately
+ * (set by `scripts/run-tests.sh`), since a filtered run legitimately
  * misses routes.
  */
 export default class RouteCoverageReporter {

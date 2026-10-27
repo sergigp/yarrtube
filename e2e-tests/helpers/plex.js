@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 
-// The stub Plex server `run-e2e-tests.sh` starts (see `plex-stub.js`), and
+// The stub Plex server `scripts/run-tests.sh` starts (see `plex-stub.js`), and
 // what the container is configured to reach it with.
 const PLEX_STUB_URL = process.env.E2E_PLEX_STUB_URL
 const PLEX_TOKEN = 'e2e-token'

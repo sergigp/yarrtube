@@ -10,7 +10,7 @@ upgrade check still uses the real YouTube.
 Run it with:
 
 ```bash
-./scripts/run-e2e-tests.sh
+./scripts/run-tests.sh --only e2e
 ```
 
 from the repository root. It builds the release Docker image, runs it with
@@ -21,6 +21,14 @@ are always removed afterward; on failure, the container's logs are saved to
 `e2e-tests/test-results/container.log` and Playwright's traces/videos are kept under
 `e2e-tests/test-results/`. Each run uses its own container, image tag and
 free ports, so the suite can run from several worktrees at the same time.
+
+The script installs nothing: install the suite's dependencies and browsers
+once (`npm --prefix e2e-tests ci && npx --prefix e2e-tests playwright install
+--with-deps chromium webkit`). With `E2E_IMAGE` set it tests that image
+instead of building one. CI (`.github/workflows/ci.yml`) runs the suite on
+every pull request and push to `main`, with the image built once with layer
+caching and passed in as `E2E_IMAGE`, and without a YouTube API key (so the
+upgrade check is skipped).
 
 ## The fake YouTube
 
@@ -203,10 +211,10 @@ Together these are also the only coverage of the HTTP API's route wiring
 `/api` route must be exercised by at least one spec. This is enforced: the
 browser's `/api` responses are recorded with their status, and
 `routeCoverageReporter.js` fails a passing full run
-(`E2E_CHECK_ROUTE_COVERAGE=1`, set by `run-e2e-tests.sh`) if any route
+(`E2E_CHECK_ROUTE_COVERAGE=1`, set by `scripts/run-tests.sh`) if any route
 parsed from `src/application/http/mod.rs` was never answered with a 2xx.
 
-After the suite, `run-e2e-tests.sh` also fails the run if the container
+After the suite, `scripts/run-tests.sh` also fails the run if the container
 logged a panic.
 
 ### Not covered yet
@@ -225,7 +233,7 @@ npx --prefix e2e-tests playwright install --with-deps chromium webkit
 
 Then start the stubs (`node e2e-tests/plex-stub.js`,
 `node e2e-tests/fake-youtube/youtube-stub.js`) and a yarrtube container
-configured like `scripts/run-e2e-tests.sh`'s `start_container ... fake`
+configured like `scripts/run-tests.sh`'s `e2e_start_container ... fake`
 (fake YouTube URL, stand-in `yt-dlp` and samples mounted, self-update off),
 and run:
 

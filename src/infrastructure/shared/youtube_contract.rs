@@ -1,7 +1,7 @@
 //! What the YouTube contract tests share. Those tests run the adapters
 //! against the real `yt-dlp` and YouTube Data API, so they're `#[ignore]`d
 //! (CI and the default `cargo test` skip them) and run by
-//! `scripts/run-youtube-contract-tests.sh`. The fixtures are public videos,
+//! `scripts/run-tests.sh --only contract`. The fixtures are public videos,
 //! playlists and channels that are Creative-Commons licensed or maintained by
 //! the project, and unlikely to change.
 
@@ -37,7 +37,7 @@ pub(crate) fn api_url() -> String {
 /// `YOUTUBE_API_KEY`, which the contract tests can't run without.
 pub(crate) fn api_key() -> String {
     std::env::var("YOUTUBE_API_KEY")
-        .expect("YOUTUBE_API_KEY must be set (see scripts/run-youtube-contract-tests.sh)")
+        .expect("YOUTUBE_API_KEY must be set (see scripts/run-tests.sh --only contract)")
 }
 
 /// `(codec_type, codec_name)` of every stream in `media`, via `ffprobe`.
