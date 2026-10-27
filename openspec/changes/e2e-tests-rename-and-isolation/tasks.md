@@ -5,7 +5,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `scripts/run-e2e-tests.sh` (no isolation yet) passes: 65 tests, routes covered.
-- [ ] 2.2 Isolated runs: per-run container name and image tag, free ports (overridable), the failure log in `test-results/`, the image tag removed on exit. Two worktrees of this branch run `scripts/run-e2e-tests.sh` at the same time and both pass.
+- [x] 2.2 Isolated runs: per-run container name and image tag, free ports (overridable), the failure log in `test-results/`, the image tag removed on exit. Two worktrees of this branch run `scripts/run-e2e-tests.sh` at the same time and both pass.
 
 ## 3. Infrastructure adapters (TDD)
 
