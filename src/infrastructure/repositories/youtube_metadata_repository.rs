@@ -314,7 +314,9 @@ mod tests {
 #[cfg(test)]
 mod youtube_contract_tests {
     use super::*;
-    use crate::infrastructure::shared::youtube_contract::{CAPTIONED_VIDEO_ID, api_key};
+    use crate::infrastructure::shared::youtube_contract::{
+        CAPTIONED_VIDEO_ID, MISSING_VIDEO_ID, api_key,
+    };
 
     #[test]
     #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
@@ -342,5 +344,17 @@ mod youtube_contract_tests {
                 category_id: Some("1".to_string()),
             })
         );
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-youtube-contract-tests.sh"]
+    fn it_should_not_find_an_unknown_video() {
+        let repository = YoutubeApiMetadataRepository::new(api_key());
+
+        let metadata = repository
+            .find(&VideoId::new(MISSING_VIDEO_ID).unwrap())
+            .unwrap();
+
+        assert_eq!(metadata, None);
     }
 }

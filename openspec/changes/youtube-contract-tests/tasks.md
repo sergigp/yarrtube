@@ -31,7 +31,7 @@ Each is a real-YouTube test of an existing adapter, `#[ignore]`d in a `youtube_c
 
 `YoutubeApiMetadataRepository`:
 - [x] 3.12 `it_should_find_a_video_metadata`: passes via the script.
-- [ ] 3.13 `it_should_not_find_an_unknown_video`: passes via the script.
+- [x] 3.13 `it_should_not_find_an_unknown_video`: passes via the script.
 
 `YoutubeApiChannelRepository`:
 - [ ] 3.14 `it_should_resolve_a_channel_handle`: passes via the script.
