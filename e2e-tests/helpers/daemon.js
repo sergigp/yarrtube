@@ -89,10 +89,11 @@ async function stopDaemon({ name, dir, plex, runId, workerIndex }) {
   const logFile = join(E2E_DIR, 'test-results', `container-${runId}-w${workerIndex}.log`)
   mkdirSync(dirname(logFile), { recursive: true })
   writeFileSync(logFile, log)
+  // The daemon writes its files as root, which on Linux the host can't
+  // remove: the container empties its own mounts first.
+  await run('docker', ['exec', name, 'find', '/videos', '/config', '-mindepth', '1', '-delete'])
   await run('docker', ['rm', '-f', name])
   await plex.close()
-  // Files the container wrote as root may not be removable on Linux; the
-  // temp directory is left to the OS then.
   rmSync(dir, { recursive: true, force: true, maxRetries: 2 })
   if (log.includes('panicked at')) {
     throw new Error(`the daemon ${name} panicked (see ${logFile})`)
