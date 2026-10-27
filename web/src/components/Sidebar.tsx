@@ -4,9 +4,9 @@ import { Ellipsis, Plus, RotateCw } from 'lucide-react'
 import {
   queryKeys,
   useChannels,
+  useDeleteSource,
   useLibraryAction,
   usePlaylists,
-  useRemoveQuery,
   useSetPlaylistExcludedFromHome,
   useSetPlaylistUnwatchedCountHidden,
   useUpdatePlaylistSettings,
@@ -334,7 +334,7 @@ export function Sidebar({
   const { data: channels, error: channelsError } = useChannels()
   const { data: playlists, error: playlistsError } = usePlaylists()
   const refreshing = useLibraryAction()
-  const removeQuery = useRemoveQuery()
+  const deleteSource = useDeleteSource()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
   const setPlaylistUnwatchedCountHidden = useSetPlaylistUnwatchedCountHidden()
   const saveChannelSettings = useSaveChannelSettings()
@@ -453,8 +453,7 @@ export function Sidebar({
             onMarkWatched={refreshing(markChannelWatched)}
             onEditRequest={setEditingChannelId}
             onDelete={refreshing(async (id: string) => {
-              await deleteChannel(id)
-              removeQuery(queryKeys.channelVideos(id))
+              await deleteSource(queryKeys.channelVideos(id), () => deleteChannel(id))
               if (activeChannelId === id) {
                 navigate('/')
               }
@@ -482,8 +481,7 @@ export function Sidebar({
             onSetUnwatchedCountHidden={setPlaylistUnwatchedCountHidden}
             onEditRequest={setEditingPlaylistId}
             onDelete={refreshing(async (id: string) => {
-              await deletePlaylist(id)
-              removeQuery(queryKeys.playlistVideos(id))
+              await deleteSource(queryKeys.playlistVideos(id), () => deletePlaylist(id))
               if (activePlaylistId === id) {
                 navigate('/')
               }

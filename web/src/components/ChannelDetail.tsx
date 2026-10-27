@@ -4,8 +4,8 @@ import {
   queryKeys,
   useChannels,
   useChannelVideos,
+  useDeleteSource,
   useLibraryAction,
-  useRemoveQuery,
 } from '@/api/queries'
 import { reconcileChannel, deleteChannel, markChannelWatched, avatarMediaUrl } from '@/api/client'
 import { useWatchProgress } from '@/hooks/useWatchProgress'
@@ -23,7 +23,7 @@ export function ChannelDetail() {
   const navigate = useNavigate()
   const { data: channels, error: channelsError } = useChannels()
   const refreshing = useLibraryAction()
-  const removeQuery = useRemoveQuery()
+  const deleteSource = useDeleteSource()
   const saveChannelSettings = useSaveChannelSettings()
   const [editing, setEditing] = useState(false)
   const channel = channels?.find((item) => item.id === id) ?? null
@@ -61,8 +61,7 @@ export function ChannelDetail() {
         onMarkWatched={refreshing(() => markChannelWatched(id))}
         onEditRequest={() => setEditing(true)}
         onDelete={refreshing(async () => {
-          await deleteChannel(id)
-          removeQuery(queryKeys.channelVideos(id))
+          await deleteSource(queryKeys.channelVideos(id), () => deleteChannel(id))
           navigate('/')
         })}
         deleteDescription="This removes the channel from tracking."

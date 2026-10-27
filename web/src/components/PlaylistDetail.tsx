@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   queryKeys,
+  useDeleteSource,
   useLibraryAction,
   usePlaylists,
   usePlaylistVideos,
-  useRemoveQuery,
   useSetPlaylistExcludedFromHome,
   useSetPlaylistUnwatchedCountHidden,
   useUpdatePlaylistSettings,
@@ -25,7 +25,7 @@ export function PlaylistDetail() {
   const navigate = useNavigate()
   const { data: playlists, error: playlistsError } = usePlaylists()
   const refreshing = useLibraryAction()
-  const removeQuery = useRemoveQuery()
+  const deleteSource = useDeleteSource()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
   const setPlaylistUnwatchedCountHidden = useSetPlaylistUnwatchedCountHidden()
   const updatePlaylistSettings = useUpdatePlaylistSettings()
@@ -67,8 +67,7 @@ export function PlaylistDetail() {
         onSetUnwatchedCountHidden={(hidden) => setPlaylistUnwatchedCountHidden(id, hidden)}
         onEditRequest={() => setEditing(true)}
         onDelete={refreshing(async () => {
-          await deletePlaylist(id)
-          removeQuery(queryKeys.playlistVideos(id))
+          await deleteSource(queryKeys.playlistVideos(id), () => deletePlaylist(id))
           navigate('/')
         })}
         deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."

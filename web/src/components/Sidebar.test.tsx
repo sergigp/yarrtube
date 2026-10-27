@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Route, Routes as RouteTable } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
+import { PlaylistDetail } from './PlaylistDetail'
+import { queryKeys } from '@/api/queries'
 import {
   aCategoryList,
   aChannel,
   aPlaylist,
+  heldUntilReleased,
   mockApi,
   renderWithProviders,
   type Routes,
@@ -375,6 +379,45 @@ describe('Sidebar', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.queryByText('Doomed')).not.toBeInTheDocument())
+  })
+
+  it("deleting the open playlist stops its page asking for its videos", async () => {
+    const playlist = aPlaylist({ id: 'PL1', name: 'Doomed' })
+    const videos = vi.fn(() => [])
+    const remove = heldUntilReleased()
+    mockApi({
+      'GET /api/channels': [],
+      'GET /api/playlists': [playlist],
+      'GET /api/categories': aCategoryList(),
+      'GET /api/playlists/PL1/videos': videos,
+      'DELETE /api/playlists/PL1': remove.route,
+    })
+    const { queryClient } = renderWithProviders(
+      <>
+        <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}}
+          onAddCategory={() => {}}
+        />
+        <RouteTable>
+          <Route path="/playlists/:id" element={<PlaylistDetail />} />
+          <Route path="/" element={<p>home page</p>} />
+        </RouteTable>
+      </>,
+      { route: '/playlists/PL1' },
+    )
+    await waitFor(() => expect(videos).toHaveBeenCalledOnce())
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Doomed' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(remove.route).toHaveBeenCalledOnce())
+
+    // A poll lands while the delete is in flight.
+    await queryClient.refetchQueries({ queryKey: queryKeys.playlistVideos('PL1') })
+    remove.release()
+
+    expect(await screen.findByText('home page')).toBeInTheDocument()
+    expect(videos).toHaveBeenCalledOnce()
   })
 
   it('syncs a channel from its row menu', async () => {

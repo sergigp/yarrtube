@@ -4,7 +4,15 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { ChannelDetail } from './ChannelDetail'
 import type { VideoQuality } from '@/api/types'
-import { aChannel, aVideo, mockApi, renderWithProviders, type Routes as ApiRoutes } from '@/test/helpers'
+import { queryKeys } from '@/api/queries'
+import {
+  aChannel,
+  aVideo,
+  heldUntilReleased,
+  mockApi,
+  renderWithProviders,
+  type Routes as ApiRoutes,
+} from '@/test/helpers'
 
 function renderChannel(routes: ApiRoutes, route: string) {
   const fetchMock = mockApi(routes)
@@ -238,6 +246,31 @@ describe('ChannelDetail', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     expect(await screen.findByText('home page')).toBeInTheDocument()
+  })
+
+  it("doesn't ask for its videos while it's being deleted", async () => {
+    const videos = vi.fn(() => [])
+    const remove = heldUntilReleased()
+    const { queryClient } = renderChannel(
+      {
+        'GET /api/channels': [aChannel({ id: 'chan', name: 'The Channel' })],
+        'GET /api/channels/chan/videos': videos,
+        'DELETE /api/channels/chan': remove.route,
+      },
+      '/channels/chan',
+    )
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Channel' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(remove.route).toHaveBeenCalledOnce())
+
+    // A poll lands while the delete is in flight.
+    await queryClient.refetchQueries({ queryKey: queryKeys.channelVideos('chan') })
+    remove.release()
+
+    expect(await screen.findByText('home page')).toBeInTheDocument()
+    expect(videos).toHaveBeenCalledOnce()
   })
 
   it('a channel page header menu offers no unwatched count item', async () => {
