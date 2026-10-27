@@ -1,0 +1,59 @@
+name: End-to-end tests
+
+# Fixtures used by this workflow (see e2e-tests/README.md for how to
+# maintain them):
+#   - the fixture playlist and channel, defaulted in
+#     ./scripts/run-e2e-tests.sh (the playlist is maintainer-owned and must
+#     keep containing the Creative-Commons "Big Buck Bunny" video).
+#   - secrets.YOUTUBE_API_KEY: a YouTube Data API v3 key, added as a repo
+#     secret (Settings > Secrets and variables > Actions). Only ever
+#     referenced here, never printed.
+#
+# Manual trigger only: GitHub-hosted runners' shared IPs consistently hit
+# YouTube's "Sign in to confirm you're not a bot" bot-detection, so this
+# doesn't run automatically on PRs/pushes. Run it locally instead via
+# ./scripts/run-e2e-tests.sh (see e2e-tests/README.md), or trigger this
+# workflow manually if running from an IP YouTube doesn't flag.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-tests:
+    name: Dockerized Playwright end-to-end suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e-tests/package-lock.json
+
+      - name: Run end-to-end tests
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: ./scripts/run-e2e-tests.sh
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-tests-results
+          path: e2e-tests/test-results
+          retention-days: 7
+
+      - name: Upload container log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-tests-container-log
+          path: e2e-tests/container.log
+          retention-days: 7

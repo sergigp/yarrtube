@@ -20,11 +20,11 @@
 web/dist/
 web/node_modules/
 
-# smoke-tests Playwright project
-smoke-tests/node_modules/
-smoke-tests/test-results/
-smoke-tests/playwright-report/
-smoke-tests/container.log
+# e2e-tests Playwright project
+e2e-tests/node_modules/
+e2e-tests/test-results/
+e2e-tests/playwright-report/
+e2e-tests/container.log
 
 # Playwright MCP browser tool scratch output
 .playwright-mcp/

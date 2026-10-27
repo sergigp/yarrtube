@@ -131,13 +131,13 @@ Tests are classified by **where they enter the code**, not by what they fake. Ou
 - **Value object tests**: exhaustive validation rules, one file per value object.
 - **Infrastructure tests**: a single adapter (repository, client) against its real dependency.
 
-Acceptance and behaviour tests follow the same rules for persistence and test doubles (see below): persistence is real, only external dependencies are faked. The Playwright suite in `smoke-tests/` is the true end-to-end layer (real binary, real browser) and lives outside these conventions.
+Acceptance and behaviour tests follow the same rules for persistence and test doubles (see below): persistence is real, only external dependencies are faked. The Playwright suite in `e2e-tests/` is the true end-to-end layer (real binary, real browser) and lives outside these conventions.
 
 ## Acceptance Tests
 
 This tests the domain logic and the validations at application level. We will place this tests in application (for example in http controllers or event subscribers) and the test will be the type of "I receive this request and I expect this response and these collateral effects". In the case of event subscribers we will send events and assert the final state of the repositories. Very similar for Tasks, we will create tasks and assert the final state of the repositories.
 
-HTTP acceptance tests call the handler function directly with only the service it uses, not through a `Router`. A small helper per handler unwraps the `Json` (`create(service, request) -> Result<(StatusCode, ChannelResponse), ApiError>`). Route wiring (paths, methods, which handler each route reaches) is covered by the Playwright suite in `smoke-tests/`, not by Rust tests: every route the UI calls must be exercised by some spec there.
+HTTP acceptance tests call the handler function directly with only the service it uses, not through a `Router`. A small helper per handler unwraps the `Json` (`create(service, request) -> Result<(StatusCode, ChannelResponse), ApiError>`). Route wiring (paths, methods, which handler each route reaches) is covered by the Playwright suite in `e2e-tests/`, not by Rust tests: every route the UI calls must be exercised by some spec there.
 
 Every test has the same 7 steps, top to bottom and inline: `TestDatabase` + repositories/fakes → seed them → build the service with `Service::new(..)` → build the request → call the handler → assert the response → assert side effects (repositories, outbox events, scheduled tasks, fake state).
 

@@ -47,7 +47,7 @@ npm run build       # produces dist/, embedded into the binary by cargo build
 Tests are colocated with what they test (`foo.ts` → `foo.test.ts`) and run in
 jsdom with Vitest + Testing Library. The whole suite must stay fast (seconds)
 and deterministic — anything needing the real backend or real downloads
-belongs in `smoke-tests/`, not here.
+belongs in `e2e-tests/`, not here.
 
 The one mocking rule: **only the network boundary (`fetch`) is mocked** — via
 `mockApi` from `src/test/helpers.tsx`, a route table keyed by

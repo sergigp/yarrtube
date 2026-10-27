@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Runs every test suite: the web UI's checks, Rust formatting, lints and
-# tests, the YouTube contract tests and the Playwright smoke suite. Used the
+# tests, the YouTube contract tests and the Playwright end-to-end suite. Used the
 # same way locally and in CI.
 #
 # Usage: scripts/run-tests.sh [--ci]
 #
 # In CI (`--ci`, or `CI=true`, which GitHub Actions sets), the YouTube
 # contract tests are skipped (YouTube bot-checks CI runners), and so, for
-# now, is the smoke suite, until it is set up to run in CI.
+# now, is the end-to-end suite, until it is set up to run in CI.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -66,13 +66,13 @@ cargo test --locked
 
 if [[ "$CI_MODE" == true ]]; then
   skip "YouTube contract tests (they need the real YouTube)"
-  skip "smoke suite (not set up for CI yet)"
+  skip "end-to-end suite (not set up for CI yet)"
 else
   step "YouTube contract tests"
   "$REPO_ROOT/scripts/run-youtube-contract-tests.sh"
 
-  step "smoke suite"
-  "$REPO_ROOT/scripts/run-smoke-tests.sh"
+  step "end-to-end suite"
+  "$REPO_ROOT/scripts/run-e2e-tests.sh"
 fi
 
 step "all tests passed"

@@ -89,7 +89,7 @@ rules:
       replaces skeleton stub code in a real adapter via one red-green-refactor cycle.
 
       ## 4. Verification
-      cargo test, fmt, clippy, and smoke tests via scripts/run-smoke-tests.sh.
+      cargo test, fmt, clippy, and end-to-end tests via scripts/run-e2e-tests.sh.
       When the change is user-visible, add a "Manual (agent)" task for the checks the
       agent can run itself: start scripts/run-local.sh --port <free port> --fresh-videos,
       seed data via the HTTP API, drive the UI with the Playwright MCP browser, assert
