@@ -40,7 +40,7 @@ The system SHALL leave the existing yt-dlp binary usable if `update-ytdlp` fails
 - **THEN** the previously installed yt-dlp binary remains usable by `download`, and the system still attempts the next recurring update on schedule
 
 ### Requirement: Manual and Automatic Invocation
-The system SHALL support running the yt-dlp update as an explicit ad hoc command, automatically once each time the daemon starts, and automatically on a recurring interval for as long as the daemon runs. Seeding the recurring interval at startup SHALL be idempotent: it SHALL NOT create an additional recurring chain if one is already scheduled and has not yet reached a terminal state.
+The system SHALL support running the yt-dlp update as an explicit ad hoc command, automatically once each time the daemon starts, and automatically on a recurring interval for as long as the daemon runs. Seeding the recurring interval at startup SHALL be idempotent: it SHALL NOT create an additional recurring chain if one is already scheduled and has not yet reached a terminal state. The automatic updates SHALL be skippable through a setting, for running against a stand-in `yt-dlp`: the recurring chain is still scheduled and listed, but its runs do not update or replace the binary.
 
 #### Scenario: Manual invocation
 - **WHEN** an operator runs `update-ytdlp` directly
@@ -61,3 +61,7 @@ The system SHALL support running the yt-dlp update as an explicit ad hoc command
 #### Scenario: Daemon starts with no recurring update scheduled
 - **WHEN** the daemon starts and no recurring yt-dlp update task exists in a pending or running state
 - **THEN** the system schedules a new recurring update chain, as before
+
+#### Scenario: Automatic updates turned off
+- **WHEN** a recurring yt-dlp update runs with the self-update turned off
+- **THEN** it leaves the yt-dlp binary untouched and schedules its next run as usual
