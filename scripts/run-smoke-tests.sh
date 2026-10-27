@@ -168,7 +168,6 @@ run_playwright() {
     SMOKE_VIDEOS_DIR="$TMP_DIR/videos" \
     SMOKE_PLEX_STUB_URL="http://localhost:$PLEX_STUB_PORT" \
     SMOKE_YOUTUBE_STUB_PORT="$YOUTUBE_STUB_PORT" \
-    SMOKE_CONTAINER_NAME="$CONTAINER_NAME" \
     "$@" \
     npm --prefix "$REPO_ROOT/smoke-tests" test
 }

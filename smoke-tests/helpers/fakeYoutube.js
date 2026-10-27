@@ -14,7 +14,7 @@ function playlist(id) {
 
 /** The golden-path playlist, holding one regular video. */
 export const PLAYLIST = playlist('PLyarrtubeFixtureTest')
-/** Its video downloads for about 20 seconds. */
+/** Its video downloads for about 8 seconds. */
 export const SLOW_PLAYLIST = playlist('PLyarrtubeFixtureSlow')
 /** Its video's download always fails. */
 export const BROKEN_PLAYLIST = playlist('PLyarrtubeFixtureBroken')

@@ -1,19 +1,11 @@
 import { test, expect } from '../helpers/fixtures.js'
-import { deleteSeeded, seedDownloadedPlaylist } from '../helpers/seed.js'
-
-test.use({ keepLibrary: true })
-
-let seeded
-test.beforeAll(async ({ request }) => {
-  seeded = await seedDownloadedPlaylist(request)
-})
-
-test.afterAll(async ({ request }) => {
-  await deleteSeeded(request, seeded)
-})
+import { PLAYLIST } from '../helpers/fakeYoutube.js'
+import { addPlaylist } from '../helpers/seed.js'
 
 test('speed menu sets playbackRate to 1.5', async ({ page }) => {
-  await page.goto(`/playlists/${encodeURIComponent(seeded.id)}?video=${encodeURIComponent(seeded.video.id)}`)
+  const playlist = await addPlaylist(page.request, PLAYLIST)
+  const [video] = playlist.videos
+  await page.goto(`/playlists/${encodeURIComponent(playlist.id)}?video=${encodeURIComponent(video.id)}`)
   const speed = page.getByRole('button', { name: 'Playback speed' })
   await expect(speed).toBeEnabled()
 

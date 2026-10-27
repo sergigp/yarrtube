@@ -1,5 +1,5 @@
 {
-  "_comment": "The fake YouTube's world, served by youtube-stub.js (Data API) and yt-dlp (downloads). Every video is the same Creative-Commons clip (samples/c-dQKjG5ffc.*, see samples/CREDITS.txt) with our own subtitles (samples/fixture.en.srt). behaviour: normal | slow (the download takes ~20 s) | failing (it always fails). liveBroadcastContent: none | upcoming (a premiere).",
+  "_comment": "The fake YouTube's world, served by youtube-stub.js (Data API) and yt-dlp (downloads). Every video is the same Creative-Commons clip (samples/c-dQKjG5ffc.*, see samples/CREDITS.txt) with our own subtitles (samples/fixture.en.srt). behaviour: normal | slow (the download takes ~8 s) | failing (it always fails). liveBroadcastContent: none | upcoming (a premiere).",
   "sample": "c-dQKjG5ffc",
   "subtitles": "fixture.en.srt",
   "videos": [

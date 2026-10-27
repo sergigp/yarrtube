@@ -3,12 +3,12 @@
 // each way the daemon calls yt-dlp (src/infrastructure/shared/ytdlp.rs) from
 // catalogue.json and ../samples/, the way the YouTube contract tests show the
 // real one does. Every video is the same sample clip; a `slow` video takes
-// ~20 s to download and a `failing` one always fails, with a transient reason
+// ~8 s to download and a `failing` one always fails, with a transient reason
 // so the daemon retries it.
 
 const CATALOGUE = JSON.parse(Deno.readTextFileSync(new URL('./catalogue.json', import.meta.url)))
 const SAMPLES = new URL('../samples/', import.meta.url)
-const SLOW_DOWNLOAD_MS = 20_000
+const SLOW_DOWNLOAD_MS = 8_000
 const FAILURE_REASON = 'Unable to download video data: HTTP Error 503: Service Unavailable'
 
 const args = Deno.args

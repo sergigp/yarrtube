@@ -1,9 +1,10 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { slugOf } from '../helpers/addDialog.js'
+import { CHANNEL, PLAYLIST } from '../helpers/fakeYoutube.js'
 
-const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
-const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
-const CHANNEL_HANDLE = process.env.SMOKE_CHANNEL_HANDLE ?? '@BlenderOfficial'
+const PLAYLIST_ID = PLAYLIST.id
+const PLAYLIST_NAME = PLAYLIST.title
+const CHANNEL_HANDLE = CHANNEL.handle
 
 // The untracked playlist's videos are refused, which the view reports.
 test.use({

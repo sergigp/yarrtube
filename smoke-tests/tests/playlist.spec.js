@@ -325,7 +325,7 @@ test.describe('with a downloaded playlist', () => {
 })
 
 test('Downloads tab lists a running download', async ({ page }) => {
-  // The slow fixture video takes about 20 s to download, long enough to be
+  // The slow fixture video takes about 8 s to download, long enough to be
   // seen running.
   const playlist = await addPlaylist(page.request, SLOW_PLAYLIST, { downloaded: false })
 
