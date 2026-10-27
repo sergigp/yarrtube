@@ -1,10 +1,11 @@
 # Smoke tests
 
-An end-to-end Playwright suite that drives the real Docker image through a
-browser: creating a playlist/channel, downloading a real video via yt-dlp,
-and playing it back. Run it locally, e.g. before merging or around a large
-refactor. It doesn't run in CI: GitHub-hosted runners' shared IPs get
-YouTube's "confirm you're not a bot" check, so the workflow is manual-only.
+A Playwright suite that drives the real Docker image through a browser
+against a fake YouTube: adding playlists and channels, "downloading" their
+videos and playing them back, with the daemon's real database, task queue
+and file layout. YouTube's own side (the real `yt-dlp` and Data API) is
+covered by the YouTube contract tests (see `doc/DEVELOPMENT.md`). Only the
+upgrade check still uses the real YouTube.
 
 Run it with:
 
@@ -20,45 +21,47 @@ are always removed afterward; on failure, the container's logs are saved to
 `smoke-tests/container.log` and Playwright's traces/videos are kept under
 `smoke-tests/test-results/`.
 
-## Fixture prerequisites
+## The fake YouTube
 
-These tests hit the real YouTube Data API and download real videos — no
-test doubles. That requires:
+The daemon in the container is pointed at a fake YouTube that serves one
+catalogue, `fake-youtube/catalogue.json`: playlists, a channel and their
+videos. Specs use them by name through `helpers/fakeYoutube.js`.
 
-- **`YOUTUBE_API_KEY`**: a YouTube Data API v3 key. Locally, put it in the
-  repository root's `.env` (same as `scripts/run-local.sh` uses). In CI it
-  comes from the `YOUTUBE_API_KEY` repository secret (Settings > Secrets
-  and variables > Actions > New repository secret) — never printed or
-  logged.
-- **`SMOKE_PLAYLIST_ID`**: the id of a public, maintainer-owned YouTube
-  playlist containing the Creative-Commons "Big Buck Bunny" video. If the
-  playlist's contents ever change, the playlist test's download assertions
-  may need to change with it.
-- **`SMOKE_VIDEOS_DIR`**: the host directory mounted as the daemon's videos
-  root, so specs can check the files on disk. `run-smoke-tests.sh` sets it
-  to its temp directory.
+- `fake-youtube/youtube-stub.js`: the YouTube Data API (playlists, their
+  items, videos, channels by handle) plus the thumbnail and avatar images,
+  run on the host. The container reaches it through
+  `YARRTUBE_YOUTUBE_API_URL`; the browser through `localhost` (the page
+  fixture maps the host).
+- `fake-youtube/yt-dlp`: a stand-in `yt-dlp` (a Deno script, the image ships
+  Deno) mounted into the container as `YTDLP_PATH`. It answers each way the
+  daemon calls `yt-dlp` the way the contract tests show the real one does.
+  Every video is the same Creative-Commons clip, `samples/c-dQKjG5ffc.mp4`
+  (credits in `samples/CREDITS.txt`), with our own subtitles
+  (`samples/fixture.en.srt`). A `slow` video takes ~8 s to download, a
+  `failing` one always fails (2 s into each attempt), and an `upcoming` one is
+  a premiere.
 
-- **`SMOKE_PLEX_STUB_URL`**: where specs reach the stand-in Plex server
-  (`plex-stub.js`) the daemon is pointed at via `YARRTUBE_PLEX_*`.
-  `run-smoke-tests.sh` starts it on `SMOKE_PLEX_STUB_PORT` (default
-  `18324`) and configures the container for it.
+The container also runs with the self-update off
+(`YARRTUBE_YTDLP_SELF_UPDATE=false`, it would replace the stand-in), a 250 ms
+background poll (`YARRTUBE_BACKGROUND_POLL_INTERVAL_MS`, so each pipeline step
+doesn't wait 5 s) and no delay between retries.
 
-The suite refuses to start without `SMOKE_PLAYLIST_ID`, `SMOKE_VIDEOS_DIR`
-and `SMOKE_PLEX_STUB_URL`, rather than skipping the specs that need them.
-
-Optional overrides (defaults shown):
+Overrides (defaults shown):
 
 | Env var                      | Default                 |
 | ----------------------------- | ------------------------ |
-| `SMOKE_PLAYLIST_ID`           | `PLXWRoRTUXjks` (https://www.youtube.com/playlist?list=PLXWRoRTUXjks) |
-| `SMOKE_PLAYLIST_NAME`         | `test` (the playlist's YouTube title) |
-| `SMOKE_CHANNEL_HANDLE`        | `@BlenderOfficial`      |
-| `SMOKE_CHANNEL_VIDEO_LIMIT`   | `1`                      |
 | `YARRTUBE_PORT`               | `8080`                   |
 | `SMOKE_READY_TIMEOUT_SECONDS` | `120`                    |
-| `SMOKE_RETRY_BASE_DELAY_SECONDS` | `10`                  |
-| `SMOKE_PLEX_STUB_PORT`       | `18324`                  |
-| `SMOKE_UPGRADE_FROM_IMAGE`   | `ghcr.io/sergigp/yarrtube:latest` (`none` skips the upgrade check) |
+| `SMOKE_PLEX_STUB_PORT`        | `18324`                  |
+| `SMOKE_YOUTUBE_STUB_PORT`     | `18326`                  |
+| `SMOKE_UPGRADE_FROM_IMAGE`    | `ghcr.io/sergigp/yarrtube:latest` (`none` skips the upgrade check) |
+
+The upgrade check starts the released image, which can't be pointed at the
+fake YouTube, so it needs a real `YOUTUBE_API_KEY` (from the environment or
+the repository's `.env`) and is skipped without one. It uses the
+maintainer-owned "test" playlist (`SMOKE_PLAYLIST_ID`, default
+`PLXWRoRTUXjks`, holding Big Buck Bunny) and retries failed downloads after
+`SMOKE_RETRY_BASE_DELAY_SECONDS` (default `10`).
 
 ## Browsers
 
@@ -88,10 +91,10 @@ with `test.use({ keepLibrary: true })`, and fails on:
   `expectedApiErrors` (`[{ method, path, status }]`, `path` a pathname or a
   RegExp).
 
-Specs that share one download seed it in `beforeAll` with
-`helpers/seed.js` (`seedDownloadedPlaylist` / `seedDownloadedChannel`: added
-through the API at low quality and waited on until downloaded and settled),
-so each of their tests runs on its own. Image assertions use
+Tests add the sources they need themselves with `helpers/seed.js`
+(`addPlaylist` / `addChannel`: added through the API and, by default, waited
+on until downloaded and settled, about a second), so no test depends on
+another's state. Image assertions use
 `expectImageLoaded` (`helpers/media.js`), which requires the image to have
 actually loaded rather than the placeholder a broken one is swapped for.
 
@@ -110,20 +113,19 @@ actually loaded rather than the placeholder a broken one is swapped for.
   a Plex episode (`Season 1/S01E…` media, `.nfo`, thumbnail, `tvshow.nfo`)
   and that Plex was asked to scan its folder, sees its unwatched badge
   arrive through the sidebar's periodic refresh (no reload), then deletes it
-  and checks its folder is removed. On a seeded download, independent tests
+  and checks its folder is removed. On a downloaded playlist, independent tests
   hide and show its badge, list it with a loaded thumbnail and duration,
   play it and record the position, show its subtitles, show it on the home
   feed (its card showing the time left), show its progress bar and time left
   in the playlist's list, exclude it from home and include it again, sync it (changing
   nothing), edit its check interval, run its sync from the Tasks view,
   reject adding it twice, mark it watched while playing and mark it all
-  watched. On a fresh add, the Tasks view's Downloads tab lists its
-  download while it runs.
+  watched. The Tasks view's Downloads tab lists the slow video's download
+  while it runs.
 - **Channel** (`tests/channel.spec.js`): the same lifecycle for the fixture
   channel (episodes under `Season <year>`, plus a `poster.jpg`), including
-  marking a single video watched, editing its quality and check interval,
-  with loose (non-title) assertions since the channel's newest video can
-  change. While the video is unwatched, the folded Channels heading shows
+  marking a single video watched, editing its quality and check interval.
+  While the video is unwatched, the folded Channels heading shows
   the section's unwatched total and is marked active on the channel's
   route. Separately, the channel's avatar in the sidebar (the copy the
   daemon downloaded) loads.
@@ -138,11 +140,17 @@ actually loaded rather than the placeholder a broken one is swapped for.
 - **Delete during download** (`tests/deleteDuringDownload.spec.js`):
   deleting a playlist while its download is running removes its folder, and
   it doesn't reappear once the download ends.
-- **Media** (`tests/media.spec.js`): the downloaded video is an `.mp4` with
-  H.264 video and AAC audio (read with `ffprobe` inside the container
-  named by `SMOKE_CONTAINER_NAME`), and `/media` answers
+- **Media** (`tests/media.spec.js`): `/media` answers
   `Range: bytes=0-1023` with a `206`, a `Content-Range` and 1024 bytes.
-  Every episode checked on disk must be `.mp4`.
+  Every episode checked on disk must be `.mp4` (that real downloads are
+  H.264/AAC is checked by the YouTube contract tests).
+- **Errored download** (`tests/erroredDownload.spec.js`): a download that
+  keeps failing is listed in the Downloads tab with its reason while it's
+  retried, and its video is Errored once the retries run out.
+- **Premieres** (`tests/premiere.spec.js`): a playlist's upcoming premiere
+  is neither listed nor downloaded; its other video is.
+- **Search** (`tests/search.spec.js`): with 16 playlists, the sidebar search
+  and the Tasks view's search list only what matches.
 - **Playback speed** (`tests/playbackSpeed.spec.js`): choosing 1.5x from the
   speed menu sets the player's `playbackRate` and the menu shows it.
 - **Deep links** (`tests/deepLinks.spec.js`): reloading home, a playlist, a
@@ -151,7 +159,8 @@ actually loaded rather than the placeholder a broken one is swapped for.
 - **Add dialogs** (`tests/addPlaylistDialog.spec.js`,
   `tests/addChannelDialog.spec.js`, `tests/addDialogLocation.spec.js`): the
   destination notice (title, count, absolute path), values that aren't a
-  playlist or channel, playlists and channels YouTube doesn't know,
+  playlist or channel, playlists and channels YouTube doesn't know, the
+  channel's avatar in the notice,
   auto-filled folder names, and choosing, staging and blocking destinations
   with the folder browser.
 - **Categories** (`tests/categories.spec.js`): create a category from the
@@ -201,10 +210,8 @@ logged a panic.
 
 ### Not covered yet
 
-- An errored download being surfaced: it needs a maintainer-owned playlist
-  holding an unavailable video.
-- Sidebar search and Tasks search: they only show with more than 15 sources
-  or tasks, more than the fixtures track.
+- A full run against the real YouTube: the YouTube contract tests cover
+  YouTube's side, and only the upgrade check downloads real videos.
 - On a real iPhone (checked by hand): native captions menu, fullscreen and
   rotation, sound, and the home-screen web app.
 
@@ -215,22 +222,19 @@ npm --prefix smoke-tests ci
 npx --prefix smoke-tests playwright install --with-deps chromium webkit
 ```
 
-Then start the Plex stub (`node smoke-tests/plex-stub.js`) and, against an
-already-running yarrtube instance started with
-`YARRTUBE_PLEX_URL=http://localhost:18324`, `YARRTUBE_PLEX_TOKEN=smoke-token`
-and `YARRTUBE_PLEX_VIDEOS_PATH=/plex/yarrtube`:
+Then start the stubs (`node smoke-tests/plex-stub.js`,
+`node smoke-tests/fake-youtube/youtube-stub.js`) and a yarrtube container
+configured like `scripts/run-smoke-tests.sh`'s `start_container ... fake`
+(fake YouTube URL, stand-in `yt-dlp` and samples mounted, self-update off),
+and run:
 
 ```bash
 BASE_URL=http://localhost:8080 \
-  YOUTUBE_API_KEY=... \
-  SMOKE_PLAYLIST_ID=... \
   SMOKE_VIDEOS_DIR=$PWD/videos \
   SMOKE_PLEX_STUB_URL=http://localhost:18324 \
-  SMOKE_CONTAINER_NAME=<the container, for ffprobe> \
+  SMOKE_YOUTUBE_STUB_PORT=18326 \
   npm --prefix smoke-tests test
 ```
 
-`SMOKE_CONTAINER_NAME` names the Docker container serving `BASE_URL`; only
-`tests/media.spec.js` uses it, to run `ffprobe` on the downloaded file, so
-against a `cargo run` instance that spec can't pass. Add
-`--project=chromium` or `--project=mobile-safari` to run one browser only.
+Add `--project=chromium` or `--project=mobile-safari` to run one browser
+only.

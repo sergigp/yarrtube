@@ -5,10 +5,9 @@
 #
 # Usage: scripts/run-tests.sh [--ci]
 #
-# In CI (`--ci`, or `CI=true`, which GitHub Actions sets), the suites that
-# talk to the real YouTube are skipped: YouTube bot-checks CI runners. Today
-# that is the YouTube contract tests and the smoke suite (which downloads
-# real videos).
+# In CI (`--ci`, or `CI=true`, which GitHub Actions sets), the YouTube
+# contract tests are skipped (YouTube bot-checks CI runners), and so, for
+# now, is the smoke suite, until it is set up to run in CI.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -67,7 +66,7 @@ cargo test --locked
 
 if [[ "$CI_MODE" == true ]]; then
   skip "YouTube contract tests (they need the real YouTube)"
-  skip "smoke suite (it downloads real videos from YouTube)"
+  skip "smoke suite (not set up for CI yet)"
 else
   step "YouTube contract tests"
   "$REPO_ROOT/scripts/run-youtube-contract-tests.sh"
