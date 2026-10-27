@@ -26,4 +26,4 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `doc/INSTALLATION.md` (the three settings, for testing) and `smoke-tests/README.md` (the fake YouTube, its catalogue, what still needs the real one) updated; `scripts/run-tests.sh` passes, and `scripts/run-smoke-tests.sh` passes with no `YOUTUBE_API_KEY` (upgrade check skipped) and with one (upgrade check run). Record both run times.
+- [x] 4.1 `doc/INSTALLATION.md` (the three settings, for testing) and `smoke-tests/README.md` (the fake YouTube, its catalogue, what still needs the real one) updated; `scripts/run-tests.sh` passes, and `scripts/run-smoke-tests.sh` passes with no `YOUTUBE_API_KEY` (upgrade check skipped) and with one (upgrade check run). Record both run times. Recorded 2026-10-27: `scripts/run-smoke-tests.sh` with no `YOUTUBE_API_KEY` (upgrade check skipped): 65/65 in 4m36s; `scripts/run-tests.sh` with a key: everything passed in 5m50s, of which the smoke run (upgrade check included) took 5m17s and its suite 4.6m; all `/api` routes answered 2xx. Before this change a smoke run took 14–16 min.
