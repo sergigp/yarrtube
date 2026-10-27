@@ -10,6 +10,7 @@ import { waitForVideoStatus, assertVideoPlays, assertSubtitlesShow } from '../he
 import { expectEpisodeOnDisk, expectGoneFromDisk } from '../helpers/library.js'
 import { expectPlexScanned } from '../helpers/plex.js'
 import { deleteSeeded, seedDownloadedPlaylist } from '../helpers/seed.js'
+import { PLAYLIST } from '../helpers/fakeYoutube.js'
 import { expectImageLoaded } from '../helpers/media.js'
 import {
   syncItem,
@@ -23,8 +24,8 @@ import {
 } from '../helpers/sidebar.js'
 import { expectPendingSync } from '../helpers/tasks.js'
 
-const PLAYLIST_ID = process.env.SMOKE_PLAYLIST_ID
-const PLAYLIST_NAME = process.env.SMOKE_PLAYLIST_NAME ?? 'test'
+const PLAYLIST_ID = PLAYLIST.id
+const PLAYLIST_NAME = PLAYLIST.title
 const PLAYLIST_PATH = `playlists/${slugOf(PLAYLIST_NAME)}`
 // The badge of an in-progress thumbnail: "<1m left", "8m left", "1h 5m left".
 const TIME_LEFT = /^(<1m|\d+m|\d+h( \d+m)?) left$/

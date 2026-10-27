@@ -5,7 +5,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `it_should_skip_the_update_and_reschedule_if_self_update_is_off`: `UpdateYtdlpTask` skips the updater when off; `serve.rs` skips the startup update when off.
-- [ ] 2.2 Smoke: the stub serves the fixture playlist and the stand-in downloads it: `playlist golden path` passes via `scripts/run-smoke-tests.sh`.
+- [x] 2.2 Smoke: the stub serves the fixture playlist and the stand-in downloads it: `playlist golden path` passes via `scripts/run-smoke-tests.sh`.
 - [ ] 2.3 Smoke: `playlist.spec.js` fully on the fixture playlist (seeded tests use `addPlaylist`); the file passes.
 - [ ] 2.4 Smoke: `channel.spec.js` and `channelVideoLimit.spec.js` on the fixture channel; both pass.
 - [ ] 2.5 Smoke: `moveSources.spec.js` and `categories.spec.js`; both pass.
