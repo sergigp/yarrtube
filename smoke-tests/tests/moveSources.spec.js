@@ -31,7 +31,7 @@ async function waitUntilSettled(request, { listUrl, id, videosUrl }) {
           videos.every((video) => video.status === 'DOWNLOADED' && video.thumbnail_filename)
         return source?.work_in_progress === false && downloaded
       },
-      { message: `${id} settled`, timeout: 240_000 },
+      { message: `${id} settled`, timeout: 30_000 },
     )
     .toBe(true)
 }

@@ -60,7 +60,7 @@ test('it should create a playlist into a browsed parent folder', async ({ page }
   const sidebarLink = sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME })
   await expect(sidebarLink).toBeVisible()
   await sidebarLink.click()
-  await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 240_000 })
+  await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 30_000 })
 
   // The videos went to the stated destination, not anywhere else.
   expect(await listDirectories(page, 'playlists')).toContain(folderName)
@@ -102,7 +102,7 @@ test('it should create a playlist into a staged parent folder that did not exist
 
   const sidebarLink = sectionList(page, 'Playlists').getByRole('link', { name: PLAYLIST_NAME })
   await sidebarLink.click()
-  await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 240_000 })
+  await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 30_000 })
 
   // Both directories exist once the first download has run.
   expect(await listDirectories(page, '')).toContain(stagedParent)

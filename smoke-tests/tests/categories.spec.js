@@ -129,7 +129,7 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
   await test.step('wait for the channel video and mark it all watched', async () => {
     // The video card shows once the channel's download finishes.
     const cards = page.locator('main ul li')
-    await expect(cards).toHaveCount(1, { timeout: 240_000 })
+    await expect(cards).toHaveCount(1, { timeout: 30_000 })
     // The sidebar refetches its badges on an interval, not when a download ends.
     await page.reload()
     await expect(categoryRows.getByLabel('1 unwatched')).toBeVisible()
@@ -154,7 +154,7 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
           )
           return (await response.json()).map((video) => video.subtitle_language !== null)
         },
-        { timeout: 60_000 },
+        { timeout: 15_000 },
       )
       .toEqual([true])
   })

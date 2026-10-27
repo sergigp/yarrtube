@@ -143,7 +143,7 @@ test('icon-only Tasks tabs and Run now work by accessible name @mobile', async (
     const syncRow = page.locator('main li', { hasText: `Syncing playlist ${PLAYLIST_NAME}` })
     const runNow = syncRow.getByRole('button', { name: /^Run now: / })
     // The header's Sync may still be running it; Run now shows once it's pending again.
-    await expect(runNow).toBeVisible({ timeout: 60_000 })
+    await expect(runNow).toBeVisible({ timeout: 15_000 })
     await expect(runNow).toHaveText('', { useInnerText: true })
     const ranNow = reconciled(page)
     await runNow.tap()

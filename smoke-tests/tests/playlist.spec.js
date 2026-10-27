@@ -74,7 +74,7 @@ test('playlist golden path: add, download, on disk, scanned by Plex, badge, dele
   await test.step('wait for the download, on disk and scanned by Plex', async () => {
     // Follow it into the detail view and wait for the download to finish.
     await sidebarLink.click()
-    await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 240_000 })
+    await waitForVideoStatus(page, { status: 'DOWNLOADED', timeoutMs: 30_000 })
     const videoTitle = await page.locator('main h3').first().innerText()
 
     // On disk it is the playlist's first episode, laid out for Plex.

@@ -25,10 +25,11 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 2 : 0,
-  // Lifecycle tests wait up to 240s for a real yt-dlp download to finish
-  // (enough to cover a couple of retries at the smoke suite's short retry
-  // base delay), on top of the dialog/sync/delete steps around it.
-  timeout: 300_000,
+  // Against the fake YouTube a download takes about a second; the longest
+  // test waits up to a minute for the sidebar's periodic refresh. The
+  // upgrade check's seeding still downloads from the real YouTube, for up to
+  // 240 s.
+  timeout: UPGRADE_PHASE ? 300_000 : 120_000,
   reporter: [['list'], ['./routeCoverageReporter.js']],
   use: {
     baseURL: process.env.BASE_URL ?? 'http://localhost:8080',

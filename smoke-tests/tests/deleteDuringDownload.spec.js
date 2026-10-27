@@ -36,7 +36,7 @@ test('deleting a playlist mid-download leaves no folder', async ({ page }) => {
   await expect
     .poll(async () => (await downloadTasks(page.request)).length, {
       message: 'in-flight download over',
-      timeout: 240_000,
+      timeout: 30_000,
     })
     .toBe(0)
   // Give a late write the time to land before checking it didn't.

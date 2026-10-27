@@ -118,7 +118,7 @@ function isExpectedApiError(expectedApiErrors, { method, pathname, status }) {
   )
 }
 
-export async function deleteAllSources(request) {
+async function deleteAllSources(request) {
   await deleteAllCategories(request)
   const leftovers = []
   for (const kind of ['playlists', 'channels']) {

@@ -9,7 +9,7 @@ const STATUS_LABELS = {
   ERRORED: 'Errored',
 }
 
-export async function waitForVideoStatus(page, { title, status = 'DOWNLOADED', timeoutMs = 240_000 } = {}) {
+export async function waitForVideoStatus(page, { title, status = 'DOWNLOADED', timeoutMs = 30_000 } = {}) {
   const main = page.locator('main')
   if (title) {
     await main.getByRole('button').filter({ hasText: title }).first().click()

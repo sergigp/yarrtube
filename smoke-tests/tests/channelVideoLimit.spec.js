@@ -35,7 +35,7 @@ test('lowering a channel video limit deletes the videos beyond it on the next sy
         const videos = await (await page.request.get(VIDEOS_URL)).json()
         return videos.filter((video) => video.status === 'DOWNLOADED' && video.thumbnail_filename).length
       },
-      { message: 'both videos downloaded with thumbnails', timeout: 240_000 },
+      { message: 'both videos downloaded with thumbnails', timeout: 30_000 },
     )
     .toBe(2)
   const [newest, oldest] = (await (await page.request.get(VIDEOS_URL)).json()).sort((a, b) =>
