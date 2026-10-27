@@ -21,7 +21,9 @@ export default defineConfig({
   ...(UPGRADE_PHASE
     ? { testDir: './upgrade', testMatch: `${UPGRADE_PHASE}.spec.js` }
     : { testDir: './tests' }),
-  fullyParallel: false,
+  // Every test starts from an empty library on its own worker's daemon, so
+  // tests of one file can run on several workers too.
+  fullyParallel: true,
   // `scripts/run-tests.sh --workers N`; one when run directly.
   workers: Number(process.env.E2E_WORKERS ?? 1),
   retries: process.env.CI ? 2 : 0,
