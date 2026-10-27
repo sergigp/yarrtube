@@ -98,7 +98,11 @@ pub fn run() -> ExitCode {
     // These use a blocking HTTP client, so they run on this thread outside the
     // tokio runtime rather than inside it (a blocking client can't run on a
     // tokio worker thread).
-    run_startup_ytdlp_update();
+    if ytdlp_self_update_enabled() {
+        run_startup_ytdlp_update();
+    } else {
+        info!("yt-dlp self-update is off, leaving yt-dlp as it is");
+    }
     run_startup_database_check();
     run_startup_youtube_api_key_check();
     run_startup_storage_directories_check();

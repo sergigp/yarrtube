@@ -50,9 +50,13 @@ impl TaskHandler for UpdateYtdlpTask {
     fn handle(&self, payload: &str, _is_last_attempt: bool) -> anyhow::Result<()> {
         Task::decode_update_ytdlp_payload(payload)?;
 
-        match self.updater.update(&self.ytdlp_path) {
-            Ok(()) => info!("yt-dlp self-update succeeded"),
-            Err(e) => error!(error = %e, "yt-dlp self-update failed"),
+        if self.self_update_enabled {
+            match self.updater.update(&self.ytdlp_path) {
+                Ok(()) => info!("yt-dlp self-update succeeded"),
+                Err(e) => error!(error = %e, "yt-dlp self-update failed"),
+            }
+        } else {
+            info!("yt-dlp self-update is off, leaving yt-dlp as it is");
         }
 
         let next_run_at = self.clock.now() + chrono::Duration::seconds(UPDATE_INTERVAL_SECONDS);
@@ -107,7 +111,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let task = UpdateYtdlpTask::new(
-            Arc::new(FakeYtdlpUpdater { succeeds: true }),
+            Arc::new(FakeYtdlpUpdater::succeeding()),
             PathBuf::from("/app/bin/yt-dlp"),
             true,
             task_repository.clone(),
@@ -128,6 +132,36 @@ mod tests {
     }
 
     #[test]
+    fn it_should_skip_the_update_and_reschedule_if_self_update_is_off() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let updater = Arc::new(FakeYtdlpUpdater::succeeding());
+        let task = UpdateYtdlpTask::new(
+            updater.clone(),
+            PathBuf::from("/fake-youtube/yt-dlp"),
+            false,
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let result = run(&task, "{}");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(*updater.updated.lock().unwrap(), Vec::<PathBuf>::new());
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::UpdateYtdlp,
+                fixed_timestamp() + chrono::Duration::seconds(UPDATE_INTERVAL_SECONDS),
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_reschedule_after_failure() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
@@ -135,7 +169,7 @@ mod tests {
             Arc::new(FixedClock(fixed_timestamp())),
         ));
         let task = UpdateYtdlpTask::new(
-            Arc::new(FakeYtdlpUpdater { succeeds: false }),
+            Arc::new(FakeYtdlpUpdater::failing()),
             PathBuf::from("/app/bin/yt-dlp"),
             true,
             task_repository.clone(),
