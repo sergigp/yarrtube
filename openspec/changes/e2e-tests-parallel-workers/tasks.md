@@ -15,4 +15,4 @@ None: no Rust changes.
 
 ## 4. Verification
 
-- [ ] 4.1 `e2e-tests/README.md` (workers, containers per run, per-worker logs) and one line in `doc/DEVELOPMENT.md` for `--workers`; `scripts/run-tests.sh` passes locally (upgrade check included).
+- [x] 4.1 `e2e-tests/README.md` (workers, containers per run, per-worker logs) and one line in `doc/DEVELOPMENT.md` for `--workers`; `scripts/run-tests.sh` passes locally (upgrade check included). Full run passed in 2m38s (was 5m43s), upgrade check included.

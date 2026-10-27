@@ -85,6 +85,7 @@ One script runs every test suite, locally and in CI:
 scripts/run-tests.sh                 # everything
 scripts/run-tests.sh --only e2e      # one suite: web, rust, contract or e2e
 scripts/run-tests.sh --ci            # what CI runs (also when CI=true)
+scripts/run-tests.sh --workers 2     # end-to-end tests at once (default: half the cores, at most 4)
 ```
 
 The suites are the web UI's checks, Rust formatting, clippy and tests, the
@@ -94,8 +95,8 @@ YouTube). CI runs all of them except the contract tests, which need the real
 YouTube, on every pull request and push to `main`. The script only checks:
 it installs and builds nothing, so install the web UI's and `e2e-tests/`'s
 dependencies (and the Playwright browsers) and build the web UI first. Each
-end-to-end run uses its own container and ports, so worktrees can run it at
-the same time.
+end-to-end worker runs its own container on its own ports, so the suite runs
+in parallel and worktrees can run it at the same time.
 
 ### YouTube contract tests
 

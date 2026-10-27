@@ -13,14 +13,22 @@ Run it with:
 ./scripts/run-tests.sh --only e2e
 ```
 
-from the repository root. It builds the release Docker image, runs it with
-a fresh temp database/videos directory, waits for it to become ready, then
-runs this Playwright suite against it. Before that, it runs the upgrade
-check (see below) unless `E2E_UPGRADE_FROM_IMAGE=none`. The container and temp directories
-are always removed afterward; on failure, the container's logs are saved to
-`e2e-tests/test-results/container.log` and Playwright's traces/videos are kept under
-`e2e-tests/test-results/`. Each run uses its own container, image tag and
-free ports, so the suite can run from several worktrees at the same time.
+from the repository root. It builds the release Docker image, runs the
+upgrade check (see below) unless `E2E_UPGRADE_FROM_IMAGE=none`, then runs
+this Playwright suite on `--workers N` workers (default: half the cores, at
+most 4; 2 in CI), every test free to run alongside any other.
+
+Each worker starts its own daemon (`helpers/daemon.js`, a worker-scoped
+fixture): a container of the image with a fresh temp database and videos
+directory, on free ports, with its own Plex stub, all sharing the one fake
+YouTube. So at most N daemons are alive at once; a run starts one per
+worker per browser project, plus one more each time a failed test restarts
+its worker. When a worker finishes, its container and temp directories are
+removed and its log is saved to
+`e2e-tests/test-results/container-<run>-w<worker>.log` (a panic in it fails
+the run); Playwright's traces/videos are kept under `e2e-tests/test-results/`.
+Each run uses its own container names, image tag and free ports, so the
+suite can run from several worktrees at the same time.
 
 The script installs nothing: install the suite's dependencies and browsers
 once (`npm --prefix e2e-tests ci && npx --prefix e2e-tests playwright install
@@ -74,7 +82,7 @@ maintainer-owned "test" playlist (`E2E_PLAYLIST_ID`, default
 
 ## Browsers
 
-Two Playwright projects run against the same container:
+Two Playwright projects run against the daemons:
 
 - **`chromium`** (Desktop Chrome) runs every spec *not* tagged `@mobile`.
 - **`mobile-safari`** (`iPhone 13`: WebKit, touch, mobile viewport and user
