@@ -11,8 +11,8 @@
 - [x] 2.3 `ConfirmDialog` shows `pendingLabel` on the confirm button while `onConfirm` is pending — verify the test passes.
 - [x] 2.4 `DetailHeader` with 23 unwatched: "Mark all watched" opens a red confirmation ("Mark watched" / "Marking…") without marking; confirming calls `onMarkWatched` and closes — verify the test passes.
 - [x] 2.5 `DetailHeader`: cancelling never calls `onMarkWatched` — verify the test passes.
-- [ ] 2.6 `DetailHeader` with 1 unwatched marks without a dialog — verify the test passes.
-- [ ] 2.7 `DetailHeader`: a failure after confirming keeps the dialog open with the error — verify the test passes.
+- [x] 2.6 `DetailHeader` with 1 unwatched marks without a dialog — verify the test passes.
+- [x] 2.7 `DetailHeader`: a failure after confirming keeps the dialog open with the error — verify the test passes.
 - [ ] 2.8 `CategoryDetail` with 3 unwatched asks for confirmation before `POST .../watched` is sent — verify the test passes.
 - [ ] 2.9 `Sidebar` channel row with 2+ unwatched opens the confirmation; confirming sends `POST /api/channels/:id/watched` (update the existing mark-watched tests in `Sidebar.test.tsx` to confirm) — verify the tests pass.
 - [ ] 2.10 `Sidebar` playlist row with 1 unwatched marks without a dialog — verify the test passes.

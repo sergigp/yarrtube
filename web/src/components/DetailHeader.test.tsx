@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DetailHeader } from './DetailHeader'
 import { aVideo } from '@/test/helpers'
@@ -155,6 +155,51 @@ describe('DetailHeader', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(onMarkWatched).not.toHaveBeenCalled()
+  })
+
+  it('marks a single unwatched video watched without asking', async () => {
+    const user = userEvent.setup()
+    const onMarkWatched = vi.fn(noop)
+    render(
+      <DetailHeader
+        name="The Channel"
+        videos={[]}
+        unwatchedCount={1}
+        onMarkWatched={onMarkWatched}
+        onDelete={noop}
+        deleteDescription="desc"
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'More actions for The Channel' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+
+    await waitFor(() => expect(onMarkWatched).toHaveBeenCalledOnce())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps the mark-all-watched confirmation open with the error when marking fails', async () => {
+    const user = userEvent.setup()
+    const onMarkWatched = vi.fn(() => Promise.reject(new Error('mark failed')))
+    render(
+      <DetailHeader
+        name="The Channel"
+        videos={[]}
+        unwatchedCount={3}
+        onMarkWatched={onMarkWatched}
+        onDelete={noop}
+        deleteDescription="desc"
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'More actions for The Channel' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+    await user.click(await screen.findByRole('button', { name: 'Mark watched' }))
+
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Mark 3 videos in "The Channel" watched?',
+    })
+    expect(await within(dialog).findByText('mark failed')).toBeInTheDocument()
   })
 
   it('disables mark-all-watched while it runs', async () => {
