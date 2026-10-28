@@ -37,7 +37,7 @@ function Swatch({
         aria-label={name}
         checked={checked}
         onChange={onSelect}
-        className="sr-only"
+        className="absolute inset-0 cursor-pointer appearance-none rounded-full opacity-0"
       />
     </label>
   )

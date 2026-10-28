@@ -50,8 +50,10 @@ describe('AddCategoryDialog', () => {
       '/api/categories',
       expect.objectContaining({ method: 'POST' }),
     )
-    expect(screen.getByRole('status', { name: 'Current route', hidden: true })).toHaveTextContent(
-      '/categories/chess',
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'Current route', hidden: true })).toHaveTextContent(
+        '/categories/chess',
+      ),
     )
     expect(await screen.findByRole('dialog', { name: 'Manage sources in Chess' })).toBeVisible()
     expect(screen.getByRole('searchbox', { name: 'Search channels and playlists' })).toHaveFocus()
