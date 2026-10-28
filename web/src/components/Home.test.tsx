@@ -3,11 +3,24 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Home } from './Home'
 import type { HomeVideoSource } from '@/api/types'
-import { aHomeVideo, aPlaylist, mockApi, renderWithProviders } from '@/test/helpers'
+import {
+  aCategory,
+  aCategoryList,
+  aHomeVideo,
+  aPlaylist,
+  mockApi,
+  renderWithProviders,
+  type Routes,
+} from '@/test/helpers'
+
+/** Mocks the API with no categories unless `routes` says otherwise. */
+function mockHomeApi(routes: Routes) {
+  return mockApi({ 'GET /api/categories': aCategoryList(), ...routes })
+}
 
 describe('Home', () => {
   it('shows only the latest section while the others are empty', async () => {
-    mockApi({
+    mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
         quick_watches: [],
@@ -24,7 +37,7 @@ describe('Home', () => {
   })
 
   it('shows every section that has videos', async () => {
-    mockApi({
+    mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [aHomeVideo({ title: 'Half Watched', position_seconds: 60 })],
         quick_watches: [aHomeVideo({ title: 'Short One' })],
@@ -40,7 +53,7 @@ describe('Home', () => {
   })
 
   it('shows progress on in-progress cards in every section', async () => {
-    mockApi({
+    mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [aHomeVideo({ position_seconds: 60, duration_seconds: 600 })],
         quick_watches: [],
@@ -67,7 +80,7 @@ describe('Home', () => {
   })
 
   it('shows no progress for watched or durationless cards', async () => {
-    mockApi({
+    mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
         quick_watches: [],
@@ -90,7 +103,7 @@ describe('Home', () => {
   })
 
   it('links a video card to its source detail view with a deep link', async () => {
-    mockApi({
+    mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
         quick_watches: [],
@@ -123,7 +136,7 @@ describe('Home', () => {
   })
 
   it('shows an empty message when nothing has synced yet', async () => {
-    mockApi({
+    mockHomeApi({
       'GET /api/videos/home': { continue_watching: [], quick_watches: [], latest: [] },
     })
 
@@ -133,7 +146,7 @@ describe('Home', () => {
   })
 
   it('reports a load failure in the latest section', async () => {
-    mockApi({ 'GET /api/videos/home': { status: 500, error: 'boom' } })
+    mockHomeApi({ 'GET /api/videos/home': { status: 500, error: 'boom' } })
 
     renderWithProviders(<Home />)
 
@@ -141,7 +154,7 @@ describe('Home', () => {
   })
 
   it('marks watched videos with a tick', async () => {
-    mockApi({
+    mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
         quick_watches: [],
@@ -156,7 +169,7 @@ describe('Home', () => {
   it('marking a continue-watching video watched removes it from the section', async () => {
     const halfWatched = aHomeVideo({ id: 'half', title: 'Half Watched', position_seconds: 60 })
     let marked = false
-    mockApi({
+    mockHomeApi({
       'GET /api/videos/home': () => ({
         continue_watching: marked ? [] : [halfWatched],
         quick_watches: [],
@@ -186,7 +199,7 @@ describe('Home', () => {
       avatar_filename: null,
     }
     let excluded = false
-    mockApi({
+    mockHomeApi({
       'GET /api/videos/home': () => ({
         continue_watching: [],
         quick_watches: excluded ? [] : [aHomeVideo({ title: 'Bluey Short', source: bluey })],
@@ -212,7 +225,7 @@ describe('Home', () => {
   })
 
   it('a channel card offers no exclude item', async () => {
-    mockApi({
+    mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
         quick_watches: [],
@@ -235,8 +248,40 @@ describe('Home', () => {
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Actions for Channel Video' }))
 
-    expect(
-      (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
-    ).toEqual(['Mark as watched'])
+    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual([
+      'Mark as watched',
+    ])
+  })
+
+  it('tints each card by its categories', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        quick_watches: [],
+        latest: [
+          aHomeVideo({ title: 'One', category_ids: ['chess'] }),
+          aHomeVideo({ title: 'Two', category_ids: ['chess', 'streams'] }),
+          aHomeVideo({ title: 'Four', category_ids: ['chess', 'streams', 'news', 'music'] }),
+          aHomeVideo({ title: 'None', category_ids: [] }),
+        ],
+      },
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', color: '#d3ecf8' }),
+        aCategory({ id: 'streams', color: '#fff1bf' }),
+        aCategory({ id: 'news', color: '#e9def8' }),
+        aCategory({ id: 'music', color: '#ffd9d4' }),
+      ]),
+    })
+
+    renderWithProviders(<Home />)
+
+    const card = async (title: string) =>
+      (await screen.findByText(title)).closest('li') as HTMLElement
+    await waitFor(async () => expect(await card('One')).toHaveStyle({ background: '#d3ecf8' }))
+    expect(await card('Two')).toHaveStyle({
+      background: 'linear-gradient(135deg, #d3ecf8 0% 50%, #fff1bf 50% 100%)',
+    })
+    expect(await card('Four')).toHaveStyle({ background: '#f2f2f2' })
+    expect((await card('None')).style.background).toBe('')
   })
 })

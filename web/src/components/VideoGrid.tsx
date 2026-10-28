@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { videoMediaUrl, avatarMediaUrl } from '@/api/client'
 import type { HomeVideo, HomeVideoSource } from '@/api/types'
+import { cardBackground } from '@/lib/categoryColors'
 import { cn } from '@/lib/utils'
 import { Thumbnail } from './Thumbnail'
 import { ThumbnailOverlay } from './ThumbnailOverlay'
@@ -17,8 +18,13 @@ interface VideoGridProps {
   categoryColors?: Map<string, string>
 }
 
+/** The colors of the video's categories, in its order, up to the 4 that make a card grey. */
+function colorsOf(video: HomeVideo, categoryColors: Map<string, string>): string[] {
+  return video.category_ids.slice(0, 4).flatMap((id) => categoryColors.get(id) ?? [])
+}
+
 /** Home-style video cards, each linking to its video in its source. */
-export function VideoGrid({ videos }: VideoGridProps) {
+export function VideoGrid({ videos, categoryColors }: VideoGridProps) {
   if (videos.length === 0) {
     return <p className="text-sm text-muted-foreground">No videos synced yet.</p>
   }
@@ -31,8 +37,12 @@ export function VideoGrid({ videos }: VideoGridProps) {
         return (
           <li
             key={`${video.source.kind}:${video.source.id}:${video.id}`}
-            className="animate-enter"
-            style={{ animationDelay: `${Math.min(index, 12) * 35}ms` }}
+            // Tinted grids pad every card, tinted or not, so they all line up.
+            className={cn('animate-enter', categoryColors && '-m-2 rounded-xl p-2')}
+            style={{
+              animationDelay: `${Math.min(index, 12) * 35}ms`,
+              background: categoryColors && cardBackground(colorsOf(video, categoryColors)),
+            }}
           >
             <div className="flex flex-col gap-2">
               <Link className="group relative block" to={videoPath}>
