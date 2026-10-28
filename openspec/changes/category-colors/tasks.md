@@ -18,7 +18,7 @@ Backend acceptance tests (HTTP handlers):
 - [x] 2.7 `it_should_rename_and_recolor_a_category` — both fields are applied
 - [x] 2.8 `it_should_fail_to_update_without_name_or_color` — 400, category unchanged (replaces `it_should_fail_to_rename_if_name_missing`)
 - [x] 2.9 `it_should_fail_to_update_if_color_invalid` — 400, category unchanged
-- [ ] 2.10 `it_should_not_recolor_if_name_taken` — 409, color unchanged
+- [x] 2.10 `it_should_not_recolor_if_name_taken` — 409, color unchanged
 - [ ] 2.11 `it_should_list_a_home_video_with_its_category` — source in "Chess" → `category_ids` = [Chess]; verify `cargo test videos` passes
 - [ ] 2.12 `it_should_list_a_home_video_without_categories` — `[]`
 - [ ] 2.13 `it_should_order_home_video_categories_by_name` — "Streams" and "chess" → [chess, Streams]

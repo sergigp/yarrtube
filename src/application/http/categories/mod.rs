@@ -872,6 +872,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_not_recolor_if_name_taken() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = category(None, "Chess");
+        let sports = category(None, "Sports");
+        repository.insert(&chess).unwrap();
+        repository.insert(&sports).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: Some("sports".to_string()),
+                color: Some("#e9def8".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "a category named \"sports\" already exists"
+            ))
+        );
+        assert_eq!(repository.list().unwrap(), vec![chess, sports]);
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_update_without_name_or_color() {
         let response = update(
             any_category_updater(),
