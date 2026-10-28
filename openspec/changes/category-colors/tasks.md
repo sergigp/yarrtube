@@ -22,7 +22,7 @@ Backend acceptance tests (HTTP handlers):
 - [x] 2.11 `it_should_list_a_home_video_with_its_category` — source in "Chess" → `category_ids` = [Chess]; verify `cargo test videos` passes
 - [x] 2.12 `it_should_list_a_home_video_without_categories` — `[]`
 - [x] 2.13 `it_should_order_home_video_categories_by_name` — "Streams" and "chess" → [chess, Streams]
-- [ ] 2.14 `it_should_include_categories_reached_through_another_source` — channel copy shown, playlist excluded from home in "Highlights" → [Chess, Highlights]
+- [x] 2.14 `it_should_include_categories_reached_through_another_source` — channel copy shown, playlist excluded from home in "Highlights" → [Chess, Highlights]
 - [ ] 2.15 `it_should_list_a_category_reached_by_two_members_once`
 - [ ] 2.16 `it_should_list_category_videos_with_their_categories` — `GET /api/categories/:id/videos` includes "Chess" and "Streams"
 
