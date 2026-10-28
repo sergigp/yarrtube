@@ -36,8 +36,8 @@ describe('categoryColors', () => {
     ]).toEqual([
       undefined,
       '#d3ecf8',
-      'linear-gradient(135deg, #d3ecf8 0% 50%, #fff1bf 50% 100%)',
-      'linear-gradient(135deg, #d3ecf8 0% 33.33%, #fff1bf 33.33% 66.67%, #e9def8 66.67% 100%)',
+      'linear-gradient(to bottom right, #d3ecf8 0% 50%, #fff1bf 50% 100%)',
+      'linear-gradient(to bottom right, #d3ecf8 0% 33.33%, #fff1bf 33.33% 66.67%, #e9def8 66.67% 100%)',
       '#f2f2f2',
       '#f2f2f2',
     ])

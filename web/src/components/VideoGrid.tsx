@@ -40,7 +40,7 @@ export function VideoGrid({ videos, categoryColors }: VideoGridProps) {
             // Tinted grids frame every card, tinted or not, so they all line up.
             className={cn(
               'animate-enter',
-              categoryColors && 'rounded-xl border border-black/[0.06] p-3',
+              categoryColors && 'rounded-lg border border-black/[0.06] p-3',
             )}
             style={{
               animationDelay: `${Math.min(index, 12) * 35}ms`,

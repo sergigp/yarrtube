@@ -65,7 +65,7 @@ export function cardBackground(colors: string[]): string | undefined {
   }
   const edge = (index: number) => `${Number(((index * 100) / colors.length).toFixed(2))}%`
   const bands = colors.map((color, index) => `${color} ${edge(index)} ${edge(index + 1)}`)
-  return `linear-gradient(135deg, ${bands.join(', ')})`
+  return `linear-gradient(to bottom right, ${bands.join(', ')})`
 }
 
 /** OKLCH to linear sRGB channels, unclamped (Björn Ottosson's OKLab matrices). */

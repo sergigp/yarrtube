@@ -278,9 +278,10 @@ describe('Home', () => {
     const card = async (title: string) =>
       (await screen.findByText(title)).closest('li') as HTMLElement
     await waitFor(async () => expect(await card('One')).toHaveStyle({ background: '#d3ecf8' }))
-    expect(await card('Two')).toHaveStyle({
-      background: 'linear-gradient(135deg, #d3ecf8 0% 50%, #fff1bf 50% 100%)',
-    })
+    // jsdom drops the gradient's `to bottom` (cardBackground's own test pins the exact value).
+    expect((await card('Two')).style.background).toMatch(
+      /^linear-gradient\(.*rgb\(211, 236, 248\) 0% 50%, rgb\(255, 241, 191\) 50% 100%\)$/,
+    )
     expect(await card('Four')).toHaveStyle({ background: '#f2f2f2' })
     expect((await card('None')).style.background).toBe('')
   })
