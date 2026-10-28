@@ -163,7 +163,7 @@ describe('SidebarCategories', () => {
     ).toHaveTextContent('/categories/science')
   })
 
-  it('is not filtered by the sidebar search', async () => {
+  it('is filtered by the sidebar search, and hidden when nothing in it matches', async () => {
     renderSidebar({
       'GET /api/channels': Array.from({ length: 16 }, (_, index) =>
         aChannel({ name: `Chan ${index}` }),
@@ -174,10 +174,35 @@ describe('SidebarCategories', () => {
       ]),
     })
 
-    const search = await screen.findByRole('searchbox', { name: 'Search channels and playlists' })
+    const search = await screen.findByRole('searchbox', {
+      name: 'Search categories, channels and playlists',
+    })
     await screen.findByText('Chess')
-    await userEvent.setup().type(search, 'Chan 1')
+    const user = userEvent.setup()
+    await user.type(search, 'sci')
+    const matches = categoryRowNames()
+    await user.clear(search)
+    await user.type(search, 'Chan 1')
 
-    expect(categoryRowNames()).toEqual(['Chess', 'Science'])
+    expect(matches).toEqual(['Science'])
+    expect(screen.queryByRole('button', { name: 'Categories' })).not.toBeInTheDocument()
+  })
+
+  it('shows matches of a folded section while searching', async () => {
+    renderSidebar({
+      'GET /api/channels': Array.from({ length: 16 }, (_, index) =>
+        aChannel({ name: `Chan ${index}` }),
+      ),
+      'GET /api/categories': aCategoryList([aCategory({ name: 'Chess' })]),
+    })
+
+    const search = await screen.findByRole('searchbox', {
+      name: 'Search categories, channels and playlists',
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Categories' }))
+    await user.type(search, 'che')
+
+    expect(categoryRowNames()).toEqual(['Chess'])
   })
 })

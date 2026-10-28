@@ -11,7 +11,6 @@ import {
 import type { Category } from '@/api/types'
 import { deleteCategoryDescription, memberCount } from '@/lib/categories'
 import { Button } from '@/components/ui/button'
-import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { DetailHeader } from './DetailHeader'
 import { ManageSourcesDialog } from './ManageSourcesDialog'
 import { VideoGrid } from './VideoGrid'
@@ -92,12 +91,9 @@ export function CategoryDetail() {
         unwatchedCount={category.unwatched_count}
         summaryPrefix={`${sources} ${sources === 1 ? 'source' : 'sources'}`}
         onRename={refreshing((name: string) => renameCategory(category.id, name))}
-        menuItems={
-          <DropdownMenuItem onSelect={() => setManaging(true)}>
-            <Settings2 />
-            Manage sources
-          </DropdownMenuItem>
-        }
+        extraActions={[
+          { label: 'Manage sources', icon: <Settings2 />, onSelect: () => setManaging(true) },
+        ]}
         onMarkWatched={sources > 0 ? () => markCategoryWatched(category.id) : undefined}
         onDelete={refreshing(async () => {
           await deleteCategory(category.id)

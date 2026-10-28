@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Ellipsis, Plus, RotateCw } from 'lucide-react'
 import {
   queryKeys,
+  useCategories,
   useChannels,
   useDeleteSource,
   useLibraryAction,
@@ -24,6 +25,7 @@ import type { LibraryItem } from '@/api/types'
 import {
   SEARCH_THRESHOLD,
   activeIdFrom,
+  matchesSearch,
   orderByUnwatched,
   sectionView,
   shownUnwatchedCount,
@@ -333,6 +335,8 @@ export function Sidebar({
   const navigate = useNavigate()
   const { data: channels, error: channelsError } = useChannels()
   const { data: playlists, error: playlistsError } = usePlaylists()
+  const { data: categoryList } = useCategories()
+  const categories = categoryList?.categories
   const refreshing = useLibraryAction()
   const deleteSource = useDeleteSource()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
@@ -385,7 +389,9 @@ export function Sidebar({
   const activeChannelId = activeIdFrom(location.pathname, '/channels/')
   const activePlaylistId = activeIdFrom(location.pathname, '/playlists/')
 
-  const searchable = (channels?.length ?? 0) + (playlists?.length ?? 0) > SEARCH_THRESHOLD
+  const searchable =
+    (channels?.length ?? 0) + (playlists?.length ?? 0) + (categories?.length ?? 0) >
+    SEARCH_THRESHOLD
   const searchText = searchable ? search.trim() : ''
   const orderedChannels = channels && orderByUnwatched(channels)
   const channelsView = sectionView(orderedChannels, {
@@ -400,6 +406,8 @@ export function Sidebar({
   })
   const showChannels = !searchText || channelsView.rows?.length !== 0
   const showPlaylists = !searchText || playlistsView.rows?.length !== 0
+  const showCategories =
+    !searchText || (categories?.some((category) => matchesSearch(category, searchText)) ?? false)
 
   return (
     <>
@@ -420,17 +428,17 @@ export function Sidebar({
           'md:static md:z-auto md:h-full md:w-60 md:max-w-none md:translate-x-0 md:shadow-none md:transition-none md:py-6',
         )}
       >
-        <SidebarCategories onAddCategory={onAddCategory} onClose={onClose} />
         {searchable && (
           <Input
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search"
-            aria-label="Search channels and playlists"
+            aria-label="Search categories, channels and playlists"
           />
         )}
-        {!showChannels && !showPlaylists && (
+        <SidebarCategories onAddCategory={onAddCategory} onClose={onClose} searchText={searchText} />
+        {!showCategories && !showChannels && !showPlaylists && (
           <p className="px-2 text-sm text-muted-foreground">Nothing matches "{searchText}".</p>
         )}
         {showChannels && (

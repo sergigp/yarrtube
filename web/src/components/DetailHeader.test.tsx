@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DetailHeader } from './DetailHeader'
 import { aVideo } from '@/test/helpers'
-import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { useDesktopViewport } from '@/test/viewport'
 
 const noop = async () => {}
 
@@ -52,14 +52,8 @@ describe('DetailHeader', () => {
     expect(screen.queryByText(/videos/)).not.toBeInTheDocument()
   })
 
-  it('runs the sync action and disables the button meanwhile', async () => {
-    let resolveSync = () => {}
-    const onSync = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveSync = resolve
-        }),
-    )
+  it('keeps every action, Sync included, behind the ⋮ menu on mobile', async () => {
+    const onSync = vi.fn(noop)
     render(
       <DetailHeader
         name="The Channel"
@@ -69,36 +63,13 @@ describe('DetailHeader', () => {
         deleteDescription="desc"
       />,
     )
+    const user = userEvent.setup()
 
-    const sync = screen.getByRole('button', { name: 'Sync' })
-    await userEvent.setup().click(sync)
+    expect(screen.queryByRole('button', { name: 'Sync' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'More actions for The Channel' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Sync' }))
 
     expect(onSync).toHaveBeenCalledOnce()
-    expect(sync).toBeDisabled()
-    resolveSync()
-    await waitFor(() => expect(sync).toBeEnabled())
-  })
-
-  it('alerts when syncing fails', async () => {
-    const alert = vi.fn()
-    vi.stubGlobal('alert', alert)
-    render(
-      <DetailHeader
-        name="The Channel"
-        videos={[]}
-        onSync={async () => {
-          throw new Error('yt down')
-        }}
-        onDelete={noop}
-        deleteDescription="desc"
-      />,
-    )
-
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Sync' }))
-
-    await waitFor(() =>
-      expect(alert).toHaveBeenCalledWith('Failed to sync "The Channel": yt down'),
-    )
   })
 
   it('offers mark-all-watched in its menu only when supported', async () => {
@@ -177,7 +148,7 @@ describe('DetailHeader', () => {
         videos={[aVideo(), aVideo()]}
         unwatchedCount={1}
         summaryPrefix="3 sources"
-        menuItems={<DropdownMenuItem>Manage sources</DropdownMenuItem>}
+        extraActions={[{ label: 'Manage sources', icon: null, onSelect: () => {} }]}
         onDelete={noop}
         deleteDescription="desc"
       />,
@@ -188,6 +159,100 @@ describe('DetailHeader', () => {
 
     expect(screen.getByText('3 sources · 2 videos · 1 unwatched')).toBeInTheDocument()
     expect(items).toEqual(['Manage sources', 'Delete'])
-    expect(screen.queryByRole('button', { name: 'Sync' })).not.toBeInTheDocument()
+  })
+
+  describe('on desktop', () => {
+    useDesktopViewport()
+
+    it('runs the sync action and disables the button meanwhile', async () => {
+      let resolveSync = () => {}
+      const onSync = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSync = resolve
+          }),
+      )
+      render(
+        <DetailHeader
+          name="The Channel"
+          videos={[]}
+          onSync={onSync}
+          onDelete={noop}
+          deleteDescription="desc"
+        />,
+      )
+
+      const sync = screen.getByRole('button', { name: 'Sync' })
+      await userEvent.setup().click(sync)
+
+      expect(onSync).toHaveBeenCalledOnce()
+      expect(sync).toBeDisabled()
+      resolveSync()
+      await waitFor(() => expect(sync).toBeEnabled())
+    })
+
+    it('alerts when syncing fails', async () => {
+      const alert = vi.fn()
+      vi.stubGlobal('alert', alert)
+      render(
+        <DetailHeader
+          name="The Channel"
+          videos={[]}
+          onSync={async () => {
+            throw new Error('yt down')
+          }}
+          onDelete={noop}
+          deleteDescription="desc"
+        />,
+      )
+
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Sync' }))
+
+      await waitFor(() =>
+        expect(alert).toHaveBeenCalledWith('Failed to sync "The Channel": yt down'),
+      )
+    })
+
+    it('names an icon button in a tooltip on hover', async () => {
+      render(
+        <DetailHeader
+          name="The Channel"
+          videos={[]}
+          onSync={noop}
+          onDelete={noop}
+          deleteDescription="desc"
+        />,
+      )
+
+      await userEvent.setup().hover(screen.getByRole('button', { name: 'Sync' }))
+
+      expect(await screen.findByRole('tooltip')).toHaveTextContent('Sync')
+    })
+
+    it('lays every action out as an icon button, with no ⋮ menu', async () => {
+      const onEditRequest = vi.fn()
+      render(
+        <DetailHeader
+          name="The Channel"
+          videos={[]}
+          onSync={noop}
+          onMarkWatched={noop}
+          onEditRequest={onEditRequest}
+          onDelete={noop}
+          deleteDescription="desc"
+        />,
+      )
+
+      const buttons = screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))
+      const menu = screen.queryByRole('button', { name: 'More actions for The Channel' })
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: 'Edit settings' }))
+      await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+      expect(buttons).toEqual(['Sync', 'Mark all watched', 'Edit settings', 'Delete'])
+      expect(menu).not.toBeInTheDocument()
+      expect(onEditRequest).toHaveBeenCalledOnce()
+      expect(screen.getByRole('dialog', { name: 'Delete "The Channel"?' })).toBeVisible()
+    })
   })
 })

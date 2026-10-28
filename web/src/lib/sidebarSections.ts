@@ -27,23 +27,23 @@ export interface SectionViewOptions {
   activeId: string | null
 }
 
-export interface SectionView {
+export interface SectionView<T> {
   /** True when only the heading shows: folded and not searching. */
   folded: boolean
   /** Folded, and the viewed entry belongs to this section. */
   headingActive: boolean
   /** Every row, the search matches, or `[]` when folded; undefined while loading. */
-  rows: LibraryItem[] | undefined
+  rows: T[] | undefined
 }
 
 /**
  * What a section shows: every match while searching, only its heading when
  * folded, otherwise every row.
  */
-export function sectionView(
-  items: LibraryItem[] | undefined,
+export function sectionView<T extends { id: string; name: string }>(
+  items: T[] | undefined,
   { searchText, folded, activeId }: SectionViewOptions,
-): SectionView {
+): SectionView<T> {
   if (folded && !searchText) {
     const headingActive = items?.some((item) => item.id === activeId) ?? false
     return { folded: true, headingActive, rows: [] }

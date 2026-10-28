@@ -1,11 +1,31 @@
 import { useState, type ReactNode } from 'react'
-import { RotateCw } from 'lucide-react'
+import {
+  Bell,
+  BellOff,
+  CheckCheck,
+  EllipsisVertical,
+  Eye,
+  EyeOff,
+  RotateCw,
+  SlidersHorizontal,
+  Trash2,
+} from 'lucide-react'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EditableTitle } from './EditableTitle'
-import { EntryActionsMenu } from './EntryActionsMenu'
 import { Thumbnail } from './Thumbnail'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { errorMessage } from '@/lib/errorMessage'
+import { homeSettingAction } from '@/lib/homeSetting'
+import { unwatchedCountSettingAction } from '@/lib/unwatchedCountSetting'
 
 function summaryFor(
   videos: readonly unknown[] | undefined,
@@ -25,6 +45,43 @@ function summaryFor(
   return parts.join(' · ')
 }
 
+/** One page-level action, rendered as a button on desktop and a menu item on mobile. */
+export interface HeaderAction {
+  label: string
+  icon: ReactNode
+  onSelect: () => void
+  disabled?: boolean
+}
+
+/** Runs `action`, alerting `failure: <error>` when it throws. */
+async function alertOnFailure(action: () => Promise<void>, failure: string): Promise<void> {
+  try {
+    await action()
+  } catch (err) {
+    window.alert(`${failure}: ${errorMessage(err)}`)
+  }
+}
+
+/** A square, icon-only button naming its action in a tooltip and its accessible name. */
+function IconAction({ action, destructive }: { action: HeaderAction; destructive?: boolean }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={destructive ? 'destructive' : 'outline'}
+          size="icon"
+          aria-label={action.label}
+          disabled={action.disabled}
+          onClick={action.onSelect}
+        >
+          {action.icon}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{action.label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 interface DetailHeaderProps {
   name: string
   avatarSrc?: string | null
@@ -33,12 +90,12 @@ interface DetailHeaderProps {
   unwatchedCount?: number
   /** Shown before the video counts, e.g. "2 sources". */
   summaryPrefix?: string
-  /** Shows the Sync control; categories have none. */
+  /** Shows the Sync action; categories have none. */
   onSync?: () => Promise<void>
   /** Shows a "Rename" pencil that edits the name in place. */
   onRename?: (name: string) => Promise<void>
-  /** Items listed first in the actions menu. */
-  menuItems?: ReactNode
+  /** Actions listed right after Sync, e.g. a category's "Manage sources". */
+  extraActions?: HeaderAction[]
   onMarkWatched?: () => Promise<void>
   /** Playlists only: whether the playlist is excluded from home. */
   excludedFromHome?: boolean
@@ -53,10 +110,11 @@ interface DetailHeaderProps {
 }
 
 /**
- * Title block at the top of a channel/playlist page: optional avatar, the
- * name, a video/unwatched summary and the page-level actions (sync, mark all
- * watched when supported, delete behind a confirmation). Action labels
- * collapse to icons on narrow screens.
+ * Title block at the top of a channel/playlist/category page: optional
+ * avatar, the name, a video/unwatched summary and the page-level actions
+ * (sync, mark all watched, settings, delete behind a confirmation). Desktop
+ * lays every action out as an icon button named in its tooltip; mobile keeps
+ * them all behind one "⋮".
  */
 export function DetailHeader({
   name,
@@ -67,7 +125,7 @@ export function DetailHeader({
   summaryPrefix,
   onSync,
   onRename,
-  menuItems,
+  extraActions = [],
   onMarkWatched,
   excludedFromHome,
   onSetExcludedFromHome,
@@ -77,9 +135,64 @@ export function DetailHeader({
   onDelete,
   deleteDescription,
 }: DetailHeaderProps) {
+  const isDesktop = useIsDesktop()
   const [syncing, setSyncing] = useState(false)
+  const [markingWatched, setMarkingWatched] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const summary = summaryFor(videos, unwatchedCount, summaryPrefix)
+
+  const actions: HeaderAction[] = []
+  if (onSync) {
+    actions.push({
+      label: 'Sync',
+      icon: <RotateCw className={syncing ? 'animate-spin' : undefined} />,
+      disabled: syncing,
+      onSelect: async () => {
+        setSyncing(true)
+        await alertOnFailure(onSync, `Failed to sync "${name}"`)
+        setSyncing(false)
+      },
+    })
+  }
+  actions.push(...extraActions)
+  if (onMarkWatched) {
+    actions.push({
+      label: 'Mark all watched',
+      icon: <CheckCheck />,
+      disabled: markingWatched,
+      onSelect: async () => {
+        setMarkingWatched(true)
+        await alertOnFailure(onMarkWatched, `Failed to mark "${name}" watched`)
+        setMarkingWatched(false)
+      },
+    })
+  }
+  if (excludedFromHome !== undefined && onSetExcludedFromHome) {
+    actions.push({
+      label: excludedFromHome ? 'Include in home' : 'Exclude from home',
+      icon: excludedFromHome ? <Eye /> : <EyeOff />,
+      onSelect: () =>
+        alertOnFailure(
+          () => onSetExcludedFromHome(!excludedFromHome),
+          `Failed to ${homeSettingAction(!excludedFromHome, name)}`,
+        ),
+    })
+  }
+  if (unwatchedCountHidden !== undefined && onSetUnwatchedCountHidden) {
+    actions.push({
+      label: unwatchedCountHidden ? 'Show unwatched count' : 'Hide unwatched count',
+      icon: unwatchedCountHidden ? <Bell /> : <BellOff />,
+      onSelect: () =>
+        alertOnFailure(
+          () => onSetUnwatchedCountHidden(!unwatchedCountHidden),
+          `Failed to ${unwatchedCountSettingAction(!unwatchedCountHidden, name)}`,
+        ),
+    })
+  }
+  if (onEditRequest) {
+    actions.push({ label: 'Edit settings', icon: <SlidersHorizontal />, onSelect: onEditRequest })
+  }
+  const requestDelete = () => setConfirmingDelete(true)
 
   return (
     <div className="mb-4 flex items-center gap-3 md:mb-6">
@@ -99,43 +212,48 @@ export function DetailHeader({
         )}
         {summary && <p className="truncate text-xs text-muted-foreground md:text-sm">{summary}</p>}
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {onSync && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={syncing}
-            aria-label="Sync"
-            onClick={async () => {
-              setSyncing(true)
-              try {
-                await onSync()
-              } catch (err) {
-                window.alert(`Failed to sync "${name}": ${errorMessage(err)}`)
-              } finally {
-                setSyncing(false)
-              }
-            }}
+      {isDesktop ? (
+        <TooltipProvider>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {actions.map((action) => (
+              <IconAction key={action.label} action={action} />
+            ))}
+            <IconAction
+              action={{ label: 'Delete', icon: <Trash2 />, onSelect: requestDelete }}
+              destructive
+            />
+          </div>
+        </TooltipProvider>
+      ) : (
+        // Non-modal so opening the delete confirmation from it doesn't leave
+        // the page with pointer events disabled. Labelled apart from the
+        // sidebar row's "Actions for <name>", which is on screen at the same time.
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
+            aria-label={`More actions for ${name}`}
           >
-            <RotateCw className={syncing ? 'animate-spin' : undefined} />
-            <span className="hidden sm:inline">Sync</span>
-          </Button>
-        )}
-        {/* Labelled apart from the sidebar row's "Actions for <name>", which is
-            on screen at the same time. */}
-        <EntryActionsMenu
-          name={name}
-          label={`More actions for ${name}`}
-          leadingItems={menuItems}
-          onMarkWatched={onMarkWatched}
-          excludedFromHome={excludedFromHome}
-          onSetExcludedFromHome={onSetExcludedFromHome}
-          unwatchedCountHidden={unwatchedCountHidden}
-          onSetUnwatchedCountHidden={onSetUnwatchedCountHidden}
-          onEditRequest={onEditRequest}
-          onDeleteRequest={() => setConfirmingDelete(true)}
-        />
-      </div>
+            <EllipsisVertical className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-auto min-w-44">
+            {actions.map((action) => (
+              <DropdownMenuItem
+                key={action.label}
+                disabled={action.disabled}
+                onSelect={action.onSelect}
+              >
+                {action.icon}
+                {action.label}
+              </DropdownMenuItem>
+            ))}
+            {actions.length > 0 && <DropdownMenuSeparator />}
+            <DropdownMenuItem variant="destructive" onSelect={requestDelete}>
+              <Trash2 />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       <ConfirmDialog
         open={confirmingDelete}

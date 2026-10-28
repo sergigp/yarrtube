@@ -6,6 +6,7 @@ import { Sidebar } from './Sidebar'
 import { PlaylistDetail } from './PlaylistDetail'
 import { queryKeys } from '@/api/queries'
 import {
+  aCategory,
   aCategoryList,
   aChannel,
   aPlaylist,
@@ -298,7 +299,7 @@ describe('Sidebar', () => {
     const playlists = Array.from({ length: 10 }, (_, index) => aPlaylist({ name: `List ${index}` }))
     renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': playlists })
 
-    const search = await screen.findByRole('searchbox', { name: 'Search channels and playlists' })
+    const search = await screen.findByRole('searchbox', { name: 'Search categories, channels and playlists' })
     const user = userEvent.setup()
     await user.type(search, 'List 3')
 
@@ -315,7 +316,7 @@ describe('Sidebar', () => {
     ]
     renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] })
 
-    const search = await screen.findByRole('searchbox', { name: 'Search channels and playlists' })
+    const search = await screen.findByRole('searchbox', { name: 'Search categories, channels and playlists' })
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Channels' }))
     await user.type(search, 'ver')
@@ -334,10 +335,31 @@ describe('Sidebar', () => {
     const channels = Array.from({ length: 16 }, (_, index) => aChannel({ name: `Chan ${index}` }))
     renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] })
 
-    const search = await screen.findByRole('searchbox', { name: 'Search channels and playlists' })
+    const search = await screen.findByRole('searchbox', { name: 'Search categories, channels and playlists' })
     await userEvent.setup().type(search, 'zzz')
 
     expect(screen.getByText('Nothing matches "zzz".')).toBeInTheDocument()
+  })
+
+  it('puts the search above the categories and counts them toward the threshold', async () => {
+    renderSidebar({
+      'GET /api/channels': Array.from({ length: 10 }, (_, index) =>
+        aChannel({ name: `Chan ${index}` }),
+      ),
+      'GET /api/playlists': [],
+      'GET /api/categories': aCategoryList(
+        Array.from({ length: 6 }, (_, index) => aCategory({ name: `Cat ${index}` })),
+      ),
+    })
+
+    const search = await screen.findByRole('searchbox', {
+      name: 'Search categories, channels and playlists',
+    })
+    const categoriesHeading = await screen.findByRole('button', { name: 'Categories' })
+
+    expect(
+      search.compareDocumentPosition(categoriesHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 
   it('hides the search box for small libraries', async () => {
