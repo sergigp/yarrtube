@@ -318,6 +318,21 @@ mod tests {
     }
 
     #[test]
+    fn it_should_update_the_color() {
+        let db = TestDatabase::new();
+        let repository = SqliteCategoryRepository::new(db.database());
+        let chess = category("Chess", &[]);
+        repository.insert(&chess).unwrap();
+        let recolored = chess
+            .clone()
+            .with_color(CategoryColor::new("#e9def8").unwrap());
+
+        repository.update(&recolored).unwrap();
+
+        assert_eq!(repository.find(&chess.id).unwrap(), Some(recolored));
+    }
+
+    #[test]
     fn it_should_delete_the_category() {
         let db = TestDatabase::new();
         let repository = SqliteCategoryRepository::new(db.database());
