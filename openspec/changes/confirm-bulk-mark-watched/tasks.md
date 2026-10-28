@@ -7,7 +7,7 @@
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `markWatchedConfirmation` returns null for 0 and 1 unwatched — verify the unit test passes.
-- [ ] 2.2 `markWatchedConfirmation` for 23 unwatched in "Foo" returns `Mark 23 videos in "Foo" watched?` and the can't-undo description — verify the unit test passes.
+- [x] 2.2 `markWatchedConfirmation` for 23 unwatched in "Foo" returns `Mark 23 videos in "Foo" watched?` and the can't-undo description — verify the unit test passes.
 - [ ] 2.3 `ConfirmDialog` shows `pendingLabel` on the confirm button while `onConfirm` is pending — verify the test passes.
 - [ ] 2.4 `DetailHeader` with 23 unwatched: "Mark all watched" opens a red confirmation ("Mark watched" / "Marking…") without marking; confirming calls `onMarkWatched` and closes — verify the test passes.
 - [ ] 2.5 `DetailHeader`: cancelling never calls `onMarkWatched` — verify the test passes.

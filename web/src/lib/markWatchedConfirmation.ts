@@ -9,8 +9,15 @@ export interface MarkWatchedConfirmation {
  * right away. `unwatchedCount` must be the real count, also when it is hidden.
  */
 export function markWatchedConfirmation(
-  _name: string,
-  _unwatchedCount: number,
+  name: string,
+  unwatchedCount: number,
 ): MarkWatchedConfirmation | null {
-  return null
+  // One video is no worse than a single video's "Mark as watched", which never asks.
+  if (unwatchedCount <= 1) {
+    return null
+  }
+  return {
+    title: `Mark ${unwatchedCount} videos in "${name}" watched?`,
+    description: "This can't be undone in bulk: videos can only be marked unwatched one by one.",
+  }
 }
