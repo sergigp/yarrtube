@@ -19,7 +19,7 @@ Backend acceptance tests (HTTP handlers):
 - [x] 2.8 `it_should_fail_to_update_without_name_or_color` — 400, category unchanged (replaces `it_should_fail_to_rename_if_name_missing`)
 - [x] 2.9 `it_should_fail_to_update_if_color_invalid` — 400, category unchanged
 - [x] 2.10 `it_should_not_recolor_if_name_taken` — 409, color unchanged
-- [ ] 2.11 `it_should_list_a_home_video_with_its_category` — source in "Chess" → `category_ids` = [Chess]; verify `cargo test videos` passes
+- [x] 2.11 `it_should_list_a_home_video_with_its_category` — source in "Chess" → `category_ids` = [Chess]; verify `cargo test videos` passes
 - [ ] 2.12 `it_should_list_a_home_video_without_categories` — `[]`
 - [ ] 2.13 `it_should_order_home_video_categories_by_name` — "Streams" and "chess" → [chess, Streams]
 - [ ] 2.14 `it_should_include_categories_reached_through_another_source` — channel copy shown, playlist excluded from home in "Highlights" → [Chess, Highlights]

@@ -15,7 +15,7 @@ use crate::infrastructure::repositories::sqlite_video_metadata_repository::Video
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Reads videos, listed by playlist, by channel, by category or for home.
@@ -190,7 +190,36 @@ impl VideoSearcher {
         &self,
         views: Vec<HomeVideoView>,
     ) -> Result<Vec<HomeVideoView>, ListVideosError> {
-        Ok(views)
+        let by_video = self
+            .category_ids_by_video()
+            .map_err(ListVideosError::Repository)?;
+        Ok(views
+            .into_iter()
+            .map(|view| {
+                let ids = by_video.get(&view.youtube_id).cloned().unwrap_or_default();
+                view.with_category_ids(ids)
+            })
+            .collect())
+    }
+
+    /// YouTube video → ids of categories having it downloaded, in
+    /// category-name order.
+    fn category_ids_by_video(&self) -> anyhow::Result<HashMap<VideoId, Vec<CategoryId>>> {
+        self.category_repository.list()?.iter().try_fold(
+            HashMap::new(),
+            |mut by_video: HashMap<VideoId, Vec<CategoryId>>, category| {
+                self.category_video_collector
+                    .downloaded_videos(category)?
+                    .into_iter()
+                    .for_each(|sourced| {
+                        let ids = by_video.entry(sourced.video.youtube_id).or_default();
+                        if !ids.contains(&category.id) {
+                            ids.push(category.id.clone());
+                        }
+                    });
+                Ok(by_video)
+            },
+        )
     }
 
     /// Every downloaded video of every tracked channel, then of every tracked
