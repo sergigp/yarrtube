@@ -54,11 +54,11 @@ pub async fn update_category(
     Json(request): Json<UpdateCategoryRequest>,
 ) -> Result<StatusCode, ApiError> {
     let id = CategoryId::new(id)?;
+    if request.name.is_none() && request.color.is_none() {
+        return Err(ApiError::bad_request(MISSING_CATEGORY_NAME));
+    }
     let update = CategoryUpdate {
-        name: Some(CategoryName::new(required(
-            request.name,
-            MISSING_CATEGORY_NAME,
-        )?)?),
+        name: request.name.map(CategoryName::new).transpose()?,
         color: request.color.map(CategoryColor::new).transpose()?,
     };
 
@@ -751,6 +751,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_recolor_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@chess")).unwrap();
+        let chess = Category {
+            members: vec![channel_member("@chess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: None,
+                color: Some("#e9def8".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                color: color("#e9def8"),
+                ..chess
+            }]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_rename_a_category_to_a_case_variant_of_its_name() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
@@ -1417,15 +1454,23 @@ mod tests {
         id: &str,
         name: &str,
     ) -> Result<StatusCode, ApiError> {
-        update_category(
-            State(category_updater),
-            Path(id.to_string()),
-            Json(UpdateCategoryRequest {
+        update(
+            category_updater,
+            id,
+            UpdateCategoryRequest {
                 name: Some(name.to_string()),
                 color: None,
-            }),
+            },
         )
         .await
+    }
+
+    async fn update(
+        category_updater: CategoryUpdater,
+        id: &str,
+        request: UpdateCategoryRequest,
+    ) -> Result<StatusCode, ApiError> {
+        update_category(State(category_updater), Path(id.to_string()), Json(request)).await
     }
 
     async fn list(

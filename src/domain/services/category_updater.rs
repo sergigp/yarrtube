@@ -51,13 +51,10 @@ pub trait CategoryUpdaterApi: Send + Sync {
 impl CategoryUpdaterApi for CategoryUpdater {
     fn update(&self, id: &CategoryId, update: CategoryUpdate) -> Result<(), UpdateCategoryError> {
         let category = self.find_category(id)?;
-        match update.name {
-            Some(name) => {
-                self.ensure_name_free(id, &name)?;
-                self.save(&category.with_name(name))
-            }
-            None => Ok(()),
+        if let Some(name) = &update.name {
+            self.ensure_name_free(id, name)?;
         }
+        self.save(&Self::applied(category, update))
     }
 
     fn set_members(
@@ -120,6 +117,18 @@ impl CategoryUpdater {
                 .map(|playlist| playlist.is_some()),
         }
         .map_err(UpdateCategoryError::Repository)
+    }
+
+    /// `category` with the present fields of `update`.
+    fn applied(category: Category, update: CategoryUpdate) -> Category {
+        let category = match update.name {
+            Some(name) => category.with_name(name),
+            None => category,
+        };
+        match update.color {
+            Some(color) => category.with_color(color),
+            None => category,
+        }
     }
 
     fn save(&self, category: &Category) -> Result<(), UpdateCategoryError> {
