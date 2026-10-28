@@ -190,6 +190,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_create_a_category_with_a_color() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let category_creator =
+            CategoryCreator::new(repository.clone(), Arc::new(FixedClock(fixed_timestamp())));
+
+        let response = create(
+            category_creator,
+            CreateCategoryRequest {
+                color: Some("#D3ECF8".to_string()),
+                ..create_request("Chess")
+            },
+        )
+        .await;
+
+        let stored = repository.list().unwrap();
+        let id = stored.first().map(|category| category.id.clone());
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                CategoryResponse {
+                    color: "#d3ecf8".to_string(),
+                    ..category_response(id.as_ref(), "Chess", &[], &[])
+                }
+            ))
+        );
+        assert_eq!(
+            stored,
+            vec![Category {
+                color: color("#d3ecf8"),
+                ..category(id, "Chess")
+            }]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_create_if_name_missing() {
         let response = create(
             any_category_creator(),
@@ -1112,6 +1149,10 @@ mod tests {
             members: vec![],
             created_at: fixed_timestamp(),
         }
+    }
+
+    fn color(hex: &str) -> CategoryColor {
+        CategoryColor::new(hex).unwrap()
     }
 
     fn list_item(

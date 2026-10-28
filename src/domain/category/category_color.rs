@@ -13,7 +13,7 @@ impl CategoryColor {
     ];
 
     pub fn new(color: impl Into<String>) -> Result<Self, ValidationError> {
-        Ok(Self(color.into()))
+        Ok(Self(color.into().to_lowercase()))
     }
 
     /// Palette color used by the fewest of `used`, earliest on a tie.
