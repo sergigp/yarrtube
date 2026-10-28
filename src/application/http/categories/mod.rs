@@ -24,6 +24,7 @@ use dto::{
 };
 
 const MISSING_CATEGORY_NAME: &str = "Category name must not be empty (missing)";
+const MISSING_CATEGORY_NAME_AND_COLOR: &str = "Category name or color is required (both missing)";
 
 pub async fn create_category(
     State(category_creator): State<CategoryCreator>,
@@ -55,7 +56,7 @@ pub async fn update_category(
 ) -> Result<StatusCode, ApiError> {
     let id = CategoryId::new(id)?;
     if request.name.is_none() && request.color.is_none() {
-        return Err(ApiError::bad_request(MISSING_CATEGORY_NAME));
+        return Err(ApiError::bad_request(MISSING_CATEGORY_NAME_AND_COLOR));
     }
     let update = CategoryUpdate {
         name: request.name.map(CategoryName::new).transpose()?,
@@ -871,21 +872,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_fail_to_rename_if_name_missing() {
-        let response = update_category(
-            State(any_category_updater()),
-            Path("chess".to_string()),
-            Json(UpdateCategoryRequest {
+    async fn it_should_fail_to_update_without_name_or_color() {
+        let response = update(
+            any_category_updater(),
+            "chess",
+            UpdateCategoryRequest {
                 name: None,
                 color: None,
-            }),
+            },
         )
         .await;
 
         assert_eq!(
             response,
             Err(ApiError::bad_request(
-                "Category name must not be empty (missing)"
+                "Category name or color is required (both missing)"
             ))
         );
     }
