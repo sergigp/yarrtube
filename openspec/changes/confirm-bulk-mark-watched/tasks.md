@@ -25,7 +25,7 @@
 ## 4. Verification
 
 - [x] 4.1 `npm run check` in `web/`, plus `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and end-to-end tests via `scripts/run-tests.sh` all pass (update any e2e test that marks a source watched to confirm the dialog).
-- [ ] 4.2 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, add a channel with 2+ downloaded videos via the HTTP API, then with the Playwright MCP browser: from the channel header and from the sidebar row menu, "Mark all watched" shows the confirmation with the right count; Cancel sends no `POST .../watched` request; confirming sends it and the badge disappears; repeat once from a category view header. Screenshot the dialog. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
+- [x] 4.2 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, add a channel with 2+ downloaded videos via the HTTP API, then with the Playwright MCP browser: from the channel header and from the sidebar row menu, "Mark all watched" shows the confirmation with the right count; Cancel sends no `POST .../watched` request; confirming sends it and the badge disappears; repeat once from a category view header. Screenshot the dialog. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.3 Manual (human): check on a phone that the confirmation opens from the header's "⋮" menu and reads well at narrow width.
 
 ## Workflow follow-up
