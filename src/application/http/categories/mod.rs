@@ -788,6 +788,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_rename_and_recolor_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = category(None, "Chess");
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: Some("Board games".to_string()),
+                color: Some("#e9def8".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                name: CategoryName::new("Board games").unwrap(),
+                color: color("#e9def8"),
+                ..chess
+            }]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_rename_a_category_to_a_case_variant_of_its_name() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
