@@ -23,7 +23,7 @@
 - `web/src/lib/categoryColors.ts` (+ test, new): the palette (names and hex), `defaultColor`, `pastelFromHue`, `hueOf`, `cardBackground`.
 - `web/src/components/CategoryColorPicker.tsx` (+ test, new): swatch radio group plus the custom hue slider. Each radio input covers its swatch, invisible, so a click anywhere on it (and a click by role) chooses it.
 - `web/src/components/AddCategoryDialog.tsx` (+ test): the picker, with the default color preselected.
-- `web/src/components/CategoryDetail.tsx` (+ test): header tint, the "Change color" popover, an untinted grid.
+- `web/src/components/CategoryDetail.tsx` (+ test): header tint, the "Change color" popover (shows each choice at once, saves the latest once it settles for 300ms or the popover closes, one save at a time), an untinted grid.
 - `web/src/components/DetailHeader.tsx`: optional `tint` background and a slot for the color control.
 - `web/src/components/SidebarCategories.tsx` (+ test): the color dot.
 - `web/src/components/VideoGrid.tsx`: a `categoryColors` prop; with it, every card is framed (padding, a thin grey border, 8px radius, the grid gap kept) and takes `cardBackground` as its background.
@@ -71,7 +71,7 @@ impl HomeVideoView { pub fn with_category_ids(self, ids: Vec<CategoryId>) -> Sel
 // domain/services/video_searcher.rs (private)
 /// YouTube video → ids of categories having it downloaded, in category-name order.
 fn category_ids_by_video(&self) -> anyhow::Result<HashMap<VideoId, Vec<CategoryId>>>;
-fn with_categories(&self, views: Vec<HomeVideoView>) -> Result<Vec<HomeVideoView>, ListVideosError>;
+fn with_categories(views: Vec<HomeVideoView>, by_video: &HashMap<VideoId, Vec<CategoryId>>) -> Vec<HomeVideoView>;
 
 // application/http/categories/dto.rs
 pub struct CreateCategoryRequest { pub name: Option<String>, pub color: Option<String> }
@@ -117,11 +117,11 @@ List: `GET /api/categories` → `CategoryViewSearcher::search_all` → `Category
 
 Home: `GET /api/videos/home`
 - `list_home_videos` → `VideoSearcher::list_home(limits)` → sections as today
-- → `with_categories(views)` → `category_ids_by_video()`:
+- → `category_ids_by_video()` once per request:
   `category_repository.list()` (name order) → for each `category_video_collector.downloaded_videos(&category)` → insert `category.id` under each `youtube_id`, once
-- → `view.with_category_ids(map[youtube_id] or [])` → `HomeVideoResponse { category_ids }`
+- → each section `with_categories(views, &map)` → `view.with_category_ids(map[youtube_id] or [])` → `HomeVideoResponse { category_ids }`
 
-Category videos: `GET /api/categories/:id/videos` → `VideoSearcher::list_for_category(id)` → `with_categories(views)` → same as home
+Category videos: `GET /api/categories/:id/videos` → `VideoSearcher::list_for_category(id)` → `category_ids_by_video()` → `with_categories(views, &map)` → same as home
 
 Web home card: `Home` → `useCategories()` → `Map(id → color)` → `VideoGrid categoryColors` → per card `cardBackground(video.category_ids.slice(0, 4).flatMap(id → color))` → `style={{ background }}`
 

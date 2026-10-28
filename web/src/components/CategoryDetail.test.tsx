@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes, useNavigate, type InitialEntry } from 'react-router-dom'
 import { CategoryDetail } from './CategoryDetail'
@@ -254,6 +254,33 @@ describe('CategoryDetail', () => {
       RequestInit,
     ]
     expect(JSON.parse(init.body as string)).toEqual({ color: '#e9def8' })
+  })
+
+  it('saves a custom hue once, when the slider settles', async () => {
+    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#d3ecf8', channels: ['@hikaru'] })
+    const recolor = vi.fn(() => {
+      chess = { ...chess, color: '#cdf4f6' }
+      return null
+    })
+    const { fetchMock } = renderCategory({
+      'GET /api/categories': () => aCategoryList([chess]),
+      'GET /api/categories/chess/videos': [],
+      'PATCH /api/categories/chess': recolor,
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Change color' }))
+    await user.click(await screen.findByRole('radio', { name: 'Custom' }))
+    const hue = screen.getByRole('slider', { name: 'Hue' })
+    ;['120', '160', '187', '200'].forEach((value) => fireEvent.change(hue, { target: { value } }))
+
+    const header = screen.getByRole('heading', { name: 'Chess' }).closest('header')
+    await waitFor(() => expect(header).toHaveStyle({ background: '#cdf4f6' }))
+    const saves = fetchMock.mock.calls.filter(([url]) => url === '/api/categories/chess') as [
+      string,
+      RequestInit,
+    ][]
+    expect(saves.map(([, init]) => JSON.parse(init.body as string))).toEqual([{ color: '#cdf4f6' }])
   })
 
   it('renames from the header', async () => {

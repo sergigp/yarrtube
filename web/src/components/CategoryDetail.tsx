@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { FolderPlus, Plus, Settings2 } from 'lucide-react'
 import { deleteCategory, updateCategory } from '@/api/client'
@@ -53,9 +53,42 @@ function EmptyCategory({ category, onManage }: { category: Category; onManage: (
   )
 }
 
+/** How long the chosen color must stay put before it is saved. */
+const COLOR_SAVE_DELAY_MS = 300
+
 /**
- * A dot in the category's color that opens the color picker, saving each
- * choice at once. The picker shows the latest choice while it is being saved.
+ * Saves the latest of a burst of choices (a hue slider drag) once it settles,
+ * or at once on `flush` and unmount. Saves run one at a time, in order, so
+ * the last choice is the one stored.
+ */
+function useSettledSave(save: (color: string) => Promise<void>) {
+  const saveRef = useRef(save)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const pending = useRef<string | null>(null)
+  const queue = useRef<Promise<void>>(Promise.resolve())
+  useEffect(() => {
+    saveRef.current = save
+  })
+  const flush = useCallback(() => {
+    clearTimeout(timer.current)
+    const color = pending.current
+    pending.current = null
+    if (color !== null) {
+      queue.current = queue.current.then(() => saveRef.current(color)).catch(() => {})
+    }
+  }, [])
+  useEffect(() => flush, [flush])
+  const schedule = (color: string) => {
+    pending.current = color
+    clearTimeout(timer.current)
+    timer.current = setTimeout(flush, COLOR_SAVE_DELAY_MS)
+  }
+  return { schedule, flush }
+}
+
+/**
+ * A dot in the category's color that opens the color picker. The picker
+ * shows each choice at once and saves it once it settles (see `useSettledSave`).
  */
 function CategoryColorControl({
   color,
@@ -65,8 +98,16 @@ function CategoryColorControl({
   onChange: (color: string) => Promise<void>
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  const { schedule, flush } = useSettledSave(onChange)
   return (
-    <Popover onOpenChange={(open) => !open && setDraft(null)}>
+    <Popover
+      onOpenChange={(open) => {
+        if (!open) {
+          flush()
+          setDraft(null)
+        }
+      }}
+    >
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -92,7 +133,7 @@ function CategoryColorControl({
           value={draft ?? color}
           onChange={(next) => {
             setDraft(next)
-            void onChange(next)
+            schedule(next)
           }}
         />
       </PopoverContent>

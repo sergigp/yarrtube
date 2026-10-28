@@ -55,9 +55,10 @@ pub async fn update_category(
     Json(request): Json<UpdateCategoryRequest>,
 ) -> Result<StatusCode, ApiError> {
     let id = CategoryId::new(id)?;
-    if request.name.is_none() && request.color.is_none() {
-        return Err(ApiError::bad_request(MISSING_CATEGORY_NAME_AND_COLOR));
-    }
+    required(
+        request.name.as_ref().or(request.color.as_ref()),
+        MISSING_CATEGORY_NAME_AND_COLOR,
+    )?;
     let update = CategoryUpdate {
         name: request.name.map(CategoryName::new).transpose()?,
         color: request.color.map(CategoryColor::new).transpose()?,

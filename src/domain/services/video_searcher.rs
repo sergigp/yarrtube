@@ -142,10 +142,13 @@ impl VideoSearcherApi for VideoSearcher {
             Self::not_shown_in(&not_continue_watching, &quick_watches),
             limits.latest,
         );
+        let by_video = self
+            .category_ids_by_video()
+            .map_err(ListVideosError::Repository)?;
         Ok(HomeVideos {
-            continue_watching: self.with_categories(Self::views(continue_watching))?,
-            quick_watches: self.with_categories(Self::views(quick_watches))?,
-            latest: self.with_categories(Self::views(latest))?,
+            continue_watching: Self::with_categories(Self::views(continue_watching), &by_video),
+            quick_watches: Self::with_categories(Self::views(quick_watches), &by_video),
+            latest: Self::with_categories(Self::views(latest), &by_video),
         })
     }
 
@@ -157,7 +160,10 @@ impl VideoSearcherApi for VideoSearcher {
                 .map_err(ListVideosError::Repository)?,
         );
         videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.created_at));
-        self.with_categories(Self::views(videos))
+        let by_video = self
+            .category_ids_by_video()
+            .map_err(ListVideosError::Repository)?;
+        Ok(Self::with_categories(Self::views(videos), &by_video))
     }
 }
 
@@ -185,21 +191,19 @@ impl VideoSearcher {
         videos.into_iter().map(HomeVideoView::from).collect()
     }
 
-    /// `views`, each with the categories having its YouTube video.
+    /// `views`, each with the categories having its YouTube video in
+    /// `by_video` (see `category_ids_by_video`).
     fn with_categories(
-        &self,
         views: Vec<HomeVideoView>,
-    ) -> Result<Vec<HomeVideoView>, ListVideosError> {
-        let by_video = self
-            .category_ids_by_video()
-            .map_err(ListVideosError::Repository)?;
-        Ok(views
+        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+    ) -> Vec<HomeVideoView> {
+        views
             .into_iter()
             .map(|view| {
                 let ids = by_video.get(&view.youtube_id).cloned().unwrap_or_default();
                 view.with_category_ids(ids)
             })
-            .collect())
+            .collect()
     }
 
     /// YouTube video → ids of categories having it downloaded, in
