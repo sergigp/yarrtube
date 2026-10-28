@@ -34,8 +34,8 @@ Value object (`category_color.rs`):
 Web (Vitest):
 
 - [x] 2.19 `lib/categoryColors` › `defaultColor` picks the least used, the earliest on a tie; verify `npm run test` passes
-- [ ] 2.20 `lib/categoryColors` › `cardBackground` for 0 (none), 1 (flat), 2 and 3 (135deg hard-stop bands in order) and 4+ (`#f2f2f2`)
-- [ ] 2.21 `lib/categoryColors` › `pastelFromHue` gives a soft hex and `hueOf` round-trips it within 1 degree
+- [x] 2.20 `lib/categoryColors` › `cardBackground` for 0 (none), 1 (flat), 2 and 3 (135deg hard-stop bands in order) and 4+ (`#f2f2f2`)
+- [x] 2.21 `lib/categoryColors` › `pastelFromHue` gives a soft hex and `hueOf` round-trips it within 1 degree
 - [ ] 2.22 `CategoryColorPicker` › choosing a swatch checks it and reports its hex
 - [ ] 2.23 `CategoryColorPicker` › a non-palette color shows "Custom" checked, and the slider reports pastel colors
 - [ ] 2.24 `AddCategoryDialog` › preselects the next free color and creates with the chosen one
