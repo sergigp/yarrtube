@@ -15,8 +15,9 @@ interface ConfirmDialogProps {
 }
 
 /**
- * Shared destructive-action confirmation dialog. `onConfirm` may return a
- * promise; while it's pending the confirm button is disabled and the dialog
+ * Shared destructive-action confirmation dialog (deleting, marking watched in
+ * bulk). `onConfirm` may return a promise; while it's pending the confirm
+ * button is disabled and the dialog
  * stays open, closing automatically only on success. A failure is shown
  * inline and the dialog stays open so the user can retry or cancel.
  */
@@ -27,7 +28,7 @@ export function ConfirmDialog({
   description,
   cancelLabel = 'Cancel',
   confirmLabel = 'Delete',
-  pendingLabel: _pendingLabel = 'Deleting…',
+  pendingLabel = 'Deleting…',
   onConfirm,
 }: ConfirmDialogProps) {
   const [error, setError] = useState<Error | null>(null)
@@ -69,7 +70,7 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button type="button" variant="destructive" onClick={handleConfirm} disabled={confirming}>
-            {confirming ? 'Deleting…' : confirmLabel}
+            {confirming ? pendingLabel : confirmLabel}
           </Button>
         </div>
       </DialogContent>
