@@ -1,3 +1,4 @@
+use super::category_color::CategoryColor;
 use super::category_id::CategoryId;
 use super::category_member::CategoryMember;
 use super::category_name::CategoryName;
@@ -8,6 +9,7 @@ use chrono::{DateTime, Utc};
 pub struct Category {
     pub id: CategoryId,
     pub name: CategoryName,
+    pub color: CategoryColor,
     /// Each member once, in the order first added.
     pub members: Vec<CategoryMember>,
     pub created_at: DateTime<Utc>,
@@ -15,10 +17,11 @@ pub struct Category {
 
 impl Category {
     /// A new category with a generated id and no members.
-    pub fn create(name: CategoryName, now: DateTime<Utc>) -> Self {
+    pub fn create(name: CategoryName, color: CategoryColor, now: DateTime<Utc>) -> Self {
         Self {
             id: CategoryId::new_generated(),
             name,
+            color,
             members: Vec::new(),
             created_at: now,
         }
@@ -26,6 +29,10 @@ impl Category {
 
     pub fn with_name(self, name: CategoryName) -> Self {
         Self { name, ..self }
+    }
+
+    pub fn with_color(self, color: CategoryColor) -> Self {
+        Self { color, ..self }
     }
 
     /// Replaces the members, keeping each once (first occurrence wins).

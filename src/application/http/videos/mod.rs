@@ -178,7 +178,7 @@ fn vtt_response(vtt: WebVtt) -> VttResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::category::{Category, CategoryMember, CategoryName};
+    use crate::domain::category::{Category, CategoryColor, CategoryMember, CategoryName};
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
@@ -1321,6 +1321,269 @@ mod tests {
                         path: "creators/somechannel".to_string(),
                         avatar_filename: Some("@somechannel.jpg".to_string()),
                     }
+                )],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_a_home_video_with_its_category() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &downloaded_video("vid1", "My Video", None, 100),
+            0,
+        );
+        let chess = named_category("Chess", &[channel_member("@somechannel")]);
+        category_repository.insert(&chess).unwrap();
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: vec![in_categories(
+                    home_video_response("vid1", "My Video", channel_source(None)),
+                    &[&chess]
+                )],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_a_home_video_without_categories() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &downloaded_video("vid1", "My Video", None, 100),
+            0,
+        );
+        category_repository
+            .insert(&named_category("Chess", &[]))
+            .unwrap();
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: vec![in_categories(
+                    home_video_response("vid1", "My Video", channel_source(None)),
+                    &[]
+                )],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_order_home_video_categories_by_name() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &downloaded_video("vid1", "My Video", None, 100),
+            0,
+        );
+        let streams = named_category("Streams", &[channel_member("@somechannel")]);
+        let chess = named_category("chess", &[channel_member("@somechannel")]);
+        category_repository.insert(&streams).unwrap();
+        category_repository.insert(&chess).unwrap();
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: vec![in_categories(
+                    home_video_response("vid1", "My Video", channel_source(None)),
+                    &[&chess, &streams]
+                )],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_include_categories_reached_through_another_source() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        playlist_repository
+            .insert(&Playlist {
+                exclude_from_home: true,
+                ..playlist("PL1")
+            })
+            .unwrap();
+        let shared = downloaded_video("vid_shared", "Shared", None, 100);
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &shared,
+            0,
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &shared,
+        );
+        let chess = named_category("Chess", &[channel_member("@somechannel")]);
+        let highlights = named_category("Highlights", &[playlist_member("PL1")]);
+        category_repository.insert(&chess).unwrap();
+        category_repository.insert(&highlights).unwrap();
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: vec![in_categories(
+                    home_video_response("vid_shared", "Shared", channel_source(None)),
+                    &[&chess, &highlights]
+                )],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_a_category_reached_by_two_members_once() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        playlist_repository
+            .insert(&Playlist {
+                exclude_from_home: true,
+                ..playlist("PL1")
+            })
+            .unwrap();
+        let shared = downloaded_video("vid_shared", "Shared", None, 100);
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &shared,
+            0,
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &shared,
+        );
+        let chess = named_category(
+            "Chess",
+            &[channel_member("@somechannel"), playlist_member("PL1")],
+        );
+        category_repository.insert(&chess).unwrap();
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: vec![in_categories(
+                    home_video_response("vid_shared", "Shared", channel_source(None)),
+                    &[&chess]
                 )],
                 ..empty_home()
             })
@@ -3197,11 +3460,74 @@ mod tests {
             Ok(vec![
                 HomeVideoResponse {
                     thumbnail_filename: Some("vid3.jpg".to_string()),
-                    ..home_video_response("vid3", "Newest", channel_source(Some("avatar.jpg")))
+                    ..in_categories(
+                        home_video_response("vid3", "Newest", channel_source(Some("avatar.jpg"))),
+                        &[&chess]
+                    )
                 },
-                home_video_response("vid2", "Middle", playlist_source()),
-                home_video_response("vid1", "Oldest", channel_source(Some("avatar.jpg"))),
+                in_categories(
+                    home_video_response("vid2", "Middle", playlist_source()),
+                    &[&chess]
+                ),
+                in_categories(
+                    home_video_response("vid1", "Oldest", channel_source(Some("avatar.jpg"))),
+                    &[&chess]
+                ),
             ])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_category_videos_with_their_categories() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let shared = downloaded_video("vid_shared", "Shared", None, 100);
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &shared,
+            0,
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &shared,
+        );
+        let chess = named_category("Chess", &[channel_member("@somechannel")]);
+        let streams = named_category("Streams", &[playlist_member("PL1")]);
+        category_repository.insert(&chess).unwrap();
+        category_repository.insert(&streams).unwrap();
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = list_for_category(video_searcher, chess.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![in_categories(
+                home_video_response("vid_shared", "Shared", channel_source(None)),
+                &[&chess, &streams]
+            )])
         );
     }
 
@@ -3250,10 +3576,9 @@ mod tests {
 
         assert_eq!(
             response,
-            Ok(vec![home_video_response(
-                "vid_shared",
-                "Shared",
-                channel_source(None)
+            Ok(vec![in_categories(
+                home_video_response("vid_shared", "Shared", channel_source(None)),
+                &[&chess]
             )])
         );
     }
@@ -3310,10 +3635,9 @@ mod tests {
 
         assert_eq!(
             response,
-            Ok(vec![home_video_response(
-                "vid1",
-                "Downloaded",
-                channel_source(None)
+            Ok(vec![in_categories(
+                home_video_response("vid1", "Downloaded", channel_source(None)),
+                &[&chess]
             )])
         );
     }
@@ -3355,10 +3679,9 @@ mod tests {
 
         assert_eq!(
             response,
-            Ok(vec![home_video_response(
-                "vid1",
-                "Excluded from home",
-                playlist_source()
+            Ok(vec![in_categories(
+                home_video_response("vid1", "Excluded from home", playlist_source()),
+                &[&chess]
             )])
         );
     }
@@ -3655,6 +3978,17 @@ mod tests {
             watched: false,
             position_seconds: 0,
             source,
+            category_ids: vec![],
+        }
+    }
+
+    fn in_categories(card: HomeVideoResponse, categories: &[&Category]) -> HomeVideoResponse {
+        HomeVideoResponse {
+            category_ids: categories
+                .iter()
+                .map(|category| category.id.as_str().to_string())
+                .collect(),
+            ..card
         }
     }
 
@@ -3679,8 +4013,16 @@ mod tests {
     }
 
     fn category_with_members(members: &[CategoryMember]) -> Category {
-        Category::create(CategoryName::new("Chess").unwrap(), fixed_timestamp())
-            .with_members(members.to_vec())
+        named_category("Chess", members)
+    }
+
+    fn named_category(name: &str, members: &[CategoryMember]) -> Category {
+        Category::create(
+            CategoryName::new(name).unwrap(),
+            CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
+            fixed_timestamp(),
+        )
+        .with_members(members.to_vec())
     }
 
     fn channel_member(handle: &str) -> CategoryMember {

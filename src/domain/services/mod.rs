@@ -37,7 +37,7 @@ pub mod video_watch_state_updater;
 pub use category_creator::{CategoryCreator, CategoryCreatorApi};
 pub use category_deleter::{CategoryDeleter, CategoryDeleterApi};
 pub use category_member_remover::{CategoryMemberRemover, CategoryMemberRemoverApi};
-pub use category_updater::{CategoryUpdater, CategoryUpdaterApi};
+pub use category_updater::{CategoryUpdate, CategoryUpdater, CategoryUpdaterApi};
 pub use category_video_collector::{CategoryVideoCollector, CategoryVideoCollectorApi};
 pub use category_view_searcher::{CategoryViewSearcher, CategoryViewSearcherApi};
 pub use channel_avatar_restorer::{ChannelAvatarRestorer, ChannelAvatarRestorerApi};

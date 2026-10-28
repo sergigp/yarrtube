@@ -1,7 +1,7 @@
-import { useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { FolderPlus, Plus, Settings2 } from 'lucide-react'
-import { deleteCategory, renameCategory } from '@/api/client'
+import { deleteCategory, updateCategory } from '@/api/client'
 import {
   useCategories,
   useCategoryVideos,
@@ -11,6 +11,9 @@ import {
 import type { Category } from '@/api/types'
 import { deleteCategoryDescription, memberCount } from '@/lib/categories'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { CategoryColorPicker } from './CategoryColorPicker'
 import { DetailHeader } from './DetailHeader'
 import { ManageSourcesDialog } from './ManageSourcesDialog'
 import { VideoGrid } from './VideoGrid'
@@ -47,6 +50,94 @@ function EmptyCategory({ category, onManage }: { category: Category; onManage: (
         Add channels and playlists
       </Button>
     </section>
+  )
+}
+
+/** How long the chosen color must stay put before it is saved. */
+const COLOR_SAVE_DELAY_MS = 300
+
+/**
+ * Saves the latest of a burst of choices (a hue slider drag) once it settles,
+ * or at once on `flush` and unmount. Saves run one at a time, in order, so
+ * the last choice is the one stored.
+ */
+function useSettledSave(save: (color: string) => Promise<void>) {
+  const saveRef = useRef(save)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const pending = useRef<string | null>(null)
+  const queue = useRef<Promise<void>>(Promise.resolve())
+  useEffect(() => {
+    saveRef.current = save
+  })
+  const flush = useCallback(() => {
+    clearTimeout(timer.current)
+    const color = pending.current
+    pending.current = null
+    if (color !== null) {
+      queue.current = queue.current.then(() => saveRef.current(color)).catch(() => {})
+    }
+  }, [])
+  useEffect(() => flush, [flush])
+  const schedule = (color: string) => {
+    pending.current = color
+    clearTimeout(timer.current)
+    timer.current = setTimeout(flush, COLOR_SAVE_DELAY_MS)
+  }
+  return { schedule, flush }
+}
+
+/**
+ * A dot in the category's color that opens the color picker. The picker
+ * shows each choice at once and saves it once it settles (see `useSettledSave`).
+ */
+function CategoryColorControl({
+  color,
+  onChange,
+}: {
+  color: string
+  onChange: (color: string) => Promise<void>
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const { schedule, flush } = useSettledSave(onChange)
+  return (
+    <Popover
+      onOpenChange={(open) => {
+        if (!open) {
+          flush()
+          setDraft(null)
+        }
+      }}
+    >
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Change color"
+                className="shrink-0 rounded-full"
+              >
+                <span
+                  className="size-4 rounded-full border border-black/10"
+                  style={{ background: draft ?? color }}
+                />
+              </Button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Change color</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <PopoverContent align="start" className="w-auto">
+        <CategoryColorPicker
+          value={draft ?? color}
+          onChange={(next) => {
+            setDraft(next)
+            schedule(next)
+          }}
+        />
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -87,10 +178,17 @@ export function CategoryDetail() {
     <div className="flex min-w-0 flex-col">
       <DetailHeader
         name={category.name}
+        tint={category.color}
+        colorControl={
+          <CategoryColorControl
+            color={category.color}
+            onChange={refreshing((color: string) => updateCategory(category.id, { color }))}
+          />
+        }
         videos={videos}
         unwatchedCount={category.unwatched_count}
         summaryPrefix={`${sources} ${sources === 1 ? 'source' : 'sources'}`}
-        onRename={refreshing((name: string) => renameCategory(category.id, name))}
+        onRename={refreshing((name: string) => updateCategory(category.id, { name }))}
         extraActions={[
           { label: 'Manage sources', icon: <Settings2 />, onSelect: () => setManaging(true) },
         ]}

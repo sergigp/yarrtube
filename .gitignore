@@ -20,6 +20,9 @@
 web/dist/
 web/node_modules/
 
+# Tool caches written when vitest runs from the repo root
+/node_modules/
+
 # e2e-tests Playwright project
 e2e-tests/node_modules/
 e2e-tests/test-results/

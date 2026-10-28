@@ -88,6 +88,8 @@ export interface HomeVideo {
   watched: boolean
   position_seconds: number
   source: HomeVideoSource
+  /** Categories having the YouTube video, in category-name order. */
+  category_ids: string[]
 }
 
 /** Response of `GET /api/videos/home`. */
@@ -183,6 +185,8 @@ export interface AppVersion {
 export interface Category {
   id: string
   name: string
+  /** Lowercase `#rrggbb`. */
+  color: string
   unwatched_count: number
   channels: string[]
   playlists: string[]
@@ -205,6 +209,7 @@ export interface CategoryMembers {
 export interface CreatedCategory {
   id: string
   name: string
+  color: string
   channels: string[]
   playlists: string[]
 }

@@ -1,3 +1,4 @@
+use super::category_color::CategoryColor;
 use super::category_id::CategoryId;
 use super::category_name::CategoryName;
 use crate::domain::channel::ChannelHandle;
@@ -9,6 +10,7 @@ use crate::domain::playlist::PlaylistId;
 pub struct CategoryView {
     pub id: CategoryId,
     pub name: CategoryName,
+    pub color: CategoryColor,
     pub unwatched_count: usize,
     /// Existing members only.
     pub channels: Vec<ChannelHandle>,
