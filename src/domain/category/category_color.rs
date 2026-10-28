@@ -24,8 +24,13 @@ impl CategoryColor {
     }
 
     /// Palette color used by the fewest of `used`, earliest on a tie.
-    pub fn least_used(_used: &[CategoryColor]) -> Self {
-        Self(Self::PALETTE[0].to_string())
+    pub fn least_used(used: &[CategoryColor]) -> Self {
+        let uses = |hex: &str| used.iter().filter(|color| color.as_str() == hex).count();
+        let least = Self::PALETTE
+            .into_iter()
+            .min_by_key(|hex| uses(hex))
+            .unwrap_or(Self::PALETTE[0]);
+        Self(least.to_string())
     }
 
     pub fn as_str(&self) -> &str {

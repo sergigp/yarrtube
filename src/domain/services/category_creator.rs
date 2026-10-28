@@ -33,8 +33,9 @@ impl CategoryCreatorApi for CategoryCreator {
         name: CategoryName,
         color: Option<CategoryColor>,
     ) -> Result<Category, CreateCategoryError> {
-        self.ensure_name_free(&name)?;
-        let color = color.unwrap_or_else(|| CategoryColor::least_used(&[]));
+        let existing = self.list_categories()?;
+        Self::ensure_name_free(&existing, &name)?;
+        let color = color.unwrap_or_else(|| Self::least_used_color(&existing));
         let category = Category::create(name, color, self.clock.now());
         self.repository
             .insert(&category)
@@ -44,16 +45,30 @@ impl CategoryCreatorApi for CategoryCreator {
 }
 
 impl CategoryCreator {
-    fn ensure_name_free(&self, name: &CategoryName) -> Result<(), CreateCategoryError> {
-        let taken = self
-            .repository
+    fn list_categories(&self) -> Result<Vec<Category>, CreateCategoryError> {
+        self.repository
             .list()
-            .map_err(CreateCategoryError::Repository)?
+            .map_err(CreateCategoryError::Repository)
+    }
+
+    fn ensure_name_free(
+        existing: &[Category],
+        name: &CategoryName,
+    ) -> Result<(), CreateCategoryError> {
+        if existing
             .iter()
-            .any(|category| category.name.is_same_as(name));
-        if taken {
+            .any(|category| category.name.is_same_as(name))
+        {
             return Err(CreateCategoryError::NameTaken(name.clone()));
         }
         Ok(())
+    }
+
+    fn least_used_color(existing: &[Category]) -> CategoryColor {
+        let used: Vec<CategoryColor> = existing
+            .iter()
+            .map(|category| category.color.clone())
+            .collect();
+        CategoryColor::least_used(&used)
     }
 }

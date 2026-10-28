@@ -259,6 +259,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_create_a_category_with_the_least_used_palette_color() {
+        let butter_and_coral = vec!["#fff1bf", "#ffd9d4"];
+        let every_color_and_butter_again = CategoryColor::PALETTE
+            .into_iter()
+            .chain(["#fff1bf"])
+            .collect::<Vec<_>>();
+        let mut colors = Vec::new();
+        for used in [butter_and_coral, every_color_and_butter_again] {
+            let db = TestDatabase::new();
+            let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+            used.iter().enumerate().for_each(|(index, hex)| {
+                let existing = Category {
+                    color: color(hex),
+                    ..category(None, &format!("Existing {index}"))
+                };
+                repository.insert(&existing).unwrap();
+            });
+            let category_creator =
+                CategoryCreator::new(repository, Arc::new(FixedClock(fixed_timestamp())));
+
+            let response = create(category_creator, create_request("Chess")).await;
+
+            colors.push(response.map(|(_, category)| category.color));
+        }
+
+        assert_eq!(
+            colors,
+            vec![Ok("#ffe0c7".to_string()), Ok("#ffe0c7".to_string())]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_create_if_color_invalid() {
         let mut responses = Vec::new();
         for invalid in ["#fff", "yellow", "#gggggg"] {
