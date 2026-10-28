@@ -504,6 +504,23 @@ describe('Sidebar', () => {
     await waitFor(() => expect(screen.queryByTitle('2 unwatched')).not.toBeInTheDocument())
   })
 
+  it('marks a playlist with one unwatched video watched without asking', async () => {
+    const markWatched = vi.fn(() => null)
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'Courses', unwatched_count: 1 })],
+      'GET /api/categories': aCategoryList(),
+      'POST /api/playlists/PL1/watched': markWatched,
+    })
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Courses' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+
+    await waitFor(() => expect(markWatched).toHaveBeenCalledOnce())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('offers playlist row actions in order', async () => {
     renderSidebar({
       'GET /api/channels': [],
