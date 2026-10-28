@@ -3478,6 +3478,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_category_videos_with_their_categories() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let shared = downloaded_video("vid_shared", "Shared", None, 100);
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &shared,
+            0,
+        );
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &shared,
+        );
+        let chess = named_category("Chess", &[channel_member("@somechannel")]);
+        let streams = named_category("Streams", &[playlist_member("PL1")]);
+        category_repository.insert(&chess).unwrap();
+        category_repository.insert(&streams).unwrap();
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = list_for_category(video_searcher, chess.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![in_categories(
+                home_video_response("vid_shared", "Shared", channel_source(None)),
+                &[&chess, &streams]
+            )])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_a_shared_video_once_from_the_channel() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
