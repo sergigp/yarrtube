@@ -178,7 +178,7 @@ fn vtt_response(vtt: WebVtt) -> VttResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::category::{Category, CategoryMember, CategoryName};
+    use crate::domain::category::{Category, CategoryColor, CategoryMember, CategoryName};
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
@@ -3655,6 +3655,7 @@ mod tests {
             watched: false,
             position_seconds: 0,
             source,
+            category_ids: vec![],
         }
     }
 
@@ -3679,8 +3680,12 @@ mod tests {
     }
 
     fn category_with_members(members: &[CategoryMember]) -> Category {
-        Category::create(CategoryName::new("Chess").unwrap(), fixed_timestamp())
-            .with_members(members.to_vec())
+        Category::create(
+            CategoryName::new("Chess").unwrap(),
+            CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
+            fixed_timestamp(),
+        )
+        .with_members(members.to_vec())
     }
 
     fn channel_member(handle: &str) -> CategoryMember {

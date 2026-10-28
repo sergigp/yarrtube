@@ -152,6 +152,7 @@ impl CategoryViewSearcher {
                 .collect(),
             id: category.id,
             name: category.name,
+            color: category.color,
             unwatched_count,
         }
     }

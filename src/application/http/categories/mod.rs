@@ -5,15 +5,15 @@ use super::error::ApiError;
 use super::validation::required;
 use super::videos::update_watch_state_error;
 use crate::domain::category::{
-    CategoryId, CategoryMember, CategoryName, CreateCategoryError, DeleteCategoryError,
-    UpdateCategoryError,
+    CategoryColor, CategoryId, CategoryMember, CategoryName, CreateCategoryError,
+    DeleteCategoryError, UpdateCategoryError,
 };
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
-    CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryDeleterApi, CategoryUpdater,
-    CategoryUpdaterApi, CategoryViewSearcher, CategoryViewSearcherApi, VideoWatchStateUpdater,
-    VideoWatchStateUpdaterApi,
+    CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryDeleterApi, CategoryUpdate,
+    CategoryUpdater, CategoryUpdaterApi, CategoryViewSearcher, CategoryViewSearcherApi,
+    VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use axum::Json;
 use axum::extract::{Path, State};
@@ -30,8 +30,9 @@ pub async fn create_category(
     Json(request): Json<CreateCategoryRequest>,
 ) -> Result<(StatusCode, Json<CategoryResponse>), ApiError> {
     let name = CategoryName::new(required(request.name, MISSING_CATEGORY_NAME)?)?;
+    let color = request.color.map(CategoryColor::new).transpose()?;
 
-    match run_blocking(move || category_creator.create(name)).await? {
+    match run_blocking(move || category_creator.create(name, color)).await? {
         Ok(category) => Ok((StatusCode::CREATED, Json(CategoryResponse::from(category)))),
         Err(e @ CreateCategoryError::NameTaken(_)) => Err(ApiError::new(StatusCode::CONFLICT, e)),
         Err(e @ CreateCategoryError::Repository(_)) => Err(ApiError::internal(e)),
@@ -53,9 +54,15 @@ pub async fn update_category(
     Json(request): Json<UpdateCategoryRequest>,
 ) -> Result<StatusCode, ApiError> {
     let id = CategoryId::new(id)?;
-    let name = CategoryName::new(required(request.name, MISSING_CATEGORY_NAME)?)?;
+    let update = CategoryUpdate {
+        name: Some(CategoryName::new(required(
+            request.name,
+            MISSING_CATEGORY_NAME,
+        )?)?),
+        color: request.color.map(CategoryColor::new).transpose()?,
+    };
 
-    run_blocking(move || category_updater.rename(&id, name))
+    run_blocking(move || category_updater.update(&id, update))
         .await?
         .map_err(update_category_error)?;
 
@@ -184,7 +191,14 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_fail_to_create_if_name_missing() {
-        let response = create(any_category_creator(), CreateCategoryRequest { name: None }).await;
+        let response = create(
+            any_category_creator(),
+            CreateCategoryRequest {
+                name: None,
+                color: None,
+            },
+        )
+        .await;
 
         assert_eq!(
             response,
@@ -639,7 +653,10 @@ mod tests {
         let response = update_category(
             State(any_category_updater()),
             Path("chess".to_string()),
-            Json(UpdateCategoryRequest { name: None }),
+            Json(UpdateCategoryRequest {
+                name: None,
+                color: None,
+            }),
         )
         .await;
 
@@ -1067,6 +1084,7 @@ mod tests {
     fn create_request(name: &str) -> CreateCategoryRequest {
         CreateCategoryRequest {
             name: Some(name.to_string()),
+            color: None,
         }
     }
 
@@ -1079,6 +1097,7 @@ mod tests {
         CategoryResponse {
             id: id.map(|id| id.as_str().to_string()).unwrap_or_default(),
             name: name.to_string(),
+            color: CategoryColor::PALETTE[0].to_string(),
             channels: channels.iter().map(|c| c.to_string()).collect(),
             playlists: playlists.iter().map(|p| p.to_string()).collect(),
         }
@@ -1089,6 +1108,7 @@ mod tests {
         Category {
             id: id.unwrap_or_else(CategoryId::new_generated),
             name: CategoryName::new(name).unwrap(),
+            color: CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
             members: vec![],
             created_at: fixed_timestamp(),
         }
@@ -1103,6 +1123,7 @@ mod tests {
         CategoryListItemResponse {
             id: category.id.as_str().to_string(),
             name: category.name.as_str().to_string(),
+            color: category.color.as_str().to_string(),
             unwatched_count,
             channels: channels.iter().map(|c| c.to_string()).collect(),
             playlists: playlists.iter().map(|p| p.to_string()).collect(),
@@ -1245,6 +1266,7 @@ mod tests {
             Path(id.to_string()),
             Json(UpdateCategoryRequest {
                 name: Some(name.to_string()),
+                color: None,
             }),
         )
         .await

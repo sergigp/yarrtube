@@ -1,5 +1,6 @@
 use super::sourced_video::{SourcedVideo, VideoSource};
 use super::video_id::VideoId;
+use crate::domain::category::CategoryId;
 
 /// A video card of the home listing: the flat fields a card shows, with the
 /// source that tracks the video.
@@ -12,6 +13,8 @@ pub struct HomeVideoView {
     pub watched: bool,
     pub position_seconds: i64,
     pub source: VideoSource,
+    /// Categories having the YouTube video, in category-name order.
+    pub category_ids: Vec<CategoryId>,
 }
 
 impl From<SourcedVideo> for HomeVideoView {
@@ -25,6 +28,16 @@ impl From<SourcedVideo> for HomeVideoView {
             thumbnail_filename: video.thumbnail_filename,
             duration_seconds: video.duration_seconds,
             source: sourced.source,
+            category_ids: Vec::new(),
+        }
+    }
+}
+
+impl HomeVideoView {
+    pub fn with_category_ids(self, category_ids: Vec<CategoryId>) -> Self {
+        Self {
+            category_ids,
+            ..self
         }
     }
 }

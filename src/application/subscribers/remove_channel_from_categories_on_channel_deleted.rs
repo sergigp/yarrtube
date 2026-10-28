@@ -36,7 +36,7 @@ impl EventSubscriber for RemoveChannelFromCategoriesOnChannelDeleted {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::category::{Category, CategoryName};
+    use crate::domain::category::{Category, CategoryColor, CategoryName};
     use crate::domain::playlist::PlaylistId;
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
@@ -106,8 +106,12 @@ mod tests {
     }
 
     fn category(name: &str, members: &[CategoryMember]) -> Category {
-        Category::create(CategoryName::new(name).unwrap(), fixed_timestamp())
-            .with_members(members.to_vec())
+        Category::create(
+            CategoryName::new(name).unwrap(),
+            CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
+            fixed_timestamp(),
+        )
+        .with_members(members.to_vec())
     }
 
     fn channel_member(handle: &str) -> CategoryMember {

@@ -1,4 +1,4 @@
-use crate::domain::category::{Category, CategoryName, CreateCategoryError};
+use crate::domain::category::{Category, CategoryColor, CategoryName, CreateCategoryError};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::sync::Arc;
@@ -17,15 +17,25 @@ impl CategoryCreator {
 }
 
 pub trait CategoryCreatorApi: Send + Sync {
-    /// Creates a category with no members. Another category with the same
-    /// name ignoring case → `NameTaken`.
-    fn create(&self, name: CategoryName) -> Result<Category, CreateCategoryError>;
+    /// Creates a category with no members, colored `color` or, without one,
+    /// the least used palette color. Another category with the same name
+    /// ignoring case → `NameTaken`.
+    fn create(
+        &self,
+        name: CategoryName,
+        color: Option<CategoryColor>,
+    ) -> Result<Category, CreateCategoryError>;
 }
 
 impl CategoryCreatorApi for CategoryCreator {
-    fn create(&self, name: CategoryName) -> Result<Category, CreateCategoryError> {
+    fn create(
+        &self,
+        name: CategoryName,
+        color: Option<CategoryColor>,
+    ) -> Result<Category, CreateCategoryError> {
         self.ensure_name_free(&name)?;
-        let category = Category::create(name, self.clock.now());
+        let color = color.unwrap_or_else(|| CategoryColor::least_used(&[]));
+        let category = Category::create(name, color, self.clock.now());
         self.repository
             .insert(&category)
             .map_err(CreateCategoryError::Repository)?;

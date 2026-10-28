@@ -19,6 +19,7 @@ const VIDEO_SUBTITLES_SQL: &str = include_str!("../../../migrations/0010_video_s
 const CATEGORIES_SQL: &str = include_str!("../../../migrations/0011_categories.sql");
 const PLAYLIST_HIDE_UNWATCHED_COUNT_SQL: &str =
     include_str!("../../../migrations/0012_playlist_hide_unwatched_count.sql");
+const CATEGORY_COLOR_SQL: &str = include_str!("../../../migrations/0013_category_color.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -34,6 +35,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(VIDEO_SUBTITLES_SQL),
         M::up(CATEGORIES_SQL),
         M::up(PLAYLIST_HIDE_UNWATCHED_COUNT_SQL),
+        M::up(CATEGORY_COLOR_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))

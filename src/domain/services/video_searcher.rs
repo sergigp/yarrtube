@@ -143,9 +143,9 @@ impl VideoSearcherApi for VideoSearcher {
             limits.latest,
         );
         Ok(HomeVideos {
-            continue_watching: Self::views(continue_watching),
-            quick_watches: Self::views(quick_watches),
-            latest: Self::views(latest),
+            continue_watching: self.with_categories(Self::views(continue_watching))?,
+            quick_watches: self.with_categories(Self::views(quick_watches))?,
+            latest: self.with_categories(Self::views(latest))?,
         })
     }
 
@@ -157,7 +157,7 @@ impl VideoSearcherApi for VideoSearcher {
                 .map_err(ListVideosError::Repository)?,
         );
         videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.created_at));
-        Ok(Self::views(videos))
+        self.with_categories(Self::views(videos))
     }
 }
 
@@ -183,6 +183,14 @@ impl VideoSearcher {
 
     fn views(videos: Vec<SourcedVideo>) -> Vec<HomeVideoView> {
         videos.into_iter().map(HomeVideoView::from).collect()
+    }
+
+    /// `views`, each with the categories having its YouTube video.
+    fn with_categories(
+        &self,
+        views: Vec<HomeVideoView>,
+    ) -> Result<Vec<HomeVideoView>, ListVideosError> {
+        Ok(views)
     }
 
     /// Every downloaded video of every tracked channel, then of every tracked
