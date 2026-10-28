@@ -1,5 +1,5 @@
-import { useId } from 'react'
-import { PALETTE } from '@/lib/categoryColors'
+import { useId, useState } from 'react'
+import { PALETTE, hueOf, pastelFromHue } from '@/lib/categoryColors'
 import { cn } from '@/lib/utils'
 
 interface CategoryColorPickerProps {
@@ -43,21 +43,62 @@ function Swatch({
   )
 }
 
-/** The palette swatches plus a custom pastel hue, as one radio group. */
+const HUE_STOPS = [0, 60, 120, 180, 240, 300, 360].map((hue) => pastelFromHue(hue)).join(', ')
+
+/** Every pastel hue around a circle, the Custom swatch's face. */
+const CUSTOM_FACE = `conic-gradient(${HUE_STOPS})`
+
+/** Every pastel hue left to right, the hue slider's track. */
+const HUE_TRACK = `linear-gradient(to right, ${HUE_STOPS})`
+
+/**
+ * The palette swatches plus "Custom", as one radio group. Custom shows a hue
+ * slider whose colors keep the palette's soft lightness and chroma.
+ */
 export function CategoryColorPicker({ value, onChange }: CategoryColorPickerProps) {
   const group = useId()
+  const custom = !PALETTE.some((color) => color.hex === value)
+  // Held apart from `value` so the slider stays where it was put, even though
+  // a hex only approximates its hue.
+  const [hue, setHue] = useState(() => Math.round(hueOf(value)))
+  const chooseHue = (next: number) => {
+    setHue(next)
+    onChange(pastelFromHue(next))
+  }
+
   return (
-    <div role="radiogroup" aria-label="Color" className="flex flex-wrap gap-2">
-      {PALETTE.map((color) => (
+    <div className="flex flex-col gap-3">
+      <div role="radiogroup" aria-label="Color" className="flex flex-wrap gap-2">
+        {PALETTE.map((color) => (
+          <Swatch
+            key={color.hex}
+            name={color.name}
+            group={group}
+            color={color.hex}
+            checked={value === color.hex}
+            onSelect={() => onChange(color.hex)}
+          />
+        ))}
         <Swatch
-          key={color.hex}
-          name={color.name}
+          name="Custom"
           group={group}
-          color={color.hex}
-          checked={value === color.hex}
-          onSelect={() => onChange(color.hex)}
+          color={custom ? value : CUSTOM_FACE}
+          checked={custom}
+          onSelect={() => chooseHue(hue)}
         />
-      ))}
+      </div>
+      {custom && (
+        <input
+          type="range"
+          aria-label="Hue"
+          min={0}
+          max={359}
+          value={hue}
+          onChange={(event) => chooseHue(Number(event.target.value))}
+          className="h-2 w-full cursor-pointer appearance-none rounded-full"
+          style={{ background: HUE_TRACK }}
+        />
+      )}
     </div>
   )
 }

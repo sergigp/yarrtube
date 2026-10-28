@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CategoryColorPicker } from './CategoryColorPicker'
 
@@ -29,5 +29,19 @@ describe('CategoryColorPicker', () => {
     expect(onChange).toHaveBeenCalledWith('#d3ecf8')
     expect(screen.getByRole('radio', { name: 'Sky' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Butter' })).not.toBeChecked()
+  })
+
+  it('shows a color outside the palette as Custom, whose hue slider picks pastels', () => {
+    const onChange = vi.fn()
+    render(<Picker initial="#f0e4d0" onChange={onChange} />)
+
+    expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked()
+    expect(screen.getByRole('slider', { name: 'Hue' })).toHaveValue('81')
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Hue' }), { target: { value: '200' } })
+
+    expect(onChange).toHaveBeenCalledWith('#cdf4f6')
+    expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked()
+    expect(screen.getByRole('slider', { name: 'Hue' })).toHaveValue('200')
   })
 })
