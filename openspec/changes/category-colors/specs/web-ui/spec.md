@@ -7,6 +7,10 @@ The category color picker SHALL offer the 10 palette colors as swatches in palet
 - **WHEN** a user chooses the "Sky" swatch
 - **THEN** "Sky" is shown checked and the chosen color is "#d3ecf8"
 
+#### Scenario: Clicking a swatch
+- **WHEN** a user clicks anywhere on the "Lilac" swatch
+- **THEN** "Lilac" is shown checked
+
 #### Scenario: Choosing a custom hue
 - **WHEN** a user chooses "Custom" and moves the hue slider
 - **THEN** the chosen color follows the hue and stays a soft pastel
@@ -16,7 +20,7 @@ The category color picker SHALL offer the 10 palette colors as swatches in palet
 - **THEN** "Custom" is shown checked with the slider at that color's hue
 
 ### Requirement: Home Card Category Tint
-Each home video card SHALL take the colors of its categories, in the order the video lists them, as its background: none leaves the card without a tint, one gives a flat tint, two or three give equal diagonal bands with hard edges running from the top-left to the bottom-right, and four or more give a neutral grey. Cards on a category's own view SHALL NOT be tinted.
+Each home video card SHALL take the colors of its categories, in the order the video lists them, as its background: none leaves the card without a tint, one gives a flat tint, two or three give equal diagonal bands with hard edges, in order from the top-left corner to the bottom-right one, the edge between two bands running from corner to corner whatever the card's shape, and four or more give a neutral grey. Cards on a category's own view SHALL NOT be tinted.
 
 #### Scenario: One category
 - **WHEN** a home video belongs to "Chess", colored "#d3ecf8"
@@ -37,6 +41,10 @@ Each home video card SHALL take the colors of its categories, in the order the v
 #### Scenario: No category
 - **WHEN** a home video belongs to no category
 - **THEN** its card has no tint
+
+#### Scenario: Cards framed
+- **WHEN** the home view shows tinted and untinted cards
+- **THEN** every card has padding and a thin grey border, and neighbouring cards keep the grid's gap between them
 
 #### Scenario: Category view cards
 - **WHEN** a user opens the "Chess" view

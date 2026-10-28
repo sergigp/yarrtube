@@ -21,13 +21,13 @@
 - `web/src/api/client.ts`: `createCategory(name, color)`, `updateCategory(id, { name?, color? })` (replaces `renameCategory`).
 - `web/src/test/helpers.tsx`: fixture builders get the new fields.
 - `web/src/lib/categoryColors.ts` (+ test, new): the palette (names and hex), `defaultColor`, `pastelFromHue`, `hueOf`, `cardBackground`.
-- `web/src/components/CategoryColorPicker.tsx` (+ test, new): swatch radio group plus the custom hue slider.
+- `web/src/components/CategoryColorPicker.tsx` (+ test, new): swatch radio group plus the custom hue slider. Each radio input covers its swatch, invisible, so a click anywhere on it (and a click by role) chooses it.
 - `web/src/components/AddCategoryDialog.tsx` (+ test): the picker, with the default color preselected.
 - `web/src/components/CategoryDetail.tsx` (+ test): header tint, the "Change color" popover, an untinted grid.
 - `web/src/components/DetailHeader.tsx`: optional `tint` background and a slot for the color control.
 - `web/src/components/SidebarCategories.tsx` (+ test): the color dot.
-- `web/src/components/VideoGrid.tsx`: a `tinted` prop; card wrapper with `cardBackground`.
-- `web/src/components/Home.tsx` (+ test): passes the categories' colors and `tinted` to the grid.
+- `web/src/components/VideoGrid.tsx`: a `categoryColors` prop; with it, every card is framed (padding, a thin grey border, 8px radius, the grid gap kept) and takes `cardBackground` as its background.
+- `web/src/components/Home.tsx` (+ test): passes the categories' colors (`categoryColors`) to the grid.
 
 ## Types & Signatures
 
@@ -88,10 +88,11 @@ pub struct HomeVideoResponse { /* … */ pub category_ids: Vec<String> }
 export const PALETTE: readonly { name: string; hex: string }[] // Butter … Sand
 export const CROWDED_CARD = '#f2f2f2'
 export function defaultColor(used: string[]): string
-export function pastelFromHue(hue: number): string   // oklch(0.94 0.04 hue) -> #rrggbb
+export function pastelFromHue(hue: number): string   // oklch(0.94 0.04 hue) -> #rrggbb; chroma lowered until it fits sRGB, so the hue holds
 export function hueOf(hex: string): number
 export function cardBackground(colors: string[]): string | undefined
-// 0 -> undefined, 1 -> hex, 2-3 -> linear-gradient(135deg, hard stops), 4+ -> CROWDED_CARD
+// 0 -> undefined, 1 -> hex, 2-3 -> linear-gradient(to bottom right, hard stops), 4+ -> CROWDED_CARD
+// `to bottom right` (not a fixed angle) puts the 50% edge exactly corner to corner on any card shape
 
 // web/src/components/CategoryColorPicker.tsx
 export function CategoryColorPicker(props: { value: string; onChange: (hex: string) => void }): JSX.Element
@@ -151,7 +152,7 @@ Web home card: `Home` → `useCategories()` → `Map(id → color)` → `VideoGr
    - sqlite_migrations
      - `it_should_backfill_existing_categories_with_palette_colors_in_creation_order`
 3. Web (Vitest)
-   - `categoryColors.test.ts`: `defaultColor` least-used/tie; `cardBackground` for 0/1/2/3/4 colors; `pastelFromHue`/`hueOf` round trip.
+   - `categoryColors.test.ts`: `defaultColor` least-used/tie; `cardBackground` for 0/1/2/3/4 colors; `pastelFromHue`/`hueOf` round trip within 3 degrees (8-bit hex quantization at this chroma shifts the hue up to ~2.8°, so 1° is unreachable).
    - `CategoryColorPicker.test.tsx`: choosing a swatch; a custom color shows "Custom" checked.
    - `AddCategoryDialog.test.tsx`: next free color preselected; creates with the chosen color.
    - `CategoryDetail.test.tsx`: header tinted; "Change color" saves and the header updates; cards untinted.
