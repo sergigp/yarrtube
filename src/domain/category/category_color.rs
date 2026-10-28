@@ -43,3 +43,19 @@ impl fmt::Display for CategoryColor {
         write!(f, "{}", self.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_accept_a_hex_color_and_lowercase_it() {
+        assert_eq!(
+            [CategoryColor::new("#d3ecf8"), CategoryColor::new("#D3eCF8")],
+            [
+                Ok(CategoryColor("#d3ecf8".to_string())),
+                Ok(CategoryColor("#d3ecf8".to_string()))
+            ]
+        );
+    }
+}
