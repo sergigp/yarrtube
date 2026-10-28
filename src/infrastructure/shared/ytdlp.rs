@@ -33,6 +33,12 @@ fn output_retrying_busy(cmd: &mut Command) -> io::Result<std::process::Output> {
 /// best available stream instead of hard-failing when no such stream
 /// exists) — see design.md's "yt-dlp selector shape per tier" decision.
 ///
+/// The video slot is `bv` (video-only), never `bv*` (any stream with
+/// video): the `-S` sort ranks the audio codec before resolution, so under
+/// `bv*` the one muxed stream carrying AAC audio (YouTube's 360p format
+/// `18`) outranks every silent HD stream and wins the slot. Muxed streams
+/// stay reachable through the `b` fallback.
+///
 /// `--merge-output-format mp4` only takes effect when yt-dlp actually merges
 /// separate video/audio streams; when the `b` fallback in the selector picks
 /// a single already-muxed stream instead (e.g. because YouTube didn't offer
@@ -43,9 +49,9 @@ fn output_retrying_busy(cmd: &mut Command) -> io::Result<std::process::Output> {
 /// happened, so every download consistently lands as `.mp4`.
 pub fn args_for_quality(quality: Quality) -> Vec<String> {
     let format = match quality {
-        Quality::High => "bv*+ba/b".to_string(),
-        Quality::Mid => "bv*[height<=720]+ba/b[height<=720]".to_string(),
-        Quality::Low => "bv*[height<=480]+ba/b[height<=480]".to_string(),
+        Quality::High => "bv+ba/b".to_string(),
+        Quality::Mid => "bv[height<=720]+ba/b[height<=720]".to_string(),
+        Quality::Low => "bv[height<=480]+ba/b[height<=480]".to_string(),
     };
     vec![
         "-f".to_string(),
@@ -2196,7 +2202,7 @@ mod tests {
             args_for_quality(Quality::High),
             vec![
                 "-f".to_string(),
-                "bv*+ba/b".to_string(),
+                "bv+ba/b".to_string(),
                 "-S".to_string(),
                 "codec:h264:aac,ext:mp4:m4a".to_string(),
                 "--merge-output-format".to_string(),
@@ -2213,7 +2219,7 @@ mod tests {
             args_for_quality(Quality::Mid),
             vec![
                 "-f".to_string(),
-                "bv*[height<=720]+ba/b[height<=720]".to_string(),
+                "bv[height<=720]+ba/b[height<=720]".to_string(),
                 "-S".to_string(),
                 "codec:h264:aac,ext:mp4:m4a".to_string(),
                 "--merge-output-format".to_string(),
@@ -2230,7 +2236,7 @@ mod tests {
             args_for_quality(Quality::Low),
             vec![
                 "-f".to_string(),
-                "bv*[height<=480]+ba/b[height<=480]".to_string(),
+                "bv[height<=480]+ba/b[height<=480]".to_string(),
                 "-S".to_string(),
                 "codec:h264:aac,ext:mp4:m4a".to_string(),
                 "--merge-output-format".to_string(),

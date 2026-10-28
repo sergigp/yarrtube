@@ -42,22 +42,47 @@ pub(crate) fn api_key() -> String {
 
 /// `(codec_type, codec_name)` of every stream in `media`, via `ffprobe`.
 pub(crate) fn stream_codecs(media: &Path) -> Vec<(String, String)> {
-    let output = std::process::Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
+    ffprobe(
+        &[
             "-show_entries",
             "stream=codec_type,codec_name",
             "-of",
             "csv=p=0",
-        ])
+        ],
+        media,
+    )
+    .lines()
+    .filter_map(|line| line.split_once(','))
+    .map(|(name, kind)| (kind.to_string(), name.to_string()))
+    .collect()
+}
+
+/// The height in pixels of `media`'s first video stream, via `ffprobe`.
+pub(crate) fn video_height(media: &Path) -> u32 {
+    ffprobe(
+        &[
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=height",
+            "-of",
+            "csv=p=0",
+        ],
+        media,
+    )
+    .trim()
+    .parse()
+    .unwrap_or_else(|_| panic!("ffprobe printed no video height for {media:?}"))
+}
+
+/// `ffprobe -v error <args> <media>`'s stdout; panics if it can't run or fails.
+fn ffprobe(args: &[&str], media: &Path) -> String {
+    let output = std::process::Command::new("ffprobe")
+        .args(["-v", "error"])
+        .args(args)
         .arg(media)
         .output()
         .expect("ffprobe must be installed (it comes with ffmpeg)");
     assert!(output.status.success(), "ffprobe failed on {media:?}");
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| line.split_once(','))
-        .map(|(name, kind)| (kind.to_string(), name.to_string()))
-        .collect()
+    String::from_utf8_lossy(&output.stdout).into_owned()
 }
