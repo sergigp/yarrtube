@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { errorMessage } from '@/lib/errorMessage'
 import { homeSettingAction } from '@/lib/homeSetting'
+import { markWatchedConfirmation } from '@/lib/markWatchedConfirmation'
 import { unwatchedCountSettingAction } from '@/lib/unwatchedCountSetting'
 
 function summaryFor(
@@ -139,6 +140,8 @@ export function DetailHeader({
   const [syncing, setSyncing] = useState(false)
   const [markingWatched, setMarkingWatched] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmingMarkWatched, setConfirmingMarkWatched] = useState(false)
+  const markWatchedPrompt = markWatchedConfirmation(name, unwatchedCount ?? 0)
   const summary = summaryFor(videos, unwatchedCount, summaryPrefix)
 
   const actions: HeaderAction[] = []
@@ -161,6 +164,10 @@ export function DetailHeader({
       icon: <CheckCheck />,
       disabled: markingWatched,
       onSelect: async () => {
+        if (markWatchedPrompt) {
+          setConfirmingMarkWatched(true)
+          return
+        }
         setMarkingWatched(true)
         await alertOnFailure(onMarkWatched, `Failed to mark "${name}" watched`)
         setMarkingWatched(false)
@@ -262,6 +269,17 @@ export function DetailHeader({
         description={deleteDescription}
         onConfirm={onDelete}
       />
+      {onMarkWatched && markWatchedPrompt && (
+        <ConfirmDialog
+          open={confirmingMarkWatched}
+          onOpenChange={setConfirmingMarkWatched}
+          title={markWatchedPrompt.title}
+          description={markWatchedPrompt.description}
+          confirmLabel="Mark watched"
+          pendingLabel="Marking…"
+          onConfirm={onMarkWatched}
+        />
+      )}
     </div>
   )
 }

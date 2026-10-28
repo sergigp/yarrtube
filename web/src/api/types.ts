@@ -24,7 +24,7 @@ export interface ChannelListItem {
   work_in_progress: boolean
 }
 
-/** An entry of `GET /api/playlists`. Playlists don't report an unwatched count. */
+/** An entry of `GET /api/playlists`. */
 export interface PlaylistListItem {
   id: string
   name: string

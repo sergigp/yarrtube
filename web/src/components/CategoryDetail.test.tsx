@@ -100,6 +100,28 @@ describe('CategoryDetail', () => {
     expect(within(fresh).getByText('2:00')).toBeInTheDocument()
   })
 
+  it('asks before marking a category with 3 unwatched videos watched', async () => {
+    const markWatched = vi.fn(() => null)
+    renderCategory({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 3 }),
+      ]),
+      'GET /api/channels': [aChannel({ id: '@hikaru', name: 'Hikaru' })],
+      'GET /api/categories/chess/videos': [aHomeVideo({ id: 'v1' })],
+      'POST /api/categories/chess/watched': markWatched,
+    })
+
+    const user = userEvent.setup()
+    await screen.findAllByRole('listitem')
+    await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Mark 3 videos in "Chess" watched?' }),
+    ).toBeInTheDocument()
+    expect(markWatched).not.toHaveBeenCalled()
+  })
+
   it('marks all watched and deletes from the actions menu', async () => {
     let watched = false
     let category = aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 2 })
@@ -124,6 +146,7 @@ describe('CategoryDetail', () => {
     await screen.findAllByRole('listitem')
     await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+    await user.click(await screen.findByRole('button', { name: 'Mark watched' }))
 
     expect(await screen.findAllByRole('img', { name: 'Watched' })).toHaveLength(2)
     expect(markWatched).toHaveBeenCalledOnce()

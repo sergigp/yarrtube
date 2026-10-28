@@ -46,6 +46,24 @@ describe('ConfirmDialog', () => {
     expect(onConfirm).toHaveBeenCalledOnce()
   })
 
+  it('shows its pending label while confirming', async () => {
+    const user = userEvent.setup()
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title='Mark 3 videos in "Mix" watched?'
+        confirmLabel="Mark watched"
+        pendingLabel="Marking…"
+        onConfirm={() => new Promise<void>(() => {})}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Mark watched' }))
+
+    expect(await screen.findByRole('button', { name: 'Marking…' })).toBeDisabled()
+  })
+
   it('shows the failure and stays open so the user can retry', async () => {
     const user = userEvent.setup()
     const onOpenChange = vi.fn()
