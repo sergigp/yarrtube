@@ -168,6 +168,8 @@ mod tests {
     use rusqlite::Connection;
     use std::sync::Arc;
 
+    const INVALID_COLOR: &str = "Category color must be # followed by 6 hexadecimal digits";
+
     #[tokio::test]
     async fn it_should_create_a_category() {
         let db = TestDatabase::new();
@@ -223,6 +225,27 @@ mod tests {
                 color: color("#d3ecf8"),
                 ..category(id, "Chess")
             }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_if_color_invalid() {
+        let mut responses = Vec::new();
+        for invalid in ["#fff", "yellow", "#gggggg"] {
+            let request = CreateCategoryRequest {
+                color: Some(invalid.to_string()),
+                ..create_request("Chess")
+            };
+            responses.push(create(any_category_creator(), request).await);
+        }
+
+        assert_eq!(
+            responses,
+            vec![
+                Err(ApiError::bad_request(INVALID_COLOR)),
+                Err(ApiError::bad_request(INVALID_COLOR)),
+                Err(ApiError::bad_request(INVALID_COLOR)),
+            ]
         );
     }
 

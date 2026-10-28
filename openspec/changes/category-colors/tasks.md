@@ -10,7 +10,7 @@
 Backend acceptance tests (HTTP handlers):
 
 - [x] 2.1 `it_should_create_a_category_with_a_color` — 201 with the given color, lowercased; verify `cargo test categories` passes
-- [ ] 2.2 `it_should_fail_to_create_if_color_invalid` — `"#fff"`, `"yellow"`, `"#gggggg"` give 400 and nothing is stored
+- [x] 2.2 `it_should_fail_to_create_if_color_invalid` — `"#fff"`, `"yellow"`, `"#gggggg"` give 400 and nothing is stored
 - [ ] 2.3 `it_should_create_the_first_category_with_the_first_palette_color` — no categories, no color → `#fff1bf`
 - [ ] 2.4 `it_should_create_a_category_with_the_least_used_palette_color` — Butter and Coral used → `#ffe0c7`; every color used once and Butter twice → `#ffe0c7`
 - [ ] 2.5 `it_should_list_categories_with_their_color` — the list item carries `color`

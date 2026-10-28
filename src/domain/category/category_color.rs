@@ -13,7 +13,14 @@ impl CategoryColor {
     ];
 
     pub fn new(color: impl Into<String>) -> Result<Self, ValidationError> {
-        Ok(Self(color.into().to_lowercase()))
+        let color = color.into().to_lowercase();
+        let digits = color.strip_prefix('#').unwrap_or_default();
+        if digits.len() != 6 || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(ValidationError(
+                "Category color must be # followed by 6 hexadecimal digits".to_string(),
+            ));
+        }
+        Ok(Self(color))
     }
 
     /// Palette color used by the fewest of `used`, earliest on a tie.
