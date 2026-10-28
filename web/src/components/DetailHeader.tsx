@@ -209,7 +209,7 @@ export function DetailHeader({
   const requestDelete = () => setConfirmingDelete(true)
 
   return (
-    <div
+    <header
       className={cn(
         'mb-4 flex items-center gap-3 md:mb-6',
         tint && '-mx-2 rounded-xl px-2 py-3 md:-mx-3 md:px-3',
@@ -294,6 +294,6 @@ export function DetailHeader({
           onConfirm={onMarkWatched}
         />
       )}
-    </div>
+    </header>
   )
 }

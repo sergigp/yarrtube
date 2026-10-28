@@ -87,6 +87,7 @@ export function CategoryDetail() {
     <div className="flex min-w-0 flex-col">
       <DetailHeader
         name={category.name}
+        tint={category.color}
         videos={videos}
         unwatchedCount={category.unwatched_count}
         summaryPrefix={`${sources} ${sources === 1 ? 'source' : 'sources'}`}

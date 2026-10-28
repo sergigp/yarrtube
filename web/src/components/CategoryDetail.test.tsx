@@ -77,6 +77,21 @@ describe('CategoryDetail', () => {
     ])
   })
 
+  it('tints the header with the category color and leaves the cards untinted', async () => {
+    renderCategory({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', color: '#d3ecf8', channels: ['@hikaru'] }),
+      ]),
+      'GET /api/categories/chess/videos': [aHomeVideo({ title: 'Opening', category_ids: ['chess'] })],
+    })
+
+    const heading = await screen.findByRole('heading', { name: 'Chess' })
+    const card = await screen.findByRole('listitem')
+
+    expect(heading.closest('header')).toHaveStyle({ background: '#d3ecf8' })
+    expect(card.style.background).toBe('')
+  })
+
   it('shows progress and time left on an in-progress card', async () => {
     renderCategory({
       'GET /api/categories': aCategoryList([
