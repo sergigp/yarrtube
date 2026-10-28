@@ -9,6 +9,8 @@ interface ConfirmDialogProps {
   description?: string
   cancelLabel?: string
   confirmLabel?: string
+  /** The confirm button's text while `onConfirm` is pending. */
+  pendingLabel?: string
   onConfirm: () => void | Promise<void>
 }
 
@@ -25,6 +27,7 @@ export function ConfirmDialog({
   description,
   cancelLabel = 'Cancel',
   confirmLabel = 'Delete',
+  pendingLabel: _pendingLabel = 'Deleting…',
   onConfirm,
 }: ConfirmDialogProps) {
   const [error, setError] = useState<Error | null>(null)

@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Create `web/src/lib/markWatchedConfirmation.ts` with `MarkWatchedConfirmation` and `markWatchedConfirmation()` returning `null`; add `pendingLabel?` to `ConfirmDialog` (default "Deleting…", not yet used); add the unused `confirmingMarkWatched` state + `ConfirmDialog` to `DetailHeader` and `pendingMarkWatched` state + `ConfirmDialog` to `SidebarSection`, both closed; fix the stale playlist comment in `web/src/api/types.ts`. Done when `npm run check` passes with no behaviour change.
+- [x] 1.1 Create `web/src/lib/markWatchedConfirmation.ts` with `MarkWatchedConfirmation` and `markWatchedConfirmation()` returning `null`; add `pendingLabel?` to `ConfirmDialog` (default "Deleting…", not yet used); add the unused `confirmingMarkWatched` state + `ConfirmDialog` to `DetailHeader` and `pendingMarkWatched` state + `ConfirmDialog` to `SidebarSection`, both closed; fix the stale playlist comment in `web/src/api/types.ts`. Done when `npm run check` passes with no behaviour change.
 
 ## 2. Behaviour (TDD)
 

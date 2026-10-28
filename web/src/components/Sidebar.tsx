@@ -31,6 +31,7 @@ import {
   shownUnwatchedCount,
   unwatchedTotal,
 } from '@/lib/sidebarSections'
+import { markWatchedConfirmation } from '@/lib/markWatchedConfirmation'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EditChannelDialog } from './EditChannelDialog'
 import { EditPlaylistDialog } from './EditPlaylistDialog'
@@ -217,6 +218,10 @@ function SidebarSection({
   onNavigate,
 }: SidebarSectionProps) {
   const [pendingDelete, setPendingDelete] = useState<LibraryItem | null>(null)
+  const [pendingMarkWatched, setPendingMarkWatched] = useState<LibraryItem | null>(null)
+  const markWatchedPrompt =
+    pendingMarkWatched &&
+    markWatchedConfirmation(pendingMarkWatched.name, pendingMarkWatched.unwatched_count ?? 0)
   const headingId = useId()
   // Closing first lets the mobile drawer get out of the dialog's way;
   // on desktop the sidebar is static and `onClose` changes nothing.
@@ -304,6 +309,23 @@ function SidebarSection({
         onConfirm={async () => {
           if (pendingDelete) {
             await onDelete(pendingDelete.id)
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={markWatchedPrompt !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingMarkWatched(null)
+          }
+        }}
+        title={markWatchedPrompt?.title ?? ''}
+        description={markWatchedPrompt?.description}
+        confirmLabel="Mark watched"
+        pendingLabel="Marking…"
+        onConfirm={async () => {
+          if (pendingMarkWatched && onMarkWatched) {
+            await onMarkWatched(pendingMarkWatched.id)
           }
         }}
       />
