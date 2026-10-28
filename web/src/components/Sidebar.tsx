@@ -279,7 +279,17 @@ function SidebarSection({
                       window.alert(`Failed to sync "${item.name}": ${errorMessage(err)}`)
                     }
                   }}
-                  onMarkWatched={onMarkWatched && (() => onMarkWatched(item.id))}
+                  onMarkWatched={
+                    onMarkWatched &&
+                    (async () => {
+                      // The real count, also when the badge hides it.
+                      if (markWatchedConfirmation(item.name, item.unwatched_count ?? 0)) {
+                        setPendingMarkWatched(item)
+                      } else {
+                        await onMarkWatched(item.id)
+                      }
+                    })
+                  }
                   onSetExcludedFromHome={
                     onSetExcludedFromHome &&
                     ((excluded: boolean) => onSetExcludedFromHome(item.id, excluded))

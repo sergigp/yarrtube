@@ -472,8 +472,14 @@ describe('Sidebar', () => {
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Actions for Chan A' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Mark 2 videos in "Chan A" watched?',
+    })
+    expect(markWatched).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Mark watched' }))
 
-    expect(markWatched).toHaveBeenCalledOnce()
+    await waitFor(() => expect(markWatched).toHaveBeenCalledOnce())
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
   it('marks a playlist watched from its row menu', async () => {
@@ -492,8 +498,9 @@ describe('Sidebar', () => {
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Actions for Courses' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+    await user.click(await screen.findByRole('button', { name: 'Mark watched' }))
 
-    expect(markWatched).toHaveBeenCalledOnce()
+    await waitFor(() => expect(markWatched).toHaveBeenCalledOnce())
     await waitFor(() => expect(screen.queryByTitle('2 unwatched')).not.toBeInTheDocument())
   })
 
