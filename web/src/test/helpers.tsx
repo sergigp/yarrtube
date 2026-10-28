@@ -180,6 +180,7 @@ export function aHomeVideo(overrides: Partial<HomeVideo> = {}): HomeVideo {
       path: `playlists/playlist-${uniqueId}`,
       avatar_filename: null,
     },
+    category_ids: [],
     ...overrides,
   }
 }
@@ -226,6 +227,7 @@ export function aCategory(overrides: Partial<Category> = {}): Category {
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
+    color: '#fff1bf',
     unwatched_count: 0,
     channels: [],
     playlists: [],
@@ -238,6 +240,7 @@ export function aCreatedCategory(overrides: Partial<CreatedCategory> = {}): Crea
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
+    color: '#fff1bf',
     channels: [],
     playlists: [],
     ...overrides,

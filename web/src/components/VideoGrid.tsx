@@ -11,8 +11,14 @@ function videoDetailPath(source: HomeVideoSource): string {
   return `${base}?video=`
 }
 
+interface VideoGridProps {
+  videos: HomeVideo[]
+  /** Category id → color; tints each card by its categories. Absent leaves cards untinted. */
+  categoryColors?: Map<string, string>
+}
+
 /** Home-style video cards, each linking to its video in its source. */
-export function VideoGrid({ videos }: { videos: HomeVideo[] }) {
+export function VideoGrid({ videos }: VideoGridProps) {
   if (videos.length === 0) {
     return <p className="text-sm text-muted-foreground">No videos synced yet.</p>
   }

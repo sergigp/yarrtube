@@ -27,6 +27,7 @@ import { errorMessage } from '@/lib/errorMessage'
 import { homeSettingAction } from '@/lib/homeSetting'
 import { markWatchedConfirmation } from '@/lib/markWatchedConfirmation'
 import { unwatchedCountSettingAction } from '@/lib/unwatchedCountSetting'
+import { cn } from '@/lib/utils'
 
 function summaryFor(
   videos: readonly unknown[] | undefined,
@@ -85,6 +86,10 @@ function IconAction({ action, destructive }: { action: HeaderAction; destructive
 
 interface DetailHeaderProps {
   name: string
+  /** Background color of the whole header, e.g. a category's color. */
+  tint?: string
+  /** Shown before the name, e.g. a category's color control. */
+  colorControl?: ReactNode
   avatarSrc?: string | null
   showAvatar?: boolean
   videos: readonly unknown[] | undefined
@@ -119,6 +124,8 @@ interface DetailHeaderProps {
  */
 export function DetailHeader({
   name,
+  tint,
+  colorControl,
   avatarSrc,
   showAvatar,
   videos,
@@ -202,7 +209,14 @@ export function DetailHeader({
   const requestDelete = () => setConfirmingDelete(true)
 
   return (
-    <div className="mb-4 flex items-center gap-3 md:mb-6">
+    <div
+      className={cn(
+        'mb-4 flex items-center gap-3 md:mb-6',
+        tint && '-mx-2 rounded-xl px-2 py-3 md:-mx-3 md:px-3',
+      )}
+      style={tint ? { background: tint } : undefined}
+    >
+      {colorControl}
       {showAvatar && (
         <Thumbnail
           src={avatarSrc}

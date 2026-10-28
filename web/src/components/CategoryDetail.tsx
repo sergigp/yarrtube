@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { FolderPlus, Plus, Settings2 } from 'lucide-react'
-import { deleteCategory, renameCategory } from '@/api/client'
+import { deleteCategory, updateCategory } from '@/api/client'
 import {
   useCategories,
   useCategoryVideos,
@@ -90,7 +90,7 @@ export function CategoryDetail() {
         videos={videos}
         unwatchedCount={category.unwatched_count}
         summaryPrefix={`${sources} ${sources === 1 ? 'source' : 'sources'}`}
-        onRename={refreshing((name: string) => renameCategory(category.id, name))}
+        onRename={refreshing((name: string) => updateCategory(category.id, { name }))}
         extraActions={[
           { label: 'Manage sources', icon: <Settings2 />, onSelect: () => setManaging(true) },
         ]}
