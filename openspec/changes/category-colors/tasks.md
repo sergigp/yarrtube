@@ -49,7 +49,7 @@ Web (Vitest):
 
 SqliteCategoryRepository:
 
-- [ ] 3.1 `it_should_return_the_color_after_inserting_a_category`; verify `cargo test sqlite_category_repository` passes
+- [x] 3.1 `it_should_return_the_color_after_inserting_a_category`; verify `cargo test sqlite_category_repository` passes
 - [ ] 3.2 `it_should_update_the_color`
 
 sqlite_migrations:

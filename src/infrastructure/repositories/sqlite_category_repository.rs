@@ -238,6 +238,20 @@ mod tests {
     }
 
     #[test]
+    fn it_should_return_the_color_after_inserting_a_category() {
+        let db = TestDatabase::new();
+        let repository = SqliteCategoryRepository::new(db.database());
+        let chess = category("Chess", &[]).with_color(CategoryColor::new("#d3ecf8").unwrap());
+
+        repository.insert(&chess).unwrap();
+
+        assert_eq!(
+            repository.find(&chess.id).unwrap().map(|found| found.color),
+            Some(CategoryColor::new("#d3ecf8").unwrap())
+        );
+    }
+
+    #[test]
     fn it_should_list_categories_by_name_ignoring_case() {
         let db = TestDatabase::new();
         let repository = SqliteCategoryRepository::new(db.database());
