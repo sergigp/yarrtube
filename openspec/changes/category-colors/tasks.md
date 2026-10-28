@@ -54,7 +54,7 @@ SqliteCategoryRepository:
 
 sqlite_migrations:
 
-- [ ] 3.3 `it_should_backfill_existing_categories_with_palette_colors_in_creation_order` — three pre-0013 categories → `#fff1bf`, `#ffe0c7`, `#ffd9d4`, wrapping after ten; verify `cargo test sqlite_migrations` passes
+- [x] 3.3 `it_should_backfill_existing_categories_with_palette_colors_in_creation_order` — three pre-0013 categories → `#fff1bf`, `#ffe0c7`, `#ffd9d4`, wrapping after ten; verify `cargo test sqlite_migrations` passes
 
 ## 4. Verification
 

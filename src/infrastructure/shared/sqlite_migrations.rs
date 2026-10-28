@@ -270,6 +270,58 @@ mod tests {
     }
 
     #[test]
+    fn it_should_backfill_existing_categories_with_palette_colors_in_creation_order() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+            M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+            M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
+            M::up(EPISODE_NUMBERS_SQL),
+            M::up(RECONCILE_INTERVAL_SQL),
+            M::up(VIDEO_SUBTITLES_SQL),
+            M::up(CATEGORIES_SQL),
+            M::up(PLAYLIST_HIDE_UNWATCHED_COUNT_SQL),
+        ])
+        .to_latest(&mut conn)
+        .unwrap();
+        // Inserted out of creation order, named so name order differs too.
+        let created_minutes = [2, 0, 1, 3, 4, 5, 6, 7, 8, 9, 10];
+        created_minutes.iter().for_each(|minute| {
+            conn.execute(
+                "INSERT INTO categories (id, name, created_at) VALUES (?1, ?2, ?3)",
+                rusqlite::params![
+                    format!("category-{minute:02}"),
+                    format!("Category {}", 10 - minute),
+                    format!("2024-01-01T00:{minute:02}:00+00:00"),
+                ],
+            )
+            .unwrap();
+        });
+
+        apply(&mut conn).unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT color FROM categories ORDER BY id")
+            .unwrap();
+        let colors: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            colors,
+            vec![
+                "#fff1bf", "#ffe0c7", "#ffd9d4", "#fadceb", "#e9def8", "#dbe3fb", "#d3ecf8",
+                "#cff0ea", "#e4f0cc", "#eee5d7", "#fff1bf",
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_default_existing_videos_to_missing_subtitles() {
         let mut conn = Connection::open_in_memory().unwrap();
         Migrations::new(vec![
