@@ -205,4 +205,21 @@ describe('SidebarCategories', () => {
 
     expect(categoryRowNames()).toEqual(['Chess'])
   })
+
+  it("shows a dot in each category's color before its name", async () => {
+    renderSidebar({
+      'GET /api/categories': aCategoryList([
+        aCategory({ name: 'Chess', color: '#d3ecf8' }),
+        aCategory({ name: 'Sports', color: '#f0e4d0' }),
+      ]),
+    })
+
+    const chess = await screen.findByRole('link', { name: 'Chess' })
+    const sports = screen.getByRole('link', { name: 'Sports' })
+
+    const dot = (link: HTMLElement) => link.firstElementChild as HTMLElement | null
+    expect(dot(chess)).toHaveAttribute('aria-hidden', 'true')
+    expect(dot(chess)).toHaveStyle({ background: '#d3ecf8' })
+    expect(dot(sports)).toHaveStyle({ background: '#f0e4d0' })
+  })
 })

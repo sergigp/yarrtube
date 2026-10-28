@@ -41,7 +41,7 @@ Web (Vitest):
 - [x] 2.24 `AddCategoryDialog` › preselects the next free color and creates with the chosen one
 - [x] 2.25 `CategoryDetail` › tints the header with the category color and leaves the cards untinted
 - [x] 2.26 `CategoryDetail` › "Change color" saves the chosen color and the header updates
-- [ ] 2.27 `SidebarCategories` › shows a dot in each category's color
+- [x] 2.27 `SidebarCategories` › shows a dot in each category's color
 - [ ] 2.28 `Home` › tints a one-category card, splits a two-category card diagonally, makes a four-category card grey and leaves an uncategorized card untinted
 - [ ] 2.29 `CategoryDetail` (rename) › renaming still works through `updateCategory`; verify existing rename tests pass against the new route body
 

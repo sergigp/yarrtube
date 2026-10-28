@@ -35,6 +35,11 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
           active ? 'font-medium text-primary' : 'text-foreground hover:text-primary',
         )}
       >
+        <span
+          aria-hidden="true"
+          className="size-2.5 shrink-0 rounded-full border border-black/10"
+          style={{ background: category.color }}
+        />
         <span className="min-w-0 flex-1 truncate">{category.name}</span>
         {unwatchedCount > 0 && (
           <span
