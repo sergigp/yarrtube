@@ -477,7 +477,8 @@ mod youtube_contract_tests {
     use super::*;
     use crate::domain::video_transcript::{CaptionLanguage, CaptionSource, CaptionTracks};
     use crate::infrastructure::shared::youtube_contract::{
-        CAPTIONED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs, video_url, ytdlp_path,
+        CAPTIONED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs, video_height,
+        video_url, ytdlp_path,
     };
     use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
     use crate::infrastructure::shared::ytdlp::{
@@ -524,6 +525,24 @@ mod youtube_contract_tests {
             ]
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_download_at_1080p_for_high_quality() {
+        assert_eq!(downloaded_height(Quality::High), 1080);
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_download_at_720p_for_mid_quality() {
+        assert_eq!(downloaded_height(Quality::Mid), 720);
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_download_at_480p_for_low_quality() {
+        assert_eq!(downloaded_height(Quality::Low), 480);
     }
 
     #[test]
@@ -660,5 +679,24 @@ mod youtube_contract_tests {
             .collect();
         files.sort();
         files
+    }
+
+    /// Downloads the short fixture at `quality` and returns its video height.
+    /// The fixture offers h264 up to 1080p plus YouTube's muxed 360p format
+    /// `18`, the stream that used to win every tier (issue #116).
+    fn downloaded_height(quality: Quality) -> u32 {
+        let staging_dir = unique_temp_dir("contract-download-quality");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let attempt = repository
+            .download(&video_url(SHORT_VIDEO_ID), quality, &staging_dir)
+            .unwrap();
+
+        let DownloadAttempt::Succeeded(video) = attempt else {
+            panic!("expected a successful download, got {attempt:?}");
+        };
+        let height = video_height(&video.media_path);
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+        height
     }
 }
