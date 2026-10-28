@@ -404,6 +404,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_categories_with_their_color() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = Category {
+            color: color("#d3ecf8"),
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_view_searcher = CategoryViewSearcher::new(
+            repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            category_video_collector(&db),
+        );
+
+        let response = list(category_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(CategoryListResponse {
+                categories: vec![CategoryListItemResponse {
+                    color: "#d3ecf8".to_string(),
+                    ..list_item(&chess, 0, &[], &[])
+                }],
+                unwatched_total: 0,
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_count_distinct_unwatched_videos_per_category() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));

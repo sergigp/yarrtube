@@ -13,7 +13,7 @@ Backend acceptance tests (HTTP handlers):
 - [x] 2.2 `it_should_fail_to_create_if_color_invalid` — `"#fff"`, `"yellow"`, `"#gggggg"` give 400 and nothing is stored
 - [x] 2.3 `it_should_create_the_first_category_with_the_first_palette_color` — no categories, no color → `#fff1bf`
 - [x] 2.4 `it_should_create_a_category_with_the_least_used_palette_color` — Butter and Coral used → `#ffe0c7`; every color used once and Butter twice → `#ffe0c7`
-- [ ] 2.5 `it_should_list_categories_with_their_color` — the list item carries `color`
+- [x] 2.5 `it_should_list_categories_with_their_color` — the list item carries `color`
 - [ ] 2.6 `it_should_recolor_a_category` — PATCH with the color only gives 204, and the name and members are kept
 - [ ] 2.7 `it_should_rename_and_recolor_a_category` — both fields are applied
 - [ ] 2.8 `it_should_fail_to_update_without_name_or_color` — 400, category unchanged (replaces `it_should_fail_to_rename_if_name_missing`)
