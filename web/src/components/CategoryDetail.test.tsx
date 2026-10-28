@@ -82,7 +82,9 @@ describe('CategoryDetail', () => {
       'GET /api/categories': aCategoryList([
         aCategory({ id: 'chess', name: 'Chess', color: '#d3ecf8', channels: ['@hikaru'] }),
       ]),
-      'GET /api/categories/chess/videos': [aHomeVideo({ title: 'Opening', category_ids: ['chess'] })],
+      'GET /api/categories/chess/videos': [
+        aHomeVideo({ title: 'Opening', category_ids: ['chess'] }),
+      ],
     })
 
     const heading = await screen.findByRole('heading', { name: 'Chess' })
@@ -139,7 +141,12 @@ describe('CategoryDetail', () => {
 
   it('marks all watched and deletes from the actions menu', async () => {
     let watched = false
-    let category = aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], unwatched_count: 2 })
+    let category = aCategory({
+      id: 'chess',
+      name: 'Chess',
+      channels: ['@hikaru'],
+      unwatched_count: 2,
+    })
     const markWatched = vi.fn(() => {
       watched = true
       category = { ...category, unwatched_count: 0 }
@@ -205,7 +212,9 @@ describe('CategoryDetail', () => {
     const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
     await user.keyboard('{Escape}')
     await user.click(within(emptyState).getByRole('button', { name: 'Add channels and playlists' }))
-    const dialogTitle = within(await screen.findByRole('dialog')).getByRole('heading', { level: 2 }).textContent
+    const dialogTitle = within(await screen.findByRole('dialog')).getByRole('heading', {
+      level: 2,
+    }).textContent
     empty.unmount()
     const withoutVideos = renderCategory(routes, '/categories/science')
     const noVideosMessage = (await screen.findByText(/No videos/)).textContent
@@ -220,6 +229,31 @@ describe('CategoryDetail', () => {
     expect(dialogTitle).toBe('Manage sources in Chess')
     expect(noVideosMessage).toBe('No videos synced yet.')
     expect(await screen.findByText('Category not found.')).toBeInTheDocument()
+  })
+
+  it('saves the color chosen through "Change color" and tints the header with it', async () => {
+    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#d3ecf8', channels: ['@hikaru'] })
+    const recolor = vi.fn(() => {
+      chess = { ...chess, color: '#e9def8' }
+      return null
+    })
+    const { fetchMock } = renderCategory({
+      'GET /api/categories': () => aCategoryList([chess]),
+      'GET /api/categories/chess/videos': [],
+      'PATCH /api/categories/chess': recolor,
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Change color' }))
+    await user.click(await screen.findByRole('radio', { name: 'Lilac' }))
+
+    const header = screen.getByRole('heading', { name: 'Chess' }).closest('header')
+    await waitFor(() => expect(header).toHaveStyle({ background: '#e9def8' }))
+    const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/categories/chess') as [
+      string,
+      RequestInit,
+    ]
+    expect(JSON.parse(init.body as string)).toEqual({ color: '#e9def8' })
   })
 
   it('renames from the header', async () => {

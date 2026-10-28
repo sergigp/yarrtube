@@ -11,6 +11,9 @@ import {
 import type { Category } from '@/api/types'
 import { deleteCategoryDescription, memberCount } from '@/lib/categories'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { CategoryColorPicker } from './CategoryColorPicker'
 import { DetailHeader } from './DetailHeader'
 import { ManageSourcesDialog } from './ManageSourcesDialog'
 import { VideoGrid } from './VideoGrid'
@@ -47,6 +50,53 @@ function EmptyCategory({ category, onManage }: { category: Category; onManage: (
         Add channels and playlists
       </Button>
     </section>
+  )
+}
+
+/**
+ * A dot in the category's color that opens the color picker, saving each
+ * choice at once. The picker shows the latest choice while it is being saved.
+ */
+function CategoryColorControl({
+  color,
+  onChange,
+}: {
+  color: string
+  onChange: (color: string) => Promise<void>
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  return (
+    <Popover onOpenChange={(open) => !open && setDraft(null)}>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Change color"
+                className="shrink-0 rounded-full"
+              >
+                <span
+                  className="size-4 rounded-full border border-black/10"
+                  style={{ background: draft ?? color }}
+                />
+              </Button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Change color</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <PopoverContent align="start" className="w-auto">
+        <CategoryColorPicker
+          value={draft ?? color}
+          onChange={(next) => {
+            setDraft(next)
+            void onChange(next)
+          }}
+        />
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -88,6 +138,12 @@ export function CategoryDetail() {
       <DetailHeader
         name={category.name}
         tint={category.color}
+        colorControl={
+          <CategoryColorControl
+            color={category.color}
+            onChange={refreshing((color: string) => updateCategory(category.id, { color }))}
+          />
+        }
         videos={videos}
         unwatchedCount={category.unwatched_count}
         summaryPrefix={`${sources} ${sources === 1 ? 'source' : 'sources'}`}
