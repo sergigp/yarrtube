@@ -16,8 +16,9 @@ export const PALETTE: readonly { name: string; hex: string }[] = [
 export const CROWDED_CARD = '#f2f2f2'
 
 /** The palette color used by the fewest of `used`, the earliest on a tie. */
-export function defaultColor(_used: string[]): string {
-  return PALETTE[0].hex
+export function defaultColor(used: string[]): string {
+  const uses = (hex: string) => used.filter((color) => color === hex).length
+  return PALETTE.reduce((least, color) => (uses(color.hex) < uses(least.hex) ? color : least)).hex
 }
 
 /** The soft pastel of `hue` (degrees): oklch(0.94 0.04 hue) as `#rrggbb`. */

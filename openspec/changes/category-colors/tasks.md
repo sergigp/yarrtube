@@ -33,7 +33,7 @@ Value object (`category_color.rs`):
 
 Web (Vitest):
 
-- [ ] 2.19 `lib/categoryColors` › `defaultColor` picks the least used, the earliest on a tie; verify `npm run test` passes
+- [x] 2.19 `lib/categoryColors` › `defaultColor` picks the least used, the earliest on a tie; verify `npm run test` passes
 - [ ] 2.20 `lib/categoryColors` › `cardBackground` for 0 (none), 1 (flat), 2 and 3 (135deg hard-stop bands in order) and 4+ (`#f2f2f2`)
 - [ ] 2.21 `lib/categoryColors` › `pastelFromHue` gives a soft hex and `hueOf` round-trips it within 1 degree
 - [ ] 2.22 `CategoryColorPicker` › choosing a swatch checks it and reports its hex
