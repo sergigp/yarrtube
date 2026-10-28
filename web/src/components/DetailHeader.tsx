@@ -25,7 +25,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { errorMessage } from '@/lib/errorMessage'
 import { homeSettingAction } from '@/lib/homeSetting'
+import { markWatchedConfirmation } from '@/lib/markWatchedConfirmation'
 import { unwatchedCountSettingAction } from '@/lib/unwatchedCountSetting'
+import { cn } from '@/lib/utils'
 
 function summaryFor(
   videos: readonly unknown[] | undefined,
@@ -84,6 +86,10 @@ function IconAction({ action, destructive }: { action: HeaderAction; destructive
 
 interface DetailHeaderProps {
   name: string
+  /** Background color of the whole header, e.g. a category's color. */
+  tint?: string
+  /** Shown before the name, e.g. a category's color control. */
+  colorControl?: ReactNode
   avatarSrc?: string | null
   showAvatar?: boolean
   videos: readonly unknown[] | undefined
@@ -118,6 +124,8 @@ interface DetailHeaderProps {
  */
 export function DetailHeader({
   name,
+  tint,
+  colorControl,
   avatarSrc,
   showAvatar,
   videos,
@@ -139,6 +147,8 @@ export function DetailHeader({
   const [syncing, setSyncing] = useState(false)
   const [markingWatched, setMarkingWatched] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmingMarkWatched, setConfirmingMarkWatched] = useState(false)
+  const markWatchedPrompt = markWatchedConfirmation(name, unwatchedCount ?? 0)
   const summary = summaryFor(videos, unwatchedCount, summaryPrefix)
 
   const actions: HeaderAction[] = []
@@ -161,6 +171,10 @@ export function DetailHeader({
       icon: <CheckCheck />,
       disabled: markingWatched,
       onSelect: async () => {
+        if (markWatchedPrompt) {
+          setConfirmingMarkWatched(true)
+          return
+        }
         setMarkingWatched(true)
         await alertOnFailure(onMarkWatched, `Failed to mark "${name}" watched`)
         setMarkingWatched(false)
@@ -195,7 +209,14 @@ export function DetailHeader({
   const requestDelete = () => setConfirmingDelete(true)
 
   return (
-    <div className="mb-4 flex items-center gap-3 md:mb-6">
+    <header
+      className={cn(
+        'mb-4 flex items-center gap-3 md:mb-6',
+        tint && '-mx-2 rounded-xl px-2 py-3 md:-mx-3 md:px-3',
+      )}
+      style={tint ? { background: tint } : undefined}
+    >
+      {colorControl}
       {showAvatar && (
         <Thumbnail
           src={avatarSrc}
@@ -262,6 +283,17 @@ export function DetailHeader({
         description={deleteDescription}
         onConfirm={onDelete}
       />
-    </div>
+      {onMarkWatched && markWatchedPrompt && (
+        <ConfirmDialog
+          open={confirmingMarkWatched}
+          onOpenChange={setConfirmingMarkWatched}
+          title={markWatchedPrompt.title}
+          description={markWatchedPrompt.description}
+          confirmLabel="Mark watched"
+          pendingLabel="Marking…"
+          onConfirm={onMarkWatched}
+        />
+      )}
+    </header>
   )
 }

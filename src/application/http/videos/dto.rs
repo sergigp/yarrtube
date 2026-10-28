@@ -87,6 +87,7 @@ pub struct HomeVideoResponse {
     pub watched: bool,
     pub position_seconds: i64,
     pub source: HomeVideoSourceResponse,
+    pub category_ids: Vec<String>,
 }
 
 impl From<HomeVideoView> for HomeVideoResponse {
@@ -120,6 +121,11 @@ impl From<HomeVideoView> for HomeVideoResponse {
             watched: view.watched,
             position_seconds: view.position_seconds,
             source,
+            category_ids: view
+                .category_ids
+                .iter()
+                .map(|id| id.as_str().to_string())
+                .collect(),
         }
     }
 }

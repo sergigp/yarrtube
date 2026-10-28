@@ -15,7 +15,7 @@ use crate::infrastructure::repositories::sqlite_video_metadata_repository::Video
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Utc};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Reads videos, listed by playlist, by channel, by category or for home.
@@ -142,10 +142,13 @@ impl VideoSearcherApi for VideoSearcher {
             Self::not_shown_in(&not_continue_watching, &quick_watches),
             limits.latest,
         );
+        let by_video = self
+            .category_ids_by_video()
+            .map_err(ListVideosError::Repository)?;
         Ok(HomeVideos {
-            continue_watching: Self::views(continue_watching),
-            quick_watches: Self::views(quick_watches),
-            latest: Self::views(latest),
+            continue_watching: Self::with_categories(Self::views(continue_watching), &by_video),
+            quick_watches: Self::with_categories(Self::views(quick_watches), &by_video),
+            latest: Self::with_categories(Self::views(latest), &by_video),
         })
     }
 
@@ -157,7 +160,10 @@ impl VideoSearcherApi for VideoSearcher {
                 .map_err(ListVideosError::Repository)?,
         );
         videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.created_at));
-        Ok(Self::views(videos))
+        let by_video = self
+            .category_ids_by_video()
+            .map_err(ListVideosError::Repository)?;
+        Ok(Self::with_categories(Self::views(videos), &by_video))
     }
 }
 
@@ -183,6 +189,41 @@ impl VideoSearcher {
 
     fn views(videos: Vec<SourcedVideo>) -> Vec<HomeVideoView> {
         videos.into_iter().map(HomeVideoView::from).collect()
+    }
+
+    /// `views`, each with the categories having its YouTube video in
+    /// `by_video` (see `category_ids_by_video`).
+    fn with_categories(
+        views: Vec<HomeVideoView>,
+        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+    ) -> Vec<HomeVideoView> {
+        views
+            .into_iter()
+            .map(|view| {
+                let ids = by_video.get(&view.youtube_id).cloned().unwrap_or_default();
+                view.with_category_ids(ids)
+            })
+            .collect()
+    }
+
+    /// YouTube video → ids of categories having it downloaded, in
+    /// category-name order.
+    fn category_ids_by_video(&self) -> anyhow::Result<HashMap<VideoId, Vec<CategoryId>>> {
+        self.category_repository.list()?.iter().try_fold(
+            HashMap::new(),
+            |mut by_video: HashMap<VideoId, Vec<CategoryId>>, category| {
+                self.category_video_collector
+                    .downloaded_videos(category)?
+                    .into_iter()
+                    .for_each(|sourced| {
+                        let ids = by_video.entry(sourced.video.youtube_id).or_default();
+                        if !ids.contains(&category.id) {
+                            ids.push(category.id.clone());
+                        }
+                    });
+                Ok(by_video)
+            },
+        )
     }
 
     /// Every downloaded video of every tracked channel, then of every tracked

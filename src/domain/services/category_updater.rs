@@ -1,12 +1,19 @@
 use crate::domain::category::{
-    Category, CategoryId, CategoryMember, CategoryName, UpdateCategoryError,
+    Category, CategoryColor, CategoryId, CategoryMember, CategoryName, UpdateCategoryError,
 };
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use std::sync::Arc;
 
-/// Renames categories and sets their members.
+/// The fields of a category to change; absent ones are kept.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CategoryUpdate {
+    pub name: Option<CategoryName>,
+    pub color: Option<CategoryColor>,
+}
+
+/// Renames and recolors categories and sets their members.
 #[derive(Clone)]
 pub struct CategoryUpdater {
     repository: Arc<dyn CategoryRepository>,
@@ -29,8 +36,9 @@ impl CategoryUpdater {
 }
 
 pub trait CategoryUpdaterApi: Send + Sync {
-    /// Another category with the same name ignoring case → `NameTaken`.
-    fn rename(&self, id: &CategoryId, name: CategoryName) -> Result<(), UpdateCategoryError>;
+    /// Applies the present fields of `update` in one save. Another category
+    /// with the same name ignoring case → `NameTaken`.
+    fn update(&self, id: &CategoryId, update: CategoryUpdate) -> Result<(), UpdateCategoryError>;
     /// Replaces the members. Every member must be a tracked channel/playlist;
     /// the first that is not → `MemberNotTracked`.
     fn set_members(
@@ -41,10 +49,12 @@ pub trait CategoryUpdaterApi: Send + Sync {
 }
 
 impl CategoryUpdaterApi for CategoryUpdater {
-    fn rename(&self, id: &CategoryId, name: CategoryName) -> Result<(), UpdateCategoryError> {
+    fn update(&self, id: &CategoryId, update: CategoryUpdate) -> Result<(), UpdateCategoryError> {
         let category = self.find_category(id)?;
-        self.ensure_name_free(id, &name)?;
-        self.save(&category.with_name(name))
+        if let Some(name) = &update.name {
+            self.ensure_name_free(id, name)?;
+        }
+        self.save(&Self::applied(category, update))
     }
 
     fn set_members(
@@ -107,6 +117,18 @@ impl CategoryUpdater {
                 .map(|playlist| playlist.is_some()),
         }
         .map_err(UpdateCategoryError::Repository)
+    }
+
+    /// `category` with the present fields of `update`.
+    fn applied(category: Category, update: CategoryUpdate) -> Category {
+        let category = match update.name {
+            Some(name) => category.with_name(name),
+            None => category,
+        };
+        match update.color {
+            Some(color) => category.with_color(color),
+            None => category,
+        }
     }
 
     fn save(&self, category: &Category) -> Result<(), UpdateCategoryError> {

@@ -1,4 +1,5 @@
-import { useRecentVideos } from '@/api/queries'
+import { useMemo } from 'react'
+import { useCategories, useRecentVideos } from '@/api/queries'
 import type { HomeVideo } from '@/api/types'
 import { VideoGrid } from './VideoGrid'
 
@@ -7,6 +8,7 @@ interface HomeSectionProps {
   name: string
   videos: HomeVideo[] | undefined
   error: Error | null
+  categoryColors: Map<string, string>
   hideWhenEmpty?: boolean
 }
 
@@ -15,7 +17,14 @@ interface HomeSectionProps {
  * the whole section, heading included, renders nothing unless it has videos
  * to show; otherwise it reports loading, errors and emptiness in place.
  */
-function HomeSection({ title, name, videos, error, hideWhenEmpty }: HomeSectionProps) {
+function HomeSection({
+  title,
+  name,
+  videos,
+  error,
+  categoryColors,
+  hideWhenEmpty,
+}: HomeSectionProps) {
   if (hideWhenEmpty && (error || !videos || videos.length === 0)) {
     return null
   }
@@ -29,13 +38,18 @@ function HomeSection({ title, name, videos, error, hideWhenEmpty }: HomeSectionP
         </p>
       )}
       {!error && !videos && <p className="text-sm text-muted-foreground">Loading {name}…</p>}
-      {!error && videos && <VideoGrid videos={videos} />}
+      {!error && videos && <VideoGrid videos={videos} categoryColors={categoryColors} />}
     </section>
   )
 }
 
 export function Home() {
   const { data: home, error } = useRecentVideos()
+  const { data: categories } = useCategories()
+  const categoryColors = useMemo(
+    () => new Map((categories?.categories ?? []).map((category) => [category.id, category.color])),
+    [categories],
+  )
 
   return (
     <div className="flex min-w-0 flex-col gap-10">
@@ -44,6 +58,7 @@ export function Home() {
         name="continue watching videos"
         videos={home?.continue_watching}
         error={error}
+        categoryColors={categoryColors}
         hideWhenEmpty
       />
       <HomeSection
@@ -51,9 +66,16 @@ export function Home() {
         name="quick watches"
         videos={home?.quick_watches}
         error={error}
+        categoryColors={categoryColors}
         hideWhenEmpty
       />
-      <HomeSection title="Latest videos" name="recent videos" videos={home?.latest} error={error} />
+      <HomeSection
+        title="Latest videos"
+        name="recent videos"
+        videos={home?.latest}
+        error={error}
+        categoryColors={categoryColors}
+      />
     </div>
   )
 }

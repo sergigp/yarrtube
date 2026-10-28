@@ -5,12 +5,16 @@ use serde::{Deserialize, Serialize};
 pub struct CreateCategoryRequest {
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateCategoryRequest {
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -25,6 +29,7 @@ pub struct SetCategoryMembersRequest {
 pub struct CategoryResponse {
     pub id: String,
     pub name: String,
+    pub color: String,
     pub channels: Vec<String>,
     pub playlists: Vec<String>,
 }
@@ -34,6 +39,7 @@ impl From<Category> for CategoryResponse {
         Self {
             id: category.id.as_str().to_string(),
             name: category.name.as_str().to_string(),
+            color: category.color.as_str().to_string(),
             channels: Vec::new(),
             playlists: Vec::new(),
         }
@@ -44,6 +50,7 @@ impl From<Category> for CategoryResponse {
 pub struct CategoryListItemResponse {
     pub id: String,
     pub name: String,
+    pub color: String,
     pub unwatched_count: usize,
     pub channels: Vec<String>,
     pub playlists: Vec<String>,
@@ -54,6 +61,7 @@ impl From<CategoryView> for CategoryListItemResponse {
         Self {
             id: category.id.as_str().to_string(),
             name: category.name.as_str().to_string(),
+            color: category.color.as_str().to_string(),
             unwatched_count: category.unwatched_count,
             channels: category
                 .channels

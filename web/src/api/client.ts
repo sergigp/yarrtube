@@ -276,15 +276,20 @@ export function listCategories(): Promise<CategoryList> {
   return request('/categories')
 }
 
-export function createCategory(name: string): Promise<CreatedCategory> {
-  return request('/categories', { method: 'POST', body: { name }, label: '/categories' })
+/** Without a color, the daemon picks the least used palette color. */
+export function createCategory(name: string, color?: string): Promise<CreatedCategory> {
+  return request('/categories', { method: 'POST', body: { name, color }, label: '/categories' })
 }
 
-export async function renameCategory(id: string, name: string): Promise<void> {
+/** Renames and/or recolors; absent fields are kept. */
+export async function updateCategory(
+  id: string,
+  update: { name?: string; color?: string },
+): Promise<void> {
   await send(`/categories/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    body: { name },
-    label: `rename category ${id}`,
+    body: update,
+    label: `update category ${id}`,
   })
 }
 

@@ -5,15 +5,15 @@ use super::error::ApiError;
 use super::validation::required;
 use super::videos::update_watch_state_error;
 use crate::domain::category::{
-    CategoryId, CategoryMember, CategoryName, CreateCategoryError, DeleteCategoryError,
-    UpdateCategoryError,
+    CategoryColor, CategoryId, CategoryMember, CategoryName, CreateCategoryError,
+    DeleteCategoryError, UpdateCategoryError,
 };
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{
-    CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryDeleterApi, CategoryUpdater,
-    CategoryUpdaterApi, CategoryViewSearcher, CategoryViewSearcherApi, VideoWatchStateUpdater,
-    VideoWatchStateUpdaterApi,
+    CategoryCreator, CategoryCreatorApi, CategoryDeleter, CategoryDeleterApi, CategoryUpdate,
+    CategoryUpdater, CategoryUpdaterApi, CategoryViewSearcher, CategoryViewSearcherApi,
+    VideoWatchStateUpdater, VideoWatchStateUpdaterApi,
 };
 use axum::Json;
 use axum::extract::{Path, State};
@@ -24,14 +24,16 @@ use dto::{
 };
 
 const MISSING_CATEGORY_NAME: &str = "Category name must not be empty (missing)";
+const MISSING_CATEGORY_NAME_AND_COLOR: &str = "Category name or color is required (both missing)";
 
 pub async fn create_category(
     State(category_creator): State<CategoryCreator>,
     Json(request): Json<CreateCategoryRequest>,
 ) -> Result<(StatusCode, Json<CategoryResponse>), ApiError> {
     let name = CategoryName::new(required(request.name, MISSING_CATEGORY_NAME)?)?;
+    let color = request.color.map(CategoryColor::new).transpose()?;
 
-    match run_blocking(move || category_creator.create(name)).await? {
+    match run_blocking(move || category_creator.create(name, color)).await? {
         Ok(category) => Ok((StatusCode::CREATED, Json(CategoryResponse::from(category)))),
         Err(e @ CreateCategoryError::NameTaken(_)) => Err(ApiError::new(StatusCode::CONFLICT, e)),
         Err(e @ CreateCategoryError::Repository(_)) => Err(ApiError::internal(e)),
@@ -53,9 +55,16 @@ pub async fn update_category(
     Json(request): Json<UpdateCategoryRequest>,
 ) -> Result<StatusCode, ApiError> {
     let id = CategoryId::new(id)?;
-    let name = CategoryName::new(required(request.name, MISSING_CATEGORY_NAME)?)?;
+    required(
+        request.name.as_ref().or(request.color.as_ref()),
+        MISSING_CATEGORY_NAME_AND_COLOR,
+    )?;
+    let update = CategoryUpdate {
+        name: request.name.map(CategoryName::new).transpose()?,
+        color: request.color.map(CategoryColor::new).transpose()?,
+    };
 
-    run_blocking(move || category_updater.rename(&id, name))
+    run_blocking(move || category_updater.update(&id, update))
         .await?
         .map_err(update_category_error)?;
 
@@ -161,6 +170,8 @@ mod tests {
     use rusqlite::Connection;
     use std::sync::Arc;
 
+    const INVALID_COLOR: &str = "Category color must be # followed by 6 hexadecimal digits";
+
     #[tokio::test]
     async fn it_should_create_a_category() {
         let db = TestDatabase::new();
@@ -183,8 +194,135 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_create_a_category_with_a_color() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let category_creator =
+            CategoryCreator::new(repository.clone(), Arc::new(FixedClock(fixed_timestamp())));
+
+        let response = create(
+            category_creator,
+            CreateCategoryRequest {
+                color: Some("#D3ECF8".to_string()),
+                ..create_request("Chess")
+            },
+        )
+        .await;
+
+        let stored = repository.list().unwrap();
+        let id = stored.first().map(|category| category.id.clone());
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                CategoryResponse {
+                    color: "#d3ecf8".to_string(),
+                    ..category_response(id.as_ref(), "Chess", &[], &[])
+                }
+            ))
+        );
+        assert_eq!(
+            stored,
+            vec![Category {
+                color: color("#d3ecf8"),
+                ..category(id, "Chess")
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_create_the_first_category_with_the_first_palette_color() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let category_creator =
+            CategoryCreator::new(repository.clone(), Arc::new(FixedClock(fixed_timestamp())));
+
+        let response = create(category_creator, create_request("Chess")).await;
+
+        let stored = repository.list().unwrap();
+        let id = stored.first().map(|category| category.id.clone());
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                CategoryResponse {
+                    color: "#fff1bf".to_string(),
+                    ..category_response(id.as_ref(), "Chess", &[], &[])
+                }
+            ))
+        );
+        assert_eq!(
+            stored,
+            vec![Category {
+                color: color("#fff1bf"),
+                ..category(id, "Chess")
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_create_a_category_with_the_least_used_palette_color() {
+        let butter_and_coral = vec!["#fff1bf", "#ffd9d4"];
+        let every_color_and_butter_again = CategoryColor::PALETTE
+            .into_iter()
+            .chain(["#fff1bf"])
+            .collect::<Vec<_>>();
+        let mut colors = Vec::new();
+        for used in [butter_and_coral, every_color_and_butter_again] {
+            let db = TestDatabase::new();
+            let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+            used.iter().enumerate().for_each(|(index, hex)| {
+                let existing = Category {
+                    color: color(hex),
+                    ..category(None, &format!("Existing {index}"))
+                };
+                repository.insert(&existing).unwrap();
+            });
+            let category_creator =
+                CategoryCreator::new(repository, Arc::new(FixedClock(fixed_timestamp())));
+
+            let response = create(category_creator, create_request("Chess")).await;
+
+            colors.push(response.map(|(_, category)| category.color));
+        }
+
+        assert_eq!(
+            colors,
+            vec![Ok("#ffe0c7".to_string()), Ok("#ffe0c7".to_string())]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_create_if_color_invalid() {
+        let mut responses = Vec::new();
+        for invalid in ["#fff", "yellow", "#gggggg"] {
+            let request = CreateCategoryRequest {
+                color: Some(invalid.to_string()),
+                ..create_request("Chess")
+            };
+            responses.push(create(any_category_creator(), request).await);
+        }
+
+        assert_eq!(
+            responses,
+            vec![
+                Err(ApiError::bad_request(INVALID_COLOR)),
+                Err(ApiError::bad_request(INVALID_COLOR)),
+                Err(ApiError::bad_request(INVALID_COLOR)),
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_create_if_name_missing() {
-        let response = create(any_category_creator(), CreateCategoryRequest { name: None }).await;
+        let response = create(
+            any_category_creator(),
+            CreateCategoryRequest {
+                name: None,
+                color: None,
+            },
+        )
+        .await;
 
         assert_eq!(
             response,
@@ -262,6 +400,36 @@ mod tests {
                     list_item(&science, 0, &[], &[]),
                     list_item(&sports, 0, &[], &[]),
                 ],
+                unwatched_total: 0,
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_list_categories_with_their_color() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = Category {
+            color: color("#d3ecf8"),
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_view_searcher = CategoryViewSearcher::new(
+            repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            category_video_collector(&db),
+        );
+
+        let response = list(category_view_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(CategoryListResponse {
+                categories: vec![CategoryListItemResponse {
+                    color: "#d3ecf8".to_string(),
+                    ..list_item(&chess, 0, &[], &[])
+                }],
                 unwatched_total: 0,
             })
         );
@@ -585,6 +753,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_recolor_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository.insert(&channel("@chess")).unwrap();
+        let chess = Category {
+            members: vec![channel_member("@chess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: None,
+                color: Some("#e9def8".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                color: color("#e9def8"),
+                ..chess
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_rename_and_recolor_a_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = category(None, "Chess");
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: Some("Board games".to_string()),
+                color: Some("#e9def8".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![Category {
+                name: CategoryName::new("Board games").unwrap(),
+                color: color("#e9def8"),
+                ..chess
+            }]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_rename_a_category_to_a_case_variant_of_its_name() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
@@ -635,20 +873,72 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_should_fail_to_rename_if_name_missing() {
-        let response = update_category(
-            State(any_category_updater()),
-            Path("chess".to_string()),
-            Json(UpdateCategoryRequest { name: None }),
+    async fn it_should_not_recolor_if_name_taken() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let chess = category(None, "Chess");
+        let sports = category(None, "Sports");
+        repository.insert(&chess).unwrap();
+        repository.insert(&sports).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: Some("sports".to_string()),
+                color: Some("#e9def8".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "a category named \"sports\" already exists"
+            ))
+        );
+        assert_eq!(repository.list().unwrap(), vec![chess, sports]);
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_update_without_name_or_color() {
+        let response = update(
+            any_category_updater(),
+            "chess",
+            UpdateCategoryRequest {
+                name: None,
+                color: None,
+            },
         )
         .await;
 
         assert_eq!(
             response,
             Err(ApiError::bad_request(
-                "Category name must not be empty (missing)"
+                "Category name or color is required (both missing)"
             ))
         );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_update_if_color_invalid() {
+        let response = update(
+            any_category_updater(),
+            "chess",
+            UpdateCategoryRequest {
+                name: None,
+                color: Some("yellow".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Err(ApiError::bad_request(INVALID_COLOR)));
     }
 
     #[tokio::test]
@@ -1067,6 +1357,7 @@ mod tests {
     fn create_request(name: &str) -> CreateCategoryRequest {
         CreateCategoryRequest {
             name: Some(name.to_string()),
+            color: None,
         }
     }
 
@@ -1079,6 +1370,7 @@ mod tests {
         CategoryResponse {
             id: id.map(|id| id.as_str().to_string()).unwrap_or_default(),
             name: name.to_string(),
+            color: CategoryColor::PALETTE[0].to_string(),
             channels: channels.iter().map(|c| c.to_string()).collect(),
             playlists: playlists.iter().map(|p| p.to_string()).collect(),
         }
@@ -1089,9 +1381,14 @@ mod tests {
         Category {
             id: id.unwrap_or_else(CategoryId::new_generated),
             name: CategoryName::new(name).unwrap(),
+            color: CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
             members: vec![],
             created_at: fixed_timestamp(),
         }
+    }
+
+    fn color(hex: &str) -> CategoryColor {
+        CategoryColor::new(hex).unwrap()
     }
 
     fn list_item(
@@ -1103,6 +1400,7 @@ mod tests {
         CategoryListItemResponse {
             id: category.id.as_str().to_string(),
             name: category.name.as_str().to_string(),
+            color: category.color.as_str().to_string(),
             unwatched_count,
             channels: channels.iter().map(|c| c.to_string()).collect(),
             playlists: playlists.iter().map(|p| p.to_string()).collect(),
@@ -1240,14 +1538,23 @@ mod tests {
         id: &str,
         name: &str,
     ) -> Result<StatusCode, ApiError> {
-        update_category(
-            State(category_updater),
-            Path(id.to_string()),
-            Json(UpdateCategoryRequest {
+        update(
+            category_updater,
+            id,
+            UpdateCategoryRequest {
                 name: Some(name.to_string()),
-            }),
+                color: None,
+            },
         )
         .await
+    }
+
+    async fn update(
+        category_updater: CategoryUpdater,
+        id: &str,
+        request: UpdateCategoryRequest,
+    ) -> Result<StatusCode, ApiError> {
+        update_category(State(category_updater), Path(id.to_string()), Json(request)).await
     }
 
     async fn list(

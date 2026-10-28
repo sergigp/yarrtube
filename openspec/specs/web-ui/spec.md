@@ -615,10 +615,10 @@ Each channel row in the sidebar SHALL display a badge with the channel's unwatch
 - **THEN** the channel's badge count decreases by one promptly without a page reload
 
 ### Requirement: Mark Channel Watched From Channel View
-A channel detail view SHALL provide an action to mark the channel watched, which takes effect without confirmation. The action SHALL sit among the page header's actions.
+A channel detail view SHALL provide an action to mark the channel watched, which asks for confirmation as described in "Confirm Bulk Mark Watched". The action SHALL sit among the page header's actions.
 
 #### Scenario: Marking a channel watched from its view
-- **WHEN** a user chooses the mark-watched action from a channel's page header
+- **WHEN** a user chooses the mark-watched action from a channel's page header and confirms
 - **THEN** every downloaded video in the list shows a tick, and the channel's sidebar badge disappears
 
 ### Requirement: Video Actions Menu
@@ -1336,11 +1336,19 @@ Each category row SHALL provide an always-visible menu control offering "Manage 
 - **THEN** the application navigates to the home view
 
 ### Requirement: Add Category Dialog
-The "Add category" control SHALL open a dialog asking only for a name. Creating SHALL be possible once the name is not blank. On success, the dialog SHALL close and the application SHALL navigate to the new category's view with the manage sources dialog open. When creation fails (including a name already taken), the dialog SHALL stay open and show the error. On viewports narrower than the desktop breakpoint, activating "Add category" SHALL close the sidebar before the dialog is shown.
+The "Add category" control SHALL open a dialog asking for a name and a color through the category color picker, with the palette color used by the fewest categories preselected (the earliest in palette order on a tie). Creating SHALL be possible once the name is not blank, and SHALL create the category with the chosen color. On success, the dialog SHALL close and the application SHALL navigate to the new category's view with the manage sources dialog open. When creation fails (including a name already taken), the dialog SHALL stay open and show the error. On viewports narrower than the desktop breakpoint, activating "Add category" SHALL close the sidebar before the dialog is shown.
 
 #### Scenario: Creating a category
 - **WHEN** a user activates "Add category", enters "Chess" and creates it
 - **THEN** the dialog closes and the "Chess" category view opens with the manage sources dialog open and its search field focused
+
+#### Scenario: Next free color preselected
+- **WHEN** a user opens "Add category" and the existing categories are colored Butter and Coral
+- **THEN** "Peach" is preselected
+
+#### Scenario: Creating with a chosen color
+- **WHEN** a user enters "Chess", chooses "Lilac" and creates it
+- **THEN** "Chess" is created with the color "#e9def8"
 
 #### Scenario: Blank name
 - **WHEN** the name field is empty or blank
@@ -1351,14 +1359,22 @@ The "Add category" control SHALL open a dialog asking only for a name. Creating 
 - **THEN** the dialog stays open and says the name is already taken
 
 ### Requirement: Category View
-Each category SHALL have a view at an address of its own with a header and its videos as a grid of the same cards as the home view, each YouTube video once, newest sync first. The header SHALL show the category's name, a summary of its number of sources, its number of videos and, when above 0, its number of unwatched videos, and the same actions layout as the channel and playlist views' page header, offering "Manage sources", which opens the manage sources dialog, "Mark all watched" (only when the category has sources), which marks every downloaded video of the category watched without confirmation, and "Delete", which deletes the category after the same confirmation as the sidebar row's "Delete" and then navigates to the home view. A category with no sources SHALL say so and offer a control that opens the manage sources dialog. A category with sources but without downloaded videos SHALL say it has no videos yet. When the category does not exist, the view SHALL say it was not found.
+Each category SHALL have a view at an address of its own with a header and its videos as a grid of the same cards as the home view, each YouTube video once, newest sync first. The header SHALL be tinted with the category's color and SHALL show the category's name, a color control with the accessible name and tooltip "Change color" that opens the category color picker and saves the chosen color immediately, a summary of its number of sources, its number of videos and, when above 0, its number of unwatched videos, and the same actions layout as the channel and playlist views' page header, offering "Manage sources", which opens the manage sources dialog, "Mark all watched" (only when the category has sources), which marks every downloaded video of the category watched after the confirmation described in "Confirm Bulk Mark Watched", and "Delete", which deletes the category after the same confirmation as the sidebar row's "Delete" and then navigates to the home view. A category with no sources SHALL say so and offer a control that opens the manage sources dialog. A category with sources but without downloaded videos SHALL say it has no videos yet. When the category does not exist, the view SHALL say it was not found.
 
 #### Scenario: Category videos
 - **WHEN** a user opens the "Chess" view, which holds 2 sources with 14 downloaded videos, 3 of them unwatched
 - **THEN** the view shows "Chess", the summary "2 sources · 14 videos · 3 unwatched", and the videos as cards, newest sync first
 
+#### Scenario: Header tinted
+- **WHEN** a user opens the "Chess" view and "Chess" is colored "#d3ecf8"
+- **THEN** the header's background is "#d3ecf8"
+
+#### Scenario: Changing the color
+- **WHEN** a user activates "Change color" on the "Chess" view and chooses "Lilac"
+- **THEN** "Chess" is saved with the color "#e9def8", and the header, the sidebar dot and the home cards of its videos show it
+
 #### Scenario: Mark all watched
-- **WHEN** a user chooses "Mark all watched" from a category view's header
+- **WHEN** a user chooses "Mark all watched" from a category view's header and confirms
 - **THEN** every card shows as watched, and the category's sidebar badge disappears promptly
 
 #### Scenario: Deleting from the category view
@@ -1497,15 +1513,19 @@ Each playlist's sidebar row menu and page header SHALL offer an action labeled "
 - **THEN** it offers neither "Hide unwatched count" nor "Show unwatched count"
 
 ### Requirement: Sidebar Row Menu
-Each channel or playlist sidebar row SHALL have an always-visible menu control, not hover-dependent, offering sync, mark watched, "Edit settings" (opening that entry's edit dialog) and delete. Playlist rows SHALL also offer the home exclusion action ("Exclude from home"/"Include in home", without confirmation, refreshing home) and the hide/show unwatched count action. The unwatched badge SHALL sit at the row's trailing edge next to the menu control. Only deleting SHALL need confirmation.
+Each channel or playlist sidebar row SHALL have an always-visible menu control, not hover-dependent, offering sync, mark watched, "Edit settings" (opening that entry's edit dialog) and delete. Playlist rows SHALL also offer the home exclusion action ("Exclude from home"/"Include in home", without confirmation, refreshing home) and the hide/show unwatched count action. The unwatched badge SHALL sit at the row's trailing edge next to the menu control. Deleting SHALL need confirmation, and mark watched SHALL ask for it as described in "Confirm Bulk Mark Watched"; no other action SHALL.
 
 #### Scenario: Badge sits next to the menu control
 - **WHEN** a row displays an unwatched badge
 - **THEN** the badge sits at the row's trailing edge, next to the menu control, with no reserved blank space between them
 
 #### Scenario: Marking watched takes effect without confirmation
-- **WHEN** a user chooses the mark-watched action from a channel or playlist row's menu
+- **WHEN** a user chooses the mark-watched action from the menu of a channel or playlist row with 1 or no unwatched videos
 - **THEN** it takes effect without a confirmation prompt
+
+#### Scenario: Marking watched asks for confirmation
+- **WHEN** a user chooses the mark-watched action from the menu of a channel or playlist row with 2 or more unwatched videos
+- **THEN** the application asks for confirmation before marking it watched
 
 #### Scenario: Changing the home setting fails
 - **WHEN** the request to exclude a playlist from home or include it again fails
@@ -1528,11 +1548,11 @@ Each channel or playlist sidebar row SHALL have an always-visible menu control, 
 - **THEN** the application navigates to the home view
 
 #### Scenario: Marking a channel watched from the sidebar
-- **WHEN** a user chooses the mark-watched action from a channel row's menu
+- **WHEN** a user chooses the mark-watched action from a channel row's menu and confirms
 - **THEN** the application marks that channel watched, and its unwatched badge disappears
 
 #### Scenario: Marking a playlist watched from the sidebar
-- **WHEN** a user chooses the mark-watched action from a playlist row's menu
+- **WHEN** a user chooses the mark-watched action from a playlist row's menu and confirms
 - **THEN** the application marks that playlist watched, its unwatched badge disappears, and the badges of channels sharing its videos drop accordingly
 
 #### Scenario: Editing a channel's settings from the sidebar
@@ -1716,11 +1736,15 @@ While the sidebar search field contains text, the Categories, Channels and Playl
 - **THEN** every section returns to the folded or unfolded view it had before searching
 
 ### Requirement: Sidebar Categories List
-The sidebar SHALL show a "Categories" section above the Channels section listing every category, never trimmed, each row showing the category's name and, when its unwatched count is above 0, a badge with that count. Selecting a row SHALL navigate to that category's view, and while the user is on it, its row SHALL be marked active. The sidebar search SHALL filter the section like the other sections.
+The sidebar SHALL show a "Categories" section above the Channels section listing every category, never trimmed, each row showing a dot in the category's color, the category's name and, when its unwatched count is above 0, a badge with that count. Selecting a row SHALL navigate to that category's view, and while the user is on it, its row SHALL be marked active. The sidebar search SHALL filter the section like the other sections.
 
 #### Scenario: Categories listed above channels
 - **WHEN** the categories "Chess" and "Sports" exist
 - **THEN** the sidebar shows a "Categories" section above "Channels" listing both
+
+#### Scenario: Color dot
+- **WHEN** the category "Chess" is colored "#d3ecf8"
+- **THEN** its row shows a "#d3ecf8" dot before its name
 
 #### Scenario: Every category shown
 - **WHEN** 25 categories exist and the Categories section is unfolded
@@ -1789,3 +1813,85 @@ Each keyboard seek SHALL show feedback over the side of the player sought toward
 #### Scenario: Changing direction
 - **WHEN** the feedback shows "20 seconds" forward and the user presses ←
 - **THEN** the left side of the player shows "10 seconds"
+
+### Requirement: Confirm Bulk Mark Watched
+Marking a channel, playlist or category watched, from its page header or its sidebar row menu, SHALL first ask the user to confirm when it has 2 or more unwatched videos, counting them also when its count is hidden. The confirmation SHALL state how many videos will be marked and that this cannot be undone in bulk, with a destructive-styled confirm action. Cancelling SHALL mark nothing. With 0 or 1 unwatched videos, it SHALL take effect without confirmation.
+
+#### Scenario: Confirming marks the entry watched
+- **WHEN** a user chooses "Mark all watched" for the channel "Foo", which has 23 unwatched videos
+- **THEN** a confirmation asks to mark 23 videos in "Foo" watched and says this cannot be undone in bulk
+- **AND** confirming marks the channel watched and closes the confirmation
+
+#### Scenario: Cancelling marks nothing
+- **WHEN** a user chooses "Mark all watched" for a playlist with 5 unwatched videos and cancels the confirmation
+- **THEN** no video is marked watched and the playlist's badge still shows 5
+
+#### Scenario: Marking a category asks for confirmation
+- **WHEN** a user chooses "Mark all watched" from the header of a category with 3 unwatched videos
+- **THEN** a confirmation asks to mark 3 videos in the category watched before anything is marked
+
+#### Scenario: One unwatched video needs no confirmation
+- **WHEN** a user chooses "Mark all watched" for a channel with exactly 1 unwatched video
+- **THEN** the channel is marked watched without a confirmation prompt
+
+#### Scenario: Nothing unwatched needs no confirmation
+- **WHEN** a user chooses "Mark all watched" for a playlist with no unwatched videos
+- **THEN** it takes effect without a confirmation prompt
+
+#### Scenario: Hidden count still confirms
+- **WHEN** a user chooses "Mark all watched" from the menu of a playlist whose unwatched count is hidden and which has 4 unwatched videos
+- **THEN** a confirmation asks to mark 4 videos watched
+
+#### Scenario: Marking fails
+- **WHEN** a user confirms marking an entry watched and the request fails
+- **THEN** the confirmation stays open, shows the error, and no video is marked watched
+
+### Requirement: Category Color Picker
+The category color picker SHALL offer the 10 palette colors as swatches in palette order, each a radio option named Butter, Peach, Coral, Rose, Lilac, Periwinkle, Sky, Aqua, Pistachio and Sand, plus a "Custom" option with a hue slider. Every custom color SHALL keep the palette's soft lightness and saturation, so only the hue changes. The chosen option SHALL be shown checked. A color not in the palette SHALL show as "Custom" with the slider at its hue.
+
+#### Scenario: Choosing a swatch
+- **WHEN** a user chooses the "Sky" swatch
+- **THEN** "Sky" is shown checked and the chosen color is "#d3ecf8"
+
+#### Scenario: Clicking a swatch
+- **WHEN** a user clicks anywhere on the "Lilac" swatch
+- **THEN** "Lilac" is shown checked
+
+#### Scenario: Choosing a custom hue
+- **WHEN** a user chooses "Custom" and moves the hue slider
+- **THEN** the chosen color follows the hue and stays a soft pastel
+
+#### Scenario: Existing custom color
+- **WHEN** the picker opens for a category whose color is not in the palette
+- **THEN** "Custom" is shown checked with the slider at that color's hue
+
+### Requirement: Home Card Category Tint
+Each home video card SHALL take the colors of its categories, in the order the video lists them, as its background: none leaves the card without a tint, one gives a flat tint, two or three give equal diagonal bands with hard edges, in order from the top-left corner to the bottom-right one, the edge between two bands running from corner to corner whatever the card's shape, and four or more give a neutral grey. Cards on a category's own view SHALL NOT be tinted.
+
+#### Scenario: One category
+- **WHEN** a home video belongs to "Chess", colored "#d3ecf8"
+- **THEN** its card's background is "#d3ecf8"
+
+#### Scenario: Two categories
+- **WHEN** a home video belongs to "Chess" ("#d3ecf8") and "Streams" ("#fff1bf")
+- **THEN** its card is split diagonally, the "#d3ecf8" half first and the "#fff1bf" half second
+
+#### Scenario: Three categories
+- **WHEN** a home video belongs to three categories
+- **THEN** its card is split diagonally into three equal bands, one per category, in order
+
+#### Scenario: Four or more categories
+- **WHEN** a home video belongs to four categories
+- **THEN** its card's background is neutral grey
+
+#### Scenario: No category
+- **WHEN** a home video belongs to no category
+- **THEN** its card has no tint
+
+#### Scenario: Cards framed
+- **WHEN** the home view shows tinted and untinted cards
+- **THEN** every card has padding and a thin grey border, and neighbouring cards keep the grid's gap between them
+
+#### Scenario: Category view cards
+- **WHEN** a user opens the "Chess" view
+- **THEN** its video cards have no tint
