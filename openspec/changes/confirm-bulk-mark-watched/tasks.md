@@ -16,11 +16,11 @@
 - [x] 2.8 `CategoryDetail` with 3 unwatched asks for confirmation before `POST .../watched` is sent — verify the test passes.
 - [x] 2.9 `Sidebar` channel row with 2+ unwatched opens the confirmation; confirming sends `POST /api/channels/:id/watched` (update the existing mark-watched tests in `Sidebar.test.tsx` to confirm) — verify the tests pass.
 - [x] 2.10 `Sidebar` playlist row with 1 unwatched marks without a dialog — verify the test passes.
-- [ ] 2.11 `Sidebar` playlist with hidden count and 4 unwatched still asks, saying 4 videos — verify the test passes.
+- [x] 2.11 `Sidebar` playlist with hidden count and 4 unwatched still asks, saying 4 videos — verify the test passes.
 
 ## 3. Infrastructure adapters (TDD)
 
-- [ ] 3.1 None: no adapter changes (frontend only). Mark done.
+- [x] 3.1 None: no adapter changes (frontend only). Mark done.
 
 ## 4. Verification
 

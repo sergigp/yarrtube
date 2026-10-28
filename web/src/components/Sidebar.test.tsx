@@ -521,6 +521,32 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('asks before marking a playlist watched even when its count is hidden', async () => {
+    const markWatched = vi.fn(() => null)
+    renderSidebar({
+      'GET /api/channels': [],
+      'GET /api/playlists': [
+        aPlaylist({
+          id: 'PL1',
+          name: 'Courses',
+          unwatched_count: 4,
+          hide_unwatched_count: true,
+        }),
+      ],
+      'GET /api/categories': aCategoryList(),
+      'POST /api/playlists/PL1/watched': markWatched,
+    })
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Actions for Courses' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Mark 4 videos in "Courses" watched?' }),
+    ).toBeInTheDocument()
+    expect(markWatched).not.toHaveBeenCalled()
+  })
+
   it('offers playlist row actions in order', async () => {
     renderSidebar({
       'GET /api/channels': [],
