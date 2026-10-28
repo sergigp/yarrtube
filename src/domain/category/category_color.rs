@@ -58,4 +58,18 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn it_should_reject_short_named_and_non_hex_colors() {
+        let invalid = [
+            "#fff", "yellow", "#gggggg", "d3ecf8", "#d3ecf80", "", "#d3ecf ",
+        ];
+
+        assert_eq!(
+            invalid.map(CategoryColor::new),
+            invalid.map(|_| Err(ValidationError(
+                "Category color must be # followed by 6 hexadecimal digits".to_string()
+            )))
+        );
+    }
 }

@@ -29,7 +29,7 @@ Backend acceptance tests (HTTP handlers):
 Value object (`category_color.rs`):
 
 - [x] 2.17 `CategoryColor` › accepts `#rrggbb` and lowercases it
-- [ ] 2.18 `CategoryColor` › rejects short, named and non-hex values
+- [x] 2.18 `CategoryColor` › rejects short, named and non-hex values
 
 Web (Vitest):
 
