@@ -315,6 +315,7 @@ describe('ChannelDetail', () => {
     expect(await screen.findByText('2 videos · 2 unwatched')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'More actions for The Channel' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+    await user.click(await screen.findByRole('button', { name: 'Mark watched' }))
 
     expect(await screen.findByText('2 videos')).toBeInTheDocument()
     expect(

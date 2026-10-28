@@ -124,6 +124,7 @@ describe('CategoryDetail', () => {
     await screen.findAllByRole('listitem')
     await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+    await user.click(await screen.findByRole('button', { name: 'Mark watched' }))
 
     expect(await screen.findAllByRole('img', { name: 'Watched' })).toHaveLength(2)
     expect(markWatched).toHaveBeenCalledOnce()

@@ -104,6 +104,37 @@ describe('DetailHeader', () => {
     expect(screen.queryByRole('menuitem', { name: 'Mark all watched' })).not.toBeInTheDocument()
   })
 
+  it('asks before marking 2 or more unwatched videos watched', async () => {
+    const user = userEvent.setup()
+    const onMarkWatched = vi.fn(noop)
+    render(
+      <DetailHeader
+        name="The Channel"
+        videos={[]}
+        unwatchedCount={23}
+        onMarkWatched={onMarkWatched}
+        onDelete={noop}
+        deleteDescription="desc"
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'More actions for The Channel' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Mark 23 videos in "The Channel" watched?',
+    })
+    expect(dialog).toHaveTextContent(
+      "This can't be undone in bulk: videos can only be marked unwatched one by one.",
+    )
+    expect(onMarkWatched).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Mark watched' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(onMarkWatched).toHaveBeenCalledOnce()
+  })
+
   it('disables mark-all-watched while it runs', async () => {
     let resolveMarkWatched = () => {}
     const onMarkWatched = vi.fn(

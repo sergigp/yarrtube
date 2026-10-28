@@ -164,6 +164,10 @@ export function DetailHeader({
       icon: <CheckCheck />,
       disabled: markingWatched,
       onSelect: async () => {
+        if (markWatchedPrompt) {
+          setConfirmingMarkWatched(true)
+          return
+        }
         setMarkingWatched(true)
         await alertOnFailure(onMarkWatched, `Failed to mark "${name}" watched`)
         setMarkingWatched(false)
