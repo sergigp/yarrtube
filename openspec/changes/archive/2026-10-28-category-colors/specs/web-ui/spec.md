@@ -76,7 +76,7 @@ The "Add category" control SHALL open a dialog asking for a name and a color thr
 - **THEN** the dialog stays open and says the name is already taken
 
 ### Requirement: Category View
-Each category SHALL have a view at an address of its own with a header and its videos as a grid of the same cards as the home view, each YouTube video once, newest sync first. The header SHALL be tinted with the category's color and SHALL show the category's name, a color control with the accessible name and tooltip "Change color" that opens the category color picker and saves the chosen color immediately, a summary of its number of sources, its number of videos and, when above 0, its number of unwatched videos, and the same actions layout as the channel and playlist views' page header, offering "Manage sources", which opens the manage sources dialog, "Mark all watched" (only when the category has sources), which marks every downloaded video of the category watched without confirmation, and "Delete", which deletes the category after the same confirmation as the sidebar row's "Delete" and then navigates to the home view. A category with no sources SHALL say so and offer a control that opens the manage sources dialog. A category with sources but without downloaded videos SHALL say it has no videos yet. When the category does not exist, the view SHALL say it was not found.
+Each category SHALL have a view at an address of its own with a header and its videos as a grid of the same cards as the home view, each YouTube video once, newest sync first. The header SHALL be tinted with the category's color and SHALL show the category's name, a color control with the accessible name and tooltip "Change color" that opens the category color picker and saves the chosen color immediately, a summary of its number of sources, its number of videos and, when above 0, its number of unwatched videos, and the same actions layout as the channel and playlist views' page header, offering "Manage sources", which opens the manage sources dialog, "Mark all watched" (only when the category has sources), which marks every downloaded video of the category watched after the confirmation described in "Confirm Bulk Mark Watched", and "Delete", which deletes the category after the same confirmation as the sidebar row's "Delete" and then navigates to the home view. A category with no sources SHALL say so and offer a control that opens the manage sources dialog. A category with sources but without downloaded videos SHALL say it has no videos yet. When the category does not exist, the view SHALL say it was not found.
 
 #### Scenario: Category videos
 - **WHEN** a user opens the "Chess" view, which holds 2 sources with 14 downloaded videos, 3 of them unwatched
@@ -91,7 +91,7 @@ Each category SHALL have a view at an address of its own with a header and its v
 - **THEN** "Chess" is saved with the color "#e9def8", and the header, the sidebar dot and the home cards of its videos show it
 
 #### Scenario: Mark all watched
-- **WHEN** a user chooses "Mark all watched" from a category view's header
+- **WHEN** a user chooses "Mark all watched" from a category view's header and confirms
 - **THEN** every card shows as watched, and the category's sidebar badge disappears promptly
 
 #### Scenario: Deleting from the category view
