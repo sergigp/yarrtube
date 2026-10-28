@@ -1,12 +1,19 @@
 import '@testing-library/jest-dom/vitest'
+import { afterEach } from 'vitest'
+import { viewport } from './viewport'
 
 // jsdom implements neither `matchMedia` nor `ResizeObserver`; the components
 // only need them to exist (VideoDetail starts expanded on desktop widths,
-// Description measures overflow).
+// Description measures overflow). Every query matches only on a desktop
+// viewport, which `useDesktopViewport()` opts a test into.
+afterEach(() => {
+  viewport.desktop = false
+})
+
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: (query: string) => ({
-    matches: false,
+    matches: viewport.desktop,
     media: query,
     onchange: null,
     addEventListener: () => {},

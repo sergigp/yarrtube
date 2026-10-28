@@ -238,8 +238,7 @@ test.describe('with a downloaded playlist', () => {
     // /playlists/{id} with an interval).
     await openPlaylist(page)
     const editPlaylist = async () => {
-      await page.getByRole('button', { name: /^More actions for / }).click()
-      await page.getByRole('menuitem', { name: 'Edit settings' }).click()
+      await page.getByRole('button', { name: 'Edit settings' }).click()
       return page.getByRole('dialog', { name: `Edit ${PLAYLIST_NAME} settings` })
     }
     let editDialog = await editPlaylist()

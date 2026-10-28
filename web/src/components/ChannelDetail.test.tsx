@@ -287,7 +287,7 @@ describe('ChannelDetail', () => {
 
     expect(
       (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
-    ).toEqual(['Mark all watched', 'Edit settings', 'Delete'])
+    ).toEqual(['Sync', 'Mark all watched', 'Edit settings', 'Delete'])
   })
 
   it('marks the channel watched from its page header menu', async () => {

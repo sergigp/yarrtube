@@ -46,8 +46,8 @@ interface EntryActionsMenuProps {
 }
 
 /**
- * A "⋮" menu of actions on one channel or playlist, shared by its sidebar row
- * and its page header. It alerts when marking watched or changing the home
+ * A "⋮" menu of actions on one sidebar row (channel, playlist or category).
+ * It alerts when marking watched or changing the home
  * or unwatched count setting fails, leaving the entry as it was.
  */
 export function EntryActionsMenu({

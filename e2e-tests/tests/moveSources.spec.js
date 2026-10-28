@@ -41,8 +41,7 @@ async function waitUntilSettled(request, { listUrl, id, videosUrl }) {
  * the folder `newName` next to it through "Move…".
  */
 async function moveThroughEditDialog(page, { currentPath, newName, kind }) {
-  await page.getByRole('button', { name: /^More actions for / }).click()
-  await page.getByRole('menuitem', { name: 'Edit settings' }).click()
+  await page.getByRole('button', { name: 'Edit settings' }).click()
   const editDialog = page.getByRole('dialog', { name: /^Edit .+ settings$/ })
   await expect(editDialog.getByText(currentPath, { exact: true })).toBeVisible()
   await editDialog.getByRole('button', { name: 'Move…' }).click()

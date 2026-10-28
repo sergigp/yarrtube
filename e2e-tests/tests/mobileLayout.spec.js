@@ -126,11 +126,11 @@ test('icon-only Tasks tabs and Run now work by accessible name @mobile', async (
 
   await test.step("the header's Sync", async () => {
     await page.goto(`/playlists/${encodeURIComponent(PLAYLIST_ID)}`)
-    const sync = page.getByRole('button', { name: 'Sync', exact: true })
-    // Only its icon shows on a phone.
-    await expect(sync).toHaveText('', { useInnerText: true })
+    // A phone keeps it, with every other action, behind the ⋮.
+    await expect(page.getByRole('button', { name: 'Sync', exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: `More actions for ${PLAYLIST_NAME}` }).tap()
     const synced = reconciled(page)
-    await sync.tap()
+    await page.getByRole('menuitem', { name: 'Sync', exact: true }).tap()
     expect((await synced).ok()).toBe(true)
   })
 

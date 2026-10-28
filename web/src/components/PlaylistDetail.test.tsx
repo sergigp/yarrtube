@@ -12,6 +12,7 @@ import {
   renderWithProviders,
   type Routes as ApiRoutes,
 } from '@/test/helpers'
+import { useDesktopViewport } from '@/test/viewport'
 
 function renderPlaylist(routes: ApiRoutes, route: string) {
   const fetchMock = mockApi(routes)
@@ -114,7 +115,7 @@ describe('PlaylistDetail', () => {
     expect(await screen.findByText('No video selected.')).toBeInTheDocument()
   })
 
-  it('keeps Sync visible and the other actions in the ⋮ menu', async () => {
+  it('keeps every action, Sync included, in the ⋮ menu on mobile', async () => {
     renderPlaylist(
       {
         'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'The Playlist' })],
@@ -123,11 +124,48 @@ describe('PlaylistDetail', () => {
       '/playlists/PL1',
     )
 
-    expect(await screen.findByRole('button', { name: 'Sync' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'More actions for The Playlist' }))
-    expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'More actions for The Playlist' }))
+
+    expect(
+      (await screen.findAllByRole('menuitem')).map((item) => item.textContent),
+    ).toEqual([
+      'Sync',
+      'Mark all watched',
+      'Exclude from home',
+      'Hide unwatched count',
+      'Edit settings',
+      'Delete',
+    ])
+    expect(screen.queryByRole('button', { name: 'Sync' })).not.toBeInTheDocument()
+  })
+
+  describe('on desktop', () => {
+    useDesktopViewport()
+
+    it('lays every action out as a button, with no ⋮ menu', async () => {
+      renderPlaylist(
+        {
+          'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'The Playlist' })],
+          'GET /api/playlists/PL1/videos': [],
+        },
+        '/playlists/PL1',
+      )
+
+      expect(await screen.findByRole('button', { name: 'Sync' })).toBeInTheDocument()
+      for (const name of [
+        'Mark all watched',
+        'Exclude from home',
+        'Hide unwatched count',
+        'Edit settings',
+        'Delete',
+      ]) {
+        expect(screen.getByRole('button', { name })).toBeInTheDocument()
+      }
+      expect(
+        screen.queryByRole('button', { name: 'More actions for The Playlist' }),
+      ).not.toBeInTheDocument()
+    })
   })
 
   it('excludes the playlist from home from its page header menu', async () => {

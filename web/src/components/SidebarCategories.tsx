@@ -6,7 +6,7 @@ import { useCategories, useLibraryAction } from '@/api/queries'
 import type { Category } from '@/api/types'
 import { useRememberedFlag } from '@/hooks/useRememberedFlag'
 import { deleteCategoryDescription, orderCategories } from '@/lib/categories'
-import { activeIdFrom } from '@/lib/sidebarSections'
+import { activeIdFrom, sectionView } from '@/lib/sidebarSections'
 import { cn } from '@/lib/utils'
 import type { ManageSourcesState } from './CategoryDetail'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -70,27 +70,46 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
 interface SidebarCategoriesProps {
   onAddCategory: () => void
   onClose: () => void
+  /** Trimmed sidebar search; shows only matching categories, unfolded. */
+  searchText: string
 }
 
-/** The sidebar's Categories section: every category, unread first. */
-export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesProps) {
+/**
+ * The sidebar's Categories section: every category, unread first. Hidden
+ * while searching when no category matches.
+ */
+export function SidebarCategories({ onAddCategory, onClose, searchText }: SidebarCategoriesProps) {
   const { pathname } = useLocation()
   const activeId = activeIdFrom(pathname, '/categories/')
   const navigate = useNavigate()
   const { data } = useCategories()
   const refreshing = useLibraryAction()
   const [pendingDelete, setPendingDelete] = useState<Category | null>(null)
-  const categories = data && orderCategories(data.categories)
-  const [folded, toggleFolded] = useRememberedFlag('yarrtube.sidebar.folded.categories', false)
-  const headingActive = folded && (categories?.some((category) => category.id === activeId) ?? false)
+  const [rememberedFolded, toggleFolded] = useRememberedFlag(
+    'yarrtube.sidebar.folded.categories',
+    false,
+  )
+  const {
+    folded,
+    headingActive,
+    rows: categories,
+  } = sectionView(data && orderCategories(data.categories), {
+    searchText,
+    folded: rememberedFolded,
+    activeId,
+  })
   // Closing first lets the mobile drawer get out of the dialog's way.
   const add = () => {
     onClose()
     onAddCategory()
   }
   // No categories yet gets a full-width add row; otherwise a compact `+` on the heading.
-  const empty = categories?.length === 0
+  const empty = data?.categories.length === 0
   const headingId = useId()
+
+  if (searchText && !categories?.length) {
+    return null
+  }
 
   return (
     <section aria-labelledby={headingId}>

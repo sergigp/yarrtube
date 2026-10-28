@@ -63,8 +63,7 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
   const categoryRows = sectionRows(page, 'Categories')
   const summary = page.locator('main').getByText(/^\d+ sources? · /)
   const openManageSources = async (name) => {
-    await page.getByRole('button', { name: `More actions for ${name}` }).click()
-    await page.getByRole('menuitem', { name: 'Manage sources' }).click()
+    await page.getByRole('button', { name: 'Manage sources' }).click()
     await expect(dialog).toContainText(`Manage sources in ${name}`)
   }
 
@@ -136,8 +135,7 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
     const marked = page.waitForResponse(
       (response) => response.url().endsWith('/watched') && response.request().method() === 'POST',
     )
-    await page.getByRole('button', { name: 'More actions for Board games' }).click()
-    await page.getByRole('menuitem', { name: 'Mark all watched' }).click()
+    await page.getByRole('button', { name: 'Mark all watched' }).click()
     expect((await marked).status()).toBe(204)
     await expect(cards.getByRole('img', { name: 'Watched' })).toBeVisible()
     await expect(categoryRows.getByLabel(/ unwatched$/)).toHaveCount(0)
@@ -167,8 +165,7 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
   })
 
   await test.step('delete it from its actions menu, keeping its channel', async () => {
-    await page.getByRole('button', { name: 'More actions for Board games' }).click()
-    await page.getByRole('menuitem', { name: 'Delete', exact: true }).click()
+    await page.getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(dialog).toContainText(
       '"Board games" holds 1 channels and playlists. None of them, nor any video, will be deleted.',
     )

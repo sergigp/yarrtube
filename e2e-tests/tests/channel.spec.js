@@ -136,8 +136,7 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     // Change the video quality from the page header's "⋮" menu; reopening the
     // dialog shows the saved value (covers PATCH /channels/{handle}).
     const editChannel = async () => {
-      await page.getByRole('button', { name: /^More actions for / }).click()
-      await page.getByRole('menuitem', { name: 'Edit settings' }).click()
+      await page.getByRole('button', { name: 'Edit settings' }).click()
       return page.getByRole('dialog', { name: /^Edit .+ settings$/ })
     }
     let editDialog = await editChannel()
