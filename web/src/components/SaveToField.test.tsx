@@ -16,12 +16,12 @@ const baseRoutes: Routes = {
 function renderField(routes: Routes) {
   mockApi({ ...baseRoutes, ...routes })
   const captured: { value?: LocationValue } = {}
-  function Harness() {
+  function Harness({ onValue }: { onValue: (value: LocationValue) => void }) {
     const location = useSaveLocation('playlist', 'My Mix')
-    captured.value = location.value
+    onValue(location.value)
     return <SaveToField location={location} />
   }
-  renderWithProviders(<Harness />)
+  renderWithProviders(<Harness onValue={(value) => (captured.value = value)} />)
   return captured
 }
 
