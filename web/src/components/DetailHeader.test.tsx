@@ -135,6 +135,28 @@ describe('DetailHeader', () => {
     expect(onMarkWatched).toHaveBeenCalledOnce()
   })
 
+  it('marks nothing when the mark-all-watched confirmation is cancelled', async () => {
+    const user = userEvent.setup()
+    const onMarkWatched = vi.fn(noop)
+    render(
+      <DetailHeader
+        name="The Channel"
+        videos={[]}
+        unwatchedCount={5}
+        onMarkWatched={onMarkWatched}
+        onDelete={noop}
+        deleteDescription="desc"
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'More actions for The Channel' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(onMarkWatched).not.toHaveBeenCalled()
+  })
+
   it('disables mark-all-watched while it runs', async () => {
     let resolveMarkWatched = () => {}
     const onMarkWatched = vi.fn(
