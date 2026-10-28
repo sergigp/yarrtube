@@ -31,7 +31,7 @@ function renderDialog(routes: ApiRoutes) {
 
 describe('AddCategoryDialog', () => {
   it('creates a category and opens it with the manage sources dialog', async () => {
-    const create = vi.fn(() => (aCreatedCategory({ id: 'chess', name: 'Chess' })))
+    const create = vi.fn(() => aCreatedCategory({ id: 'chess', name: 'Chess' }))
     const { fetchMock, onOpenChange } = renderDialog({
       'POST /api/categories': create,
       'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
@@ -45,8 +45,11 @@ describe('AddCategoryDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(JSON.parse(init.body as string)).toEqual({ name: 'Chess' })
+    expect(create).toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/categories',
+      expect.objectContaining({ method: 'POST' }),
+    )
     expect(screen.getByRole('status', { name: 'Current route', hidden: true })).toHaveTextContent(
       '/categories/chess',
     )
@@ -68,9 +71,33 @@ describe('AddCategoryDialog', () => {
     await user.click(create)
 
     expect([disabledWhenEmpty, disabledWhenBlank]).toEqual([true, true])
-    expect(
-      await screen.findByText('a category named "Chess" already exists'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('a category named "Chess" already exists')).toBeInTheDocument()
     expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
+  it('preselects the least used color and creates with the chosen one', async () => {
+    const create = vi.fn(() => aCreatedCategory({ id: 'chess', name: 'Chess' }))
+    const { fetchMock } = renderDialog({
+      'POST /api/categories': create,
+      'GET /api/categories': aCategoryList([
+        aCategory({ name: 'Cooking', color: '#fff1bf' }),
+        aCategory({ name: 'Sports', color: '#ffd9d4' }),
+      ]),
+      'GET /api/categories/chess/videos': [],
+      'GET /api/channels': [],
+      'GET /api/playlists': [],
+    })
+    const user = userEvent.setup()
+
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Peach' })).toBeChecked())
+    await user.type(screen.getByLabelText('Name'), 'Chess')
+    await user.click(screen.getByRole('radio', { name: 'Lilac' }))
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    const [, init] = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+    ) as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({ name: 'Chess', color: '#e9def8' })
   })
 })
