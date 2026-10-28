@@ -229,6 +229,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_create_the_first_category_with_the_first_palette_color() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let category_creator =
+            CategoryCreator::new(repository.clone(), Arc::new(FixedClock(fixed_timestamp())));
+
+        let response = create(category_creator, create_request("Chess")).await;
+
+        let stored = repository.list().unwrap();
+        let id = stored.first().map(|category| category.id.clone());
+        assert_eq!(
+            response,
+            Ok((
+                StatusCode::CREATED,
+                CategoryResponse {
+                    color: "#fff1bf".to_string(),
+                    ..category_response(id.as_ref(), "Chess", &[], &[])
+                }
+            ))
+        );
+        assert_eq!(
+            stored,
+            vec![Category {
+                color: color("#fff1bf"),
+                ..category(id, "Chess")
+            }]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_create_if_color_invalid() {
         let mut responses = Vec::new();
         for invalid in ["#fff", "yellow", "#gggggg"] {
