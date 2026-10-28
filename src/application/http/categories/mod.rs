@@ -892,6 +892,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_fail_to_update_if_color_invalid() {
+        let response = update(
+            any_category_updater(),
+            "chess",
+            UpdateCategoryRequest {
+                name: None,
+                color: Some("yellow".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Err(ApiError::bad_request(INVALID_COLOR)));
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_rename_if_name_invalid() {
         let response = rename(any_category_updater(), "chess", "   ").await;
 
