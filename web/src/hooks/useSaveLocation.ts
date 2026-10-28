@@ -88,7 +88,7 @@ export function useSaveLocation(
 ): SaveLocation {
   const defaultParent = DEFAULT_PARENTS[mode]
   const initialParent = initialPath === undefined ? null : (parentOf(initialPath) ?? '')
-  const [parent, setParent] = useState(initialParent ?? defaultParent)
+  const [selectedParent, setParent] = useState(initialParent ?? defaultParent)
   const [parentTouched, setParentTouched] = useState(initialParent !== null)
   const [sessionCandidate, setSessionCandidate] = useState<string | null>(initialParent)
   const [stagedFrom, setStagedFrom] = useState<string | null>(null)
@@ -149,19 +149,15 @@ export function useSaveLocation(
   // The remembered parent only preselects while it is still among the
   // derived candidates: a stale one falls back to the default silently. It
   // never overrides a selection the user already made this session.
-  useEffect(() => {
-    if (parentTouched || !ownItems.length) {
-      return
-    }
-    const remembered = readRememberedParent(mode)
-    if (
-      remembered &&
-      remembered !== defaultParent &&
-      deriveSaveCandidates(defaultParent, ownItems).some((c) => c.path === remembered)
-    ) {
-      setParent(remembered)
-    }
-  }, [mode, defaultParent, ownItems, parentTouched])
+  const remembered = useMemo(() => readRememberedParent(mode), [mode])
+  const rememberedParent =
+    !parentTouched &&
+    remembered &&
+    remembered !== defaultParent &&
+    deriveSaveCandidates(defaultParent, ownItems).some((c) => c.path === remembered)
+      ? remembered
+      : null
+  const parent = rememberedParent ?? selectedParent
 
   const selectParent = useCallback((next: string) => {
     setParentTouched(true)

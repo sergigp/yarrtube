@@ -82,3 +82,7 @@ if (!Element.prototype.hasPointerCapture) {
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {}
 }
+
+// jsdom has no media playback: its `pause()`/`load()` log "Not implemented".
+HTMLMediaElement.prototype.pause = () => {}
+HTMLMediaElement.prototype.load = () => {}
