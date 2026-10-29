@@ -192,8 +192,19 @@ impl VideoReconciler {
         Ok(reset)
     }
 
+    /// Gives an `Errored` video (one that exhausted its download retries)
+    /// another chance once its recovery cooldown is over
+    /// (`Video::is_due_for_recovery`), with no limit on how many times a
+    /// video may be recovered.
     fn recover_if_due(&self, video: Video) -> anyhow::Result<Video> {
-        Ok(video)
+        if !video.is_due_for_recovery(self.clock.now()) {
+            return Ok(video);
+        }
+        warn!(
+            video_id = %video.youtube_id,
+            "permanently errored video is due for recovery, resetting for redownload"
+        );
+        self.reset_for_redownload(video)
     }
 
     fn repair_metadata(&self, _video: &Video, _owner: &VideoOwner) {}
