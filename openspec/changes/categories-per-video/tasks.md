@@ -30,8 +30,8 @@ Requires `video-reconciler` to be implemented first (`VideoReconciler`, `SyncVid
 ## 3. Infrastructure adapters (TDD)
 
 SqliteVideoCategoriesRepository:
-- [ ] 3.1 `it_should_find_none_for_a_record_without_rows`
-- [ ] 3.2 `it_should_replace_a_record_set_on_save`
+- [x] 3.1 `it_should_find_none_for_a_record_without_rows`
+- [x] 3.2 `it_should_replace_a_record_set_on_save`
 - [ ] 3.3 `it_should_delete_all_rows_when_saving_an_empty_set`
 - [ ] 3.4 `it_should_list_records_in_a_category_with_their_full_sets`
 - [ ] 3.5 `it_should_delete_a_record_rows`
