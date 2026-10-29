@@ -2396,12 +2396,6 @@ mod tests {
             task_repository.clone(),
             Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
-                Arc::new(MetadataGenerator::new(
-                    Arc::new(FakeYoutubeMetadataRepository::default()),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                )),
-                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                task_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 VideoReconciler::new(
                     video_repository.clone(),
@@ -2417,7 +2411,7 @@ mod tests {
                         Arc::new(FixedClock(fixed_timestamp())),
                     )),
                     Arc::new(VideoRelocator::new(
-                        video_repository.clone(),
+                        Arc::new(SqliteVideoRepository::new(db.database())),
                         Arc::new(FakeVideoFileRepository::default()),
                         Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                         Arc::new(FixedClock(fixed_timestamp())),
@@ -2427,13 +2421,6 @@ mod tests {
                     "/videos",
                     video_category_assigner(db.database()),
                 ),
-                Arc::new(VideoRelocator::new(
-                    Arc::new(SqliteVideoRepository::new(db.database())),
-                    Arc::new(FakeVideoFileRepository::default()),
-                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                )),
-                Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
             )),
             Arc::new(ShowFileWriter::new(
@@ -3374,12 +3361,6 @@ mod tests {
             task_repository.clone(),
             Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
-                Arc::new(MetadataGenerator::new(
-                    Arc::new(FakeYoutubeMetadataRepository::default()),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                )),
-                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                task_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 VideoReconciler::new(
                     video_repository.clone(),
@@ -3395,7 +3376,7 @@ mod tests {
                         Arc::new(FixedClock(fixed_timestamp())),
                     )),
                     Arc::new(VideoRelocator::new(
-                        video_repository.clone(),
+                        Arc::new(SqliteVideoRepository::new(db.database())),
                         Arc::new(FakeVideoFileRepository::default()),
                         Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                         Arc::new(FixedClock(fixed_timestamp())),
@@ -3405,13 +3386,6 @@ mod tests {
                     "/videos",
                     video_category_assigner(db.database()),
                 ),
-                Arc::new(VideoRelocator::new(
-                    Arc::new(SqliteVideoRepository::new(db.database())),
-                    Arc::new(FakeVideoFileRepository::default()),
-                    Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                )),
-                Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
             )),
             Arc::new(ShowFileWriter::new(
@@ -3444,12 +3418,6 @@ mod tests {
             task_repository.clone(),
             Arc::new(InternalVideoReconciler::new(
                 video_repository.clone(),
-                Arc::new(MetadataGenerator::new(
-                    Arc::new(FakeYoutubeMetadataRepository::default()),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                )),
-                Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
-                task_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 VideoReconciler::new(
                     video_repository.clone(),
@@ -3465,7 +3433,7 @@ mod tests {
                         Arc::new(FixedClock(fixed_timestamp())),
                     )),
                     Arc::new(VideoRelocator::new(
-                        video_repository.clone(),
+                        Arc::new(SqliteVideoRepository::new(unused_connection())),
                         Arc::new(FakeVideoFileRepository::default()),
                         Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
                         Arc::new(FixedClock(fixed_timestamp())),
@@ -3475,13 +3443,6 @@ mod tests {
                     "/videos",
                     video_category_assigner(unused_connection()),
                 ),
-                Arc::new(VideoRelocator::new(
-                    Arc::new(SqliteVideoRepository::new(unused_connection())),
-                    Arc::new(FakeVideoFileRepository::default()),
-                    Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                )),
-                Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
             )),
             Arc::new(ShowFileWriter::new(

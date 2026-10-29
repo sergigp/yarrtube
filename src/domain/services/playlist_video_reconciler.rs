@@ -404,20 +404,13 @@ impl PlaylistVideoReconciler {
 
     /// What the database says the playlist's folder should contain.
     fn desired_state(&self, playlist: &Playlist) -> anyhow::Result<DesiredState> {
-        let playlist_videos = self
-            .playlist_video_repository
-            .list_for_playlist(&playlist.id)?;
-
         Ok(DesiredState {
             path: playlist.path.clone(),
-            quality: playlist.quality,
-            video_ids: playlist_videos
-                .iter()
-                .map(|pv| pv.video_id.clone())
-                .collect(),
-            sort_positions: playlist_videos
+            video_ids: self
+                .playlist_video_repository
+                .list_for_playlist(&playlist.id)?
                 .into_iter()
-                .map(|pv| (pv.video_id, pv.position))
+                .map(|pv| pv.video_id)
                 .collect(),
         })
     }

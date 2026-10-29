@@ -385,19 +385,16 @@ impl ChannelVideoReconciler {
             })
     }
 
-    /// What the database says the channel's folder should contain. A
-    /// channel's videos sort by publish date, so it has no sort positions.
+    /// What the database says the channel's folder should contain.
     fn desired_state(&self, channel: &Channel) -> anyhow::Result<DesiredState> {
         Ok(DesiredState {
             path: channel.path.clone(),
-            quality: channel.quality,
             video_ids: self
                 .channel_video_repository
                 .list_for_channel(&channel.id)?
                 .into_iter()
                 .map(|cv| cv.video_id)
                 .collect(),
-            sort_positions: HashMap::new(),
         })
     }
 
