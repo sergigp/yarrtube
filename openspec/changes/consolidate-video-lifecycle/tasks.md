@@ -11,7 +11,7 @@
 - [x] 2.3 `it_should_recover_an_errored_video_after_its_cooldown` (sync_video_task) — Errored ≥24h is reset and gets thumbnail fetch + download.
 - [x] 2.4 `it_should_schedule_nothing_for_a_settled_errored_video` (sync_video_task, existing) — Errored <24h stays Errored, nothing scheduled.
 - [x] 2.5 `it_should_never_recover_an_excluded_video` (sync_video_task) — Excluded stays Excluded, nothing scheduled.
-- [ ] 2.6 `it_should_generate_missing_metadata_of_a_playlist_video` (sync_video_task) — metadata saved with sorttitle from playlist position.
+- [x] 2.6 `it_should_generate_missing_metadata_of_a_playlist_video` (sync_video_task) — metadata saved with sorttitle from playlist position.
 - [ ] 2.7 `it_should_generate_missing_metadata_of_a_channel_video` (sync_video_task) — sorttitle from publish date.
 - [ ] 2.8 `it_should_keep_existing_metadata` (sync_video_task) — no regeneration when a metadata row exists.
 - [ ] 2.9 `it_should_relocate_a_legacy_video_when_its_metadata_is_recovered` (sync_video_task) — file set moved into the season folder, filenames recorded.

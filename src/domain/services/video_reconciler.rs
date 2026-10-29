@@ -1,10 +1,11 @@
 use crate::domain::category::CategoryMember;
 use crate::domain::services::{
-    MetadataGenerator, VideoCategoryAssigner, VideoCategoryAssignerApi, VideoRelocator,
+    MetadataGenerator, MetadataGeneratorApi, VideoCategoryAssigner, VideoCategoryAssignerApi,
+    VideoRelocator,
 };
 use crate::domain::shared::Quality;
 use crate::domain::video::{
-    Video, VideoRecordId, VideoStatus, VideoSyncPlan, VideoTarget, resolve_output_dir,
+    Video, VideoRecordId, VideoStatus, VideoSyncPlan, VideoTarget, nfo_path_for, resolve_output_dir,
 };
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -207,7 +208,33 @@ impl VideoReconciler {
         self.reset_for_redownload(video)
     }
 
-    fn repair_metadata(&self, _video: &Video, _owner: &VideoOwner) {}
+    /// Regenerates the metadata of a `Downloaded` video the same way
+    /// `VideoDownloader` does at download time, referencing the thumbnail
+    /// already on disk. Best effort: a failure is logged, the video is left
+    /// as it is and its next sync tries again.
+    fn repair_metadata(&self, video: &Video, owner: &VideoOwner) {
+        if video.status != VideoStatus::Downloaded {
+            return;
+        }
+        let Some(metadata) = self
+            .metadata_generator
+            .generate(video, owner.sort_position, None)
+        else {
+            return;
+        };
+        let (Some(filename), Some(number)) = (video.filename.as_deref(), video.episode_number)
+        else {
+            return;
+        };
+        let metadata = metadata.with_thumb(thumbnail_basename(video));
+        let nfo_path = owner.target.output_dir.join(nfo_path_for(filename));
+        if let Err(e) = self
+            .video_metadata_repository
+            .save(&video.id, &metadata, &number, &nfo_path)
+        {
+            warn!(video_id = %video.id, error = %e, "failed to save video metadata during sync");
+        }
+    }
 
     fn warn_if_stranded(&self, _video: &Video) -> anyhow::Result<()> {
         Ok(())
@@ -222,4 +249,14 @@ impl VideoReconciler {
                     .schedule(&step.task_for(video, target), self.clock.now())
             })
     }
+}
+
+/// The thumbnail's file name as an NFO references it, next to the episode.
+fn thumbnail_basename(video: &Video) -> Option<String> {
+    video
+        .thumbnail_filename
+        .as_deref()
+        .and_then(|f| Path::new(f).file_name())
+        .and_then(|f| f.to_str())
+        .map(str::to_string)
 }
