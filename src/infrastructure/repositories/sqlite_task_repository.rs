@@ -276,10 +276,18 @@ impl TaskRepository for SqliteTaskRepository {
 
     fn find_non_completed_for_video(
         &self,
-        _task_type: &str,
-        _video_id: &VideoRecordId,
+        task_type: &str,
+        video_id: &VideoRecordId,
     ) -> anyhow::Result<Option<ScheduledTask>> {
-        Ok(None)
+        let conn = self.db.read()?;
+        conn.query_row(
+            &format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE task_type = ?1 AND json_extract(payload, '$.video_id') = ?2 AND status IN ('pending', 'running') ORDER BY id LIMIT 1"),
+            params![task_type, video_id.as_str()],
+            row_to_scheduled_task,
+        )
+        .optional()
+        .inspect_err(|e| tracing::error!(error = %e, "failed to find non-completed task of video"))
+        .context("failed to find non-completed task of video")
     }
 
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {

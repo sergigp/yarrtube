@@ -18,7 +18,7 @@
 - [x] 2.10 `it_should_leave_a_legacy_video_in_place_when_its_metadata_is_still_unavailable` (sync_video_task) — video unchanged.
 - [x] 2.11 `it_should_warn_about_a_stranded_video` (sync_video_task) — warning logged, download scheduled.
 - [x] 2.12 `it_should_keep_a_stranded_errored_retrying_video_errored_retrying` (sync_video_task) — warning logged, download scheduled, status unchanged.
-- [ ] 2.13 `it_should_not_warn_about_a_video_whose_download_is_running` (sync_video_task) — no warning, no second download.
+- [x] 2.13 `it_should_not_warn_about_a_video_whose_download_is_running` (sync_video_task) — no warning, no second download.
 - [ ] 2.14 `it_should_redownload_videos_with_missing_file` (reconcile_channel_task, update) — pass delegates per-video work to `VideoReconciler::reconcile`; reset video gets thumbnail fetch + download; remove `it_should_schedule_only_the_download_of_a_video_reset_for_redownload` and the per-video recovery code/tests from `internal_video_reconciler.rs` now covered by 2.1–2.13.
 - [ ] 2.15 `it_should_sync_a_video_added_by_the_same_pass` (reconcile_channel_task) — replaces `it_should_schedule_no_step_for_a_video_added_by_the_same_pass`; steps scheduled once; `handled` set removed.
 - [ ] 2.16 `it_should_repair_the_categories_of_stored_videos` (reconcile_channel_task, update) — one event per repaired video; `assign_source` removed from the channel/playlist reconcilers and `VideoCategoryAssignerApi`.
