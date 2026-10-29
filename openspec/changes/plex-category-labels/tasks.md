@@ -58,7 +58,7 @@ HttpPlexLibraryRepository (mockito):
 SqliteEpisodeLabelsRepository:
 - [x] 3.10 `it_should_round_trip_an_episode_labels_row`
 - [x] 3.11 `it_should_list_dirty_rows_least_recently_checked_first_up_to_a_limit`
-- [ ] 3.12 `it_should_list_only_synced_rows`
+- [x] 3.12 `it_should_list_only_synced_rows`
 
 SqliteCategoryPlaylistRepository:
 - [ ] 3.13 `it_should_save_list_and_delete_category_playlists`

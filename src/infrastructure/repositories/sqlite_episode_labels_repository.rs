@@ -56,7 +56,12 @@ impl EpisodeLabelsRepository for SqliteEpisodeLabelsRepository {
     }
 
     fn list_synced(&self) -> anyhow::Result<Vec<EpisodeLabels>> {
-        Ok(Vec::new())
+        self.query(
+            &format!(
+                "SELECT {COLUMNS} FROM episode_labels WHERE rating_key IS NOT NULL ORDER BY video_id"
+            ),
+            [],
+        )
     }
 
     fn save_many(&self, rows: &[EpisodeLabels]) -> anyhow::Result<()> {
@@ -205,6 +210,24 @@ mod tests {
                 checked("rec1", "2026-10-29T10:00:00Z"),
             ]
         );
+    }
+
+    #[test]
+    fn it_should_list_only_synced_rows() {
+        let db = TestDatabase::new();
+        let repository = SqliteEpisodeLabelsRepository::new(db.database());
+        let synced = EpisodeLabels {
+            rating_key: Some("101".to_string()),
+            section_id: Some("19".to_string()),
+            ..pending("rec2")
+        };
+        repository
+            .save_many(&[pending("rec1"), synced.clone()])
+            .unwrap();
+
+        let rows = repository.list_synced().unwrap();
+
+        assert_eq!(rows, vec![synced]);
     }
 
     fn checked(id: &str, at_time: &str) -> EpisodeLabels {
