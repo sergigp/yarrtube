@@ -26,14 +26,18 @@ impl TaskHandler for SyncVideoTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::category::{Category, CategoryColor, CategoryMember, CategoryName};
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::VideoCategoryAssigner;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::{EpisodeNumber, Video, VideoId};
+    use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
+    use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
@@ -51,10 +55,14 @@ mod tests {
         SqliteTaskRepository, TaskRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_repository::{
+        EventRepository, SqliteEventRepository,
+    };
     use crate::infrastructure::shared::sqlite_connection::Database;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
@@ -386,6 +394,61 @@ mod tests {
     }
 
     #[test]
+    fn it_should_categorize_a_new_video_of_a_categorized_channel() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video = my_video();
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelRepository::new(db.database()),
+            &SqliteChannelVideoRepository::new(db.database()),
+            &video,
+        );
+        let chess = category_with_members("Chess", &[CategoryMember::Channel(my_channel_id())]);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&chess)
+            .unwrap();
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            Arc::new(video_repository),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+            video_category_assigner(db.database()),
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone()]
+            )]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoCategoriesChanged(VideoCategoriesChanged {
+                    video_ids: vec![video.id.as_str().to_string()],
+                })
+            )]
+        );
+    }
+
+    #[test]
     fn it_should_skip_if_video_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
@@ -513,6 +576,27 @@ mod tests {
             ReconcileInterval::default_interval(),
             fixed_timestamp(),
         )
+    }
+
+    fn category_with_members(name: &str, members: &[CategoryMember]) -> Category {
+        Category::create(
+            CategoryName::new(name).unwrap(),
+            CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
+            fixed_timestamp(),
+        )
+        .with_members(members.to_vec())
+    }
+
+    fn pending_event(id: i64, event: DomainEvent) -> ScheduledEvent {
+        ScheduledEvent {
+            id,
+            event_type: event.event_type().to_string(),
+            payload: event.payload().to_string(),
+            retries: 0,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
     }
 
     fn payload_for(video: &Video) -> String {

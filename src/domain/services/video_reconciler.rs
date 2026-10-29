@@ -1,4 +1,5 @@
-use crate::domain::services::VideoCategoryAssigner;
+use crate::domain::category::CategoryMember;
+use crate::domain::services::{VideoCategoryAssigner, VideoCategoryAssignerApi};
 use crate::domain::shared::Quality;
 use crate::domain::video::{
     Video, VideoRecordId, VideoSyncPlan, VideoSyncStep, VideoTarget, resolve_output_dir,
@@ -56,9 +57,9 @@ impl VideoReconciler {
 }
 
 pub trait VideoReconcilerApi: Send + Sync {
-    /// Finds the video and the playlist or channel holding it, then
-    /// schedules every step its stored state still needs. No-op if either
-    /// is gone.
+    /// Finds the video and the playlist or channel holding it, gives it its
+    /// source's categories (when the source is in any), then schedules every
+    /// step its stored state still needs. No-op if either is gone.
     fn reconcile(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
 
     /// Schedules every step still needed by `video`, already read along with
@@ -75,9 +76,11 @@ impl VideoReconcilerApi for VideoReconciler {
         let Some(video) = self.video_repository.find(video_id)? else {
             return Ok(());
         };
-        let Some(target) = self.find_target(&video)? else {
+        let Some((source, target)) = self.find_owner(&video)? else {
             return Ok(());
         };
+        self.video_category_assigner
+            .assign_video(&video.id, &source)?;
         self.reconcile_video(&video, &target)
     }
 
@@ -104,33 +107,49 @@ impl VideoReconciler {
             .schedule(&step.task_for(video, target), self.clock.now())
     }
 
-    /// The target of the channel holding `video`, else of the playlist
-    /// holding it; `None` when neither is found.
-    fn find_target(&self, video: &Video) -> anyhow::Result<Option<VideoTarget>> {
-        match self.find_channel_target(video)? {
-            Some(target) => Ok(Some(target)),
-            None => self.find_playlist_target(video),
+    /// The channel holding `video`, else the playlist holding it, with its
+    /// target; `None` when neither is found.
+    fn find_owner(&self, video: &Video) -> anyhow::Result<Option<(CategoryMember, VideoTarget)>> {
+        match self.find_channel_owner(video)? {
+            Some(owner) => Ok(Some(owner)),
+            None => self.find_playlist_owner(video),
         }
     }
 
-    fn find_channel_target(&self, video: &Video) -> anyhow::Result<Option<VideoTarget>> {
+    fn find_channel_owner(
+        &self,
+        video: &Video,
+    ) -> anyhow::Result<Option<(CategoryMember, VideoTarget)>> {
         let Some(channel_video) = self.channel_video_repository.find_by_video(&video.id)? else {
             return Ok(None);
         };
         Ok(self
             .channel_repository
             .find(&channel_video.channel_id)?
-            .map(|channel| self.target(channel.path.as_str(), channel.quality)))
+            .map(|channel| {
+                (
+                    CategoryMember::Channel(channel.id),
+                    self.target(channel.path.as_str(), channel.quality),
+                )
+            }))
     }
 
-    fn find_playlist_target(&self, video: &Video) -> anyhow::Result<Option<VideoTarget>> {
+    fn find_playlist_owner(
+        &self,
+        video: &Video,
+    ) -> anyhow::Result<Option<(CategoryMember, VideoTarget)>> {
         let Some(playlist_video) = self.playlist_video_repository.find_by_video(&video.id)? else {
             return Ok(None);
         };
         Ok(self
             .playlist_repository
             .find(&playlist_video.playlist_id)?
-            .map(|playlist| self.target(playlist.path.as_str(), playlist.quality)))
+            .map(|playlist| {
+                (
+                    CategoryMember::Playlist(playlist.id),
+                    self.target(playlist.path.as_str(), playlist.quality),
+                )
+            }))
     }
 
     fn target(&self, path: &str, quality: Quality) -> VideoTarget {

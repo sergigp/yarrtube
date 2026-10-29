@@ -68,10 +68,12 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
 
     fn assign_video(
         &self,
-        _video_id: &VideoRecordId,
-        _source: &CategoryMember,
+        video_id: &VideoRecordId,
+        source: &CategoryMember,
     ) -> anyhow::Result<()> {
-        Ok(())
+        let categories = self.category_repository.list()?;
+        let category_ids = Self::source_category_ids(source, &categories);
+        self.save_and_announce(vec![VideoCategories::new(video_id.clone(), category_ids)])
     }
 
     fn reassign_category(
