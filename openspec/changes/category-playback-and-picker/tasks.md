@@ -19,7 +19,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --locked` and `npm run check` (in `web/`) all pass.
+- [x] 4.1 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `cargo test --locked` and `npm run check` (in `web/`) all pass.
 - [ ] 4.2 End-to-end: `scripts/run-tests.sh` passes, including the updated picker step in `e2e-tests/tests/categories.spec.js`.
 - [ ] 4.3 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, seed a category with a channel and a playlist through the HTTP API, and use the Playwright MCP browser to: open the category, click a card, and assert the URL `/categories/<id>?video=<id>`, the `<video>` src under the source path and the queue listing the category's videos; click a queue video from the other source and assert the src changes; open the add channel dialog and assert every category chip is shown, and a pressed one is filled with its color. Take a screenshot of the home grid and of the player. Then stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.4 Manual (human): judge visually whether the 50% home tints read as soft enough, and whether the chip colors and outlines stay legible in light and dark themes; check playback, captions and progress resume on a real device in a category queue.
