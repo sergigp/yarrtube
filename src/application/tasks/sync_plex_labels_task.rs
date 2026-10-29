@@ -532,6 +532,58 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_rotate_videos_waiting_for_plex() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+        );
+        let waiting: Vec<EpisodeLabels> = (0..BATCH_SIZE)
+            .map(|i| {
+                seed_video(
+                    &db,
+                    Video::create(VideoId::new(format!("w{i}")).unwrap(), "Waiting", now()),
+                )
+            })
+            .map(|video| EpisodeLabels::pending(video.id))
+            .collect();
+        let importable = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        seed_category(&db, "chess", "Chess", &[&importable]);
+        episode_labels_repository
+            .save_many(
+                &[
+                    waiting,
+                    vec![EpisodeLabels {
+                        checked_at: Some(now() - Duration::minutes(1)),
+                        ..EpisodeLabels::pending(importable.id.clone())
+                    }],
+                ]
+                .concat(),
+            )
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            episode_labels_repository.clone(),
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
+        ));
+
+        let results = [run(&task), run(&task)];
+
+        assert_eq!(results, [Ok(()), Ok(())]);
+        assert_eq!(plex.labels("101"), vec!["Chess".to_string()]);
+        assert_eq!(
+            episode_labels_repository
+                .find_many(&[importable.id.clone()])
+                .unwrap(),
+            vec![synced(&importable, "101", &["Chess"])]
+        );
+    }
+
     /// The syncer over the test database, with Plex seeing `/videos` at
     /// `/plex/videos`.
     fn syncer(
