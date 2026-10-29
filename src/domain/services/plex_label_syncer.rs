@@ -242,12 +242,23 @@ impl PlexLabelSyncer {
             .get(&row.video_id)
             .cloned()
             .unwrap_or_else(PlexLabels::none);
+        Ok(Some(self.apply_labels(row, &episode, desired)))
+    }
+
+    /// The row once `desired` is written to `episode`; still dirty when
+    /// Plex rejects it, so a later sync retries.
+    fn apply_labels(
+        &self,
+        row: EpisodeLabels,
+        episode: &PlexEpisode,
+        desired: PlexLabels,
+    ) -> EpisodeLabels {
         let now = self.clock.now();
-        match self.write_labels(&episode, &desired) {
-            Ok(()) => Ok(Some(row.synced(&episode, desired, now))),
+        match self.write_labels(episode, &desired) {
+            Ok(()) => row.synced(episode, desired, now),
             Err(e) => {
                 warn!(video_id = %row.video_id, rating_key = %episode.rating_key, error = %e, "failed to write Plex labels, retrying on a later sync");
-                Ok(Some(row.checked(now)))
+                row.checked(now)
             }
         }
     }
