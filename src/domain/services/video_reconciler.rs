@@ -22,6 +22,8 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::warn;
 
+const DOWNLOAD_VIDEO_TASK_TYPE: &str = "download_video";
+
 /// The playlist or channel holding a video, as its sync needs it.
 struct VideoOwner {
     source: CategoryMember,
@@ -274,7 +276,23 @@ impl VideoReconciler {
             .map_or(true, |metadata| metadata.is_some())
     }
 
-    fn warn_if_stranded(&self, _video: &Video) -> anyhow::Result<()> {
+    /// Logs a video waiting to be downloaded with no download pending or
+    /// running: a step lost on a crash or never scheduled, which
+    /// `schedule_steps` then schedules.
+    fn warn_if_stranded(&self, video: &Video) -> anyhow::Result<()> {
+        if video.is_download_settled()
+            || self
+                .task_repository
+                .find_non_completed_for_video(DOWNLOAD_VIDEO_TASK_TYPE, &video.id)?
+                .is_some()
+        {
+            return Ok(());
+        }
+        warn!(
+            video_id = %video.youtube_id,
+            status = video.status.as_str(),
+            "stranded video found, scheduling its download"
+        );
         Ok(())
     }
 
