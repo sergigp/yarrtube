@@ -278,6 +278,7 @@ impl Task {
             "fetch_thumbnail" => TaskLane::Thumbnail,
             "fetch_subtitles" => TaskLane::Subtitles,
             "sync_video" => TaskLane::VideoSync,
+            "sync_plex_labels" => TaskLane::Plex,
             "update_ytdlp" => TaskLane::Exclusive,
             _ => TaskLane::Light,
         }
@@ -614,6 +615,11 @@ mod tests {
     #[test]
     fn it_should_run_video_syncs_in_their_own_lane() {
         assert_eq!(Task::lane_for("sync_video"), TaskLane::VideoSync);
+    }
+
+    #[test]
+    fn it_should_run_label_syncs_in_the_plex_lane() {
+        assert_eq!(Task::lane_for("sync_plex_labels"), TaskLane::Plex);
     }
 
     #[test]
