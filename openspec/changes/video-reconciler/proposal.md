@@ -25,7 +25,8 @@ needs before more steps are bolted on in more places.
 - The `VideoAddedToPlaylist`, `VideoAddedToChannel` and `VideoDownloaded`
   events schedule a `sync_video` instead of a download, thumbnail fetch or
   subtitle fetch directly. The five subscribers doing that are replaced by
-  one (`SyncVideoOnVideoEvent`).
+  three, one per event (`SyncVideoOnVideoAddedToPlaylist`,
+  `SyncVideoOnVideoAddedToChannel`, `SyncVideoOnVideoDownloaded`).
 - `InternalVideoReconciler` keeps its folder-level work (broken files,
   metadata repair, errored recovery, orphan cleanup) but delegates per-video
   step scheduling (stranded downloads, missing thumbnails, missing
@@ -59,7 +60,8 @@ their steps to the `VideoReconciler` rather than new subscribers.
 - Domain: new `VideoReconciler` service and `VideoSyncStep` /
   `VideoSyncPlan` / `VideoTarget` types; `InternalVideoReconciler`,
   `Task`, `TaskLane` change.
-- Application: new `SyncVideoTask` and `SyncVideoOnVideoEvent`; five
+- Application: new `SyncVideoTask` and the three `SyncVideoOn*`
+  subscribers; five
   subscribers removed; task and subscriber registries rewired.
 - Infrastructure: `SqliteTaskRepository` dedupe and `TaskExecutor` lane
   capacity; `TaskViewSearcher` resolves `sync_video`.

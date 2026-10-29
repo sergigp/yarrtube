@@ -14,11 +14,11 @@
 - `src/domain/task/task_lane.rs` — `TaskLane::VideoSync` (capacity 1 via the executor's default).
 - `src/application/tasks/sync_video_task.rs` — new `SyncVideoTask` handler.
 - `src/application/tasks/mod.rs` — registers `sync_video`.
-- `src/application/subscribers/sync_video_on_video_event.rs` — new subscriber scheduling a `sync_video` from any event carrying `video_id`.
-- `src/application/subscribers/mod.rs` — registers it for `VideoAddedToPlaylist`, `VideoAddedToChannel`, `VideoDownloaded`; drops the five replaced subscribers.
+- `src/application/subscribers/sync_video_on_video_added_to_playlist.rs`, `sync_video_on_video_added_to_channel.rs`, `sync_video_on_video_downloaded.rs` — new subscribers, one per event, each scheduling a `sync_video` for the event's `video_id`.
+- `src/application/subscribers/mod.rs` — registers each for its event (`VideoAddedToPlaylist`, `VideoAddedToChannel`, `VideoDownloaded`); drops the five replaced subscribers.
 - `src/application/subscribers/download_video_on_video_added_to_{channel,playlist}.rs`, `fetch_thumbnail_on_video_added_to_{channel,playlist}.rs`, `fetch_subtitles_on_video_downloaded.rs` — deleted.
 - `src/infrastructure/repositories/sqlite_task_repository.rs` — dedupe checks `running` only when `Task::dedupes_running` says so.
-- `src/serve.rs` — builds `VideoReconciler`, passes it to `InternalVideoReconciler`, the task registry and the subscriber registry.
+- `src/serve.rs` — builds `VideoReconciler`, passes it to `InternalVideoReconciler` and the task registry (the subscribers only need the task repository and clock).
 - `web/src/lib/tasks.ts` (+ `tasks.test.ts`) — describes `sync_video`, family `syncs`.
 
 ## Types & Signatures
@@ -117,12 +117,14 @@ impl TaskHandler for SyncVideoTask {
     fn handle(&self, payload: &str, is_last_attempt: bool) -> anyhow::Result<()>;
 }
 
-// application/subscribers/sync_video_on_video_event.rs
-pub struct SyncVideoOnVideoEvent {
+// application/subscribers/sync_video_on_video_added_to_playlist.rs,
+// sync_video_on_video_added_to_channel.rs, sync_video_on_video_downloaded.rs
+// — one subscriber per event, same shape:
+pub struct SyncVideoOnVideoAddedToPlaylist { // / ...AddedToChannel / ...Downloaded
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
 }
-impl EventSubscriber for SyncVideoOnVideoEvent {
+impl EventSubscriber for SyncVideoOnVideoAddedToPlaylist {
     fn handle(&self, payload: &str) -> anyhow::Result<()>; // reads {"video_id"}
 }
 ```
@@ -138,7 +140,7 @@ YouTube lane decision: no new limit. Download (configurable N), thumbnail (1) an
 ## Call Stack
 
 **Video added** (`VideoAddedToChannel { channel_id, video_id }` / `VideoAddedToPlaylist`)
-1. `SyncVideoOnVideoEvent::handle(payload)` → `TaskRepository::schedule(Task::SyncVideo { video_id }, clock.now())`
+1. `SyncVideoOnVideoAddedToChannel::handle(payload)` / `SyncVideoOnVideoAddedToPlaylist::handle(payload)` → `TaskRepository::schedule(Task::SyncVideo { video_id }, clock.now())`
 2. executor (lane `VideoSync`, key `video:<id>`) → `SyncVideoTask::handle(payload, _)` → `Task::decode_sync_video_payload` → `VideoRecordId::new`
 3. `VideoReconciler::reconcile(&video_id)`
    - `VideoRepository::find(&video_id)` → `None` ⇒ `Ok(())`
@@ -146,7 +148,7 @@ YouTube lane decision: no new limit. Download (configurable N), thumbnail (1) an
    - `reconcile_video(&video, &target)` → `VideoSyncPlan::for_video(&video).steps` → for each `TaskRepository::schedule(&step.task_for(&video, &target), clock.now())`
 
 **Video downloaded** (`VideoDownloaded { video_id, output_dir, folder }`)
-1. `SyncVideoOnVideoEvent::handle` → schedule `SyncVideo` (Plex scan subscriber unchanged)
+1. `SyncVideoOnVideoDownloaded::handle` → schedule `SyncVideo` (Plex scan subscriber unchanged)
 2. → same as above; plan is `[FetchSubtitles]` (thumbnail recorded by the download).
 
 **Reconcile pass** (`ReconcileChannelTask` / `ReconcilePlaylistTask` → `InternalVideoReconciler::reconcile(desired, delta)`)
@@ -173,9 +175,13 @@ Behaviour tests (application layer):
 8. `it_should_skip_if_video_is_gone` — unknown id ⇒ `Ok`, no task.
 9. `it_should_skip_if_video_has_no_owner` — video not in any channel/playlist ⇒ `Ok`, no task.
 
-`application/subscribers/sync_video_on_video_event.rs`
+`application/subscribers/sync_video_on_video_added_to_channel.rs`
 10. `it_should_schedule_a_video_sync_when_a_video_is_added_to_a_channel`
+
+`application/subscribers/sync_video_on_video_added_to_playlist.rs`
 11. `it_should_schedule_a_video_sync_when_a_video_is_added_to_a_playlist`
+
+`application/subscribers/sync_video_on_video_downloaded.rs`
 12. `it_should_schedule_a_video_sync_when_a_video_is_downloaded`
 
 `application/tasks/reconcile_channel_task.rs` (existing suite stays green; new)
