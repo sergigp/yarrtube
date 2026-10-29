@@ -5,6 +5,8 @@ pub enum TaskLane {
     Download,
     Thumbnail,
     Subtitles,
+    VideoSync,
     Light,
+    Plex,
     Exclusive,
 }

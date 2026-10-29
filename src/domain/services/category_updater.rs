@@ -1,6 +1,7 @@
 use crate::domain::category::{
     Category, CategoryColor, CategoryId, CategoryMember, CategoryName, UpdateCategoryError,
 };
+use crate::domain::services::{VideoCategoryAssigner, VideoCategoryAssignerApi};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -19,6 +20,7 @@ pub struct CategoryUpdater {
     repository: Arc<dyn CategoryRepository>,
     channel_repository: Arc<dyn ChannelRepository>,
     playlist_repository: Arc<dyn PlaylistRepository>,
+    video_category_assigner: VideoCategoryAssigner,
 }
 
 impl CategoryUpdater {
@@ -26,21 +28,25 @@ impl CategoryUpdater {
         repository: Arc<dyn CategoryRepository>,
         channel_repository: Arc<dyn ChannelRepository>,
         playlist_repository: Arc<dyn PlaylistRepository>,
+        video_category_assigner: VideoCategoryAssigner,
     ) -> Self {
         Self {
             repository,
             channel_repository,
             playlist_repository,
+            video_category_assigner,
         }
     }
 }
 
 pub trait CategoryUpdaterApi: Send + Sync {
     /// Applies the present fields of `update` in one save. Another category
-    /// with the same name ignoring case → `NameTaken`.
+    /// with the same name ignoring case → `NameTaken`. A rename is announced
+    /// for every video in the category; a recolor is not.
     fn update(&self, id: &CategoryId, update: CategoryUpdate) -> Result<(), UpdateCategoryError>;
-    /// Replaces the members. Every member must be a tracked channel/playlist;
-    /// the first that is not → `MemberNotTracked`.
+    /// Replaces the members, then recomputes the categories of every video of
+    /// a former or new member. Every member must be a tracked
+    /// channel/playlist; the first that is not → `MemberNotTracked`.
     fn set_members(
         &self,
         id: &CategoryId,
@@ -54,7 +60,14 @@ impl CategoryUpdaterApi for CategoryUpdater {
         if let Some(name) = &update.name {
             self.ensure_name_free(id, name)?;
         }
-        self.save(&Self::applied(category, update))
+        let renamed = update.name.is_some();
+        self.save(&Self::applied(category, update))?;
+        if renamed {
+            self.video_category_assigner
+                .announce_renamed(id)
+                .map_err(UpdateCategoryError::Repository)?;
+        }
+        Ok(())
     }
 
     fn set_members(
@@ -62,9 +75,12 @@ impl CategoryUpdaterApi for CategoryUpdater {
         id: &CategoryId,
         members: Vec<CategoryMember>,
     ) -> Result<(), UpdateCategoryError> {
+        let _guard = self.video_category_assigner.lock();
         let category = self.find_category(id)?;
         self.ensure_tracked(&members)?;
-        self.save(&category.with_members(members))
+        let previous_members = category.members.clone();
+        self.save(&category.with_members(members))?;
+        self.reassign_videos(id, &previous_members)
     }
 }
 
@@ -129,6 +145,21 @@ impl CategoryUpdater {
             Some(color) => category.with_color(color),
             None => category,
         }
+    }
+
+    /// Recomputes the categories of every video `id`'s member change touches.
+    fn reassign_videos(
+        &self,
+        id: &CategoryId,
+        previous_members: &[CategoryMember],
+    ) -> Result<(), UpdateCategoryError> {
+        let categories = self
+            .repository
+            .list()
+            .map_err(UpdateCategoryError::Repository)?;
+        self.video_category_assigner
+            .reassign_category(id, previous_members, &categories)
+            .map_err(UpdateCategoryError::Repository)
     }
 
     fn save(&self, category: &Category) -> Result<(), UpdateCategoryError> {

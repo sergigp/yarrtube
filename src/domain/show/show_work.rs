@@ -5,9 +5,10 @@ use std::path::Path;
 
 /// Whether anything still writes into a show directory on its own: one of
 /// its `videos` not Downloaded, Errored or Excluded, one of `tasks` (the
-/// non-completed ones) a per-video task in `show_dir`, or one of `events`
-/// (the pending ones) a `VideoDownloaded` in `show_dir` whose subscriber
-/// hasn't yet scheduled its subtitles fetch there. A source with work in
+/// non-completed ones) a per-video task in `show_dir` or a `sync_video` of
+/// one of `videos` (a running one may already have read `show_dir`), or one
+/// of `events` (the pending ones) a `VideoDownloaded` in `show_dir` whose
+/// `sync_video` task hasn't yet been scheduled. A source with work in
 /// progress can't be moved.
 pub fn has_work_in_progress(
     videos: &[Video],
@@ -20,6 +21,10 @@ pub fn has_work_in_progress(
         || tasks
             .iter()
             .any(|task| task.output_dir().is_some_and(|dir| dir == show_dir))
+        || tasks.iter().any(|task| {
+            task.sync_video_id()
+                .is_some_and(|id| videos.iter().any(|video| video.id.as_str() == id))
+        })
         || events
             .iter()
             .any(|event| event.output_dir().is_some_and(|dir| dir == show_dir))

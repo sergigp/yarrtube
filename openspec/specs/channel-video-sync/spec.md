@@ -187,20 +187,23 @@ The system SHALL, for every channel, compare the files present in that
 channel's show directory (recursively through its season folders) against
 the recorded filename and recorded thumbnail filename of each of its
 Downloaded videos, and heal any divergence it finds, the same way
-`playlist-reconciliation`'s filesystem reconciliation does for playlists,
+`playlist-reconciliation`'s filesystem reconciliation does for playlists:
+a Downloaded video whose recorded file is missing or not mp4 is reset by its
+video sync (see `video-sync`), and every file left unaccounted for once every
+video of the pass has been synced is deleted,
 with the same protected set: show files, season folders, every recorded filename, thumbnail filename and subtitle filename of any video regardless of status, the NFO
-sharing a recorded filename's base name, every file sharing the episode base
-name of a video whose number is recorded but whose download or thumbnail
-fetch has not completed yet, and legacy per-video folders or flat files
-recorded on a video. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing and it is not in the previous per-video-folder layout, because a subtitle file is placed before it is recorded.
+sharing a recorded filename's base name, every media (`.mp4`), thumbnail (`.jpg`) or NFO (`.nfo`) file under the
+episode base name of a video whose number is recorded but whose download or
+thumbnail fetch has not completed yet, and legacy per-video folders or flat files
+recorded on a video. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing and it is not in the previous per-video-folder layout, because a subtitle file is placed before it is recorded. A file with any other extension under an episode base name, such as a stale `.mkv` or `.webm`, is not protected.
 
 #### Scenario: Downloaded video's file is missing from disk
 - **WHEN** a reconcile pass finds that a Downloaded video's recorded file is not present in its channel's show directory
-- **THEN** the system resets that video to PENDING, resets its subtitle state to Missing and clears its recorded subtitle filename, clears its recorded filename and quality, keeps its episode number, and triggers a fresh download of it
+- **THEN** the video's sync resets it to PENDING, resets its subtitle state to Missing and clears its recorded subtitle filename, clears its recorded filename, thumbnail filename and quality, keeps its episode number, and schedules a thumbnail fetch and a fresh download of it
 
 #### Scenario: Downloaded video's file is present but not mp4
 - **WHEN** a reconcile pass finds that a Downloaded video's recorded file is present in its channel's show directory but is not an mp4 container
-- **THEN** the system resets that video to PENDING, clears its recorded filename and quality, and triggers a fresh download of it
+- **THEN** the video's sync resets it to PENDING, clears its recorded filename and quality, and schedules a thumbnail fetch and a fresh download of it, and the same pass deletes the stale file, no longer recorded on any video, including when the video has a recorded episode number and the file is under its episode base name
 
 #### Scenario: A file on disk is not accounted for by any Downloaded video
 - **WHEN** a reconcile pass finds a file in the channel's show directory or one of its season folders that is not a show file, not a recorded filename, recorded thumbnail filename, recorded subtitle filename or NFO of any video, not a downloader-managed in-progress temporary file, and does not share the episode base name of a video whose number is recorded
@@ -238,90 +241,6 @@ recorded on a video. Every file whose name starts with the base name of a Downlo
 - **WHEN** a reconcile pass finds `<base name>.en.srt`, where `<base name>` is a Downloaded video's recorded filename without its extension, and that video's subtitle state is Missing
 - **THEN** the system does not treat that file as orphaned and does not delete it, even if the video's title has changed since its download
 
-### Requirement: Permanently Failed Video Recovery (Channels)
-The system SHALL, for every channel, during each reconcile pass reset any
-video that has been permanently errored for at least 24 hours back to
-PENDING and trigger a fresh download of it. A video that became
-permanently errored less than 24 hours before the pass SHALL be left
-permanently errored and SHALL NOT have a download triggered by that pass.
-There is no limit on how many times a given video may be recovered this way.
-An excluded video SHALL NOT be recovered by this pass regardless of how long
-ago it was excluded.
-
-#### Scenario: Permanently errored video found during reconcile
-- **WHEN** a reconcile pass finds a video that has been permanently errored for 24 hours or more
-- **THEN** the system resets that video to PENDING, clears its recorded filename and quality, and triggers a fresh download of it
-
-#### Scenario: Video permanently errored less than 24 hours ago
-- **WHEN** a reconcile pass finds a video that became permanently errored less than 24 hours earlier
-- **THEN** the system leaves the video permanently errored and does not trigger a download for it
-
-#### Scenario: Excluded video is never recovered
-- **WHEN** a reconcile pass finds an excluded video, however long ago it was excluded
-- **THEN** the system leaves the video excluded and does not trigger a download for it
-
-### Requirement: Missing Metadata Recovery (Channels)
-The system SHALL, for every channel, regenerate a downloaded video's
-metadata during a reconcile pass whenever that video is recorded as
-successfully downloaded but has no metadata recorded as populated for it,
-without re-downloading the video's file. When such a video is still stored
-in the previous layout and its publish timestamp is now known, the pass
-SHALL also assign its episode number and move its file set into the TV-show
-layout, recording the new filenames, the same way
-`playlist-reconciliation` does.
-
-#### Scenario: Downloaded video has no recorded metadata
-- **WHEN** a reconcile pass finds a video belonging to the channel that is recorded as downloaded but has no metadata recorded as populated
-- **THEN** the system attempts to generate that video's metadata again, without re-downloading its file
-
-#### Scenario: Downloaded video already has recorded metadata
-- **WHEN** a reconcile pass finds a video belonging to the channel that is recorded as downloaded and already has metadata recorded as populated
-- **THEN** the system does not attempt to regenerate its metadata
-
-#### Scenario: Recovered video still in the previous layout
-- **WHEN** a reconcile pass regenerates the metadata of a downloaded video whose recorded file is still in a per-video folder, and the metadata carries its publish timestamp
-- **THEN** the pass assigns the video's episode number, moves its file, thumbnail and NFO under the episode base name in the season folder, removes the empty per-video folder, and records the new filenames
-
-### Requirement: Missing Thumbnail Recovery (Channels)
-The system SHALL, for every channel, schedule a thumbnail fetch task during
-a reconcile pass for each video that has no recorded thumbnail filename,
-regardless of its download status except as listed below, without affecting that video's download
-status or triggering a redownload. The pass SHALL NOT fetch the thumbnail
-itself, and SHALL NOT schedule one for:
-- a video that already has a thumbnail fetch pending or running,
-- a video the same pass resets for redownload,
-- a video whose download is In Progress,
-- a video whose download status is Excluded (permanently unavailable, so a fetch can never succeed) or Errored (recovery later resets it for redownload, and that download writes its own thumbnail),
-- a video the same pass newly added: its thumbnail fetch is scheduled in reaction to its `VideoAddedToChannel` event (see `video-thumbnails`), so recovery only covers videos already stored before the pass.
-
-#### Scenario: Video has no recorded thumbnail
-- **WHEN** a reconcile pass finds a video belonging to the channel with no recorded thumbnail filename and no thumbnail fetch pending or running for it
-- **THEN** the system schedules a thumbnail fetch task for that video
-
-#### Scenario: Video already has a recorded thumbnail
-- **WHEN** a reconcile pass finds a video belonging to the channel that already has a recorded thumbnail filename
-- **THEN** the system does not schedule a thumbnail fetch for it
-
-#### Scenario: Video newly added by the same pass
-- **WHEN** a reconcile pass adds a new video to the channel, and that video has no recorded thumbnail filename
-- **THEN** the pass itself does not schedule a thumbnail fetch for that video; its fetch is scheduled in reaction to its `VideoAddedToChannel` event
-
-#### Scenario: Thumbnail fetch already queued
-- **WHEN** a reconcile pass finds a video with no recorded thumbnail filename that already has a thumbnail fetch task pending or running
-- **THEN** the system does not schedule another thumbnail fetch for it
-
-#### Scenario: Retried thumbnail fetch fails again
-- **WHEN** a scheduled thumbnail fetch for a video fails
-- **THEN** the video's status and any other recorded field are left unchanged, and the next reconcile pass schedules another fetch, unless the video's download status has meanwhile become Excluded or Errored
-
-#### Scenario: Excluded video has no recorded thumbnail
-- **WHEN** a reconcile pass finds a video belonging to the channel with no recorded thumbnail filename whose download status is Excluded
-- **THEN** the system does not schedule a thumbnail fetch for it, on this or any later pass while it stays Excluded
-
-#### Scenario: Errored video has no recorded thumbnail
-- **WHEN** a reconcile pass finds a video belonging to the channel with no recorded thumbnail filename whose download status is Errored and that the same pass does not reset for redownload
-- **THEN** the system does not schedule a thumbnail fetch for it
-
 ### Requirement: Reconcile Preserves Concurrent Download Progress (Channels)
 A channel reconcile pass refreshing a stored video's title or position
 SHALL change only those fields, never the video's download status or any
@@ -331,49 +250,3 @@ runs is not reverted.
 #### Scenario: Download completes while a reconcile refreshes the video's title
 - **WHEN** a video's download changes its status between the time a channel reconcile pass reads that video and the time the pass stores its refreshed title
 - **THEN** the video keeps the status and download fields set by the download, and gains the refreshed title
-
-### Requirement: Stranded Video Recovery (Channels)
-The system SHALL, for every channel, during each reconcile pass trigger a download for every video of the channel that is stranded. A video is stranded when its download status is Pending, In Progress or Errored Retrying and it has no download task pending or running. The pass SHALL leave the video's download status unchanged, SHALL apply no cooldown, and SHALL NOT treat as stranded a video that the same pass newly adds or resets for redownload. A video whose status is Downloaded, Excluded or Errored is never stranded.
-
-#### Scenario: Errored-retrying video with no download task
-- **WHEN** a reconcile pass finds a video in status Errored Retrying with no download task pending or running for it
-- **THEN** the system triggers a download for that video and leaves its status Errored Retrying
-
-#### Scenario: In-progress video with no download task
-- **WHEN** a reconcile pass finds a video in status In Progress with no download task pending or running for it
-- **THEN** the system triggers a download for that video
-
-#### Scenario: Non-terminal video whose download task is still queued
-- **WHEN** a reconcile pass finds a video in status Pending, In Progress or Errored Retrying that has a download task pending or running
-- **THEN** the system does not trigger another download for it
-
-#### Scenario: Settled video is never stranded
-- **WHEN** a reconcile pass finds a video in status Downloaded, Excluded or Errored with no download task
-- **THEN** the stranded-video recovery does not trigger a download for it
-
-### Requirement: Missing Subtitles Recovery (Channels)
-The system SHALL, for every channel, schedule a subtitle fetch task during a reconcile pass for each Downloaded video whose subtitle state is Missing (see `video-subtitles`), without affecting that video's download status. The pass SHALL NOT fetch the subtitles itself, and SHALL NOT schedule one for a video that already has a subtitle fetch pending or running, nor for a video the same pass resets for redownload or newly adds, nor for a video still stored in the previous per-video-folder layout.
-
-#### Scenario: Downloaded video with missing subtitles
-- **WHEN** a reconcile pass finds a Downloaded video of the channel whose subtitle state is Missing and no subtitle fetch pending or running for it
-- **THEN** the system schedules a subtitle fetch task for that video
-
-#### Scenario: Library upgraded
-- **WHEN** the first reconcile pass after upgrading runs for a channel whose Downloaded videos were stored before subtitles existed
-- **THEN** a subtitle fetch is scheduled for each of them
-
-#### Scenario: Subtitles already fetched or unavailable
-- **WHEN** a reconcile pass finds a Downloaded video whose subtitle state is Fetched or Unavailable
-- **THEN** the system does not schedule a subtitle fetch for it
-
-#### Scenario: Video not downloaded
-- **WHEN** a reconcile pass finds a video with Missing subtitles whose download status is not Downloaded
-- **THEN** the system does not schedule a subtitle fetch for it
-
-#### Scenario: Subtitle fetch already queued
-- **WHEN** a reconcile pass finds a Downloaded video with Missing subtitles that already has a subtitle fetch pending or running
-- **THEN** the system does not schedule another subtitle fetch for it
-
-#### Scenario: Video reset for redownload by the same pass
-- **WHEN** a reconcile pass resets a Downloaded video with Missing subtitles for redownload because its file is missing
-- **THEN** the pass does not schedule a subtitle fetch for it

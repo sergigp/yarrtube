@@ -140,11 +140,13 @@ mod tests {
     use crate::domain::category::Category;
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
-    use crate::domain::services::CategoryVideoCollector;
+    use crate::domain::services::{CategoryVideoCollector, VideoCategoryAssigner};
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{Video, VideoId};
+    use crate::domain::video::{Video, VideoId, VideoRecordId};
+    use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
     };
@@ -160,8 +162,16 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::{
+        SqliteVideoCategoriesRepository, VideoCategoriesRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
+    };
+    use crate::infrastructure::shared::category_lock::CategoryLock;
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_repository::{
+        EventRepository, SqliteEventRepository,
     };
     use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
@@ -479,6 +489,8 @@ mod tests {
             ..category(None, "Chess")
         };
         repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@chess"), &[&chess]);
+        categorize_source(&db, &playlist_member("PLchess"), &[&chess]);
         let category_view_searcher = CategoryViewSearcher::new(
             repository,
             channel_repository,
@@ -528,6 +540,8 @@ mod tests {
         };
         repository.insert(&chess).unwrap();
         repository.insert(&science).unwrap();
+        categorize_source(&db, &playlist_member("PLchess"), &[&chess]);
+        categorize_source(&db, &channel_member("@science"), &[&science]);
         let category_view_searcher = CategoryViewSearcher::new(
             repository,
             channel_repository,
@@ -581,6 +595,8 @@ mod tests {
             ..category(None, "Chess")
         };
         repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@chess"), &[&chess]);
+        categorize_source(&db, &playlist_member("PLmusic"), &[&chess]);
         let category_view_searcher = CategoryViewSearcher::new(
             repository,
             channel_repository,
@@ -627,6 +643,8 @@ mod tests {
             ..category(None, "Chess")
         };
         repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@chess"), &[&chess]);
+        categorize_source(&db, &playlist_member("PLmusic"), &[&chess]);
         let category_view_searcher = CategoryViewSearcher::new(
             repository,
             channel_repository,
@@ -665,6 +683,7 @@ mod tests {
             ..category(None, "Music")
         };
         repository.insert(&music).unwrap();
+        categorize_source(&db, &playlist_member("PLmusic"), &[&music]);
         let category_view_searcher = CategoryViewSearcher::new(
             repository,
             channel_repository,
@@ -738,6 +757,7 @@ mod tests {
             repository.clone(),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = rename(category_updater, chess.id.as_str(), "Board games").await;
@@ -749,6 +769,69 @@ mod tests {
                 name: CategoryName::new("Board games").unwrap(),
                 ..chess
             }]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_announce_the_videos_of_a_renamed_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@chess")).unwrap();
+        let first = downloaded_video("vid1");
+        let second = pending_video("vid2");
+        [&first, &second].into_iter().for_each(|video| {
+            save_channel_video(
+                &video_repository,
+                &SqliteChannelVideoRepository::new(db.database()),
+                "@chess",
+                video,
+            )
+        });
+        let chess = Category {
+            members: vec![channel_member("@chess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let stored = vec![
+            VideoCategories::new(first.id.clone(), vec![chess.id.clone()]),
+            VideoCategories::new(second.id.clone(), vec![chess.id.clone()]),
+        ];
+        video_categories_repository.save_many(&stored).unwrap();
+        let video_category_assigner = VideoCategoryAssigner::new(
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner,
+        );
+
+        let response = rename(category_updater, chess.id.as_str(), "Board games").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[first.id.clone(), second.id.clone()])
+                .unwrap(),
+            stored
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&first, &second])]
         );
     }
 
@@ -767,6 +850,7 @@ mod tests {
             repository.clone(),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = update(
@@ -790,6 +874,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_not_announce_a_recolored_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@chess")).unwrap();
+        let video = downloaded_video("vid1");
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@chess",
+            &video,
+        );
+        let chess = Category {
+            members: vec![channel_member("@chess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone()],
+            )])
+            .unwrap();
+        let video_category_assigner = VideoCategoryAssigner::new(
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner,
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: None,
+                color: Some("#e9def8".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_rename_and_recolor_a_category() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
@@ -799,6 +943,7 @@ mod tests {
             repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = update(
@@ -832,6 +977,7 @@ mod tests {
             repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = rename(category_updater, chess.id.as_str(), "Chess").await;
@@ -858,6 +1004,7 @@ mod tests {
             repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = rename(category_updater, chess.id.as_str(), "sports").await;
@@ -884,6 +1031,7 @@ mod tests {
             repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = update(
@@ -958,6 +1106,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = rename(category_updater, "missing", "Chess").await;
@@ -997,7 +1146,8 @@ mod tests {
             ..category(None, "Chess")
         };
         repository.insert(&chess).unwrap();
-        let category_deleter = CategoryDeleter::new(repository.clone());
+        let category_deleter =
+            CategoryDeleter::new(repository.clone(), video_category_assigner(db.database()));
 
         let response = delete(category_deleter, chess.id.as_str()).await;
 
@@ -1009,10 +1159,142 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_uncategorize_the_videos_of_a_deleted_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@GothamChess"))
+            .unwrap();
+        let video = downloaded_video("vid1");
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+        );
+        let chess = Category {
+            members: vec![channel_member("@GothamChess")],
+            ..category(None, "Chess")
+        };
+        let funny = Category {
+            members: vec![channel_member("@GothamChess")],
+            ..category(None, "Funny")
+        };
+        repository.insert(&chess).unwrap();
+        repository.insert(&funny).unwrap();
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone(), funny.id.clone()],
+            )])
+            .unwrap();
+        let video_category_assigner = VideoCategoryAssigner::new(
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_deleter = CategoryDeleter::new(repository.clone(), video_category_assigner);
+
+        let response = delete(category_deleter, funny.id.as_str()).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(repository.list().unwrap(), vec![chess.clone()]);
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone()]
+            )]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&video])]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_only_remove_a_deleted_category_from_videos_of_an_uncategorized_source() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@GothamChess"))
+            .unwrap();
+        let first = downloaded_video("vid1");
+        let second = downloaded_video("vid2");
+        [&first, &second].into_iter().for_each(|video| {
+            save_channel_video(
+                &video_repository,
+                &SqliteChannelVideoRepository::new(db.database()),
+                "@GothamChess",
+                video,
+            )
+        });
+        // The channel is in no category: its videos' categories were set
+        // per video (by a classifier), not from the channel.
+        let chess = category(None, "Chess");
+        let funny = category(None, "Funny");
+        repository.insert(&chess).unwrap();
+        repository.insert(&funny).unwrap();
+        video_categories_repository
+            .save_many(&[
+                VideoCategories::new(first.id.clone(), vec![chess.id.clone(), funny.id.clone()]),
+                VideoCategories::new(second.id.clone(), vec![chess.id.clone()]),
+            ])
+            .unwrap();
+        let video_category_assigner = VideoCategoryAssigner::new(
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_deleter = CategoryDeleter::new(repository, video_category_assigner);
+
+        let response = delete(category_deleter, funny.id.as_str()).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[first.id.clone(), second.id.clone()])
+                .unwrap(),
+            vec![
+                VideoCategories::new(first.id.clone(), vec![chess.id.clone()]),
+                VideoCategories::new(second.id.clone(), vec![chess.id.clone()]),
+            ]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&first])]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_delete_a_missing_category() {
         let db = TestDatabase::new();
-        let category_deleter =
-            CategoryDeleter::new(Arc::new(SqliteCategoryRepository::new(db.database())));
+        let category_deleter = CategoryDeleter::new(
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            video_category_assigner(db.database()),
+        );
 
         let response = delete(category_deleter, "missing").await;
 
@@ -1036,8 +1318,12 @@ mod tests {
         playlist_repository.insert(&playlist("PLendgames")).unwrap();
         let chess = category(None, "Chess");
         repository.insert(&chess).unwrap();
-        let category_updater =
-            CategoryUpdater::new(repository.clone(), channel_repository, playlist_repository);
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            playlist_repository,
+            video_category_assigner(db.database()),
+        );
 
         let response = set_members(
             category_updater,
@@ -1076,6 +1362,7 @@ mod tests {
             repository.clone(),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = set_members(
@@ -1105,8 +1392,12 @@ mod tests {
         playlist_repository.insert(&playlist("PLendgames")).unwrap();
         let chess = category(None, "Chess");
         repository.insert(&chess).unwrap();
-        let category_updater =
-            CategoryUpdater::new(repository.clone(), channel_repository, playlist_repository);
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            playlist_repository,
+            video_category_assigner(db.database()),
+        );
 
         let response = set_members(
             category_updater,
@@ -1142,6 +1433,7 @@ mod tests {
             repository.clone(),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = set_members(
@@ -1165,6 +1457,405 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_categorize_the_videos_of_an_added_member() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        let first = pending_video("vid1");
+        let second = downloaded_video("vid2");
+        [&first, &second].into_iter().for_each(|video| {
+            save_channel_video(
+                &video_repository,
+                &channel_video_repository,
+                "@GothamChess",
+                video,
+            )
+        });
+        let chess = category(None, "Chess");
+        repository.insert(&chess).unwrap();
+        let video_category_assigner = VideoCategoryAssigner::new(
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner,
+        );
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&["@GothamChess"], &[]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[first.id.clone(), second.id.clone()])
+                .unwrap(),
+            vec![
+                VideoCategories::new(first.id.clone(), vec![chess.id.clone()]),
+                VideoCategories::new(second.id.clone(), vec![chess.id.clone()]),
+            ]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&first, &second])]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_uncategorize_the_videos_of_a_removed_member() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        let video = downloaded_video("vid1");
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+        );
+        let chess = Category {
+            members: vec![channel_member("@GothamChess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone()],
+            )])
+            .unwrap();
+        let video_category_assigner = VideoCategoryAssigner::new(
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner,
+        );
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&[], &[]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::none(video.id.clone())]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&video])]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_keep_the_other_categories_of_a_member_removed_from_one() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        let video = downloaded_video("vid1");
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+        );
+        let chess = Category {
+            members: vec![channel_member("@GothamChess")],
+            ..category(None, "Chess")
+        };
+        let funny = Category {
+            members: vec![channel_member("@GothamChess")],
+            ..category(None, "Funny")
+        };
+        repository.insert(&chess).unwrap();
+        repository.insert(&funny).unwrap();
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone(), funny.id.clone()],
+            )])
+            .unwrap();
+        let video_category_assigner = VideoCategoryAssigner::new(
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner,
+        );
+
+        let response = set_members(
+            category_updater,
+            funny.id.as_str(),
+            members_request(&[], &[]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone()]
+            )]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&video])]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_not_categorize_other_copies_of_a_member_video() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        playlist_repository.insert(&playlist("PLendgames")).unwrap();
+        let channel_copy = downloaded_video("vid1");
+        let playlist_copy = downloaded_video("vid1");
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &channel_copy,
+        );
+        save_playlist_video(
+            &video_repository,
+            &SqlitePlaylistVideoRepository::new(db.database()),
+            "PLendgames",
+            &playlist_copy,
+        );
+        let chess = category(None, "Chess");
+        repository.insert(&chess).unwrap();
+        let video_category_assigner = VideoCategoryAssigner::new(
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            playlist_repository,
+            video_category_assigner,
+        );
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&["@GothamChess"], &[]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[channel_copy.id.clone(), playlist_copy.id.clone()])
+                .unwrap(),
+            vec![
+                VideoCategories::new(channel_copy.id.clone(), vec![chess.id.clone()]),
+                VideoCategories::none(playlist_copy.id.clone()),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_uncategorize_stale_videos_of_a_former_member() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        let video = downloaded_video("vid1");
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+        );
+        // A previous members change saved the members but failed before
+        // reassigning the former member's videos.
+        let chess = category(None, "Chess");
+        repository.insert(&chess).unwrap();
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone()],
+            )])
+            .unwrap();
+        let video_category_assigner = VideoCategoryAssigner::new(
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner,
+        );
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&[], &[]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::none(video.id.clone())]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&video])]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_not_announce_a_members_set_that_changes_no_video() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        let video = downloaded_video("vid1");
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+        );
+        let chess = Category {
+            members: vec![channel_member("@GothamChess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone()],
+            )])
+            .unwrap();
+        let video_category_assigner = VideoCategoryAssigner::new(
+            video_categories_repository.clone(),
+            repository.clone(),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteEventPublisher::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        );
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner,
+        );
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&["@GothamChess"], &[]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(std::slice::from_ref(&video.id))
+                .unwrap(),
+            vec![VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone()]
+            )]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_set_members_if_a_source_is_not_tracked() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
@@ -1179,6 +1870,7 @@ mod tests {
             repository.clone(),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = set_members(
@@ -1219,6 +1911,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = set_members(category_updater, "missing", members_request(&[], &[])).await;
@@ -1277,6 +1970,8 @@ mod tests {
             ..category(None, "Chess")
         };
         repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@chess"), &[&chess]);
+        categorize_source(&db, &playlist_member("PLchess"), &[&chess]);
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             channel_repository,
@@ -1340,6 +2035,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            video_category_assigner(unused_connection()),
         )
     }
 
@@ -1503,7 +2199,58 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         )
+    }
+
+    /// Seeds every stored video of `source` as belonging to `categories`.
+    fn categorize_source(db: &TestDatabase, source: &CategoryMember, categories: &[&Category]) {
+        let video_ids: Vec<VideoRecordId> = match source {
+            CategoryMember::Channel(handle) => SqliteChannelVideoRepository::new(db.database())
+                .list_for_channel(handle)
+                .unwrap()
+                .into_iter()
+                .map(|channel_video| channel_video.video_id)
+                .collect(),
+            CategoryMember::Playlist(id) => SqlitePlaylistVideoRepository::new(db.database())
+                .list_for_playlist(id)
+                .unwrap()
+                .into_iter()
+                .map(|playlist_video| playlist_video.video_id)
+                .collect(),
+        };
+        let category_ids: Vec<CategoryId> = categories
+            .iter()
+            .map(|category| category.id.clone())
+            .collect();
+        SqliteVideoCategoriesRepository::new(db.database())
+            .save_many(
+                &video_ids
+                    .into_iter()
+                    .map(|video_id| VideoCategories::new(video_id, category_ids.clone()))
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
+    }
+
+    /// The pending `VideoCategoriesChanged` event `id`, naming `videos` in
+    /// record id order.
+    fn categories_changed_event(id: i64, videos: &[&Video]) -> ScheduledEvent {
+        let mut video_ids: Vec<String> = videos
+            .iter()
+            .map(|video| video.id.as_str().to_string())
+            .collect();
+        video_ids.sort();
+        let event = DomainEvent::VideoCategoriesChanged(VideoCategoriesChanged { video_ids });
+        ScheduledEvent {
+            id,
+            event_type: event.event_type().to_string(),
+            payload: event.payload().to_string(),
+            retries: 0,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
     }
 
     fn watched_timestamp() -> DateTime<Utc> {
@@ -1572,5 +2319,19 @@ mod tests {
         create_category(State(category_creator), Json(request))
             .await
             .map(|(status, Json(category))| (status, category))
+    }
+
+    fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
+        VideoCategoryAssigner::new(
+            Arc::new(SqliteVideoCategoriesRepository::new(database.clone())),
+            Arc::new(SqliteCategoryRepository::new(database.clone())),
+            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
+            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
+            Arc::new(SqliteEventPublisher::new(
+                database,
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(CategoryLock::default()),
+        )
     }
 }

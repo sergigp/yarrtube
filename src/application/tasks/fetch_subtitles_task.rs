@@ -7,8 +7,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 /// Fetches one downloaded video's subtitles, scheduled by
-/// `FetchSubtitlesOnVideoDownloaded` after a download and by the
-/// reconcilers' missing-subtitles recovery. Best-effort: always succeeds, so
+/// the video sync (`SyncVideoTask` via `VideoReconciler`) after a download
+/// and by the reconcilers' missing-subtitles recovery. Best-effort: always succeeds, so
 /// the queue never retries it; the next reconcile pass reschedules it instead.
 pub struct FetchSubtitlesTask {
     video_repository: Arc<dyn VideoRepository>,
@@ -51,7 +51,6 @@ mod tests {
         CaptionLanguage, CaptionSource, CaptionTracks, TranscriptText, VideoTranscript,
     };
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-    use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
         SqliteVideoTranscriptRepository, VideoTranscriptRepository,
@@ -93,10 +92,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -159,10 +154,6 @@ mod tests {
                 Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -217,10 +208,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -285,10 +272,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -351,10 +334,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -400,10 +379,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -441,10 +416,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -494,10 +465,6 @@ mod tests {
                     video_transcript_repository.clone(),
                     Arc::new(video_downloader_repository),
                     video_file_repository.clone(),
-                    Arc::new(SqliteTaskRepository::new(
-                        db.database(),
-                        Arc::new(FixedClock(now())),
-                    )),
                     Arc::new(SqliteEventPublisher::new(
                         db.database(),
                         Arc::new(FixedClock(now())),
@@ -559,10 +526,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -604,10 +567,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -645,10 +604,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -687,10 +642,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -724,10 +675,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -774,10 +721,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository,
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -828,10 +771,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository,
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -878,10 +817,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -933,10 +868,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -992,10 +923,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -1051,10 +978,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -1096,10 +1019,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -1141,10 +1060,6 @@ mod tests {
                 Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
                 video_downloader_repository,
                 Arc::new(FakeVideoFileRepository::default()),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -1194,10 +1109,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -1245,10 +1156,6 @@ mod tests {
                 video_transcript_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -1294,10 +1201,6 @@ mod tests {
                 Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
                 video_downloader_repository,
                 Arc::new(FakeVideoFileRepository::default()),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),
@@ -1332,10 +1235,6 @@ mod tests {
                 Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
                 video_downloader_repository,
                 Arc::new(FakeVideoFileRepository::default()),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(now())),
-                )),
                 Arc::new(SqliteEventPublisher::new(
                     db.database(),
                     Arc::new(FixedClock(now())),

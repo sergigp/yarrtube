@@ -93,13 +93,12 @@ impl ScheduledTask {
         self.retries + 1 >= MAX_ATTEMPTS
     }
 
-    /// The video a `download_video` task targets; `None` for any other
-    /// task type.
-    pub fn download_video_id(&self) -> Option<String> {
-        (self.task_type == "download_video")
-            .then(|| Task::decode_download_video_payload(&self.payload).ok())
+    /// The video a `sync_video` task targets; `None` for any other task
+    /// type.
+    pub fn sync_video_id(&self) -> Option<String> {
+        (self.task_type == "sync_video")
+            .then(|| Task::decode_sync_video_payload(&self.payload).ok())
             .flatten()
-            .map(|(video_id, _, _)| video_id)
     }
 
     /// The show directory this task writes to or deletes from, for a

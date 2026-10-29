@@ -6,8 +6,8 @@ use crate::infrastructure::repositories::task_handler::TaskHandler;
 use std::path::Path;
 
 /// Downloads one video via `yt-dlp`, scheduled by
-/// `subscribers::download_video_on_video_added_to_playlist`/
-/// `..._to_channel` whenever a new video shows up in a tracked container.
+/// the video sync (`SyncVideoTask` via `VideoReconciler`) whenever a video
+/// that isn't downloaded yet needs it, or by a reconcile pass.
 pub struct DownloadVideoTask {
     video_downloader: VideoDownloader,
 }

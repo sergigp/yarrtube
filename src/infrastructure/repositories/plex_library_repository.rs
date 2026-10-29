@@ -1,4 +1,5 @@
-use crate::domain::plex::PlexSection;
+use crate::domain::plex::{PlexEpisode, PlexLabels, PlexPlaylist, PlexSection};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::Deserialize;
 #[cfg(test)]
 use std::sync::Mutex;
@@ -9,16 +10,53 @@ use std::time::Duration;
 /// for a large section listing (normally ~1 s) while Plex is busy with its
 /// nightly maintenance, which has taken it to 29 s.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+/// Episodes requested per page of a section listing.
+const EPISODES_PAGE_SIZE: usize = 500;
+/// What a value Plex splits on commas or parses as a nested URI must have
+/// escaped, as python-plexapi does: all but letters, digits and `-._~`.
+const PLEX_ESCAPED: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
 
 /// Port to the Plex server's library HTTP API, authenticated via
-/// `X-Plex-Token`: discovers the library sections and asks one to scan a
-/// folder.
+/// `X-Plex-Token`: discovers the library sections, asks one to scan a
+/// folder, reads and writes episode labels and manages playlists.
 pub trait PlexLibraryRepository: Send + Sync {
     /// Every library section on the server, with the folders it scans.
     fn list_sections(&self) -> anyhow::Result<Vec<PlexSection>>;
     /// Asks Plex to scan only `path` (a server-side folder) in the section,
     /// so a new video is imported without waiting for a library scan.
     fn scan_path(&self, section_id: &str, path: &str) -> anyhow::Result<()>;
+    /// The server's machine identifier (`GET /identity`).
+    fn server_id(&self) -> anyhow::Result<String>;
+    /// Every episode in the section, one per media file
+    /// (`GET /library/sections/{id}/all?type=4`, paged).
+    fn list_episodes(&self, section_id: &str) -> anyhow::Result<Vec<PlexEpisode>>;
+    /// The episode's labels (`GET /library/metadata/{rating_key}`).
+    fn find_labels(&self, rating_key: &str) -> anyhow::Result<PlexLabels>;
+    /// Writes `labels` to the episode and removes `removed`, locking the
+    /// field, or unlocking it when `labels` is empty.
+    fn save_labels(
+        &self,
+        episode: &PlexEpisode,
+        labels: &PlexLabels,
+        removed: &[String],
+    ) -> anyhow::Result<()>;
+    /// The token user's video playlists (`GET /playlists?playlistType=video`).
+    fn list_playlists(&self) -> anyhow::Result<Vec<PlexPlaylist>>;
+    /// Creates a smart playlist of the section's unwatched episodes labelled
+    /// `label`, newest air date first.
+    fn create_smart_playlist(
+        &self,
+        server_id: &str,
+        section_id: &str,
+        label: &str,
+        title: &str,
+    ) -> anyhow::Result<PlexPlaylist>;
+    /// `DELETE /playlists/{rating_key}`.
+    fn delete_playlist(&self, rating_key: &str) -> anyhow::Result<()>;
 }
 
 pub struct PlexConfig {
@@ -41,6 +79,8 @@ struct SectionsContainer {
 #[derive(Debug, Deserialize)]
 struct Directory {
     key: String,
+    #[serde(default)]
+    title: String,
     #[serde(rename = "Location", default)]
     locations: Vec<Location>,
 }
@@ -48,6 +88,86 @@ struct Directory {
 #[derive(Debug, Deserialize)]
 struct Location {
     path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct IdentityResponse {
+    #[serde(rename = "MediaContainer")]
+    media_container: IdentityContainer,
+}
+
+#[derive(Debug, Deserialize)]
+struct IdentityContainer {
+    #[serde(rename = "machineIdentifier")]
+    machine_identifier: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct MetadataResponse {
+    #[serde(rename = "MediaContainer")]
+    media_container: MetadataContainer,
+}
+
+#[derive(Debug, Deserialize)]
+struct MetadataContainer {
+    #[serde(rename = "totalSize", default)]
+    total_size: usize,
+    #[serde(rename = "Metadata", default)]
+    metadata: Vec<Metadata>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Metadata {
+    #[serde(rename = "ratingKey")]
+    rating_key: String,
+    #[serde(rename = "Media", default)]
+    media: Vec<Media>,
+    #[serde(rename = "Label", default)]
+    labels: Vec<Tag>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Tag {
+    tag: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct Media {
+    #[serde(rename = "Part", default)]
+    parts: Vec<Part>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Part {
+    file: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlaylistsResponse {
+    #[serde(rename = "MediaContainer")]
+    media_container: PlaylistsContainer,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlaylistsContainer {
+    #[serde(rename = "Metadata", default)]
+    playlists: Vec<PlaylistMetadata>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlaylistMetadata {
+    #[serde(rename = "ratingKey")]
+    rating_key: String,
+    title: String,
+}
+
+impl From<PlaylistMetadata> for PlexPlaylist {
+    fn from(playlist: PlaylistMetadata) -> Self {
+        Self {
+            rating_key: playlist.rating_key,
+            title: playlist.title,
+        }
+    }
 }
 
 pub struct HttpPlexLibraryRepository {
@@ -76,6 +196,7 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
             .into_iter()
             .map(|directory| PlexSection {
                 id: directory.key,
+                title: directory.title,
                 locations: directory
                     .locations
                     .into_iter()
@@ -87,31 +208,147 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
 
     fn scan_path(&self, section_id: &str, path: &str) -> anyhow::Result<()> {
         let endpoint = format!("/library/sections/{section_id}/refresh");
-        let response = self
+        let request = self
             .client
-            .get(format!("{}{endpoint}", self.config.base_url))
-            .query(&[("path", path)])
-            .header("Accept", "application/json")
-            .header("X-Plex-Token", &self.config.token)
-            .send()?;
-        Self::ensure_success(&endpoint, response).map(drop)
+            .get(self.url(&endpoint))
+            .query(&[("path", path)]);
+        self.send(&endpoint, request).map(drop)
+    }
+
+    fn server_id(&self) -> anyhow::Result<String> {
+        let response: IdentityResponse = self.get_json("/identity", &[])?;
+        Ok(response.media_container.machine_identifier)
+    }
+
+    fn list_episodes(&self, section_id: &str) -> anyhow::Result<Vec<PlexEpisode>> {
+        self.list_episodes_from(section_id, 0)
+    }
+
+    fn find_labels(&self, rating_key: &str) -> anyhow::Result<PlexLabels> {
+        let response: MetadataResponse =
+            self.get_json(&format!("/library/metadata/{rating_key}"), &[])?;
+        Ok(PlexLabels::new(
+            response
+                .media_container
+                .metadata
+                .into_iter()
+                .flat_map(|metadata| metadata.labels)
+                .map(|label| label.tag)
+                .collect(),
+        ))
+    }
+
+    fn save_labels(
+        &self,
+        episode: &PlexEpisode,
+        labels: &PlexLabels,
+        removed: &[String],
+    ) -> anyhow::Result<()> {
+        let endpoint = format!("/library/sections/{}/all", episode.section_id);
+        let request = self
+            .client
+            .put(self.url(&endpoint))
+            .query(&label_edit_query(episode, labels, removed));
+        self.send(&endpoint, request).map(drop)
+    }
+
+    fn list_playlists(&self) -> anyhow::Result<Vec<PlexPlaylist>> {
+        let response: PlaylistsResponse =
+            self.get_json("/playlists", &[("playlistType", "video")])?;
+        Ok(response
+            .media_container
+            .playlists
+            .into_iter()
+            .map(PlexPlaylist::from)
+            .collect())
+    }
+
+    fn create_smart_playlist(
+        &self,
+        server_id: &str,
+        section_id: &str,
+        label: &str,
+        title: &str,
+    ) -> anyhow::Result<PlexPlaylist> {
+        let uri = smart_playlist_uri(server_id, section_id, label);
+        let request = self.client.post(self.url("/playlists")).query(&[
+            ("type", "video"),
+            ("title", title),
+            ("smart", "1"),
+            ("uri", uri.as_str()),
+        ]);
+        let response: PlaylistsResponse = self.send("/playlists", request)?.json()?;
+        response
+            .media_container
+            .playlists
+            .into_iter()
+            .next()
+            .map(PlexPlaylist::from)
+            .ok_or_else(|| anyhow::anyhow!("Plex created no playlist titled {title}"))
+    }
+
+    fn delete_playlist(&self, rating_key: &str) -> anyhow::Result<()> {
+        let endpoint = format!("/playlists/{rating_key}");
+        let request = self.client.delete(self.url(&endpoint));
+        self.send(&endpoint, request).map(drop)
     }
 }
 
 impl HttpPlexLibraryRepository {
+    /// The section's episodes from `start` on, one page per request.
+    fn list_episodes_from(
+        &self,
+        section_id: &str,
+        start: usize,
+    ) -> anyhow::Result<Vec<PlexEpisode>> {
+        let start_param = start.to_string();
+        let page_size = EPISODES_PAGE_SIZE.to_string();
+        let page: MetadataResponse = self.get_json(
+            &format!("/library/sections/{section_id}/all"),
+            &[
+                ("type", "4"),
+                ("X-Plex-Container-Start", &start_param),
+                ("X-Plex-Container-Size", &page_size),
+            ],
+        )?;
+        let container = page.media_container;
+        let next = start + container.metadata.len();
+        let episodes: Vec<PlexEpisode> = container
+            .metadata
+            .into_iter()
+            .flat_map(|metadata| episodes_of(section_id, metadata))
+            .collect();
+        if next == start || next >= container.total_size {
+            return Ok(episodes);
+        }
+        Ok([episodes, self.list_episodes_from(section_id, next)?].concat())
+    }
+
     fn get_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
         query: &[(&str, &str)],
     ) -> anyhow::Result<T> {
-        let response = self
-            .client
-            .get(format!("{}{path}", self.config.base_url))
-            .query(query)
+        let request = self.client.get(self.url(path)).query(query);
+        Ok(self.send(path, request)?.json()?)
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.config.base_url)
+    }
+
+    /// Sends `request` (to `path`) authenticated, failing unless Plex
+    /// replies with a success.
+    fn send(
+        &self,
+        path: &str,
+        request: reqwest::blocking::RequestBuilder,
+    ) -> anyhow::Result<reqwest::blocking::Response> {
+        let response = request
             .header("Accept", "application/json")
             .header("X-Plex-Token", &self.config.token)
             .send()?;
-        Ok(Self::ensure_success(path, response)?.json()?)
+        Self::ensure_success(path, response)
     }
 
     /// Passes a successful response through; otherwise fails with the
@@ -132,18 +369,110 @@ impl HttpPlexLibraryRepository {
     }
 }
 
-/// Plex server fake: each section id maps to the folders it scans.
+/// The query of a label edit: each label added by index, the removed ones
+/// in one comma-joined `-=` param, each escaped so a comma in one never
+/// splits it, and the field locked so Plex's agents never overwrite it, or
+/// unlocked once it holds no label.
+fn label_edit_query(
+    episode: &PlexEpisode,
+    labels: &PlexLabels,
+    removed: &[String],
+) -> Vec<(String, String)> {
+    let added = labels
+        .names()
+        .iter()
+        .enumerate()
+        .map(|(i, name)| (format!("label[{i}].tag.tag"), name.clone()));
+    let locked = if labels.names().is_empty() { "0" } else { "1" };
+    let removed = (!removed.is_empty()).then(|| {
+        let escaped: Vec<String> = removed.iter().map(|label| plex_escaped(label)).collect();
+        ("label[].tag.tag-".to_string(), escaped.join(","))
+    });
+    [
+        ("type".to_string(), "4".to_string()),
+        ("id".to_string(), episode.rating_key.clone()),
+    ]
+    .into_iter()
+    .chain(added)
+    .chain(removed)
+    .chain([("label.locked".to_string(), locked.to_string())])
+    .collect()
+}
+
+/// The library URI a smart playlist filters: the section's unwatched
+/// episodes labelled `label`, newest air date first. A space in it is
+/// `%20`, as python-plexapi sends it, not the form encoding's `+`.
+fn smart_playlist_uri(server_id: &str, section_id: &str, label: &str) -> String {
+    format!(
+        "server://{server_id}/com.plexapp.plugins.library/library/sections/{section_id}/all\
+         ?type=4&episode.label={}&episode.unwatched=1&sort=originallyAvailableAt%3Adesc",
+        plex_escaped(label)
+    )
+}
+
+/// `value` percent-encoded as Plex expects inside a value it parses again.
+fn plex_escaped(value: &str) -> String {
+    utf8_percent_encode(value, PLEX_ESCAPED).to_string()
+}
+
+/// One episode per file of `metadata`'s media parts.
+fn episodes_of(section_id: &str, metadata: Metadata) -> Vec<PlexEpisode> {
+    metadata
+        .media
+        .into_iter()
+        .flat_map(|media| media.parts)
+        .map(|part| PlexEpisode {
+            rating_key: metadata.rating_key.clone(),
+            section_id: section_id.to_string(),
+            file: part.file,
+        })
+        .collect()
+}
+
+/// Plex server fake: sections with their titles and folders, the episodes
+/// in them with their labels, and the token user's playlists.
 #[cfg(test)]
 #[derive(Default)]
 pub struct FakePlexLibraryRepository {
-    sections: Mutex<std::collections::BTreeMap<String, Vec<String>>>,
-    /// Every scan requested, in order, e.g. `scan:19:/volume1/x`.
+    sections: Mutex<std::collections::BTreeMap<String, FakeSection>>,
+    episodes: Mutex<Vec<FakeEpisode>>,
+    playlists: Mutex<Vec<FakePlaylist>>,
+    /// Every write requested, in order, e.g. `scan:19:/volume1/x`,
+    /// `labels:101:Chess,Funny:-Old`, `create_playlist:19:Chess:Chess`,
+    /// `delete_playlist:pl1`.
     mutations: Mutex<Vec<String>>,
     unreachable: bool,
+    /// Rating keys whose label writes Plex rejects.
+    rejected: Vec<String>,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct FakeSection {
+    title: String,
+    locations: Vec<String>,
+}
+
+#[cfg(test)]
+struct FakeEpisode {
+    episode: PlexEpisode,
+    labels: Vec<String>,
+}
+
+/// A playlist on the fake server; `filter` is the section and label of a
+/// smart playlist the fake created, `None` for one it was seeded with.
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FakePlaylist {
+    pub rating_key: String,
+    pub title: String,
+    pub filter: Option<(String, String)>,
 }
 
 #[cfg(test)]
 impl FakePlexLibraryRepository {
+    pub const SERVER_ID: &str = "fake-server";
+
     /// The same fake with `location` added to `section_id`'s folders.
     pub fn with_location(self, section_id: &str, location: &str) -> Self {
         self.sections
@@ -151,8 +480,58 @@ impl FakePlexLibraryRepository {
             .unwrap()
             .entry(section_id.to_string())
             .or_default()
+            .locations
             .push(location.to_string());
         self
+    }
+
+    /// The same fake with `section_id` titled `title`.
+    pub fn with_section_title(self, section_id: &str, title: &str) -> Self {
+        self.sections
+            .lock()
+            .unwrap()
+            .entry(section_id.to_string())
+            .or_default()
+            .title = title.to_string();
+        self
+    }
+
+    /// The same fake with an episode for `file` in `section_id`, labelled
+    /// `labels`.
+    pub fn with_episode(
+        self,
+        section_id: &str,
+        rating_key: &str,
+        file: &str,
+        labels: &[&str],
+    ) -> Self {
+        self.episodes.lock().unwrap().push(FakeEpisode {
+            episode: PlexEpisode {
+                rating_key: rating_key.to_string(),
+                section_id: section_id.to_string(),
+                file: file.to_string(),
+            },
+            labels: labels.iter().map(|label| label.to_string()).collect(),
+        });
+        self
+    }
+
+    /// The same fake with a playlist yarrtube did not create.
+    pub fn with_playlist(self, rating_key: &str, title: &str) -> Self {
+        self.playlists.lock().unwrap().push(FakePlaylist {
+            rating_key: rating_key.to_string(),
+            title: title.to_string(),
+            filter: None,
+        });
+        self
+    }
+
+    /// The same fake rejecting every label write to `rating_key`.
+    pub fn rejecting(self, rating_key: &str) -> Self {
+        Self {
+            rejected: [self.rejected.clone(), vec![rating_key.to_string()]].concat(),
+            ..self
+        }
     }
 
     /// A Plex server that is down: every call fails.
@@ -166,36 +545,164 @@ impl FakePlexLibraryRepository {
     pub fn mutations(&self) -> Vec<String> {
         self.mutations.lock().unwrap().clone()
     }
+
+    /// The label writes among `mutations`, e.g. `labels:101:Chess:-Old`.
+    pub fn label_edits(&self) -> Vec<String> {
+        self.mutations()
+            .into_iter()
+            .filter(|mutation| mutation.starts_with("labels:"))
+            .collect()
+    }
+
+    /// The labels of the episode `rating_key`, in the order written.
+    pub fn labels(&self, rating_key: &str) -> Vec<String> {
+        self.episodes
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|fake| fake.episode.rating_key == rating_key)
+            .map(|fake| fake.labels.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn playlists(&self) -> Vec<FakePlaylist> {
+        self.playlists.lock().unwrap().clone()
+    }
+
+    fn ensure_reachable(&self) -> anyhow::Result<()> {
+        if self.unreachable {
+            anyhow::bail!("Plex is unreachable");
+        }
+        Ok(())
+    }
+
+    fn record(&self, mutation: String) {
+        self.mutations.lock().unwrap().push(mutation);
+    }
 }
 
 #[cfg(test)]
 impl PlexLibraryRepository for FakePlexLibraryRepository {
     fn list_sections(&self) -> anyhow::Result<Vec<PlexSection>> {
-        if self.unreachable {
-            anyhow::bail!("Plex is unreachable");
-        }
+        self.ensure_reachable()?;
         Ok(self
             .sections
             .lock()
             .unwrap()
             .iter()
-            .map(|(id, locations)| PlexSection {
+            .map(|(id, section)| PlexSection {
                 id: id.clone(),
-                locations: locations.clone(),
+                title: section.title.clone(),
+                locations: section.locations.clone(),
             })
             .collect())
     }
 
     fn scan_path(&self, section_id: &str, path: &str) -> anyhow::Result<()> {
-        if self.unreachable {
-            anyhow::bail!("Plex is unreachable");
-        }
-        self.mutations
-            .lock()
-            .unwrap()
-            .push(format!("scan:{section_id}:{path}"));
+        self.ensure_reachable()?;
+        self.record(format!("scan:{section_id}:{path}"));
         Ok(())
     }
+
+    fn server_id(&self) -> anyhow::Result<String> {
+        self.ensure_reachable()?;
+        Ok(Self::SERVER_ID.to_string())
+    }
+
+    fn list_episodes(&self, section_id: &str) -> anyhow::Result<Vec<PlexEpisode>> {
+        self.ensure_reachable()?;
+        Ok(self
+            .episodes
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|fake| fake.episode.section_id == section_id)
+            .map(|fake| fake.episode.clone())
+            .collect())
+    }
+
+    fn find_labels(&self, rating_key: &str) -> anyhow::Result<PlexLabels> {
+        self.ensure_reachable()?;
+        Ok(PlexLabels::new(self.labels(rating_key)))
+    }
+
+    fn save_labels(
+        &self,
+        episode: &PlexEpisode,
+        labels: &PlexLabels,
+        removed: &[String],
+    ) -> anyhow::Result<()> {
+        self.ensure_reachable()?;
+        if self.rejected.contains(&episode.rating_key) {
+            anyhow::bail!("Plex rejected the labels of {}", episode.rating_key);
+        }
+        self.record(format!(
+            "labels:{}:{}:-{}",
+            episode.rating_key,
+            labels.names().join(","),
+            removed.join(",")
+        ));
+        self.episodes
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .filter(|fake| fake.episode.rating_key == episode.rating_key)
+            .for_each(|fake| fake.labels = edited_labels(&fake.labels, labels, removed));
+        Ok(())
+    }
+
+    fn list_playlists(&self) -> anyhow::Result<Vec<PlexPlaylist>> {
+        self.ensure_reachable()?;
+        Ok(self
+            .playlists()
+            .into_iter()
+            .map(|playlist| PlexPlaylist {
+                rating_key: playlist.rating_key,
+                title: playlist.title,
+            })
+            .collect())
+    }
+
+    fn create_smart_playlist(
+        &self,
+        server_id: &str,
+        section_id: &str,
+        label: &str,
+        title: &str,
+    ) -> anyhow::Result<PlexPlaylist> {
+        self.ensure_reachable()?;
+        anyhow::ensure!(server_id == Self::SERVER_ID, "unknown server {server_id}");
+        self.record(format!("create_playlist:{section_id}:{label}:{title}"));
+        let mut playlists = self.playlists.lock().unwrap();
+        let playlist = FakePlaylist {
+            rating_key: format!("pl{}", playlists.len() + 1),
+            title: title.to_string(),
+            filter: Some((section_id.to_string(), label.to_string())),
+        };
+        playlists.push(playlist.clone());
+        Ok(PlexPlaylist {
+            rating_key: playlist.rating_key,
+            title: playlist.title,
+        })
+    }
+
+    fn delete_playlist(&self, rating_key: &str) -> anyhow::Result<()> {
+        self.ensure_reachable()?;
+        self.record(format!("delete_playlist:{rating_key}"));
+        self.playlists
+            .lock()
+            .unwrap()
+            .retain(|playlist| playlist.rating_key != rating_key);
+        Ok(())
+    }
+}
+
+/// Like Plex, a label edit adds the labels it names (ignoring case) and
+/// removes only those it lists as removed.
+#[cfg(test)]
+fn edited_labels(current: &[String], labels: &PlexLabels, removed: &[String]) -> Vec<String> {
+    PlexLabels::new([current, labels.names()].concat())
+        .missing_from(&PlexLabels::new(removed.to_vec()))
 }
 
 #[cfg(test)]
@@ -272,10 +779,12 @@ mod tests {
             vec![
                 PlexSection {
                     id: "19".to_string(),
+                    title: "Kids".to_string(),
                     locations: vec!["/volume1/media/yarrtube/playlists".to_string()],
                 },
                 PlexSection {
                     id: "21".to_string(),
+                    title: "Channels".to_string(),
                     locations: vec![
                         "/volume1/media/yarrtube/channels".to_string(),
                         "/volume2/channels".to_string(),
@@ -283,10 +792,302 @@ mod tests {
                 },
                 PlexSection {
                     id: "30".to_string(),
+                    title: "Empty".to_string(),
                     locations: vec![],
                 },
             ]
         );
+    }
+
+    #[test]
+    fn it_should_list_sections_with_their_titles() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/sections")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"Directory": [
+                    {"key": "19", "title": "Sergi's Playlists", "Location": []}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let sections = repository.list_sections().unwrap();
+
+        assert_eq!(
+            sections,
+            vec![PlexSection {
+                id: "19".to_string(),
+                title: "Sergi's Playlists".to_string(),
+                locations: vec![],
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_read_the_server_id() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/identity")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 0, "claimed": true,
+                    "machineIdentifier": "abc123", "version": "1.43.4"}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let server_id = repository.server_id();
+
+        assert_eq!(
+            server_id.map_err(|e| e.to_string()),
+            Ok("abc123".to_string())
+        );
+    }
+
+    #[test]
+    fn it_should_list_a_section_episodes_with_their_files() {
+        let mut server = mockito::Server::new();
+        let _first_page = server
+            .mock("GET", "/library/sections/19/all")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("type".into(), "4".into()),
+                mockito::Matcher::UrlEncoded("X-Plex-Container-Start".into(), "0".into()),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 2, "totalSize": 3, "offset": 0, "Metadata": [
+                    {"ratingKey": "101", "Media": [{"Part": [{"file": "/volume1/a.mp4"}]}]},
+                    {"ratingKey": "102", "Media": [
+                        {"Part": [{"file": "/volume1/b1.mp4"}, {"file": "/volume1/b2.mp4"}]},
+                        {"Part": [{"file": "/volume1/b.mkv"}]}
+                    ]}
+                ]}}"#,
+            )
+            .create();
+        let _second_page = server
+            .mock("GET", "/library/sections/19/all")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("type".into(), "4".into()),
+                mockito::Matcher::UrlEncoded("X-Plex-Container-Start".into(), "2".into()),
+            ]))
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "totalSize": 3, "offset": 2, "Metadata": [
+                    {"ratingKey": "103", "Media": [{"Part": [{"file": "/volume1/c.mp4"}]}]}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let episodes = repository.list_episodes("19");
+
+        assert_eq!(
+            episodes.map_err(|e| e.to_string()),
+            Ok(vec![
+                episode("101", "/volume1/a.mp4"),
+                episode("102", "/volume1/b1.mp4"),
+                episode("102", "/volume1/b2.mp4"),
+                episode("102", "/volume1/b.mkv"),
+                episode("103", "/volume1/c.mp4"),
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_read_an_episode_labels() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/metadata/101")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "Metadata": [
+                    {"ratingKey": "101", "Label": [{"id": 7, "tag": "Funny"}, {"id": 8, "tag": "Chess"}]}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let labels = repository.find_labels("101");
+
+        assert_eq!(
+            labels.map_err(|e| e.to_string()),
+            Ok(PlexLabels::new(vec![
+                "Chess".to_string(),
+                "Funny".to_string()
+            ]))
+        );
+    }
+
+    #[test]
+    fn it_should_save_labels_removing_the_others() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("PUT", "/library/sections/19/all")
+            .match_query(mockito::Matcher::Exact(
+                "type=4&id=101&label%5B0%5D.tag.tag=Chess&label%5B1%5D.tag.tag=M%C3%BAsica\
+                 &label%5B%5D.tag.tag-=Old%2COther%2520one&label.locked=1"
+                    .to_string(),
+            ))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.save_labels(
+            &episode("101", "/volume1/a.mp4"),
+            &PlexLabels::new(vec!["Chess".to_string(), "Música".to_string()]),
+            &["Old".to_string(), "Other one".to_string()],
+        );
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_escape_each_removed_label_so_a_comma_never_splits_one() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("PUT", "/library/sections/19/all")
+            .match_query(mockito::Matcher::Exact(
+                "type=4&id=101&label%5B%5D.tag.tag-=Kids%252C%2520Family%2COld&label.locked=0"
+                    .to_string(),
+            ))
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.save_labels(
+            &episode("101", "/volume1/a.mp4"),
+            &PlexLabels::none(),
+            &["Kids, Family".to_string(), "Old".to_string()],
+        );
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_clear_labels_and_unlock_them() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("PUT", "/library/sections/19/all")
+            .match_query(mockito::Matcher::Exact(
+                "type=4&id=101&label%5B%5D.tag.tag-=Chess&label.locked=0".to_string(),
+            ))
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.save_labels(
+            &episode("101", "/volume1/a.mp4"),
+            &PlexLabels::none(),
+            &["Chess".to_string()],
+        );
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_list_playlists() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/playlists")
+            .match_query(mockito::Matcher::UrlEncoded(
+                "playlistType".into(),
+                "video".into(),
+            ))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 2, "Metadata": [
+                    {"ratingKey": "501", "title": "Chess", "smart": true},
+                    {"ratingKey": "502", "title": "Movie night", "smart": false}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let playlists = repository.list_playlists();
+
+        assert_eq!(
+            playlists.map_err(|e| e.to_string()),
+            Ok(vec![
+                PlexPlaylist {
+                    rating_key: "501".to_string(),
+                    title: "Chess".to_string(),
+                },
+                PlexPlaylist {
+                    rating_key: "502".to_string(),
+                    title: "Movie night".to_string(),
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn it_should_create_a_smart_playlist_filtered_by_label() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("POST", "/playlists")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("type".into(), "video".into()),
+                mockito::Matcher::UrlEncoded("smart".into(), "1".into()),
+                mockito::Matcher::UrlEncoded("title".into(), "Sci & Tech · Subscriptions".into()),
+                mockito::Matcher::UrlEncoded(
+                    "uri".into(),
+                    "server://abc123/com.plexapp.plugins.library/library/sections/19/all\
+                     ?type=4&episode.label=Sci%20%26%20Tech&episode.unwatched=1\
+                     &sort=originallyAvailableAt%3Adesc"
+                        .into(),
+                ),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "Metadata": [
+                    {"ratingKey": "503", "title": "Sci & Tech · Subscriptions", "smart": true}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let playlist = repository.create_smart_playlist(
+            "abc123",
+            "19",
+            "Sci & Tech",
+            "Sci & Tech · Subscriptions",
+        );
+
+        assert_eq!(
+            playlist.map_err(|e| e.to_string()),
+            Ok(PlexPlaylist {
+                rating_key: "503".to_string(),
+                title: "Sci & Tech · Subscriptions".to_string(),
+            })
+        );
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_delete_a_playlist() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("DELETE", "/playlists/503")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.delete_playlist("503");
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
     }
 
     #[test]
@@ -331,6 +1132,14 @@ mod tests {
                     .to_string()
             )
         );
+    }
+
+    fn episode(rating_key: &str, file: &str) -> PlexEpisode {
+        PlexEpisode {
+            rating_key: rating_key.to_string(),
+            section_id: "19".to_string(),
+            file: file.to_string(),
+        }
     }
 
     fn repository(server: &mockito::Server) -> HttpPlexLibraryRepository {

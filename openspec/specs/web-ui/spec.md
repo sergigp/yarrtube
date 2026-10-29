@@ -1043,7 +1043,7 @@ The tasks view SHALL show a search field above the currently selected tab's list
 - **THEN** the tab returns to listing all of its tasks
 
 ### Requirement: Tasks View Describes Every Task Type
-The tasks view SHALL describe every task it lists in plain language and SHALL NEVER display a task's raw type identifier. Each task family SHALL be described in human terms, including playlist, channel, and Plex collection syncs, video downloads and thumbnail fetches, file and container deletions, and the yt-dlp self-update. When a name the description would include could not be resolved, the description SHALL use a generic placeholder in its place rather than omitting the description.
+The tasks view SHALL describe every task it lists in plain language and SHALL NEVER display a task's raw type identifier. Each task family SHALL be described in human terms, including playlist, channel, video, and Plex collection syncs, video downloads and thumbnail and subtitle fetches, file and container deletions, and the yt-dlp self-update. When a name the description would include could not be resolved, the description SHALL use a generic placeholder in its place rather than omitting the description.
 
 #### Scenario: Plex collection sync is described in plain language
 - **WHEN** the tasks view lists a Plex collection reconciliation task
@@ -1056,6 +1056,10 @@ The tasks view SHALL describe every task it lists in plain language and SHALL NE
 #### Scenario: No raw type identifier is ever shown
 - **WHEN** the tasks view lists a task of any type
 - **THEN** its row shows a human-readable description and never a raw snake_case type string
+
+#### Scenario: Video sync is described in plain language
+- **WHEN** the tasks view lists a video sync task whose video and playlist or channel names were resolved
+- **THEN** it is described as syncing that video in that playlist or channel, and not by its raw type identifier
 
 ### Requirement: Tasks View Shows Last Error
 When a task the tasks view lists has a recorded last error, the view SHALL show that error on the task's row, so a user can see why a task is being retried. A task with no recorded last error SHALL show none.
@@ -1073,7 +1077,7 @@ The tasks view SHALL group its tasks into tabs by task family, in this order: **
 
 - **Active**: every task whose status is `running`, regardless of its type.
 - **Downloads**: video download and thumbnail fetch tasks.
-- **Syncs**: playlist reconciliation and channel reconciliation tasks.
+- **Syncs**: playlist reconciliation, channel reconciliation and video sync tasks.
 - **Other**: every task that belongs to neither Downloads nor Syncs, including Plex collection reconciliation, the yt-dlp self-update, deletion of a video file or of a playlist's or channel's files, and any task type the view does not otherwise recognise.
 
 Every task SHALL appear in exactly one of Downloads, Syncs, or Other, and additionally in **Active** while it is running. The view SHALL open on the **Active** tab. Each tab SHALL list its tasks in the view's usual order (running first, then tasks already due, then tasks scheduled for later). Each task row SHALL show an icon that reflects the kind of work the task does (download, sync, deletion, or maintenance), so rows of different kinds within **Other** remain distinguishable.
@@ -1091,8 +1095,8 @@ Every task SHALL appear in exactly one of Downloads, Syncs, or Other, and additi
 - **THEN** the Downloads tab lists those tasks and no sync or other tasks
 
 #### Scenario: Syncs tab lists only playlist and channel reconciles
-- **WHEN** the tasks include playlist, channel, and Plex collection reconciliations
-- **THEN** the Syncs tab lists the playlist and channel reconciliations and not the Plex collection reconciliation
+- **WHEN** the tasks include playlist, channel, and Plex collection reconciliations and a video sync
+- **THEN** the Syncs tab lists the playlist and channel reconciliations and the video sync, and not the Plex collection reconciliation
 
 #### Scenario: Other tab collects everything else
 - **WHEN** the tasks include a Plex collection reconciliation, a yt-dlp self-update, a video-file deletion, a deleted container's file cleanup, and a task of an unrecognised type

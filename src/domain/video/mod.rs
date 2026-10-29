@@ -16,8 +16,12 @@ pub mod video_duration;
 pub mod video_filename;
 pub mod video_id;
 pub mod video_output_entry;
+pub mod video_owner;
 pub mod video_record_id;
 pub mod video_status;
+pub mod video_sync_plan;
+pub mod video_sync_step;
+pub mod video_target;
 pub mod video_view;
 pub mod web_vtt;
 
@@ -41,7 +45,11 @@ pub use video_output_entry::{
     is_season_folder, nfo_path_for, owning_entry, resolve_output_dir, staging_dir,
     subtitle_staging_dir, top_level_entry,
 };
+pub use video_owner::VideoOwner;
 pub use video_record_id::VideoRecordId;
 pub use video_status::VideoStatus;
+pub use video_sync_plan::VideoSyncPlan;
+pub use video_sync_step::VideoSyncStep;
+pub use video_target::VideoTarget;
 pub use video_view::VideoView;
 pub use web_vtt::WebVtt;

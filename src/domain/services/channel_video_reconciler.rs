@@ -4,7 +4,7 @@ use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel}
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{
     ChannelAvatarRestorer, ChannelAvatarRestorerApi, DesiredState, InternalVideoReconciler,
-    InternalVideoReconcilerApi, MembershipDelta, ShowFileWriter, ShowFileWriterApi,
+    InternalVideoReconcilerApi, ShowFileWriter, ShowFileWriterApi,
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
@@ -12,6 +12,7 @@ use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
+use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::repositories::youtube_channel_videos_repository::{
@@ -44,6 +45,7 @@ pub struct ChannelVideoReconciler {
     channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
     clock: Arc<dyn Clock>,
     show_locks: Arc<ShowLocks>,
+    video_categories_repository: Arc<dyn VideoCategoriesRepository>,
 }
 
 impl ChannelVideoReconciler {
@@ -61,6 +63,7 @@ impl ChannelVideoReconciler {
         channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
         clock: Arc<dyn Clock>,
         show_locks: Arc<ShowLocks>,
+        video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     ) -> Self {
         Self {
             channel_repository,
@@ -75,6 +78,7 @@ impl ChannelVideoReconciler {
             channel_avatar_restorer,
             clock,
             show_locks,
+            video_categories_repository,
         }
     }
 }
@@ -166,9 +170,9 @@ impl ChannelVideoReconciler {
         if let Err(e) = self.show_file_writer.write_channel_show(channel) {
             warn!(channel_id = %channel.id, error = %e, "failed to write show files");
         }
-        let delta = self.sync_membership_with_youtube(channel, on_listing_failure)?;
+        self.sync_membership_with_youtube(channel, on_listing_failure)?;
         let desired = self.desired_state(channel)?;
-        self.internal_video_reconciler.reconcile(&desired, &delta)
+        self.internal_video_reconciler.reconcile(&desired)
     }
 
     /// Brings the stored membership in line with the channel's current
@@ -182,9 +186,9 @@ impl ChannelVideoReconciler {
         &self,
         channel: &Channel,
         on_listing_failure: ListingFailure,
-    ) -> anyhow::Result<MembershipDelta> {
+    ) -> anyhow::Result<()> {
         let Some(current_videos) = self.list_current_videos(channel, on_listing_failure)? else {
-            return Ok(MembershipDelta::default());
+            return Ok(());
         };
         let stored_videos = self.list_stored_videos(channel)?;
         let now = self.clock.now();
@@ -200,13 +204,11 @@ impl ChannelVideoReconciler {
                 )
             })
             .collect();
-        let mut delta = MembershipDelta::default();
         for current in &current_videos {
             match known_videos.get(&current.youtube_id) {
                 None => {
                     let youtube_id = VideoId::new(&current.youtube_id)?;
                     let added = self.add_video(channel, youtube_id, current, now)?;
-                    delta.added_ids.push(added.1.id.clone());
                     known_videos.insert(current.youtube_id.clone(), added);
                 }
                 Some((existing, video)) => {
@@ -221,7 +223,7 @@ impl ChannelVideoReconciler {
             .collect();
         self.remove_videos_not_in(channel, &stored_videos, &current_youtube_ids)?;
 
-        Ok(delta)
+        Ok(())
     }
 
     /// The channel's current most recent uploads. When they can't be listed
@@ -275,7 +277,7 @@ impl ChannelVideoReconciler {
     }
 
     /// Stores a newly seen video as `PENDING` at its recency position and
-    /// announces it, which is what triggers its download and thumbnail.
+    /// announces it, which is what schedules its video sync.
     fn add_video(
         &self,
         channel: &Channel,
@@ -349,6 +351,7 @@ impl ChannelVideoReconciler {
                     .delete(&channel.id, &video.youtube_id)?;
                 self.video_repository.delete(&video.id)?;
                 self.video_transcript_repository.delete(&video.id)?;
+                self.video_categories_repository.delete(&video.id)?;
                 self.event_publisher
                     .publish(&DomainEvent::VideoRemovedFromChannel(
                         VideoRemovedFromChannel {
@@ -364,19 +367,16 @@ impl ChannelVideoReconciler {
             })
     }
 
-    /// What the database says the channel's folder should contain. A
-    /// channel's videos sort by publish date, so it has no sort positions.
+    /// What the database says the channel's folder should contain.
     fn desired_state(&self, channel: &Channel) -> anyhow::Result<DesiredState> {
         Ok(DesiredState {
             path: channel.path.clone(),
-            quality: channel.quality,
             video_ids: self
                 .channel_video_repository
                 .list_for_channel(&channel.id)?
                 .into_iter()
                 .map(|cv| cv.video_id)
                 .collect(),
-            sort_positions: HashMap::new(),
         })
     }
 

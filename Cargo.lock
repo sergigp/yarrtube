@@ -2573,6 +2573,7 @@ dependencies = [
  "dotenvy",
  "mockito",
  "mutants",
+ "percent-encoding",
  "quick-xml",
  "reqwest",
  "rusqlite",

@@ -1,11 +1,7 @@
 use crate::domain::event::DomainEvent;
-use crate::domain::task::Task;
-use crate::domain::video::{
-    EpisodePaths, Video, VideoRecordId, VideoSubtitlesFetched, subtitle_staging_dir,
-};
+use crate::domain::video::{EpisodePaths, Video, VideoSubtitlesFetched, subtitle_staging_dir};
 use crate::domain::video_transcript::{CaptionTrack, TranscriptText, VideoTranscript};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
-use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::repositories::youtube_video_downloader_repository::{
@@ -14,7 +10,6 @@ use crate::infrastructure::repositories::youtube_video_downloader_repository::{
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::Duration;
-use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::warn;
@@ -26,16 +21,14 @@ const UNAVAILABLE_AFTER: Duration = Duration::days(7);
 
 /// Best-effort fetch of a downloaded video's original-language subtitles —
 /// see the `video-subtitles` capability. The fetch itself runs from the
-/// `fetch_subtitles` task and never returns an error to its caller; it is
-/// scheduled by `FetchSubtitlesOnVideoDownloaded` after a download and by
-/// the reconcilers' missing-subtitles recovery.
+/// `fetch_subtitles` task and never returns an error to its caller;
+/// `VideoReconciler` decides when to schedule it.
 #[derive(Clone)]
 pub struct SubtitleFetcher {
     video_repository: Arc<dyn VideoRepository>,
     video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
     video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
-    task_repository: Arc<dyn TaskRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     clock: Arc<dyn Clock>,
     videos_path: String,
@@ -48,7 +41,6 @@ impl SubtitleFetcher {
         video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
         video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
-        task_repository: Arc<dyn TaskRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         clock: Arc<dyn Clock>,
         videos_path: impl Into<String>,
@@ -58,7 +50,6 @@ impl SubtitleFetcher {
             video_transcript_repository,
             video_downloader_repository,
             video_file_repository,
-            task_repository,
             event_publisher,
             clock,
             videos_path: videos_path.into(),
@@ -77,18 +68,6 @@ pub trait SubtitleFetcherApi: Send + Sync {
     /// every failure, leaving the video Missing. Publishes
     /// `VideoSubtitlesFetched` once Fetched.
     fn fetch(&self, video: &Video, output_dir: &Path);
-
-    /// Missing-subtitles recovery pass over `videos`, run by
-    /// `InternalVideoReconciler`: schedules a `FetchSubtitles` for each
-    /// subtitle-fetchable video not in `skip_ids`. A video that already has a
-    /// fetch pending or running gets no second one: `TaskRepository::schedule`
-    /// dedupes it.
-    fn schedule_missing(
-        &self,
-        videos: &[Video],
-        skip_ids: &HashSet<&VideoRecordId>,
-        output_dir: &Path,
-    ) -> anyhow::Result<()>;
 }
 
 impl SubtitleFetcherApi for SubtitleFetcher {
@@ -101,31 +80,9 @@ impl SubtitleFetcherApi for SubtitleFetcher {
         }
         self.discard_staging(video);
     }
-
-    fn schedule_missing(
-        &self,
-        videos: &[Video],
-        skip_ids: &HashSet<&VideoRecordId>,
-        output_dir: &Path,
-    ) -> anyhow::Result<()> {
-        videos
-            .iter()
-            .filter(|v| v.is_subtitle_fetchable() && !skip_ids.contains(&v.id))
-            .try_for_each(|video| self.schedule_fetch(video, output_dir))
-    }
 }
 
 impl SubtitleFetcher {
-    fn schedule_fetch(&self, video: &Video, output_dir: &Path) -> anyhow::Result<()> {
-        self.task_repository.schedule(
-            &Task::FetchSubtitles {
-                video_id: video.id.as_str().to_string(),
-                output_dir: output_dir.to_string_lossy().to_string(),
-            },
-            self.clock.now(),
-        )
-    }
-
     fn fetch_and_place(&self, video: &Video, output_dir: &Path) -> anyhow::Result<()> {
         let Some(filename) = video.filename.as_deref() else {
             return Ok(());

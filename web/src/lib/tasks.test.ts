@@ -42,6 +42,17 @@ describe('describeTask', () => {
     ).toBe('Downloading Intro in Chan')
   })
 
+  it('describes a video sync with its video and container', () => {
+    expect(
+      describeTask(
+        aTask({
+          task_type: 'sync_video',
+          payload: { video_title: 'Intro', playlist_name: 'Mix' },
+        }),
+      ),
+    ).toBe('Syncing Intro in Mix')
+  })
+
   it('describes a thumbnail fetch with its video and container', () => {
     expect(
       describeTask(
@@ -81,6 +92,12 @@ describe('describeTask', () => {
 
   it('describes a yt-dlp self-update in plain language', () => {
     expect(describeTask(aTask({ task_type: 'update_ytdlp', payload: {} }))).toBe('Updating yt-dlp')
+  })
+
+  it('describes a Plex label sync in plain language', () => {
+    expect(describeTask(aTask({ task_type: 'sync_plex_labels', payload: {} }))).toBe(
+      'Syncing Plex category labels',
+    )
   })
 
   it('humanizes an unknown type instead of showing the raw snake_case string', () => {
@@ -147,6 +164,14 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskFamily(aTask({ task_type: 'mystery_task' }))).toBe('other')
   })
 
+  it('puts Plex label syncs in the other family', () => {
+    expect(taskFamily(aTask({ task_type: 'sync_plex_labels' }))).toBe('other')
+  })
+
+  it('puts video syncs in the syncs family', () => {
+    expect(taskFamily(aTask({ task_type: 'sync_video' }))).toBe('syncs')
+  })
+
   it("returns only running tasks of any type for the 'active' tab", () => {
     const runningSync = aTask({ id: 1, task_type: 'reconcile_channel', status: 'running' })
     const runningDownload = aTask({ id: 2, task_type: 'download_video', status: 'running' })
@@ -206,6 +231,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskKind(aTask({ task_type: 'fetch_subtitles' }))).toBe('download')
     expect(taskKind(aTask({ task_type: 'reconcile_playlist' }))).toBe('sync')
     expect(taskKind(aTask({ task_type: 'reconcile_channel' }))).toBe('sync')
+    expect(taskKind(aTask({ task_type: 'sync_video' }))).toBe('sync')
     expect(taskKind(aTask({ task_type: 'delete_video_file' }))).toBe('delete')
     expect(taskKind(aTask({ task_type: 'delete_playlist_files' }))).toBe('delete')
     expect(taskKind(aTask({ task_type: 'delete_channel_files' }))).toBe('delete')

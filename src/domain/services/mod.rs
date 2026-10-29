@@ -22,14 +22,18 @@ pub mod playlist_updater;
 pub mod playlist_video_reconciler;
 pub mod playlist_view_searcher;
 pub mod plex_folder_scanner;
+pub mod plex_label_syncer;
 pub mod show_file_writer;
 pub mod show_mover;
 pub mod subtitle_fetcher;
 pub mod subtitle_reader;
 pub mod task_view_searcher;
 pub mod thumbnail_fetcher;
+pub mod video_category_assigner;
 pub mod video_downloader;
 pub mod video_file_deleter;
+pub mod video_owner_finder;
+pub mod video_reconciler;
 pub mod video_relocator;
 pub mod video_searcher;
 pub mod video_watch_state_updater;
@@ -49,7 +53,7 @@ pub use channel_video_reconciler::{ChannelVideoReconciler, ChannelVideoReconcile
 pub use channel_view_searcher::{ChannelViewSearcher, ChannelViewSearcherApi};
 pub use directory_searcher::{DirectorySearcher, DirectorySearcherApi};
 pub use internal_video_reconciler::{
-    DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
+    DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi,
 };
 pub use layout_migrator::{LayoutMigrator, LayoutMigratorApi, MigrationReport};
 pub use metadata_generator::{MetadataGenerator, MetadataGeneratorApi};
@@ -60,14 +64,18 @@ pub use playlist_updater::{PlaylistUpdater, PlaylistUpdaterApi};
 pub use playlist_video_reconciler::{PlaylistVideoReconciler, PlaylistVideoReconcilerApi};
 pub use playlist_view_searcher::{PlaylistViewSearcher, PlaylistViewSearcherApi};
 pub use plex_folder_scanner::{PlexFolderScanner, PlexFolderScannerApi};
+pub use plex_label_syncer::{PlexLabelSyncer, PlexLabelSyncerApi};
 pub use show_file_writer::{ShowFileWriter, ShowFileWriterApi};
 pub use show_mover::{ShowMover, ShowMoverApi};
 pub use subtitle_fetcher::{SubtitleFetcher, SubtitleFetcherApi};
 pub use subtitle_reader::{SubtitleReader, SubtitleReaderApi};
 pub use task_view_searcher::{TaskViewSearcher, TaskViewSearcherApi};
 pub use thumbnail_fetcher::{ThumbnailFetcher, ThumbnailFetcherApi};
+pub use video_category_assigner::{VideoCategoryAssigner, VideoCategoryAssignerApi};
 pub use video_downloader::{VideoDownloader, VideoDownloaderApi};
 pub use video_file_deleter::{VideoFileDeleter, VideoFileDeleterApi};
+pub use video_owner_finder::{VideoOwnerFinder, VideoOwnerFinderApi};
+pub use video_reconciler::{VideoReconciler, VideoReconcilerApi};
 pub use video_relocator::{Relocation, SkipReason, VideoRelocator, VideoRelocatorApi};
 pub use video_searcher::{VideoSearcher, VideoSearcherApi};
 pub use video_watch_state_updater::{VideoWatchStateUpdater, VideoWatchStateUpdaterApi};

@@ -1,4 +1,5 @@
 use crate::domain::task::{DeadLetteredTask, ScheduledTask, Task, TaskStatus};
+use crate::domain::video::VideoRecordId;
 use crate::infrastructure::shared::sqlite_connection::Database;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::Context;
@@ -11,7 +12,8 @@ use tracing::info;
 
 pub trait TaskRepository: Send + Sync {
     /// Adds the task, unless it has an exclusivity key and a task of the same
-    /// type with the same key is already pending or running (then a no-op).
+    /// type with the same key is already pending, or running unless
+    /// `Task::dedupes_running` says otherwise (then a no-op).
     fn schedule(&self, task: &Task, run_at: DateTime<Utc>) -> anyhow::Result<()>;
     /// Atomically flips a pending task to running; `None` if it was no
     /// longer pending.
@@ -25,6 +27,12 @@ pub trait TaskRepository: Send + Sync {
     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>>;
     /// The pending task with this type and payload, if any.
     fn find_pending(&self, task: &Task) -> anyhow::Result<Option<ScheduledTask>>;
+    /// The pending or running task of `task_type` for `video_id`, if any.
+    fn find_non_completed_for_video(
+        &self,
+        task_type: &str,
+        video_id: &VideoRecordId,
+    ) -> anyhow::Result<Option<ScheduledTask>>;
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()>;
     fn delete(&self, id: i64) -> anyhow::Result<()>;
     /// Atomically inserts `task` into the dead-letter table and deletes the
@@ -85,13 +93,19 @@ const SELECT_COLUMNS: &str =
 
 /// The `WHERE` clause guarding `schedule`'s insert: a task with an
 /// exclusivity key is only added if no task of its type for the same video
-/// is pending or running; any other task is always added.
+/// is pending, or also running when `Task::dedupes_running`; any other task
+/// is always added.
 fn dedupe_predicate(task: &Task, payload: &str) -> &'static str {
     match Task::exclusivity_key(task.task_type(), payload) {
-        Some(_) => {
+        Some(_) if Task::dedupes_running(task.task_type()) => {
             "NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1
                AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')
                AND status IN ('pending', 'running'))"
+        }
+        Some(_) => {
+            "NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1
+               AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')
+               AND status = 'pending')"
         }
         None => "1",
     }
@@ -258,6 +272,22 @@ impl TaskRepository for SqliteTaskRepository {
         .optional()
         .inspect_err(|e| tracing::error!(error = %e, "failed to find pending task"))
         .context("failed to find pending task")
+    }
+
+    fn find_non_completed_for_video(
+        &self,
+        task_type: &str,
+        video_id: &VideoRecordId,
+    ) -> anyhow::Result<Option<ScheduledTask>> {
+        let conn = self.db.read()?;
+        conn.query_row(
+            &format!("SELECT {SELECT_COLUMNS} FROM tasks WHERE task_type = ?1 AND json_extract(payload, '$.video_id') = ?2 AND status IN ('pending', 'running') ORDER BY id LIMIT 1"),
+            params![task_type, video_id.as_str()],
+            row_to_scheduled_task,
+        )
+        .optional()
+        .inspect_err(|e| tracing::error!(error = %e, "failed to find non-completed task of video"))
+        .context("failed to find non-completed task of video")
     }
 
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {
@@ -681,6 +711,56 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_add_a_video_sync_if_one_is_pending() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let sync = sync_video_task("rec1");
+
+        repo.schedule(&sync, now).unwrap();
+        repo.schedule(&sync, now).unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![pending_task(1, &sync, now, now)]
+        );
+    }
+
+    #[test]
+    fn it_should_add_a_video_sync_if_the_only_one_is_running() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let sync = sync_video_task("rec1");
+        repo.schedule(&sync, now).unwrap();
+        repo.claim(1, now).unwrap();
+
+        repo.schedule(&sync, now).unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &sync, now, now).start(now),
+                pending_task(2, &sync, now, now),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_not_add_a_download_if_one_is_running() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let download = download_task("rec1");
+        repo.schedule(&download, now).unwrap();
+        repo.claim(1, now).unwrap();
+
+        repo.schedule(&download, now).unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![pending_task(1, &download, now, now).start(now)]
+        );
+    }
+
+    #[test]
     fn it_should_schedule_a_download_for_another_video() {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         let repo = repo_with_clock(now);
@@ -791,11 +871,50 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_find_a_running_task_of_a_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&sync_video_task("v1"), now).unwrap();
+        repo.schedule(&download_task("v1"), now).unwrap();
+        repo.claim(2, now).unwrap();
+
+        let found = repo
+            .find_non_completed_for_video("download_video", &VideoRecordId::new("v1").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            found,
+            Some(pending_task(2, &download_task("v1"), now, now).start(now))
+        );
+    }
+
+    #[test]
+    fn it_should_not_find_a_completed_task_of_a_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&download_task("v1"), now).unwrap();
+        repo.delete(1).unwrap();
+        repo.schedule(&download_task("v2"), now).unwrap();
+
+        let found = repo
+            .find_non_completed_for_video("download_video", &VideoRecordId::new("v1").unwrap())
+            .unwrap();
+
+        assert_eq!(found, None);
+    }
+
     fn download_task(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
             quality: "high".to_string(),
             output_dir: "/videos/my-playlist".to_string(),
+        }
+    }
+
+    fn sync_video_task(video_id: &str) -> Task {
+        Task::SyncVideo {
+            video_id: video_id.to_string(),
         }
     }
 }

@@ -11,6 +11,9 @@ use crate::infrastructure::repositories::filesystem_show_file_repository::{
 use crate::infrastructure::repositories::filesystem_video_file_repository::{
     FilesystemVideoFileRepository, VideoFileRepository,
 };
+use crate::infrastructure::repositories::sqlite_category_playlist_repository::{
+    CategoryPlaylistRepository, SqliteCategoryPlaylistRepository,
+};
 use crate::infrastructure::repositories::sqlite_category_repository::{
     CategoryRepository, SqliteCategoryRepository,
 };
@@ -20,6 +23,9 @@ use crate::infrastructure::repositories::sqlite_channel_repository::{
 use crate::infrastructure::repositories::sqlite_channel_video_repository::{
     ChannelVideoRepository, SqliteChannelVideoRepository,
 };
+use crate::infrastructure::repositories::sqlite_episode_labels_repository::{
+    EpisodeLabelsRepository, SqliteEpisodeLabelsRepository,
+};
 use crate::infrastructure::repositories::sqlite_playlist_repository::{
     PlaylistRepository, SqlitePlaylistRepository,
 };
@@ -28,6 +34,9 @@ use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
 };
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
+};
+use crate::infrastructure::repositories::sqlite_video_categories_repository::{
+    SqliteVideoCategoriesRepository, VideoCategoriesRepository,
 };
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
     SqliteVideoMetadataRepository, VideoMetadataRepository,
@@ -56,6 +65,7 @@ use crate::infrastructure::repositories::youtube_playlist_repository::{
 use crate::infrastructure::repositories::youtube_video_downloader_repository::{
     VideoDownloaderRepository, YtDlpVideoDownloaderRepository,
 };
+use crate::infrastructure::shared::category_lock::CategoryLock;
 use crate::infrastructure::shared::domain_events::event_publisher::{
     EventPublisher, SqliteEventPublisher,
 };
@@ -65,6 +75,7 @@ use crate::infrastructure::shared::domain_events::event_repository::{
 use crate::infrastructure::shared::show_locks::ShowLocks;
 use crate::infrastructure::shared::sqlite_connection;
 use crate::infrastructure::shared::system_clock::{Clock, SystemClock};
+use crate::infrastructure::shared::video_lock::VideoLock;
 use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -90,10 +101,13 @@ pub struct InfrastructureContainer {
     pub channel_repository: Arc<dyn ChannelRepository>,
     pub category_repository: Arc<dyn CategoryRepository>,
     pub video_repository: Arc<dyn VideoRepository>,
+    pub video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     pub playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     pub channel_video_repository: Arc<dyn ChannelVideoRepository>,
     pub video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     pub video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+    pub episode_labels_repository: Arc<dyn EpisodeLabelsRepository>,
+    pub category_playlist_repository: Arc<dyn CategoryPlaylistRepository>,
     pub task_repository: Arc<dyn TaskRepository>,
     pub event_publisher: Arc<dyn EventPublisher>,
     pub event_repository: Arc<dyn EventRepository>,
@@ -110,6 +124,10 @@ pub struct InfrastructureContainer {
     pub ytdlp_updater: Arc<dyn YtdlpUpdater>,
     /// The one registry every move and reconcile locks its show in.
     pub show_locks: Arc<ShowLocks>,
+    /// The one lock every video categories write takes.
+    pub category_lock: Arc<CategoryLock>,
+    /// The one lock every video sync takes.
+    pub video_lock: Arc<VideoLock>,
 }
 
 impl InfrastructureContainer {
@@ -129,10 +147,15 @@ impl InfrastructureContainer {
             channel_repository: Arc::new(SqliteChannelRepository::new(db.clone())),
             category_repository: Arc::new(SqliteCategoryRepository::new(db.clone())),
             video_repository: Arc::new(SqliteVideoRepository::new(db.clone())),
+            video_categories_repository: Arc::new(SqliteVideoCategoriesRepository::new(db.clone())),
             playlist_video_repository: Arc::new(SqlitePlaylistVideoRepository::new(db.clone())),
             channel_video_repository: Arc::new(SqliteChannelVideoRepository::new(db.clone())),
             video_metadata_repository: Arc::new(SqliteVideoMetadataRepository::new(db.clone())),
             video_transcript_repository: Arc::new(SqliteVideoTranscriptRepository::new(db.clone())),
+            episode_labels_repository: Arc::new(SqliteEpisodeLabelsRepository::new(db.clone())),
+            category_playlist_repository: Arc::new(SqliteCategoryPlaylistRepository::new(
+                db.clone(),
+            )),
             task_repository: Arc::new(SqliteTaskRepository::new(db.clone(), clock.clone())),
             event_publisher: Arc::new(SqliteEventPublisher::new(db.clone(), clock.clone())),
             event_repository: Arc::new(SqliteEventRepository::new(db.clone())),
@@ -168,6 +191,8 @@ impl InfrastructureContainer {
             )),
             ytdlp_updater: Arc::new(RealYtdlpUpdater),
             show_locks: Arc::new(ShowLocks::default()),
+            category_lock: Arc::new(CategoryLock::default()),
+            video_lock: Arc::new(VideoLock::default()),
             clock,
         })
     }
