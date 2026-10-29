@@ -9,7 +9,9 @@ pub mod remove_playlist_from_categories_on_playlist_deleted;
 pub mod scan_plex_folder_on_show_moved;
 pub mod scan_plex_folder_on_video_downloaded;
 pub mod scan_plex_folder_on_video_subtitles_fetched;
-pub mod sync_video_on_video_event;
+pub mod sync_video_on_video_added_to_channel;
+pub mod sync_video_on_video_added_to_playlist;
+pub mod sync_video_on_video_downloaded;
 
 use crate::domain::channel::{ChannelCreated, ChannelDeleted};
 use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
@@ -38,7 +40,9 @@ use scan_plex_folder_on_video_downloaded::ScanPlexFolderOnVideoDownloaded;
 use scan_plex_folder_on_video_subtitles_fetched::ScanPlexFolderOnVideoSubtitlesFetched;
 use std::collections::HashMap;
 use std::sync::Arc;
-use sync_video_on_video_event::SyncVideoOnVideoEvent;
+use sync_video_on_video_added_to_channel::SyncVideoOnVideoAddedToChannel;
+use sync_video_on_video_added_to_playlist::SyncVideoOnVideoAddedToPlaylist;
+use sync_video_on_video_downloaded::SyncVideoOnVideoDownloaded;
 
 /// Maps each domain event type to the subscribers that react to it, handed
 /// to `DomainEventsConsumer` at composition time.
@@ -68,21 +72,27 @@ pub fn registry(
             channel_video_reconciler,
         ))],
     );
-    [
-        VideoAddedToPlaylist::EVENT_TYPE,
-        VideoAddedToChannel::EVENT_TYPE,
-        VideoDownloaded::EVENT_TYPE,
-    ]
-    .into_iter()
-    .for_each(|event_type| {
-        registry.insert(
-            event_type.to_string(),
-            vec![Arc::new(SyncVideoOnVideoEvent::new(
-                task_repository.clone(),
-                clock.clone(),
-            ))],
-        );
-    });
+    registry.insert(
+        VideoAddedToPlaylist::EVENT_TYPE.to_string(),
+        vec![Arc::new(SyncVideoOnVideoAddedToPlaylist::new(
+            task_repository.clone(),
+            clock.clone(),
+        ))],
+    );
+    registry.insert(
+        VideoAddedToChannel::EVENT_TYPE.to_string(),
+        vec![Arc::new(SyncVideoOnVideoAddedToChannel::new(
+            task_repository.clone(),
+            clock.clone(),
+        ))],
+    );
+    registry.insert(
+        VideoDownloaded::EVENT_TYPE.to_string(),
+        vec![Arc::new(SyncVideoOnVideoDownloaded::new(
+            task_repository.clone(),
+            clock.clone(),
+        ))],
+    );
     registry.insert(
         VideoRemovedFromPlaylist::EVENT_TYPE.to_string(),
         vec![Arc::new(DeleteVideoFileOnVideoRemovedFromPlaylist::new(

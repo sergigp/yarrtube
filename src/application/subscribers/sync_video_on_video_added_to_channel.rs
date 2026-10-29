@@ -5,23 +5,21 @@ use crate::infrastructure::shared::system_clock::Clock;
 use serde::Deserialize;
 use std::sync::Arc;
 
-/// The only field this subscriber reads from any of the events it is
-/// registered for.
+/// The only field this subscriber reads from `VideoAddedToChannel`.
 #[derive(Debug, Deserialize)]
-struct VideoEventPayload {
+struct VideoAddedToChannelPayload {
     video_id: String,
 }
 
-/// Reacts to any event about one stored video (`VideoAddedToPlaylist`,
-/// `VideoAddedToChannel`, `VideoDownloaded`) by scheduling a `SyncVideo`
-/// task to run now: the sync, not this subscriber, decides which of the
-/// video's steps are still needed.
-pub struct SyncVideoOnVideoEvent {
+/// Reacts to `VideoAddedToChannel` by scheduling a `SyncVideo` task to run
+/// now: the sync, not this subscriber, decides which of the new video's
+/// steps are needed.
+pub struct SyncVideoOnVideoAddedToChannel {
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
 }
 
-impl SyncVideoOnVideoEvent {
+impl SyncVideoOnVideoAddedToChannel {
     pub fn new(task_repository: Arc<dyn TaskRepository>, clock: Arc<dyn Clock>) -> Self {
         Self {
             task_repository,
@@ -30,9 +28,9 @@ impl SyncVideoOnVideoEvent {
     }
 }
 
-impl EventSubscriber for SyncVideoOnVideoEvent {
+impl EventSubscriber for SyncVideoOnVideoAddedToChannel {
     fn handle(&self, payload: &str) -> anyhow::Result<()> {
-        let payload: VideoEventPayload = serde_json::from_str(payload)?;
+        let payload: VideoAddedToChannelPayload = serde_json::from_str(payload)?;
         self.task_repository.schedule(
             &Task::SyncVideo {
                 video_id: payload.video_id,
@@ -58,7 +56,7 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let subscriber = SyncVideoOnVideoEvent::new(
+        let subscriber = SyncVideoOnVideoAddedToChannel::new(
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
         );
@@ -66,51 +64,6 @@ mod tests {
         let result = handle(
             &subscriber,
             r#"{"channel_id": "@somechannel", "video_id": "rec1"}"#,
-        );
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(
-            task_repository.list_non_completed().unwrap(),
-            vec![pending_task(1, &sync_video("rec1"))]
-        );
-    }
-
-    #[test]
-    fn it_should_schedule_a_video_sync_when_a_video_is_added_to_a_playlist() {
-        let db = TestDatabase::new();
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let subscriber = SyncVideoOnVideoEvent::new(
-            task_repository.clone(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-
-        let result = handle(&subscriber, r#"{"playlist_id": "PL1", "video_id": "rec1"}"#);
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(
-            task_repository.list_non_completed().unwrap(),
-            vec![pending_task(1, &sync_video("rec1"))]
-        );
-    }
-
-    #[test]
-    fn it_should_schedule_a_video_sync_when_a_video_is_downloaded() {
-        let db = TestDatabase::new();
-        let task_repository = Arc::new(SqliteTaskRepository::new(
-            db.database(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        ));
-        let subscriber = SyncVideoOnVideoEvent::new(
-            task_repository.clone(),
-            Arc::new(FixedClock(fixed_timestamp())),
-        );
-
-        let result = handle(
-            &subscriber,
-            r#"{"video_id": "rec1", "output_dir": "/videos/creators/somechannel", "folder": "Season 2026"}"#,
         );
 
         assert_eq!(result, Ok(()));
@@ -144,7 +97,7 @@ mod tests {
         DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
     }
 
-    fn handle(subscriber: &SyncVideoOnVideoEvent, payload: &str) -> Result<(), String> {
+    fn handle(subscriber: &SyncVideoOnVideoAddedToChannel, payload: &str) -> Result<(), String> {
         subscriber.handle(payload).map_err(|e| e.to_string())
     }
 }
