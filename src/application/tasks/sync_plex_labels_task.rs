@@ -32,6 +32,7 @@ mod tests {
     use crate::domain::plex_label::EpisodeLabels;
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::{Video, VideoId, VideoRecordId};
     use crate::domain::video_category::VideoCategories;
     use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
@@ -52,7 +53,9 @@ mod tests {
     };
     use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
-    use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
+    use crate::infrastructure::repositories::sqlite_task_repository::{
+        SqliteTaskRepository, TaskRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_categories_repository::{
         SqliteVideoCategoriesRepository, VideoCategoriesRepository,
     };
@@ -61,7 +64,7 @@ mod tests {
     };
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
-    use chrono::{DateTime, Utc};
+    use chrono::{DateTime, Duration, Utc};
     use std::sync::Arc;
 
     #[test]
@@ -83,6 +86,7 @@ mod tests {
             plex.clone(),
             episode_labels_repository.clone(),
             Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
         ));
 
         let result = run(&task);
@@ -117,6 +121,7 @@ mod tests {
             plex.clone(),
             episode_labels_repository.clone(),
             Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
         ));
 
         let result = run(&task);
@@ -152,6 +157,7 @@ mod tests {
             plex.clone(),
             episode_labels_repository.clone(),
             Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
         ));
 
         let result = run(&task);
@@ -186,6 +192,7 @@ mod tests {
             plex.clone(),
             episode_labels_repository.clone(),
             Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
         ));
 
         let result = run(&task);
@@ -222,6 +229,7 @@ mod tests {
             plex.clone(),
             episode_labels_repository.clone(),
             Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
         ));
 
         let result = run(&task);
@@ -257,6 +265,7 @@ mod tests {
             plex.clone(),
             episode_labels_repository.clone(),
             Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
         ));
 
         let result = run(&task);
@@ -293,6 +302,7 @@ mod tests {
             plex.clone(),
             episode_labels_repository.clone(),
             Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
         ));
 
         let result = run(&task);
@@ -323,6 +333,7 @@ mod tests {
             plex.clone(),
             episode_labels_repository.clone(),
             Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
         ));
 
         let result = run(&task);
@@ -350,6 +361,7 @@ mod tests {
             plex.clone(),
             episode_labels_repository.clone(),
             Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
         ));
 
         let result = run(&task);
@@ -383,6 +395,7 @@ mod tests {
             plex.clone(),
             episode_labels_repository.clone(),
             Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
         ));
 
         let result = run(&task);
@@ -416,6 +429,7 @@ mod tests {
             plex.clone(),
             episode_labels_repository.clone(),
             Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
         ));
 
         let result = run(&task);
@@ -430,6 +444,39 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_keep_videos_dirty_if_plex_is_unreachable() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let task_repository = task_repository(&db);
+        let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        seed_category(&db, "chess", "Chess", &[&video]);
+        episode_labels_repository
+            .save_many(&[EpisodeLabels::pending(video.id.clone())])
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            Arc::new(FakePlexLibraryRepository::failing()),
+            episode_labels_repository.clone(),
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository.clone(),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            episode_labels_repository
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![EpisodeLabels::pending(video.id.clone())]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_sync(1, now() + Duration::minutes(15))]
+        );
+    }
+
     /// The syncer over the test database, with Plex seeing `/videos` at
     /// `/plex/videos`.
     fn syncer(
@@ -437,6 +484,7 @@ mod tests {
         plex: Arc<FakePlexLibraryRepository>,
         episode_labels_repository: Arc<dyn EpisodeLabelsRepository>,
         category_playlist_repository: Arc<dyn CategoryPlaylistRepository>,
+        task_repository: Arc<dyn TaskRepository>,
     ) -> PlexLabelSyncer {
         PlexLabelSyncer::new(
             plex,
@@ -452,14 +500,33 @@ mod tests {
                 Arc::new(SqlitePlaylistRepository::new(db.database())),
                 "/videos",
             )),
-            Arc::new(SqliteTaskRepository::new(
-                db.database(),
-                Arc::new(FixedClock(now())),
-            )),
+            task_repository,
             Arc::new(FixedClock(now())),
             "/videos",
             "/plex/videos",
         )
+    }
+
+    fn task_repository(db: &TestDatabase) -> Arc<SqliteTaskRepository> {
+        Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(now())),
+        ))
+    }
+
+    /// The label sync pending as task `id`, due at `run_at`.
+    fn pending_sync(id: i64, run_at: DateTime<Utc>) -> ScheduledTask {
+        ScheduledTask {
+            id,
+            task_type: "sync_plex_labels".to_string(),
+            payload: "{}".to_string(),
+            status: TaskStatus::Pending,
+            retries: 0,
+            run_at,
+            created_at: now(),
+            updated_at: now(),
+            last_error: None,
+        }
     }
 
     /// A video of `my_channel()` downloaded to `Season 2023/<file_name>`,

@@ -2,6 +2,7 @@ use crate::domain::category::{CategoryId, CategoryName};
 use crate::domain::plex::{PlexEpisode, PlexLabels, PlexSection, plex_folder_path};
 use crate::domain::plex_label::EpisodeLabels;
 use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
+use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoRecordId};
 use crate::domain::video_category::VideoCategories;
 use crate::infrastructure::repositories::plex_library_repository::PlexLibraryRepository;
@@ -98,13 +99,18 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
         Ok(())
     }
 
-    fn request_sync(&self, _run_at: DateTime<Utc>) -> anyhow::Result<()> {
-        Ok(())
+    fn request_sync(&self, run_at: DateTime<Utc>) -> anyhow::Result<()> {
+        self.task_repository.schedule(&Task::SyncPlexLabels, run_at)
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        let sections = self.served_sections()?;
-        let episodes = self.episodes_by_file(&sections)?;
+        let episodes = match self.list_episodes() {
+            Ok(episodes) => episodes,
+            Err(e) => {
+                warn!(error = %e, "failed to reach Plex, retrying the label sync later");
+                return self.request_sync(self.clock.now() + SYNC_INTERVAL);
+            }
+        };
         self.mark_reimported(&episodes)?;
         self.track_categorized_records()?;
         let rows = self.episode_labels_repository.list_dirty(BATCH_SIZE)?;
@@ -118,6 +124,13 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
 }
 
 impl PlexLabelSyncer {
+    /// Every episode of the sections holding yarrtube's videos, by its
+    /// server-side file.
+    fn list_episodes(&self) -> anyhow::Result<HashMap<String, PlexEpisode>> {
+        let sections = self.served_sections()?;
+        self.episodes_by_file(&sections)
+    }
+
     /// The library sections holding yarrtube's videos.
     fn served_sections(&self) -> anyhow::Result<Vec<PlexSection>> {
         Ok(self
