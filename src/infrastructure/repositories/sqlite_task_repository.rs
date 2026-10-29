@@ -11,7 +11,8 @@ use tracing::info;
 
 pub trait TaskRepository: Send + Sync {
     /// Adds the task, unless it has an exclusivity key and a task of the same
-    /// type with the same key is already pending or running (then a no-op).
+    /// type with the same key is already pending, or running unless
+    /// `Task::dedupes_running` says otherwise (then a no-op).
     fn schedule(&self, task: &Task, run_at: DateTime<Utc>) -> anyhow::Result<()>;
     /// Atomically flips a pending task to running; `None` if it was no
     /// longer pending.
@@ -85,13 +86,19 @@ const SELECT_COLUMNS: &str =
 
 /// The `WHERE` clause guarding `schedule`'s insert: a task with an
 /// exclusivity key is only added if no task of its type for the same video
-/// is pending or running; any other task is always added.
+/// is pending, or also running when `Task::dedupes_running`; any other task
+/// is always added.
 fn dedupe_predicate(task: &Task, payload: &str) -> &'static str {
     match Task::exclusivity_key(task.task_type(), payload) {
-        Some(_) => {
+        Some(_) if Task::dedupes_running(task.task_type()) => {
             "NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1
                AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')
                AND status IN ('pending', 'running'))"
+        }
+        Some(_) => {
+            "NOT EXISTS (SELECT 1 FROM tasks WHERE task_type = ?1
+               AND json_extract(payload, '$.video_id') = json_extract(?2, '$.video_id')
+               AND status = 'pending')"
         }
         None => "1",
     }
@@ -692,6 +699,25 @@ mod tests {
         assert_eq!(
             repo.list_non_completed().unwrap(),
             vec![pending_task(1, &sync, now, now)]
+        );
+    }
+
+    #[test]
+    fn it_should_add_a_video_sync_if_the_only_one_is_running() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let sync = sync_video_task("rec1");
+        repo.schedule(&sync, now).unwrap();
+        repo.claim(1, now).unwrap();
+
+        repo.schedule(&sync, now).unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &sync, now, now).start(now),
+                pending_task(2, &sync, now, now),
+            ]
         );
     }
 

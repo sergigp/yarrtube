@@ -293,8 +293,7 @@ impl Task {
     /// for the same video is running, not only pending. False for
     /// `sync_video`: a running sync must not swallow a newer request.
     pub fn dedupes_running(task_type: &str) -> bool {
-        let _ = task_type;
-        false
+        task_type != "sync_video"
     }
 
     /// The show directory a per-video task (`download_video`,
