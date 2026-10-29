@@ -478,8 +478,8 @@ mod tests {
             task_repository.list_non_completed().unwrap(),
             vec![
                 download_video_task(1, &newest.id),
-                download_video_task(2, &middle.id),
-                fetch_thumbnail_task(3, &newest.id),
+                fetch_thumbnail_task(2, &newest.id),
+                download_video_task(3, &middle.id),
                 fetch_thumbnail_task(4, &middle.id),
                 next_reconcile(5),
             ]
@@ -1642,6 +1642,55 @@ mod tests {
                 ..video.clone()
             }]
         );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(
+                    1,
+                    &Task::DownloadVideo {
+                        video_id: video.id.as_str().to_string(),
+                        quality: "high".to_string(),
+                        output_dir: "/videos/creators/somechannel".to_string(),
+                    },
+                    fixed_timestamp(),
+                ),
+                next_reconcile(2),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_schedule_only_the_download_of_a_video_reset_for_redownload() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let video = downloaded_video("My Video.mp4", None);
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &video,
+        );
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository.clone(),
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![

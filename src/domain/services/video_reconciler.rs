@@ -1,5 +1,7 @@
 use crate::domain::shared::Quality;
-use crate::domain::video::{Video, VideoRecordId, VideoSyncPlan, VideoTarget, resolve_output_dir};
+use crate::domain::video::{
+    Video, VideoRecordId, VideoSyncPlan, VideoSyncStep, VideoTarget, resolve_output_dir,
+};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -79,19 +81,25 @@ impl VideoReconcilerApi for VideoReconciler {
         VideoSyncPlan::for_video(video)
             .steps
             .iter()
-            .try_for_each(|step| {
-                self.task_repository
-                    .schedule(&step.task_for(video, target), self.clock.now())
-            })
+            .try_for_each(|step| self.schedule(*step, video, target))
     }
 
     fn schedule_download(&self, video: &Video, target: &VideoTarget) -> anyhow::Result<()> {
-        let _ = (video, target);
-        Ok(())
+        self.schedule(VideoSyncStep::Download, video, target)
     }
 }
 
 impl VideoReconciler {
+    fn schedule(
+        &self,
+        step: VideoSyncStep,
+        video: &Video,
+        target: &VideoTarget,
+    ) -> anyhow::Result<()> {
+        self.task_repository
+            .schedule(&step.task_for(video, target), self.clock.now())
+    }
+
     /// The target of the channel holding `video`, else of the playlist
     /// holding it; `None` when neither is found.
     fn find_target(&self, video: &Video) -> anyhow::Result<Option<VideoTarget>> {

@@ -1,14 +1,14 @@
 use crate::domain::playlist::PlaylistPath;
 use crate::domain::services::{
-    MetadataGenerator, MetadataGeneratorApi, Relocation, VideoReconciler, VideoRelocator,
-    VideoRelocatorApi,
+    MetadataGenerator, MetadataGeneratorApi, Relocation, VideoReconciler, VideoReconcilerApi,
+    VideoRelocator, VideoRelocatorApi,
 };
 use crate::domain::shared::Quality;
-use crate::domain::task::{ScheduledTask, Task};
+use crate::domain::task::ScheduledTask;
 use crate::domain::video::VideoRecordId;
 use crate::domain::video::{
     EpisodePaths, SHOW_NFO_FILENAME, SHOW_POSTER_FILENAME, SubtitleState, Video, VideoStatus,
-    is_episode_path, is_season_folder, nfo_path_for, owning_entry, resolve_output_dir,
+    VideoTarget, is_episode_path, is_season_folder, nfo_path_for, owning_entry, resolve_output_dir,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
@@ -16,7 +16,6 @@ use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
-use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -40,8 +39,8 @@ pub struct DesiredState {
 /// What the YouTube membership sync of the same reconcile pass just changed.
 #[derive(Default)]
 pub struct MembershipDelta {
-    /// Videos added by the sync: their download and thumbnail come from their
-    /// own video-added event, not from this reconciler's recoveries.
+    /// Videos added by the sync: their steps come from the video sync their
+    /// own video-added event schedules, not from this reconciler.
     pub added_ids: Vec<VideoRecordId>,
 }
 
@@ -95,33 +94,35 @@ pub trait InternalVideoReconcilerApi: Send + Sync {
     /// Brings the folder described by `desired` in line with it, working
     /// from one read of its actual state (files on disk, downloads in
     /// flight): redownloads videos whose file is missing or not mp4, repairs
-    /// missing metadata, recovers errored videos past their cooldown,
-    /// reschedules stranded downloads, schedules missing thumbnails and
-    /// subtitles and deletes orphaned files. `delta` tells it what the
-    /// membership sync of the same pass just added or renamed.
+    /// missing metadata, recovers errored videos past their cooldown, syncs
+    /// every other stored video (`VideoReconciler::reconcile_video`, which
+    /// reschedules stranded downloads and missing thumbnails and subtitles)
+    /// and deletes orphaned files. `delta` tells it what the membership sync
+    /// of the same pass just added.
     fn reconcile(&self, desired: &DesiredState, delta: &MembershipDelta) -> anyhow::Result<()>;
 }
 
 impl InternalVideoReconcilerApi for InternalVideoReconciler {
     fn reconcile(&self, desired: &DesiredState, delta: &MembershipDelta) -> anyhow::Result<()> {
         let actual = self.read_actual_state(desired)?;
+        let target = VideoTarget {
+            output_dir: actual.output_dir.clone(),
+            quality: desired.quality,
+        };
 
-        let redownloaded = self.redownload_broken_files(desired, &actual)?;
+        let redownloaded = self.redownload_broken_files(&actual, &target)?;
         self.generate_missing_metadata(desired, &actual)?;
-        let recovered = self.recover_errored_videos(desired, &actual)?;
+        let recovered = self.recover_errored_videos(&actual, &target)?;
 
-        // Added videos get their download and thumbnail from their own
-        // video-added event, reset ones with their fresh download, so the
-        // safety nets below skip them.
+        // Added videos are synced by their own video-added event, reset ones
+        // only need the download already scheduled for them.
         let handled: HashSet<&VideoRecordId> = delta
             .added_ids
             .iter()
             .chain(redownloaded)
             .chain(recovered)
             .collect();
-        self.reschedule_stranded_downloads(desired, &actual, &handled)?;
-        self.schedule_missing_thumbnails(&actual, &handled)?;
-        self.schedule_missing_subtitles(&actual, &handled)?;
+        self.sync_stored_videos(&actual, &target, &handled)?;
 
         self.delete_orphaned_files(&actual)
     }
@@ -186,8 +187,8 @@ impl InternalVideoReconciler {
     /// filename. Returns the ids it reset.
     fn redownload_broken_files<'a>(
         &self,
-        desired: &DesiredState,
         actual: &'a ActualState,
+        target: &VideoTarget,
     ) -> anyhow::Result<Vec<&'a VideoRecordId>> {
         actual
             .videos
@@ -199,7 +200,7 @@ impl InternalVideoReconciler {
                     filename = video.filename.as_deref().unwrap_or(""),
                     "downloaded video's file is missing or not mp4, resetting for redownload"
                 );
-                self.reset_for_redownload(desired, actual, video)?;
+                self.reset_for_redownload(video, target)?;
                 Ok(&video.id)
             })
             .collect()
@@ -289,8 +290,8 @@ impl InternalVideoReconciler {
     /// video may be recovered. Returns the ids it reset.
     fn recover_errored_videos<'a>(
         &self,
-        desired: &DesiredState,
         actual: &'a ActualState,
+        target: &VideoTarget,
     ) -> anyhow::Result<Vec<&'a VideoRecordId>> {
         let now = self.clock.now();
         actual
@@ -302,86 +303,35 @@ impl InternalVideoReconciler {
                     video_id = %video.youtube_id,
                     "permanently errored video found during reconcile, resetting for redownload"
                 );
-                self.reset_for_redownload(desired, actual, video)?;
+                self.reset_for_redownload(video, target)?;
                 Ok(&video.id)
             })
             .collect()
     }
 
-    /// Safety net for a video still waiting to be downloaded that has no
-    /// download task pending or running (e.g. lost on a crash): schedules
-    /// one again. Skips the `handled` videos, already taken care of.
-    fn reschedule_stranded_downloads(
+    /// Syncs every stored video not `handled` (`VideoReconciler`), the
+    /// safety net for a step lost on a crash or never scheduled. A video
+    /// waiting to be downloaded with no download in flight is logged as
+    /// stranded first.
+    fn sync_stored_videos(
         &self,
-        desired: &DesiredState,
         actual: &ActualState,
+        target: &VideoTarget,
         handled: &HashSet<&VideoRecordId>,
     ) -> anyhow::Result<()> {
         actual
             .videos
             .iter()
-            .filter(|v| {
-                !v.is_download_settled()
-                    && !actual.downloads_in_flight.contains(v.id.as_str())
-                    && !handled.contains(&v.id)
-            })
+            .filter(|v| !handled.contains(&v.id))
             .try_for_each(|video| {
-                warn!(
-                    video_id = %video.youtube_id,
-                    status = video.status.as_str(),
-                    "stranded video found during reconcile, rescheduling its download"
-                );
-                self.schedule_download(desired, actual, video, self.clock.now())
-            })
-    }
-
-    /// Missing-thumbnail recovery: schedules a `FetchThumbnail` for each
-    /// thumbnail-fetchable video with no thumbnail, except a `handled` one or
-    /// one whose download is `InProgress` (it records its own thumbnail).
-    fn schedule_missing_thumbnails(
-        &self,
-        actual: &ActualState,
-        handled: &HashSet<&VideoRecordId>,
-    ) -> anyhow::Result<()> {
-        actual
-            .videos
-            .iter()
-            .filter(|v| {
-                v.thumbnail_filename.is_none()
-                    && !handled.contains(&v.id)
-                    && v.status != VideoStatus::InProgress
-                    && v.is_thumbnail_fetchable()
-            })
-            .try_for_each(|video| {
-                self.task_repository.schedule(
-                    &Task::FetchThumbnail {
-                        video_id: video.id.as_str().to_string(),
-                        output_dir: actual.output_dir.to_string_lossy().to_string(),
-                    },
-                    self.clock.now(),
-                )
-            })
-    }
-
-    /// Missing-subtitles recovery: schedules a `FetchSubtitles` for each
-    /// subtitle-fetchable video not `handled`.
-    fn schedule_missing_subtitles(
-        &self,
-        actual: &ActualState,
-        handled: &HashSet<&VideoRecordId>,
-    ) -> anyhow::Result<()> {
-        actual
-            .videos
-            .iter()
-            .filter(|v| v.is_subtitle_fetchable() && !handled.contains(&v.id))
-            .try_for_each(|video| {
-                self.task_repository.schedule(
-                    &Task::FetchSubtitles {
-                        video_id: video.id.as_str().to_string(),
-                        output_dir: actual.output_dir.to_string_lossy().to_string(),
-                    },
-                    self.clock.now(),
-                )
+                if actual.is_stranded(video) {
+                    warn!(
+                        video_id = %video.youtube_id,
+                        status = video.status.as_str(),
+                        "stranded video found during reconcile, rescheduling its download"
+                    );
+                }
+                self.video_reconciler.reconcile_video(video, target)
             })
     }
 
@@ -403,33 +353,10 @@ impl InternalVideoReconciler {
         Ok(())
     }
 
-    fn reset_for_redownload(
-        &self,
-        desired: &DesiredState,
-        actual: &ActualState,
-        video: &Video,
-    ) -> anyhow::Result<()> {
-        let now = self.clock.now();
-        self.video_repository
-            .update(&video.clone().reset_for_redownload(now))?;
-        self.schedule_download(desired, actual, video, now)
-    }
-
-    fn schedule_download(
-        &self,
-        desired: &DesiredState,
-        actual: &ActualState,
-        video: &Video,
-        run_at: DateTime<Utc>,
-    ) -> anyhow::Result<()> {
-        self.task_repository.schedule(
-            &Task::DownloadVideo {
-                video_id: video.id.as_str().to_string(),
-                quality: desired.quality.as_str().to_string(),
-                output_dir: actual.output_dir.to_string_lossy().to_string(),
-            },
-            run_at,
-        )
+    fn reset_for_redownload(&self, video: &Video, target: &VideoTarget) -> anyhow::Result<()> {
+        let reset = video.clone().reset_for_redownload(self.clock.now());
+        self.video_repository.update(&reset)?;
+        self.video_reconciler.schedule_download(&reset, target)
     }
 }
 
@@ -458,6 +385,11 @@ struct ActualState {
 impl ActualState {
     fn is_broken(&self, video: &Video) -> bool {
         self.broken_download_ids.contains(&video.id)
+    }
+
+    /// Waiting to be downloaded with no download pending or running.
+    fn is_stranded(&self, video: &Video) -> bool {
+        !video.is_download_settled() && !self.downloads_in_flight.contains(video.id.as_str())
     }
 
     fn is_protected(&self, entry: &str) -> bool {
@@ -549,6 +481,8 @@ mod tests {
     use super::*;
     use crate::application::tasks::log_capture::captured_log_messages;
     use crate::domain::services::MetadataGenerator;
+    use crate::domain::task::Task;
+    use chrono::{DateTime, Utc};
 
     use crate::domain::task::TaskStatus;
     use crate::domain::video::{EpisodeNumber, VideoId};
