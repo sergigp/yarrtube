@@ -101,16 +101,16 @@ mod tests {
             vec![
                 pending_task(
                     1,
-                    &Task::DownloadVideo {
+                    &Task::FetchThumbnail {
                         video_id: video.id.as_str().to_string(),
-                        quality: "low".to_string(),
                         output_dir: "/videos/creators/somechannel".to_string(),
                     },
                 ),
                 pending_task(
                     2,
-                    &Task::FetchThumbnail {
+                    &Task::DownloadVideo {
                         video_id: video.id.as_str().to_string(),
+                        quality: "low".to_string(),
                         output_dir: "/videos/creators/somechannel".to_string(),
                     },
                 ),
@@ -158,16 +158,16 @@ mod tests {
             vec![
                 pending_task(
                     1,
-                    &Task::DownloadVideo {
+                    &Task::FetchThumbnail {
                         video_id: video.id.as_str().to_string(),
-                        quality: "mid".to_string(),
                         output_dir: "/videos/music/chill".to_string(),
                     },
                 ),
                 pending_task(
                     2,
-                    &Task::FetchThumbnail {
+                    &Task::DownloadVideo {
                         video_id: video.id.as_str().to_string(),
+                        quality: "mid".to_string(),
                         output_dir: "/videos/music/chill".to_string(),
                     },
                 ),

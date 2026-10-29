@@ -39,7 +39,6 @@ mod tests {
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::ShowFileWriter;
-
     use crate::domain::services::VideoReconciler;
     use crate::domain::services::VideoRelocator;
     use crate::domain::shared::{Quality, ReconcileInterval};
@@ -477,10 +476,10 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![
-                download_video_task(1, &newest.id),
-                fetch_thumbnail_task(2, &newest.id),
-                download_video_task(3, &middle.id),
-                fetch_thumbnail_task(4, &middle.id),
+                fetch_thumbnail_task(1, &newest.id),
+                download_video_task(2, &newest.id),
+                fetch_thumbnail_task(3, &middle.id),
+                download_video_task(4, &middle.id),
                 next_reconcile(5),
             ]
         );
@@ -584,8 +583,8 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![
-                download_video_task(1, &newest.id),
-                fetch_thumbnail_task(2, &newest.id),
+                fetch_thumbnail_task(1, &newest.id),
+                download_video_task(2, &newest.id),
                 next_reconcile(3),
             ]
         );
@@ -643,8 +642,8 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![
-                download_video_task(1, &existing.id),
-                fetch_thumbnail_task(2, &existing.id),
+                fetch_thumbnail_task(1, &existing.id),
+                download_video_task(2, &existing.id),
                 next_reconcile(3),
             ]
         );

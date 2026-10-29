@@ -63,18 +63,21 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    - It schedules the next `ReconcileChannel` task one reconcile interval
      later: the channel's own interval as stored when the sync finishes
      (3 hours by default, editable per channel and playlist from the web UI).
-3. For each `VideoAddedToChannel`, two asynchronous subscribers schedule a task each:
-   - `FetchThumbnailOnVideoAddedToChannel` schedules a `FetchThumbnail`
-     task.
-   - `DownloadVideoOnVideoAddedToChannel` schedules a `DownloadVideo` task.
-4. The `TaskExecutor` runs them. Both call `yt-dlp` inside the video's
-   staging folder (`<videos root>/.downloads/<youtube id>`), take its
-   episode number from the publish time `yt-dlp` reports, and move the
-   result into the show's season folder (see below). The thumbnail usually
-   arrives first, so the UI can show it while the video is still downloading.
+3. For each `VideoAddedToChannel`, the `SyncVideoOnVideoAddedToChannel`
+   subscriber schedules a `SyncVideo` task (own `VideoSync` lane). The
+   `VideoReconciler` it runs schedules, as the video's stored state needs,
+   a `FetchThumbnail` task, a `DownloadVideo` task and a `FetchSubtitles`
+   task.
+4. The `TaskExecutor` runs them. The download calls `yt-dlp` inside the
+   video's staging folder (`<videos root>/.downloads/<youtube id>`), takes
+   its episode number from the publish time `yt-dlp` reports, and moves the
+   result into the show's season folder (see below). The thumbnail task is
+   scheduled first, so it usually arrives first and the UI can show it
+   while the video is still downloading.
    A finished download publishes `VideoDownloaded`, which has two
    subscribers:
-   - `FetchSubtitlesOnVideoDownloaded` schedules a `FetchSubtitles` task.
+   - `SyncVideoOnVideoDownloaded` schedules a `SyncVideo` task, whose
+     reconciler schedules the `FetchSubtitles` task.
    - `ScanPlexFolderOnVideoDownloaded` asks Plex to scan the show folder,
      when the scan trigger is configured.
 5. The `TaskExecutor` runs `FetchSubtitles` in its own lane, one at a time,
@@ -121,12 +124,14 @@ sequenceDiagram
     end
     Reconciler->>Tasks: schedule next ReconcileChannel (now + interval)
 
-    Events->>Tasks: schedule FetchThumbnail + DownloadVideo per video
-    Executor->>Tasks: poll and run tasks
+    Events->>Tasks: schedule SyncVideo per video (SyncVideoOnVideoAddedToChannel)
+    Executor->>Tasks: poll and run SyncVideo (VideoReconciler)
+    Executor->>Tasks: schedule FetchThumbnail + DownloadVideo as needed
     Executor->>YT: yt-dlp fetches thumbnail, then downloads video
     Executor->>Events: publish VideoDownloaded
 
-    Events->>Tasks: schedule FetchSubtitles (FetchSubtitlesOnVideoDownloaded)
+    Events->>Tasks: schedule SyncVideo (SyncVideoOnVideoDownloaded)
+    Executor->>Tasks: SyncVideo schedules FetchSubtitles
     Events->>Plex: scan show folder (if configured)
     Executor->>YT: yt-dlp probes captions, downloads original-language .srt
     Executor->>Events: save transcript, publish VideoSubtitlesFetched

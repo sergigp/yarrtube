@@ -183,7 +183,6 @@ mod tests {
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::ShowFileWriter;
-
     use crate::domain::services::VideoReconciler;
     use crate::domain::services::VideoRelocator;
     use crate::domain::show::{ShowKey, ShowMoved};
@@ -228,7 +227,6 @@ mod tests {
     use crate::infrastructure::repositories::youtube_playlist_repository::{
         FakeYoutubePlaylistRepository, ResolvedPlaylist, YoutubePlaylistRepository,
     };
-
     use crate::infrastructure::shared::domain_events::event_publisher::{
         EventPublisher, SqliteEventPublisher,
     };
@@ -2252,17 +2250,17 @@ mod tests {
             vec![
                 pending_task(
                     1,
-                    &Task::DownloadVideo {
+                    &Task::FetchThumbnail {
                         video_id: videos_after_first_reconcile[0].id.as_str().to_string(),
-                        quality: "high".to_string(),
                         output_dir: "/videos/music/chill".to_string(),
                     },
                     fixed_timestamp(),
                 ),
                 pending_task(
                     2,
-                    &Task::FetchThumbnail {
+                    &Task::DownloadVideo {
                         video_id: videos_after_first_reconcile[0].id.as_str().to_string(),
+                        quality: "high".to_string(),
                         output_dir: "/videos/music/chill".to_string(),
                     },
                     fixed_timestamp(),
@@ -2386,17 +2384,17 @@ mod tests {
             vec![
                 pending_task(
                     1,
-                    &Task::DownloadVideo {
+                    &Task::FetchThumbnail {
                         video_id: existing.id.as_str().to_string(),
-                        quality: Quality::High.as_str().to_string(),
                         output_dir: "/videos/music/chill".to_string(),
                     },
                     fixed_timestamp(),
                 ),
                 pending_task(
                     2,
-                    &Task::FetchThumbnail {
+                    &Task::DownloadVideo {
                         video_id: existing.id.as_str().to_string(),
+                        quality: Quality::High.as_str().to_string(),
                         output_dir: "/videos/music/chill".to_string(),
                     },
                     fixed_timestamp(),

@@ -482,8 +482,6 @@ mod tests {
     use crate::application::tasks::log_capture::captured_log_messages;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::task::Task;
-    use chrono::{DateTime, Utc};
-
     use crate::domain::task::TaskStatus;
     use crate::domain::video::{EpisodeNumber, VideoId};
     use crate::domain::video_metadata::VideoMetadata;
@@ -495,16 +493,15 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
-
     use crate::infrastructure::repositories::youtube_metadata_repository::{
         FakeYoutubeMetadataRepository, YoutubeMetadata,
     };
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
-
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
     use chrono::Duration;
+    use chrono::{DateTime, Utc};
     use std::sync::Mutex;
 
     #[test]
@@ -815,8 +812,8 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![
-                download_video_task(1, &video.id),
-                fetch_thumbnail_task(2, &video.id)
+                fetch_thumbnail_task(1, &video.id),
+                download_video_task(2, &video.id)
             ]
         );
     }
@@ -876,8 +873,8 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![
-                download_video_task(1, &video.id),
-                fetch_thumbnail_task(2, &video.id)
+                fetch_thumbnail_task(1, &video.id),
+                download_video_task(2, &video.id)
             ]
         );
     }
@@ -1576,8 +1573,8 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![
-                download_video_task(1, &video.id),
-                fetch_thumbnail_task(2, &video.id)
+                fetch_thumbnail_task(1, &video.id),
+                download_video_task(2, &video.id)
             ]
         );
     }
@@ -1590,7 +1587,6 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let _video_downloader_repository = Arc::new(FakeVideoDownloaderRepository::default());
         let video = my_video();
         video_repository.save(&video).unwrap();
         task_repository
