@@ -164,6 +164,10 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskFamily(aTask({ task_type: 'mystery_task' }))).toBe('other')
   })
 
+  it('puts Plex label syncs in the other family', () => {
+    expect(taskFamily(aTask({ task_type: 'sync_plex_labels' }))).toBe('other')
+  })
+
   it('puts video syncs in the syncs family', () => {
     expect(taskFamily(aTask({ task_type: 'sync_video' }))).toBe('syncs')
   })
