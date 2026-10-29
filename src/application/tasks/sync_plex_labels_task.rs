@@ -240,6 +240,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_keep_a_video_dirty_until_plex_imports_it() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default().with_location("19", "/plex/videos/creators"),
+        );
+        let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        seed_category(&db, "chess", "Chess", &[&video]);
+        episode_labels_repository
+            .save_many(&[EpisodeLabels::pending(video.id.clone())])
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            episode_labels_repository.clone(),
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex.mutations(), Vec::<String>::new());
+        assert_eq!(
+            episode_labels_repository
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![checked(&video)]
+        );
+    }
+
     /// The syncer over the test database, with Plex seeing `/videos` at
     /// `/plex/videos`.
     fn syncer(
@@ -334,6 +365,14 @@ mod tests {
         video_categories_repository
             .save_many(&with_category)
             .unwrap();
+    }
+
+    /// Still dirty, looked at by the sync.
+    fn checked(video: &Video) -> EpisodeLabels {
+        EpisodeLabels {
+            checked_at: Some(now()),
+            ..EpisodeLabels::pending(video.id.clone())
+        }
     }
 
     fn synced(video: &Video, rating_key: &str, labels: &[&str]) -> EpisodeLabels {

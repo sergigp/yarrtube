@@ -171,7 +171,7 @@ impl PlexLabelSyncer {
         episodes: &HashMap<String, PlexEpisode>,
     ) -> anyhow::Result<EpisodeLabels> {
         let Some(episode) = self.find_episode(&row.video_id, episodes)? else {
-            return Ok(row);
+            return Ok(row.checked(self.clock.now()));
         };
         let desired = desired
             .get(&row.video_id)

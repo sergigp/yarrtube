@@ -38,8 +38,11 @@ impl EpisodeLabels {
 
     /// Still dirty (not downloaded, not imported or rejected by Plex),
     /// looked at `now`.
-    pub fn checked(self, _now: DateTime<Utc>) -> Self {
-        todo!()
+    pub fn checked(self, now: DateTime<Utc>) -> Self {
+        Self {
+            checked_at: Some(now),
+            ..self
+        }
     }
 
     /// `labels` written to `episode` at `now`.
