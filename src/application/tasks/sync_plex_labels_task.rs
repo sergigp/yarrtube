@@ -32,7 +32,7 @@ mod tests {
     use crate::domain::plex_label::EpisodeLabels;
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{Video, VideoId};
+    use crate::domain::video::{Video, VideoId, VideoRecordId};
     use crate::domain::video_category::VideoCategories;
     use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
     use crate::infrastructure::repositories::sqlite_category_playlist_repository::{
@@ -304,6 +304,33 @@ mod tests {
                 .find_many(&[video.id.clone()])
                 .unwrap(),
             vec![checked(&video)]
+        );
+    }
+
+    #[test]
+    fn it_should_forget_a_deleted_video() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default().with_location("19", "/plex/videos/creators"),
+        );
+        let deleted = VideoRecordId::new("deleted").unwrap();
+        episode_labels_repository
+            .save_many(&[EpisodeLabels::pending(deleted.clone())])
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            episode_labels_repository.clone(),
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            episode_labels_repository.find_many(&[deleted]).unwrap(),
+            vec![]
         );
     }
 

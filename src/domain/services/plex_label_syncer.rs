@@ -2,7 +2,7 @@ use crate::domain::category::{CategoryId, CategoryName};
 use crate::domain::plex::{PlexEpisode, PlexLabels, PlexSection, plex_folder_path};
 use crate::domain::plex_label::EpisodeLabels;
 use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
-use crate::domain::video::VideoRecordId;
+use crate::domain::video::{Video, VideoRecordId};
 use crate::domain::video_category::VideoCategories;
 use crate::infrastructure::repositories::plex_library_repository::PlexLibraryRepository;
 use crate::infrastructure::repositories::sqlite_category_playlist_repository::CategoryPlaylistRepository;
@@ -109,7 +109,10 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
         let labelled = rows
             .into_iter()
             .map(|row| self.label(row, &desired, &episodes))
-            .collect::<anyhow::Result<Vec<_>>>()?;
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
         self.episode_labels_repository.save_many(&labelled)
     }
 }
@@ -163,22 +166,27 @@ impl PlexLabelSyncer {
             .collect())
     }
 
-    /// Writes the record's desired labels to its episode.
+    /// Writes the record's desired labels to its episode; `None` once the
+    /// record is gone and its row deleted.
     fn label(
         &self,
         row: EpisodeLabels,
         desired: &HashMap<VideoRecordId, PlexLabels>,
         episodes: &HashMap<String, PlexEpisode>,
-    ) -> anyhow::Result<EpisodeLabels> {
-        let Some(episode) = self.find_episode(&row.video_id, episodes)? else {
-            return Ok(row.checked(self.clock.now()));
+    ) -> anyhow::Result<Option<EpisodeLabels>> {
+        let Some(video) = self.video_repository.find(&row.video_id)? else {
+            self.episode_labels_repository.delete(&row.video_id)?;
+            return Ok(None);
+        };
+        let Some(episode) = self.find_episode(&video, episodes)? else {
+            return Ok(Some(row.checked(self.clock.now())));
         };
         let desired = desired
             .get(&row.video_id)
             .cloned()
             .unwrap_or_else(PlexLabels::none);
         self.write_labels(&episode, &desired)?;
-        Ok(row.synced(&episode, desired, self.clock.now()))
+        Ok(Some(row.synced(&episode, desired, self.clock.now())))
     }
 
     /// Makes the episode's labels exactly `desired`, unless they already are.
@@ -196,13 +204,10 @@ impl PlexLabelSyncer {
     /// The Plex episode of the record's file.
     fn find_episode(
         &self,
-        video_id: &VideoRecordId,
+        video: &Video,
         episodes: &HashMap<String, PlexEpisode>,
     ) -> anyhow::Result<Option<PlexEpisode>> {
-        let Some(video) = self.video_repository.find(video_id)? else {
-            return Ok(None);
-        };
-        let Some(owner) = self.video_owner_finder.find(&video)? else {
+        let Some(owner) = self.video_owner_finder.find(video)? else {
             return Ok(None);
         };
         Ok(video

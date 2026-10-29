@@ -73,8 +73,15 @@ impl EpisodeLabelsRepository for SqliteEpisodeLabelsRepository {
         tx.commit().context("failed to commit episode labels save")
     }
 
-    fn delete(&self, _video_id: &VideoRecordId) -> anyhow::Result<()> {
-        Ok(())
+    fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "DELETE FROM episode_labels WHERE video_id = ?1",
+            params![video_id.as_str()],
+        )
+        .inspect_err(|e| tracing::error!(video_id = %video_id, error = %e, "failed to delete episode labels"))
+        .context("failed to delete episode labels")
+        .map(drop)
     }
 }
 
