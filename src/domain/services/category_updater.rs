@@ -63,7 +63,9 @@ impl CategoryUpdaterApi for CategoryUpdater {
         let renamed = update.name.is_some();
         self.save(&Self::applied(category, update))?;
         if renamed {
-            self.announce_renamed(id)?;
+            self.video_category_assigner
+                .announce_renamed(id)
+                .map_err(UpdateCategoryError::Repository)?;
         }
         Ok(())
     }
@@ -73,6 +75,7 @@ impl CategoryUpdaterApi for CategoryUpdater {
         id: &CategoryId,
         members: Vec<CategoryMember>,
     ) -> Result<(), UpdateCategoryError> {
+        let _guard = self.video_category_assigner.lock();
         let category = self.find_category(id)?;
         self.ensure_tracked(&members)?;
         let previous_members = category.members.clone();
@@ -142,12 +145,6 @@ impl CategoryUpdater {
             Some(color) => category.with_color(color),
             None => category,
         }
-    }
-
-    fn announce_renamed(&self, id: &CategoryId) -> Result<(), UpdateCategoryError> {
-        self.video_category_assigner
-            .announce_renamed(id)
-            .map_err(UpdateCategoryError::Repository)
     }
 
     /// Recomputes the categories of every video `id`'s member change touches.

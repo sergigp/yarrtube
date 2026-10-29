@@ -68,6 +68,7 @@ mod tests {
     use crate::infrastructure::repositories::youtube_playlist_items_repository::{
         FakeYoutubePlaylistItemsRepository, YoutubePlaylistItem,
     };
+    use crate::infrastructure::shared::category_lock::CategoryLock;
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,
@@ -575,6 +576,7 @@ mod tests {
                 database,
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(CategoryLock::default()),
         )
     }
 }

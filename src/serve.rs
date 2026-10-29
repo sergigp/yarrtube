@@ -709,6 +709,7 @@ fn video_category_assigner(infrastructure: &InfrastructureContainer) -> VideoCat
         infrastructure.channel_video_repository.clone(),
         infrastructure.playlist_video_repository.clone(),
         infrastructure.event_publisher.clone(),
+        infrastructure.category_lock.clone(),
     )
 }
 

@@ -500,6 +500,7 @@ mod tests {
         FakeYoutubeMetadataRepository, YoutubeMetadata,
     };
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::shared::category_lock::CategoryLock;
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::sqlite_connection::Database;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
@@ -2087,6 +2088,7 @@ mod tests {
                 database,
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(CategoryLock::default()),
         )
     }
 }

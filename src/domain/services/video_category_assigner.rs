@@ -6,9 +6,10 @@ use crate::infrastructure::repositories::sqlite_category_repository::CategoryRep
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
+use crate::infrastructure::shared::category_lock::CategoryLock;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, MutexGuard};
 
 /// Keeps each stored video record's categories in line with its source's
 /// (the source regime) and announces every change in one batched event.
@@ -19,6 +20,7 @@ pub struct VideoCategoryAssigner {
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     event_publisher: Arc<dyn EventPublisher>,
+    category_lock: Arc<CategoryLock>,
 }
 
 impl VideoCategoryAssigner {
@@ -28,6 +30,7 @@ impl VideoCategoryAssigner {
         channel_video_repository: Arc<dyn ChannelVideoRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         event_publisher: Arc<dyn EventPublisher>,
+        category_lock: Arc<CategoryLock>,
     ) -> Self {
         Self {
             video_categories_repository,
@@ -35,11 +38,17 @@ impl VideoCategoryAssigner {
             channel_video_repository,
             playlist_video_repository,
             event_publisher,
+            category_lock,
         }
     }
 }
 
 pub trait VideoCategoryAssignerApi: Send + Sync {
+    /// Serializes video category writes. `assign_source` and `assign_video`
+    /// take it themselves; callers of `reassign_category` hold it from
+    /// before they change the categories it is computed from until it
+    /// returns.
+    fn lock(&self) -> MutexGuard<'_, ()>;
     /// Source regime for every record of `source`: its set = the source's
     /// categories. No-op when the source is in no category (AI regime).
     fn assign_source(&self, source: &CategoryMember) -> anyhow::Result<()>;
@@ -48,8 +57,8 @@ pub trait VideoCategoryAssignerApi: Send + Sync {
     -> anyhow::Result<()>;
     /// After `category_id`'s members changed or it was deleted: recomputes every
     /// record of `previous_members`, of its current members and of records
-    /// still holding it, against `categories` (the state to apply). A source in
-    /// no category leaves its records in none.
+    /// still holding it, against `categories` (the state to apply). The
+    /// records of a source in no category only lose `category_id`.
     fn reassign_category(
         &self,
         category_id: &CategoryId,
@@ -61,12 +70,12 @@ pub trait VideoCategoryAssignerApi: Send + Sync {
 }
 
 impl VideoCategoryAssignerApi for VideoCategoryAssigner {
+    fn lock(&self) -> MutexGuard<'_, ()> {
+        self.category_lock.lock()
+    }
+
     fn assign_source(&self, source: &CategoryMember) -> anyhow::Result<()> {
-        let category_ids = self.categories_of(source)?;
-        if category_ids.is_empty() {
-            return Ok(());
-        }
-        self.save_and_announce(Self::each_in(self.record_ids(source)?, &category_ids))
+        self.assign_records(source, || self.record_ids(source))
     }
 
     fn assign_video(
@@ -74,11 +83,7 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         video_id: &VideoRecordId,
         source: &CategoryMember,
     ) -> anyhow::Result<()> {
-        let category_ids = self.categories_of(source)?;
-        if category_ids.is_empty() {
-            return Ok(());
-        }
-        self.save_and_announce(Self::each_in(vec![video_id.clone()], &category_ids))
+        self.assign_records(source, || Ok(vec![video_id.clone()]))
     }
 
     fn reassign_category(
@@ -96,7 +101,7 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         );
         let desired = sources
             .iter()
-            .map(|source| self.desired_for_source(source, categories))
+            .map(|source| self.desired_for_source(source, category_id, categories))
             .collect::<anyhow::Result<Vec<_>>>()?
             .concat();
         self.save_and_announce(desired)
@@ -111,6 +116,21 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
 }
 
 impl VideoCategoryAssigner {
+    /// Gives each of `video_ids` (listed only when `source` is in some
+    /// category) exactly the source's categories; no-op when it is in none.
+    fn assign_records(
+        &self,
+        source: &CategoryMember,
+        video_ids: impl FnOnce() -> anyhow::Result<Vec<VideoRecordId>>,
+    ) -> anyhow::Result<()> {
+        let _guard = self.lock();
+        let category_ids = self.categories_of(source)?;
+        if category_ids.is_empty() {
+            return Ok(());
+        }
+        self.save_and_announce(Self::each_in(video_ids()?, &category_ids))
+    }
+
     /// The current members of `category_id` in `categories`.
     fn members_of(category_id: &CategoryId, categories: &[Category]) -> Vec<CategoryMember> {
         categories
@@ -194,14 +214,26 @@ impl VideoCategoryAssigner {
             .collect()
     }
 
-    /// Every record of `source`, each with the source's categories.
+    /// Every record of `source` after `category_id` changed: each with the
+    /// source's categories when it is in any (source regime), else its own
+    /// categories without `category_id` (AI regime, the others are kept).
     fn desired_for_source(
         &self,
         source: &CategoryMember,
+        category_id: &CategoryId,
         categories: &[Category],
     ) -> anyhow::Result<Vec<VideoCategories>> {
         let category_ids = Self::source_category_ids(source, categories);
-        Ok(Self::each_in(self.record_ids(source)?, &category_ids))
+        let record_ids = self.record_ids(source)?;
+        if !category_ids.is_empty() {
+            return Ok(Self::each_in(record_ids, &category_ids));
+        }
+        Ok(self
+            .video_categories_repository
+            .find_many(&record_ids)?
+            .into_iter()
+            .map(|current| current.without(category_id))
+            .collect())
     }
 
     fn record_ids(&self, source: &CategoryMember) -> anyhow::Result<Vec<VideoRecordId>> {

@@ -21,18 +21,23 @@ either can be built.
     one category → its categories are exactly its source's categories.
   - **AI regime**: its source is in no category → its categories are set by
     a classifier. Nothing writes them in this change (classification is a
-    future change); such records simply have no categories.
+    future change); such records simply have no categories. Changing or
+    deleting a category only removes that category from them, keeping the
+    others a classifier may have set.
 - The relation is maintained, set-based, when:
   - a category's members are set (every record of the old and new member
-    sources is rewritten in the same transaction as the members; a source
-    left in no category loses its rows),
-  - a category is deleted (its rows go with it, same transaction),
+    sources is recomputed once the members are saved; the records of a
+    source left in no category only lose that category),
+  - a category is deleted (its rows go with it, before the category),
   - a record is deleted (its rows go with it),
   - a video sync runs for a record (`video-reconciler`): its categories are
     assigned from its source when the source is in a category,
   - a playlist/channel reconcile pass runs: its records are re-assigned from
     the source, repairing any drift.
   - Renaming or recoloring a category touches no rows.
+  - These writes are serialized by an in-process lock, so a reconcile pass
+    or video sync never writes back a category a concurrent members change
+    or delete just removed.
 - Upgrade backfills the relation from the current memberships.
 - Every category read (category feed, unwatched counts and total, home
   videos' category ids, mark category watched) reads the relation instead of

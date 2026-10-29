@@ -37,8 +37,9 @@ mod tests {
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::{EpisodeNumber, Video, VideoId};
     use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
-    use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
-    use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
+    use crate::infrastructure::repositories::sqlite_category_repository::{
+        CategoryRepository, SqliteCategoryRepository,
+    };
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -54,17 +55,18 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
-    use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
-    use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::{
+        SqliteVideoCategoriesRepository, VideoCategoriesRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::shared::category_lock::CategoryLock;
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,
     };
-    use crate::infrastructure::shared::sqlite_connection::Database;
-    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
     use std::sync::Arc;
@@ -397,7 +399,8 @@ mod tests {
     fn it_should_categorize_a_new_video_of_a_categorized_channel() {
         let db = TestDatabase::new();
         let video_repository = SqliteVideoRepository::new(db.database());
-        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
         let video = my_video();
         save_channel_video(
@@ -422,7 +425,17 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
-            video_category_assigner(db.database()),
+            VideoCategoryAssigner::new(
+                video_categories_repository.clone(),
+                Arc::new(SqliteCategoryRepository::new(db.database())),
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteEventPublisher::new(
+                    db.database(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(CategoryLock::default()),
+            ),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -452,7 +465,8 @@ mod tests {
     fn it_should_leave_a_new_video_of_an_uncategorized_playlist_uncategorized() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
         let event_repository = SqliteEventRepository::new(db.database());
         let video = my_video();
         video_repository.save(&video).unwrap();
@@ -485,7 +499,17 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
-            video_category_assigner(db.database()),
+            VideoCategoryAssigner::new(
+                video_categories_repository.clone(),
+                Arc::new(SqliteCategoryRepository::new(db.database())),
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteEventPublisher::new(
+                    db.database(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                )),
+                Arc::new(CategoryLock::default()),
+            ),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -707,6 +731,7 @@ mod tests {
                 database,
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(CategoryLock::default()),
         )
     }
 }

@@ -59,6 +59,7 @@ use crate::infrastructure::repositories::youtube_playlist_repository::{
 use crate::infrastructure::repositories::youtube_video_downloader_repository::{
     VideoDownloaderRepository, YtDlpVideoDownloaderRepository,
 };
+use crate::infrastructure::shared::category_lock::CategoryLock;
 use crate::infrastructure::shared::domain_events::event_publisher::{
     EventPublisher, SqliteEventPublisher,
 };
@@ -114,6 +115,8 @@ pub struct InfrastructureContainer {
     pub ytdlp_updater: Arc<dyn YtdlpUpdater>,
     /// The one registry every move and reconcile locks its show in.
     pub show_locks: Arc<ShowLocks>,
+    /// The one lock every video categories write takes.
+    pub category_lock: Arc<CategoryLock>,
 }
 
 impl InfrastructureContainer {
@@ -173,6 +176,7 @@ impl InfrastructureContainer {
             )),
             ytdlp_updater: Arc::new(RealYtdlpUpdater),
             show_locks: Arc::new(ShowLocks::default()),
+            category_lock: Arc::new(CategoryLock::default()),
             clock,
         })
     }

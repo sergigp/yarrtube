@@ -1,4 +1,5 @@
 pub mod app_version;
+pub mod category_lock;
 pub mod domain_events;
 pub mod error_report;
 pub mod show_locks;

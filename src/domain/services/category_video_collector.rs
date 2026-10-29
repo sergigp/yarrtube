@@ -9,8 +9,9 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use std::collections::HashSet;
 use std::sync::Arc;
 
-/// Collects the downloaded videos of a category's members, shared by the
-/// paths that list, count and mark a category's videos.
+/// Collects the downloaded videos belonging to a category (read from the
+/// per-video category relation), shared by the paths that list, count and
+/// mark a category's videos.
 #[derive(Clone)]
 pub struct CategoryVideoCollector {
     channel_repository: Arc<dyn ChannelRepository>,
@@ -52,10 +53,11 @@ pub trait CategoryVideoCollectorApi: Send + Sync {
 impl CategoryVideoCollectorApi for CategoryVideoCollector {
     fn downloaded_videos(&self, category: &Category) -> anyhow::Result<Vec<SourcedVideo>> {
         let video_ids = self.video_ids_in(category)?;
-        let mut groups = self.records_by_source(&video_ids)?;
-        groups.sort_by_key(|(source, _)| Self::source_rank(category, source));
-        Ok(groups
+        let from_members = self.member_records(category, &video_ids)?;
+        let from_former_members = self.former_member_records(&video_ids, &from_members)?;
+        Ok(from_members
             .iter()
+            .chain(&from_former_members)
             .map(|(source, ids)| self.downloaded_from(source, ids))
             .collect::<anyhow::Result<Vec<_>>>()?
             .concat())
@@ -63,7 +65,8 @@ impl CategoryVideoCollectorApi for CategoryVideoCollector {
 }
 
 impl CategoryVideoCollector {
-    fn video_ids_in(&self, category: &Category) -> anyhow::Result<HashSet<VideoRecordId>> {
+    /// The records holding the category, in record id order.
+    fn video_ids_in(&self, category: &Category) -> anyhow::Result<Vec<VideoRecordId>> {
         Ok(self
             .video_categories_repository
             .list_in_category(&category.id)?
@@ -72,48 +75,91 @@ impl CategoryVideoCollector {
             .collect())
     }
 
-    /// The records of `video_ids` grouped by their source, sources and
-    /// records in storage order.
-    fn records_by_source(
+    /// The records of `video_ids` held by each of the category's members,
+    /// channels first then playlists, each in member order, records in their
+    /// source's order. Members holding none are left out.
+    fn member_records(
         &self,
-        video_ids: &HashSet<VideoRecordId>,
+        category: &Category,
+        video_ids: &[VideoRecordId],
     ) -> anyhow::Result<Vec<(CategoryMember, Vec<VideoRecordId>)>> {
         if video_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let channel_records =
-            self.channel_video_repository
-                .list()?
-                .into_iter()
-                .map(|channel_video| {
-                    (
-                        CategoryMember::Channel(channel_video.channel_id),
-                        channel_video.video_id,
-                    )
-                });
-        let playlist_records =
-            self.playlist_video_repository
-                .list()?
-                .into_iter()
-                .map(|playlist_video| {
-                    (
-                        CategoryMember::Playlist(playlist_video.playlist_id),
-                        playlist_video.video_id,
-                    )
-                });
-        Ok(channel_records
-            .chain(playlist_records)
-            .filter(|(_, video_id)| video_ids.contains(video_id))
+        let wanted: HashSet<&VideoRecordId> = video_ids.iter().collect();
+        let mut members = category.members.clone();
+        members.sort_by_key(|member| matches!(member, CategoryMember::Playlist(_)));
+        members
+            .into_iter()
+            .map(|member| {
+                let ids = self
+                    .record_ids_of(&member)?
+                    .into_iter()
+                    .filter(|id| wanted.contains(id))
+                    .collect::<Vec<_>>();
+                Ok((member, ids))
+            })
+            .filter(|group| !matches!(group, Ok((_, ids)) if ids.is_empty()))
+            .collect()
+    }
+
+    /// The records of `video_ids` not held by a member (their source left the
+    /// category), grouped by source, channels first then playlists.
+    fn former_member_records(
+        &self,
+        video_ids: &[VideoRecordId],
+        from_members: &[(CategoryMember, Vec<VideoRecordId>)],
+    ) -> anyhow::Result<Vec<(CategoryMember, Vec<VideoRecordId>)>> {
+        let grouped: HashSet<&VideoRecordId> =
+            from_members.iter().flat_map(|(_, ids)| ids).collect();
+        let mut groups = video_ids
+            .iter()
+            .filter(|id| !grouped.contains(id))
+            .map(|id| Ok(self.source_of(id)?.map(|source| (source, id.clone()))))
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
             .fold(
                 Vec::<(CategoryMember, Vec<VideoRecordId>)>::new(),
-                |mut grouped, (source, video_id)| {
-                    match grouped.iter_mut().find(|(kept, _)| *kept == source) {
-                        Some((_, ids)) => ids.push(video_id),
-                        None => grouped.push((source, vec![video_id])),
+                |mut groups, (source, id)| {
+                    match groups.iter_mut().find(|(kept, _)| *kept == source) {
+                        Some((_, ids)) => ids.push(id),
+                        None => groups.push((source, vec![id])),
                     }
-                    grouped
+                    groups
                 },
-            ))
+            );
+        groups.sort_by_key(|(source, _)| matches!(source, CategoryMember::Playlist(_)));
+        Ok(groups)
+    }
+
+    /// Every record of `source`, in its source's order.
+    fn record_ids_of(&self, source: &CategoryMember) -> anyhow::Result<Vec<VideoRecordId>> {
+        Ok(match source {
+            CategoryMember::Channel(handle) => self
+                .channel_video_repository
+                .list_for_channel(handle)?
+                .into_iter()
+                .map(|channel_video| channel_video.video_id)
+                .collect(),
+            CategoryMember::Playlist(id) => self
+                .playlist_video_repository
+                .list_for_playlist(id)?
+                .into_iter()
+                .map(|playlist_video| playlist_video.video_id)
+                .collect(),
+        })
+    }
+
+    /// The channel holding `video_id`, else the playlist holding it.
+    fn source_of(&self, video_id: &VideoRecordId) -> anyhow::Result<Option<CategoryMember>> {
+        if let Some(channel_video) = self.channel_video_repository.find_by_video(video_id)? {
+            return Ok(Some(CategoryMember::Channel(channel_video.channel_id)));
+        }
+        Ok(self
+            .playlist_video_repository
+            .find_by_video(video_id)?
+            .map(|playlist_video| CategoryMember::Playlist(playlist_video.playlist_id)))
     }
 
     /// The downloaded videos of `video_ids`, from `source`; none when the
@@ -169,16 +215,5 @@ impl CategoryVideoCollector {
                 source: source.clone(),
             })
             .collect())
-    }
-
-    /// Members before former members, channels before playlists, then
-    /// member order.
-    fn source_rank(category: &Category, source: &CategoryMember) -> (bool, bool, usize) {
-        let position = category.members.iter().position(|member| member == source);
-        (
-            position.is_none(),
-            matches!(source, CategoryMember::Playlist(_)),
-            position.unwrap_or(usize::MAX),
-        )
     }
 }

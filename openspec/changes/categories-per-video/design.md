@@ -20,6 +20,9 @@
 - `src/domain/services/channel_video_reconciler.rs`, `playlist_video_reconciler.rs` — assign the source after each pass (best effort); delete a removed record's categories with it.
 - `src/domain/services/channel_deleter.rs`, `playlist_deleter.rs` — delete each record's categories with the record.
 - `src/serve.rs` — builds `VideoCategoryAssigner`, injects it and the repository.
+- `src/infrastructure/shared/category_lock.rs` (+ `shared/mod.rs`, a `category_lock` field in `infrastructure_container.rs`) — `CategoryLock`, the one in-process lock serializing video category writes.
+- `src/domain/category/category_id.rs` — `CategoryId` derives `PartialOrd, Ord` (`VideoCategories::new` sorts).
+- Test-only wiring of the new constructor deps: `domain/services/internal_video_reconciler.rs`, `application/subscribers/reconcile_on_{channel,playlist}_created.rs`, `application/tasks/{sync_video_task,reconcile_channel_task,reconcile_playlist_task}.rs`.
 - Existing test modules seeding categorized videos (`application/http/{categories,videos,playlists,channels}/mod.rs`) — also seed `VideoCategories`.
 
 ## Types & Signatures
@@ -36,7 +39,8 @@ pub struct VideoCategories {
 impl VideoCategories {
     pub fn new(video_id: VideoRecordId, category_ids: Vec<CategoryId>) -> Self; // sorts + dedups
     pub fn none(video_id: VideoRecordId) -> Self;
-    pub fn contains(&self, id: &CategoryId) -> bool;
+    /// The same record, no longer in `category_id`.
+    pub fn without(self, category_id: &CategoryId) -> Self;
 }
 
 // domain/video_category/events.rs
@@ -69,8 +73,13 @@ pub struct VideoCategoryAssigner {
     channel_video_repository: Arc<dyn ChannelVideoRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     event_publisher: Arc<dyn EventPublisher>,
+    category_lock: Arc<CategoryLock>, // last `new` param
 }
 pub trait VideoCategoryAssignerApi: Send + Sync {
+    /// Serializes video category writes. `assign_source` and `assign_video`
+    /// take it themselves; callers of `reassign_category` hold it from before
+    /// they change the categories it is computed from until it returns.
+    fn lock(&self) -> MutexGuard<'_, ()>;
     /// Source regime for every record of `source`: its set = the source's
     /// categories. No-op when the source is in no category (AI regime).
     fn assign_source(&self, source: &CategoryMember) -> anyhow::Result<()>;
@@ -78,8 +87,8 @@ pub trait VideoCategoryAssignerApi: Send + Sync {
     fn assign_video(&self, video_id: &VideoRecordId, source: &CategoryMember) -> anyhow::Result<()>;
     /// After `category_id`'s members changed or it was deleted: recomputes every
     /// record of `previous_members`, of its current members and of records
-    /// still holding it, against `categories` (the state to apply). A source in
-    /// no category leaves its records in none.
+    /// still holding it, against `categories` (the state to apply). The
+    /// records of a source in no category only lose `category_id`.
     fn reassign_category(
         &self,
         category_id: &CategoryId,
@@ -111,9 +120,16 @@ pub fn new(
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
 ) -> Self;
 
+// infrastructure/shared/category_lock.rs
+#[derive(Default)]
+pub struct CategoryLock { held: Mutex<()> }
+impl CategoryLock { pub fn lock(&self) -> MutexGuard<'_, ()>; } // poison ignored
+
 // domain/services/video_reconciler.rs — new dep `video_category_assigner: VideoCategoryAssigner`
 // ChannelVideoReconciler / PlaylistVideoReconciler / ChannelDeleter / PlaylistDeleter —
 // new deps `video_category_assigner` (reconcilers) and `video_categories_repository` (all four).
+// New constructor params are appended last; `ChannelDeleter::new` takes
+// `#[allow(clippy::too_many_arguments)]` like the reconcilers.
 ```
 
 Order matters on failure: `set_members` saves members then reassigns (a retry re-finds stale records via `list_in_category`); `delete` reassigns with the category excluded then deletes (a failed delete is healed by the members' next reconcile pass).
@@ -121,10 +137,10 @@ Order matters on failure: `set_members` saves members then reassigns (a retry re
 ## Call Stack
 
 **Set members** — `set_category_members` → `CategoryUpdater::set_members(&id, members)`
-1. `find_category` (old) → `ensure_tracked` → `CategoryRepository::update(&new)`
+1. `VideoCategoryAssigner::lock()` (held to the end) → `find_category` (old) → `ensure_tracked` → `CategoryRepository::update(&new)`
 2. `VideoCategoryAssigner::reassign_category(&id, &old.members, &CategoryRepository::list()?)`
    - sources = `old.members` ∪ members of `id` in `categories` ∪ sources of `list_in_category(&id)` (via `ChannelVideoRepository::list` / `PlaylistVideoRepository::list`)
-   - per source: `source_category_ids(source, categories)`; its record ids via `list_for_channel` / `list_for_playlist` ⇒ desired `VideoCategories::new(id, ids)`
+   - per source: `source_category_ids(source, categories)`; its record ids via `list_for_channel` / `list_for_playlist` ⇒ desired `VideoCategories::new(id, ids)`; a source in no category (AI regime) ⇒ `find_many(ids)` → each `without(&category_id)`
    - `VideoCategoriesRepository::find_many(ids)` ⇒ keep desired ≠ current ⇒ `save_many(changed)`
    - changed non-empty ⇒ `EventPublisher::publish(VideoCategoriesChanged { video_ids })`
 
@@ -132,23 +148,24 @@ Order matters on failure: `set_members` saves members then reassigns (a retry re
 1. save as today → `VideoCategoryAssigner::announce_renamed(&id)` → `list_in_category(&id)` → publish if non-empty. Color-only update publishes nothing.
 
 **Delete** — `CategoryDeleter::delete(&id)`
-1. `ensure_exists` → `reassign_category(&id, &category.members, &list()? without id)` → `CategoryRepository::delete(&id)`
+1. `lock()` (held to the end) → `find_category` → `reassign_category(&id, &category.members, &list()? without id)` → `CategoryRepository::delete(&id)`
 
 **Video sync** — `SyncVideoTask` → `VideoReconciler::reconcile(&video_id)`
-1. find video + owner (as in `video-reconciler`) ⇒ `source: CategoryMember`
-2. `VideoCategoryAssigner::assign_video(&video.id, &source)` → `CategoryRepository::list()` → source ids empty ⇒ return; else `find_many([id])` → differs ⇒ `save_many` + publish
+1. find video + owner (private `find_owner`, was `find_target`) ⇒ `(source: CategoryMember, target)`
+2. `VideoCategoryAssigner::assign_video(&video.id, &source)` → `lock()` → `CategoryRepository::list()` → source ids empty ⇒ return; else `find_many([id])` → differs ⇒ `save_many` + publish
 3. `reconcile_video(&video, &target)` (unchanged)
 
 **Reconcile pass** — `ChannelVideoReconciler::reconcile_channel(channel, _)` / playlist equivalent
-1. existing pass → `VideoCategoryAssigner::assign_source(&CategoryMember::Channel(channel.id))`; error ⇒ `warn!`, pass continues.
+1. existing pass → after the internal reconcile, regardless of its result: `VideoCategoryAssigner::assign_source(&CategoryMember::Channel(channel.id))` (`lock()` → as `assign_video`, all the source's records); error ⇒ `warn!`; the pass returns the internal reconcile's result.
 
 **Record removed** — `ChannelVideoReconciler` / `PlaylistVideoReconciler` removing a video, `ChannelDeleter::delete_channel_videos`, `PlaylistDeleter` equivalent
 1. `VideoRepository::delete(&id)` → `VideoCategoriesRepository::delete(&id)` (next to the transcript delete).
 
 **Category reads** — `CategoryVideoCollector::downloaded_videos(&category)`
 1. `VideoCategoriesRepository::list_in_category(&category.id)` ⇒ record ids
-2. `ChannelVideoRepository::list` / `PlaylistVideoRepository::list` ⇒ record → source; `ChannelRepository::find` / `PlaylistRepository::find` per source
-3. `VideoRepository::find_many(ids)` → `filter(Video::is_downloaded)` → `SourcedVideo`, ordered channel sources first then playlist sources, each in `category.members` order, non-member sources last.
+2. per member, channels first then playlists, each in `category.members` order: indexed `list_for_channel` / `list_for_playlist`, keeping the records holding the category (in source order)
+3. records not reached (their source left the category): `find_by_video` (channel, then playlist) ⇒ grouped by source, channels first, after the members
+4. per source `ChannelRepository::find` / `PlaylistRepository::find` (gone ⇒ skipped) → `VideoRepository::find_many(ids)` → `filter(Video::is_downloaded)` → `SourcedVideo`.
    Callers (`CategoryViewSearcher`, `VideoSearcher::list_for_category` / `category_ids_by_video`, `VideoWatchStateUpdater::mark_category_watched`) unchanged.
 
 ## Test Plan
@@ -185,6 +202,11 @@ Behaviour tests (application layer):
 
 Infrastructure tests:
 
+Added by the audit:
+- `http/categories`: `it_should_only_remove_a_deleted_category_from_videos_of_an_uncategorized_source`
+- `http/videos`: `it_should_list_a_shared_video_once_from_the_first_member`, `it_should_list_a_shared_video_once_from_a_member_before_a_former_member`
+- The `CategoryLock` serialization has no deterministic test (it would need timing-based threads).
+
 `infrastructure/repositories/sqlite_video_categories_repository.rs`
 19. `it_should_find_none_for_a_record_without_rows`
 20. `it_should_replace_a_record_set_on_save`
@@ -194,3 +216,7 @@ Infrastructure tests:
 
 `infrastructure/shared/sqlite_migrations.rs`
 24. `it_should_backfill_video_categories_from_members` — channel and playlist members, an uncategorized source, a record in two categories.
+
+## Known Limitations
+
+- `save_and_announce` saves the sets, then publishes `VideoCategoriesChanged` separately (the codebase's save-then-publish pattern). If the publish fails, every retry finds nothing changed, so that event is never re-sent. `plex-category-labels` must heal it: its periodic sync should also re-mark synced rows whose labels differ from the record's current categories.

@@ -44,3 +44,10 @@ Migrations:
 - [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
 - [x] 4.2 End-to-end suite passes via `scripts/run-tests.sh` (category list, feed, counts and mark watched unchanged).
 - [x] 4.3 Manual (agent): on a copy of a pre-upgrade database (not the user's `yarrtube.sqlite3`; copy it to a temp path first), start `scripts/run-local.sh --port <free port>` against the copy, and confirm via `GET /api/categories` and `GET /api/categories/<id>/videos` that counts and feeds equal those of the same copy on `main`; then set a category's members via the API and confirm `sqlite3` shows the expected `video_categories` rows and an `events` row of type `video_categories_changed`. Stop the server and delete the copy.
+
+## 5. Audit follow-ups
+
+- [x] 5.1 `CategoryLock` serializes video category writes: `assign_source` / `assign_video` take it; `set_members` and category `delete` hold it across read → save → reassign (→ delete).
+- [x] 5.2 `CategoryVideoCollector` reads per member through indexed `list_for_channel` / `list_for_playlist`, resolving only former members' records via `find_by_video`; `it_should_list_a_shared_video_once_from_the_first_member` and `it_should_list_a_shared_video_once_from_a_member_before_a_former_member`.
+- [x] 5.3 Records of a source in no category only lose the changed category (`VideoCategories::without`); `it_should_only_remove_a_deleted_category_from_videos_of_an_uncategorized_source`.
+- [x] 5.4 `cargo test --locked`, fmt and clippy pass after the follow-ups.

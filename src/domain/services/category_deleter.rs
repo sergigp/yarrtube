@@ -29,6 +29,7 @@ pub trait CategoryDeleterApi: Send + Sync {
 
 impl CategoryDeleterApi for CategoryDeleter {
     fn delete(&self, id: &CategoryId) -> Result<(), DeleteCategoryError> {
+        let _guard = self.video_category_assigner.lock();
         let category = self.find_category(id)?;
         self.uncategorize_videos(&category)?;
         self.repository

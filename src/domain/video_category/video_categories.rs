@@ -10,8 +10,7 @@ pub struct VideoCategories {
 }
 
 impl VideoCategories {
-    pub fn new(video_id: VideoRecordId, category_ids: Vec<CategoryId>) -> Self {
-        let mut category_ids = category_ids;
+    pub fn new(video_id: VideoRecordId, mut category_ids: Vec<CategoryId>) -> Self {
         category_ids.sort();
         category_ids.dedup();
         Self {
@@ -24,6 +23,18 @@ impl VideoCategories {
         Self {
             video_id,
             category_ids: Vec::new(),
+        }
+    }
+
+    /// The same record, no longer in `category_id`.
+    pub fn without(self, category_id: &CategoryId) -> Self {
+        Self {
+            category_ids: self
+                .category_ids
+                .into_iter()
+                .filter(|id| id != category_id)
+                .collect(),
+            ..self
         }
     }
 }

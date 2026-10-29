@@ -22,10 +22,10 @@ When a stored video's playlist or channel is a member of at least one category, 
 
 #### Scenario: Source in no category
 - **WHEN** the playlist "PLendgames" is a member of no category
-- **THEN** its stored videos belong to no category
+- **THEN** its stored videos keep the categories set for them individually, none until a classifier sets any
 
 ### Requirement: Membership Changes Apply To Videos
-When a category's members are set, every stored video of every source that was or becomes a member SHALL have its categories recomputed by the time the request completes. A source left in no category SHALL leave its videos in no category.
+When a category's members are set, every stored video of every source that was or becomes a member SHALL have its categories recomputed by the time the request completes. A video whose source is in no category SHALL only stop belonging to the changed category, keeping its other categories.
 
 #### Scenario: Source added to a category
 - **WHEN** the channel "@GothamChess", in no category, is added to "Chess"
@@ -46,9 +46,20 @@ When a category is deleted, no stored video SHALL belong to it anymore by the ti
 - **WHEN** the category "Funny", holding the channel "@GothamChess" also in "Chess", is deleted
 - **THEN** the channel's stored videos belong to "Chess" only
 
+#### Scenario: Category deleted from videos of an uncategorized source
+- **WHEN** a stored video of the channel "@GothamChess", a member of no category, belongs to "Chess" and "Funny", and "Funny" is deleted
+- **THEN** the video belongs to "Chess" only
+
 #### Scenario: Category renamed
 - **WHEN** the category "Funny" is renamed "Humor"
 - **THEN** every video that belonged to it belongs to "Humor"
+
+### Requirement: Concurrent Changes Do Not Revert Categories
+A reconcile pass or video sync running while a category's members are set or the category is deleted SHALL NOT write back a category that change removed.
+
+#### Scenario: Pass during a member removal
+- **WHEN** the reconcile pass of the channel "@GothamChess" runs while "@GothamChess" is removed from "Chess", its last category
+- **THEN** once both complete, the channel's stored videos belong to no category
 
 ### Requirement: New Videos Get Their Source's Categories
 A video newly stored for a playlist or channel that is a member of at least one category SHALL be given its source's categories by its first video sync.
