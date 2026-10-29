@@ -75,6 +75,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_schedule_a_video_sync_when_a_video_is_added_to_a_playlist() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let subscriber = SyncVideoOnVideoEvent::new(
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        );
+
+        let result = handle(&subscriber, r#"{"playlist_id": "PL1", "video_id": "rec1"}"#);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(1, &sync_video("rec1"))]
+        );
+    }
+
     fn sync_video(video_id: &str) -> Task {
         Task::SyncVideo {
             video_id: video_id.to_string(),
