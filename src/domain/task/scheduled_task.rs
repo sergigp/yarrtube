@@ -102,6 +102,14 @@ impl ScheduledTask {
             .map(|(video_id, _, _)| video_id)
     }
 
+    /// The video a `sync_video` task targets; `None` for any other task
+    /// type.
+    pub fn sync_video_id(&self) -> Option<String> {
+        (self.task_type == "sync_video")
+            .then(|| Task::decode_sync_video_payload(&self.payload).ok())
+            .flatten()
+    }
+
     /// The show directory this task writes to or deletes from, for a
     /// per-video task; `None` for any other.
     pub fn output_dir(&self) -> Option<String> {
