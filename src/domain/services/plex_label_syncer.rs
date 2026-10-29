@@ -47,10 +47,12 @@ struct DesiredPlaylist {
 }
 
 impl DesiredPlaylist {
-    /// Whether `playlist` is the one for this section and label.
+    /// Whether `playlist` is this one: for this section and label, under
+    /// this title. One with another title is replaced.
     fn is(&self, playlist: &CategoryPlaylist) -> bool {
         playlist.section_id == self.section_id
             && playlist.label.to_lowercase() == self.label.to_lowercase()
+            && playlist.title == self.title
     }
 }
 
