@@ -449,6 +449,58 @@ mod tests {
     }
 
     #[test]
+    fn it_should_leave_a_new_video_of_an_uncategorized_playlist_uncategorized() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&my_playlist())
+            .unwrap();
+        SqlitePlaylistVideoRepository::new(db.database())
+            .save(&PlaylistVideo::create(
+                my_playlist_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        SqliteCategoryRepository::new(db.database())
+            .insert(&category_with_members(
+                "Chess",
+                &[CategoryMember::Channel(my_channel_id())],
+            ))
+            .unwrap();
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            video_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+            video_category_assigner(db.database()),
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![VideoCategories::none(video.id.clone())]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[test]
     fn it_should_skip_if_video_is_gone() {
         let db = TestDatabase::new();
         let task_repository = Arc::new(SqliteTaskRepository::new(
