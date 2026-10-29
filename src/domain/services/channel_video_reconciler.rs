@@ -5,8 +5,8 @@ use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel}
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{
     ChannelAvatarRestorer, ChannelAvatarRestorerApi, DesiredState, InternalVideoReconciler,
-    InternalVideoReconcilerApi, MembershipDelta, ShowFileWriter, ShowFileWriterApi,
-    VideoCategoryAssigner, VideoCategoryAssignerApi,
+    InternalVideoReconcilerApi, ShowFileWriter, ShowFileWriterApi, VideoCategoryAssigner,
+    VideoCategoryAssignerApi,
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
@@ -175,9 +175,9 @@ impl ChannelVideoReconciler {
         if let Err(e) = self.show_file_writer.write_channel_show(channel) {
             warn!(channel_id = %channel.id, error = %e, "failed to write show files");
         }
-        let delta = self.sync_membership_with_youtube(channel, on_listing_failure)?;
+        self.sync_membership_with_youtube(channel, on_listing_failure)?;
         let desired = self.desired_state(channel)?;
-        let reconciled = self.internal_video_reconciler.reconcile(&desired, &delta);
+        let reconciled = self.internal_video_reconciler.reconcile(&desired);
         self.assign_categories(channel);
         reconciled
     }
@@ -202,9 +202,9 @@ impl ChannelVideoReconciler {
         &self,
         channel: &Channel,
         on_listing_failure: ListingFailure,
-    ) -> anyhow::Result<MembershipDelta> {
+    ) -> anyhow::Result<()> {
         let Some(current_videos) = self.list_current_videos(channel, on_listing_failure)? else {
-            return Ok(MembershipDelta::default());
+            return Ok(());
         };
         let stored_videos = self.list_stored_videos(channel)?;
         let now = self.clock.now();
@@ -220,13 +220,11 @@ impl ChannelVideoReconciler {
                 )
             })
             .collect();
-        let mut delta = MembershipDelta::default();
         for current in &current_videos {
             match known_videos.get(&current.youtube_id) {
                 None => {
                     let youtube_id = VideoId::new(&current.youtube_id)?;
                     let added = self.add_video(channel, youtube_id, current, now)?;
-                    delta.added_ids.push(added.1.id.clone());
                     known_videos.insert(current.youtube_id.clone(), added);
                 }
                 Some((existing, video)) => {
@@ -241,7 +239,7 @@ impl ChannelVideoReconciler {
             .collect();
         self.remove_videos_not_in(channel, &stored_videos, &current_youtube_ids)?;
 
-        Ok(delta)
+        Ok(())
     }
 
     /// The channel's current most recent uploads. When they can't be listed

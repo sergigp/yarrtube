@@ -51,7 +51,7 @@ pub use channel_video_reconciler::{ChannelVideoReconciler, ChannelVideoReconcile
 pub use channel_view_searcher::{ChannelViewSearcher, ChannelViewSearcherApi};
 pub use directory_searcher::{DirectorySearcher, DirectorySearcherApi};
 pub use internal_video_reconciler::{
-    DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
+    DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi,
 };
 pub use layout_migrator::{LayoutMigrator, LayoutMigratorApi, MigrationReport};
 pub use metadata_generator::{MetadataGenerator, MetadataGeneratorApi};

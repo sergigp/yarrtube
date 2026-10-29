@@ -193,7 +193,11 @@ mod tests {
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![next_reconcile(1)]
+            vec![
+                fetch_thumbnail_task(1, &video_id),
+                download_video_task(2, &video_id),
+                next_reconcile(3),
+            ]
         );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
@@ -913,14 +917,14 @@ mod tests {
                 },
             ]
         );
-        // The kept video is still pending, so the pass queues its download;
-        // the added one's is triggered by its `VideoAddedToChannel` instead.
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![
                 fetch_thumbnail_task(1, &newest.id),
                 download_video_task(2, &newest.id),
-                next_reconcile(3),
+                fetch_thumbnail_task(3, &added_id),
+                download_video_task(4, &added_id),
+                next_reconcile(5),
             ]
         );
         assert_eq!(
@@ -1805,12 +1809,21 @@ mod tests {
                 .unwrap(),
             vec![ChannelVideo {
                 id: 1,
-                ..ChannelVideo::create(handle("@somechannel"), video_id, 0, fixed_timestamp())
+                ..ChannelVideo::create(
+                    handle("@somechannel"),
+                    video_id.clone(),
+                    0,
+                    fixed_timestamp()
+                )
             }]
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![next_reconcile(1)]
+            vec![
+                fetch_thumbnail_task(1, &video_id),
+                download_video_task(2, &video_id),
+                next_reconcile(3),
+            ]
         );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
@@ -1913,13 +1926,22 @@ mod tests {
                 .unwrap(),
             vec![ChannelVideo {
                 id: 1,
-                ..ChannelVideo::create(handle("@somechannel"), video_id, 0, fixed_timestamp())
+                ..ChannelVideo::create(
+                    handle("@somechannel"),
+                    video_id.clone(),
+                    0,
+                    fixed_timestamp()
+                )
             }]
         );
         assert_eq!(*show_file_repository.show_nfos.lock().unwrap(), vec![]);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![next_reconcile(1)]
+            vec![
+                fetch_thumbnail_task(1, &video_id),
+                download_video_task(2, &video_id),
+                next_reconcile(3),
+            ]
         );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
@@ -2513,7 +2535,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_schedule_no_step_for_a_video_added_by_the_same_pass() {
+    fn it_should_sync_a_video_added_by_the_same_pass() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -2540,10 +2562,13 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         let added = video_repository.list().unwrap()[0].id.clone();
-        // Its steps come from the video sync its video-added event schedules.
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![next_reconcile(1)]
+            vec![
+                fetch_thumbnail_task(1, &added),
+                download_video_task(2, &added),
+                next_reconcile(3),
+            ]
         );
         assert_eq!(
             event_repository.list_eligible().unwrap(),

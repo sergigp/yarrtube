@@ -20,14 +20,6 @@ pub struct DesiredState {
     pub video_ids: Vec<VideoRecordId>,
 }
 
-/// What the YouTube membership sync of the same reconcile pass just changed.
-#[derive(Default)]
-pub struct MembershipDelta {
-    /// Videos added by the sync: their steps come from the video sync their
-    /// own video-added event schedules, not from this reconciler.
-    pub added_ids: Vec<VideoRecordId>,
-}
-
 /// Reconciles our database with our filesystem: brings a playlist's or
 /// channel's output folder in line with the videos recorded for it. It is
 /// the second step of a reconcile pass, after the membership sync that
@@ -61,15 +53,13 @@ impl InternalVideoReconciler {
 pub trait InternalVideoReconcilerApi: Send + Sync {
     /// Reconciles every video of `desired` (`VideoReconciler::reconcile`,
     /// a failing video is logged and skipped), then deletes orphaned files.
-    /// `delta` tells it what the membership sync of the same pass just
-    /// added.
-    fn reconcile(&self, desired: &DesiredState, delta: &MembershipDelta) -> anyhow::Result<()>;
+    fn reconcile(&self, desired: &DesiredState) -> anyhow::Result<()>;
 }
 
 impl InternalVideoReconcilerApi for InternalVideoReconciler {
-    fn reconcile(&self, desired: &DesiredState, delta: &MembershipDelta) -> anyhow::Result<()> {
+    fn reconcile(&self, desired: &DesiredState) -> anyhow::Result<()> {
         let actual = self.read_actual_state(desired)?;
-        self.sync_videos(desired, delta);
+        self.sync_videos(desired);
         self.delete_orphaned_files(&actual)
     }
 }
@@ -91,19 +81,16 @@ impl InternalVideoReconciler {
         })
     }
 
-    /// Syncs every video of `desired` not added by this pass, the safety net
-    /// for a step lost on a crash or never scheduled. A video whose sync
-    /// fails is logged and skipped, so the others are still synced.
-    fn sync_videos(&self, desired: &DesiredState, delta: &MembershipDelta) {
-        desired
-            .video_ids
-            .iter()
-            .filter(|id| !delta.added_ids.contains(id))
-            .for_each(|id| {
-                if let Err(e) = self.video_reconciler.reconcile(id) {
-                    warn!(video_id = %id, error = %e, "failed to sync video during reconcile");
-                }
-            });
+    /// Syncs every video of `desired`, including those the same pass just
+    /// added: the safety net for a step lost on a crash or never scheduled.
+    /// A video whose sync fails is logged and skipped, so the others are
+    /// still synced.
+    fn sync_videos(&self, desired: &DesiredState) {
+        desired.video_ids.iter().for_each(|id| {
+            if let Err(e) = self.video_reconciler.reconcile(id) {
+                warn!(video_id = %id, error = %e, "failed to sync video during reconcile");
+            }
+        });
     }
 
     /// Deletes every entry of the output folder that is neither a show file,
@@ -265,7 +252,7 @@ mod tests {
         );
         let desired = desired_state(vec![]);
 
-        let result = reconcile(&reconciler, &desired, &MembershipDelta::default());
+        let result = reconcile(&reconciler, &desired);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -297,7 +284,7 @@ mod tests {
         );
         let desired = desired_state(vec![video.clone()]);
 
-        let result = reconcile(&reconciler, &desired, &MembershipDelta::default());
+        let result = reconcile(&reconciler, &desired);
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
@@ -327,7 +314,7 @@ mod tests {
         );
         let desired = desired_state(vec![video.clone()]);
 
-        let result = reconcile(&reconciler, &desired, &MembershipDelta::default());
+        let result = reconcile(&reconciler, &desired);
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
@@ -357,7 +344,7 @@ mod tests {
         );
         let desired = desired_state(vec![video.clone()]);
 
-        let result = reconcile(&reconciler, &desired, &MembershipDelta::default());
+        let result = reconcile(&reconciler, &desired);
 
         assert_eq!(result, Ok(()));
         assert_eq!(
@@ -391,7 +378,7 @@ mod tests {
         );
         let desired = desired_state(vec![video.clone()]);
 
-        let result = reconcile(&reconciler, &desired, &MembershipDelta::default());
+        let result = reconcile(&reconciler, &desired);
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
@@ -420,7 +407,7 @@ mod tests {
         );
         let desired = desired_state(vec![video.clone()]);
 
-        let result = reconcile(&reconciler, &desired, &MembershipDelta::default());
+        let result = reconcile(&reconciler, &desired);
 
         assert_eq!(result, Ok(()));
         assert_eq!(*video_file_repository.deleted_calls.lock().unwrap(), vec![]);
@@ -503,11 +490,8 @@ mod tests {
     fn reconcile(
         reconciler: &InternalVideoReconciler,
         desired: &DesiredState,
-        delta: &MembershipDelta,
     ) -> Result<(), String> {
-        reconciler
-            .reconcile(desired, delta)
-            .map_err(|e| e.to_string())
+        reconciler.reconcile(desired).map_err(|e| e.to_string())
     }
 
     fn video_category_assigner(database: Database) -> VideoCategoryAssigner {

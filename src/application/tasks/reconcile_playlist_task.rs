@@ -194,7 +194,11 @@ mod tests {
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![next_reconcile(1)]
+            vec![
+                fetch_thumbnail_task(1, &video_id),
+                download_video_task(2, &video_id),
+                next_reconcile(3),
+            ]
         );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
@@ -257,7 +261,11 @@ mod tests {
         );
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![next_reconcile(1)]
+            vec![
+                fetch_thumbnail_task(1, &video_id),
+                download_video_task(2, &video_id),
+                next_reconcile(3),
+            ]
         );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
@@ -1541,7 +1549,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_not_schedule_a_thumbnail_fetch_for_a_video_added_in_the_same_pass() {
+    fn it_should_sync_a_video_added_by_the_same_pass() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -1564,9 +1572,14 @@ mod tests {
         let result = run(&task, &payload_for("PL1"));
 
         assert_eq!(result, Ok(()));
+        let added = video_repository.list().unwrap()[0].id.clone();
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![next_reconcile(1)]
+            vec![
+                fetch_thumbnail_task(1, &added),
+                download_video_task(2, &added),
+                next_reconcile(3),
+            ]
         );
     }
 

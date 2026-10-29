@@ -5,8 +5,8 @@ use crate::domain::playlist::PlaylistId;
 use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::services::{
-    DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
-    ShowFileWriter, ShowFileWriterApi, VideoCategoryAssigner, VideoCategoryAssignerApi,
+    DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, ShowFileWriter,
+    ShowFileWriterApi, VideoCategoryAssigner, VideoCategoryAssignerApi,
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
@@ -172,9 +172,9 @@ impl PlaylistVideoReconciler {
         if let Err(e) = self.show_file_writer.write_playlist_show(playlist) {
             warn!(playlist_id = %playlist.id, error = %e, "failed to write show files");
         }
-        let delta = self.sync_membership_with_youtube(playlist, on_listing_failure)?;
+        self.sync_membership_with_youtube(playlist, on_listing_failure)?;
         let desired = self.desired_state(playlist)?;
-        let reconciled = self.internal_video_reconciler.reconcile(&desired, &delta);
+        let reconciled = self.internal_video_reconciler.reconcile(&desired);
         self.assign_categories(playlist);
         reconciled
     }
@@ -198,9 +198,9 @@ impl PlaylistVideoReconciler {
         &self,
         playlist: &Playlist,
         on_listing_failure: ListingFailure,
-    ) -> anyhow::Result<MembershipDelta> {
+    ) -> anyhow::Result<()> {
         let Some(current_videos) = self.list_current_videos(playlist, on_listing_failure)? else {
-            return Ok(MembershipDelta::default());
+            return Ok(());
         };
         let stored_videos = self.list_stored_videos(playlist)?;
         let now = self.clock.now();
@@ -216,7 +216,6 @@ impl PlaylistVideoReconciler {
                 )
             })
             .collect();
-        let mut delta = MembershipDelta::default();
         let mut numbering = playlist.clone();
         for current in Self::in_position_order(&current_videos) {
             match known_videos.get(&current.video_id) {
@@ -224,7 +223,6 @@ impl PlaylistVideoReconciler {
                     let youtube_id = VideoId::new(&current.video_id)?;
                     let (numbered, added) = self.add_video(numbering, youtube_id, current, now)?;
                     numbering = numbered;
-                    delta.added_ids.push(added.1.id.clone());
                     known_videos.insert(current.video_id.clone(), added);
                 }
                 Some((existing, video)) => {
@@ -239,7 +237,7 @@ impl PlaylistVideoReconciler {
             .collect();
         self.remove_videos_not_in(playlist, &stored_videos, &current_youtube_ids)?;
 
-        Ok(delta)
+        Ok(())
     }
 
     /// The playlist's current items. When they can't be listed, e.g. the
