@@ -14,7 +14,7 @@
 - [x] 2.4 `it_should_not_rewrite_labels_already_in_sync` — case-insensitive comparison, no Plex write.
 - [x] 2.5 `it_should_replace_the_label_of_a_renamed_category` — old name removed, new written.
 - [x] 2.6 `it_should_keep_a_video_dirty_until_plex_imports_it` — no episode for the file ⇒ stays dirty, no error.
-- [ ] 2.7 `it_should_keep_a_video_dirty_until_it_is_downloaded`
+- [x] 2.7 `it_should_keep_a_video_dirty_until_it_is_downloaded`
 - [ ] 2.8 `it_should_forget_a_deleted_video` — row deleted.
 - [ ] 2.9 `it_should_label_categorized_videos_never_synced` — backfill of records without a row.
 - [ ] 2.10 `it_should_relabel_an_episode_plex_reimported` — drift: unknown rating key ⇒ dirty ⇒ labelled under the new key.

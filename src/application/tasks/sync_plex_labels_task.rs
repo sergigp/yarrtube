@@ -271,6 +271,42 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_keep_a_video_dirty_until_it_is_downloaded() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+        );
+        let video = seed_video(
+            &db,
+            Video::create(VideoId::new("yt1").unwrap(), "One", now()),
+        );
+        seed_category(&db, "chess", "Chess", &[&video]);
+        episode_labels_repository
+            .save_many(&[EpisodeLabels::pending(video.id.clone())])
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            episode_labels_repository.clone(),
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex.mutations(), Vec::<String>::new());
+        assert_eq!(
+            episode_labels_repository
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![checked(&video)]
+        );
+    }
+
     /// The syncer over the test database, with Plex seeing `/videos` at
     /// `/plex/videos`.
     fn syncer(
@@ -306,18 +342,24 @@ mod tests {
     /// A video of `my_channel()` downloaded to `Season 2023/<file_name>`,
     /// stored with its channel.
     fn seed_downloaded_video(db: &TestDatabase, youtube_id: &str, file_name: &str) -> Video {
-        let channel_repository = SqliteChannelRepository::new(db.database());
-        if channel_repository.find(&my_channel_id()).unwrap().is_none() {
-            channel_repository.insert(&my_channel()).unwrap();
-        }
-        let video = Video::create(VideoId::new(youtube_id).unwrap(), youtube_id, now())
-            .mark_downloaded(
+        seed_video(
+            db,
+            Video::create(VideoId::new(youtube_id).unwrap(), youtube_id, now()).mark_downloaded(
                 Quality::High,
                 format!("Season 2023/{file_name}"),
                 None,
                 None,
                 now(),
-            );
+            ),
+        )
+    }
+
+    /// Stores `video` with `my_channel()`.
+    fn seed_video(db: &TestDatabase, video: Video) -> Video {
+        let channel_repository = SqliteChannelRepository::new(db.database());
+        if channel_repository.find(&my_channel_id()).unwrap().is_none() {
+            channel_repository.insert(&my_channel()).unwrap();
+        }
         SqliteVideoRepository::new(db.database())
             .save(&video)
             .unwrap();
