@@ -54,8 +54,9 @@ impl VideoCategoriesRepository for SqliteVideoCategoriesRepository {
             .collect())
     }
 
-    fn list_in_category(&self, _category_id: &CategoryId) -> anyhow::Result<Vec<VideoCategories>> {
-        Ok(Vec::new())
+    fn list_in_category(&self, category_id: &CategoryId) -> anyhow::Result<Vec<VideoCategories>> {
+        let video_ids = self.video_ids_in_category(category_id)?;
+        self.find_many(&video_ids)
     }
 
     fn save_many(&self, categories: &[VideoCategories]) -> anyhow::Result<()> {
@@ -70,12 +71,35 @@ impl VideoCategoriesRepository for SqliteVideoCategoriesRepository {
             .context("failed to commit video categories save")
     }
 
-    fn delete(&self, _video_id: &VideoRecordId) -> anyhow::Result<()> {
-        Ok(())
+    fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        Self::delete_rows(&conn, video_id)
     }
 }
 
 impl SqliteVideoCategoriesRepository {
+    /// The records holding `category_id`, by id.
+    fn video_ids_in_category(
+        &self,
+        category_id: &CategoryId,
+    ) -> anyhow::Result<Vec<VideoRecordId>> {
+        let conn = self.db.read()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT video_id FROM video_categories WHERE category_id = ?1 ORDER BY video_id",
+            )
+            .context("failed to prepare videos in category query")?;
+        let ids = stmt
+            .query_map(params![category_id.as_str()], |row| row.get::<_, String>(0))
+            .inspect_err(|e| tracing::error!(category_id = %category_id, error = %e, "failed to list videos in category"))
+            .context("failed to list videos in category")?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .context("failed to read video category row")?;
+        ids.into_iter()
+            .map(|id| VideoRecordId::new(id).map_err(anyhow::Error::from))
+            .collect()
+    }
+
     fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(String, String)> {
         Ok((row.get(0)?, row.get(1)?))
     }
@@ -83,14 +107,7 @@ impl SqliteVideoCategoriesRepository {
     /// Replaces the record's rows with its set.
     fn replace(conn: &Connection, video_categories: &VideoCategories) -> anyhow::Result<()> {
         let video_id = &video_categories.video_id;
-        conn.execute(
-            "DELETE FROM video_categories WHERE video_id = ?1",
-            params![video_id.as_str()],
-        )
-        .inspect_err(
-            |e| tracing::error!(video_id = %video_id, error = %e, "failed to delete video categories"),
-        )
-        .context("failed to delete video categories")?;
+        Self::delete_rows(conn, video_id)?;
         video_categories
             .category_ids
             .iter()
@@ -103,6 +120,18 @@ impl SqliteVideoCategoriesRepository {
                 .context("failed to insert video category")
                 .map(|_| ())
             })
+    }
+
+    fn delete_rows(conn: &Connection, video_id: &VideoRecordId) -> anyhow::Result<()> {
+        conn.execute(
+            "DELETE FROM video_categories WHERE video_id = ?1",
+            params![video_id.as_str()],
+        )
+        .inspect_err(
+            |e| tracing::error!(video_id = %video_id, error = %e, "failed to delete video categories"),
+        )
+        .context("failed to delete video categories")?;
+        Ok(())
     }
 
     /// Each video id's category ids, from `(video_id, category_id)` rows.
@@ -162,6 +191,69 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_delete_all_rows_when_saving_an_empty_set() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoriesRepository::new(db.database());
+        repository
+            .save_many(&[categories("rec1", &["chess", "funny"])])
+            .unwrap();
+
+        repository
+            .save_many(&[VideoCategories::none(record("rec1"))])
+            .unwrap();
+
+        assert_eq!(
+            repository.find_many(&[record("rec1")]).unwrap(),
+            vec![VideoCategories::none(record("rec1"))]
+        );
+    }
+
+    #[test]
+    fn it_should_list_records_in_a_category_with_their_full_sets() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoriesRepository::new(db.database());
+        repository
+            .save_many(&[
+                categories("rec2", &["chess"]),
+                categories("rec1", &["funny", "chess"]),
+                categories("rec3", &["funny"]),
+            ])
+            .unwrap();
+
+        assert_eq!(
+            repository.list_in_category(&category("chess")).unwrap(),
+            vec![
+                categories("rec1", &["chess", "funny"]),
+                categories("rec2", &["chess"]),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_delete_a_record_rows() {
+        let db = TestDatabase::new();
+        let repository = SqliteVideoCategoriesRepository::new(db.database());
+        repository
+            .save_many(&[
+                categories("rec1", &["chess", "funny"]),
+                categories("rec2", &["chess"]),
+            ])
+            .unwrap();
+
+        repository.delete(&record("rec1")).unwrap();
+
+        assert_eq!(
+            repository
+                .find_many(&[record("rec1"), record("rec2")])
+                .unwrap(),
+            vec![
+                VideoCategories::none(record("rec1")),
+                categories("rec2", &["chess"]),
+            ]
+        );
+    }
+
     fn categories(video_id: &str, category_ids: &[&str]) -> VideoCategories {
         VideoCategories::new(
             record(video_id),
@@ -170,6 +262,10 @@ mod tests {
                 .map(|id| CategoryId::new(*id).unwrap())
                 .collect(),
         )
+    }
+
+    fn category(id: &str) -> CategoryId {
+        CategoryId::new(id).unwrap()
     }
 
     fn record(id: &str) -> VideoRecordId {
