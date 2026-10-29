@@ -134,6 +134,34 @@ struct Part {
     file: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct PlaylistsResponse {
+    #[serde(rename = "MediaContainer")]
+    media_container: PlaylistsContainer,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlaylistsContainer {
+    #[serde(rename = "Metadata", default)]
+    playlists: Vec<PlaylistMetadata>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlaylistMetadata {
+    #[serde(rename = "ratingKey")]
+    rating_key: String,
+    title: String,
+}
+
+impl From<PlaylistMetadata> for PlexPlaylist {
+    fn from(playlist: PlaylistMetadata) -> Self {
+        Self {
+            rating_key: playlist.rating_key,
+            title: playlist.title,
+        }
+    }
+}
+
 pub struct HttpPlexLibraryRepository {
     config: PlexConfig,
     client: reqwest::blocking::Client,
@@ -223,7 +251,14 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
     }
 
     fn list_playlists(&self) -> anyhow::Result<Vec<PlexPlaylist>> {
-        Ok(Vec::new())
+        let response: PlaylistsResponse =
+            self.get_json("/playlists", &[("playlistType", "video")])?;
+        Ok(response
+            .media_container
+            .playlists
+            .into_iter()
+            .map(PlexPlaylist::from)
+            .collect())
     }
 
     fn create_smart_playlist(
@@ -871,6 +906,43 @@ mod tests {
 
         assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
         mock.assert();
+    }
+
+    #[test]
+    fn it_should_list_playlists() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/playlists")
+            .match_query(mockito::Matcher::UrlEncoded(
+                "playlistType".into(),
+                "video".into(),
+            ))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 2, "Metadata": [
+                    {"ratingKey": "501", "title": "Chess", "smart": true},
+                    {"ratingKey": "502", "title": "Movie night", "smart": false}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let playlists = repository.list_playlists();
+
+        assert_eq!(
+            playlists.map_err(|e| e.to_string()),
+            Ok(vec![
+                PlexPlaylist {
+                    rating_key: "501".to_string(),
+                    title: "Chess".to_string(),
+                },
+                PlexPlaylist {
+                    rating_key: "502".to_string(),
+                    title: "Movie night".to_string(),
+                },
+            ])
+        );
     }
 
     #[test]
