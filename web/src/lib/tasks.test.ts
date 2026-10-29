@@ -42,6 +42,17 @@ describe('describeTask', () => {
     ).toBe('Downloading Intro in Chan')
   })
 
+  it('describes a video sync with its video and container', () => {
+    expect(
+      describeTask(
+        aTask({
+          task_type: 'sync_video',
+          payload: { video_title: 'Intro', playlist_name: 'Mix' },
+        }),
+      ),
+    ).toBe('Syncing Intro in Mix')
+  })
+
   it('describes a thumbnail fetch with its video and container', () => {
     expect(
       describeTask(

@@ -23,6 +23,8 @@ export function describeTask(task: Task): string {
       return `Fetching thumbnail of ${videoInContainer(payload)}`
     case 'fetch_subtitles':
       return `Fetching subtitles of ${videoInContainer(payload)}`
+    case 'sync_video':
+      return `Syncing ${videoInContainer(payload)}`
     case 'delete_video_file':
       return payload.filename ? `Removing file ${payload.filename}` : 'Removing a video file'
     default:
