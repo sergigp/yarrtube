@@ -52,20 +52,22 @@ impl InternalVideoReconciler {
 
 pub trait InternalVideoReconcilerApi: Send + Sync {
     /// Reconciles every video of `desired` (`VideoReconciler::reconcile`,
-    /// a failing video is logged and skipped), then deletes orphaned files.
+    /// a failing video is logged and skipped), then deletes orphaned files
+    /// from a snapshot read after those reconciles, so the stale file of a
+    /// video they reset is swept by the same pass.
     fn reconcile(&self, desired: &DesiredState) -> anyhow::Result<()>;
 }
 
 impl InternalVideoReconcilerApi for InternalVideoReconciler {
     fn reconcile(&self, desired: &DesiredState) -> anyhow::Result<()> {
-        let actual = self.read_actual_state(desired)?;
         self.sync_videos(desired);
+        let actual = self.read_actual_state(desired)?;
         self.delete_orphaned_files(&actual)
     }
 }
 
 impl InternalVideoReconciler {
-    /// Reads the folder's actual state: the files on disk and the videos
+    /// Reads the folder's actual state: the files on disk, then the videos
     /// they should belong to.
     fn read_actual_state(&self, desired: &DesiredState) -> anyhow::Result<ActualState> {
         let output_dir = resolve_output_dir(&self.videos_path, desired.path.as_str());
