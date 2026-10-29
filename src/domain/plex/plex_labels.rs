@@ -18,8 +18,12 @@ impl PlexLabels {
     }
 
     /// Names in `self` missing from `other`, ignoring case.
-    pub fn missing_from(&self, _other: &PlexLabels) -> Vec<String> {
-        todo!()
+    pub fn missing_from(&self, other: &PlexLabels) -> Vec<String> {
+        self.0
+            .iter()
+            .filter(|name| !other.contains(name))
+            .cloned()
+            .collect()
     }
 }
 
@@ -30,11 +34,21 @@ impl PartialEq for PlexLabels {
                 .0
                 .iter()
                 .zip(&other.0)
-                .all(|(name, other)| name.eq_ignore_ascii_case(other))
+                .all(|(name, other)| same_label(name, other))
     }
 }
 
 impl Eq for PlexLabels {}
+
+impl PlexLabels {
+    fn contains(&self, name: &str) -> bool {
+        self.0.iter().any(|own| same_label(own, name))
+    }
+}
+
+fn same_label(name: &str, other: &str) -> bool {
+    name.to_lowercase() == other.to_lowercase()
+}
 
 #[cfg(test)]
 mod tests {
@@ -43,6 +57,14 @@ mod tests {
     #[test]
     fn it_should_equal_labels_ignoring_case() {
         assert_eq!(labels(&["Chess", "funny"]), labels(&["chess", "Funny"]));
+    }
+
+    #[test]
+    fn it_should_list_labels_missing_from_another_set_ignoring_case() {
+        assert_eq!(
+            labels(&["Chess", "Funny", "Old"]).missing_from(&labels(&["funny"])),
+            vec!["Chess".to_string(), "Old".to_string()]
+        );
     }
 
     fn labels(names: &[&str]) -> PlexLabels {
