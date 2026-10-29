@@ -39,7 +39,6 @@ impl VideoCategoryAssigner {
     }
 }
 
-#[allow(dead_code)]
 pub trait VideoCategoryAssignerApi: Send + Sync {
     /// Source regime for every record of `source`: its set = the source's
     /// categories. No-op when the source is in no category (AI regime).
@@ -63,9 +62,11 @@ pub trait VideoCategoryAssignerApi: Send + Sync {
 
 impl VideoCategoryAssignerApi for VideoCategoryAssigner {
     fn assign_source(&self, source: &CategoryMember) -> anyhow::Result<()> {
-        let categories = self.category_repository.list()?;
-        let desired = self.desired_for_source(source, &categories)?;
-        self.save_and_announce(desired)
+        let category_ids = self.categories_of(source)?;
+        if category_ids.is_empty() {
+            return Ok(());
+        }
+        self.save_and_announce(Self::each_in(self.record_ids(source)?, &category_ids))
     }
 
     fn assign_video(
@@ -73,9 +74,11 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         video_id: &VideoRecordId,
         source: &CategoryMember,
     ) -> anyhow::Result<()> {
-        let categories = self.category_repository.list()?;
-        let category_ids = Self::source_category_ids(source, &categories);
-        self.save_and_announce(vec![VideoCategories::new(video_id.clone(), category_ids)])
+        let category_ids = self.categories_of(source)?;
+        if category_ids.is_empty() {
+            return Ok(());
+        }
+        self.save_and_announce(Self::each_in(vec![video_id.clone()], &category_ids))
     }
 
     fn reassign_category(
@@ -176,6 +179,21 @@ impl VideoCategoryAssigner {
             .collect()
     }
 
+    /// The current categories holding `source`; empty when it is in none
+    /// (the AI regime).
+    fn categories_of(&self, source: &CategoryMember) -> anyhow::Result<Vec<CategoryId>> {
+        let categories = self.category_repository.list()?;
+        Ok(Self::source_category_ids(source, &categories))
+    }
+
+    /// Each of `video_ids` in exactly `category_ids`.
+    fn each_in(video_ids: Vec<VideoRecordId>, category_ids: &[CategoryId]) -> Vec<VideoCategories> {
+        video_ids
+            .into_iter()
+            .map(|video_id| VideoCategories::new(video_id, category_ids.to_vec()))
+            .collect()
+    }
+
     /// Every record of `source`, each with the source's categories.
     fn desired_for_source(
         &self,
@@ -183,11 +201,7 @@ impl VideoCategoryAssigner {
         categories: &[Category],
     ) -> anyhow::Result<Vec<VideoCategories>> {
         let category_ids = Self::source_category_ids(source, categories);
-        Ok(self
-            .record_ids(source)?
-            .into_iter()
-            .map(|video_id| VideoCategories::new(video_id, category_ids.clone()))
-            .collect())
+        Ok(Self::each_in(self.record_ids(source)?, &category_ids))
     }
 
     fn record_ids(&self, source: &CategoryMember) -> anyhow::Result<Vec<VideoRecordId>> {

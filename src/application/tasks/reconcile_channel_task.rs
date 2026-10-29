@@ -30,7 +30,9 @@ impl TaskHandler for ReconcileChannelTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::category::{Category, CategoryColor, CategoryMember, CategoryName};
+    use crate::domain::category::{
+        Category, CategoryColor, CategoryId, CategoryMember, CategoryName,
+    };
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
@@ -316,6 +318,56 @@ mod tests {
                 })
             )]
         );
+    }
+
+    #[test]
+    fn it_should_leave_the_categories_of_an_uncategorized_channel() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let existing = my_video();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &existing,
+        );
+        // Set by a classifier: the channel is in no category.
+        let classified = VideoCategories::new(
+            existing.id.clone(),
+            vec![CategoryId::new("classified").unwrap()],
+        );
+        video_categories_repository
+            .save_many(std::slice::from_ref(&classified))
+            .unwrap();
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository,
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![
+                listed_video("yt1", "My Video", 0),
+            ])),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[existing.id.clone()])
+                .unwrap(),
+            vec![classified]
+        );
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
     }
 
     #[test]
