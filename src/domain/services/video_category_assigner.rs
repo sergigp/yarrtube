@@ -95,8 +95,11 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         self.save_and_announce(desired)
     }
 
-    fn announce_renamed(&self, _category_id: &CategoryId) -> anyhow::Result<()> {
-        Ok(())
+    fn announce_renamed(&self, category_id: &CategoryId) -> anyhow::Result<()> {
+        let holding = self
+            .video_categories_repository
+            .list_in_category(category_id)?;
+        self.announce(&holding)
     }
 }
 
@@ -205,14 +208,21 @@ impl VideoCategoryAssigner {
     /// nothing saved or published.
     fn save_and_announce(&self, desired: Vec<VideoCategories>) -> anyhow::Result<()> {
         let changed = self.changed(desired)?;
-        if changed.is_empty() {
+        if !changed.is_empty() {
+            self.video_categories_repository.save_many(&changed)?;
+        }
+        self.announce(&changed)
+    }
+
+    /// One event naming the records of `affected`; none when it is empty.
+    fn announce(&self, affected: &[VideoCategories]) -> anyhow::Result<()> {
+        if affected.is_empty() {
             return Ok(());
         }
-        self.video_categories_repository.save_many(&changed)?;
         self.event_publisher
             .publish(&DomainEvent::VideoCategoriesChanged(
                 VideoCategoriesChanged {
-                    video_ids: changed
+                    video_ids: affected
                         .iter()
                         .map(|categories| categories.video_id.as_str().to_string())
                         .collect(),

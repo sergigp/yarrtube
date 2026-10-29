@@ -58,7 +58,10 @@ impl CategoryUpdaterApi for CategoryUpdater {
         if let Some(name) = &update.name {
             self.ensure_name_free(id, name)?;
         }
-        self.save(&Self::applied(category, update))
+        self.save(&Self::applied(category, update))?;
+        self.video_category_assigner
+            .announce_renamed(id)
+            .map_err(UpdateCategoryError::Repository)
     }
 
     fn set_members(

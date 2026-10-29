@@ -763,6 +763,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_announce_the_videos_of_a_renamed_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@chess")).unwrap();
+        let first = downloaded_video("vid1");
+        let second = pending_video("vid2");
+        [&first, &second].into_iter().for_each(|video| {
+            save_channel_video(
+                &video_repository,
+                &SqliteChannelVideoRepository::new(db.database()),
+                "@chess",
+                video,
+            )
+        });
+        let chess = Category {
+            members: vec![channel_member("@chess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        let stored = vec![
+            VideoCategories::new(first.id.clone(), vec![chess.id.clone()]),
+            VideoCategories::new(second.id.clone(), vec![chess.id.clone()]),
+        ];
+        video_categories_repository.save_many(&stored).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
+        );
+
+        let response = rename(category_updater, chess.id.as_str(), "Board games").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[first.id.clone(), second.id.clone()])
+                .unwrap(),
+            stored
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&first, &second])]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_recolor_a_category() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
