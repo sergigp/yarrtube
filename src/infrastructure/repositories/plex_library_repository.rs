@@ -560,6 +560,32 @@ mod tests {
     }
 
     #[test]
+    fn it_should_list_sections_with_their_titles() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/sections")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"Directory": [
+                    {"key": "19", "title": "Sergi's Playlists", "Location": []}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let sections = repository.list_sections().unwrap();
+
+        assert_eq!(
+            sections,
+            vec![PlexSection {
+                id: "19".to_string(),
+                title: "Sergi's Playlists".to_string(),
+                locations: vec![],
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_scan_a_path_in_a_section() {
         let mut server = mockito::Server::new();
         let mock = server

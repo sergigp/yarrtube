@@ -45,7 +45,7 @@
 ## 3. Infrastructure adapters (TDD)
 
 HttpPlexLibraryRepository (mockito):
-- [ ] 3.1 `it_should_list_sections_with_their_titles`
+- [x] 3.1 `it_should_list_sections_with_their_titles`
 - [ ] 3.2 `it_should_read_the_server_id`
 - [ ] 3.3 `it_should_list_a_section_episodes_with_their_files` — two pages, multi-part media.
 - [ ] 3.4 `it_should_read_an_episode_labels`
