@@ -25,7 +25,7 @@
 - [ ] 2.17 `it_should_delete_the_stale_file_of_a_video_reset_by_the_same_pass` (reconcile_channel_task) — orphan sweep reads its snapshot after the syncs.
 - [x] 2.18 `it_should_redownload_videos_with_missing_file` (reconcile_playlist_task, update) — as 2.14 for playlists.
 - [x] 2.19 `it_should_sync_a_video_added_by_the_same_pass` (reconcile_playlist_task) — replaces `it_should_not_schedule_a_thumbnail_fetch_for_a_video_added_in_the_same_pass`.
-- [ ] 2.20 `it_should_repair_the_categories_of_stored_playlist_videos` (reconcile_playlist_task, update) — one event per repaired video.
+- [x] 2.20 `it_should_repair_the_categories_of_stored_playlist_videos` (reconcile_playlist_task, update) — one event per repaired video.
 - [ ] 2.21 Update step 6 of `doc/ARCHITECTURE.md`: the pass runs `VideoReconciler` for every stored video (categories, broken-file reset, errored recovery, metadata repair, step scheduling), then sweeps orphans. Verify by reading it against design.md's Call Stack.
 
 ## 3. Infrastructure adapters (TDD)

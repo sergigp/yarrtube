@@ -340,6 +340,13 @@ mod tests {
             &existing,
             0,
         );
+        let other = Video::create(VideoId::new("vid2").unwrap(), "Other", fixed_timestamp());
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &other,
+            1,
+        );
         let music = category_with_members("Music", &[CategoryMember::Playlist(playlist_id())]);
         SqliteCategoryRepository::new(db.database())
             .insert(&music)
@@ -367,6 +374,7 @@ mod tests {
             playlist_video_repository,
             Arc::new(FakeYoutubePlaylistItemsRepository::with_videos(vec![
                 playlist_item("vid1", "My Video", 0),
+                playlist_item("vid2", "Other", 1),
             ])),
             event_publisher,
             task_repository.clone(),
@@ -414,21 +422,29 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_categories_repository
-                .find_many(std::slice::from_ref(&existing.id))
+                .find_many(&[existing.id.clone(), other.id.clone()])
                 .unwrap(),
-            vec![VideoCategories::new(
-                existing.id.clone(),
-                vec![music.id.clone()]
-            )]
+            vec![
+                VideoCategories::new(existing.id.clone(), vec![music.id.clone()]),
+                VideoCategories::new(other.id.clone(), vec![music.id.clone()]),
+            ]
         );
         assert_eq!(
             event_repository.list_eligible().unwrap(),
-            vec![pending_event(
-                1,
-                DomainEvent::VideoCategoriesChanged(VideoCategoriesChanged {
-                    video_ids: vec![existing.id.as_str().to_string()],
-                })
-            )]
+            vec![
+                pending_event(
+                    1,
+                    DomainEvent::VideoCategoriesChanged(VideoCategoriesChanged {
+                        video_ids: vec![existing.id.as_str().to_string()],
+                    })
+                ),
+                pending_event(
+                    2,
+                    DomainEvent::VideoCategoriesChanged(VideoCategoriesChanged {
+                        video_ids: vec![other.id.as_str().to_string()],
+                    })
+                ),
+            ]
         );
     }
 
