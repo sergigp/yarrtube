@@ -42,5 +42,5 @@ Migrations:
 ## 4. Verification
 
 - [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` all pass.
-- [ ] 4.2 End-to-end suite passes via `scripts/run-tests.sh` (category list, feed, counts and mark watched unchanged).
+- [x] 4.2 End-to-end suite passes via `scripts/run-tests.sh` (category list, feed, counts and mark watched unchanged).
 - [ ] 4.3 Manual (agent): on a copy of a pre-upgrade database (not the user's `yarrtube.sqlite3`; copy it to a temp path first), start `scripts/run-local.sh --port <free port>` against the copy, and confirm via `GET /api/categories` and `GET /api/categories/<id>/videos` that counts and feeds equal those of the same copy on `main`; then set a category's members via the API and confirm `sqlite3` shows the expected `video_categories` rows and an `events` row of type `video_categories_changed`. Stop the server and delete the copy.
