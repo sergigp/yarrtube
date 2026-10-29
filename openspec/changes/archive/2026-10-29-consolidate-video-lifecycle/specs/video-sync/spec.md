@@ -56,11 +56,15 @@ A video sync SHALL regenerate the metadata of a Downloaded video with a healthy 
 - **THEN** the video is left unchanged
 
 ### Requirement: Sync Warns About a Stranded Video
-A video sync SHALL log a warning for a stranded video: one whose download status is Pending, In Progress or Errored Retrying with no download pending or running for it. Its download is then scheduled like any other unsettled video's, without changing its download status and with no cooldown.
+A video sync SHALL log a warning for a stranded video: one whose download status is In Progress or Errored Retrying with no download pending or running for it. Its download is then scheduled like any other unsettled video's, without changing its download status and with no cooldown. A Pending video with no download pending or running (a new video, or one this sync just reset or recovered) is not stranded: its steps are scheduled with no warning.
 
-#### Scenario: Pending video with no download task
-- **WHEN** a video sync runs for a Pending video with no download pending or running
+#### Scenario: In Progress video with no download task
+- **WHEN** a video sync runs for an In Progress video with no download pending or running
 - **THEN** a stranded-video warning is logged and a download of the video is scheduled
+
+#### Scenario: New video
+- **WHEN** a video sync runs for a newly added Pending video with no download pending or running
+- **THEN** a thumbnail fetch and a download of it are scheduled and no stranded-video warning is logged
 
 #### Scenario: Errored-retrying video with no download task
 - **WHEN** a video sync runs for an Errored Retrying video with no download pending or running

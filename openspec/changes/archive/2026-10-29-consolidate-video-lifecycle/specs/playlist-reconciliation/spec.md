@@ -12,11 +12,11 @@ video whose recorded file is missing is reset by its video sync (see
 pass has been synced is deleted. It SHALL
 treat as protected, and never sweep: the show files (`tvshow.nfo`,
 `poster.jpg`), season folders themselves, every recorded filename, thumbnail filename and subtitle filename of any video regardless of status, the NFO sharing a
-recorded filename's base name, and every file sharing the episode base name
-of a video whose episode number is recorded but whose download or thumbnail
+recorded filename's base name, and every media (`.mp4`), thumbnail (`.jpg`) or NFO (`.nfo`) file under the
+episode base name of a video whose episode number is recorded but whose download or thumbnail
 fetch has not completed yet, because such files are only recorded once the
 download or fetch completes. Legacy per-video folders and flat files
-recorded on a video SHALL be protected the same way. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing and it is not in the previous per-video-folder layout, because a subtitle file is placed before it is recorded.
+recorded on a video SHALL be protected the same way. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing and it is not in the previous per-video-folder layout, because a subtitle file is placed before it is recorded. A file with any other extension under an episode base name, such as a stale `.mkv` or `.webm`, is not protected.
 
 #### Scenario: Downloaded video's file is missing from disk
 - **WHEN** a reconcile pass finds that a Downloaded video's recorded file is not present in its playlist's show directory
@@ -24,7 +24,7 @@ recorded on a video SHALL be protected the same way. Every file whose name start
 
 #### Scenario: Stale file of a video reset by the same pass
 - **WHEN** a reconcile pass finds a Downloaded video whose recorded file is an `.mkv`, and its sync resets it for redownload
-- **THEN** the same pass deletes the `.mkv`, no longer recorded on any video
+- **THEN** the same pass deletes the `.mkv`, no longer recorded on any video, including when the video has a recorded episode number and the `.mkv` is under its episode base name
 
 #### Scenario: A file on disk is not accounted for by any Downloaded video
 - **WHEN** a reconcile pass finds a file in the playlist's show directory or one of its season folders that is not a show file, not a recorded filename, recorded thumbnail filename, recorded subtitle filename or NFO of any video, not a downloader-managed in-progress temporary file, and does not share the episode base name of a video whose number is recorded

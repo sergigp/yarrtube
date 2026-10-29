@@ -69,7 +69,7 @@ A video newly stored for a playlist or channel that is a member of at least one 
 - **THEN** the new video belongs to "Chess", whether or not it has been downloaded yet
 
 ### Requirement: Reconcile Passes Repair Video Categories
-Each playlist or channel reconcile pass SHALL set the categories of every stored video of that source to the source's categories when the source is a member of at least one category, and SHALL leave them unchanged otherwise.
+Each video sync SHALL set the categories of its video to its source's categories when the source is a member of at least one category, and SHALL leave them unchanged otherwise. Since every playlist or channel reconcile pass runs the video sync of every stored video of that source (see `video-sync`), each pass repairs the categories of all of them.
 
 #### Scenario: Drifted video repaired
 - **WHEN** a stored video of the channel "@GothamChess", a member of "Chess", belongs to no category, and the channel's reconcile pass runs
@@ -94,7 +94,7 @@ On upgrade, every video stored before this change SHALL be given the categories 
 - **THEN** after the upgrade all 40 stored videos belong to "Chess" and category lists, counts and feeds are unchanged
 
 ### Requirement: Video Category Change Notification
-Whenever the categories of stored videos change, or a category they belong to is renamed or deleted, the system SHALL publish one domain event per operation naming every affected video. An operation that changes no video SHALL publish nothing.
+Whenever the categories of stored videos change, or a category they belong to is renamed or deleted, the system SHALL publish one domain event per operation naming every affected video. A video sync is one operation for its video. An operation that changes no video SHALL publish nothing.
 
 #### Scenario: Members set
 - **WHEN** the channel "@GothamChess" with 3 stored videos is added to "Chess"
@@ -103,6 +103,10 @@ Whenever the categories of stored videos change, or a category they belong to is
 #### Scenario: Category renamed
 - **WHEN** the category "Chess", to which 5 stored videos belong, is renamed
 - **THEN** one video-categories-changed event naming those 5 videos is published
+
+#### Scenario: Reconcile pass repairing several videos
+- **WHEN** a reconcile pass runs for "@GothamChess", a member of "Chess", and 2 of its stored videos belong to no category
+- **THEN** one video-categories-changed event per repaired video is published, each naming that video
 
 #### Scenario: Reconcile pass with nothing to repair
 - **WHEN** a reconcile pass runs for a source whose videos already have its categories

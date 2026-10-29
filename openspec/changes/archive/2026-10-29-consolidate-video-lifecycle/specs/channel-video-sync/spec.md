@@ -12,10 +12,10 @@ a Downloaded video whose recorded file is missing or not mp4 is reset by its
 video sync (see `video-sync`), and every file left unaccounted for once every
 video of the pass has been synced is deleted,
 with the same protected set: show files, season folders, every recorded filename, thumbnail filename and subtitle filename of any video regardless of status, the NFO
-sharing a recorded filename's base name, every file sharing the episode base
-name of a video whose number is recorded but whose download or thumbnail
-fetch has not completed yet, and legacy per-video folders or flat files
-recorded on a video. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing and it is not in the previous per-video-folder layout, because a subtitle file is placed before it is recorded.
+sharing a recorded filename's base name, every media (`.mp4`), thumbnail (`.jpg`) or NFO (`.nfo`) file under the
+episode base name of a video whose number is recorded but whose download or
+thumbnail fetch has not completed yet, and legacy per-video folders or flat files
+recorded on a video. Every file whose name starts with the base name of a Downloaded video's recorded filename followed by a dot SHALL also be protected while that video's subtitle state is Missing and it is not in the previous per-video-folder layout, because a subtitle file is placed before it is recorded. A file with any other extension under an episode base name, such as a stale `.mkv` or `.webm`, is not protected.
 
 #### Scenario: Downloaded video's file is missing from disk
 - **WHEN** a reconcile pass finds that a Downloaded video's recorded file is not present in its channel's show directory
@@ -23,7 +23,7 @@ recorded on a video. Every file whose name starts with the base name of a Downlo
 
 #### Scenario: Downloaded video's file is present but not mp4
 - **WHEN** a reconcile pass finds that a Downloaded video's recorded file is present in its channel's show directory but is not an mp4 container
-- **THEN** the video's sync resets it to PENDING, clears its recorded filename and quality, and schedules a thumbnail fetch and a fresh download of it, and the same pass deletes the stale file, no longer recorded on any video
+- **THEN** the video's sync resets it to PENDING, clears its recorded filename and quality, and schedules a thumbnail fetch and a fresh download of it, and the same pass deletes the stale file, no longer recorded on any video, including when the video has a recorded episode number and the file is under its episode base name
 
 #### Scenario: A file on disk is not accounted for by any Downloaded video
 - **WHEN** a reconcile pass finds a file in the channel's show directory or one of its season folders that is not a show file, not a recorded filename, recorded thumbnail filename, recorded subtitle filename or NFO of any video, not a downloader-managed in-progress temporary file, and does not share the episode base name of a video whose number is recorded

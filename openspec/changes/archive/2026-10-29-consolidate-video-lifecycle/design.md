@@ -3,7 +3,7 @@
 ## Files
 
 - `src/domain/services/video_reconciler.rs` — owns one video's whole lifecycle; trait reduced to `reconcile`; gains reset, recovery, metadata repair (moved from `internal_video_reconciler.rs`) and the stranded warning.
-- `src/domain/services/internal_video_reconciler.rs` — reduced to: sync every stored video, then sweep orphaned files from a fresh snapshot. `MembershipDelta`, `sort_positions`, `handled`, broken/recovery/metadata code removed.
+- `src/domain/services/internal_video_reconciler.rs` — reduced to: sync every stored video, then sweep orphaned files from a fresh snapshot. `MembershipDelta`, `sort_positions`, `handled`, broken/recovery/metadata code removed. The episode-base-name protection of the sweep is limited to `EPISODE_FILE_EXTENSIONS`, so a reset episode's stale container is swept.
 - `src/domain/services/channel_video_reconciler.rs`, `playlist_video_reconciler.rs` — no `assign_categories`, no delta passed down, smaller `DesiredState`.
 - `src/domain/services/video_category_assigner.rs` — `assign_source` removed (no caller left).
 - `src/infrastructure/shared/video_lock.rs` — new in-process per-video lock (sibling of `category_lock.rs`).
@@ -83,6 +83,13 @@ pub struct InternalVideoReconciler {
     videos_path: String,
 }
 
+/// Extensions a download or thumbnail fetch moves into place under an
+/// episode's base name; only these are protected by that base name.
+const EPISODE_FILE_EXTENSIONS: [&str; 3] = ["mp4", "jpg", "nfo"];
+impl ActualState {
+    fn is_numbered_episode_file(&self, entry: &str) -> bool;
+}
+
 pub trait InternalVideoReconcilerApi: Send + Sync {
     /// Reconciles every video of `desired` (`VideoReconciler::reconcile`,
     /// a failing video is logged and skipped), then deletes orphaned files
@@ -122,7 +129,7 @@ SyncVideoTask::handle(payload)
       metadata_generator.generate(&video, owner.sort_position, None)
       video_relocator.relocate(..)                         // legacy only, unchanged
       video_metadata_repository.save(&id, &metadata, &number, &nfo_path)
-    warn_if_stranded(&video)                               // !settled && no download task
+    warn_if_stranded(&video)                               // InProgress|ErroredRetrying && no download task
       task_repository.find_non_completed_for_video("download_video", &video.id)
     schedule_steps(&video, &owner.target)
       VideoSyncPlan::for_video(&video).steps -> task_repository.schedule(..)
@@ -153,7 +160,8 @@ Behaviour (acceptance) — `sync_video_task.rs`, primary suite of the lifecycle:
 8. `it_should_keep_existing_metadata` — metadata row present: generator not called.
 9. `it_should_relocate_a_legacy_video_when_its_metadata_is_recovered` — legacy file moved into season folder, filenames recorded.
 10. `it_should_leave_a_legacy_video_in_place_when_its_metadata_is_still_unavailable` — generator returns none: video unchanged.
-11. `it_should_warn_about_a_stranded_video` — Pending, no download task: warning logged, download scheduled.
+11. `it_should_warn_about_a_stranded_video` — In Progress, no download task: warning logged, download scheduled (no thumbnail fetch).
+11b. `it_should_not_warn_about_a_new_video` — new Pending video, no download task: thumbnail fetch + download scheduled, no warning.
 12. `it_should_keep_a_stranded_errored_retrying_video_errored_retrying` — warning logged, download scheduled, status unchanged.
 13. `it_should_not_warn_about_a_video_whose_download_is_running` — running download task: no warning, no second download.
 
@@ -162,6 +170,7 @@ Behaviour (acceptance) — `reconcile_channel_task.rs`:
 15. `it_should_sync_a_video_added_by_the_same_pass` (replaces `it_should_schedule_no_step_for_a_video_added_by_the_same_pass`) — new video's steps scheduled once, no duplicates.
 16. `it_should_repair_the_categories_of_stored_videos` (update) — one video-categories-changed event per repaired video.
 17. `it_should_delete_the_stale_file_of_a_video_reset_by_the_same_pass` — `.mkv` of a reset video swept in the same pass.
+17b. `it_should_delete_the_stale_file_of_an_episode_reset_by_the_same_pass` — same for a numbered episode's `.mkv` under its episode base name; its `.jpg` kept.
 
 Behaviour (acceptance) — `reconcile_playlist_task.rs`:
 18. `it_should_redownload_videos_with_missing_file` (update) — as 14.
@@ -175,6 +184,8 @@ Not unit tested: "one video fails to sync" (every fallible step of a sync hits r
 Infrastructure — `video_lock.rs`:
 21. `it_should_block_a_second_lock_of_the_same_video_until_released`
 22. `it_should_not_block_locks_of_different_videos`
+
+Both synchronized with channels (`recv_timeout`), no sleeps asserting a thread finished.
 
 Infrastructure — `sqlite_task_repository.rs`:
 23. `it_should_find_a_running_task_of_a_video`

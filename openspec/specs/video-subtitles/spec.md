@@ -80,7 +80,7 @@ A successful subtitle fetch SHALL write the selected captions in SubRip format t
 - **THEN** its show directory contains `Season 2026/S2026E031501 - Old Title.en.srt` and that is its recorded subtitle filename
 
 ### Requirement: Subtitle Fetch Scheduled After Download
-The system SHALL schedule a subtitle fetch to run immediately each time a video finishes downloading, without waiting for the next reconcile pass. It SHALL NOT schedule a second one for a video that already has a subtitle fetch pending or running. Reconcile passes keep scheduling fetches for videos whose subtitles are still Missing (see `playlist-reconciliation`, `channel-video-sync`).
+The system SHALL schedule a subtitle fetch to run immediately each time a video finishes downloading, without waiting for the next reconcile pass. It SHALL NOT schedule a second one for a video that already has a subtitle fetch pending or running. Reconcile passes keep scheduling fetches for videos whose subtitles are still Missing, through the video sync they run for every stored video (see `video-sync`).
 
 #### Scenario: Video finishes downloading
 - **WHEN** a video finishes downloading

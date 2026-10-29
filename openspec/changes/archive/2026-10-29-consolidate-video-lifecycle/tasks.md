@@ -47,6 +47,12 @@
 - [x] 4.3 End-to-end suite passes via `scripts/run-tests.sh`.
 - [ ] 4.4 Manual (human): on a real library, delete a downloaded episode file, trigger a reconcile of its source, and confirm it is redownloaded with its thumbnail and NFO and Plex shows the episode again.
 
+## 5. Audit fixes
+
+- [x] 5.1 Stranded means In Progress or Errored Retrying only — 2.11 now uses an In Progress video; `it_should_not_warn_about_a_new_video` (sync_video_task).
+- [x] 5.2 Orphan sweep protects only mp4/jpg/nfo under a numbered episode base name — `it_should_delete_the_stale_file_of_an_episode_reset_by_the_same_pass` (reconcile_channel_task).
+- [x] 5.3 `VideoLock` tests synchronized with channels instead of sleeps.
+
 ## Workflow follow-up
 
 - Archive the change after review.
