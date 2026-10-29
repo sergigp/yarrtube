@@ -80,6 +80,18 @@ struct Location {
     path: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct IdentityResponse {
+    #[serde(rename = "MediaContainer")]
+    media_container: IdentityContainer,
+}
+
+#[derive(Debug, Deserialize)]
+struct IdentityContainer {
+    #[serde(rename = "machineIdentifier")]
+    machine_identifier: String,
+}
+
 pub struct HttpPlexLibraryRepository {
     config: PlexConfig,
     client: reqwest::blocking::Client,
@@ -129,7 +141,8 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
     }
 
     fn server_id(&self) -> anyhow::Result<String> {
-        Ok(String::new())
+        let response: IdentityResponse = self.get_json("/identity", &[])?;
+        Ok(response.media_container.machine_identifier)
     }
 
     fn list_episodes(&self, _section_id: &str) -> anyhow::Result<Vec<PlexEpisode>> {
@@ -582,6 +595,28 @@ mod tests {
                 title: "Sergi's Playlists".to_string(),
                 locations: vec![],
             }]
+        );
+    }
+
+    #[test]
+    fn it_should_read_the_server_id() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/identity")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 0, "claimed": true,
+                    "machineIdentifier": "abc123", "version": "1.43.4"}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let server_id = repository.server_id();
+
+        assert_eq!(
+            server_id.map_err(|e| e.to_string()),
+            Ok("abc123".to_string())
         );
     }
 
