@@ -191,7 +191,9 @@ test.describe('with a downloaded channel in a category', () => {
     expect(members.ok(), await members.text()).toBeTruthy()
   })
 
-  test('category card opens its video in the channel view and plays', async ({ page }) => {
+  test('category card plays its video in the category, queued with the category', async ({
+    page,
+  }) => {
     const [{ id, title }] = seeded.videos
     await page.goto(`/categories/${encodeURIComponent(categoryId)}`)
 
@@ -200,8 +202,12 @@ test.describe('with a downloaded channel in a category', () => {
 
     await page.locator('main').getByRole('link', { name: title, exact: true }).first().click()
 
-    await expect(page).toHaveURL(new RegExp(`/channels/[^?]+\\?video=${id}$`))
+    await expect(page).toHaveURL(
+      new RegExp(`/categories/${encodeURIComponent(categoryId)}\\?video=${id}$`),
+    )
+    await expect(page.getByRole('heading', { name: 'Watch later', exact: true })).toBeVisible()
     await expect(page.locator('main h3').first()).toHaveText(title)
+    await expect(page.locator('video')).toHaveAttribute('src', new RegExp(`^/media/${seeded.path}/`))
     await assertVideoPlays(page)
   })
 })
