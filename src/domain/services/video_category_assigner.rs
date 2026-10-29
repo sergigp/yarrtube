@@ -200,20 +200,38 @@ impl VideoCategoryAssigner {
         })
     }
 
-    /// Saves `desired` and announces its records in one event, in record id
-    /// order.
+    /// Saves the records of `desired` whose set differs from the stored one
+    /// and announces them in one event, in record id order. Nothing changed →
+    /// nothing saved or published.
     fn save_and_announce(&self, desired: Vec<VideoCategories>) -> anyhow::Result<()> {
-        let mut desired = desired;
-        desired.sort_by(|a, b| a.video_id.as_str().cmp(b.video_id.as_str()));
-        self.video_categories_repository.save_many(&desired)?;
+        let changed = self.changed(desired)?;
+        if changed.is_empty() {
+            return Ok(());
+        }
+        self.video_categories_repository.save_many(&changed)?;
         self.event_publisher
             .publish(&DomainEvent::VideoCategoriesChanged(
                 VideoCategoriesChanged {
-                    video_ids: desired
+                    video_ids: changed
                         .iter()
                         .map(|categories| categories.video_id.as_str().to_string())
                         .collect(),
                 },
             ))
+    }
+
+    /// The sets of `desired` that differ from the stored ones, in record id
+    /// order.
+    fn changed(&self, desired: Vec<VideoCategories>) -> anyhow::Result<Vec<VideoCategories>> {
+        let ids: Vec<VideoRecordId> = desired.iter().map(|d| d.video_id.clone()).collect();
+        let current = self.video_categories_repository.find_many(&ids)?;
+        let mut changed: Vec<VideoCategories> = desired
+            .into_iter()
+            .zip(current)
+            .filter(|(wanted, stored)| wanted != stored)
+            .map(|(wanted, _)| wanted)
+            .collect();
+        changed.sort_by(|a, b| a.video_id.as_str().cmp(b.video_id.as_str()));
+        Ok(changed)
     }
 }
