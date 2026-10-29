@@ -268,10 +268,10 @@ impl Task {
         }
     }
 
-    /// `Some("video:<id>")` for `download_video`, `fetch_thumbnail` and
-    /// `fetch_subtitles`: two tasks sharing a key never run at the same
-    /// time, and a task with a key is not scheduled twice while one is
-    /// pending or running.
+    /// `Some("video:<id>")` for `download_video`, `fetch_thumbnail`,
+    /// `fetch_subtitles` and `sync_video`: two tasks sharing a key never run
+    /// at the same time, and a task with a key is not scheduled twice while
+    /// one is pending (or running, see `dedupes_running`).
     pub fn exclusivity_key(task_type: &str, payload: &str) -> Option<String> {
         let video_id = match task_type {
             "download_video" => Self::decode_download_video_payload(payload)
@@ -283,6 +283,7 @@ impl Task {
             "fetch_subtitles" => Self::decode_fetch_subtitles_payload(payload)
                 .ok()
                 .map(|(video_id, _)| video_id),
+            "sync_video" => Self::decode_sync_video_payload(payload).ok(),
             _ => None,
         }?;
         Some(format!("video:{video_id}"))
@@ -628,6 +629,18 @@ mod tests {
                 Some("video:rec2".to_string()),
                 None,
             ]
+        );
+    }
+
+    #[test]
+    fn it_should_give_a_video_sync_the_video_exclusivity_key() {
+        let task = Task::SyncVideo {
+            video_id: "rec1".to_string(),
+        };
+
+        assert_eq!(
+            Task::exclusivity_key(task.task_type(), &task.payload().to_string()),
+            Some("video:rec1".to_string())
         );
     }
 
