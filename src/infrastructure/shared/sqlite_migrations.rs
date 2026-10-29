@@ -325,6 +325,64 @@ mod tests {
     }
 
     #[test]
+    fn it_should_backfill_video_categories_from_members() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+            M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+            M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
+            M::up(EPISODE_NUMBERS_SQL),
+            M::up(RECONCILE_INTERVAL_SQL),
+            M::up(VIDEO_SUBTITLES_SQL),
+            M::up(CATEGORIES_SQL),
+            M::up(PLAYLIST_HIDE_UNWATCHED_COUNT_SQL),
+            M::up(CATEGORY_COLOR_SQL),
+        ])
+        .to_latest(&mut conn)
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO channel_videos (channel_id, video_id, position, created_at)
+             VALUES ('@GothamChess', 'chess-rec1', 0, '2024-01-01T00:00:00+00:00'),
+                    ('@GothamChess', 'chess-rec2', 1, '2024-01-01T00:00:00+00:00'),
+                    ('@Uncategorized', 'other-rec1', 0, '2024-01-01T00:00:00+00:00');
+             INSERT INTO playlist_videos (playlist_id, video_id, position, created_at)
+             VALUES ('PLendgames', 'endgames-rec1', 0, '2024-01-01T00:00:00+00:00'),
+                    ('PLuntracked', 'untracked-rec1', 0, '2024-01-01T00:00:00+00:00');
+             INSERT INTO category_members (category_id, member_kind, member_id)
+             VALUES ('chess', 'channel', '@GothamChess'),
+                    ('chess', 'playlist', 'PLendgames'),
+                    ('funny', 'channel', '@GothamChess');",
+        )
+        .unwrap();
+
+        apply(&mut conn).unwrap();
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT video_id, category_id FROM video_categories ORDER BY video_id, category_id",
+            )
+            .unwrap();
+        let rows: Vec<(String, String)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        let expected = [
+            ("chess-rec1", "chess"),
+            ("chess-rec1", "funny"),
+            ("chess-rec2", "chess"),
+            ("chess-rec2", "funny"),
+            ("endgames-rec1", "chess"),
+        ]
+        .map(|(video_id, category_id)| (video_id.to_string(), category_id.to_string()));
+        assert_eq!(rows, expected.to_vec());
+    }
+
+    #[test]
     fn it_should_default_existing_videos_to_missing_subtitles() {
         let mut conn = Connection::open_in_memory().unwrap();
         Migrations::new(vec![

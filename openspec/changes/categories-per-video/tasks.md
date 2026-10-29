@@ -37,7 +37,7 @@ SqliteVideoCategoriesRepository:
 - [x] 3.5 `it_should_delete_a_record_rows`
 
 Migrations:
-- [ ] 3.6 `it_should_backfill_video_categories_from_members` — channel and playlist members, an uncategorized source, a record in two categories.
+- [x] 3.6 `it_should_backfill_video_categories_from_members` — channel and playlist members, an uncategorized source, a record in two categories.
 
 ## 4. Verification
 
