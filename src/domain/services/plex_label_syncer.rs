@@ -120,8 +120,17 @@ pub trait PlexLabelSyncerApi: Send + Sync {
 }
 
 impl PlexLabelSyncerApi for PlexLabelSyncer {
-    fn mark(&self, _video_ids: &[VideoRecordId], _delay: Duration) -> anyhow::Result<()> {
-        Ok(())
+    fn mark(&self, video_ids: &[VideoRecordId], delay: Duration) -> anyhow::Result<()> {
+        let existing = self.episode_labels_repository.find_many(video_ids)?;
+        let marked: Vec<EpisodeLabels> = video_ids
+            .iter()
+            .map(|id| match existing.iter().find(|row| &row.video_id == id) {
+                Some(row) => row.clone().mark_dirty(),
+                None => EpisodeLabels::pending(id.clone()),
+            })
+            .collect();
+        self.episode_labels_repository.save_many(&marked)?;
+        self.request_sync(self.clock.now() + delay)
     }
 
     fn request_sync(&self, run_at: DateTime<Utc>) -> anyhow::Result<()> {
