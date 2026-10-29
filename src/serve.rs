@@ -1122,6 +1122,42 @@ mod tests {
     }
 
     #[test]
+    fn it_should_request_the_label_sync_at_startup_only_if_plex_is_configured() {
+        let queued: Vec<Vec<String>> = [
+            None,
+            plex_integration_from(
+                Some("http://plex:32400".to_string()),
+                Some("token".to_string()),
+                Some("/plex/videos".to_string()),
+            ),
+        ]
+        .into_iter()
+        .map(|plex| {
+            let db = TestDatabase::new();
+            let infrastructure = test_infrastructure(&db);
+            let syncer = plex.map(|plex| plex_label_syncer(&infrastructure, plex));
+            let executor = task_executor(&infrastructure, syncer.clone());
+            prepare_task_queue(&infrastructure, &executor, syncer.as_ref()).unwrap();
+            infrastructure
+                .task_repository
+                .list_non_completed()
+                .unwrap()
+                .into_iter()
+                .map(|task| task.task_type)
+                .collect()
+        })
+        .collect();
+
+        assert_eq!(
+            queued,
+            vec![
+                vec!["update_ytdlp".to_string()],
+                vec!["update_ytdlp".to_string(), "sync_plex_labels".to_string()],
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_register_a_handler_for_every_task_type() {
         let db = TestDatabase::new();
         let infrastructure = test_infrastructure(&db);
