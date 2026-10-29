@@ -35,6 +35,6 @@ SqliteTaskRepository:
 ## 4. Verification
 
 - [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `npm run check` in `web/`.
-- [ ] 4.2 End-to-end suite via `scripts/run-tests.sh`.
+- [x] 4.2 End-to-end suite via `scripts/run-tests.sh`.
 - [ ] 4.3 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, add a short playlist via the HTTP API, and confirm via `GET /api/tasks` and the tasks view (Playwright) that a `sync_video` per new video appears in the Syncs tab described as "Syncing <title> in <playlist>", followed by its download and thumbnail fetch, then a subtitle fetch after the download; confirm the video ends Downloaded with its `.srt`. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.4 Manual (human): with the Plex scan integration enabled, confirm a newly downloaded episode and its subtitle still appear in Plex after the scan.
