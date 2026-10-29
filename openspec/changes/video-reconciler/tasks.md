@@ -17,7 +17,7 @@
 - [x] 2.9 `it_should_skip_if_video_has_no_owner` — orphan record is a no-op.
 - [x] 2.10 `it_should_schedule_a_video_sync_when_a_video_is_added_to_a_channel` — subscriber schedules `sync_video`.
 - [x] 2.11 `it_should_schedule_a_video_sync_when_a_video_is_added_to_a_playlist` — subscriber registered for playlist additions.
-- [ ] 2.12 `it_should_schedule_a_video_sync_when_a_video_is_downloaded` — subscriber registered for downloads (replaces the subtitle subscriber).
+- [x] 2.12 `it_should_schedule_a_video_sync_when_a_video_is_downloaded` — subscriber registered for downloads (replaces the subtitle subscriber).
 - [ ] 2.13 `it_should_schedule_only_the_download_of_a_video_reset_for_redownload` — `InternalVideoReconciler` delegates resets to `VideoReconciler::schedule_download` and every other stored video to `reconcile_video`; remove its own stranded/thumbnail/subtitle scheduling. Existing reconcile suites must stay green.
 - [ ] 2.14 `it_should_schedule_no_step_for_a_video_added_by_the_same_pass` — added videos are left to their sync.
 - [ ] 2.15 `it_should_list_a_video_sync_with_its_video_title_and_owner_name` — `TaskViewSearcher` resolves `sync_video`.
