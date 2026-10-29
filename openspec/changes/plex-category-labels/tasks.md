@@ -26,7 +26,7 @@
 - [x] 2.16 `it_should_create_a_smart_playlist_for_a_category` — label/section/unwatched/newest-first filter; row stored.
 - [x] 2.17 `it_should_title_playlists_by_library_if_a_category_spans_libraries`
 - [x] 2.18 `it_should_delete_the_playlist_of_a_category_without_labelled_episodes`
-- [ ] 2.19 `it_should_replace_the_playlist_of_a_renamed_category`
+- [x] 2.19 `it_should_replace_the_playlist_of_a_renamed_category`
 - [ ] 2.20 `it_should_recreate_a_playlist_deleted_in_plex`
 - [ ] 2.21 `it_should_not_touch_playlists_it_did_not_create`
 - [ ] 2.22 `it_should_mark_the_videos_and_request_a_sync_shortly` — `VideoCategoriesChanged` subscriber; pending at now + `CATEGORY_CHANGE_DELAY` (10 s).
