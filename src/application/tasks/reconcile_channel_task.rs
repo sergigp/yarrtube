@@ -371,6 +371,51 @@ mod tests {
     }
 
     #[test]
+    fn it_should_delete_the_categories_of_a_removed_video() {
+        let db = TestDatabase::new();
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        channel_repository.insert(&channel("@somechannel")).unwrap();
+        let removed = my_video();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            &removed,
+        );
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                removed.id.clone(),
+                vec![CategoryId::new("classified").unwrap()],
+            )])
+            .unwrap();
+        let task = ReconcileChannelTask::new(channel_video_reconciler(
+            &db,
+            channel_repository,
+            video_repository.clone(),
+            channel_video_repository,
+            Arc::new(FakeChannelVideosRepository::with_videos(vec![])),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for("@somechannel"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[removed.id.clone()])
+                .unwrap(),
+            vec![VideoCategories::none(removed.id.clone())]
+        );
+    }
+
+    #[test]
     fn it_should_remove_videos_beyond_the_limit() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
