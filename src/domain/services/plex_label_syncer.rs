@@ -1,6 +1,6 @@
 use crate::domain::category::{CategoryId, CategoryName};
 use crate::domain::plex::{PlexEpisode, PlexLabels, PlexSection, plex_folder_path};
-use crate::domain::plex_label::EpisodeLabels;
+use crate::domain::plex_label::{CategoryPlaylist, EpisodeLabels};
 use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
 use crate::domain::task::Task;
 use crate::domain::video::{Video, VideoRecordId};
@@ -14,7 +14,7 @@ use crate::infrastructure::repositories::sqlite_video_categories_repository::Vid
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Duration, Utc};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 use tracing::warn;
@@ -114,6 +114,7 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
         self.mark_reimported(&episodes)?;
         self.track_categorized_records()?;
         let labelled = self.label_dirty_records(&episodes)?;
+        self.reconcile_playlists()?;
         self.request_next_sync(labelled == BATCH_SIZE)
     }
 }
@@ -134,6 +135,50 @@ impl PlexLabelSyncer {
             .collect::<anyhow::Result<Vec<_>>>()?;
         self.episode_labels_repository.save_many(&labelled)?;
         Ok(taken)
+    }
+
+    /// Keeps one smart playlist per label and section holding labelled
+    /// episodes.
+    fn reconcile_playlists(&self) -> anyhow::Result<()> {
+        let stored = self.category_playlist_repository.list()?;
+        self.desired_playlists()?
+            .into_iter()
+            .filter(|(section_id, label)| {
+                !stored
+                    .iter()
+                    .any(|playlist| &playlist.section_id == section_id && &playlist.label == label)
+            })
+            .try_for_each(|(section_id, label)| self.create_playlist(&section_id, &label))
+    }
+
+    /// Each label written to a synced episode, with the episode's section.
+    fn desired_playlists(&self) -> anyhow::Result<BTreeSet<(String, String)>> {
+        Ok(self
+            .episode_labels_repository
+            .list_synced()?
+            .into_iter()
+            .flat_map(|row| {
+                let section_id = row.section_id.unwrap_or_default();
+                row.labels
+                    .names()
+                    .iter()
+                    .map(|label| (section_id.clone(), label.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .collect())
+    }
+
+    fn create_playlist(&self, section_id: &str, label: &str) -> anyhow::Result<()> {
+        let server_id = self.plex_library_repository.server_id()?;
+        let playlist = self
+            .plex_library_repository
+            .create_smart_playlist(&server_id, section_id, label, label)?;
+        self.category_playlist_repository.save(&CategoryPlaylist {
+            section_id: section_id.to_string(),
+            label: label.to_string(),
+            rating_key: playlist.rating_key,
+            title: playlist.title,
+        })
     }
 
     /// Right away while a backlog of dirty records remains, else after

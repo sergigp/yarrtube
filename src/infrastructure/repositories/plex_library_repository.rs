@@ -533,6 +533,14 @@ impl FakePlexLibraryRepository {
         self.mutations.lock().unwrap().clone()
     }
 
+    /// The label writes among `mutations`, e.g. `labels:101:Chess:-Old`.
+    pub fn label_edits(&self) -> Vec<String> {
+        self.mutations()
+            .into_iter()
+            .filter(|mutation| mutation.starts_with("labels:"))
+            .collect()
+    }
+
     /// The labels of the episode `rating_key`, in the order written.
     pub fn labels(&self, rating_key: &str) -> Vec<String> {
         self.episodes

@@ -29,14 +29,16 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::PlaylistPath;
     use crate::domain::plex::PlexLabels;
-    use crate::domain::plex_label::EpisodeLabels;
+    use crate::domain::plex_label::{CategoryPlaylist, EpisodeLabels};
     use crate::domain::services::VideoOwnerFinder;
     use crate::domain::services::plex_label_syncer::BATCH_SIZE;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::{Video, VideoId, VideoRecordId};
     use crate::domain::video_category::VideoCategories;
-    use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
+    use crate::infrastructure::repositories::plex_library_repository::{
+        FakePlaylist, FakePlexLibraryRepository,
+    };
     use crate::infrastructure::repositories::sqlite_category_playlist_repository::{
         CategoryPlaylistRepository, SqliteCategoryPlaylistRepository,
     };
@@ -165,7 +167,7 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(plex.labels("101"), Vec::<String>::new());
-        assert_eq!(plex.mutations(), vec!["labels:101::-Chess".to_string()]);
+        assert_eq!(plex.label_edits(), vec!["labels:101::-Chess".to_string()]);
         assert_eq!(
             episode_labels_repository
                 .find_many(&[video.id.clone()])
@@ -199,7 +201,7 @@ mod tests {
         let result = run(&task);
 
         assert_eq!(result, Ok(()));
-        assert_eq!(plex.mutations(), Vec::<String>::new());
+        assert_eq!(plex.label_edits(), Vec::<String>::new());
         assert_eq!(
             episode_labels_repository
                 .find_many(&[video.id.clone()])
@@ -238,7 +240,7 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(plex.labels("101"), vec!["Humor".to_string()]);
         assert_eq!(
-            plex.mutations(),
+            plex.label_edits(),
             vec!["labels:101:Humor:-Funny".to_string()]
         );
         assert_eq!(
@@ -272,7 +274,7 @@ mod tests {
         let result = run(&task);
 
         assert_eq!(result, Ok(()));
-        assert_eq!(plex.mutations(), Vec::<String>::new());
+        assert_eq!(plex.label_edits(), Vec::<String>::new());
         assert_eq!(
             episode_labels_repository
                 .find_many(&[video.id.clone()])
@@ -309,7 +311,7 @@ mod tests {
         let result = run(&task);
 
         assert_eq!(result, Ok(()));
-        assert_eq!(plex.mutations(), Vec::<String>::new());
+        assert_eq!(plex.label_edits(), Vec::<String>::new());
         assert_eq!(
             episode_labels_repository
                 .find_many(&[video.id.clone()])
@@ -584,6 +586,43 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_create_a_smart_playlist_for_a_category() {
+        let db = TestDatabase::new();
+        let category_playlist_repository =
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+        );
+        let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        seed_category(&db, "chess", "Chess", &[&video]);
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+            category_playlist_repository.clone(),
+            task_repository(&db),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            plex.playlists(),
+            vec![FakePlaylist {
+                rating_key: "pl1".to_string(),
+                title: "Chess".to_string(),
+                filter: Some(("19".to_string(), "Chess".to_string())),
+            }]
+        );
+        assert_eq!(
+            category_playlist_repository.list().unwrap(),
+            vec![category_playlist("19", "Chess", "pl1", "Chess")]
+        );
+    }
+
     /// The syncer over the test database, with Plex seeing `/videos` at
     /// `/plex/videos`.
     fn syncer(
@@ -711,6 +750,20 @@ mod tests {
         EpisodeLabels {
             checked_at: Some(now()),
             ..EpisodeLabels::pending(video.id.clone())
+        }
+    }
+
+    fn category_playlist(
+        section_id: &str,
+        label: &str,
+        rating_key: &str,
+        title: &str,
+    ) -> CategoryPlaylist {
+        CategoryPlaylist {
+            section_id: section_id.to_string(),
+            label: label.to_string(),
+            rating_key: rating_key.to_string(),
+            title: title.to_string(),
         }
     }
 
