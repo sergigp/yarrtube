@@ -119,7 +119,8 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
             .into_iter()
             .filter_map(|row| self.label(row, &desired, &episodes).transpose())
             .collect::<anyhow::Result<Vec<_>>>()?;
-        self.episode_labels_repository.save_many(&labelled)
+        self.episode_labels_repository.save_many(&labelled)?;
+        self.request_sync(self.clock.now() + SYNC_INTERVAL)
     }
 }
 

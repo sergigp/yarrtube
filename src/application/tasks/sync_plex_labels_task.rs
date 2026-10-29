@@ -477,6 +477,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_schedule_the_next_sync() {
+        let db = TestDatabase::new();
+        let task_repository = task_repository(&db);
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            Arc::new(
+                FakePlexLibraryRepository::default().with_location("19", "/plex/videos/creators"),
+            ),
+            Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository.clone(),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_sync(1, now() + Duration::minutes(15))]
+        );
+    }
+
     /// The syncer over the test database, with Plex seeing `/videos` at
     /// `/plex/videos`.
     fn syncer(
