@@ -164,15 +164,32 @@ impl PlexLabelSyncer {
     /// episodes.
     fn reconcile_playlists(&self, sections: &[PlexSection]) -> anyhow::Result<()> {
         let desired = self.desired_playlists(sections)?;
-        let stored = self.category_playlist_repository.list()?;
-        stored
-            .iter()
+        let (live, gone) = self.stored_playlists()?;
+        gone.iter()
+            .try_for_each(|playlist| self.category_playlist_repository.delete(playlist))?;
+        live.iter()
             .filter(|playlist| !desired.iter().any(|desired| desired.is(playlist)))
             .try_for_each(|playlist| self.delete_playlist(playlist))?;
         desired
             .into_iter()
-            .filter(|desired| !stored.iter().any(|playlist| desired.is(playlist)))
+            .filter(|desired| !live.iter().any(|playlist| desired.is(playlist)))
             .try_for_each(|desired| self.create_playlist(desired))
+    }
+
+    /// The playlists yarrtube created: those still in Plex, then those
+    /// deleted in Plex since.
+    fn stored_playlists(&self) -> anyhow::Result<(Vec<CategoryPlaylist>, Vec<CategoryPlaylist>)> {
+        let in_plex: HashSet<String> = self
+            .plex_library_repository
+            .list_playlists()?
+            .into_iter()
+            .map(|playlist| playlist.rating_key)
+            .collect();
+        Ok(self
+            .category_playlist_repository
+            .list()?
+            .into_iter()
+            .partition(|playlist| in_plex.contains(&playlist.rating_key)))
     }
 
     /// One playlist per label written to a synced episode and the episode's

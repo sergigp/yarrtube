@@ -751,6 +751,50 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_recreate_a_playlist_deleted_in_plex() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let category_playlist_repository =
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &["Chess"]),
+        );
+        let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        seed_category(&db, "chess", "Chess", &[&video]);
+        episode_labels_repository
+            .save_many(&[synced(&video, "101", &["Chess"])])
+            .unwrap();
+        category_playlist_repository
+            .save(&category_playlist("19", "Chess", "pl7", "Chess"))
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            episode_labels_repository,
+            category_playlist_repository.clone(),
+            task_repository(&db),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            plex.playlists(),
+            vec![FakePlaylist {
+                rating_key: "pl1".to_string(),
+                title: "Chess".to_string(),
+                filter: Some(("19".to_string(), "Chess".to_string())),
+            }]
+        );
+        assert_eq!(
+            category_playlist_repository.list().unwrap(),
+            vec![category_playlist("19", "Chess", "pl1", "Chess")]
+        );
+    }
+
     /// The syncer over the test database, with Plex seeing `/videos` at
     /// `/plex/videos`.
     fn syncer(
