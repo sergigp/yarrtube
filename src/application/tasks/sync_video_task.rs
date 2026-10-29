@@ -256,6 +256,49 @@ mod tests {
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
+    #[test]
+    fn it_should_not_schedule_a_second_download_if_one_is_queued() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = my_video();
+        save_channel_video(
+            &video_repository,
+            &channel_repository,
+            &channel_video_repository,
+            &video,
+        );
+        task_repository
+            .schedule(&download_video(&video), fixed_timestamp())
+            .unwrap();
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            video_repository,
+            channel_video_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &download_video(&video)),
+                pending_task(2, &fetch_thumbnail(&video)),
+            ]
+        );
+    }
+
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }
@@ -339,6 +382,22 @@ mod tests {
         }
         .payload()
         .to_string()
+    }
+
+    /// The download `my_channel()` wants for `video`.
+    fn download_video(video: &Video) -> Task {
+        Task::DownloadVideo {
+            video_id: video.id.as_str().to_string(),
+            quality: "high".to_string(),
+            output_dir: "/videos/creators/somechannel".to_string(),
+        }
+    }
+
+    fn fetch_thumbnail(video: &Video) -> Task {
+        Task::FetchThumbnail {
+            video_id: video.id.as_str().to_string(),
+            output_dir: "/videos/creators/somechannel".to_string(),
+        }
     }
 
     fn pending_task(id: i64, task: &Task) -> ScheduledTask {
