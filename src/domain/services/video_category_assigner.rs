@@ -62,8 +62,10 @@ pub trait VideoCategoryAssignerApi: Send + Sync {
 }
 
 impl VideoCategoryAssignerApi for VideoCategoryAssigner {
-    fn assign_source(&self, _source: &CategoryMember) -> anyhow::Result<()> {
-        Ok(())
+    fn assign_source(&self, source: &CategoryMember) -> anyhow::Result<()> {
+        let categories = self.category_repository.list()?;
+        let desired = self.desired_for_source(source, &categories)?;
+        self.save_and_announce(desired)
     }
 
     fn assign_video(

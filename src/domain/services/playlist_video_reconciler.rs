@@ -1,3 +1,4 @@
+use crate::domain::category::CategoryMember;
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::Playlist;
 use crate::domain::playlist::PlaylistId;
@@ -5,7 +6,7 @@ use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::services::{
     DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
-    ShowFileWriter, ShowFileWriterApi, VideoCategoryAssigner,
+    ShowFileWriter, ShowFileWriterApi, VideoCategoryAssigner, VideoCategoryAssignerApi,
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;

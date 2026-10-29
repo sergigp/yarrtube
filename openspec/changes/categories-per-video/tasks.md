@@ -20,7 +20,7 @@ Requires `video-reconciler` to be implemented first (`VideoReconciler`, `SyncVid
 - [x] 2.10 Refactor `CategoryVideoCollector` to read `VideoCategoriesRepository::list_in_category` (record → source via `ChannelVideoRepository::list` / `PlaylistVideoRepository::list`, channel sources first, then member order). Extend the seeds of the existing category list/count/total, `list_for_category` and `mark_category_watched` tests with the matching `VideoCategories`; done when those suites pass unchanged in their assertions.
 - [x] 2.11 `it_should_categorize_a_new_video_of_a_categorized_channel` — `VideoReconciler::reconcile` assigns the record from its owner.
 - [x] 2.12 `it_should_leave_a_new_video_of_an_uncategorized_playlist_uncategorized` — AI regime untouched, no event.
-- [ ] 2.13 `it_should_repair_the_categories_of_stored_videos` — channel reconcile pass calls `assign_source`.
+- [x] 2.13 `it_should_repair_the_categories_of_stored_videos` — channel reconcile pass calls `assign_source`.
 - [ ] 2.14 `it_should_leave_the_categories_of_an_uncategorized_channel` — pass never clears AI-regime rows.
 - [ ] 2.15 `it_should_delete_the_categories_of_a_removed_video` — reconciler removing a record deletes its rows.
 - [ ] 2.16 `it_should_repair_the_categories_of_stored_playlist_videos` — playlist reconcile pass calls `assign_source`.
