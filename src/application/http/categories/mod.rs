@@ -1362,6 +1362,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_not_categorize_other_copies_of_a_member_video() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        playlist_repository.insert(&playlist("PLendgames")).unwrap();
+        let channel_copy = downloaded_video("vid1");
+        let playlist_copy = downloaded_video("vid1");
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &channel_copy,
+        );
+        save_playlist_video(
+            &video_repository,
+            &SqlitePlaylistVideoRepository::new(db.database()),
+            "PLendgames",
+            &playlist_copy,
+        );
+        let chess = category(None, "Chess");
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            playlist_repository,
+            video_category_assigner(db.database()),
+        );
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&["@GothamChess"], &[]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[channel_copy.id.clone(), playlist_copy.id.clone()])
+                .unwrap(),
+            vec![
+                VideoCategories::new(channel_copy.id.clone(), vec![chess.id.clone()]),
+                VideoCategories::none(playlist_copy.id.clone()),
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_set_members_if_a_source_is_not_tracked() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
