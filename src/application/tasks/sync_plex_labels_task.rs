@@ -795,6 +795,51 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_not_touch_playlists_it_did_not_create() {
+        let db = TestDatabase::new();
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+                .with_playlist("900", "Chess")
+                .with_playlist("901", "Funny"),
+        );
+        let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        seed_category(&db, "chess", "Chess", &[&video]);
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository(&db),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            plex.playlists(),
+            vec![
+                FakePlaylist {
+                    rating_key: "900".to_string(),
+                    title: "Chess".to_string(),
+                    filter: None,
+                },
+                FakePlaylist {
+                    rating_key: "901".to_string(),
+                    title: "Funny".to_string(),
+                    filter: None,
+                },
+                FakePlaylist {
+                    rating_key: "pl3".to_string(),
+                    title: "Chess".to_string(),
+                    filter: Some(("19".to_string(), "Chess".to_string())),
+                },
+            ]
+        );
+    }
+
     /// The syncer over the test database, with Plex seeing `/videos` at
     /// `/plex/videos`.
     fn syncer(
