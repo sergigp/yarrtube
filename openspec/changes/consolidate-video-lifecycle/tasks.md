@@ -37,8 +37,8 @@
 
 ### SqliteTaskRepository
 
-- [ ] 3.3 `it_should_find_a_running_task_of_a_video` — `find_non_completed_for_video` returns the pending or running task matching type and video id.
-- [ ] 3.4 `it_should_not_find_a_completed_task_of_a_video` — returns `None` for completed tasks and other videos.
+- [x] 3.3 `it_should_find_a_running_task_of_a_video` — `find_non_completed_for_video` returns the pending or running task matching type and video id.
+- [x] 3.4 `it_should_not_find_a_completed_task_of_a_video` — returns `None` for completed tasks and other videos.
 
 ## 4. Verification
 

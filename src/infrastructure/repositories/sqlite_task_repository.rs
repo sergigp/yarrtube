@@ -871,6 +871,39 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_find_a_running_task_of_a_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&sync_video_task("v1"), now).unwrap();
+        repo.schedule(&download_task("v1"), now).unwrap();
+        repo.claim(2, now).unwrap();
+
+        let found = repo
+            .find_non_completed_for_video("download_video", &VideoRecordId::new("v1").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            found,
+            Some(pending_task(2, &download_task("v1"), now, now).start(now))
+        );
+    }
+
+    #[test]
+    fn it_should_not_find_a_completed_task_of_a_video() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        repo.schedule(&download_task("v1"), now).unwrap();
+        repo.delete(1).unwrap();
+        repo.schedule(&download_task("v2"), now).unwrap();
+
+        let found = repo
+            .find_non_completed_for_video("download_video", &VideoRecordId::new("v1").unwrap())
+            .unwrap();
+
+        assert_eq!(found, None);
+    }
+
     fn download_task(video_id: &str) -> Task {
         Task::DownloadVideo {
             video_id: video_id.to_string(),
