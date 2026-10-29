@@ -200,14 +200,11 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
 
     fn scan_path(&self, section_id: &str, path: &str) -> anyhow::Result<()> {
         let endpoint = format!("/library/sections/{section_id}/refresh");
-        let response = self
+        let request = self
             .client
-            .get(format!("{}{endpoint}", self.config.base_url))
-            .query(&[("path", path)])
-            .header("Accept", "application/json")
-            .header("X-Plex-Token", &self.config.token)
-            .send()?;
-        Self::ensure_success(&endpoint, response).map(drop)
+            .get(self.url(&endpoint))
+            .query(&[("path", path)]);
+        self.send(&endpoint, request).map(drop)
     }
 
     fn server_id(&self) -> anyhow::Result<String> {
@@ -240,14 +237,11 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         removed: &[String],
     ) -> anyhow::Result<()> {
         let endpoint = format!("/library/sections/{}/all", episode.section_id);
-        let response = self
+        let request = self
             .client
-            .put(format!("{}{endpoint}", self.config.base_url))
-            .query(&label_edit_query(episode, labels, removed))
-            .header("Accept", "application/json")
-            .header("X-Plex-Token", &self.config.token)
-            .send()?;
-        Self::ensure_success(&endpoint, response).map(drop)
+            .put(self.url(&endpoint))
+            .query(&label_edit_query(episode, labels, removed));
+        self.send(&endpoint, request).map(drop)
     }
 
     fn list_playlists(&self) -> anyhow::Result<Vec<PlexPlaylist>> {
@@ -269,19 +263,13 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         title: &str,
     ) -> anyhow::Result<PlexPlaylist> {
         let uri = smart_playlist_uri(server_id, section_id, label)?;
-        let response = self
-            .client
-            .post(format!("{}/playlists", self.config.base_url))
-            .query(&[
-                ("type", "video"),
-                ("title", title),
-                ("smart", "1"),
-                ("uri", uri.as_str()),
-            ])
-            .header("Accept", "application/json")
-            .header("X-Plex-Token", &self.config.token)
-            .send()?;
-        let response: PlaylistsResponse = Self::ensure_success("/playlists", response)?.json()?;
+        let request = self.client.post(self.url("/playlists")).query(&[
+            ("type", "video"),
+            ("title", title),
+            ("smart", "1"),
+            ("uri", uri.as_str()),
+        ]);
+        let response: PlaylistsResponse = self.send("/playlists", request)?.json()?;
         response
             .media_container
             .playlists
@@ -293,13 +281,8 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
 
     fn delete_playlist(&self, rating_key: &str) -> anyhow::Result<()> {
         let endpoint = format!("/playlists/{rating_key}");
-        let response = self
-            .client
-            .delete(format!("{}{endpoint}", self.config.base_url))
-            .header("Accept", "application/json")
-            .header("X-Plex-Token", &self.config.token)
-            .send()?;
-        Self::ensure_success(&endpoint, response).map(drop)
+        let request = self.client.delete(self.url(&endpoint));
+        self.send(&endpoint, request).map(drop)
     }
 }
 
@@ -338,14 +321,26 @@ impl HttpPlexLibraryRepository {
         path: &str,
         query: &[(&str, &str)],
     ) -> anyhow::Result<T> {
-        let response = self
-            .client
-            .get(format!("{}{path}", self.config.base_url))
-            .query(query)
+        let request = self.client.get(self.url(path)).query(query);
+        Ok(self.send(path, request)?.json()?)
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.config.base_url)
+    }
+
+    /// Sends `request` (to `path`) authenticated, failing unless Plex
+    /// replies with a success.
+    fn send(
+        &self,
+        path: &str,
+        request: reqwest::blocking::RequestBuilder,
+    ) -> anyhow::Result<reqwest::blocking::Response> {
+        let response = request
             .header("Accept", "application/json")
             .header("X-Plex-Token", &self.config.token)
             .send()?;
-        Ok(Self::ensure_success(path, response)?.json()?)
+        Self::ensure_success(path, response)
     }
 
     /// Passes a successful response through; otherwise fails with the
