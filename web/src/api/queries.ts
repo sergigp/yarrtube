@@ -27,6 +27,7 @@ import {
   updatePlaylist,
   type UpdateChannelRequest,
   type UpdatePlaylistRequest,
+  type VideoSourceRef,
 } from './client'
 import type {
   Announcement,
@@ -147,6 +148,21 @@ export function usePlaylistVideos(id: string): UseQueryResult<Video[], Error> {
   return useQuery({
     queryKey: queryKeys.playlistVideos(id),
     queryFn: liveVideos(() => fetchVideos(id)),
+    refetchInterval: LIVE_INTERVAL_MS,
+  })
+}
+
+/**
+ * The videos of `source`, a channel or playlist, sharing its detail view's
+ * query; idle while `source` is null.
+ */
+export function useSourceVideos(source: VideoSourceRef | null): UseQueryResult<Video[], Error> {
+  const kind = source?.kind
+  const id = source?.id ?? ''
+  return useQuery({
+    queryKey: kind === 'channel' ? queryKeys.channelVideos(id) : queryKeys.playlistVideos(id),
+    queryFn: liveVideos(() => (kind === 'channel' ? fetchChannelVideos(id) : fetchVideos(id))),
+    enabled: source !== null,
     refetchInterval: LIVE_INTERVAL_MS,
   })
 }

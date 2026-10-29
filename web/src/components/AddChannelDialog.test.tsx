@@ -231,11 +231,8 @@ describe('AddChannelDialog', () => {
     const addWithCategories = async () => {
       const user = userEvent.setup()
       await user.type(screen.getByLabelText('Channel Handle or URL'), '@chan')
-      const field = screen.getByRole('combobox', { name: 'Categories' })
-      await user.type(field, 'che')
-      await user.click(await screen.findByRole('option', { name: 'Chess' }))
-      await user.type(field, 'str')
-      await user.click(await screen.findByRole('option', { name: 'Streams' }))
+      await user.click(await screen.findByRole('button', { name: 'Chess' }))
+      await user.click(screen.getByRole('button', { name: 'Streams' }))
       const submit = screen.getByRole('button', { name: 'Create Channel' })
       await waitFor(() => expect(submit).toBeEnabled())
       await user.click(submit)

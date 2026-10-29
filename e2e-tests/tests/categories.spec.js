@@ -91,9 +91,9 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
   const channelName = await test.step('assign a new channel to it from the add channel dialog', async () => {
     await openAddChannelDialog(page)
     await fillChannel(page, { handle: CHANNEL_HANDLE, videoLimit: 1 })
-    await dialog.getByRole('combobox', { name: 'Categories' }).fill('Board')
-    await dialog.getByRole('option', { name: 'Board games' }).click()
-    await expect(dialog.getByRole('list', { name: 'Chosen categories' })).toHaveText('Board games')
+    const categoryChip = dialog.getByRole('button', { name: 'Board games', exact: true })
+    await categoryChip.click()
+    await expect(categoryChip).toHaveAttribute('aria-pressed', 'true')
     await dialog.getByRole('button', { name: /^Create Channel/ }).click()
     await dialog.waitFor({ state: 'hidden' })
     const [{ name }] = await (await page.request.get('/api/channels')).json()

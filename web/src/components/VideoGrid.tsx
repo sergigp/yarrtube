@@ -16,6 +16,8 @@ interface VideoGridProps {
   videos: HomeVideo[]
   /** Category id → color; tints each card by its categories. Absent leaves cards untinted. */
   categoryColors?: Map<string, string>
+  /** Where a card leads; absent, to the video in its channel or playlist. */
+  videoPathOf?: (video: HomeVideo) => string
 }
 
 /** The colors of the video's categories, in its order, up to the 4 that make a card grey. */
@@ -24,7 +26,7 @@ function colorsOf(video: HomeVideo, categoryColors: Map<string, string>): string
 }
 
 /** Home-style video cards, each linking to its video in its source. */
-export function VideoGrid({ videos, categoryColors }: VideoGridProps) {
+export function VideoGrid({ videos, categoryColors, videoPathOf }: VideoGridProps) {
   if (videos.length === 0) {
     return <p className="text-sm text-muted-foreground">No videos synced yet.</p>
   }
@@ -32,7 +34,8 @@ export function VideoGrid({ videos, categoryColors }: VideoGridProps) {
   return (
     <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {videos.map((video, index) => {
-        const videoPath = `${videoDetailPath(video.source)}${encodeURIComponent(video.id)}`
+        const videoPath =
+          videoPathOf?.(video) ?? `${videoDetailPath(video.source)}${encodeURIComponent(video.id)}`
         const channelPath = video.source.kind === 'channel' ? `/channels/${video.source.id}` : null
         return (
           <li

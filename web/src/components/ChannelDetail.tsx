@@ -97,7 +97,7 @@ export function ChannelDetail() {
 
         <VideoListPane
           noun="channel"
-          basePath={channel.path}
+          basePathOf={() => channel.path}
           videos={videos}
           error={error}
           selectedVideoId={selectedVideo?.id ?? null}

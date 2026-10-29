@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { EditChannelDialog } from './EditChannelDialog'
 import {
@@ -195,7 +195,7 @@ describe('EditChannelDialog', () => {
     )
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: 'Remove Chess' }))
+    await user.click(await screen.findByRole('button', { name: 'Chess', pressed: true }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
@@ -213,14 +213,12 @@ describe('EditChannelDialog', () => {
       vi.fn(async () => {}),
       { 'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]) },
     )
-    const field = screen.getByRole('combobox', { name: 'Categories' })
-    await screen.findByText('Categories')
+    const field = screen.getByRole('textbox', { name: 'New category' })
+    await screen.findByRole('button', { name: 'Chess' })
 
-    await userEvent.setup().type(field, 'che{Enter}')
+    await userEvent.setup().type(field, 'chess{Enter}')
 
-    expect(
-      await within(screen.getByRole('list', { name: 'Chosen categories' })).findByText('Chess'),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Chess', pressed: true })).toBeInTheDocument()
     expect(onOpenChange).not.toHaveBeenCalled()
     expect(onSave).not.toHaveBeenCalled()
   })

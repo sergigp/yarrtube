@@ -30,12 +30,21 @@ function VideoStatusIndicator({ status }: { status: VideoStatus }) {
   )
 }
 
-interface VideoListPaneProps {
-  /** Names the container in the empty message ("channel" or "playlist"). */
+/**
+ * What a list row shows of a video. `status` is absent for videos only ever
+ * listed once downloaded (a category's).
+ */
+export type ListVideo = Pick<
+  Video,
+  'id' | 'title' | 'thumbnail_filename' | 'watched' | 'position_seconds' | 'duration_seconds'
+> & { status?: VideoStatus }
+
+interface VideoListPaneProps<T extends ListVideo> {
+  /** Names the container in the empty message ("channel", "playlist" or "category"). */
   noun: string
-  /** The channel/playlist path the thumbnails are served under. */
-  basePath: string
-  videos: Video[] | undefined
+  /** The channel/playlist path a video's thumbnail is served under. */
+  basePathOf: (video: T) => string
+  videos: T[] | undefined
   error: Error | null
   selectedVideoId: string | null
   onSelect: (id: string) => void
@@ -48,14 +57,14 @@ interface VideoListPaneProps {
  * row's select button, not inside it, so opening it never selects the video;
  * the selected row has none, since its detail pane shows one.
  */
-export function VideoListPane({
+export function VideoListPane<T extends ListVideo>({
   noun,
-  basePath,
+  basePathOf,
   videos,
   error,
   selectedVideoId,
   onSelect,
-}: VideoListPaneProps) {
+}: VideoListPaneProps<T>) {
   return (
     <div className="md:h-full md:min-h-0 md:overflow-y-auto">
       {error && <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>}
@@ -83,7 +92,7 @@ export function VideoListPane({
                     <Thumbnail
                       src={
                         video.thumbnail_filename
-                          ? videoMediaUrl(basePath, video.thumbnail_filename)
+                          ? videoMediaUrl(basePathOf(video), video.thumbnail_filename)
                           : null
                       }
                       className={cn(
@@ -110,7 +119,7 @@ export function VideoListPane({
                   >
                     {video.title}
                   </span>
-                  <VideoStatusIndicator status={video.status} />
+                  {video.status && <VideoStatusIndicator status={video.status} />}
                 </button>
                 {active ? (
                   // The detail pane holds the selected video's menu; the
@@ -120,7 +129,7 @@ export function VideoListPane({
                   <VideoActionsMenu
                     videoId={video.id}
                     title={video.title}
-                    markable={!video.watched && video.status === 'DOWNLOADED'}
+                    markable={!video.watched && (video.status ?? 'DOWNLOADED') === 'DOWNLOADED'}
                     className="mt-2"
                   />
                 )}
