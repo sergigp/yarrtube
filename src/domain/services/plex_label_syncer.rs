@@ -108,11 +108,8 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
         let desired = self.desired_labels(&rows)?;
         let labelled = rows
             .into_iter()
-            .map(|row| self.label(row, &desired, &episodes))
-            .collect::<anyhow::Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>();
+            .filter_map(|row| self.label(row, &desired, &episodes).transpose())
+            .collect::<anyhow::Result<Vec<_>>>()?;
         self.episode_labels_repository.save_many(&labelled)
     }
 }
