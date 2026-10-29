@@ -45,8 +45,14 @@ impl EpisodeLabelsRepository for SqliteEpisodeLabelsRepository {
             .collect())
     }
 
-    fn list_dirty(&self, _limit: usize) -> anyhow::Result<Vec<EpisodeLabels>> {
-        Ok(Vec::new())
+    fn list_dirty(&self, limit: usize) -> anyhow::Result<Vec<EpisodeLabels>> {
+        self.query(
+            &format!(
+                "SELECT {COLUMNS} FROM episode_labels WHERE dirty = 1
+                 ORDER BY checked_at IS NOT NULL, checked_at, video_id LIMIT {limit}"
+            ),
+            [],
+        )
     }
 
     fn list_synced(&self) -> anyhow::Result<Vec<EpisodeLabels>> {
@@ -170,6 +176,42 @@ mod tests {
             .unwrap();
 
         assert_eq!(found, vec![synced, pending("rec2")]);
+    }
+
+    #[test]
+    fn it_should_list_dirty_rows_least_recently_checked_first_up_to_a_limit() {
+        let db = TestDatabase::new();
+        let repository = SqliteEpisodeLabelsRepository::new(db.database());
+        repository
+            .save_many(&[
+                checked("rec1", "2026-10-29T10:00:00Z"),
+                pending("rec2"),
+                EpisodeLabels {
+                    dirty: false,
+                    ..pending("rec3")
+                },
+                checked("rec4", "2026-10-29T09:00:00Z"),
+                checked("rec5", "2026-10-29T11:00:00Z"),
+            ])
+            .unwrap();
+
+        let dirty = repository.list_dirty(3).unwrap();
+
+        assert_eq!(
+            dirty,
+            vec![
+                pending("rec2"),
+                checked("rec4", "2026-10-29T09:00:00Z"),
+                checked("rec1", "2026-10-29T10:00:00Z"),
+            ]
+        );
+    }
+
+    fn checked(id: &str, at_time: &str) -> EpisodeLabels {
+        EpisodeLabels {
+            checked_at: Some(at(at_time)),
+            ..pending(id)
+        }
     }
 
     fn pending(id: &str) -> EpisodeLabels {
