@@ -16,6 +16,7 @@ use crate::infrastructure::repositories::sqlite_video_metadata_repository::Video
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use crate::infrastructure::shared::video_lock::VideoLock;
+use std::path::Path;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -158,24 +159,30 @@ impl VideoReconciler {
         }
     }
 
-    /// Resets a `Downloaded` video whose file is missing, so it is
-    /// downloaded again.
+    /// Resets a `Downloaded` video whose file is missing or not mp4 (a stale
+    /// container downloaded before yt-dlp always remuxed to mp4, see
+    /// `args_for_quality`), so it is downloaded again; the pass's orphan
+    /// sweep removes the stale file.
     fn reset_if_broken(&self, video: Video, target: &VideoTarget) -> anyhow::Result<Video> {
-        if video.status != VideoStatus::Downloaded || self.has_file(&video, target) {
+        if video.status != VideoStatus::Downloaded || self.has_healthy_file(&video, target) {
             return Ok(video);
         }
         warn!(
             video_id = %video.youtube_id,
             filename = video.filename.as_deref().unwrap_or(""),
-            "downloaded video's file is missing, resetting for redownload"
+            "downloaded video's file is missing or not mp4, resetting for redownload"
         );
         self.reset_for_redownload(video)
     }
 
-    fn has_file(&self, video: &Video, target: &VideoTarget) -> bool {
+    /// A video's file is healthy when it exists and is an mp4.
+    fn has_healthy_file(&self, video: &Video, target: &VideoTarget) -> bool {
         video.filename.as_deref().is_some_and(|filename| {
             self.video_file_repository
                 .file_exists(&target.output_dir, filename)
+                && Path::new(filename)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("mp4"))
         })
     }
 
