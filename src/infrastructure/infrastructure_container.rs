@@ -69,6 +69,7 @@ use crate::infrastructure::shared::domain_events::event_repository::{
 use crate::infrastructure::shared::show_locks::ShowLocks;
 use crate::infrastructure::shared::sqlite_connection;
 use crate::infrastructure::shared::system_clock::{Clock, SystemClock};
+use crate::infrastructure::shared::video_lock::VideoLock;
 use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -117,6 +118,8 @@ pub struct InfrastructureContainer {
     pub show_locks: Arc<ShowLocks>,
     /// The one lock every video categories write takes.
     pub category_lock: Arc<CategoryLock>,
+    /// The one lock every video sync takes.
+    pub video_lock: Arc<VideoLock>,
 }
 
 impl InfrastructureContainer {
@@ -177,6 +180,7 @@ impl InfrastructureContainer {
             ytdlp_updater: Arc::new(RealYtdlpUpdater),
             show_locks: Arc::new(ShowLocks::default()),
             category_lock: Arc::new(CategoryLock::default()),
+            video_lock: Arc::new(VideoLock::default()),
             clock,
         })
     }

@@ -1,4 +1,5 @@
 use crate::domain::task::{DeadLetteredTask, ScheduledTask, Task, TaskStatus};
+use crate::domain::video::VideoRecordId;
 use crate::infrastructure::shared::sqlite_connection::Database;
 use crate::infrastructure::shared::system_clock::Clock;
 use anyhow::Context;
@@ -26,6 +27,12 @@ pub trait TaskRepository: Send + Sync {
     fn list_non_completed(&self) -> anyhow::Result<Vec<ScheduledTask>>;
     /// The pending task with this type and payload, if any.
     fn find_pending(&self, task: &Task) -> anyhow::Result<Option<ScheduledTask>>;
+    /// The pending or running task of `task_type` for `video_id`, if any.
+    fn find_non_completed_for_video(
+        &self,
+        task_type: &str,
+        video_id: &VideoRecordId,
+    ) -> anyhow::Result<Option<ScheduledTask>>;
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()>;
     fn delete(&self, id: i64) -> anyhow::Result<()>;
     /// Atomically inserts `task` into the dead-letter table and deletes the
@@ -265,6 +272,14 @@ impl TaskRepository for SqliteTaskRepository {
         .optional()
         .inspect_err(|e| tracing::error!(error = %e, "failed to find pending task"))
         .context("failed to find pending task")
+    }
+
+    fn find_non_completed_for_video(
+        &self,
+        _task_type: &str,
+        _video_id: &VideoRecordId,
+    ) -> anyhow::Result<Option<ScheduledTask>> {
+        Ok(None)
     }
 
     fn update(&self, task: &ScheduledTask) -> anyhow::Result<()> {

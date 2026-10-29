@@ -32,11 +32,14 @@ mod tests {
     use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::services::MetadataGenerator;
     use crate::domain::services::VideoCategoryAssigner;
+    use crate::domain::services::VideoRelocator;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::{EpisodeNumber, Video, VideoId};
     use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
+    use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
     };
@@ -58,9 +61,11 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_video_categories_repository::{
         SqliteVideoCategoriesRepository, VideoCategoriesRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
     use crate::infrastructure::shared::category_lock::CategoryLock;
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{
@@ -68,6 +73,7 @@ mod tests {
     };
     use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
+    use crate::infrastructure::shared::video_lock::VideoLock;
     use chrono::{DateTime, Utc};
     use std::sync::Arc;
 
@@ -98,12 +104,25 @@ mod tests {
             ))
             .unwrap();
         let task = SyncVideoTask::new(VideoReconciler::new(
-            video_repository,
+            video_repository.clone(),
             channel_video_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
             video_category_assigner(db.database()),
@@ -156,12 +175,25 @@ mod tests {
             ))
             .unwrap();
         let task = SyncVideoTask::new(VideoReconciler::new(
-            video_repository,
+            video_repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             playlist_video_repository,
             Arc::new(SqliteChannelRepository::new(db.database())),
             playlist_repository,
             task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
             video_category_assigner(db.database()),
@@ -210,12 +242,25 @@ mod tests {
             &video,
         );
         let task = SyncVideoTask::new(VideoReconciler::new(
-            video_repository,
+            video_repository.clone(),
             channel_video_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
             video_category_assigner(db.database()),
@@ -258,12 +303,25 @@ mod tests {
         );
         video_repository.update_subtitles(&video).unwrap();
         let task = SyncVideoTask::new(VideoReconciler::new(
-            video_repository,
+            video_repository.clone(),
             channel_video_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
             video_category_assigner(db.database()),
@@ -296,12 +354,25 @@ mod tests {
             .schedule(&download_video(&video), fixed_timestamp())
             .unwrap();
         let task = SyncVideoTask::new(VideoReconciler::new(
-            video_repository,
+            video_repository.clone(),
             channel_video_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
             video_category_assigner(db.database()),
@@ -340,12 +411,25 @@ mod tests {
             .schedule(&download_video(&video), fixed_timestamp())
             .unwrap();
         let task = SyncVideoTask::new(VideoReconciler::new(
-            video_repository,
+            video_repository.clone(),
             channel_video_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
             video_category_assigner(db.database()),
@@ -378,12 +462,25 @@ mod tests {
             &video,
         );
         let task = SyncVideoTask::new(VideoReconciler::new(
-            video_repository,
+            video_repository.clone(),
             channel_video_repository,
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
             video_category_assigner(db.database()),
@@ -423,6 +520,19 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
             VideoCategoryAssigner::new(
@@ -488,7 +598,7 @@ mod tests {
             ))
             .unwrap();
         let task = SyncVideoTask::new(VideoReconciler::new(
-            video_repository,
+            video_repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteChannelRepository::new(db.database())),
@@ -497,6 +607,19 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
             VideoCategoryAssigner::new(
@@ -538,6 +661,19 @@ mod tests {
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                Arc::new(SqliteVideoRepository::new(db.database())),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
             video_category_assigner(db.database()),
@@ -560,12 +696,25 @@ mod tests {
         let video = my_video();
         video_repository.save(&video).unwrap();
         let task = SyncVideoTask::new(VideoReconciler::new(
-            video_repository,
+            video_repository.clone(),
             Arc::new(SqliteChannelVideoRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository,
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
             video_category_assigner(db.database()),

@@ -6,6 +6,7 @@ pub mod show_locks;
 pub mod sqlite_connection;
 pub mod sqlite_migrations;
 pub mod system_clock;
+pub mod video_lock;
 pub mod web_assets;
 pub mod youtube_api_key;
 #[cfg(test)]
