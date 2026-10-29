@@ -207,11 +207,19 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
 
     fn save_labels(
         &self,
-        _episode: &PlexEpisode,
-        _labels: &PlexLabels,
-        _removed: &[String],
+        episode: &PlexEpisode,
+        labels: &PlexLabels,
+        removed: &[String],
     ) -> anyhow::Result<()> {
-        Ok(())
+        let endpoint = format!("/library/sections/{}/all", episode.section_id);
+        let response = self
+            .client
+            .put(format!("{}{endpoint}", self.config.base_url))
+            .query(&label_edit_query(episode, labels, removed))
+            .header("Accept", "application/json")
+            .header("X-Plex-Token", &self.config.token)
+            .send()?;
+        Self::ensure_success(&endpoint, response).map(drop)
     }
 
     fn list_playlists(&self) -> anyhow::Result<Vec<PlexPlaylist>> {
@@ -297,6 +305,32 @@ impl HttpPlexLibraryRepository {
             body => anyhow::bail!("Plex request to {path} failed with status {status}: {body}"),
         }
     }
+}
+
+/// The query of a label edit: each label added by index, the removed ones
+/// in one comma-joined `-=` param, and the field locked so Plex's agents
+/// never overwrite it.
+fn label_edit_query(
+    episode: &PlexEpisode,
+    labels: &PlexLabels,
+    removed: &[String],
+) -> Vec<(String, String)> {
+    let added = labels
+        .names()
+        .iter()
+        .enumerate()
+        .map(|(i, name)| (format!("label[{i}].tag.tag"), name.clone()));
+    let removed =
+        (!removed.is_empty()).then(|| ("label[].tag.tag-".to_string(), removed.join(",")));
+    [
+        ("type".to_string(), "4".to_string()),
+        ("id".to_string(), episode.rating_key.clone()),
+    ]
+    .into_iter()
+    .chain(added)
+    .chain(removed)
+    .chain([("label.locked".to_string(), "1".to_string())])
+    .collect()
 }
 
 /// One episode per file of `metadata`'s media parts.
@@ -789,6 +823,31 @@ mod tests {
                 "Funny".to_string()
             ]))
         );
+    }
+
+    #[test]
+    fn it_should_save_labels_removing_the_others() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("PUT", "/library/sections/19/all")
+            .match_query(mockito::Matcher::Exact(
+                "type=4&id=101&label%5B0%5D.tag.tag=Chess&label%5B1%5D.tag.tag=M%C3%BAsica\
+                 &label%5B%5D.tag.tag-=Old%2COther+one&label.locked=1"
+                    .to_string(),
+            ))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.save_labels(
+            &episode("101", "/volume1/a.mp4"),
+            &PlexLabels::new(vec!["Chess".to_string(), "Música".to_string()]),
+            &["Old".to_string(), "Other one".to_string()],
+        );
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
     }
 
     #[test]
