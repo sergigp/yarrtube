@@ -4,6 +4,7 @@ use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::show::ShowMoved;
 use crate::domain::video::{VideoDownloaded, VideoSubtitlesFetched};
+use crate::domain::video_category::VideoCategoriesChanged;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -22,6 +23,7 @@ pub enum DomainEvent {
     VideoDownloaded(VideoDownloaded),
     VideoSubtitlesFetched(VideoSubtitlesFetched),
     ShowMoved(ShowMoved),
+    VideoCategoriesChanged(VideoCategoriesChanged),
 }
 
 impl DomainEvent {
@@ -38,6 +40,7 @@ impl DomainEvent {
             Self::VideoDownloaded(_) => VideoDownloaded::EVENT_TYPE,
             Self::VideoSubtitlesFetched(_) => VideoSubtitlesFetched::EVENT_TYPE,
             Self::ShowMoved(_) => ShowMoved::EVENT_TYPE,
+            Self::VideoCategoriesChanged(_) => VideoCategoriesChanged::EVENT_TYPE,
         }
     }
 
@@ -54,6 +57,7 @@ impl DomainEvent {
             Self::VideoDownloaded(event) => to_payload(event),
             Self::VideoSubtitlesFetched(event) => to_payload(event),
             Self::ShowMoved(event) => to_payload(event),
+            Self::VideoCategoriesChanged(event) => to_payload(event),
         }
     }
 }

@@ -185,6 +185,7 @@ mod tests {
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::ShowFileWriter;
+    use crate::domain::services::VideoCategoryAssigner;
     use crate::domain::services::VideoReconciler;
     use crate::domain::services::VideoRelocator;
     use crate::domain::show::ShowMoved;
@@ -211,6 +212,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
@@ -230,6 +232,7 @@ mod tests {
         EventRepository, SqliteEventRepository,
     };
     use crate::infrastructure::shared::show_locks::ShowLocks;
+    use crate::infrastructure::shared::sqlite_connection::Database;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
@@ -886,6 +889,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -929,6 +933,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             task_repository.clone(),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -979,6 +984,7 @@ mod tests {
             Arc::new(FakeChannelAvatarRepository::default()),
             event_publisher(&db),
             task_repository.clone(),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1034,6 +1040,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1088,6 +1095,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1122,6 +1130,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         );
 
         let response = delete(channel_deleter, "@somechannel").await;
@@ -1154,6 +1163,7 @@ mod tests {
                 db.database(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         );
 
         let response = delete(channel_deleter, "@missing").await;
@@ -2429,6 +2439,7 @@ mod tests {
                 unused_connection(),
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
+            Arc::new(SqliteVideoCategoriesRepository::new(unused_connection())),
         )
     }
 
@@ -2480,6 +2491,7 @@ mod tests {
                     task_repository.clone(),
                     Arc::new(FixedClock(fixed_timestamp())),
                     "/videos",
+                    video_category_assigner(db.database()),
                 ),
                 Arc::new(VideoRelocator::new(
                     Arc::new(SqliteVideoRepository::new(db.database())),
@@ -2502,6 +2514,8 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
+            video_category_assigner(db.database()),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         )
     }
 
@@ -2537,6 +2551,7 @@ mod tests {
                     task_repository.clone(),
                     Arc::new(FixedClock(fixed_timestamp())),
                     "/videos",
+                    video_category_assigner(unused_connection()),
                 ),
                 Arc::new(VideoRelocator::new(
                     Arc::new(SqliteVideoRepository::new(unused_connection())),
@@ -2559,6 +2574,8 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
+            video_category_assigner(unused_connection()),
+            Arc::new(SqliteVideoCategoriesRepository::new(unused_connection())),
         )
     }
 
@@ -2592,6 +2609,7 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         )
     }
 
@@ -2603,6 +2621,7 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
             Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqliteVideoCategoriesRepository::new(unused_connection())),
         )
     }
 
@@ -2975,5 +2994,18 @@ mod tests {
         channel_handle: &str,
     ) -> Result<StatusCode, ApiError> {
         reconcile_channel(State(reconciler), Path(channel_handle.to_string())).await
+    }
+
+    fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
+        VideoCategoryAssigner::new(
+            Arc::new(SqliteVideoCategoriesRepository::new(database.clone())),
+            Arc::new(SqliteCategoryRepository::new(database.clone())),
+            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
+            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
+            Arc::new(SqliteEventPublisher::new(
+                database,
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+        )
     }
 }

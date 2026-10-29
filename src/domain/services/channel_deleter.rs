@@ -6,6 +6,7 @@ use crate::infrastructure::repositories::filesystem_channel_avatar_repository::C
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
+use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
@@ -22,6 +23,7 @@ pub struct ChannelDeleter {
     avatar_repository: Arc<dyn ChannelAvatarRepository>,
     event_publisher: Arc<dyn EventPublisher>,
     task_repository: Arc<dyn TaskRepository>,
+    video_categories_repository: Arc<dyn VideoCategoriesRepository>,
 }
 
 impl ChannelDeleter {
@@ -33,6 +35,7 @@ impl ChannelDeleter {
         avatar_repository: Arc<dyn ChannelAvatarRepository>,
         event_publisher: Arc<dyn EventPublisher>,
         task_repository: Arc<dyn TaskRepository>,
+        video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     ) -> Self {
         Self {
             repository,
@@ -42,6 +45,7 @@ impl ChannelDeleter {
             avatar_repository,
             event_publisher,
             task_repository,
+            video_categories_repository,
         }
     }
 }

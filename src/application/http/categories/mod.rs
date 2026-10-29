@@ -143,6 +143,7 @@ mod tests {
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::CategoryVideoCollector;
+    use crate::domain::services::VideoCategoryAssigner;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{Video, VideoId};
     use crate::infrastructure::repositories::sqlite_category_repository::{
@@ -160,9 +161,11 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
@@ -738,6 +741,7 @@ mod tests {
             repository.clone(),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = rename(category_updater, chess.id.as_str(), "Board games").await;
@@ -767,6 +771,7 @@ mod tests {
             repository.clone(),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = update(
@@ -799,6 +804,7 @@ mod tests {
             repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = update(
@@ -832,6 +838,7 @@ mod tests {
             repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = rename(category_updater, chess.id.as_str(), "Chess").await;
@@ -858,6 +865,7 @@ mod tests {
             repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = rename(category_updater, chess.id.as_str(), "sports").await;
@@ -884,6 +892,7 @@ mod tests {
             repository.clone(),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = update(
@@ -958,6 +967,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = rename(category_updater, "missing", "Chess").await;
@@ -997,7 +1007,8 @@ mod tests {
             ..category(None, "Chess")
         };
         repository.insert(&chess).unwrap();
-        let category_deleter = CategoryDeleter::new(repository.clone());
+        let category_deleter =
+            CategoryDeleter::new(repository.clone(), video_category_assigner(db.database()));
 
         let response = delete(category_deleter, chess.id.as_str()).await;
 
@@ -1011,8 +1022,10 @@ mod tests {
     #[tokio::test]
     async fn it_should_fail_to_delete_a_missing_category() {
         let db = TestDatabase::new();
-        let category_deleter =
-            CategoryDeleter::new(Arc::new(SqliteCategoryRepository::new(db.database())));
+        let category_deleter = CategoryDeleter::new(
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            video_category_assigner(db.database()),
+        );
 
         let response = delete(category_deleter, "missing").await;
 
@@ -1036,8 +1049,12 @@ mod tests {
         playlist_repository.insert(&playlist("PLendgames")).unwrap();
         let chess = category(None, "Chess");
         repository.insert(&chess).unwrap();
-        let category_updater =
-            CategoryUpdater::new(repository.clone(), channel_repository, playlist_repository);
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            playlist_repository,
+            video_category_assigner(db.database()),
+        );
 
         let response = set_members(
             category_updater,
@@ -1076,6 +1093,7 @@ mod tests {
             repository.clone(),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = set_members(
@@ -1105,8 +1123,12 @@ mod tests {
         playlist_repository.insert(&playlist("PLendgames")).unwrap();
         let chess = category(None, "Chess");
         repository.insert(&chess).unwrap();
-        let category_updater =
-            CategoryUpdater::new(repository.clone(), channel_repository, playlist_repository);
+        let category_updater = CategoryUpdater::new(
+            repository.clone(),
+            channel_repository,
+            playlist_repository,
+            video_category_assigner(db.database()),
+        );
 
         let response = set_members(
             category_updater,
@@ -1142,6 +1164,7 @@ mod tests {
             repository.clone(),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = set_members(
@@ -1179,6 +1202,7 @@ mod tests {
             repository.clone(),
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = set_members(
@@ -1219,6 +1243,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(db.database())),
             Arc::new(SqliteChannelRepository::new(db.database())),
             Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
         );
 
         let response = set_members(category_updater, "missing", members_request(&[], &[])).await;
@@ -1340,6 +1365,7 @@ mod tests {
             Arc::new(SqliteCategoryRepository::new(unused_connection())),
             Arc::new(SqliteChannelRepository::new(unused_connection())),
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
+            video_category_assigner(unused_connection()),
         )
     }
 
@@ -1503,6 +1529,7 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         )
     }
 
@@ -1572,5 +1599,18 @@ mod tests {
         create_category(State(category_creator), Json(request))
             .await
             .map(|(status, Json(category))| (status, category))
+    }
+
+    fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
+        VideoCategoryAssigner::new(
+            Arc::new(SqliteVideoCategoriesRepository::new(database.clone())),
+            Arc::new(SqliteCategoryRepository::new(database.clone())),
+            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
+            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
+            Arc::new(SqliteEventPublisher::new(
+                database,
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+        )
     }
 }

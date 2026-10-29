@@ -6,6 +6,7 @@ use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepos
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use std::sync::Arc;
 
@@ -18,6 +19,7 @@ pub struct CategoryVideoCollector {
     playlist_repository: Arc<dyn PlaylistRepository>,
     playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
     video_repository: Arc<dyn VideoRepository>,
+    video_categories_repository: Arc<dyn VideoCategoriesRepository>,
 }
 
 impl CategoryVideoCollector {
@@ -27,6 +29,7 @@ impl CategoryVideoCollector {
         playlist_repository: Arc<dyn PlaylistRepository>,
         playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
         video_repository: Arc<dyn VideoRepository>,
+        video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     ) -> Self {
         Self {
             channel_repository,
@@ -34,6 +37,7 @@ impl CategoryVideoCollector {
             playlist_repository,
             playlist_video_repository,
             video_repository,
+            video_categories_repository,
         }
     }
 }

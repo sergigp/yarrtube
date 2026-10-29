@@ -3,7 +3,7 @@ use std::fmt;
 use uuid::Uuid;
 
 /// A category's identifier, generated when the category is created.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CategoryId(String);
 
 impl CategoryId {

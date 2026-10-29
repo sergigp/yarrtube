@@ -1,6 +1,7 @@
 use crate::domain::category::{
     Category, CategoryColor, CategoryId, CategoryMember, CategoryName, UpdateCategoryError,
 };
+use crate::domain::services::VideoCategoryAssigner;
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -19,6 +20,7 @@ pub struct CategoryUpdater {
     repository: Arc<dyn CategoryRepository>,
     channel_repository: Arc<dyn ChannelRepository>,
     playlist_repository: Arc<dyn PlaylistRepository>,
+    video_category_assigner: VideoCategoryAssigner,
 }
 
 impl CategoryUpdater {
@@ -26,11 +28,13 @@ impl CategoryUpdater {
         repository: Arc<dyn CategoryRepository>,
         channel_repository: Arc<dyn ChannelRepository>,
         playlist_repository: Arc<dyn PlaylistRepository>,
+        video_category_assigner: VideoCategoryAssigner,
     ) -> Self {
         Self {
             repository,
             channel_repository,
             playlist_repository,
+            video_category_assigner,
         }
     }
 }

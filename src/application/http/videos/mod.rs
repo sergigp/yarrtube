@@ -203,6 +203,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
         SqliteVideoMetadataRepository, VideoMetadataRepository,
     };
@@ -3803,6 +3804,7 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
             Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         )
     }
 
@@ -3815,6 +3817,7 @@ mod tests {
             Arc::new(SqlitePlaylistRepository::new(unused_connection())),
             Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
             Arc::new(SqliteVideoRepository::new(unused_connection())),
+            Arc::new(SqliteVideoCategoriesRepository::new(unused_connection())),
         )
     }
 

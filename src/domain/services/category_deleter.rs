@@ -1,4 +1,5 @@
 use crate::domain::category::{CategoryId, DeleteCategoryError};
+use crate::domain::services::VideoCategoryAssigner;
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use std::sync::Arc;
 
@@ -6,11 +7,18 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct CategoryDeleter {
     repository: Arc<dyn CategoryRepository>,
+    video_category_assigner: VideoCategoryAssigner,
 }
 
 impl CategoryDeleter {
-    pub fn new(repository: Arc<dyn CategoryRepository>) -> Self {
-        Self { repository }
+    pub fn new(
+        repository: Arc<dyn CategoryRepository>,
+        video_category_assigner: VideoCategoryAssigner,
+    ) -> Self {
+        Self {
+            repository,
+            video_category_assigner,
+        }
     }
 }
 

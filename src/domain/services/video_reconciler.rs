@@ -1,3 +1,4 @@
+use crate::domain::services::VideoCategoryAssigner;
 use crate::domain::shared::Quality;
 use crate::domain::video::{
     Video, VideoRecordId, VideoSyncPlan, VideoSyncStep, VideoTarget, resolve_output_dir,
@@ -24,6 +25,7 @@ pub struct VideoReconciler {
     task_repository: Arc<dyn TaskRepository>,
     clock: Arc<dyn Clock>,
     videos_path: String,
+    video_category_assigner: VideoCategoryAssigner,
 }
 
 impl VideoReconciler {
@@ -37,6 +39,7 @@ impl VideoReconciler {
         task_repository: Arc<dyn TaskRepository>,
         clock: Arc<dyn Clock>,
         videos_path: impl Into<String>,
+        video_category_assigner: VideoCategoryAssigner,
     ) -> Self {
         Self {
             video_repository,
@@ -47,6 +50,7 @@ impl VideoReconciler {
             task_repository,
             clock,
             videos_path: videos_path.into(),
+            video_category_assigner,
         }
     }
 }

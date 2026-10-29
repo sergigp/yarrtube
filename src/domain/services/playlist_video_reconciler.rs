@@ -5,7 +5,7 @@ use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::services::{
     DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, MembershipDelta,
-    ShowFileWriter, ShowFileWriterApi,
+    ShowFileWriter, ShowFileWriterApi, VideoCategoryAssigner,
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
@@ -13,6 +13,7 @@ use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
+use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::repositories::youtube_playlist_items_repository::{
@@ -43,6 +44,8 @@ pub struct PlaylistVideoReconciler {
     show_file_writer: Arc<ShowFileWriter>,
     clock: Arc<dyn Clock>,
     show_locks: Arc<ShowLocks>,
+    video_category_assigner: VideoCategoryAssigner,
+    video_categories_repository: Arc<dyn VideoCategoriesRepository>,
 }
 
 impl PlaylistVideoReconciler {
@@ -59,6 +62,8 @@ impl PlaylistVideoReconciler {
         show_file_writer: Arc<ShowFileWriter>,
         clock: Arc<dyn Clock>,
         show_locks: Arc<ShowLocks>,
+        video_category_assigner: VideoCategoryAssigner,
+        video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     ) -> Self {
         Self {
             playlist_repository,
@@ -72,6 +77,8 @@ impl PlaylistVideoReconciler {
             show_file_writer,
             clock,
             show_locks,
+            video_category_assigner,
+            video_categories_repository,
         }
     }
 }

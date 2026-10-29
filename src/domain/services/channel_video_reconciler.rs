@@ -5,6 +5,7 @@ use crate::domain::event::DomainEvent;
 use crate::domain::services::{
     ChannelAvatarRestorer, ChannelAvatarRestorerApi, DesiredState, InternalVideoReconciler,
     InternalVideoReconcilerApi, MembershipDelta, ShowFileWriter, ShowFileWriterApi,
+    VideoCategoryAssigner,
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
@@ -12,6 +13,7 @@ use crate::domain::video::{Video, VideoId, VideoRecordId, VideoStatus};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
+use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::repositories::sqlite_video_transcript_repository::VideoTranscriptRepository;
 use crate::infrastructure::repositories::youtube_channel_videos_repository::{
@@ -44,6 +46,8 @@ pub struct ChannelVideoReconciler {
     channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
     clock: Arc<dyn Clock>,
     show_locks: Arc<ShowLocks>,
+    video_category_assigner: VideoCategoryAssigner,
+    video_categories_repository: Arc<dyn VideoCategoriesRepository>,
 }
 
 impl ChannelVideoReconciler {
@@ -61,6 +65,8 @@ impl ChannelVideoReconciler {
         channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
         clock: Arc<dyn Clock>,
         show_locks: Arc<ShowLocks>,
+        video_category_assigner: VideoCategoryAssigner,
+        video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     ) -> Self {
         Self {
             channel_repository,
@@ -75,6 +81,8 @@ impl ChannelVideoReconciler {
             channel_avatar_restorer,
             clock,
             show_locks,
+            video_category_assigner,
+            video_categories_repository,
         }
     }
 }

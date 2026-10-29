@@ -30,9 +30,11 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::services::VideoCategoryAssigner;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::{EpisodeNumber, Video, VideoId};
+    use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -48,9 +50,12 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::sqlite_connection::Database;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
@@ -91,6 +96,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
+            video_category_assigner(db.database()),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -148,6 +154,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
+            video_category_assigner(db.database()),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -201,6 +208,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
+            video_category_assigner(db.database()),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -248,6 +256,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
+            video_category_assigner(db.database()),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -285,6 +294,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
+            video_category_assigner(db.database()),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -328,6 +338,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
+            video_category_assigner(db.database()),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -365,6 +376,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
+            video_category_assigner(db.database()),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -389,6 +401,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
+            video_category_assigner(db.database()),
         ));
 
         let result = run(&task, &payload_for(&my_video()));
@@ -416,6 +429,7 @@ mod tests {
             task_repository.clone(),
             Arc::new(FixedClock(fixed_timestamp())),
             "/videos",
+            video_category_assigner(db.database()),
         ));
 
         let result = run(&task, &payload_for(&video));
@@ -545,5 +559,18 @@ mod tests {
 
     fn run(task: &SyncVideoTask, payload: &str) -> Result<(), String> {
         task.handle(payload, false).map_err(|e| e.to_string())
+    }
+
+    fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
+        VideoCategoryAssigner::new(
+            Arc::new(SqliteVideoCategoriesRepository::new(database.clone())),
+            Arc::new(SqliteCategoryRepository::new(database.clone())),
+            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
+            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
+            Arc::new(SqliteEventPublisher::new(
+                database,
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+        )
     }
 }

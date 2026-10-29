@@ -481,22 +481,27 @@ mod tests {
     use super::*;
     use crate::application::tasks::log_capture::captured_log_messages;
     use crate::domain::services::MetadataGenerator;
+    use crate::domain::services::VideoCategoryAssigner;
     use crate::domain::task::Task;
     use crate::domain::task::TaskStatus;
     use crate::domain::video::{EpisodeNumber, VideoId};
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
+    use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
     use crate::infrastructure::repositories::sqlite_channel_repository::SqliteChannelRepository;
     use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
     use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::youtube_metadata_repository::{
         FakeYoutubeMetadataRepository, YoutubeMetadata,
     };
     use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::sqlite_connection::Database;
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use crate::infrastructure::shared::ytdlp::FetchedThumbnail;
@@ -1186,6 +1191,7 @@ mod tests {
                 task_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
                 videos_root.path().to_string_lossy(),
+                video_category_assigner(db.database()),
             ),
             Arc::new(VideoRelocator::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1287,6 +1293,7 @@ mod tests {
                 task_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
                 videos_root.path().to_string_lossy(),
+                video_category_assigner(db.database()),
             ),
             Arc::new(VideoRelocator::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1410,6 +1417,7 @@ mod tests {
                 task_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
                 videos_root.path().to_string_lossy(),
+                video_category_assigner(db.database()),
             ),
             Arc::new(VideoRelocator::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1480,6 +1488,7 @@ mod tests {
                 task_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
                 videos_root.path().to_string_lossy(),
+                video_category_assigner(db.database()),
             ),
             Arc::new(VideoRelocator::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1550,6 +1559,7 @@ mod tests {
                 task_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
+                video_category_assigner(db.database()),
             ),
             Arc::new(VideoRelocator::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1616,6 +1626,7 @@ mod tests {
                 task_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
+                video_category_assigner(db.database()),
             ),
             Arc::new(VideoRelocator::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1680,6 +1691,7 @@ mod tests {
                 task_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
+                video_category_assigner(db.database()),
             ),
             Arc::new(VideoRelocator::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1788,6 +1800,7 @@ mod tests {
                 task_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
+                video_category_assigner(db.database()),
             ),
             Arc::new(VideoRelocator::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1843,6 +1856,7 @@ mod tests {
                 task_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
+                video_category_assigner(db.database()),
             ),
             Arc::new(VideoRelocator::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -1935,6 +1949,7 @@ mod tests {
                 task_repository.clone(),
                 Arc::new(FixedClock(fixed_timestamp())),
                 "/videos",
+                video_category_assigner(db.database()),
             ),
             Arc::new(VideoRelocator::new(
                 Arc::new(SqliteVideoRepository::new(db.database())),
@@ -2060,5 +2075,18 @@ mod tests {
         reconciler
             .reconcile(desired, delta)
             .map_err(|e| e.to_string())
+    }
+
+    fn video_category_assigner(database: Database) -> VideoCategoryAssigner {
+        VideoCategoryAssigner::new(
+            Arc::new(SqliteVideoCategoriesRepository::new(database.clone())),
+            Arc::new(SqliteCategoryRepository::new(database.clone())),
+            Arc::new(SqliteChannelVideoRepository::new(database.clone())),
+            Arc::new(SqlitePlaylistVideoRepository::new(database.clone())),
+            Arc::new(SqliteEventPublisher::new(
+                database,
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+        )
     }
 }

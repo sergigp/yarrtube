@@ -7,8 +7,8 @@ use crate::domain::services::{
     DirectorySearcher, InternalVideoReconciler, LayoutMigrator, MetadataGenerator, PlaylistCreator,
     PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater, PlaylistVideoReconciler,
     PlaylistViewSearcher, PlexFolderScanner, ShowFileWriter, ShowMover, SubtitleFetcher,
-    SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter,
-    VideoReconciler, VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
+    SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoCategoryAssigner, VideoDownloader,
+    VideoFileDeleter, VideoReconciler, VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -408,6 +408,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.playlist_video_repository.clone(),
             infrastructure.event_publisher.clone(),
             infrastructure.task_repository.clone(),
+            infrastructure.video_categories_repository.clone(),
         ),
         playlist_previewer: PlaylistPreviewer::new(
             infrastructure.youtube_playlist_repository.clone(),
@@ -460,6 +461,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.channel_avatar_repository.clone(),
             infrastructure.event_publisher.clone(),
             infrastructure.task_repository.clone(),
+            infrastructure.video_categories_repository.clone(),
         ),
         channel_previewer: ChannelPreviewer::new(infrastructure.youtube_channel_repository.clone()),
         channel_updater: ChannelUpdater::new(
@@ -506,8 +508,12 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.category_repository.clone(),
             infrastructure.channel_repository.clone(),
             infrastructure.playlist_repository.clone(),
+            video_category_assigner(infrastructure),
         ),
-        category_deleter: CategoryDeleter::new(infrastructure.category_repository.clone()),
+        category_deleter: CategoryDeleter::new(
+            infrastructure.category_repository.clone(),
+            video_category_assigner(infrastructure),
+        ),
         category_view_searcher: CategoryViewSearcher::new(
             infrastructure.category_repository.clone(),
             infrastructure.channel_repository.clone(),
@@ -537,6 +543,7 @@ fn category_video_collector(infrastructure: &InfrastructureContainer) -> Categor
         infrastructure.playlist_repository.clone(),
         infrastructure.playlist_video_repository.clone(),
         infrastructure.video_repository.clone(),
+        infrastructure.video_categories_repository.clone(),
     )
 }
 
@@ -613,6 +620,8 @@ fn playlist_video_reconciler(infrastructure: &InfrastructureContainer) -> Playli
         show_file_writer(infrastructure),
         infrastructure.clock.clone(),
         infrastructure.show_locks.clone(),
+        video_category_assigner(infrastructure),
+        infrastructure.video_categories_repository.clone(),
     )
 }
 
@@ -634,6 +643,8 @@ fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> Channel
         )),
         infrastructure.clock.clone(),
         infrastructure.show_locks.clone(),
+        video_category_assigner(infrastructure),
+        infrastructure.video_categories_repository.clone(),
     )
 }
 
@@ -691,6 +702,16 @@ fn internal_video_reconciler(
     ))
 }
 
+fn video_category_assigner(infrastructure: &InfrastructureContainer) -> VideoCategoryAssigner {
+    VideoCategoryAssigner::new(
+        infrastructure.video_categories_repository.clone(),
+        infrastructure.category_repository.clone(),
+        infrastructure.channel_video_repository.clone(),
+        infrastructure.playlist_video_repository.clone(),
+        infrastructure.event_publisher.clone(),
+    )
+}
+
 fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler {
     VideoReconciler::new(
         infrastructure.video_repository.clone(),
@@ -701,6 +722,7 @@ fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler
         infrastructure.task_repository.clone(),
         infrastructure.clock.clone(),
         videos_path(),
+        video_category_assigner(infrastructure),
     )
 }
 
