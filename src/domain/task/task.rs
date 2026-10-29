@@ -262,6 +262,7 @@ impl Task {
             "download_video" => TaskLane::Download,
             "fetch_thumbnail" => TaskLane::Thumbnail,
             "fetch_subtitles" => TaskLane::Subtitles,
+            "sync_video" => TaskLane::VideoSync,
             "update_ytdlp" => TaskLane::Exclusive,
             _ => TaskLane::Light,
         }
@@ -593,6 +594,11 @@ mod tests {
                 TaskLane::Light,
             ]
         );
+    }
+
+    #[test]
+    fn it_should_run_video_syncs_in_their_own_lane() {
+        assert_eq!(Task::lane_for("sync_video"), TaskLane::VideoSync);
     }
 
     #[test]

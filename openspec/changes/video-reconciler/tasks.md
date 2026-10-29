@@ -21,7 +21,7 @@
 - [x] 2.13 `it_should_schedule_only_the_download_of_a_video_reset_for_redownload` — `InternalVideoReconciler` delegates resets to `VideoReconciler::schedule_download` and every other stored video to `reconcile_video`; remove its own stranded/thumbnail/subtitle scheduling. Existing reconcile suites must stay green.
 - [x] 2.14 `it_should_schedule_no_step_for_a_video_added_by_the_same_pass` — added videos are left to their sync.
 - [x] 2.15 `it_should_list_a_video_sync_with_its_video_title_and_owner_name` — `TaskViewSearcher` resolves `sync_video`.
-- [ ] 2.16 `it_should_run_video_syncs_in_their_own_lane` — `Task::lane_for("sync_video")`.
+- [x] 2.16 `it_should_run_video_syncs_in_their_own_lane` — `Task::lane_for("sync_video")`.
 - [ ] 2.17 `it_should_give_a_video_sync_the_video_exclusivity_key` — per-video mutual exclusion.
 - [ ] 2.18 `describes a video sync with its video and container` (web, `tasks.test.ts`).
 - [ ] 2.19 `puts video syncs in the syncs family` (web, `tasks.test.ts`).
