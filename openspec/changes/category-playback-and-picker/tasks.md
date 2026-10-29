@@ -10,7 +10,7 @@
 - [x] 2.2 Categories field as toggle chips in category colors, with a "New category" field that creates or chooses by name (`CategoryPicker.tsx`): verified by `CategoryPicker.test.tsx` and the Add/Edit Channel/Playlist dialog tests (already in the working tree).
 - [x] 2.3 `it_should_list_category_videos_with_their_playback_fields`: a category video's entry carries status, quality, file name, sync time and subtitle language. Verified with `cargo test it_should_list_category_videos_with_their_playback_fields`.
 - [x] 2.4 `it_should_list_category_videos_with_their_metadata`: a category video's entry carries publish time, description and channel name from its metadata. Verified with `cargo test it_should_list_category_videos_with_their_metadata`.
-- [ ] 2.5 `it_should_list_category_videos_without_metadata_as_absent`: without generated metadata, those three fields are absent and the rest are still present. Verified with `cargo test it_should_list_category_videos_without_metadata_as_absent`.
+- [x] 2.5 `it_should_list_category_videos_without_metadata_as_absent`: without generated metadata, those three fields are absent and the rest are still present. Verified with `cargo test it_should_list_category_videos_without_metadata_as_absent`.
 - [ ] 2.6 Category playback in `CategoryDetail.test.tsx`: a card opens `/categories/:id?video=<id>` and autoplays from its source's path; selecting a queue video from another source plays from that source and shows its channel avatar link; no source video list is requested. Verified with `npm run test -- CategoryDetail`.
 
 ## 3. Infrastructure adapters (TDD)
