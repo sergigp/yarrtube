@@ -38,7 +38,7 @@
 - [x] 2.27 `it_should_equal_labels_ignoring_case` — `PlexLabels`.
 - [x] 2.28 `it_should_list_labels_missing_from_another_set_ignoring_case` — `PlexLabels`.
 - [x] 2.29 `it_should_keep_each_label_once_ignoring_case` — `PlexLabels`.
-- [ ] 2.30 `it_should_serve_a_root_under_or_above_its_location` — `PlexSection`.
+- [x] 2.30 `it_should_serve_a_root_under_or_above_its_location` — `PlexSection`.
 - [ ] 2.31 `describes a Plex label sync in plain language` — `web/src/lib/tasks.test.ts`.
 - [ ] 2.32 `puts Plex label syncs in the other family` — `web/src/lib/tasks.test.ts`.
 

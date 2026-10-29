@@ -19,8 +19,10 @@ impl PlexSection {
     }
 
     /// Whether a location is under `root` or `root` is under a location.
-    pub fn serves(&self, _root: &str) -> bool {
-        todo!()
+    pub fn serves(&self, root: &str) -> bool {
+        self.locations.iter().any(|location| {
+            Path::new(location).starts_with(root) || Path::new(root).starts_with(location)
+        })
     }
 }
 
@@ -56,6 +58,22 @@ mod tests {
         };
 
         assert!(!section.contains("/volume1/media/yarrtube/playlists/kids/Some video"));
+    }
+
+    #[test]
+    fn it_should_serve_a_root_under_or_above_its_location() {
+        let served: Vec<bool> = [
+            "/volume1/media/yarrtube",
+            "/volume1/media/yarrtube/channels/",
+            "/volume1/media/yarrtube/channels/Some Channel",
+            "/volume1/media/yarrtube-old",
+            "/volume2",
+        ]
+        .into_iter()
+        .map(|root| section().serves(root))
+        .collect();
+
+        assert_eq!(served, vec![true, true, true, false, false]);
     }
 
     fn section() -> PlexSection {
