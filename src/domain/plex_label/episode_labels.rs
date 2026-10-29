@@ -17,6 +17,9 @@ pub struct EpisodeLabels {
     /// checked first, so rows waiting on a download or import never starve
     /// the rest.
     pub checked_at: Option<DateTime<Utc>>,
+    /// How many times it was marked dirty; a sync's save lands only if no
+    /// mark came after the sync read it.
+    pub generation: i64,
 }
 
 impl EpisodeLabels {
@@ -29,13 +32,26 @@ impl EpisodeLabels {
             section_id: None,
             labels: PlexLabels::none(),
             checked_at: None,
+            generation: 0,
         }
     }
 
     pub fn mark_dirty(self) -> Self {
         Self {
             dirty: true,
+            generation: self.generation + 1,
             ..self
+        }
+    }
+
+    /// Dirty, and no longer tied to an episode: Plex stopped listing the one
+    /// last written, so neither it nor its labels count any more.
+    pub fn forget_episode(self) -> Self {
+        Self {
+            rating_key: None,
+            section_id: None,
+            labels: PlexLabels::none(),
+            ..self.mark_dirty()
         }
     }
 

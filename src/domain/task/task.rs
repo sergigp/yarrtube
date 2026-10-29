@@ -578,6 +578,11 @@ mod tests {
     }
 
     #[test]
+    fn it_should_reject_a_malformed_sync_plex_labels_payload() {
+        assert!(Task::decode_sync_plex_labels_payload("not json").is_err());
+    }
+
+    #[test]
     fn it_should_map_task_types_to_lanes() {
         let lanes: Vec<TaskLane> = [
             "download_video",

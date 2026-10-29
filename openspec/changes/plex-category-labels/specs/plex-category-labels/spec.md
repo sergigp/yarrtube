@@ -32,6 +32,10 @@ For every downloaded video that Plex has imported, the system SHALL make its Ple
 - **WHEN** a video belongs to "chess" and its episode is already labelled "Chess"
 - **THEN** a label sync makes no change to that episode
 
+#### Scenario: Label holding a comma
+- **WHEN** a video leaves the category "Kids, Family"
+- **THEN** after the next label sync its episode no longer has that label
+
 ### Requirement: Labels Follow Category Changes
 When the categories of stored videos change, or a category they belong to is renamed or deleted, the system SHALL update their episodes' labels by a label sync that starts within a minute.
 
@@ -46,6 +50,10 @@ When the categories of stored videos change, or a category they belong to is ren
 #### Scenario: Category deleted
 - **WHEN** the category "Funny" is deleted
 - **THEN** after the next label sync no episode is labelled "Funny"
+
+#### Scenario: Change during a running sync
+- **WHEN** a video's categories change while a label sync is labelling it
+- **THEN** a later label sync labels its episode with the new categories
 
 ### Requirement: New Downloads Are Labelled
 After a video downloads, the system SHALL label its episode once Plex has imported it. A label sync SHALL run about a minute after each download, and an episode not yet imported SHALL be labelled by a later sync without being reported as a failure.
@@ -92,8 +100,12 @@ The system SHALL run a label sync at least every 15 minutes while the integratio
 - **THEN** the next periodic label sync labels the new episode
 
 #### Scenario: Large backlog
-- **WHEN** more videos are pending than one sync handles
-- **THEN** another sync runs right after it until none are pending
+- **WHEN** more pending videos can be labelled than one sync handles
+- **THEN** another sync runs right after it until they are labelled
+
+#### Scenario: Backlog not labellable yet
+- **WHEN** a sync takes as many pending videos as it handles and none of them can be labelled yet (not downloaded or not imported)
+- **THEN** the next sync runs 15 minutes later, not right after
 
 ### Requirement: Smart Playlist Per Category And Library
 For each category with at least one labelled episode in a Plex library, the system SHALL keep one smart playlist in that library, owned by the token's Plex user, listing that library's unwatched episodes labelled with the category, newest air date first.
@@ -120,6 +132,14 @@ The system SHALL replace a category's playlists after it is renamed, delete a pl
 #### Scenario: Category deleted
 - **WHEN** the category "Funny" with a playlist is deleted
 - **THEN** after the next label sync its playlist is gone
+
+#### Scenario: Episodes gone from Plex
+- **WHEN** every "Chess" episode of a library disappears from Plex while their videos stay in "Chess"
+- **THEN** the next label sync deletes that library's "Chess" playlist
+
+#### Scenario: Category renamed by case only
+- **WHEN** the category "chess" with a playlist is renamed "Chess"
+- **THEN** after the label syncs that relabel its episodes exactly one playlist, titled "Chess", exists for it in each library
 
 #### Scenario: Playlist deleted in Plex
 - **WHEN** a user deletes the "Chess" playlist in Plex while "Chess" still has labelled episodes

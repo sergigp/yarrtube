@@ -86,6 +86,7 @@ mod tests {
             vec![
                 EpisodeLabels {
                     dirty: true,
+                    generation: 1,
                     ..synced("rec1")
                 },
                 EpisodeLabels::pending(record("rec2")),

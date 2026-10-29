@@ -55,7 +55,8 @@ configurable.
 ## Impact
 
 - Schema: migration `0015_plex_labels.sql` (episode label state, category
-  playlists).
+  playlists) and `0016_episode_labels_generation.sql` (a mark counter, so a
+  sync never overwrites a category change made while it runs).
 - Domain: new `plex_label` module, new `PlexLabelSyncer` service, new
   `Task::SyncPlexLabels` and `TaskLane::Plex`; `PlexSection` gains its title;
   new `PlexEpisode`, `PlexPlaylist`, `PlexLabels` types; the video owner

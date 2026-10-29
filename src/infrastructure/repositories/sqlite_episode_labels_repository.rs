@@ -6,7 +6,7 @@ use anyhow::Context;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params, params_from_iter};
 
-const COLUMNS: &str = "video_id, dirty, rating_key, section_id, labels, checked_at";
+const COLUMNS: &str = "video_id, dirty, rating_key, section_id, labels, checked_at, generation";
 
 /// The Plex label state of each stored video record.
 pub trait EpisodeLabelsRepository: Send + Sync {
@@ -17,7 +17,8 @@ pub trait EpisodeLabelsRepository: Send + Sync {
     fn list_dirty(&self, limit: usize) -> anyhow::Result<Vec<EpisodeLabels>>;
     /// Rows with a rating key.
     fn list_synced(&self) -> anyhow::Result<Vec<EpisodeLabels>>;
-    /// Inserts or replaces each row, all in one transaction.
+    /// Inserts or replaces each row, all in one transaction; a row whose
+    /// stored generation is newer (marked since it was read) is left as is.
     fn save_many(&self, rows: &[EpisodeLabels]) -> anyhow::Result<()>;
     fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
 }
@@ -65,6 +66,9 @@ impl EpisodeLabelsRepository for SqliteEpisodeLabelsRepository {
     }
 
     fn save_many(&self, rows: &[EpisodeLabels]) -> anyhow::Result<()> {
+        if rows.is_empty() {
+            return Ok(());
+        }
         let mut conn = self.db.write()?;
         let tx = conn
             .transaction()
@@ -106,7 +110,17 @@ impl SqliteEpisodeLabelsRepository {
 
     fn upsert(conn: &Connection, row: &EpisodeLabels) -> anyhow::Result<()> {
         conn.execute(
-            &format!("INSERT OR REPLACE INTO episode_labels ({COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"),
+            &format!(
+                "INSERT INTO episode_labels ({COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT (video_id) DO UPDATE SET
+                     dirty = excluded.dirty,
+                     rating_key = excluded.rating_key,
+                     section_id = excluded.section_id,
+                     labels = excluded.labels,
+                     checked_at = excluded.checked_at,
+                     generation = excluded.generation
+                 WHERE episode_labels.generation <= excluded.generation"
+            ),
             params![
                 row.video_id.as_str(),
                 row.dirty,
@@ -114,6 +128,7 @@ impl SqliteEpisodeLabelsRepository {
                 row.section_id,
                 serde_json::to_string(row.labels.names())?,
                 row.checked_at.map(|at| at.to_rfc3339()),
+                row.generation,
             ],
         )
         .inspect_err(|e| tracing::error!(video_id = %row.video_id, error = %e, "failed to save episode labels"))
@@ -129,6 +144,7 @@ impl SqliteEpisodeLabelsRepository {
             section_id: row.get(3)?,
             labels: row.get(4)?,
             checked_at: row.get(5)?,
+            generation: row.get(6)?,
         })
     }
 
@@ -146,6 +162,7 @@ impl SqliteEpisodeLabelsRepository {
                 .map(|at| DateTime::parse_from_rfc3339(&at).map(|at| at.with_timezone(&Utc)))
                 .transpose()
                 .context("invalid stored episode labels check time")?,
+            generation: row.generation,
         })
     }
 }
@@ -158,6 +175,7 @@ struct RawRow {
     section_id: Option<String>,
     labels: String,
     checked_at: Option<String>,
+    generation: i64,
 }
 
 #[cfg(test)]
@@ -220,6 +238,31 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_a_row_marked_since_it_was_read() {
+        let db = TestDatabase::new();
+        let repository = SqliteEpisodeLabelsRepository::new(db.database());
+        repository.save_many(&[pending("rec1")]).unwrap();
+        let read_by_sync = pending("rec1");
+        let marked = pending("rec1").mark_dirty();
+        repository.save_many(std::slice::from_ref(&marked)).unwrap();
+
+        repository
+            .save_many(&[EpisodeLabels {
+                dirty: false,
+                rating_key: Some("101".to_string()),
+                section_id: Some("19".to_string()),
+                labels: PlexLabels::new(vec!["Chess".to_string()]),
+                ..read_by_sync
+            }])
+            .unwrap();
+
+        assert_eq!(
+            repository.find_many(&[record("rec1")]).unwrap(),
+            vec![marked]
+        );
+    }
+
+    #[test]
     fn it_should_list_only_synced_rows() {
         let db = TestDatabase::new();
         let repository = SqliteEpisodeLabelsRepository::new(db.database());
@@ -252,6 +295,7 @@ mod tests {
             section_id: None,
             labels: PlexLabels::none(),
             checked_at: None,
+            generation: 0,
         }
     }
 

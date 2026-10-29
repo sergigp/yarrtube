@@ -3,7 +3,9 @@
 ## Files
 
 - `migrations/0015_plex_labels.sql` — `episode_labels(video_id PK, dirty, rating_key, section_id, labels JSON, checked_at)` and `category_playlists(section_id, label COLLATE NOCASE, rating_key, title, PK(section_id, label))`. No backfill: the periodic sync backfills.
-- `src/infrastructure/shared/sqlite_migrations.rs` — registers 0015.
+- `migrations/0016_episode_labels_generation.sql` — `episode_labels.generation INTEGER NOT NULL DEFAULT 0`: times a row was marked dirty, so a sync's save skips a row marked since it read it.
+- `src/infrastructure/shared/sqlite_migrations.rs` — registers 0015 and 0016.
+- `Cargo.toml` — `percent-encoding`, to escape labels as Plex expects inside a comma-joined removal and a nested playlist URI.
 - `src/domain/plex/plex_section.rs` — `PlexSection` gains `title` and `serves(root)`.
 - `src/domain/plex/plex_episode.rs` — new `PlexEpisode`: an episode as listed by Plex (rating key + file).
 - `src/domain/plex/plex_playlist.rs` — new `PlexPlaylist`: a playlist as listed by Plex.
@@ -32,6 +34,7 @@
 - `src/serve.rs` — `PlexIntegration: Clone`; builds `VideoOwnerFinder` (shared by `video_reconciler` and the syncer) and `PlexLabelSyncer`; passes the syncer to the task registry and `event_subscribers`; `prepare_task_queue` gains `Option<&PlexLabelSyncer>` and requests a sync at startup when it is `Some`.
 - `web/src/lib/tasks.ts` (+ `tasks.test.ts`) — describes `sync_plex_labels` ("Syncing Plex category labels"), family `other`.
 - `doc/PLEX.md` — labels, playlists, limits.
+- Test-only wiring for the `VideoOwnerFinder` extraction (tests build `VideoReconciler` with a `VideoOwnerFinder`): `src/application/http/channels/mod.rs`, `src/application/http/playlists/mod.rs`, `src/application/subscribers/reconcile_on_channel_created.rs`, `src/application/subscribers/reconcile_on_playlist_created.rs`, `src/application/tasks/reconcile_channel_task.rs`, `src/application/tasks/reconcile_playlist_task.rs`, `src/application/tasks/sync_video_task.rs`, `src/domain/services/internal_video_reconciler.rs`.
 
 ## Types & Signatures
 
@@ -79,10 +82,16 @@ pub struct EpisodeLabels {
     /// Last time a sync looked at it; dirty rows are taken least recently
     /// checked first, so rows waiting on a download or import never starve the rest.
     pub checked_at: Option<DateTime<Utc>>,
+    /// How many times it was marked dirty; a sync's save lands only if no
+    /// mark came after the sync read it.
+    pub generation: i64,
 }
 impl EpisodeLabels {
-    pub fn pending(video_id: VideoRecordId) -> Self;      // dirty, never synced
-    pub fn mark_dirty(self) -> Self;
+    pub fn pending(video_id: VideoRecordId) -> Self;      // dirty, never synced, generation 0
+    pub fn mark_dirty(self) -> Self;                     // dirty, generation + 1
+    /// Dirty (generation + 1) and no longer tied to an episode: Plex stopped
+    /// listing the one last written, so its section and labels count no more.
+    pub fn forget_episode(self) -> Self;
     /// Still dirty (not downloaded / not imported / Plex rejected), looked at `now`.
     pub fn checked(self, now: DateTime<Utc>) -> Self;
     pub fn synced(self, episode: &PlexEpisode, labels: PlexLabels, now: DateTime<Utc>) -> Self;
@@ -104,11 +113,12 @@ pub struct VideoOwnerFinder {
     playlist_repository: Arc<dyn PlaylistRepository>,
     videos_path: String,
 }
-impl VideoOwnerFinder {
+pub trait VideoOwnerFinderApi: Send + Sync {
     /// The channel owning the video, else the playlist; `None` if neither
     /// (or its source) is stored. Body moved verbatim from `VideoReconciler`.
-    pub fn find(&self, video: &Video) -> anyhow::Result<Option<VideoOwner>>;
+    fn find(&self, video: &Video) -> anyhow::Result<Option<VideoOwner>>;
 }
+impl VideoOwnerFinderApi for VideoOwnerFinder; // the repo's `<Service>Api` convention
 
 // domain/plex_label/category_playlist.rs
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,13 +140,13 @@ pub trait PlexLibraryRepository: Send + Sync {
     /// GET /library/metadata/{rating_key} → Label[].tag.
     fn find_labels(&self, rating_key: &str) -> anyhow::Result<PlexLabels>;
     /// PUT /library/sections/{section}/all?type=4&id={rk}
-    ///   &label[i].tag.tag=<each of labels>&label[].tag.tag-=<removed, comma-joined>
+    ///   &label[i].tag.tag=<each of labels>&label[].tag.tag-=<removed, each percent-encoded, comma-joined>
     ///   &label.locked=1 (0 when labels is empty).
     fn save_labels(&self, episode: &PlexEpisode, labels: &PlexLabels, removed: &[String]) -> anyhow::Result<()>;
     /// GET /playlists?playlistType=video.
     fn list_playlists(&self) -> anyhow::Result<Vec<PlexPlaylist>>;
     /// POST /playlists?type=video&smart=1&title=..&uri=server://{server_id}/com.plexapp.plugins.library
-    ///   /library/sections/{section}/all?type=4&episode.label={label}&episode.unwatched=1
+    ///   /library/sections/{section}/all?type=4&episode.label={label percent-encoded, %20 for a space}&episode.unwatched=1
     ///   &sort=originallyAvailableAt:desc
     fn create_smart_playlist(&self, server_id: &str, section_id: &str, label: &str, title: &str) -> anyhow::Result<PlexPlaylist>;
     /// DELETE /playlists/{rating_key}.
@@ -151,7 +161,9 @@ pub trait EpisodeLabelsRepository: Send + Sync {
     fn list_dirty(&self, limit: usize) -> anyhow::Result<Vec<EpisodeLabels>>;
     /// Rows with a rating key.
     fn list_synced(&self) -> anyhow::Result<Vec<EpisodeLabels>>;
-    fn save_many(&self, rows: &[EpisodeLabels]) -> anyhow::Result<()>;  // upsert, one transaction
+    /// Upsert, one transaction; a stored row with a newer `generation` (marked
+    /// since the caller read it) is left as is.
+    fn save_many(&self, rows: &[EpisodeLabels]) -> anyhow::Result<()>;
     fn delete(&self, video_id: &VideoRecordId) -> anyhow::Result<()>;
 }
 
@@ -169,7 +181,7 @@ pub const AFTER_DOWNLOAD_DELAY: Duration = 60 s; // let Plex's async scan import
 /// the first one schedules the sync this far out and `bring_forward` keeps it
 /// there, so the pass's events collapse into one sync.
 pub const CATEGORY_CHANGE_DELAY: Duration = 10 s;
-pub const BATCH_SIZE: usize = 500;               // more dirty ⇒ next sync requested now
+pub const BATCH_SIZE: usize = 500;               // a full batch with progress ⇒ next sync requested now
 
 pub struct PlexLabelSyncer {
     plex_library_repository: Arc<dyn PlexLibraryRepository>,
@@ -191,7 +203,8 @@ pub trait PlexLabelSyncerApi: Send + Sync {
     /// A pending sync moves forward to `run_at` if due later, else one is scheduled.
     fn request_sync(&self, run_at: DateTime<Utc>) -> anyhow::Result<()>;
     /// One sync: heal drift, label a batch of dirty records, reconcile playlists,
-    /// then request the next sync (now if dirty records remain, else now + SYNC_INTERVAL).
+    /// then request the next sync (now if the batch was full and at least one of its
+    /// rows was synced or deleted, else now + SYNC_INTERVAL).
     /// Plex unreachable ⇒ logs, keeps everything dirty, still requests the next sync, Ok.
     fn sync(&self) -> anyhow::Result<()>;
 }
@@ -219,22 +232,22 @@ Playlist scope (open question, default chosen): a playlist exists only in librar
 1. `list_sections()` → keep `serves(plex_videos_path)`; `Err` ⇒ `warn!`, `request_sync(now + SYNC_INTERVAL)`, `Ok(())`
 2. `list_episodes(section)` per kept section ⇒ `by_file: file → PlexEpisode`, `keys: rating_key set`
 3. Heal drift:
-   - `list_synced()` → rows whose `rating_key` ∉ `keys` ⇒ `mark_dirty()`
+   - `list_synced()` → rows whose `rating_key` ∉ `keys` ⇒ `forget_episode()` (an episode gone for good keeps no playlist alive; a re-imported one is labelled again)
    - every record in a category (`CategoryRepository::list` → `VideoCategoriesRepository::list_in_category` per category) with no row (`find_many`) ⇒ `EpisodeLabels::pending`
    - `save_many(healed)`
 4. `list_dirty(BATCH_SIZE)` → `VideoCategoriesRepository::find_many(ids)` → names via `CategoryRepository::list()` ⇒ desired `PlexLabels` per record; per row:
    - `VideoRepository::find` → `None` ⇒ `EpisodeLabelsRepository::delete`; not downloaded ⇒ `checked(now)`
    - `VideoOwnerFinder::find(&video)` → `None` ⇒ `checked(now)`; else `owner.target.output_dir.join(filename)` → `plex_folder_path(videos_path, plex_videos_path, file)` → `by_file` → `None` ⇒ `checked(now)` (not imported yet)
-   - current = row's `labels` if `row.rating_key == episode.rating_key`, else `find_labels(&episode.rating_key)`
+   - current = `find_labels(&episode.rating_key)`, always (also catches labels edited by hand in Plex)
    - current == desired ⇒ no call; else `save_labels(&episode, &desired, &current.missing_from(&desired))`; `Err` ⇒ `warn!`, `checked(now)`, continue
    - ok ⇒ `row.synced(&episode, desired, now)`
-   - `save_many(rows)`
+   - `save_many(rows)` — rows marked since `list_dirty` read them (a category change during the sync) are not overwritten and stay dirty
 5. Playlists:
-   - desired = distinct `(section_id, label)` over `list_synced()` with labels, titled by current category name (`· <section title>` if the label spans sections)
+   - desired = distinct `(section_id, category name)` over `list_synced()` labels matching a current category ignoring case (spelled as the category; a label no category carries counts for none), titled by that name (`· <section title>` if it spans sections)
    - `list_playlists()` → stored = `CategoryPlaylistRepository::list()`
    - stored not desired, or desired with a title change, ⇒ `delete_playlist` (ignore 404) + `delete`
    - desired without a stored row whose `rating_key` is in Plex ⇒ `create_smart_playlist(server_id(), ..)` + `save`
-6. batch was full (`BATCH_SIZE` rows) ⇒ `request_sync(now)`, else `request_sync(now + SYNC_INTERVAL)`
+6. batch was full (`BATCH_SIZE` rows) and at least one row was synced or deleted ⇒ `request_sync(now)`, else `request_sync(now + SYNC_INTERVAL)` (a full batch of rows not labellable yet never makes syncs run back to back)
 
 ## Test Plan
 
@@ -254,7 +267,8 @@ Behaviour tests (application layer):
 11. `it_should_label_the_others_if_plex_rejects_one` — fake failing for one rating key ⇒ other labelled; rejected stays dirty.
 12. `it_should_keep_videos_dirty_if_plex_is_unreachable` — `failing()` ⇒ rows dirty, next sync pending at now + 15 min.
 13. `it_should_schedule_the_next_sync` — nothing dirty ⇒ one `sync_plex_labels` pending at now + 15 min.
-14. `it_should_schedule_the_next_sync_now_if_the_batch_was_full` — BATCH_SIZE dirty ⇒ next sync at now.
+14. `it_should_schedule_the_next_sync_now_if_the_batch_was_full` — BATCH_SIZE labellable dirty rows ⇒ next sync at now.
+14b. `it_should_not_sync_again_right_away_if_no_row_of_a_full_batch_could_be_labelled` — BATCH_SIZE dirty rows of videos not downloaded ⇒ next sync at now + 15 min.
 15. `it_should_rotate_videos_waiting_for_plex` — a full batch of not-imported rows, then one importable row ⇒ the next sync labels it.
 16. `it_should_create_a_smart_playlist_for_a_category` — labelled "Chess" in one section ⇒ fake playlist "Chess" with the label/section filter; stored row.
 17. `it_should_title_playlists_by_library_if_a_category_spans_libraries` — two sections ⇒ "Chess · Subscriptions", "Chess · Sergi's Playlists".
@@ -262,6 +276,9 @@ Behaviour tests (application layer):
 19. `it_should_replace_the_playlist_of_a_renamed_category`
 20. `it_should_recreate_a_playlist_deleted_in_plex`
 21. `it_should_not_touch_playlists_it_did_not_create`
+21b. `it_should_keep_a_playlist_already_in_sync` — a second sync makes no Plex playlist mutation.
+21c. `it_should_delete_the_playlist_of_a_category_whose_episodes_left_plex` — synced row whose rating key Plex no longer lists ⇒ its playlist deleted.
+21d. `it_should_keep_one_playlist_for_a_category_renamed_by_case` — rows holding "chess" and "Chess", category "Chess" ⇒ one playlist "Chess" after two syncs.
 
 `application/subscribers/sync_plex_labels_on_video_categories_changed.rs`
 22. `it_should_mark_the_videos_and_request_a_sync_shortly` — rows dirty; one `sync_plex_labels` pending at now + 10 s.
@@ -277,7 +294,7 @@ Behaviour tests (application layer):
 Regression (no new test): the existing `sync_video_task.rs`, `reconcile_channel_task.rs` and `reconcile_playlist_task.rs` suites pass unchanged after extracting `VideoOwnerFinder`.
 
 Domain unit:
-- `domain/task/task.rs`: 26. `it_should_run_label_syncs_in_the_plex_lane`
+- `domain/task/task.rs`: 26. `it_should_run_label_syncs_in_the_plex_lane`, 26b. `it_should_reject_a_malformed_sync_plex_labels_payload`
 - `domain/plex/plex_labels.rs`: 27. `it_should_equal_labels_ignoring_case`, 28. `it_should_list_labels_missing_from_another_set_ignoring_case`, 29. `it_should_keep_each_label_once_ignoring_case`
 - `domain/plex/plex_section.rs`: 30. `it_should_serve_a_root_under_or_above_its_location`
 
@@ -292,16 +309,18 @@ Infrastructure tests:
 34. `it_should_read_the_server_id`
 35. `it_should_list_a_section_episodes_with_their_files` — two pages, multi-part media.
 36. `it_should_read_an_episode_labels`
-37. `it_should_save_labels_removing_the_others` — exact query: indexed adds, `-=` removals, `label.locked=1`.
+37. `it_should_save_labels_removing_the_others` — exact query: indexed adds, `-=` removals (each escaped, `Other%20one`), `label.locked=1`.
 38. `it_should_clear_labels_and_unlock_them`
+38b. `it_should_escape_each_removed_label_so_a_comma_never_splits_one` — each removed label percent-encoded (python-plexapi style) before the comma join.
 39. `it_should_list_playlists`
-40. `it_should_create_a_smart_playlist_filtered_by_label` — exact `uri`.
+40. `it_should_create_a_smart_playlist_filtered_by_label` — exact `uri`, the label escaped with `%20` for a space (as python-plexapi), never `+`.
 41. `it_should_delete_a_playlist`
 
 `infrastructure/repositories/sqlite_episode_labels_repository.rs`
 42. `it_should_round_trip_an_episode_labels_row`
 43. `it_should_list_dirty_rows_least_recently_checked_first_up_to_a_limit`
 44. `it_should_list_only_synced_rows`
+44b. `it_should_keep_a_row_marked_since_it_was_read` — a save carrying an older `generation` leaves the stored row as is.
 
 `infrastructure/repositories/sqlite_category_playlist_repository.rs`
 45. `it_should_save_list_and_delete_category_playlists`

@@ -122,10 +122,14 @@ pub trait PlexLabelSyncerApi: Send + Sync {
 impl PlexLabelSyncerApi for PlexLabelSyncer {
     fn mark(&self, video_ids: &[VideoRecordId], delay: Duration) -> anyhow::Result<()> {
         let existing = self.episode_labels_repository.find_many(video_ids)?;
+        let mut existing: HashMap<VideoRecordId, EpisodeLabels> = existing
+            .into_iter()
+            .map(|row| (row.video_id.clone(), row))
+            .collect();
         let marked: Vec<EpisodeLabels> = video_ids
             .iter()
-            .map(|id| match existing.iter().find(|row| &row.video_id == id) {
-                Some(row) => row.clone().mark_dirty(),
+            .map(|id| match existing.remove(id) {
+                Some(row) => row.mark_dirty(),
                 None => EpisodeLabels::pending(id.clone()),
             })
             .collect();
@@ -168,9 +172,19 @@ impl PlexLabelSyncer {
         let rows = self.episode_labels_repository.list_dirty(BATCH_SIZE)?;
         let taken = rows.len();
         let desired = self.desired_labels(&rows)?;
+        let ids: Vec<VideoRecordId> = rows.iter().map(|row| row.video_id.clone()).collect();
+        let videos: HashMap<VideoRecordId, Video> = self
+            .video_repository
+            .find_many(&ids)?
+            .into_iter()
+            .map(|video| (video.id.clone(), video))
+            .collect();
         let labelled = rows
             .into_iter()
-            .filter_map(|row| self.label(row, &desired, episodes).transpose())
+            .filter_map(|row| {
+                let video = videos.get(&row.video_id);
+                self.label(row, video, &desired, episodes).transpose()
+            })
             .collect::<anyhow::Result<Vec<_>>>()?;
         self.episode_labels_repository.save_many(&labelled)?;
         Ok(taken)
@@ -208,10 +222,23 @@ impl PlexLabelSyncer {
             .partition(|playlist| in_plex.contains(&playlist.rating_key)))
     }
 
-    /// One playlist per label written to a synced episode and the episode's
-    /// section, titled by the label and, when the label spans sections, the
-    /// section's title.
+    /// One playlist per category whose label is written to a synced episode,
+    /// in the episode's section, titled by the category's name and, when it
+    /// spans sections, the section's title. A label no category carries any
+    /// more (renamed or deleted, its episode not relabelled yet) counts for
+    /// none, and one differing from its category only in case counts as it.
     fn desired_playlists(&self, sections: &[PlexSection]) -> anyhow::Result<Vec<DesiredPlaylist>> {
+        let names: HashMap<String, String> = self
+            .category_repository
+            .list()?
+            .into_iter()
+            .map(|category| {
+                (
+                    category.name.as_str().to_lowercase(),
+                    category.name.as_str().to_string(),
+                )
+            })
+            .collect();
         let labelled: BTreeSet<(String, String)> = self
             .episode_labels_repository
             .list_synced()?
@@ -221,7 +248,8 @@ impl PlexLabelSyncer {
                 row.labels
                     .names()
                     .iter()
-                    .map(|label| (section_id.clone(), label.clone()))
+                    .filter_map(|label| names.get(&label.to_lowercase()))
+                    .map(|name| (section_id.clone(), name.clone()))
                     .collect::<Vec<_>>()
             })
             .collect();
@@ -299,8 +327,9 @@ impl PlexLabelSyncer {
             })
     }
 
-    /// Marks dirty every synced row whose episode Plex no longer lists, so
-    /// an episode Plex re-imported under a new rating key is labelled again.
+    /// Marks dirty every synced row whose episode Plex no longer lists,
+    /// forgetting that episode: one Plex re-imported under a new rating key
+    /// is labelled again, and one gone for good keeps no playlist alive.
     fn mark_reimported(&self, episodes: &HashMap<String, PlexEpisode>) -> anyhow::Result<()> {
         let rating_keys: HashSet<&str> = episodes
             .values()
@@ -315,7 +344,7 @@ impl PlexLabelSyncer {
                     .as_deref()
                     .is_some_and(|key| !rating_keys.contains(key))
             })
-            .map(EpisodeLabels::mark_dirty)
+            .map(EpisodeLabels::forget_episode)
             .collect();
         self.episode_labels_repository.save_many(&reimported)
     }
@@ -381,21 +410,22 @@ impl PlexLabelSyncer {
     fn label(
         &self,
         row: EpisodeLabels,
+        video: Option<&Video>,
         desired: &HashMap<VideoRecordId, PlexLabels>,
         episodes: &HashMap<String, PlexEpisode>,
     ) -> anyhow::Result<Option<EpisodeLabels>> {
-        let Some(video) = self.video_repository.find(&row.video_id)? else {
+        let Some(video) = video else {
             self.episode_labels_repository.delete(&row.video_id)?;
             return Ok(None);
         };
-        let Some(episode) = self.find_episode(&video, episodes)? else {
+        let Some(episode) = self.find_episode(video, episodes)? else {
             return Ok(Some(row.checked(self.clock.now())));
         };
         let desired = desired
             .get(&row.video_id)
             .cloned()
             .unwrap_or_else(PlexLabels::none);
-        Ok(Some(self.apply_labels(row, &episode, desired)))
+        Ok(Some(self.apply_labels(row, episode, desired)))
     }
 
     /// The row once `desired` is written to `episode`; still dirty when
@@ -429,11 +459,11 @@ impl PlexLabelSyncer {
     }
 
     /// The Plex episode of the record's file.
-    fn find_episode(
+    fn find_episode<'a>(
         &self,
         video: &Video,
-        episodes: &HashMap<String, PlexEpisode>,
-    ) -> anyhow::Result<Option<PlexEpisode>> {
+        episodes: &'a HashMap<String, PlexEpisode>,
+    ) -> anyhow::Result<Option<&'a PlexEpisode>> {
         let Some(owner) = self.video_owner_finder.find(video)? else {
             return Ok(None);
         };
@@ -444,7 +474,7 @@ impl PlexLabelSyncer {
             .and_then(|file| {
                 plex_folder_path(Path::new(&self.videos_path), &self.plex_videos_path, &file)
             })
-            .and_then(|file| episodes.get(&file).cloned()))
+            .and_then(|file| episodes.get(&file)))
     }
 }
 

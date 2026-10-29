@@ -409,7 +409,10 @@ mod tests {
             episode_labels_repository
                 .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
-            vec![synced(&video, "201", &["Chess"])]
+            vec![EpisodeLabels {
+                generation: 1,
+                ..synced(&video, "201", &["Chess"])
+            }]
         );
     }
 
@@ -624,6 +627,46 @@ mod tests {
     }
 
     #[test]
+    fn it_should_keep_a_playlist_already_in_sync() {
+        let db = TestDatabase::new();
+        let category_playlist_repository =
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+        );
+        let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        seed_category(&db, "chess", "Chess", &[&video]);
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+            category_playlist_repository.clone(),
+            task_repository(&db),
+        ));
+        run(&task).unwrap();
+        let first_sync_mutations = plex.mutations();
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex.mutations(), first_sync_mutations);
+        assert_eq!(
+            plex.playlists(),
+            vec![FakePlaylist {
+                rating_key: "pl1".to_string(),
+                title: "Chess".to_string(),
+                filter: Some(("19".to_string(), "Chess".to_string())),
+            }]
+        );
+        assert_eq!(
+            category_playlist_repository.list().unwrap(),
+            vec![category_playlist("19", "Chess", "pl1", "Chess")]
+        );
+    }
+
+    #[test]
     fn it_should_title_playlists_by_library_if_a_category_spans_libraries() {
         let db = TestDatabase::new();
         let category_playlist_repository =
@@ -748,6 +791,94 @@ mod tests {
         assert_eq!(
             category_playlist_repository.list().unwrap(),
             vec![category_playlist("19", "Humor", "pl1", "Humor")]
+        );
+    }
+
+    #[test]
+    fn it_should_delete_the_playlist_of_a_category_whose_episodes_left_plex() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let category_playlist_repository =
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_playlist("pl7", "Chess"),
+        );
+        let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        seed_category(&db, "chess", "Chess", &[&video]);
+        episode_labels_repository
+            .save_many(&[synced(&video, "101", &["Chess"])])
+            .unwrap();
+        category_playlist_repository
+            .save(&category_playlist("19", "Chess", "pl7", "Chess"))
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            episode_labels_repository,
+            category_playlist_repository.clone(),
+            task_repository(&db),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex.playlists(), vec![]);
+        assert_eq!(category_playlist_repository.list().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn it_should_keep_one_playlist_for_a_category_renamed_by_case() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let category_playlist_repository =
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &["chess"])
+                .with_episode("19", "102", &plex_file("S2023E1115 - Two.mp4"), &["chess"])
+                .with_playlist("pl7", "chess"),
+        );
+        let relabelled = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        let not_yet_relabelled = seed_downloaded_video(&db, "yt2", "S2023E1115 - Two.mp4");
+        seed_category(&db, "chess", "Chess", &[&relabelled, &not_yet_relabelled]);
+        episode_labels_repository
+            .save_many(&[
+                EpisodeLabels {
+                    dirty: true,
+                    ..synced(&relabelled, "101", &["chess"])
+                },
+                synced(&not_yet_relabelled, "102", &["chess"]),
+            ])
+            .unwrap();
+        category_playlist_repository
+            .save(&category_playlist("19", "chess", "pl7", "chess"))
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            episode_labels_repository,
+            category_playlist_repository.clone(),
+            task_repository(&db),
+        ));
+        run(&task).unwrap();
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            plex.playlists(),
+            vec![FakePlaylist {
+                rating_key: "pl1".to_string(),
+                title: "Chess".to_string(),
+                filter: Some(("19".to_string(), "Chess".to_string())),
+            }]
+        );
+        assert_eq!(
+            category_playlist_repository.list().unwrap(),
+            vec![category_playlist("19", "Chess", "pl1", "Chess")]
         );
     }
 
@@ -1044,6 +1175,7 @@ mod tests {
             section_id: Some("19".to_string()),
             labels: PlexLabels::new(labels.iter().map(|label| label.to_string()).collect()),
             checked_at: Some(now()),
+            generation: 0,
         }
     }
 

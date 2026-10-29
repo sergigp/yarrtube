@@ -1,4 +1,5 @@
 use crate::domain::plex::{PlexEpisode, PlexLabels, PlexPlaylist, PlexSection};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::Deserialize;
 #[cfg(test)]
 use std::sync::Mutex;
@@ -11,6 +12,13 @@ use std::time::Duration;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 /// Episodes requested per page of a section listing.
 const EPISODES_PAGE_SIZE: usize = 500;
+/// What a value Plex splits on commas or parses as a nested URI must have
+/// escaped, as python-plexapi does: all but letters, digits and `-._~`.
+const PLEX_ESCAPED: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
 
 /// Port to the Plex server's library HTTP API, authenticated via
 /// `X-Plex-Token`: discovers the library sections, asks one to scan a
@@ -262,7 +270,7 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         label: &str,
         title: &str,
     ) -> anyhow::Result<PlexPlaylist> {
-        let uri = smart_playlist_uri(server_id, section_id, label)?;
+        let uri = smart_playlist_uri(server_id, section_id, label);
         let request = self.client.post(self.url("/playlists")).query(&[
             ("type", "video"),
             ("title", title),
@@ -362,8 +370,9 @@ impl HttpPlexLibraryRepository {
 }
 
 /// The query of a label edit: each label added by index, the removed ones
-/// in one comma-joined `-=` param, and the field locked so Plex's agents
-/// never overwrite it, or unlocked once it holds no label.
+/// in one comma-joined `-=` param, each escaped so a comma in one never
+/// splits it, and the field locked so Plex's agents never overwrite it, or
+/// unlocked once it holds no label.
 fn label_edit_query(
     episode: &PlexEpisode,
     labels: &PlexLabels,
@@ -375,8 +384,10 @@ fn label_edit_query(
         .enumerate()
         .map(|(i, name)| (format!("label[{i}].tag.tag"), name.clone()));
     let locked = if labels.names().is_empty() { "0" } else { "1" };
-    let removed =
-        (!removed.is_empty()).then(|| ("label[].tag.tag-".to_string(), removed.join(",")));
+    let removed = (!removed.is_empty()).then(|| {
+        let escaped: Vec<String> = removed.iter().map(|label| plex_escaped(label)).collect();
+        ("label[].tag.tag-".to_string(), escaped.join(","))
+    });
     [
         ("type".to_string(), "4".to_string()),
         ("id".to_string(), episode.rating_key.clone()),
@@ -389,17 +400,19 @@ fn label_edit_query(
 }
 
 /// The library URI a smart playlist filters: the section's unwatched
-/// episodes labelled `label`, newest air date first.
-fn smart_playlist_uri(server_id: &str, section_id: &str, label: &str) -> anyhow::Result<String> {
-    let mut uri = reqwest::Url::parse(&format!(
-        "server://{server_id}/com.plexapp.plugins.library/library/sections/{section_id}/all"
-    ))?;
-    uri.query_pairs_mut()
-        .append_pair("type", "4")
-        .append_pair("episode.label", label)
-        .append_pair("episode.unwatched", "1")
-        .append_pair("sort", "originallyAvailableAt:desc");
-    Ok(uri.to_string())
+/// episodes labelled `label`, newest air date first. A space in it is
+/// `%20`, as python-plexapi sends it, not the form encoding's `+`.
+fn smart_playlist_uri(server_id: &str, section_id: &str, label: &str) -> String {
+    format!(
+        "server://{server_id}/com.plexapp.plugins.library/library/sections/{section_id}/all\
+         ?type=4&episode.label={}&episode.unwatched=1&sort=originallyAvailableAt%3Adesc",
+        plex_escaped(label)
+    )
+}
+
+/// `value` percent-encoded as Plex expects inside a value it parses again.
+fn plex_escaped(value: &str) -> String {
+    utf8_percent_encode(value, PLEX_ESCAPED).to_string()
 }
 
 /// One episode per file of `metadata`'s media parts.
@@ -917,7 +930,7 @@ mod tests {
             .mock("PUT", "/library/sections/19/all")
             .match_query(mockito::Matcher::Exact(
                 "type=4&id=101&label%5B0%5D.tag.tag=Chess&label%5B1%5D.tag.tag=M%C3%BAsica\
-                 &label%5B%5D.tag.tag-=Old%2COther+one&label.locked=1"
+                 &label%5B%5D.tag.tag-=Old%2COther%2520one&label.locked=1"
                     .to_string(),
             ))
             .match_header("x-plex-token", "secret-token")
@@ -929,6 +942,29 @@ mod tests {
             &episode("101", "/volume1/a.mp4"),
             &PlexLabels::new(vec!["Chess".to_string(), "Música".to_string()]),
             &["Old".to_string(), "Other one".to_string()],
+        );
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_escape_each_removed_label_so_a_comma_never_splits_one() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("PUT", "/library/sections/19/all")
+            .match_query(mockito::Matcher::Exact(
+                "type=4&id=101&label%5B%5D.tag.tag-=Kids%252C%2520Family%2COld&label.locked=0"
+                    .to_string(),
+            ))
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.save_labels(
+            &episode("101", "/volume1/a.mp4"),
+            &PlexLabels::none(),
+            &["Kids, Family".to_string(), "Old".to_string()],
         );
 
         assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
@@ -1006,7 +1042,7 @@ mod tests {
                 mockito::Matcher::UrlEncoded(
                     "uri".into(),
                     "server://abc123/com.plexapp.plugins.library/library/sections/19/all\
-                     ?type=4&episode.label=Sci+%26+Tech&episode.unwatched=1\
+                     ?type=4&episode.label=Sci%20%26%20Tech&episode.unwatched=1\
                      &sort=originallyAvailableAt%3Adesc"
                         .into(),
                 ),
