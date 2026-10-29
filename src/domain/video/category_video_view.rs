@@ -27,6 +27,10 @@ impl From<SourcedVideo> for CategoryVideoView {
 }
 
 impl CategoryVideoView {
+    pub fn with_metadata(self, metadata: Option<VideoMetadata>) -> Self {
+        Self { metadata, ..self }
+    }
+
     pub fn with_category_ids(self, category_ids: Vec<CategoryId>) -> Self {
         Self {
             category_ids,

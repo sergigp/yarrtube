@@ -167,16 +167,11 @@ impl VideoSearcherApi for VideoSearcher {
         let by_video = self
             .category_ids_by_video()
             .map_err(ListVideosError::Repository)?;
-        Ok(videos
+        videos
             .into_iter()
-            .map(|sourced| {
-                let ids = by_video
-                    .get(&sourced.video.youtube_id)
-                    .cloned()
-                    .unwrap_or_default();
-                CategoryVideoView::from(sourced).with_category_ids(ids)
-            })
-            .collect())
+            .map(|sourced| self.category_view(sourced, &by_video))
+            .collect::<anyhow::Result<Vec<CategoryVideoView>>>()
+            .map_err(ListVideosError::Repository)
     }
 }
 
@@ -198,6 +193,23 @@ impl VideoSearcher {
     fn view(&self, video: Video) -> anyhow::Result<VideoView> {
         let metadata = self.video_metadata_repository.find(&video.id)?;
         Ok(VideoView { video, metadata })
+    }
+
+    /// `sourced` as a category video: with its metadata and the categories
+    /// having its YouTube video in `by_video` (see `category_ids_by_video`).
+    fn category_view(
+        &self,
+        sourced: SourcedVideo,
+        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+    ) -> anyhow::Result<CategoryVideoView> {
+        let metadata = self.video_metadata_repository.find(&sourced.video.id)?;
+        let ids = by_video
+            .get(&sourced.video.youtube_id)
+            .cloned()
+            .unwrap_or_default();
+        Ok(CategoryVideoView::from(sourced)
+            .with_metadata(metadata)
+            .with_category_ids(ids))
     }
 
     fn views(videos: Vec<SourcedVideo>) -> Vec<HomeVideoView> {

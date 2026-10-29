@@ -3949,6 +3949,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_category_videos_with_their_metadata() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+        let video_dir = tempfile::tempdir().unwrap();
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        let video = downloaded_video("vid1", "My Video", None, 10);
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &video,
+            0,
+        );
+        video_metadata_repository
+            .save(
+                &video.id,
+                &video_metadata(),
+                &EpisodeNumber::from_columns(2024, 10101).unwrap(),
+                &video_dir.path().join("S2024E010101 - My Video.nfo"),
+            )
+            .unwrap();
+        let chess = category_with_members(&[channel_member("@somechannel")]);
+        category_repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess]);
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            video_metadata_repository,
+            Arc::new(FixedClock(fixed_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = list_for_category(video_searcher, chess.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![CategoryVideoResponse {
+                published_at: Some(published_timestamp()),
+                description: Some("A description\nwith two lines".to_string()),
+                channel_name: Some("Some Channel".to_string()),
+                ..category_video_in(
+                    category_video_response("vid1", "My Video", 10, channel_source(None)),
+                    &[&chess]
+                )
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_no_videos_for_a_category_without_members() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
