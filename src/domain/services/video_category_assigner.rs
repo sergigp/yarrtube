@@ -7,6 +7,7 @@ use crate::infrastructure::repositories::sqlite_channel_video_repository::Channe
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
 use crate::infrastructure::shared::domain_events::event_publisher::EventPublisher;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Keeps each stored video record's categories in line with its source's
@@ -83,7 +84,8 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
             previous_members
                 .iter()
                 .cloned()
-                .chain(Self::members_of(category_id, categories)),
+                .chain(Self::members_of(category_id, categories))
+                .chain(self.stale_sources(category_id)?),
         );
         let desired = sources
             .iter()
@@ -106,6 +108,46 @@ impl VideoCategoryAssigner {
             .find(|category| &category.id == category_id)
             .map(|category| category.members.clone())
             .unwrap_or_default()
+    }
+
+    /// The sources of the records still holding `category_id`.
+    fn stale_sources(&self, category_id: &CategoryId) -> anyhow::Result<Vec<CategoryMember>> {
+        let holding = self
+            .video_categories_repository
+            .list_in_category(category_id)?;
+        if holding.is_empty() {
+            return Ok(Vec::new());
+        }
+        let sources = self.sources_by_video()?;
+        Ok(holding
+            .iter()
+            .filter_map(|categories| sources.get(&categories.video_id).cloned())
+            .collect())
+    }
+
+    /// Every stored record's source.
+    fn sources_by_video(&self) -> anyhow::Result<HashMap<VideoRecordId, CategoryMember>> {
+        let channel_sources =
+            self.channel_video_repository
+                .list()?
+                .into_iter()
+                .map(|channel_video| {
+                    (
+                        channel_video.video_id,
+                        CategoryMember::Channel(channel_video.channel_id),
+                    )
+                });
+        let playlist_sources =
+            self.playlist_video_repository
+                .list()?
+                .into_iter()
+                .map(|playlist_video| {
+                    (
+                        playlist_video.video_id,
+                        CategoryMember::Playlist(playlist_video.playlist_id),
+                    )
+                });
+        Ok(channel_sources.chain(playlist_sources).collect())
     }
 
     /// `sources` each once, first occurrence first.
