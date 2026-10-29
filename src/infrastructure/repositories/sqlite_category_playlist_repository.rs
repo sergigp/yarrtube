@@ -102,6 +102,20 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_key_playlists_by_label_ignoring_case() {
+        let db = TestDatabase::new();
+        let repository = SqliteCategoryPlaylistRepository::new(db.database());
+        repository.save(&playlist("19", "Chess", "pl1")).unwrap();
+
+        repository.save(&playlist("19", "chess", "pl2")).unwrap();
+
+        assert_eq!(
+            repository.list().unwrap(),
+            vec![playlist("19", "chess", "pl2")]
+        );
+    }
+
     fn playlist(section_id: &str, label: &str, rating_key: &str) -> CategoryPlaylist {
         CategoryPlaylist {
             section_id: section_id.to_string(),

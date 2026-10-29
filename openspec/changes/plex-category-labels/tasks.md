@@ -62,7 +62,7 @@ SqliteEpisodeLabelsRepository:
 
 SqliteCategoryPlaylistRepository:
 - [x] 3.13 `it_should_save_list_and_delete_category_playlists`
-- [ ] 3.14 `it_should_key_playlists_by_label_ignoring_case`
+- [x] 3.14 `it_should_key_playlists_by_label_ignoring_case`
 
 ## 4. Verification
 
