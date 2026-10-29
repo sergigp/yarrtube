@@ -13,7 +13,7 @@ use crate::infrastructure::repositories::sqlite_video_categories_repository::Vid
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Duration, Utc};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -104,6 +104,7 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
     fn sync(&self) -> anyhow::Result<()> {
         let sections = self.served_sections()?;
         let episodes = self.episodes_by_file(&sections)?;
+        self.track_categorized_records()?;
         let rows = self.episode_labels_repository.list_dirty(BATCH_SIZE)?;
         let desired = self.desired_labels(&rows)?;
         let labelled = rows
@@ -141,6 +142,42 @@ impl PlexLabelSyncer {
                     .map(|episode| (episode.file.clone(), episode))
                     .collect()
             })
+    }
+
+    /// Starts tracking, dirty, every categorized record without a row: one
+    /// categorized before this sync existed, or whose row was lost.
+    fn track_categorized_records(&self) -> anyhow::Result<()> {
+        let categorized = self.categorized_records()?;
+        let tracked: HashSet<VideoRecordId> = self
+            .episode_labels_repository
+            .find_many(&categorized)?
+            .into_iter()
+            .map(|row| row.video_id)
+            .collect();
+        let untracked: Vec<EpisodeLabels> = categorized
+            .into_iter()
+            .filter(|id| !tracked.contains(id))
+            .map(EpisodeLabels::pending)
+            .collect();
+        self.episode_labels_repository.save_many(&untracked)
+    }
+
+    /// Every record in at least one category, each once.
+    fn categorized_records(&self) -> anyhow::Result<Vec<VideoRecordId>> {
+        let ids: HashSet<VideoRecordId> = self
+            .category_repository
+            .list()?
+            .iter()
+            .map(|category| {
+                self.video_categories_repository
+                    .list_in_category(&category.id)
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .map(|categories| categories.video_id)
+            .collect();
+        Ok(ids.into_iter().collect())
     }
 
     /// The labels each row's record should carry: its categories' names.
