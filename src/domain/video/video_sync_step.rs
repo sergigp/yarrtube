@@ -15,7 +15,18 @@ pub enum VideoSyncStep {
 impl VideoSyncStep {
     /// The task performing this step for `video`, run in that task's own lane.
     pub fn task_for(&self, video: &Video, target: &VideoTarget) -> Task {
-        let _ = (video, target);
-        todo!("walking skeleton")
+        let video_id = video.id.as_str().to_string();
+        let output_dir = target.output_dir.to_string_lossy().to_string();
+        match self {
+            Self::Download => Task::DownloadVideo {
+                video_id,
+                quality: target.quality.as_str().to_string(),
+                output_dir,
+            },
+            Self::FetchThumbnail | Self::FetchSubtitles => Task::FetchThumbnail {
+                video_id,
+                output_dir,
+            },
+        }
     }
 }

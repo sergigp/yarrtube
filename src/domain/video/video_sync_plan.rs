@@ -11,6 +11,8 @@ pub struct VideoSyncPlan {
 impl VideoSyncPlan {
     pub fn for_video(video: &Video) -> Self {
         let _ = video;
-        Self { steps: Vec::new() }
+        Self {
+            steps: vec![VideoSyncStep::Download, VideoSyncStep::FetchThumbnail],
+        }
     }
 }

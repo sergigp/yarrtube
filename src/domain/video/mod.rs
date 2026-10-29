@@ -46,6 +46,7 @@ pub use video_output_entry::{
 };
 pub use video_record_id::VideoRecordId;
 pub use video_status::VideoStatus;
+pub use video_sync_plan::VideoSyncPlan;
 pub use video_sync_step::VideoSyncStep;
 pub use video_target::VideoTarget;
 pub use video_view::VideoView;

@@ -1,4 +1,4 @@
-use crate::domain::video::{Video, VideoRecordId, VideoTarget};
+use crate::domain::video::{Video, VideoRecordId, VideoSyncPlan, VideoTarget, resolve_output_dir};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -65,17 +65,43 @@ pub trait VideoReconcilerApi: Send + Sync {
 
 impl VideoReconcilerApi for VideoReconciler {
     fn reconcile(&self, video_id: &VideoRecordId) -> anyhow::Result<()> {
-        let _ = video_id;
-        Ok(())
+        let Some(video) = self.video_repository.find(video_id)? else {
+            return Ok(());
+        };
+        let Some(target) = self.find_target(&video)? else {
+            return Ok(());
+        };
+        self.reconcile_video(&video, &target)
     }
 
     fn reconcile_video(&self, video: &Video, target: &VideoTarget) -> anyhow::Result<()> {
-        let _ = (video, target);
-        Ok(())
+        VideoSyncPlan::for_video(video)
+            .steps
+            .iter()
+            .try_for_each(|step| {
+                self.task_repository
+                    .schedule(&step.task_for(video, target), self.clock.now())
+            })
     }
 
     fn schedule_download(&self, video: &Video, target: &VideoTarget) -> anyhow::Result<()> {
         let _ = (video, target);
         Ok(())
+    }
+}
+
+impl VideoReconciler {
+    /// The target of the channel holding `video`.
+    fn find_target(&self, video: &Video) -> anyhow::Result<Option<VideoTarget>> {
+        let Some(channel_video) = self.channel_video_repository.find_by_video(&video.id)? else {
+            return Ok(None);
+        };
+        Ok(self
+            .channel_repository
+            .find(&channel_video.channel_id)?
+            .map(|channel| VideoTarget {
+                output_dir: resolve_output_dir(&self.videos_path, channel.path.as_str()),
+                quality: channel.quality,
+            }))
     }
 }
