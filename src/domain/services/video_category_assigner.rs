@@ -44,15 +44,12 @@ impl VideoCategoryAssigner {
 }
 
 pub trait VideoCategoryAssignerApi: Send + Sync {
-    /// Serializes video category writes. `assign_source` and `assign_video`
-    /// take it themselves; callers of `reassign_category` hold it from
+    /// Serializes video category writes. `assign_video` takes it itself; callers of `reassign_category` hold it from
     /// before they change the categories it is computed from until it
     /// returns.
     fn lock(&self) -> MutexGuard<'_, ()>;
-    /// Source regime for every record of `source`: its set = the source's
+    /// Source regime for one record of `source`: its set = the source's
     /// categories. No-op when the source is in no category (AI regime).
-    fn assign_source(&self, source: &CategoryMember) -> anyhow::Result<()>;
-    /// Same, for one record of `source`.
     fn assign_video(&self, video_id: &VideoRecordId, source: &CategoryMember)
     -> anyhow::Result<()>;
     /// After `category_id`'s members changed or it was deleted: recomputes every
@@ -74,16 +71,17 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
         self.category_lock.lock()
     }
 
-    fn assign_source(&self, source: &CategoryMember) -> anyhow::Result<()> {
-        self.assign_records(source, || self.record_ids(source))
-    }
-
     fn assign_video(
         &self,
         video_id: &VideoRecordId,
         source: &CategoryMember,
     ) -> anyhow::Result<()> {
-        self.assign_records(source, || Ok(vec![video_id.clone()]))
+        let _guard = self.lock();
+        let category_ids = self.categories_of(source)?;
+        if category_ids.is_empty() {
+            return Ok(());
+        }
+        self.save_and_announce(Self::each_in(vec![video_id.clone()], &category_ids))
     }
 
     fn reassign_category(
@@ -116,21 +114,6 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
 }
 
 impl VideoCategoryAssigner {
-    /// Gives each of `video_ids` (listed only when `source` is in some
-    /// category) exactly the source's categories; no-op when it is in none.
-    fn assign_records(
-        &self,
-        source: &CategoryMember,
-        video_ids: impl FnOnce() -> anyhow::Result<Vec<VideoRecordId>>,
-    ) -> anyhow::Result<()> {
-        let _guard = self.lock();
-        let category_ids = self.categories_of(source)?;
-        if category_ids.is_empty() {
-            return Ok(());
-        }
-        self.save_and_announce(Self::each_in(video_ids()?, &category_ids))
-    }
-
     /// The current members of `category_id` in `categories`.
     fn members_of(category_id: &CategoryId, categories: &[Category]) -> Vec<CategoryMember> {
         categories

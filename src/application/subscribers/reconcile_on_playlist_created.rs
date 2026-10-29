@@ -173,7 +173,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner(db.database()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         ));
 
@@ -265,7 +264,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner(db.database()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         ));
 
@@ -342,7 +340,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner(db.database()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         ));
 
@@ -435,7 +432,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner(db.database()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         )
     }
@@ -497,7 +493,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner(unused_connection()),
             Arc::new(SqliteVideoCategoriesRepository::new(unused_connection())),
         ))
     }

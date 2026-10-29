@@ -620,7 +620,6 @@ fn playlist_video_reconciler(infrastructure: &InfrastructureContainer) -> Playli
         show_file_writer(infrastructure),
         infrastructure.clock.clone(),
         infrastructure.show_locks.clone(),
-        video_category_assigner(infrastructure),
         infrastructure.video_categories_repository.clone(),
     )
 }
@@ -643,7 +642,6 @@ fn channel_video_reconciler(infrastructure: &InfrastructureContainer) -> Channel
         )),
         infrastructure.clock.clone(),
         infrastructure.show_locks.clone(),
-        video_category_assigner(infrastructure),
         infrastructure.video_categories_repository.clone(),
     )
 }

@@ -21,7 +21,7 @@
 - [x] 2.13 `it_should_not_warn_about_a_video_whose_download_is_running` (sync_video_task) — no warning, no second download.
 - [x] 2.14 `it_should_redownload_videos_with_missing_file` (reconcile_channel_task, update) — pass delegates per-video work to `VideoReconciler::reconcile`; reset video gets thumbnail fetch + download; remove `it_should_schedule_only_the_download_of_a_video_reset_for_redownload` and the per-video recovery code/tests from `internal_video_reconciler.rs` now covered by 2.1–2.13.
 - [x] 2.15 `it_should_sync_a_video_added_by_the_same_pass` (reconcile_channel_task) — replaces `it_should_schedule_no_step_for_a_video_added_by_the_same_pass`; steps scheduled once; `handled` set removed.
-- [ ] 2.16 `it_should_repair_the_categories_of_stored_videos` (reconcile_channel_task, update) — one event per repaired video; `assign_source` removed from the channel/playlist reconcilers and `VideoCategoryAssignerApi`.
+- [x] 2.16 `it_should_repair_the_categories_of_stored_videos` (reconcile_channel_task, update) — one event per repaired video; `assign_source` removed from the channel/playlist reconcilers and `VideoCategoryAssignerApi`.
 - [ ] 2.17 `it_should_delete_the_stale_file_of_a_video_reset_by_the_same_pass` (reconcile_channel_task) — orphan sweep reads its snapshot after the syncs.
 - [x] 2.18 `it_should_redownload_videos_with_missing_file` (reconcile_playlist_task, update) — as 2.14 for playlists.
 - [x] 2.19 `it_should_sync_a_video_added_by_the_same_pass` (reconcile_playlist_task) — replaces `it_should_not_schedule_a_thumbnail_fetch_for_a_video_added_in_the_same_pass`.

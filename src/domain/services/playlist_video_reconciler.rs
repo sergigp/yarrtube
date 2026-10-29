@@ -1,4 +1,3 @@
-use crate::domain::category::CategoryMember;
 use crate::domain::event::DomainEvent;
 use crate::domain::playlist::Playlist;
 use crate::domain::playlist::PlaylistId;
@@ -6,7 +5,7 @@ use crate::domain::playlist_video::PlaylistVideo;
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::services::{
     DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi, ShowFileWriter,
-    ShowFileWriterApi, VideoCategoryAssigner, VideoCategoryAssignerApi,
+    ShowFileWriterApi,
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
@@ -45,7 +44,6 @@ pub struct PlaylistVideoReconciler {
     show_file_writer: Arc<ShowFileWriter>,
     clock: Arc<dyn Clock>,
     show_locks: Arc<ShowLocks>,
-    video_category_assigner: VideoCategoryAssigner,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
 }
 
@@ -63,7 +61,6 @@ impl PlaylistVideoReconciler {
         show_file_writer: Arc<ShowFileWriter>,
         clock: Arc<dyn Clock>,
         show_locks: Arc<ShowLocks>,
-        video_category_assigner: VideoCategoryAssigner,
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     ) -> Self {
         Self {
@@ -78,7 +75,6 @@ impl PlaylistVideoReconciler {
             show_file_writer,
             clock,
             show_locks,
-            video_category_assigner,
             video_categories_repository,
         }
     }
@@ -174,18 +170,7 @@ impl PlaylistVideoReconciler {
         }
         self.sync_membership_with_youtube(playlist, on_listing_failure)?;
         let desired = self.desired_state(playlist)?;
-        let reconciled = self.internal_video_reconciler.reconcile(&desired);
-        self.assign_categories(playlist);
-        reconciled
-    }
-
-    /// Best effort: gives every stored video the playlist's categories; a
-    /// failure is repaired by the next pass.
-    fn assign_categories(&self, playlist: &Playlist) {
-        let source = CategoryMember::Playlist(playlist.id.clone());
-        if let Err(e) = self.video_category_assigner.assign_source(&source) {
-            warn!(playlist_id = %playlist.id, error = %e, "failed to assign video categories");
-        }
+        self.internal_video_reconciler.reconcile(&desired)
     }
 
     /// Brings the stored membership in line with YouTube's playlist items:

@@ -406,7 +406,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner,
             video_categories_repository.clone(),
         ));
 
@@ -785,7 +784,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner(db.database()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         ));
 
@@ -919,7 +917,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner,
             video_categories_repository.clone(),
         ));
 
@@ -1191,7 +1188,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner(db.database()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         ));
 
@@ -1268,7 +1264,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner(db.database()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         ));
 
@@ -1501,7 +1496,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner(db.database()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         ));
 
@@ -1642,7 +1636,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             show_locks.clone(),
-            video_category_assigner(db.database()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         ));
 
@@ -1737,7 +1730,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner(db.database()),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         )
     }
@@ -1799,7 +1791,6 @@ mod tests {
             )),
             Arc::new(FixedClock(fixed_timestamp())),
             Arc::new(ShowLocks::default()),
-            video_category_assigner(unused_connection()),
             Arc::new(SqliteVideoCategoriesRepository::new(unused_connection())),
         ))
     }

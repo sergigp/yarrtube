@@ -1,12 +1,10 @@
-use crate::domain::category::CategoryMember;
 use crate::domain::channel::{Channel, ChannelHandle};
 use crate::domain::channel_video::ChannelVideo;
 use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
 use crate::domain::event::DomainEvent;
 use crate::domain::services::{
     ChannelAvatarRestorer, ChannelAvatarRestorerApi, DesiredState, InternalVideoReconciler,
-    InternalVideoReconcilerApi, ShowFileWriter, ShowFileWriterApi, VideoCategoryAssigner,
-    VideoCategoryAssignerApi,
+    InternalVideoReconcilerApi, ShowFileWriter, ShowFileWriterApi,
 };
 use crate::domain::show::ShowKey;
 use crate::domain::task::Task;
@@ -47,7 +45,6 @@ pub struct ChannelVideoReconciler {
     channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
     clock: Arc<dyn Clock>,
     show_locks: Arc<ShowLocks>,
-    video_category_assigner: VideoCategoryAssigner,
     video_categories_repository: Arc<dyn VideoCategoriesRepository>,
 }
 
@@ -66,7 +63,6 @@ impl ChannelVideoReconciler {
         channel_avatar_restorer: Arc<ChannelAvatarRestorer>,
         clock: Arc<dyn Clock>,
         show_locks: Arc<ShowLocks>,
-        video_category_assigner: VideoCategoryAssigner,
         video_categories_repository: Arc<dyn VideoCategoriesRepository>,
     ) -> Self {
         Self {
@@ -82,7 +78,6 @@ impl ChannelVideoReconciler {
             channel_avatar_restorer,
             clock,
             show_locks,
-            video_category_assigner,
             video_categories_repository,
         }
     }
@@ -177,18 +172,7 @@ impl ChannelVideoReconciler {
         }
         self.sync_membership_with_youtube(channel, on_listing_failure)?;
         let desired = self.desired_state(channel)?;
-        let reconciled = self.internal_video_reconciler.reconcile(&desired);
-        self.assign_categories(channel);
-        reconciled
-    }
-
-    /// Best effort: gives every stored video the channel's categories; a
-    /// failure is repaired by the next pass.
-    fn assign_categories(&self, channel: &Channel) {
-        let source = CategoryMember::Channel(channel.id.clone());
-        if let Err(e) = self.video_category_assigner.assign_source(&source) {
-            warn!(channel_id = %channel.id, error = %e, "failed to assign video categories");
-        }
+        self.internal_video_reconciler.reconcile(&desired)
     }
 
     /// Brings the stored membership in line with the channel's current
