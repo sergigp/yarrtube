@@ -221,6 +221,7 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskKind(aTask({ task_type: 'fetch_subtitles' }))).toBe('download')
     expect(taskKind(aTask({ task_type: 'reconcile_playlist' }))).toBe('sync')
     expect(taskKind(aTask({ task_type: 'reconcile_channel' }))).toBe('sync')
+    expect(taskKind(aTask({ task_type: 'sync_video' }))).toBe('sync')
     expect(taskKind(aTask({ task_type: 'delete_video_file' }))).toBe('delete')
     expect(taskKind(aTask({ task_type: 'delete_playlist_files' }))).toBe('delete')
     expect(taskKind(aTask({ task_type: 'delete_channel_files' }))).toBe('delete')
