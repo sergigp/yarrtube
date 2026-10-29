@@ -14,7 +14,7 @@
 - [x] 2.6 `it_should_not_schedule_a_thumbnail_for_a_video_being_downloaded` — InProgress guard.
 - [x] 2.7 `it_should_schedule_nothing_for_a_settled_errored_video` — settled-status guard.
 - [x] 2.8 `it_should_skip_if_video_is_gone` — missing record is a no-op.
-- [ ] 2.9 `it_should_skip_if_video_has_no_owner` — orphan record is a no-op.
+- [x] 2.9 `it_should_skip_if_video_has_no_owner` — orphan record is a no-op.
 - [ ] 2.10 `it_should_schedule_a_video_sync_when_a_video_is_added_to_a_channel` — subscriber schedules `sync_video`.
 - [ ] 2.11 `it_should_schedule_a_video_sync_when_a_video_is_added_to_a_playlist` — subscriber registered for playlist additions.
 - [ ] 2.12 `it_should_schedule_a_video_sync_when_a_video_is_downloaded` — subscriber registered for downloads (replaces the subtitle subscriber).

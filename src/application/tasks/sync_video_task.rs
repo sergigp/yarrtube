@@ -397,6 +397,33 @@ mod tests {
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
+    #[test]
+    fn it_should_skip_if_video_has_no_owner() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            video_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    }
+
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }
