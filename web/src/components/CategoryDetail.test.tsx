@@ -11,7 +11,6 @@ import {
   aChannel,
   aHomeVideo,
   aPlaylist,
-  aVideo,
   mockApi,
   renderWithProviders,
   type Routes as ApiRoutes,
@@ -348,7 +347,7 @@ describe('CategoryDetail', () => {
       path: 'playlists/endgames',
       avatar_filename: null,
     }
-    renderCategory({
+    const { fetchMock } = renderCategory({
       'GET /api/categories': aCategoryList([
         aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], playlists: ['PLend'] }),
       ]),
@@ -361,13 +360,6 @@ describe('CategoryDetail', () => {
           filename: 'rook.mp4',
           source: endgames,
         }),
-      ],
-      'GET /api/channels/%40hikaru/videos': [
-        aVideo({ id: 'blitz', title: 'Blitz', filename: 'blitz.mp4' }),
-        aVideo({ id: 'older', title: 'Not in the category' }),
-      ],
-      'GET /api/playlists/PLend/videos': [
-        aVideo({ id: 'rook', title: 'Rook endings', filename: 'rook.mp4' }),
       ],
     })
     const user = userEvent.setup()
@@ -395,5 +387,9 @@ describe('CategoryDetail', () => {
       'href',
       '/channels/@hikaru',
     )
+    // The category's own list feeds the player: no source's video list is fetched.
+    expect(
+      fetchMock.mock.calls.map(([url]) => url as string).filter((url) => url.includes('/videos')),
+    ).not.toContainEqual(expect.stringMatching(/^\/api\/(channels|playlists)\//))
   })
 })
