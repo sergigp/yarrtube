@@ -30,7 +30,7 @@
 - [x] 2.20 `it_should_recreate_a_playlist_deleted_in_plex`
 - [x] 2.21 `it_should_not_touch_playlists_it_did_not_create`
 - [x] 2.22 `it_should_mark_the_videos_and_request_a_sync_shortly` — `VideoCategoriesChanged` subscriber; pending at now + `CATEGORY_CHANGE_DELAY` (10 s).
-- [ ] 2.23 `it_should_bring_forward_a_pending_sync` — still one pending sync, moved to now + 10 s.
+- [x] 2.23 `it_should_bring_forward_a_pending_sync` — still one pending sync, moved to now + 10 s.
 - [ ] 2.23b `it_should_collapse_category_changes_into_one_sync` — two events (as a reconcile pass publishes, one per repaired video) ⇒ one pending sync at now + 10 s.
 - [ ] 2.24 `it_should_mark_the_video_and_request_a_sync_in_a_minute` — `VideoDownloaded` subscriber.
 - [ ] 2.25 `it_should_request_the_label_sync_at_startup_only_if_plex_is_configured` — `serve::prepare_task_queue`.

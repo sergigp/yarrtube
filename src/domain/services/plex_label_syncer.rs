@@ -134,7 +134,12 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
     }
 
     fn request_sync(&self, run_at: DateTime<Utc>) -> anyhow::Result<()> {
-        self.task_repository.schedule(&Task::SyncPlexLabels, run_at)
+        match self.task_repository.find_pending(&Task::SyncPlexLabels)? {
+            Some(pending) => self
+                .task_repository
+                .update(&pending.bring_forward(run_at, self.clock.now())),
+            None => self.task_repository.schedule(&Task::SyncPlexLabels, run_at),
+        }
     }
 
     fn sync(&self) -> anyhow::Result<()> {

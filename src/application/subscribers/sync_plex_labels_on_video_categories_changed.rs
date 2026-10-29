@@ -41,7 +41,7 @@ mod tests {
     use crate::domain::plex::{PlexEpisode, PlexLabels};
     use crate::domain::plex_label::EpisodeLabels;
     use crate::domain::services::VideoOwnerFinder;
-    use crate::domain::task::{ScheduledTask, TaskStatus};
+    use crate::domain::task::{ScheduledTask, Task, TaskStatus};
     use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
     use crate::infrastructure::repositories::sqlite_category_playlist_repository::SqliteCategoryPlaylistRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::SqliteCategoryRepository;
@@ -91,6 +91,28 @@ mod tests {
                 EpisodeLabels::pending(record("rec2")),
             ]
         );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_sync(1, now() + Duration::seconds(10))]
+        );
+    }
+
+    #[test]
+    fn it_should_bring_forward_a_pending_sync() {
+        let db = TestDatabase::new();
+        let task_repository = task_repository(&db);
+        task_repository
+            .schedule(&Task::SyncPlexLabels, now() + Duration::minutes(15))
+            .unwrap();
+        let subscriber = SyncPlexLabelsOnVideoCategoriesChanged::new(syncer(
+            &db,
+            Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+            task_repository.clone(),
+        ));
+
+        let result = handle(&subscriber, &["rec1"]);
+
+        assert_eq!(result, Ok(()));
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_sync(1, now() + Duration::seconds(10))]
