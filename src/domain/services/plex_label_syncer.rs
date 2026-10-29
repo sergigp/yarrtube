@@ -104,6 +104,7 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
     fn sync(&self) -> anyhow::Result<()> {
         let sections = self.served_sections()?;
         let episodes = self.episodes_by_file(&sections)?;
+        self.mark_reimported(&episodes)?;
         self.track_categorized_records()?;
         let rows = self.episode_labels_repository.list_dirty(BATCH_SIZE)?;
         let desired = self.desired_labels(&rows)?;
@@ -142,6 +143,27 @@ impl PlexLabelSyncer {
                     .map(|episode| (episode.file.clone(), episode))
                     .collect()
             })
+    }
+
+    /// Marks dirty every synced row whose episode Plex no longer lists, so
+    /// an episode Plex re-imported under a new rating key is labelled again.
+    fn mark_reimported(&self, episodes: &HashMap<String, PlexEpisode>) -> anyhow::Result<()> {
+        let rating_keys: HashSet<&str> = episodes
+            .values()
+            .map(|episode| episode.rating_key.as_str())
+            .collect();
+        let reimported: Vec<EpisodeLabels> = self
+            .episode_labels_repository
+            .list_synced()?
+            .into_iter()
+            .filter(|row| {
+                row.rating_key
+                    .as_deref()
+                    .is_some_and(|key| !rating_keys.contains(key))
+            })
+            .map(EpisodeLabels::mark_dirty)
+            .collect();
+        self.episode_labels_repository.save_many(&reimported)
     }
 
     /// Starts tracking, dirty, every categorized record without a row: one

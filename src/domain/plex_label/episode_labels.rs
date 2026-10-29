@@ -33,7 +33,10 @@ impl EpisodeLabels {
     }
 
     pub fn mark_dirty(self) -> Self {
-        todo!()
+        Self {
+            dirty: true,
+            ..self
+        }
     }
 
     /// Still dirty (not downloaded, not imported or rejected by Plex),

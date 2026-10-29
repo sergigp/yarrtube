@@ -17,7 +17,7 @@
 - [x] 2.7 `it_should_keep_a_video_dirty_until_it_is_downloaded`
 - [x] 2.8 `it_should_forget_a_deleted_video` — row deleted.
 - [x] 2.9 `it_should_label_categorized_videos_never_synced` — backfill of records without a row.
-- [ ] 2.10 `it_should_relabel_an_episode_plex_reimported` — drift: unknown rating key ⇒ dirty ⇒ labelled under the new key.
+- [x] 2.10 `it_should_relabel_an_episode_plex_reimported` — drift: unknown rating key ⇒ dirty ⇒ labelled under the new key.
 - [ ] 2.11 `it_should_label_the_others_if_plex_rejects_one` — per-episode failure isolated.
 - [ ] 2.12 `it_should_keep_videos_dirty_if_plex_is_unreachable` — sync succeeds, next sync in 15 min.
 - [ ] 2.13 `it_should_schedule_the_next_sync` — periodic chain at now + 15 min.
