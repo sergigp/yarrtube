@@ -6,7 +6,14 @@ pub struct PlexLabels(Vec<String>);
 
 impl PlexLabels {
     pub fn new(names: Vec<String>) -> Self {
-        Self(names)
+        let unique = names.into_iter().fold(Self::none(), |kept, name| {
+            if kept.contains(&name) {
+                kept
+            } else {
+                Self([kept.0, vec![name]].concat())
+            }
+        });
+        Self(sorted_by_key(unique.0))
     }
 
     pub fn none() -> Self {
@@ -46,6 +53,11 @@ impl PlexLabels {
     }
 }
 
+fn sorted_by_key(mut names: Vec<String>) -> Vec<String> {
+    names.sort_by_key(|name| name.to_lowercase());
+    names
+}
+
 fn same_label(name: &str, other: &str) -> bool {
     name.to_lowercase() == other.to_lowercase()
 }
@@ -64,6 +76,14 @@ mod tests {
         assert_eq!(
             labels(&["Chess", "Funny", "Old"]).missing_from(&labels(&["funny"])),
             vec!["Chess".to_string(), "Old".to_string()]
+        );
+    }
+
+    #[test]
+    fn it_should_keep_each_label_once_ignoring_case() {
+        assert_eq!(
+            labels(&["funny", "Chess", "chess"]).names(),
+            ["Chess".to_string(), "funny".to_string()]
         );
     }
 
