@@ -17,7 +17,7 @@ Requires `video-reconciler` to be implemented first (`VideoReconciler`, `SyncVid
 - [x] 2.7 `it_should_uncategorize_the_videos_of_a_deleted_category` — deleter reassigns with the category excluded before deleting.
 - [x] 2.8 `it_should_announce_the_videos_of_a_renamed_category` — rename publishes, rows untouched.
 - [x] 2.9 `it_should_not_announce_a_recolored_category` — color-only update publishes nothing.
-- [ ] 2.10 Refactor `CategoryVideoCollector` to read `VideoCategoriesRepository::list_in_category` (record → source via `ChannelVideoRepository::list` / `PlaylistVideoRepository::list`, channel sources first, then member order). Extend the seeds of the existing category list/count/total, `list_for_category` and `mark_category_watched` tests with the matching `VideoCategories`; done when those suites pass unchanged in their assertions.
+- [x] 2.10 Refactor `CategoryVideoCollector` to read `VideoCategoriesRepository::list_in_category` (record → source via `ChannelVideoRepository::list` / `PlaylistVideoRepository::list`, channel sources first, then member order). Extend the seeds of the existing category list/count/total, `list_for_category` and `mark_category_watched` tests with the matching `VideoCategories`; done when those suites pass unchanged in their assertions.
 - [ ] 2.11 `it_should_categorize_a_new_video_of_a_categorized_channel` — `VideoReconciler::reconcile` assigns the record from its owner.
 - [ ] 2.12 `it_should_leave_a_new_video_of_an_uncategorized_playlist_uncategorized` — AI regime untouched, no event.
 - [ ] 2.13 `it_should_repair_the_categories_of_stored_videos` — channel reconcile pass calls `assign_source`.

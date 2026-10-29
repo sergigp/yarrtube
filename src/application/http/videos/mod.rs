@@ -185,7 +185,9 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::video::VideoRecordId;
     use crate::domain::video::{EpisodeNumber, Video};
+    use crate::domain::video_category::VideoCategories;
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
     use crate::infrastructure::repositories::sqlite_category_repository::{
@@ -204,6 +206,7 @@ mod tests {
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::{
         SqliteVideoMetadataRepository, VideoMetadataRepository,
     };
@@ -1347,6 +1350,7 @@ mod tests {
         );
         let chess = named_category("Chess", &[channel_member("@somechannel")]);
         category_repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess]);
         let video_searcher = VideoSearcher::new(
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
@@ -1440,6 +1444,7 @@ mod tests {
         let chess = named_category("chess", &[channel_member("@somechannel")]);
         category_repository.insert(&streams).unwrap();
         category_repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@somechannel"), &[&streams, &chess]);
         let video_searcher = VideoSearcher::new(
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
@@ -1502,6 +1507,8 @@ mod tests {
         let highlights = named_category("Highlights", &[playlist_member("PL1")]);
         category_repository.insert(&chess).unwrap();
         category_repository.insert(&highlights).unwrap();
+        // `shared` is one record held by both sources, so in both categories.
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess, &highlights]);
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
@@ -1565,6 +1572,8 @@ mod tests {
             &[channel_member("@somechannel"), playlist_member("PL1")],
         );
         category_repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess]);
+        categorize_source(&db, &playlist_member("PL1"), &[&chess]);
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
@@ -3442,6 +3451,8 @@ mod tests {
         let chess =
             category_with_members(&[channel_member("@somechannel"), playlist_member("PL1")]);
         category_repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess]);
+        categorize_source(&db, &playlist_member("PL1"), &[&chess]);
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
@@ -3509,6 +3520,8 @@ mod tests {
         let streams = named_category("Streams", &[playlist_member("PL1")]);
         category_repository.insert(&chess).unwrap();
         category_repository.insert(&streams).unwrap();
+        // `shared` is one record held by both sources, so in both categories.
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess, &streams]);
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
@@ -3561,6 +3574,8 @@ mod tests {
         let chess =
             category_with_members(&[playlist_member("PL1"), channel_member("@somechannel")]);
         category_repository.insert(&chess).unwrap();
+        categorize_source(&db, &playlist_member("PL1"), &[&chess]);
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess]);
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
@@ -3620,6 +3635,7 @@ mod tests {
         });
         let chess = category_with_members(&[channel_member("@somechannel")]);
         category_repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess]);
         let video_searcher = VideoSearcher::new(
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
@@ -3664,6 +3680,7 @@ mod tests {
         );
         let chess = category_with_members(&[playlist_member("PL1")]);
         category_repository.insert(&chess).unwrap();
+        categorize_source(&db, &playlist_member("PL1"), &[&chess]);
         let video_searcher = VideoSearcher::new(
             playlist_repository,
             playlist_video_repository,
@@ -4258,5 +4275,35 @@ mod tests {
         list_home_videos(State(video_searcher))
             .await
             .map(|Json(home)| home)
+    }
+
+    /// Seeds every stored video of `source` as belonging to `categories`.
+    fn categorize_source(db: &TestDatabase, source: &CategoryMember, categories: &[&Category]) {
+        let video_ids: Vec<VideoRecordId> = match source {
+            CategoryMember::Channel(handle) => SqliteChannelVideoRepository::new(db.database())
+                .list_for_channel(handle)
+                .unwrap()
+                .into_iter()
+                .map(|channel_video| channel_video.video_id)
+                .collect(),
+            CategoryMember::Playlist(id) => SqlitePlaylistVideoRepository::new(db.database())
+                .list_for_playlist(id)
+                .unwrap()
+                .into_iter()
+                .map(|playlist_video| playlist_video.video_id)
+                .collect(),
+        };
+        let category_ids: Vec<CategoryId> = categories
+            .iter()
+            .map(|category| category.id.clone())
+            .collect();
+        SqliteVideoCategoriesRepository::new(db.database())
+            .save_many(
+                &video_ids
+                    .into_iter()
+                    .map(|video_id| VideoCategories::new(video_id, category_ids.clone()))
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
     }
 }

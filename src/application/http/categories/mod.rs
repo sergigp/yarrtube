@@ -146,7 +146,7 @@ mod tests {
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::VideoCategoryAssigner;
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{Video, VideoId};
+    use crate::domain::video::{Video, VideoId, VideoRecordId};
     use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
@@ -488,6 +488,8 @@ mod tests {
             ..category(None, "Chess")
         };
         repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@chess"), &[&chess]);
+        categorize_source(&db, &playlist_member("PLchess"), &[&chess]);
         let category_view_searcher = CategoryViewSearcher::new(
             repository,
             channel_repository,
@@ -537,6 +539,8 @@ mod tests {
         };
         repository.insert(&chess).unwrap();
         repository.insert(&science).unwrap();
+        categorize_source(&db, &playlist_member("PLchess"), &[&chess]);
+        categorize_source(&db, &channel_member("@science"), &[&science]);
         let category_view_searcher = CategoryViewSearcher::new(
             repository,
             channel_repository,
@@ -590,6 +594,8 @@ mod tests {
             ..category(None, "Chess")
         };
         repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@chess"), &[&chess]);
+        categorize_source(&db, &playlist_member("PLmusic"), &[&chess]);
         let category_view_searcher = CategoryViewSearcher::new(
             repository,
             channel_repository,
@@ -636,6 +642,8 @@ mod tests {
             ..category(None, "Chess")
         };
         repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@chess"), &[&chess]);
+        categorize_source(&db, &playlist_member("PLmusic"), &[&chess]);
         let category_view_searcher = CategoryViewSearcher::new(
             repository,
             channel_repository,
@@ -674,6 +682,7 @@ mod tests {
             ..category(None, "Music")
         };
         repository.insert(&music).unwrap();
+        categorize_source(&db, &playlist_member("PLmusic"), &[&music]);
         let category_view_searcher = CategoryViewSearcher::new(
             repository,
             channel_repository,
@@ -1788,6 +1797,8 @@ mod tests {
             ..category(None, "Chess")
         };
         repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@chess"), &[&chess]);
+        categorize_source(&db, &playlist_member("PLchess"), &[&chess]);
         let video_watch_state_updater = VideoWatchStateUpdater::new(
             video_repository.clone(),
             channel_repository,
@@ -2017,6 +2028,36 @@ mod tests {
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         )
+    }
+
+    /// Seeds every stored video of `source` as belonging to `categories`.
+    fn categorize_source(db: &TestDatabase, source: &CategoryMember, categories: &[&Category]) {
+        let video_ids: Vec<VideoRecordId> = match source {
+            CategoryMember::Channel(handle) => SqliteChannelVideoRepository::new(db.database())
+                .list_for_channel(handle)
+                .unwrap()
+                .into_iter()
+                .map(|channel_video| channel_video.video_id)
+                .collect(),
+            CategoryMember::Playlist(id) => SqlitePlaylistVideoRepository::new(db.database())
+                .list_for_playlist(id)
+                .unwrap()
+                .into_iter()
+                .map(|playlist_video| playlist_video.video_id)
+                .collect(),
+        };
+        let category_ids: Vec<CategoryId> = categories
+            .iter()
+            .map(|category| category.id.clone())
+            .collect();
+        SqliteVideoCategoriesRepository::new(db.database())
+            .save_many(
+                &video_ids
+                    .into_iter()
+                    .map(|video_id| VideoCategories::new(video_id, category_ids.clone()))
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
     }
 
     /// The pending `VideoCategoriesChanged` event `id`, naming `videos` in
