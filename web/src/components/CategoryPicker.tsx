@@ -6,6 +6,7 @@ import { byName } from '@/lib/categories'
 import { errorMessage } from '@/lib/errorMessage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 interface CategoryPickerProps {
@@ -71,9 +72,7 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
 
   return (
     <div role="group" aria-labelledby={labelId} className="flex flex-col gap-1.5">
-      <span id={labelId} className="text-sm leading-none font-medium select-none">
-        Categories
-      </span>
+      <Label id={labelId}>Categories</Label>
       {categories.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">
           {categories.map((category) => {

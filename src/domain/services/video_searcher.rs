@@ -202,14 +202,14 @@ impl VideoSearcher {
         sourced: SourcedVideo,
         by_video: &HashMap<VideoId, Vec<CategoryId>>,
     ) -> anyhow::Result<CategoryVideoView> {
-        let metadata = self.video_metadata_repository.find(&sourced.video.id)?;
-        let ids = by_video
-            .get(&sourced.video.youtube_id)
-            .cloned()
-            .unwrap_or_default();
-        Ok(CategoryVideoView::from(sourced)
-            .with_metadata(metadata)
-            .with_category_ids(ids))
+        let VideoView { video, metadata } = self.view(sourced.video)?;
+        let category_ids = by_video.get(&video.youtube_id).cloned().unwrap_or_default();
+        Ok(CategoryVideoView {
+            video,
+            metadata,
+            source: sourced.source,
+            category_ids,
+        })
     }
 
     fn views(videos: Vec<SourcedVideo>) -> Vec<HomeVideoView> {
