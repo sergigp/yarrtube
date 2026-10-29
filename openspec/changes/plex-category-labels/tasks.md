@@ -47,7 +47,7 @@
 HttpPlexLibraryRepository (mockito):
 - [x] 3.1 `it_should_list_sections_with_their_titles`
 - [x] 3.2 `it_should_read_the_server_id`
-- [ ] 3.3 `it_should_list_a_section_episodes_with_their_files` — two pages, multi-part media.
+- [x] 3.3 `it_should_list_a_section_episodes_with_their_files` — two pages, multi-part media.
 - [ ] 3.4 `it_should_read_an_episode_labels`
 - [ ] 3.5 `it_should_save_labels_removing_the_others` — exact query: `label[i].tag.tag`, `label[].tag.tag-=`, `label.locked=1`.
 - [ ] 3.6 `it_should_clear_labels_and_unlock_them` — `label.locked=0`.

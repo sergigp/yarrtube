@@ -9,6 +9,8 @@ use std::time::Duration;
 /// for a large section listing (normally ~1 s) while Plex is busy with its
 /// nightly maintenance, which has taken it to 29 s.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+/// Episodes requested per page of a section listing.
+const EPISODES_PAGE_SIZE: usize = 500;
 
 /// Port to the Plex server's library HTTP API, authenticated via
 /// `X-Plex-Token`: discovers the library sections, asks one to scan a
@@ -92,6 +94,39 @@ struct IdentityContainer {
     machine_identifier: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct MetadataResponse {
+    #[serde(rename = "MediaContainer")]
+    media_container: MetadataContainer,
+}
+
+#[derive(Debug, Deserialize)]
+struct MetadataContainer {
+    #[serde(rename = "totalSize", default)]
+    total_size: usize,
+    #[serde(rename = "Metadata", default)]
+    metadata: Vec<Metadata>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Metadata {
+    #[serde(rename = "ratingKey")]
+    rating_key: String,
+    #[serde(rename = "Media", default)]
+    media: Vec<Media>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Media {
+    #[serde(rename = "Part", default)]
+    parts: Vec<Part>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Part {
+    file: String,
+}
+
 pub struct HttpPlexLibraryRepository {
     config: PlexConfig,
     client: reqwest::blocking::Client,
@@ -145,8 +180,8 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         Ok(response.media_container.machine_identifier)
     }
 
-    fn list_episodes(&self, _section_id: &str) -> anyhow::Result<Vec<PlexEpisode>> {
-        Ok(Vec::new())
+    fn list_episodes(&self, section_id: &str) -> anyhow::Result<Vec<PlexEpisode>> {
+        self.list_episodes_from(section_id, 0)
     }
 
     fn find_labels(&self, _rating_key: &str) -> anyhow::Result<PlexLabels> {
@@ -185,6 +220,35 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
 }
 
 impl HttpPlexLibraryRepository {
+    /// The section's episodes from `start` on, one page per request.
+    fn list_episodes_from(
+        &self,
+        section_id: &str,
+        start: usize,
+    ) -> anyhow::Result<Vec<PlexEpisode>> {
+        let start_param = start.to_string();
+        let page_size = EPISODES_PAGE_SIZE.to_string();
+        let page: MetadataResponse = self.get_json(
+            &format!("/library/sections/{section_id}/all"),
+            &[
+                ("type", "4"),
+                ("X-Plex-Container-Start", &start_param),
+                ("X-Plex-Container-Size", &page_size),
+            ],
+        )?;
+        let container = page.media_container;
+        let next = start + container.metadata.len();
+        let episodes: Vec<PlexEpisode> = container
+            .metadata
+            .into_iter()
+            .flat_map(|metadata| episodes_of(section_id, metadata))
+            .collect();
+        if next == start || next >= container.total_size {
+            return Ok(episodes);
+        }
+        Ok([episodes, self.list_episodes_from(section_id, next)?].concat())
+    }
+
     fn get_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
@@ -216,6 +280,20 @@ impl HttpPlexLibraryRepository {
             body => anyhow::bail!("Plex request to {path} failed with status {status}: {body}"),
         }
     }
+}
+
+/// One episode per file of `metadata`'s media parts.
+fn episodes_of(section_id: &str, metadata: Metadata) -> Vec<PlexEpisode> {
+    metadata
+        .media
+        .into_iter()
+        .flat_map(|media| media.parts)
+        .map(|part| PlexEpisode {
+            rating_key: metadata.rating_key.clone(),
+            section_id: section_id.to_string(),
+            file: part.file,
+        })
+        .collect()
 }
 
 /// Plex server fake: sections with their titles and folders, the episodes
@@ -621,6 +699,56 @@ mod tests {
     }
 
     #[test]
+    fn it_should_list_a_section_episodes_with_their_files() {
+        let mut server = mockito::Server::new();
+        let _first_page = server
+            .mock("GET", "/library/sections/19/all")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("type".into(), "4".into()),
+                mockito::Matcher::UrlEncoded("X-Plex-Container-Start".into(), "0".into()),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 2, "totalSize": 3, "offset": 0, "Metadata": [
+                    {"ratingKey": "101", "Media": [{"Part": [{"file": "/volume1/a.mp4"}]}]},
+                    {"ratingKey": "102", "Media": [
+                        {"Part": [{"file": "/volume1/b1.mp4"}, {"file": "/volume1/b2.mp4"}]},
+                        {"Part": [{"file": "/volume1/b.mkv"}]}
+                    ]}
+                ]}}"#,
+            )
+            .create();
+        let _second_page = server
+            .mock("GET", "/library/sections/19/all")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("type".into(), "4".into()),
+                mockito::Matcher::UrlEncoded("X-Plex-Container-Start".into(), "2".into()),
+            ]))
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "totalSize": 3, "offset": 2, "Metadata": [
+                    {"ratingKey": "103", "Media": [{"Part": [{"file": "/volume1/c.mp4"}]}]}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let episodes = repository.list_episodes("19");
+
+        assert_eq!(
+            episodes.map_err(|e| e.to_string()),
+            Ok(vec![
+                episode("101", "/volume1/a.mp4"),
+                episode("102", "/volume1/b1.mp4"),
+                episode("102", "/volume1/b2.mp4"),
+                episode("102", "/volume1/b.mkv"),
+                episode("103", "/volume1/c.mp4"),
+            ])
+        );
+    }
+
+    #[test]
     fn it_should_scan_a_path_in_a_section() {
         let mut server = mockito::Server::new();
         let mock = server
@@ -662,6 +790,14 @@ mod tests {
                     .to_string()
             )
         );
+    }
+
+    fn episode(rating_key: &str, file: &str) -> PlexEpisode {
+        PlexEpisode {
+            rating_key: rating_key.to_string(),
+            section_id: "19".to_string(),
+            file: file.to_string(),
+        }
     }
 
     fn repository(server: &mockito::Server) -> HttpPlexLibraryRepository {
