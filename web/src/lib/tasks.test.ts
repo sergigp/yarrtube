@@ -158,6 +158,10 @@ describe('taskFamily, tasksForTab, tabCounts and matchesTask', () => {
     expect(taskFamily(aTask({ task_type: 'mystery_task' }))).toBe('other')
   })
 
+  it('puts video syncs in the syncs family', () => {
+    expect(taskFamily(aTask({ task_type: 'sync_video' }))).toBe('syncs')
+  })
+
   it("returns only running tasks of any type for the 'active' tab", () => {
     const runningSync = aTask({ id: 1, task_type: 'reconcile_channel', status: 'running' })
     const runningDownload = aTask({ id: 2, task_type: 'download_video', status: 'running' })

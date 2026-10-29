@@ -24,7 +24,7 @@
 - [x] 2.16 `it_should_run_video_syncs_in_their_own_lane` — `Task::lane_for("sync_video")`.
 - [x] 2.17 `it_should_give_a_video_sync_the_video_exclusivity_key` — per-video mutual exclusion.
 - [x] 2.18 `describes a video sync with its video and container` (web, `tasks.test.ts`).
-- [ ] 2.19 `puts video syncs in the syncs family` (web, `tasks.test.ts`).
+- [x] 2.19 `puts video syncs in the syncs family` (web, `tasks.test.ts`).
 
 ## 3. Infrastructure adapters (TDD)
 

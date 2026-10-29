@@ -58,6 +58,7 @@ const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
   fetch_subtitles: 'downloads',
   reconcile_playlist: 'syncs',
   reconcile_channel: 'syncs',
+  sync_video: 'syncs',
 }
 
 export function taskFamily(task: Task): TaskFamily {
