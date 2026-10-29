@@ -373,6 +373,30 @@ mod tests {
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
+    #[test]
+    fn it_should_skip_if_video_is_gone() {
+        let db = TestDatabase::new();
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        ));
+
+        let result = run(&task, &payload_for(&my_video()));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
+    }
+
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }
