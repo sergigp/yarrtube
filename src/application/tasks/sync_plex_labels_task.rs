@@ -538,6 +538,43 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_sync_again_right_away_if_no_row_of_a_full_batch_could_be_labelled() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let task_repository = task_repository(&db);
+        episode_labels_repository
+            .save_many(
+                &(0..BATCH_SIZE)
+                    .map(|i| {
+                        seed_video(
+                            &db,
+                            Video::create(VideoId::new(format!("w{i}")).unwrap(), "Waiting", now()),
+                        )
+                    })
+                    .map(|video| EpisodeLabels::pending(video.id))
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            Arc::new(
+                FakePlexLibraryRepository::default().with_location("19", "/plex/videos/creators"),
+            ),
+            episode_labels_repository,
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository.clone(),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_sync(1, now() + Duration::minutes(15))]
+        );
+    }
+
+    #[test]
     fn it_should_rotate_videos_waiting_for_plex() {
         let db = TestDatabase::new();
         let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));

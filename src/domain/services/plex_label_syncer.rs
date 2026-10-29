@@ -28,7 +28,8 @@ pub const AFTER_DOWNLOAD_DELAY: Duration = Duration::seconds(60);
 /// video; the first one schedules the sync this far out and `bring_forward`
 /// keeps it there, so the pass's events collapse into one sync.
 pub const CATEGORY_CHANGE_DELAY: Duration = Duration::seconds(10);
-/// Dirty records labelled per sync; more dirty ⇒ the next sync runs now.
+/// Dirty records labelled per sync; a full batch that made progress ⇒ the
+/// next sync runs now.
 pub const BATCH_SIZE: usize = 500;
 
 /// The Plex library sections holding yarrtube's videos, as one sync reads
@@ -113,8 +114,9 @@ pub trait PlexLabelSyncerApi: Send + Sync {
     /// scheduled.
     fn request_sync(&self, run_at: DateTime<Utc>) -> anyhow::Result<()>;
     /// One sync: heals drift, labels a batch of dirty records, reconciles
-    /// playlists, then requests the next sync (now if dirty records remain,
-    /// else now + `SYNC_INTERVAL`). Plex unreachable ⇒ logs, keeps
+    /// playlists, then requests the next sync (now if the batch was full and
+    /// at least one of its records was labelled or forgotten, else now +
+    /// `SYNC_INTERVAL`). Plex unreachable ⇒ logs, keeps
     /// everything dirty, still requests the next sync, `Ok`.
     fn sync(&self) -> anyhow::Result<()>;
 }
@@ -156,19 +158,18 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
         };
         self.mark_reimported(&library.episodes)?;
         self.track_categorized_records()?;
-        let labelled = self.label_dirty_records(&library.episodes)?;
+        let backlog = self.label_dirty_records(&library.episodes)?;
         self.reconcile_playlists(&library.sections)?;
-        self.request_next_sync(labelled == BATCH_SIZE)
+        self.request_next_sync(backlog)
     }
 }
 
 impl PlexLabelSyncer {
     /// Labels a batch of dirty records, least recently checked first;
-    /// returns how many were taken.
-    fn label_dirty_records(
-        &self,
-        episodes: &HashMap<String, PlexEpisode>,
-    ) -> anyhow::Result<usize> {
+    /// returns whether more may be labellable right away: the batch was full
+    /// and at least one of its rows was synced or deleted, so a batch of
+    /// records none of which can be labelled yet never chains syncs.
+    fn label_dirty_records(&self, episodes: &HashMap<String, PlexEpisode>) -> anyhow::Result<bool> {
         let rows = self.episode_labels_repository.list_dirty(BATCH_SIZE)?;
         let taken = rows.len();
         let desired = self.desired_labels(&rows)?;
@@ -186,8 +187,9 @@ impl PlexLabelSyncer {
                 self.label(row, video, &desired, episodes).transpose()
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
+        let progressed = labelled.len() < taken || labelled.iter().any(|row| !row.dirty);
         self.episode_labels_repository.save_many(&labelled)?;
-        Ok(taken)
+        Ok(taken == BATCH_SIZE && progressed)
     }
 
     /// Keeps one smart playlist per label and section holding labelled
