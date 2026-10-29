@@ -42,8 +42,8 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo test --locked` passes.
-- [ ] 4.2 `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass.
+- [x] 4.1 `cargo test --locked` passes.
+- [x] 4.2 `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass.
 - [ ] 4.3 End-to-end suite passes via `scripts/run-tests.sh`.
 - [ ] 4.4 Manual (human): on a real library, delete a downloaded episode file, trigger a reconcile of its source, and confirm it is redownloaded with its thumbnail and NFO and Plex shows the episode again.
 
