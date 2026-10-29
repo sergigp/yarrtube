@@ -309,7 +309,7 @@ impl HttpPlexLibraryRepository {
 
 /// The query of a label edit: each label added by index, the removed ones
 /// in one comma-joined `-=` param, and the field locked so Plex's agents
-/// never overwrite it.
+/// never overwrite it, or unlocked once it holds no label.
 fn label_edit_query(
     episode: &PlexEpisode,
     labels: &PlexLabels,
@@ -320,6 +320,7 @@ fn label_edit_query(
         .iter()
         .enumerate()
         .map(|(i, name)| (format!("label[{i}].tag.tag"), name.clone()));
+    let locked = if labels.names().is_empty() { "0" } else { "1" };
     let removed =
         (!removed.is_empty()).then(|| ("label[].tag.tag-".to_string(), removed.join(",")));
     [
@@ -329,7 +330,7 @@ fn label_edit_query(
     .into_iter()
     .chain(added)
     .chain(removed)
-    .chain([("label.locked".to_string(), "1".to_string())])
+    .chain([("label.locked".to_string(), locked.to_string())])
     .collect()
 }
 
@@ -844,6 +845,28 @@ mod tests {
             &episode("101", "/volume1/a.mp4"),
             &PlexLabels::new(vec!["Chess".to_string(), "Música".to_string()]),
             &["Old".to_string(), "Other one".to_string()],
+        );
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_clear_labels_and_unlock_them() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("PUT", "/library/sections/19/all")
+            .match_query(mockito::Matcher::Exact(
+                "type=4&id=101&label%5B%5D.tag.tag-=Chess&label.locked=0".to_string(),
+            ))
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.save_labels(
+            &episode("101", "/volume1/a.mp4"),
+            &PlexLabels::none(),
+            &["Chess".to_string()],
         );
 
         assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
