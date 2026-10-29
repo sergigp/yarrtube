@@ -1055,6 +1055,91 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_generate_missing_metadata_of_a_channel_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+        let videos_root = tempfile::tempdir().unwrap();
+        let channel_dir = videos_root.path().join("creators/somechannel");
+        std::fs::create_dir_all(channel_dir.join("Season 2026")).unwrap();
+        let video = downloaded_video();
+        save_channel_video(
+            &video_repository,
+            &channel_repository,
+            &channel_video_repository,
+            &video,
+        );
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            video_repository.clone(),
+            channel_video_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::with_listing(vec![
+                DOWNLOADED_FILENAME.to_string(),
+            ])),
+            video_metadata_repository.clone(),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository {
+                    metadata: Some(youtube_metadata()),
+                }),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                video_metadata_repository.clone(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            videos_root.path().to_string_lossy(),
+            video_category_assigner(db.database()),
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_metadata_repository.find(&video.id).unwrap(),
+            Some(
+                VideoMetadata::new(
+                    "My Video",
+                    "A description",
+                    "My Channel",
+                    "My Channel",
+                    fixed_timestamp(),
+                    None,
+                    Vec::new(),
+                    "yt1",
+                    None,
+                    "20231114 My Video",
+                    fixed_timestamp(),
+                )
+                .with_thumb(Some("S2026E031501 - My Video.jpg".to_string()))
+            )
+        );
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::FetchSubtitles {
+                    video_id: video.id.as_str().to_string(),
+                    output_dir: channel_dir.to_string_lossy().to_string(),
+                },
+            )]
+        );
+    }
+
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }
