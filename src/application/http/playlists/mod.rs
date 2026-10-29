@@ -172,6 +172,7 @@ pub async fn mark_playlist_watched(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::category::CategoryId;
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::event::{DomainEvent, ScheduledEvent};
@@ -192,6 +193,7 @@ mod tests {
     use crate::domain::video::Video;
     use crate::domain::video::VideoDownloaded;
     use crate::domain::video::VideoId;
+    use crate::domain::video_category::VideoCategories;
     use crate::domain::video_transcript::{
         CaptionLanguage, CaptionSource, CaptionTrack, TranscriptText, VideoTranscript,
     };
@@ -215,6 +217,7 @@ mod tests {
         SqliteTaskRepository, TaskRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
     use crate::infrastructure::repositories::sqlite_video_metadata_repository::SqliteVideoMetadataRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
@@ -1232,6 +1235,54 @@ mod tests {
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(video_transcript_repository.find(&video.id).unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn it_should_delete_the_categories_of_a_deleted_playlist_videos() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let video_categories_repository =
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database()));
+        playlist_repository
+            .insert(&playlist("PL1", DEFAULT_PATH))
+            .unwrap();
+        let (video, _) = save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            "vid1",
+            0,
+        );
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                video.id.clone(),
+                vec![CategoryId::new("music").unwrap()],
+            )])
+            .unwrap();
+        let playlist_deleter = PlaylistDeleter::new(
+            playlist_repository.clone(),
+            video_repository.clone(),
+            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
+            playlist_video_repository.clone(),
+            event_publisher(&db),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            video_categories_repository.clone(),
+        );
+
+        let response = delete(playlist_deleter, "PL1").await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![VideoCategories::none(video.id.clone())]
+        );
     }
 
     #[tokio::test]

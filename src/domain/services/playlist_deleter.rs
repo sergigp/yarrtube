@@ -73,8 +73,8 @@ impl PlaylistDeleter {
         }
     }
 
-    /// Deletes each `PlaylistVideo`'s owned `Video` row and its transcript,
-    /// then the `PlaylistVideo` rows themselves.
+    /// Deletes each `PlaylistVideo`'s owned `Video` row, its transcript and
+    /// its categories, then the `PlaylistVideo` rows themselves.
     fn delete_playlist_videos(&self, id: &PlaylistId) -> Result<(), DeletePlaylistError> {
         let playlist_videos = self
             .playlist_video_repository
@@ -85,6 +85,9 @@ impl PlaylistDeleter {
                 .delete(&playlist_video.video_id)
                 .map_err(DeletePlaylistError::Repository)?;
             self.video_transcript_repository
+                .delete(&playlist_video.video_id)
+                .map_err(DeletePlaylistError::Repository)?;
+            self.video_categories_repository
                 .delete(&playlist_video.video_id)
                 .map_err(DeletePlaylistError::Repository)?;
         }
