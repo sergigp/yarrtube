@@ -42,7 +42,6 @@ mod tests {
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::ShowFileWriter;
-
     use crate::domain::services::VideoReconciler;
     use crate::domain::services::VideoRelocator;
     use crate::domain::shared::{Quality, ReconcileInterval};
@@ -65,7 +64,6 @@ mod tests {
     use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
     use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
     use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
-
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,

@@ -7,8 +7,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 /// Fetches one downloaded video's subtitles, scheduled by
-/// `FetchSubtitlesOnVideoDownloaded` after a download and by the
-/// reconcilers' missing-subtitles recovery. Best-effort: always succeeds, so
+/// the video sync (`SyncVideoTask` via `VideoReconciler`) after a download
+/// and by the reconcilers' missing-subtitles recovery. Best-effort: always succeeds, so
 /// the queue never retries it; the next reconcile pass reschedules it instead.
 pub struct FetchSubtitlesTask {
     video_repository: Arc<dyn VideoRepository>,
@@ -51,7 +51,6 @@ mod tests {
         CaptionLanguage, CaptionSource, CaptionTracks, TranscriptText, VideoTranscript,
     };
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
-
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::sqlite_video_transcript_repository::{
         SqliteVideoTranscriptRepository, VideoTranscriptRepository,

@@ -722,6 +722,22 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_add_a_download_if_one_is_running() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let download = download_task("rec1");
+        repo.schedule(&download, now).unwrap();
+        repo.claim(1, now).unwrap();
+
+        repo.schedule(&download, now).unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![pending_task(1, &download, now, now).start(now)]
+        );
+    }
+
+    #[test]
     fn it_should_schedule_a_download_for_another_video() {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         let repo = repo_with_clock(now);

@@ -632,6 +632,21 @@ mod tests {
     }
 
     #[test]
+    fn it_should_dedupe_running_video_tasks_except_video_syncs() {
+        let dedupes: Vec<bool> = [
+            "download_video",
+            "fetch_thumbnail",
+            "fetch_subtitles",
+            "sync_video",
+        ]
+        .iter()
+        .map(|task_type| Task::dedupes_running(task_type))
+        .collect();
+
+        assert_eq!(dedupes, vec![true, true, true, false]);
+    }
+
+    #[test]
     fn it_should_give_a_video_sync_the_video_exclusivity_key() {
         let task = Task::SyncVideo {
             video_id: "rec1".to_string(),
