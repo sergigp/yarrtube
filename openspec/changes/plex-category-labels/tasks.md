@@ -52,7 +52,7 @@ HttpPlexLibraryRepository (mockito):
 - [x] 3.5 `it_should_save_labels_removing_the_others` — exact query: `label[i].tag.tag`, `label[].tag.tag-=`, `label.locked=1`.
 - [x] 3.6 `it_should_clear_labels_and_unlock_them` — `label.locked=0`.
 - [x] 3.7 `it_should_list_playlists`
-- [ ] 3.8 `it_should_create_a_smart_playlist_filtered_by_label` — exact `uri`.
+- [x] 3.8 `it_should_create_a_smart_playlist_filtered_by_label` — exact `uri`.
 - [ ] 3.9 `it_should_delete_a_playlist`
 
 SqliteEpisodeLabelsRepository:

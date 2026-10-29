@@ -263,15 +263,32 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
 
     fn create_smart_playlist(
         &self,
-        _server_id: &str,
-        _section_id: &str,
-        _label: &str,
-        _title: &str,
+        server_id: &str,
+        section_id: &str,
+        label: &str,
+        title: &str,
     ) -> anyhow::Result<PlexPlaylist> {
-        Ok(PlexPlaylist {
-            rating_key: String::new(),
-            title: String::new(),
-        })
+        let uri = smart_playlist_uri(server_id, section_id, label)?;
+        let response = self
+            .client
+            .post(format!("{}/playlists", self.config.base_url))
+            .query(&[
+                ("type", "video"),
+                ("title", title),
+                ("smart", "1"),
+                ("uri", uri.as_str()),
+            ])
+            .header("Accept", "application/json")
+            .header("X-Plex-Token", &self.config.token)
+            .send()?;
+        let response: PlaylistsResponse = Self::ensure_success("/playlists", response)?.json()?;
+        response
+            .media_container
+            .playlists
+            .into_iter()
+            .next()
+            .map(PlexPlaylist::from)
+            .ok_or_else(|| anyhow::anyhow!("Plex created no playlist titled {title}"))
     }
 
     fn delete_playlist(&self, _rating_key: &str) -> anyhow::Result<()> {
@@ -367,6 +384,20 @@ fn label_edit_query(
     .chain(removed)
     .chain([("label.locked".to_string(), locked.to_string())])
     .collect()
+}
+
+/// The library URI a smart playlist filters: the section's unwatched
+/// episodes labelled `label`, newest air date first.
+fn smart_playlist_uri(server_id: &str, section_id: &str, label: &str) -> anyhow::Result<String> {
+    let mut uri = reqwest::Url::parse(&format!(
+        "server://{server_id}/com.plexapp.plugins.library/library/sections/{section_id}/all"
+    ))?;
+    uri.query_pairs_mut()
+        .append_pair("type", "4")
+        .append_pair("episode.label", label)
+        .append_pair("episode.unwatched", "1")
+        .append_pair("sort", "originallyAvailableAt:desc");
+    Ok(uri.to_string())
 }
 
 /// One episode per file of `metadata`'s media parts.
@@ -943,6 +974,50 @@ mod tests {
                 },
             ])
         );
+    }
+
+    #[test]
+    fn it_should_create_a_smart_playlist_filtered_by_label() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("POST", "/playlists")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("type".into(), "video".into()),
+                mockito::Matcher::UrlEncoded("smart".into(), "1".into()),
+                mockito::Matcher::UrlEncoded("title".into(), "Sci & Tech · Subscriptions".into()),
+                mockito::Matcher::UrlEncoded(
+                    "uri".into(),
+                    "server://abc123/com.plexapp.plugins.library/library/sections/19/all\
+                     ?type=4&episode.label=Sci+%26+Tech&episode.unwatched=1\
+                     &sort=originallyAvailableAt%3Adesc"
+                        .into(),
+                ),
+            ]))
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "Metadata": [
+                    {"ratingKey": "503", "title": "Sci & Tech · Subscriptions", "smart": true}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let playlist = repository.create_smart_playlist(
+            "abc123",
+            "19",
+            "Sci & Tech",
+            "Sci & Tech · Subscriptions",
+        );
+
+        assert_eq!(
+            playlist.map_err(|e| e.to_string()),
+            Ok(PlexPlaylist {
+                rating_key: "503".to_string(),
+                title: "Sci & Tech · Subscriptions".to_string(),
+            })
+        );
+        mock.assert();
     }
 
     #[test]
