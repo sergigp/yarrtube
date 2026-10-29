@@ -46,6 +46,14 @@ struct DesiredPlaylist {
     title: String,
 }
 
+impl DesiredPlaylist {
+    /// Whether `playlist` is the one for this section and label.
+    fn is(&self, playlist: &CategoryPlaylist) -> bool {
+        playlist.section_id == self.section_id
+            && playlist.label.to_lowercase() == self.label.to_lowercase()
+    }
+}
+
 /// Mirrors each stored video's categories into its Plex episode's labels,
 /// and keeps one smart playlist per category and Plex library on them. Plex
 /// sees yarrtube's `videos_path` at `plex_videos_path`.
@@ -155,14 +163,15 @@ impl PlexLabelSyncer {
     /// Keeps one smart playlist per label and section holding labelled
     /// episodes.
     fn reconcile_playlists(&self, sections: &[PlexSection]) -> anyhow::Result<()> {
+        let desired = self.desired_playlists(sections)?;
         let stored = self.category_playlist_repository.list()?;
-        self.desired_playlists(sections)?
+        stored
+            .iter()
+            .filter(|playlist| !desired.iter().any(|desired| desired.is(playlist)))
+            .try_for_each(|playlist| self.delete_playlist(playlist))?;
+        desired
             .into_iter()
-            .filter(|desired| {
-                !stored.iter().any(|playlist| {
-                    playlist.section_id == desired.section_id && playlist.label == desired.label
-                })
-            })
+            .filter(|desired| !stored.iter().any(|playlist| desired.is(playlist)))
             .try_for_each(|desired| self.create_playlist(desired))
     }
 
@@ -191,6 +200,12 @@ impl PlexLabelSyncer {
                 title: playlist_title(label, section_id, &labelled, sections),
             })
             .collect())
+    }
+
+    fn delete_playlist(&self, playlist: &CategoryPlaylist) -> anyhow::Result<()> {
+        self.plex_library_repository
+            .delete_playlist(&playlist.rating_key)?;
+        self.category_playlist_repository.delete(playlist)
     }
 
     fn create_playlist(&self, desired: DesiredPlaylist) -> anyhow::Result<()> {

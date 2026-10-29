@@ -675,6 +675,34 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_delete_the_playlist_of_a_category_without_labelled_episodes() {
+        let db = TestDatabase::new();
+        let category_playlist_repository =
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_playlist("pl7", "Funny"),
+        );
+        category_playlist_repository
+            .save(&category_playlist("19", "Funny", "pl7", "Funny"))
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+            category_playlist_repository.clone(),
+            task_repository(&db),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex.playlists(), vec![]);
+        assert_eq!(category_playlist_repository.list().unwrap(), vec![]);
+    }
+
     /// The syncer over the test database, with Plex seeing `/videos` at
     /// `/plex/videos`.
     fn syncer(
