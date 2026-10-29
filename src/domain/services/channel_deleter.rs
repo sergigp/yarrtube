@@ -27,6 +27,7 @@ pub struct ChannelDeleter {
 }
 
 impl ChannelDeleter {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         repository: Arc<dyn ChannelRepository>,
         video_repository: Arc<dyn VideoRepository>,

@@ -302,7 +302,7 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_categories_repository
-                .find_many(&[existing.id.clone()])
+                .find_many(std::slice::from_ref(&existing.id))
                 .unwrap(),
             vec![VideoCategories::new(
                 existing.id.clone(),
@@ -363,7 +363,7 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             video_categories_repository
-                .find_many(&[existing.id.clone()])
+                .find_many(std::slice::from_ref(&existing.id))
                 .unwrap(),
             vec![classified]
         );
@@ -409,7 +409,7 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![]);
         assert_eq!(
             video_categories_repository
-                .find_many(&[removed.id.clone()])
+                .find_many(std::slice::from_ref(&removed.id))
                 .unwrap(),
             vec![VideoCategories::none(removed.id.clone())]
         );

@@ -48,8 +48,9 @@ impl VideoCategoriesRepository for SqliteVideoCategoriesRepository {
         let mut by_video = Self::group_by_video(found)?;
         Ok(ids
             .iter()
-            .map(|id| {
-                VideoCategories::new(id.clone(), by_video.remove(id.as_str()).unwrap_or_default())
+            .map(|id| match by_video.remove(id.as_str()) {
+                Some(category_ids) => VideoCategories::new(id.clone(), category_ids),
+                None => VideoCategories::none(id.clone()),
             })
             .collect())
     }

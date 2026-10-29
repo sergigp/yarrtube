@@ -26,8 +26,4 @@ impl VideoCategories {
             category_ids: Vec::new(),
         }
     }
-
-    pub fn contains(&self, id: &CategoryId) -> bool {
-        self.category_ids.contains(id)
-    }
 }

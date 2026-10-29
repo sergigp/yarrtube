@@ -1149,7 +1149,7 @@ mod tests {
         assert_eq!(response, Ok(StatusCode::NO_CONTENT));
         assert_eq!(
             video_categories_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![VideoCategories::none(video.id.clone())]
         );
