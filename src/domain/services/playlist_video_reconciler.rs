@@ -278,7 +278,7 @@ impl PlaylistVideoReconciler {
 
     /// Stores a newly seen video as `PENDING` at its playlist position, under
     /// the playlist's next episode number, and announces it, which is what
-    /// triggers its download and thumbnail. Returns the playlist with that
+    /// schedules its video sync. Returns the playlist with that
     /// number recorded as its last.
     fn add_video(
         &self,

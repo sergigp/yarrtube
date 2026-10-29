@@ -275,7 +275,7 @@ impl ChannelVideoReconciler {
     }
 
     /// Stores a newly seen video as `PENDING` at its recency position and
-    /// announces it, which is what triggers its download and thumbnail.
+    /// announces it, which is what schedules its video sync.
     fn add_video(
         &self,
         channel: &Channel,
