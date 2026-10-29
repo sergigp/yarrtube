@@ -16,6 +16,7 @@ use chrono::{DateTime, Duration, Utc};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
+use tracing::warn;
 
 /// How often a label sync runs to heal drift.
 pub const SYNC_INTERVAL: Duration = Duration::minutes(15);
@@ -241,8 +242,14 @@ impl PlexLabelSyncer {
             .get(&row.video_id)
             .cloned()
             .unwrap_or_else(PlexLabels::none);
-        self.write_labels(&episode, &desired)?;
-        Ok(Some(row.synced(&episode, desired, self.clock.now())))
+        let now = self.clock.now();
+        match self.write_labels(&episode, &desired) {
+            Ok(()) => Ok(Some(row.synced(&episode, desired, now))),
+            Err(e) => {
+                warn!(video_id = %row.video_id, rating_key = %episode.rating_key, error = %e, "failed to write Plex labels, retrying on a later sync");
+                Ok(Some(row.checked(now)))
+            }
+        }
     }
 
     /// Makes the episode's labels exactly `desired`, unless they already are.
