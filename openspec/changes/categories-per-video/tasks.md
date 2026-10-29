@@ -9,7 +9,7 @@ Requires `video-reconciler` to be implemented first (`VideoReconciler`, `SyncVid
 ## 2. Behaviour (TDD)
 
 - [x] 2.1 `it_should_categorize_the_videos_of_an_added_member` — set members writes the member's records' sets and publishes one batched `VideoCategoriesChanged`.
-- [ ] 2.2 `it_should_uncategorize_the_videos_of_a_removed_member` — a source left in no category leaves its records in none.
+- [x] 2.2 `it_should_uncategorize_the_videos_of_a_removed_member` — a source left in no category leaves its records in none.
 - [ ] 2.3 `it_should_keep_the_other_categories_of_a_member_removed_from_one` — sets are the source's remaining categories.
 - [ ] 2.4 `it_should_not_categorize_other_copies_of_a_member_video` — categories are per record, not per YouTube video.
 - [ ] 2.5 `it_should_uncategorize_stale_videos_of_a_former_member` — records still holding the category are recomputed (retry safety).

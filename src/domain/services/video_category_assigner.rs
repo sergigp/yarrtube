@@ -76,10 +76,15 @@ impl VideoCategoryAssignerApi for VideoCategoryAssigner {
     fn reassign_category(
         &self,
         category_id: &CategoryId,
-        _previous_members: &[CategoryMember],
+        previous_members: &[CategoryMember],
         categories: &[Category],
     ) -> anyhow::Result<()> {
-        let sources = Self::members_of(category_id, categories);
+        let sources = Self::distinct(
+            previous_members
+                .iter()
+                .cloned()
+                .chain(Self::members_of(category_id, categories)),
+        );
         let desired = sources
             .iter()
             .map(|source| self.desired_for_source(source, categories))
@@ -101,6 +106,16 @@ impl VideoCategoryAssigner {
             .find(|category| &category.id == category_id)
             .map(|category| category.members.clone())
             .unwrap_or_default()
+    }
+
+    /// `sources` each once, first occurrence first.
+    fn distinct(sources: impl Iterator<Item = CategoryMember>) -> Vec<CategoryMember> {
+        sources.fold(Vec::new(), |mut kept, source| {
+            if !kept.contains(&source) {
+                kept.push(source);
+            }
+            kept
+        })
     }
 
     /// The categories of `categories` holding `source`.
