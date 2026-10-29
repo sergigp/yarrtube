@@ -3,8 +3,8 @@ use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
 use crate::domain::video::{
-    HomeLimits, HomeVideoView, HomeVideos, ListVideosError, SourcedVideo, Video, VideoId,
-    VideoSource, VideoStatus, VideoView,
+    CategoryVideoView, HomeLimits, HomeVideoView, HomeVideos, ListVideosError, SourcedVideo, Video,
+    VideoId, VideoSource, VideoStatus, VideoView,
 };
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -84,7 +84,8 @@ pub trait VideoSearcherApi: Send + Sync {
 
     /// Downloaded videos of the category's members, once per YouTube video
     /// (channel copy preferred), newest sync first.
-    fn list_for_category(&self, id: &CategoryId) -> Result<Vec<HomeVideoView>, ListVideosError>;
+    fn list_for_category(&self, id: &CategoryId)
+    -> Result<Vec<CategoryVideoView>, ListVideosError>;
 }
 
 impl VideoSearcherApi for VideoSearcher {
@@ -152,7 +153,10 @@ impl VideoSearcherApi for VideoSearcher {
         })
     }
 
-    fn list_for_category(&self, id: &CategoryId) -> Result<Vec<HomeVideoView>, ListVideosError> {
+    fn list_for_category(
+        &self,
+        id: &CategoryId,
+    ) -> Result<Vec<CategoryVideoView>, ListVideosError> {
         let category = self.find_category(id)?;
         let mut videos = Self::once_per_youtube_video(
             self.category_video_collector
@@ -163,7 +167,16 @@ impl VideoSearcherApi for VideoSearcher {
         let by_video = self
             .category_ids_by_video()
             .map_err(ListVideosError::Repository)?;
-        Ok(Self::with_categories(Self::views(videos), &by_video))
+        Ok(videos
+            .into_iter()
+            .map(|sourced| {
+                let ids = by_video
+                    .get(&sourced.video.youtube_id)
+                    .cloned()
+                    .unwrap_or_default();
+                CategoryVideoView::from(sourced).with_category_ids(ids)
+            })
+            .collect())
     }
 }
 

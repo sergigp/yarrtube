@@ -3,12 +3,12 @@ import type {
   AppVersion,
   CategoryList,
   CategoryMembers,
+  CategoryVideo,
   CreatedCategory,
   ChannelListItem,
   ChannelPreview,
   CreatedChannel,
   DirectoryListing,
-  HomeVideo,
   HomeVideos,
   PlaylistListItem,
   PlaylistPreview,
@@ -309,7 +309,7 @@ export async function setCategoryMembers(id: string, members: CategoryMembers): 
   })
 }
 
-export function listCategoryVideos(id: string): Promise<HomeVideo[]> {
+export function listCategoryVideos(id: string): Promise<CategoryVideo[]> {
   return request(`/categories/${encodeURIComponent(id)}/videos`)
 }
 

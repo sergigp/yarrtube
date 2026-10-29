@@ -19,7 +19,8 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::http::header::{CONTENT_TYPE, HeaderName};
 use dto::{
-    HomeResponse, HomeVideoResponse, RecordProgressRequest, RecordProgressResponse, VideoResponse,
+    CategoryVideoResponse, HomeResponse, RecordProgressRequest, RecordProgressResponse,
+    VideoResponse,
 };
 
 /// A WebVTT body with its content type header.
@@ -60,14 +61,17 @@ pub async fn list_videos_for_channel(
 pub async fn list_videos_for_category(
     State(video_searcher): State<VideoSearcher>,
     Path(id): Path<String>,
-) -> Result<Json<Vec<HomeVideoResponse>>, ApiError> {
+) -> Result<Json<Vec<CategoryVideoResponse>>, ApiError> {
     let id = CategoryId::new(id)?;
 
     let videos = run_blocking(move || video_searcher.list_for_category(&id))
         .await?
         .map_err(list_videos_error)?;
     Ok(Json(
-        videos.into_iter().map(HomeVideoResponse::from).collect(),
+        videos
+            .into_iter()
+            .map(CategoryVideoResponse::from)
+            .collect(),
     ))
 }
 
@@ -216,7 +220,7 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Duration, Utc};
-    use dto::HomeVideoSourceResponse;
+    use dto::{HomeVideoResponse, HomeVideoSourceResponse};
     use rusqlite::Connection;
     use std::sync::Arc;
 
@@ -3470,19 +3474,29 @@ mod tests {
         assert_eq!(
             response,
             Ok(vec![
-                HomeVideoResponse {
+                CategoryVideoResponse {
                     thumbnail_filename: Some("vid3.jpg".to_string()),
-                    ..in_categories(
-                        home_video_response("vid3", "Newest", channel_source(Some("avatar.jpg"))),
+                    ..category_video_in(
+                        category_video_response(
+                            "vid3",
+                            "Newest",
+                            30,
+                            channel_source(Some("avatar.jpg"))
+                        ),
                         &[&chess]
                     )
                 },
-                in_categories(
-                    home_video_response("vid2", "Middle", playlist_source()),
+                category_video_in(
+                    category_video_response("vid2", "Middle", 20, playlist_source()),
                     &[&chess]
                 ),
-                in_categories(
-                    home_video_response("vid1", "Oldest", channel_source(Some("avatar.jpg"))),
+                category_video_in(
+                    category_video_response(
+                        "vid1",
+                        "Oldest",
+                        10,
+                        channel_source(Some("avatar.jpg"))
+                    ),
                     &[&chess]
                 ),
             ])
@@ -3538,8 +3552,8 @@ mod tests {
 
         assert_eq!(
             response,
-            Ok(vec![in_categories(
-                home_video_response("vid_shared", "Shared", channel_source(None)),
+            Ok(vec![category_video_in(
+                category_video_response("vid_shared", "Shared", 100, channel_source(None)),
                 &[&chess, &streams]
             )])
         );
@@ -3592,8 +3606,8 @@ mod tests {
 
         assert_eq!(
             response,
-            Ok(vec![in_categories(
-                home_video_response("vid_shared", "Shared", channel_source(None)),
+            Ok(vec![category_video_in(
+                category_video_response("vid_shared", "Shared", 10, channel_source(None)),
                 &[&chess]
             )])
         );
@@ -3642,10 +3656,11 @@ mod tests {
 
         assert_eq!(
             response,
-            Ok(vec![in_categories(
-                home_video_response(
+            Ok(vec![category_video_in(
+                category_video_response(
                     "vid_shared",
                     "Shared",
+                    20,
                     HomeVideoSourceResponse {
                         id: "PL2".to_string(),
                         ..playlist_source()
@@ -3704,8 +3719,8 @@ mod tests {
 
         assert_eq!(
             response,
-            Ok(vec![in_categories(
-                home_video_response("vid_shared", "Shared", playlist_source()),
+            Ok(vec![category_video_in(
+                category_video_response("vid_shared", "Shared", 20, playlist_source()),
                 &[&chess]
             )])
         );
@@ -3760,12 +3775,17 @@ mod tests {
         assert_eq!(
             response,
             Ok(vec![
-                in_categories(
-                    home_video_response("vid_channel", "From channel", channel_source(None)),
+                category_video_in(
+                    category_video_response(
+                        "vid_channel",
+                        "From channel",
+                        20,
+                        channel_source(None)
+                    ),
                     &[&chess]
                 ),
-                in_categories(
-                    home_video_response("vid_playlist", "From playlist", playlist_source()),
+                category_video_in(
+                    category_video_response("vid_playlist", "From playlist", 10, playlist_source()),
                     &[&chess]
                 ),
             ])
@@ -3825,8 +3845,8 @@ mod tests {
 
         assert_eq!(
             response,
-            Ok(vec![in_categories(
-                home_video_response("vid1", "Downloaded", channel_source(None)),
+            Ok(vec![category_video_in(
+                category_video_response("vid1", "Downloaded", 10, channel_source(None)),
                 &[&chess]
             )])
         );
@@ -3870,8 +3890,8 @@ mod tests {
 
         assert_eq!(
             response,
-            Ok(vec![in_categories(
-                home_video_response("vid1", "Excluded from home", playlist_source()),
+            Ok(vec![category_video_in(
+                category_video_response("vid1", "Excluded from home", 10, playlist_source()),
                 &[&chess]
             )])
         );
@@ -4175,6 +4195,48 @@ mod tests {
         }
     }
 
+    fn category_video_response(
+        youtube_id: &str,
+        title: &str,
+        created_at_seconds: i64,
+        source: HomeVideoSourceResponse,
+    ) -> CategoryVideoResponse {
+        let created_at = DateTime::<Utc>::from_timestamp(created_at_seconds, 0).unwrap();
+        CategoryVideoResponse {
+            id: youtube_id.to_string(),
+            title: title.to_string(),
+            status: "DOWNLOADED".to_string(),
+            quality: Some("high".to_string()),
+            filename: Some(format!("{title}.mp4")),
+            thumbnail_filename: None,
+            duration_seconds: None,
+            created_at,
+            updated_at: created_at,
+            watched: false,
+            position_seconds: 0,
+            synced_at: Some(created_at),
+            published_at: None,
+            description: None,
+            channel_name: None,
+            subtitle_language: None,
+            source,
+            category_ids: vec![],
+        }
+    }
+
+    fn category_video_in(
+        video: CategoryVideoResponse,
+        categories: &[&Category],
+    ) -> CategoryVideoResponse {
+        CategoryVideoResponse {
+            category_ids: categories
+                .iter()
+                .map(|category| category.id.as_str().to_string())
+                .collect(),
+            ..video
+        }
+    }
+
     fn in_categories(card: HomeVideoResponse, categories: &[&Category]) -> HomeVideoResponse {
         HomeVideoResponse {
             category_ids: categories
@@ -4386,7 +4448,7 @@ mod tests {
     async fn list_for_category(
         video_searcher: VideoSearcher,
         id: &str,
-    ) -> Result<Vec<HomeVideoResponse>, ApiError> {
+    ) -> Result<Vec<CategoryVideoResponse>, ApiError> {
         list_videos_for_category(State(video_searcher), Path(id.to_string()))
             .await
             .map(|Json(videos)| videos)

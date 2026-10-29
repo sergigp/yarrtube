@@ -7,6 +7,7 @@ import { RouteProbe } from '@/test/RouteProbe'
 import {
   aCategory,
   aCategoryList,
+  aCategoryVideo,
   aChannel,
   aHomeVideo,
   aPlaylist,
@@ -353,8 +354,13 @@ describe('CategoryDetail', () => {
       ]),
       'GET /api/channels': [aChannel({ id: '@hikaru', name: 'Hikaru', path: 'channels/hikaru' })],
       'GET /api/categories/chess/videos': [
-        aHomeVideo({ id: 'blitz', title: 'Blitz', source: hikaru }),
-        aHomeVideo({ id: 'rook', title: 'Rook endings', source: endgames }),
+        aCategoryVideo({ id: 'blitz', title: 'Blitz', filename: 'blitz.mp4', source: hikaru }),
+        aCategoryVideo({
+          id: 'rook',
+          title: 'Rook endings',
+          filename: 'rook.mp4',
+          source: endgames,
+        }),
       ],
       'GET /api/channels/%40hikaru/videos': [
         aVideo({ id: 'blitz', title: 'Blitz', filename: 'blitz.mp4' }),

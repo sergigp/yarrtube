@@ -2,7 +2,7 @@
 
 ## 1. Walking skeleton
 
-- [ ] 1.1 Add `CategoryVideoView` (`src/domain/video/category_video_view.rs`, re-exported from `mod.rs`), switch `VideoSearcherApi::list_for_category` to `Vec<CategoryVideoView>` (bodies may fill `metadata: None`), add `CategoryVideoResponse` + `From<VideoSource> for HomeVideoSourceResponse` in `dto.rs`, and make `list_videos_for_category` return `Vec<CategoryVideoResponse>`, with the existing category tests asserting through a `category_video_response(..)` helper. On the frontend, add the `CategoryVideo` type and `aCategoryVideo` builder, type `listCategoryVideos`/`useCategoryVideos` as `CategoryVideo[]`, make `VideoListPane` generic over `T extends Video` with `basePathOf`, and have `CategoryPlayer` read the selected video from the category list (dropping `useSourceVideos`). Done when `cargo build`, `cargo test --locked` and `npm run check` pass.
+- [x] 1.1 Add `CategoryVideoView` (`src/domain/video/category_video_view.rs`, re-exported from `mod.rs`), switch `VideoSearcherApi::list_for_category` to `Vec<CategoryVideoView>` (bodies may fill `metadata: None`), add `CategoryVideoResponse` + `From<VideoSource> for HomeVideoSourceResponse` in `dto.rs`, and make `list_videos_for_category` return `Vec<CategoryVideoResponse>`, with the existing category tests asserting through a `category_video_response(..)` helper. On the frontend, add the `CategoryVideo` type and `aCategoryVideo` builder, type `listCategoryVideos`/`useCategoryVideos` as `CategoryVideo[]`, make `VideoListPane` generic over `T extends Video` with `basePathOf`, and have `CategoryPlayer` read the selected video from the category list (dropping `useSourceVideos`). Done when `cargo build`, `cargo test --locked` and `npm run check` pass.
 
 ## 2. Behaviour (TDD)
 

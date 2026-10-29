@@ -92,6 +92,13 @@ export interface HomeVideo {
   category_ids: string[]
 }
 
+/** An entry of `GET /api/categories/:id/videos`: a source's video, with where it's listed from. */
+export interface CategoryVideo extends Video {
+  source: HomeVideoSource
+  /** Categories having the YouTube video, in category-name order. */
+  category_ids: string[]
+}
+
 /** Response of `GET /api/videos/home`. */
 export interface HomeVideos {
   continue_watching: HomeVideo[]

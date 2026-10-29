@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useChannels, useSourceVideos } from '@/api/queries'
-import type { HomeVideo } from '@/api/types'
+import { useChannels } from '@/api/queries'
+import type { CategoryVideo } from '@/api/types'
 import { usePlaybackSpeed } from '@/hooks/usePlaybackSpeed'
 import { useVideoSelection } from '@/hooks/useVideoSelection'
 import { useWatchProgress } from '@/hooks/useWatchProgress'
@@ -9,22 +9,19 @@ import { VideoListPane } from './VideoListPane'
 import { VideoPlayer } from './VideoPlayer'
 
 interface CategoryPlayerProps {
-  videos: HomeVideo[] | undefined
+  videos: CategoryVideo[] | undefined
   error: Error | null
 }
 
 /**
  * A category played like a playlist: the player and the selected video's
  * detail, with the category's videos as the queue beside them. Each video
- * plays from its own channel or playlist, whose video list supplies what the
- * player and detail need beyond the queue's entry.
+ * plays from, and records its progress against, its own channel or playlist.
  */
 export function CategoryPlayer({ videos, error }: CategoryPlayerProps) {
-  const { selectedVideo: selected, autoplay, selectVideo } = useVideoSelection(videos)
-  const source = selected?.source ?? null
-  const { data: sourceVideos } = useSourceVideos(source)
+  const { selectedVideo: video, autoplay, selectVideo } = useVideoSelection(videos)
+  const source = video?.source ?? null
   const { data: channels } = useChannels()
-  const video = sourceVideos?.find((candidate) => candidate.id === selected?.id) ?? null
   const channel =
     source?.kind === 'channel' ? channels?.find((item) => item.id === source.id) : undefined
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
@@ -53,9 +50,7 @@ export function CategoryPlayer({ videos, error }: CategoryPlayerProps) {
             onPlaybackRateChange={playbackSpeed.changeRate}
           />
         ) : (
-          <p className="text-sm text-muted-foreground">
-            {selected ? 'Loading video…' : 'No video selected.'}
-          </p>
+          <p className="text-sm text-muted-foreground">No video selected.</p>
         )}
       </div>
 
@@ -64,7 +59,7 @@ export function CategoryPlayer({ videos, error }: CategoryPlayerProps) {
         basePathOf={(item) => item.source.path}
         videos={videos}
         error={error}
-        selectedVideoId={selected?.id ?? null}
+        selectedVideoId={video?.id ?? null}
         onSelect={selectVideo}
       />
     </div>

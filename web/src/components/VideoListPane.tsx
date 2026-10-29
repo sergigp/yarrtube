@@ -30,16 +30,7 @@ function VideoStatusIndicator({ status }: { status: VideoStatus }) {
   )
 }
 
-/**
- * What a list row shows of a video. `status` is absent for videos only ever
- * listed once downloaded (a category's).
- */
-export type ListVideo = Pick<
-  Video,
-  'id' | 'title' | 'thumbnail_filename' | 'watched' | 'position_seconds' | 'duration_seconds'
-> & { status?: VideoStatus }
-
-interface VideoListPaneProps<T extends ListVideo> {
+interface VideoListPaneProps<T extends Video> {
   /** Names the container in the empty message ("channel", "playlist" or "category"). */
   noun: string
   /** The channel/playlist path a video's thumbnail is served under. */
@@ -57,7 +48,7 @@ interface VideoListPaneProps<T extends ListVideo> {
  * row's select button, not inside it, so opening it never selects the video;
  * the selected row has none, since its detail pane shows one.
  */
-export function VideoListPane<T extends ListVideo>({
+export function VideoListPane<T extends Video>({
   noun,
   basePathOf,
   videos,
@@ -119,7 +110,7 @@ export function VideoListPane<T extends ListVideo>({
                   >
                     {video.title}
                   </span>
-                  {video.status && <VideoStatusIndicator status={video.status} />}
+                  <VideoStatusIndicator status={video.status} />
                 </button>
                 {active ? (
                   // The detail pane holds the selected video's menu; the
@@ -129,7 +120,7 @@ export function VideoListPane<T extends ListVideo>({
                   <VideoActionsMenu
                     videoId={video.id}
                     title={video.title}
-                    markable={!video.watched && (video.status ?? 'DOWNLOADED') === 'DOWNLOADED'}
+                    markable={!video.watched && video.status === 'DOWNLOADED'}
                     className="mt-2"
                   />
                 )}
