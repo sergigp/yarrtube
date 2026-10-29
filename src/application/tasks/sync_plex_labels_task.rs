@@ -200,6 +200,46 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_replace_the_label_of_a_renamed_category() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &["Funny"]),
+        );
+        let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        seed_category(&db, "funny", "Humor", &[&video]);
+        episode_labels_repository
+            .save_many(&[EpisodeLabels {
+                dirty: true,
+                ..synced(&video, "101", &["Funny"])
+            }])
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            episode_labels_repository.clone(),
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex.labels("101"), vec!["Humor".to_string()]);
+        assert_eq!(
+            plex.mutations(),
+            vec!["labels:101:Humor:-Funny".to_string()]
+        );
+        assert_eq!(
+            episode_labels_repository
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![synced(&video, "101", &["Humor"])]
+        );
+    }
+
     /// The syncer over the test database, with Plex seeing `/videos` at
     /// `/plex/videos`.
     fn syncer(
