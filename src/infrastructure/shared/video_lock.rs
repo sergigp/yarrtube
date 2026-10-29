@@ -65,6 +65,22 @@ mod tests {
         assert_eq!((waited, acquired), (true, true));
     }
 
+    #[test]
+    fn it_should_not_block_locks_of_different_videos() {
+        let lock = VideoLock::default();
+        let held = lock.lock(&video_id("v1"));
+
+        let acquired = std::thread::scope(|scope| {
+            let other = scope.spawn(|| drop(lock.lock(&video_id("v2"))));
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let acquired = other.is_finished();
+            drop(held);
+            acquired
+        });
+
+        assert!(acquired);
+    }
+
     fn video_id(id: &str) -> VideoRecordId {
         VideoRecordId::new(id).unwrap()
     }

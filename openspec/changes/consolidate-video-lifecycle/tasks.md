@@ -33,7 +33,7 @@
 ### VideoLock
 
 - [x] 3.1 `it_should_block_a_second_lock_of_the_same_video_until_released` — second `lock` of the same id returns only after the first guard drops.
-- [ ] 3.2 `it_should_not_block_locks_of_different_videos` — two ids lock concurrently.
+- [x] 3.2 `it_should_not_block_locks_of_different_videos` — two ids lock concurrently.
 
 ### SqliteTaskRepository
 
