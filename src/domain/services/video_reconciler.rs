@@ -1,18 +1,13 @@
-use crate::domain::category::CategoryMember;
 use crate::domain::services::{
     MetadataGenerator, MetadataGeneratorApi, Relocation, VideoCategoryAssigner,
-    VideoCategoryAssignerApi, VideoRelocator, VideoRelocatorApi,
+    VideoCategoryAssignerApi, VideoOwnerFinder, VideoOwnerFinderApi, VideoRelocator,
+    VideoRelocatorApi,
 };
-use crate::domain::shared::Quality;
 use crate::domain::video::{
-    Video, VideoRecordId, VideoStatus, VideoSyncPlan, VideoTarget, nfo_path_for, resolve_output_dir,
+    Video, VideoOwner, VideoRecordId, VideoStatus, VideoSyncPlan, VideoTarget, nfo_path_for,
 };
 use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
-use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
-use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
-use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
-use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
@@ -24,25 +19,13 @@ use tracing::warn;
 
 const DOWNLOAD_VIDEO_TASK_TYPE: &str = "download_video";
 
-/// The playlist or channel holding a video, as its sync needs it.
-struct VideoOwner {
-    source: CategoryMember,
-    target: VideoTarget,
-    /// The video's playlist position; `None` for a channel video, which
-    /// sorts by publish date.
-    sort_position: Option<i64>,
-}
-
 /// Owns a stored video's lifecycle — see the `video-sync` capability:
 /// brings the video to its desired state and schedules each step still
 /// needed as its own task.
 #[derive(Clone)]
 pub struct VideoReconciler {
     video_repository: Arc<dyn VideoRepository>,
-    channel_video_repository: Arc<dyn ChannelVideoRepository>,
-    playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
-    channel_repository: Arc<dyn ChannelRepository>,
-    playlist_repository: Arc<dyn PlaylistRepository>,
+    video_owner_finder: Arc<VideoOwnerFinder>,
     task_repository: Arc<dyn TaskRepository>,
     video_file_repository: Arc<dyn VideoFileRepository>,
     video_metadata_repository: Arc<dyn VideoMetadataRepository>,
@@ -50,7 +33,6 @@ pub struct VideoReconciler {
     video_relocator: Arc<VideoRelocator>,
     video_lock: Arc<VideoLock>,
     clock: Arc<dyn Clock>,
-    videos_path: String,
     video_category_assigner: VideoCategoryAssigner,
 }
 
@@ -58,10 +40,7 @@ impl VideoReconciler {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         video_repository: Arc<dyn VideoRepository>,
-        channel_video_repository: Arc<dyn ChannelVideoRepository>,
-        playlist_video_repository: Arc<dyn PlaylistVideoRepository>,
-        channel_repository: Arc<dyn ChannelRepository>,
-        playlist_repository: Arc<dyn PlaylistRepository>,
+        video_owner_finder: Arc<VideoOwnerFinder>,
         task_repository: Arc<dyn TaskRepository>,
         video_file_repository: Arc<dyn VideoFileRepository>,
         video_metadata_repository: Arc<dyn VideoMetadataRepository>,
@@ -69,15 +48,11 @@ impl VideoReconciler {
         video_relocator: Arc<VideoRelocator>,
         video_lock: Arc<VideoLock>,
         clock: Arc<dyn Clock>,
-        videos_path: impl Into<String>,
         video_category_assigner: VideoCategoryAssigner,
     ) -> Self {
         Self {
             video_repository,
-            channel_video_repository,
-            playlist_video_repository,
-            channel_repository,
-            playlist_repository,
+            video_owner_finder,
             task_repository,
             video_file_repository,
             video_metadata_repository,
@@ -85,7 +60,6 @@ impl VideoReconciler {
             video_relocator,
             video_lock,
             clock,
-            videos_path: videos_path.into(),
             video_category_assigner,
         }
     }
@@ -105,7 +79,7 @@ impl VideoReconcilerApi for VideoReconciler {
         let Some(video) = self.video_repository.find(video_id)? else {
             return Ok(());
         };
-        let Some(owner) = self.find_owner(&video)? else {
+        let Some(owner) = self.video_owner_finder.find(&video)? else {
             return Ok(());
         };
         self.video_category_assigner
@@ -119,50 +93,6 @@ impl VideoReconcilerApi for VideoReconciler {
 }
 
 impl VideoReconciler {
-    /// The channel holding `video`, else the playlist holding it; `None`
-    /// when neither is found.
-    fn find_owner(&self, video: &Video) -> anyhow::Result<Option<VideoOwner>> {
-        match self.find_channel_owner(video)? {
-            Some(owner) => Ok(Some(owner)),
-            None => self.find_playlist_owner(video),
-        }
-    }
-
-    fn find_channel_owner(&self, video: &Video) -> anyhow::Result<Option<VideoOwner>> {
-        let Some(channel_video) = self.channel_video_repository.find_by_video(&video.id)? else {
-            return Ok(None);
-        };
-        Ok(self
-            .channel_repository
-            .find(&channel_video.channel_id)?
-            .map(|channel| VideoOwner {
-                source: CategoryMember::Channel(channel.id),
-                target: self.target(channel.path.as_str(), channel.quality),
-                sort_position: None,
-            }))
-    }
-
-    fn find_playlist_owner(&self, video: &Video) -> anyhow::Result<Option<VideoOwner>> {
-        let Some(playlist_video) = self.playlist_video_repository.find_by_video(&video.id)? else {
-            return Ok(None);
-        };
-        Ok(self
-            .playlist_repository
-            .find(&playlist_video.playlist_id)?
-            .map(|playlist| VideoOwner {
-                source: CategoryMember::Playlist(playlist.id),
-                target: self.target(playlist.path.as_str(), playlist.quality),
-                sort_position: Some(playlist_video.position),
-            }))
-    }
-
-    fn target(&self, path: &str, quality: Quality) -> VideoTarget {
-        VideoTarget {
-            output_dir: resolve_output_dir(&self.videos_path, path),
-            quality,
-        }
-    }
-
     /// Resets a `Downloaded` video whose file is missing or not mp4 (a stale
     /// container downloaded before yt-dlp always remuxed to mp4, see
     /// `args_for_quality`), so it is downloaded again; the pass's orphan

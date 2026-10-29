@@ -8,7 +8,8 @@ use crate::domain::services::{
     PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater, PlaylistVideoReconciler,
     PlaylistViewSearcher, PlexFolderScanner, ShowFileWriter, ShowMover, SubtitleFetcher,
     SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoCategoryAssigner, VideoDownloader,
-    VideoFileDeleter, VideoReconciler, VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
+    VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator, VideoSearcher,
+    VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -709,10 +710,7 @@ fn video_category_assigner(infrastructure: &InfrastructureContainer) -> VideoCat
 fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler {
     VideoReconciler::new(
         infrastructure.video_repository.clone(),
-        infrastructure.channel_video_repository.clone(),
-        infrastructure.playlist_video_repository.clone(),
-        infrastructure.channel_repository.clone(),
-        infrastructure.playlist_repository.clone(),
+        video_owner_finder(infrastructure),
         infrastructure.task_repository.clone(),
         infrastructure.video_file_repository.clone(),
         infrastructure.video_metadata_repository.clone(),
@@ -720,9 +718,18 @@ fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler
         video_relocator(infrastructure),
         infrastructure.video_lock.clone(),
         infrastructure.clock.clone(),
-        videos_path(),
         video_category_assigner(infrastructure),
     )
+}
+
+fn video_owner_finder(infrastructure: &InfrastructureContainer) -> Arc<VideoOwnerFinder> {
+    Arc::new(VideoOwnerFinder::new(
+        infrastructure.channel_video_repository.clone(),
+        infrastructure.playlist_video_repository.clone(),
+        infrastructure.channel_repository.clone(),
+        infrastructure.playlist_repository.clone(),
+        videos_path(),
+    ))
 }
 
 fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailFetcher> {

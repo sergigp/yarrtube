@@ -220,6 +220,7 @@ mod tests {
     use super::*;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::VideoCategoryAssigner;
+    use crate::domain::services::VideoOwnerFinder;
     use crate::domain::services::VideoRelocator;
     use crate::domain::shared::Quality;
     use crate::domain::video::VideoId;
@@ -440,10 +441,13 @@ mod tests {
             video_file_repository.clone(),
             VideoReconciler::new(
                 video_repository.clone(),
-                Arc::new(SqliteChannelVideoRepository::new(db.database())),
-                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
-                Arc::new(SqliteChannelRepository::new(db.database())),
-                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                Arc::new(VideoOwnerFinder::new(
+                    Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                    Arc::new(SqliteChannelRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistRepository::new(db.database())),
+                    "/videos",
+                )),
                 task_repository.clone(),
                 video_file_repository.clone(),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
@@ -459,7 +463,6 @@ mod tests {
                 )),
                 Arc::new(VideoLock::default()),
                 Arc::new(FixedClock(fixed_timestamp())),
-                "/videos",
                 video_category_assigner(db.database()),
             ),
             "/videos",
