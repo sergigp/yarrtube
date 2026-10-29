@@ -32,7 +32,7 @@
 - [x] 2.22 `it_should_mark_the_videos_and_request_a_sync_shortly` — `VideoCategoriesChanged` subscriber; pending at now + `CATEGORY_CHANGE_DELAY` (10 s).
 - [x] 2.23 `it_should_bring_forward_a_pending_sync` — still one pending sync, moved to now + 10 s.
 - [x] 2.23b `it_should_collapse_category_changes_into_one_sync` — two events (as a reconcile pass publishes, one per repaired video) ⇒ one pending sync at now + 10 s.
-- [ ] 2.24 `it_should_mark_the_video_and_request_a_sync_in_a_minute` — `VideoDownloaded` subscriber.
+- [x] 2.24 `it_should_mark_the_video_and_request_a_sync_in_a_minute` — `VideoDownloaded` subscriber.
 - [ ] 2.25 `it_should_request_the_label_sync_at_startup_only_if_plex_is_configured` — `serve::prepare_task_queue`.
 - [x] 2.26 `it_should_run_label_syncs_in_the_plex_lane` — `domain/task/task.rs`.
 - [x] 2.27 `it_should_equal_labels_ignoring_case` — `PlexLabels`.
