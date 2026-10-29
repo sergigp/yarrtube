@@ -208,12 +208,12 @@ impl VideoReconciler {
         self.reset_for_redownload(video)
     }
 
-    /// Regenerates the metadata of a `Downloaded` video the same way
-    /// `VideoDownloader` does at download time, referencing the thumbnail
-    /// already on disk. Best effort: a failure is logged, the video is left
-    /// as it is and its next sync tries again.
+    /// Regenerates the metadata of a `Downloaded` video that has none, the
+    /// same way `VideoDownloader` does at download time, referencing the
+    /// thumbnail already on disk. Best effort: a failure is logged, the video
+    /// is left as it is and its next sync tries again.
     fn repair_metadata(&self, video: &Video, owner: &VideoOwner) {
-        if video.status != VideoStatus::Downloaded {
+        if video.status != VideoStatus::Downloaded || self.has_metadata(video) {
             return;
         }
         let Some(metadata) = self
@@ -234,6 +234,15 @@ impl VideoReconciler {
         {
             warn!(video_id = %video.id, error = %e, "failed to save video metadata during sync");
         }
+    }
+
+    /// Whether `video` has metadata recorded; a failed read counts as
+    /// having it, so nothing is regenerated over it.
+    fn has_metadata(&self, video: &Video) -> bool {
+        self.video_metadata_repository
+            .find(&video.id)
+            .inspect_err(|e| warn!(video_id = %video.id, error = %e, "failed to read video metadata during sync"))
+            .map_or(true, |metadata| metadata.is_some())
     }
 
     fn warn_if_stranded(&self, _video: &Video) -> anyhow::Result<()> {
