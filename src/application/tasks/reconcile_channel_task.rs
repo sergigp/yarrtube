@@ -2580,7 +2580,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_not_schedule_a_thumbnail_fetch_for_a_video_added_in_the_same_pass() {
+    fn it_should_schedule_no_step_for_a_video_added_by_the_same_pass() {
         let db = TestDatabase::new();
         let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -2589,6 +2589,7 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
+        let event_repository = SqliteEventRepository::new(db.database());
         channel_repository.insert(&channel("@somechannel")).unwrap();
         let task = ReconcileChannelTask::new(channel_video_reconciler(
             &db,
@@ -2605,9 +2606,21 @@ mod tests {
         let result = run(&task, &payload_for("@somechannel"));
 
         assert_eq!(result, Ok(()));
+        let added = video_repository.list().unwrap()[0].id.clone();
+        // Its steps come from the video sync its video-added event schedules.
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![next_reconcile(1)]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![pending_event(
+                1,
+                DomainEvent::VideoAddedToChannel(VideoAddedToChannel {
+                    channel_id: "@somechannel".to_string(),
+                    video_id: added.as_str().to_string(),
+                })
+            )]
         );
     }
 
