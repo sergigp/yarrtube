@@ -23,7 +23,7 @@ Requires `video-reconciler` to be implemented first (`VideoReconciler`, `SyncVid
 - [x] 2.13 `it_should_repair_the_categories_of_stored_videos` — channel reconcile pass calls `assign_source`.
 - [x] 2.14 `it_should_leave_the_categories_of_an_uncategorized_channel` — pass never clears AI-regime rows.
 - [x] 2.15 `it_should_delete_the_categories_of_a_removed_video` — reconciler removing a record deletes its rows.
-- [ ] 2.16 `it_should_repair_the_categories_of_stored_playlist_videos` — playlist reconcile pass calls `assign_source`.
+- [x] 2.16 `it_should_repair_the_categories_of_stored_playlist_videos` — playlist reconcile pass calls `assign_source`.
 - [ ] 2.17 `it_should_delete_the_categories_of_a_deleted_channel_videos` — channel deletion deletes its records' rows.
 - [ ] 2.18 `it_should_delete_the_categories_of_a_deleted_playlist_videos` — playlist deletion deletes its records' rows.
 

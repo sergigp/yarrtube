@@ -174,7 +174,18 @@ impl PlaylistVideoReconciler {
         }
         let delta = self.sync_membership_with_youtube(playlist, on_listing_failure)?;
         let desired = self.desired_state(playlist)?;
-        self.internal_video_reconciler.reconcile(&desired, &delta)
+        let reconciled = self.internal_video_reconciler.reconcile(&desired, &delta);
+        self.assign_categories(playlist);
+        reconciled
+    }
+
+    /// Best effort: gives every stored video the playlist's categories; a
+    /// failure is repaired by the next pass.
+    fn assign_categories(&self, playlist: &Playlist) {
+        let source = CategoryMember::Playlist(playlist.id.clone());
+        if let Err(e) = self.video_category_assigner.assign_source(&source) {
+            warn!(playlist_id = %playlist.id, error = %e, "failed to assign video categories");
+        }
     }
 
     /// Brings the stored membership in line with YouTube's playlist items:
