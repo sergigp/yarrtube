@@ -14,7 +14,7 @@
 - [x] 2.6 `it_should_generate_missing_metadata_of_a_playlist_video` (sync_video_task) — metadata saved with sorttitle from playlist position.
 - [x] 2.7 `it_should_generate_missing_metadata_of_a_channel_video` (sync_video_task) — sorttitle from publish date.
 - [x] 2.8 `it_should_keep_existing_metadata` (sync_video_task) — no regeneration when a metadata row exists.
-- [ ] 2.9 `it_should_relocate_a_legacy_video_when_its_metadata_is_recovered` (sync_video_task) — file set moved into the season folder, filenames recorded.
+- [x] 2.9 `it_should_relocate_a_legacy_video_when_its_metadata_is_recovered` (sync_video_task) — file set moved into the season folder, filenames recorded.
 - [ ] 2.10 `it_should_leave_a_legacy_video_in_place_when_its_metadata_is_still_unavailable` (sync_video_task) — video unchanged.
 - [ ] 2.11 `it_should_warn_about_a_stranded_video` (sync_video_task) — warning logged, download scheduled.
 - [ ] 2.12 `it_should_keep_a_stranded_errored_retrying_video_errored_retrying` (sync_video_task) — warning logged, download scheduled, status unchanged.

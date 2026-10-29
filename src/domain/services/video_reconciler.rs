@@ -1,12 +1,13 @@
 use crate::domain::category::CategoryMember;
 use crate::domain::services::{
-    MetadataGenerator, MetadataGeneratorApi, VideoCategoryAssigner, VideoCategoryAssignerApi,
-    VideoRelocator,
+    MetadataGenerator, MetadataGeneratorApi, Relocation, VideoCategoryAssigner,
+    VideoCategoryAssignerApi, VideoRelocator, VideoRelocatorApi,
 };
 use crate::domain::shared::Quality;
 use crate::domain::video::{
     Video, VideoRecordId, VideoStatus, VideoSyncPlan, VideoTarget, nfo_path_for, resolve_output_dir,
 };
+use crate::domain::video_metadata::VideoMetadata;
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -222,17 +223,45 @@ impl VideoReconciler {
         else {
             return;
         };
+        let Some(video) = self.relocate_if_legacy(video, &metadata, &owner.target) else {
+            return;
+        };
         let (Some(filename), Some(number)) = (video.filename.as_deref(), video.episode_number)
         else {
             return;
         };
-        let metadata = metadata.with_thumb(thumbnail_basename(video));
+        let metadata = metadata.with_thumb(thumbnail_basename(&video));
         let nfo_path = owner.target.output_dir.join(nfo_path_for(filename));
         if let Err(e) = self
             .video_metadata_repository
             .save(&video.id, &metadata, &number, &nfo_path)
         {
             warn!(video_id = %video.id, error = %e, "failed to save video metadata during sync");
+        }
+    }
+
+    /// `video` itself when already in its season folder, else `video` as
+    /// stored once relocated there, now that its publish time is known;
+    /// `None` when the relocation failed or moved nothing.
+    fn relocate_if_legacy(
+        &self,
+        video: &Video,
+        metadata: &VideoMetadata,
+        target: &VideoTarget,
+    ) -> Option<Video> {
+        if !video.is_in_legacy_layout() {
+            return Some(video.clone());
+        }
+        match self
+            .video_relocator
+            .relocate(video, Some(metadata.published_at), &target.output_dir)
+        {
+            Ok(Relocation::Moved { .. }) => self.video_repository.find(&video.id).ok().flatten(),
+            Ok(_) => None,
+            Err(e) => {
+                warn!(video_id = %video.id, error = %e, "failed to relocate legacy video during sync");
+                None
+            }
         }
     }
 
