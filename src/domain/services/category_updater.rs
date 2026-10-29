@@ -1,7 +1,7 @@
 use crate::domain::category::{
     Category, CategoryColor, CategoryId, CategoryMember, CategoryName, UpdateCategoryError,
 };
-use crate::domain::services::VideoCategoryAssigner;
+use crate::domain::services::{VideoCategoryAssigner, VideoCategoryAssignerApi};
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -68,7 +68,9 @@ impl CategoryUpdaterApi for CategoryUpdater {
     ) -> Result<(), UpdateCategoryError> {
         let category = self.find_category(id)?;
         self.ensure_tracked(&members)?;
-        self.save(&category.with_members(members))
+        let previous_members = category.members.clone();
+        self.save(&category.with_members(members))?;
+        self.reassign_videos(id, &previous_members)
     }
 }
 
@@ -133,6 +135,21 @@ impl CategoryUpdater {
             Some(color) => category.with_color(color),
             None => category,
         }
+    }
+
+    /// Recomputes the categories of every video `id`'s member change touches.
+    fn reassign_videos(
+        &self,
+        id: &CategoryId,
+        previous_members: &[CategoryMember],
+    ) -> Result<(), UpdateCategoryError> {
+        let categories = self
+            .repository
+            .list()
+            .map_err(UpdateCategoryError::Repository)?;
+        self.video_category_assigner
+            .reassign_category(id, previous_members, &categories)
+            .map_err(UpdateCategoryError::Repository)
     }
 
     fn save(&self, category: &Category) -> Result<(), UpdateCategoryError> {

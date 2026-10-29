@@ -140,12 +140,14 @@ mod tests {
     use crate::domain::category::Category;
     use crate::domain::channel::{Channel, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::event::{DomainEvent, ScheduledEvent};
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::services::VideoCategoryAssigner;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{Video, VideoId};
+    use crate::domain::video_category::{VideoCategories, VideoCategoriesChanged};
     use crate::infrastructure::repositories::sqlite_category_repository::{
         CategoryRepository, SqliteCategoryRepository,
     };
@@ -162,10 +164,14 @@ mod tests {
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
     use crate::infrastructure::repositories::sqlite_video_categories_repository::SqliteVideoCategoriesRepository;
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::VideoCategoriesRepository;
     use crate::infrastructure::repositories::sqlite_video_repository::{
         SqliteVideoRepository, VideoRepository,
     };
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
+    use crate::infrastructure::shared::domain_events::event_repository::{
+        EventRepository, SqliteEventRepository,
+    };
     use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Utc};
@@ -1188,6 +1194,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_categorize_the_videos_of_an_added_member() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@GothamChess")).unwrap();
+        let first = pending_video("vid1");
+        let second = downloaded_video("vid2");
+        [&first, &second].into_iter().for_each(|video| {
+            save_channel_video(
+                &video_repository,
+                &channel_video_repository,
+                "@GothamChess",
+                video,
+            )
+        });
+        let chess = category(None, "Chess");
+        repository.insert(&chess).unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
+        );
+
+        let response = set_members(
+            category_updater,
+            chess.id.as_str(),
+            members_request(&["@GothamChess"], &[]),
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[first.id.clone(), second.id.clone()])
+                .unwrap(),
+            vec![
+                VideoCategories::new(first.id.clone(), vec![chess.id.clone()]),
+                VideoCategories::new(second.id.clone(), vec![chess.id.clone()]),
+            ]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&first, &second])]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_set_members_if_a_source_is_not_tracked() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
@@ -1531,6 +1589,26 @@ mod tests {
             Arc::new(SqliteVideoRepository::new(db.database())),
             Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
         )
+    }
+
+    /// The pending `VideoCategoriesChanged` event `id`, naming `videos` in
+    /// record id order.
+    fn categories_changed_event(id: i64, videos: &[&Video]) -> ScheduledEvent {
+        let mut video_ids: Vec<String> = videos
+            .iter()
+            .map(|video| video.id.as_str().to_string())
+            .collect();
+        video_ids.sort();
+        let event = DomainEvent::VideoCategoriesChanged(VideoCategoriesChanged { video_ids });
+        ScheduledEvent {
+            id,
+            event_type: event.event_type().to_string(),
+            payload: event.payload().to_string(),
+            retries: 0,
+            created_at: fixed_timestamp(),
+            updated_at: fixed_timestamp(),
+            last_error: None,
+        }
     }
 
     fn watched_timestamp() -> DateTime<Utc> {
