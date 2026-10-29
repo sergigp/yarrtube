@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { FolderPlus, Plus, Settings2 } from 'lucide-react'
 import { deleteCategory, updateCategory } from '@/api/client'
 import {
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { CategoryColorPicker } from './CategoryColorPicker'
+import { CategoryPlayer } from './CategoryPlayer'
 import { DetailHeader } from './DetailHeader'
 import { ManageSourcesDialog } from './ManageSourcesDialog'
 import { VideoGrid } from './VideoGrid'
@@ -141,9 +142,15 @@ function CategoryColorControl({
   )
 }
 
-/** A category's view (`/categories/:id`): its header and videos. */
+/**
+ * A category's view (`/categories/:id`): its header and videos, as a grid,
+ * or, once one is picked (`?video=`), playing it with the category's videos
+ * as the queue beside the player.
+ */
 export function CategoryDetail() {
   const { id = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const playing = searchParams.has('video')
   const navigate = useNavigate()
   const location = useLocation()
   const refreshing = useLibraryAction()
@@ -163,7 +170,7 @@ export function CategoryDetail() {
     }
   }, [arrivedManaging, location.pathname, navigate])
   const { data } = useCategories()
-  const { data: videos } = useCategoryVideos(id)
+  const { data: videos, error } = useCategoryVideos(id)
   const category = data?.categories.find((candidate) => candidate.id === id)
 
   if (!data) {
@@ -175,7 +182,7 @@ export function CategoryDetail() {
   const sources = memberCount(category)
 
   return (
-    <div className="flex min-w-0 flex-col">
+    <div className={playing ? 'flex flex-col md:h-full md:min-h-[480px]' : 'flex min-w-0 flex-col'}>
       <DetailHeader
         name={category.name}
         tint={category.color}
@@ -201,8 +208,17 @@ export function CategoryDetail() {
       />
       {sources === 0 ? (
         <EmptyCategory category={category} onManage={() => setManaging(true)} />
+      ) : playing ? (
+        <CategoryPlayer key={category.id} videos={videos} error={error} />
       ) : (
-        videos && <VideoGrid videos={videos} />
+        videos && (
+          <VideoGrid
+            videos={videos}
+            videoPathOf={(video) =>
+              `/categories/${encodeURIComponent(category.id)}?video=${encodeURIComponent(video.id)}`
+            }
+          />
+        )
       )}
       <ManageSourcesDialog category={category} open={managing} onOpenChange={setManaging} />
     </div>

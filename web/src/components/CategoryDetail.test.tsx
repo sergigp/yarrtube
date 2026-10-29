@@ -7,6 +7,7 @@ import { RouteProbe } from '@/test/RouteProbe'
 import {
   aCategory,
   aCategoryList,
+  aCategoryVideo,
   aChannel,
   aHomeVideo,
   aPlaylist,
@@ -329,5 +330,66 @@ describe('CategoryDetail', () => {
 
     expect(openedOnArrival).toBe(true)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('opens a card in the category, playing it with the category as the queue', async () => {
+    const hikaru = {
+      kind: 'channel' as const,
+      id: '@hikaru',
+      name: 'Hikaru',
+      path: 'channels/hikaru',
+      avatar_filename: null,
+    }
+    const endgames = {
+      kind: 'playlist' as const,
+      id: 'PLend',
+      name: 'Endgames',
+      path: 'playlists/endgames',
+      avatar_filename: null,
+    }
+    const { fetchMock } = renderCategory({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', channels: ['@hikaru'], playlists: ['PLend'] }),
+      ]),
+      'GET /api/channels': [aChannel({ id: '@hikaru', name: 'Hikaru', path: 'channels/hikaru' })],
+      'GET /api/categories/chess/videos': [
+        aCategoryVideo({ id: 'blitz', title: 'Blitz', filename: 'blitz.mp4', source: hikaru }),
+        aCategoryVideo({
+          id: 'rook',
+          title: 'Rook endings',
+          filename: 'rook.mp4',
+          source: endgames,
+        }),
+      ],
+    })
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('link', { name: 'Rook endings' }))
+    await waitFor(() =>
+      expect(document.querySelector('video')?.getAttribute('src')).toBe(
+        '/media/playlists/endgames/rook.mp4',
+      ),
+    )
+    const route = screen.getByRole('status', { name: 'Current route' }).textContent
+    const autoplay = document.querySelector('video')?.hasAttribute('autoplay')
+    const queue = screen.getAllByRole('button', { name: /^2:00 / })
+    await user.click(screen.getByRole('button', { name: '2:00 Blitz' }))
+
+    await waitFor(() =>
+      expect(document.querySelector('video')?.getAttribute('src')).toBe(
+        '/media/channels/hikaru/blitz.mp4',
+      ),
+    )
+    expect(route).toBe('/categories/chess?video=rook')
+    expect(autoplay).toBe(true)
+    expect(queue.map((row) => row.textContent)).toEqual(['2:00Blitz', '2:00Rook endings'])
+    expect(screen.getByRole('link', { name: 'Hikaru' })).toHaveAttribute(
+      'href',
+      '/channels/@hikaru',
+    )
+    // The category's own list feeds the player: no source's video list is fetched.
+    expect(
+      fetchMock.mock.calls.map(([url]) => url as string).filter((url) => url.includes('/videos')),
+    ).not.toContainEqual(expect.stringMatching(/^\/api\/(channels|playlists)\//))
   })
 })

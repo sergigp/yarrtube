@@ -8,6 +8,7 @@ import type {
   AppVersion,
   Category,
   CategoryList,
+  CategoryVideo,
   ChannelListItem,
   CreatedCategory,
   HomeVideo,
@@ -173,6 +174,22 @@ export function aHomeVideo(overrides: Partial<HomeVideo> = {}): HomeVideo {
     duration_seconds: 120,
     watched: false,
     position_seconds: 0,
+    source: {
+      kind: 'playlist',
+      id: `playlist-${uniqueId}`,
+      name: `Playlist ${uniqueId}`,
+      path: `playlists/playlist-${uniqueId}`,
+      avatar_filename: null,
+    },
+    category_ids: [],
+    ...overrides,
+  }
+}
+
+export function aCategoryVideo(overrides: Partial<CategoryVideo> = {}): CategoryVideo {
+  const video = aVideo()
+  return {
+    ...video,
     source: {
       kind: 'playlist',
       id: `playlist-${uniqueId}`,

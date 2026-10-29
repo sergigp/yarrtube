@@ -1,3 +1,4 @@
+pub mod category_video_view;
 pub mod channel_episode_number;
 pub mod episode_number;
 pub mod episode_paths;
@@ -25,6 +26,7 @@ pub mod video_target;
 pub mod video_view;
 pub mod web_vtt;
 
+pub use category_video_view::CategoryVideoView;
 pub use channel_episode_number::ChannelEpisodeNumber;
 pub use episode_number::EpisodeNumber;
 pub use episode_paths::EpisodePaths;

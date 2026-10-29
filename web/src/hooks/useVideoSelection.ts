@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import type { Video } from '@/api/types'
 
-export interface VideoSelection {
+export interface VideoSelection<T> {
   /** The video the player shows, or `null` while none can be. */
-  selectedVideo: Video | null
+  selectedVideo: T | null
   /** Autoplay only a deep-linked video: the user opened a link straight to it. */
   autoplay: boolean
   /** Selects a video from the list by its ID. */
@@ -19,7 +18,9 @@ export interface VideoSelection {
  * stays on the video first shown, even once a sync lists a newer one above
  * it, until that video leaves the list.
  */
-export function useVideoSelection(videos: Video[] | undefined): VideoSelection {
+export function useVideoSelection<T extends { id: string }>(
+  videos: T[] | undefined,
+): VideoSelection<T> {
   const [searchParams] = useSearchParams()
   const [manualSelectionId, setManualSelectionId] = useState<string | null>(null)
   const [defaultVideoId, setDefaultVideoId] = useState<string | null>(null)

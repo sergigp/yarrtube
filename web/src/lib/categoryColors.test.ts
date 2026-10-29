@@ -25,7 +25,7 @@ describe('categoryColors', () => {
     ]).toEqual(['#fff1bf', '#ffe0c7', '#ffe0c7', '#fff1bf'])
   })
 
-  it('tints a card flat for one category, in diagonal bands for 2–3 and grey for 4 or more', () => {
+  it('tints a card half transparent: flat for one category, in diagonal bands for 2–3 and grey for 4 or more', () => {
     expect([
       cardBackground([]),
       cardBackground(['#d3ecf8']),
@@ -35,11 +35,11 @@ describe('categoryColors', () => {
       cardBackground(['#d3ecf8', '#fff1bf', '#e9def8', '#ffd9d4', '#cff0ea']),
     ]).toEqual([
       undefined,
-      '#d3ecf8',
-      'linear-gradient(to bottom right, #d3ecf8 0% 50%, #fff1bf 50% 100%)',
-      'linear-gradient(to bottom right, #d3ecf8 0% 33.33%, #fff1bf 33.33% 66.67%, #e9def8 66.67% 100%)',
-      '#f2f2f2',
-      '#f2f2f2',
+      '#d3ecf880',
+      'linear-gradient(to bottom right, #d3ecf880 0% 50%, #fff1bf80 50% 100%)',
+      'linear-gradient(to bottom right, #d3ecf880 0% 33.33%, #fff1bf80 33.33% 66.67%, #e9def880 66.67% 100%)',
+      '#f2f2f280',
+      '#f2f2f280',
     ])
   })
 

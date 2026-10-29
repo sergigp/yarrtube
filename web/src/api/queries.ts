@@ -32,9 +32,9 @@ import type {
   Announcement,
   AppVersion,
   CategoryList,
+  CategoryVideo,
   ChannelListItem,
   ChannelPreview,
-  HomeVideo,
   HomeVideos,
   PlaylistListItem,
   PlaylistPreview,
@@ -99,7 +99,7 @@ export function useCategories(): UseQueryResult<CategoryList, Error> {
   })
 }
 
-export function useCategoryVideos(id: string): UseQueryResult<HomeVideo[], Error> {
+export function useCategoryVideos(id: string): UseQueryResult<CategoryVideo[], Error> {
   return useQuery({
     queryKey: queryKeys.categoryVideos(id),
     queryFn: () => listCategoryVideos(id),

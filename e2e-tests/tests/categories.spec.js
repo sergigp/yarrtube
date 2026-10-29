@@ -91,9 +91,9 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
   const channelName = await test.step('assign a new channel to it from the add channel dialog', async () => {
     await openAddChannelDialog(page)
     await fillChannel(page, { handle: CHANNEL_HANDLE, videoLimit: 1 })
-    await dialog.getByRole('combobox', { name: 'Categories' }).fill('Board')
-    await dialog.getByRole('option', { name: 'Board games' }).click()
-    await expect(dialog.getByRole('list', { name: 'Chosen categories' })).toHaveText('Board games')
+    const categoryChip = dialog.getByRole('button', { name: 'Board games', exact: true })
+    await categoryChip.click()
+    await expect(categoryChip).toHaveAttribute('aria-pressed', 'true')
     await dialog.getByRole('button', { name: /^Create Channel/ }).click()
     await dialog.waitFor({ state: 'hidden' })
     const [{ name }] = await (await page.request.get('/api/channels')).json()
@@ -191,7 +191,9 @@ test.describe('with a downloaded channel in a category', () => {
     expect(members.ok(), await members.text()).toBeTruthy()
   })
 
-  test('category card opens its video in the channel view and plays', async ({ page }) => {
+  test('category card plays its video in the category, queued with the category', async ({
+    page,
+  }) => {
     const [{ id, title }] = seeded.videos
     await page.goto(`/categories/${encodeURIComponent(categoryId)}`)
 
@@ -200,8 +202,12 @@ test.describe('with a downloaded channel in a category', () => {
 
     await page.locator('main').getByRole('link', { name: title, exact: true }).first().click()
 
-    await expect(page).toHaveURL(new RegExp(`/channels/[^?]+\\?video=${id}$`))
+    await expect(page).toHaveURL(
+      new RegExp(`/categories/${encodeURIComponent(categoryId)}\\?video=${id}$`),
+    )
+    await expect(page.getByRole('heading', { name: 'Watch later', exact: true })).toBeVisible()
     await expect(page.locator('main h3').first()).toHaveText(title)
+    await expect(page.locator('video')).toHaveAttribute('src', new RegExp(`^/media/${seeded.path}/`))
     await assertVideoPlays(page)
   })
 })

@@ -102,7 +102,7 @@ export function PlaylistDetail() {
 
         <VideoListPane
           noun="playlist"
-          basePath={playlist.path}
+          basePathOf={() => playlist.path}
           videos={videos}
           error={error}
           selectedVideoId={selectedVideo?.id ?? null}

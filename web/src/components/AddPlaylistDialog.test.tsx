@@ -421,8 +421,7 @@ describe('AddPlaylistDialog', () => {
     const user = userEvent.setup()
 
     await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
-    await user.type(screen.getByRole('combobox', { name: 'Categories' }), 'che')
-    await user.click(await screen.findByRole('option', { name: 'Chess' }))
+    await user.click(await screen.findByRole('button', { name: 'Chess' }))
     const submit = screen.getByRole('button', { name: 'Create Playlist' })
     await waitFor(() => expect(submit).toBeEnabled())
     await user.click(submit)

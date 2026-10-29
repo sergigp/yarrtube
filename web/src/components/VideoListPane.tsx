@@ -30,12 +30,12 @@ function VideoStatusIndicator({ status }: { status: VideoStatus }) {
   )
 }
 
-interface VideoListPaneProps {
-  /** Names the container in the empty message ("channel" or "playlist"). */
+interface VideoListPaneProps<T extends Video> {
+  /** Names the container in the empty message ("channel", "playlist" or "category"). */
   noun: string
-  /** The channel/playlist path the thumbnails are served under. */
-  basePath: string
-  videos: Video[] | undefined
+  /** The channel/playlist path a video's thumbnail is served under. */
+  basePathOf: (video: T) => string
+  videos: T[] | undefined
   error: Error | null
   selectedVideoId: string | null
   onSelect: (id: string) => void
@@ -48,14 +48,14 @@ interface VideoListPaneProps {
  * row's select button, not inside it, so opening it never selects the video;
  * the selected row has none, since its detail pane shows one.
  */
-export function VideoListPane({
+export function VideoListPane<T extends Video>({
   noun,
-  basePath,
+  basePathOf,
   videos,
   error,
   selectedVideoId,
   onSelect,
-}: VideoListPaneProps) {
+}: VideoListPaneProps<T>) {
   return (
     <div className="md:h-full md:min-h-0 md:overflow-y-auto">
       {error && <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>}
@@ -83,7 +83,7 @@ export function VideoListPane({
                     <Thumbnail
                       src={
                         video.thumbnail_filename
-                          ? videoMediaUrl(basePath, video.thumbnail_filename)
+                          ? videoMediaUrl(basePathOf(video), video.thumbnail_filename)
                           : null
                       }
                       className={cn(

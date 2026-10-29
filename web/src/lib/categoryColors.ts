@@ -49,22 +49,31 @@ export function hueOf(hex: string): number {
   return ((Math.atan2(labB, labA) * 180) / Math.PI + 360) % 360
 }
 
+/** The alpha byte cards are tinted at (50%), so a category color only washes the card. */
+const CARD_TINT_ALPHA = '80'
+
+/** `hex` (`#rrggbb`) at the card tint's transparency, as `#rrggbbaa`. */
+function cardTint(hex: string): string {
+  return `${hex}${CARD_TINT_ALPHA}`
+}
+
 /**
- * A card's background for its categories' colors: none for 0, flat for 1,
- * diagonal hard-stop bands for 2–3, `CROWDED_CARD` for 4 or more.
+ * A card's background for its categories' colors, each at the card tint's
+ * transparency: none for 0, flat for 1, diagonal hard-stop bands for 2–3,
+ * `CROWDED_CARD` for 4 or more.
  */
 export function cardBackground(colors: string[]): string | undefined {
   if (colors.length === 0) {
     return undefined
   }
   if (colors.length === 1) {
-    return colors[0]
+    return cardTint(colors[0])
   }
   if (colors.length > 3) {
-    return CROWDED_CARD
+    return cardTint(CROWDED_CARD)
   }
   const edge = (index: number) => `${Number(((index * 100) / colors.length).toFixed(2))}%`
-  const bands = colors.map((color, index) => `${color} ${edge(index)} ${edge(index + 1)}`)
+  const bands = colors.map((color, index) => `${cardTint(color)} ${edge(index)} ${edge(index + 1)}`)
   return `linear-gradient(to bottom right, ${bands.join(', ')})`
 }
 

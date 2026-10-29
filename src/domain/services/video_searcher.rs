@@ -3,8 +3,8 @@ use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
 use crate::domain::video::{
-    HomeLimits, HomeVideoView, HomeVideos, ListVideosError, SourcedVideo, Video, VideoId,
-    VideoSource, VideoStatus, VideoView,
+    CategoryVideoView, HomeLimits, HomeVideoView, HomeVideos, ListVideosError, SourcedVideo, Video,
+    VideoId, VideoSource, VideoStatus, VideoView,
 };
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -84,7 +84,8 @@ pub trait VideoSearcherApi: Send + Sync {
 
     /// Downloaded videos of the category's members, once per YouTube video
     /// (channel copy preferred), newest sync first.
-    fn list_for_category(&self, id: &CategoryId) -> Result<Vec<HomeVideoView>, ListVideosError>;
+    fn list_for_category(&self, id: &CategoryId)
+    -> Result<Vec<CategoryVideoView>, ListVideosError>;
 }
 
 impl VideoSearcherApi for VideoSearcher {
@@ -152,7 +153,10 @@ impl VideoSearcherApi for VideoSearcher {
         })
     }
 
-    fn list_for_category(&self, id: &CategoryId) -> Result<Vec<HomeVideoView>, ListVideosError> {
+    fn list_for_category(
+        &self,
+        id: &CategoryId,
+    ) -> Result<Vec<CategoryVideoView>, ListVideosError> {
         let category = self.find_category(id)?;
         let mut videos = Self::once_per_youtube_video(
             self.category_video_collector
@@ -163,7 +167,11 @@ impl VideoSearcherApi for VideoSearcher {
         let by_video = self
             .category_ids_by_video()
             .map_err(ListVideosError::Repository)?;
-        Ok(Self::with_categories(Self::views(videos), &by_video))
+        videos
+            .into_iter()
+            .map(|sourced| self.category_view(sourced, &by_video))
+            .collect::<anyhow::Result<Vec<CategoryVideoView>>>()
+            .map_err(ListVideosError::Repository)
     }
 }
 
@@ -185,6 +193,23 @@ impl VideoSearcher {
     fn view(&self, video: Video) -> anyhow::Result<VideoView> {
         let metadata = self.video_metadata_repository.find(&video.id)?;
         Ok(VideoView { video, metadata })
+    }
+
+    /// `sourced` as a category video: with its metadata and the categories
+    /// having its YouTube video in `by_video` (see `category_ids_by_video`).
+    fn category_view(
+        &self,
+        sourced: SourcedVideo,
+        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+    ) -> anyhow::Result<CategoryVideoView> {
+        let VideoView { video, metadata } = self.view(sourced.video)?;
+        let category_ids = by_video.get(&video.youtube_id).cloned().unwrap_or_default();
+        Ok(CategoryVideoView {
+            video,
+            metadata,
+            source: sourced.source,
+            category_ids,
+        })
     }
 
     fn views(videos: Vec<SourcedVideo>) -> Vec<HomeVideoView> {

@@ -102,10 +102,9 @@ describe('EditPlaylistDialog', () => {
       },
     )
     const user = userEvent.setup()
-    await screen.findByText('Chess')
+    await screen.findByRole('button', { name: 'Chess', pressed: true })
 
-    await user.type(screen.getByRole('combobox', { name: 'Categories' }), 'cour')
-    await user.click(await screen.findByRole('option', { name: 'Courses' }))
+    await user.click(screen.getByRole('button', { name: 'Courses' }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
