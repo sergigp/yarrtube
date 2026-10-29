@@ -9,7 +9,7 @@
 - [x] 2.1 `it_should_schedule_the_download_and_thumbnail_of_a_new_channel_video` — sync resolves the channel target and schedules download + thumbnail fetch.
 - [x] 2.2 `it_should_schedule_the_download_of_a_new_playlist_video_in_its_playlist_folder` — playlist owner resolution.
 - [x] 2.3 `it_should_schedule_the_subtitles_of_a_downloaded_video` — subtitle step from stored state only.
-- [ ] 2.4 `it_should_schedule_nothing_for_a_fully_synced_video` — finished steps are never redone.
+- [x] 2.4 `it_should_schedule_nothing_for_a_fully_synced_video` — finished steps are never redone.
 - [ ] 2.5 `it_should_not_schedule_a_second_download_if_one_is_queued` — dedupe via the task queue.
 - [ ] 2.6 `it_should_not_schedule_a_thumbnail_for_a_video_being_downloaded` — InProgress guard.
 - [ ] 2.7 `it_should_schedule_nothing_for_a_settled_errored_video` — settled-status guard.
