@@ -21,7 +21,7 @@
 - [x] 2.11 `it_should_label_the_others_if_plex_rejects_one` — per-episode failure isolated.
 - [x] 2.12 `it_should_keep_videos_dirty_if_plex_is_unreachable` — sync succeeds, next sync in 15 min.
 - [x] 2.13 `it_should_schedule_the_next_sync` — periodic chain at now + 15 min.
-- [ ] 2.14 `it_should_schedule_the_next_sync_now_if_the_batch_was_full`
+- [x] 2.14 `it_should_schedule_the_next_sync_now_if_the_batch_was_full`
 - [ ] 2.15 `it_should_rotate_videos_waiting_for_plex` — least recently checked first.
 - [ ] 2.16 `it_should_create_a_smart_playlist_for_a_category` — label/section/unwatched/newest-first filter; row stored.
 - [ ] 2.17 `it_should_title_playlists_by_library_if_a_category_spans_libraries`

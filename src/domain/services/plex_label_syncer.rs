@@ -113,18 +113,36 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
         };
         self.mark_reimported(&episodes)?;
         self.track_categorized_records()?;
-        let rows = self.episode_labels_repository.list_dirty(BATCH_SIZE)?;
-        let desired = self.desired_labels(&rows)?;
-        let labelled = rows
-            .into_iter()
-            .filter_map(|row| self.label(row, &desired, &episodes).transpose())
-            .collect::<anyhow::Result<Vec<_>>>()?;
-        self.episode_labels_repository.save_many(&labelled)?;
-        self.request_sync(self.clock.now() + SYNC_INTERVAL)
+        let labelled = self.label_dirty_records(&episodes)?;
+        self.request_next_sync(labelled == BATCH_SIZE)
     }
 }
 
 impl PlexLabelSyncer {
+    /// Labels a batch of dirty records, least recently checked first;
+    /// returns how many were taken.
+    fn label_dirty_records(
+        &self,
+        episodes: &HashMap<String, PlexEpisode>,
+    ) -> anyhow::Result<usize> {
+        let rows = self.episode_labels_repository.list_dirty(BATCH_SIZE)?;
+        let taken = rows.len();
+        let desired = self.desired_labels(&rows)?;
+        let labelled = rows
+            .into_iter()
+            .filter_map(|row| self.label(row, &desired, episodes).transpose())
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        self.episode_labels_repository.save_many(&labelled)?;
+        Ok(taken)
+    }
+
+    /// Right away while a backlog of dirty records remains, else after
+    /// `SYNC_INTERVAL`.
+    fn request_next_sync(&self, backlog: bool) -> anyhow::Result<()> {
+        let now = self.clock.now();
+        self.request_sync(if backlog { now } else { now + SYNC_INTERVAL })
+    }
+
     /// Every episode of the sections holding yarrtube's videos, by its
     /// server-side file.
     fn list_episodes(&self) -> anyhow::Result<HashMap<String, PlexEpisode>> {

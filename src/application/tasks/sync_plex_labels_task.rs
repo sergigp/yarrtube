@@ -31,6 +31,7 @@ mod tests {
     use crate::domain::plex::PlexLabels;
     use crate::domain::plex_label::EpisodeLabels;
     use crate::domain::services::VideoOwnerFinder;
+    use crate::domain::services::plex_label_syncer::BATCH_SIZE;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::{Video, VideoId, VideoRecordId};
@@ -497,6 +498,37 @@ mod tests {
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
             vec![pending_sync(1, now() + Duration::minutes(15))]
+        );
+    }
+
+    #[test]
+    fn it_should_schedule_the_next_sync_now_if_the_batch_was_full() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let task_repository = task_repository(&db);
+        episode_labels_repository
+            .save_many(
+                &(0..BATCH_SIZE)
+                    .map(|i| EpisodeLabels::pending(VideoRecordId::new(format!("rec{i}")).unwrap()))
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            Arc::new(
+                FakePlexLibraryRepository::default().with_location("19", "/plex/videos/creators"),
+            ),
+            episode_labels_repository,
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+            task_repository.clone(),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_sync(1, now())]
         );
     }
 
