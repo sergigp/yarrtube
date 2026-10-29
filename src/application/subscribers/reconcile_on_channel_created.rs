@@ -42,8 +42,8 @@ mod tests {
     use crate::domain::services::InternalVideoReconciler;
     use crate::domain::services::MetadataGenerator;
     use crate::domain::services::ShowFileWriter;
-    use crate::domain::services::SubtitleFetcher;
-    use crate::domain::services::ThumbnailFetcher;
+
+    use crate::domain::services::VideoReconciler;
     use crate::domain::services::VideoRelocator;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, Task, TaskStatus};
@@ -54,6 +54,8 @@ mod tests {
         ChannelRepository, SqliteChannelRepository,
     };
     use crate::infrastructure::repositories::sqlite_channel_video_repository::SqliteChannelVideoRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
@@ -63,7 +65,7 @@ mod tests {
     use crate::infrastructure::repositories::youtube_channel_repository::FakeYoutubeChannelRepository;
     use crate::infrastructure::repositories::youtube_channel_videos_repository::FakeChannelVideosRepository;
     use crate::infrastructure::repositories::youtube_metadata_repository::FakeYoutubeMetadataRepository;
-    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+
     use crate::infrastructure::shared::domain_events::event_publisher::SqliteEventPublisher;
     use crate::infrastructure::shared::domain_events::event_repository::{
         EventRepository, SqliteEventRepository,
@@ -141,27 +143,16 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 task_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
-                Arc::new(SubtitleFetcher::new(
+                VideoReconciler::new(
                     video_repository.clone(),
-                    Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
-                    Arc::new(FakeVideoDownloaderRepository::default()),
-                    Arc::new(FakeVideoFileRepository::default()),
-                    task_repository.clone(),
-                    Arc::new(SqliteEventPublisher::new(
-                        db.database(),
-                        Arc::new(FixedClock(fixed_timestamp())),
-                    )),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                    "/videos",
-                )),
-                Arc::new(ThumbnailFetcher::new(
-                    video_repository.clone(),
-                    Arc::new(FakeVideoDownloaderRepository::default()),
-                    Arc::new(FakeVideoFileRepository::default()),
+                    Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                    Arc::new(SqliteChannelRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistRepository::new(db.database())),
                     task_repository.clone(),
                     Arc::new(FixedClock(fixed_timestamp())),
                     "/videos",
-                )),
+                ),
                 Arc::new(VideoRelocator::new(
                     video_repository.clone(),
                     Arc::new(FakeVideoFileRepository::default()),
@@ -237,27 +228,16 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 task_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
-                Arc::new(SubtitleFetcher::new(
+                VideoReconciler::new(
                     video_repository.clone(),
-                    Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
-                    Arc::new(FakeVideoDownloaderRepository::default()),
-                    Arc::new(FakeVideoFileRepository::default()),
-                    task_repository.clone(),
-                    Arc::new(SqliteEventPublisher::new(
-                        db.database(),
-                        Arc::new(FixedClock(fixed_timestamp())),
-                    )),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                    "/videos",
-                )),
-                Arc::new(ThumbnailFetcher::new(
-                    video_repository.clone(),
-                    Arc::new(FakeVideoDownloaderRepository::default()),
-                    Arc::new(FakeVideoFileRepository::default()),
+                    Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                    Arc::new(SqliteChannelRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistRepository::new(db.database())),
                     task_repository.clone(),
                     Arc::new(FixedClock(fixed_timestamp())),
                     "/videos",
-                )),
+                ),
                 Arc::new(VideoRelocator::new(
                     Arc::new(SqliteVideoRepository::new(db.database())),
                     Arc::new(FakeVideoFileRepository::default()),
@@ -326,27 +306,6 @@ mod tests {
         task_repository: Arc<SqliteTaskRepository>,
     ) -> ChannelVideoReconciler {
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
-        let subtitle_fetcher = Arc::new(SubtitleFetcher::new(
-            video_repository.clone(),
-            Arc::new(SqliteVideoTranscriptRepository::new(db.database())),
-            Arc::new(FakeVideoDownloaderRepository::default()),
-            Arc::new(FakeVideoFileRepository::default()),
-            task_repository.clone(),
-            Arc::new(SqliteEventPublisher::new(
-                db.database(),
-                Arc::new(FixedClock(fixed_timestamp())),
-            )),
-            Arc::new(FixedClock(fixed_timestamp())),
-            "/videos",
-        ));
-        let thumbnail_fetcher = Arc::new(ThumbnailFetcher::new(
-            video_repository.clone(),
-            Arc::new(FakeVideoDownloaderRepository::default()),
-            Arc::new(FakeVideoFileRepository::default()),
-            task_repository.clone(),
-            Arc::new(FixedClock(fixed_timestamp())),
-            "/videos",
-        ));
         ChannelVideoReconciler::new(
             channel_repository.clone(),
             video_repository.clone(),
@@ -356,16 +315,24 @@ mod tests {
             event_publisher(db),
             task_repository.clone(),
             Arc::new(InternalVideoReconciler::new(
-                video_repository,
+                video_repository.clone(),
                 Arc::new(MetadataGenerator::new(
                     Arc::new(FakeYoutubeMetadataRepository::default()),
                     Arc::new(FixedClock(fixed_timestamp())),
                 )),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
-                task_repository,
+                task_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
-                subtitle_fetcher,
-                thumbnail_fetcher,
+                VideoReconciler::new(
+                    video_repository.clone(),
+                    Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                    Arc::new(SqliteChannelRepository::new(db.database())),
+                    Arc::new(SqlitePlaylistRepository::new(db.database())),
+                    task_repository.clone(),
+                    Arc::new(FixedClock(fixed_timestamp())),
+                    "/videos",
+                ),
                 Arc::new(VideoRelocator::new(
                     Arc::new(SqliteVideoRepository::new(db.database())),
                     Arc::new(FakeVideoFileRepository::default()),
@@ -420,27 +387,16 @@ mod tests {
                 Arc::new(SqliteVideoMetadataRepository::new(unused_connection())),
                 task_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
-                Arc::new(SubtitleFetcher::new(
+                VideoReconciler::new(
                     video_repository.clone(),
-                    Arc::new(SqliteVideoTranscriptRepository::new(unused_connection())),
-                    Arc::new(FakeVideoDownloaderRepository::default()),
-                    Arc::new(FakeVideoFileRepository::default()),
-                    task_repository.clone(),
-                    Arc::new(SqliteEventPublisher::new(
-                        unused_connection(),
-                        Arc::new(FixedClock(fixed_timestamp())),
-                    )),
-                    Arc::new(FixedClock(fixed_timestamp())),
-                    "/videos",
-                )),
-                Arc::new(ThumbnailFetcher::new(
-                    video_repository,
-                    Arc::new(FakeVideoDownloaderRepository::default()),
-                    Arc::new(FakeVideoFileRepository::default()),
+                    Arc::new(SqliteChannelVideoRepository::new(unused_connection())),
+                    Arc::new(SqlitePlaylistVideoRepository::new(unused_connection())),
+                    Arc::new(SqliteChannelRepository::new(unused_connection())),
+                    Arc::new(SqlitePlaylistRepository::new(unused_connection())),
                     task_repository.clone(),
                     Arc::new(FixedClock(fixed_timestamp())),
                     "/videos",
-                )),
+                ),
                 Arc::new(VideoRelocator::new(
                     Arc::new(SqliteVideoRepository::new(unused_connection())),
                     Arc::new(FakeVideoFileRepository::default()),

@@ -52,7 +52,7 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
     };
-    use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
+
     use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
     use crate::infrastructure::repositories::youtube_video_downloader_repository::{
         FakeVideoDownloaderRepository, FetchedThumbnail,
@@ -91,10 +91,6 @@ mod tests {
                 video_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(later())),
-                )),
                 Arc::new(FixedClock(later())),
                 "/videos",
             )),
@@ -145,10 +141,6 @@ mod tests {
                 video_repository.clone(),
                 video_downloader_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(later())),
-                )),
                 Arc::new(FixedClock(later())),
                 "/videos",
             )),
@@ -184,10 +176,6 @@ mod tests {
                 video_repository.clone(),
                 video_downloader_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(later())),
-                )),
                 Arc::new(FixedClock(later())),
                 "/videos",
             )),
@@ -223,10 +211,6 @@ mod tests {
                 video_repository.clone(),
                 video_downloader_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(later())),
-                )),
                 Arc::new(FixedClock(later())),
                 "/videos",
             )),
@@ -253,10 +237,6 @@ mod tests {
                 video_repository.clone(),
                 video_downloader_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(later())),
-                )),
                 Arc::new(FixedClock(later())),
                 "/videos",
             )),
@@ -287,10 +267,6 @@ mod tests {
                 video_repository.clone(),
                 video_downloader_repository.clone(),
                 video_file_repository.clone(),
-                Arc::new(SqliteTaskRepository::new(
-                    db.database(),
-                    Arc::new(FixedClock(later())),
-                )),
                 Arc::new(FixedClock(later())),
                 "/videos",
             )),

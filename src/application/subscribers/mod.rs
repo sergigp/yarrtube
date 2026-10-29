@@ -2,11 +2,6 @@ pub mod delete_channel_files_on_channel_deleted;
 pub mod delete_playlist_files_on_playlist_deleted;
 pub mod delete_video_file_on_video_removed_from_channel;
 pub mod delete_video_file_on_video_removed_from_playlist;
-pub mod download_video_on_video_added_to_channel;
-pub mod download_video_on_video_added_to_playlist;
-pub mod fetch_subtitles_on_video_downloaded;
-pub mod fetch_thumbnail_on_video_added_to_channel;
-pub mod fetch_thumbnail_on_video_added_to_playlist;
 pub mod reconcile_on_channel_created;
 pub mod reconcile_on_playlist_created;
 pub mod remove_channel_from_categories_on_channel_deleted;
@@ -14,6 +9,7 @@ pub mod remove_playlist_from_categories_on_playlist_deleted;
 pub mod scan_plex_folder_on_show_moved;
 pub mod scan_plex_folder_on_video_downloaded;
 pub mod scan_plex_folder_on_video_subtitles_fetched;
+pub mod sync_video_on_video_event;
 
 use crate::domain::channel::{ChannelCreated, ChannelDeleted};
 use crate::domain::channel_video::{VideoAddedToChannel, VideoRemovedFromChannel};
@@ -33,11 +29,6 @@ use delete_channel_files_on_channel_deleted::DeleteChannelFilesOnChannelDeleted;
 use delete_playlist_files_on_playlist_deleted::DeletePlaylistFilesOnPlaylistDeleted;
 use delete_video_file_on_video_removed_from_channel::DeleteVideoFileOnVideoRemovedFromChannel;
 use delete_video_file_on_video_removed_from_playlist::DeleteVideoFileOnVideoRemovedFromPlaylist;
-use download_video_on_video_added_to_channel::DownloadVideoOnVideoAddedToChannel;
-use download_video_on_video_added_to_playlist::DownloadVideoOnVideoAddedToPlaylist;
-use fetch_subtitles_on_video_downloaded::FetchSubtitlesOnVideoDownloaded;
-use fetch_thumbnail_on_video_added_to_channel::FetchThumbnailOnVideoAddedToChannel;
-use fetch_thumbnail_on_video_added_to_playlist::FetchThumbnailOnVideoAddedToPlaylist;
 use reconcile_on_channel_created::ReconcileOnChannelCreated;
 use reconcile_on_playlist_created::ReconcileOnPlaylistCreated;
 use remove_channel_from_categories_on_channel_deleted::RemoveChannelFromCategoriesOnChannelDeleted;
@@ -47,6 +38,7 @@ use scan_plex_folder_on_video_downloaded::ScanPlexFolderOnVideoDownloaded;
 use scan_plex_folder_on_video_subtitles_fetched::ScanPlexFolderOnVideoSubtitlesFetched;
 use std::collections::HashMap;
 use std::sync::Arc;
+use sync_video_on_video_event::SyncVideoOnVideoEvent;
 
 /// Maps each domain event type to the subscribers that react to it, handed
 /// to `DomainEventsConsumer` at composition time.
@@ -76,40 +68,21 @@ pub fn registry(
             channel_video_reconciler,
         ))],
     );
-    registry.insert(
-        VideoAddedToPlaylist::EVENT_TYPE.to_string(),
-        vec![
-            Arc::new(FetchThumbnailOnVideoAddedToPlaylist::new(
-                playlist_repository.clone(),
+    [
+        VideoAddedToPlaylist::EVENT_TYPE,
+        VideoAddedToChannel::EVENT_TYPE,
+        VideoDownloaded::EVENT_TYPE,
+    ]
+    .into_iter()
+    .for_each(|event_type| {
+        registry.insert(
+            event_type.to_string(),
+            vec![Arc::new(SyncVideoOnVideoEvent::new(
                 task_repository.clone(),
                 clock.clone(),
-                videos_path.clone(),
-            )),
-            Arc::new(DownloadVideoOnVideoAddedToPlaylist::new(
-                playlist_repository.clone(),
-                task_repository.clone(),
-                clock.clone(),
-                videos_path.clone(),
-            )),
-        ],
-    );
-    registry.insert(
-        VideoAddedToChannel::EVENT_TYPE.to_string(),
-        vec![
-            Arc::new(FetchThumbnailOnVideoAddedToChannel::new(
-                channel_repository.clone(),
-                task_repository.clone(),
-                clock.clone(),
-                videos_path.clone(),
-            )),
-            Arc::new(DownloadVideoOnVideoAddedToChannel::new(
-                channel_repository.clone(),
-                task_repository.clone(),
-                clock.clone(),
-                videos_path.clone(),
-            )),
-        ],
-    );
+            ))],
+        );
+    });
     registry.insert(
         VideoRemovedFromPlaylist::EVENT_TYPE.to_string(),
         vec![Arc::new(DeleteVideoFileOnVideoRemovedFromPlaylist::new(
@@ -151,13 +124,6 @@ pub fn registry(
                 category_member_remover,
             )),
         ],
-    );
-    registry.insert(
-        VideoDownloaded::EVENT_TYPE.to_string(),
-        vec![Arc::new(FetchSubtitlesOnVideoDownloaded::new(
-            task_repository,
-            clock,
-        ))],
     );
     if let Some(scanner) = plex_folder_scanner {
         registry

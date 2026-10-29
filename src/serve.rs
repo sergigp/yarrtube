@@ -8,7 +8,7 @@ use crate::domain::services::{
     PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater, PlaylistVideoReconciler,
     PlaylistViewSearcher, PlexFolderScanner, ShowFileWriter, ShowMover, SubtitleFetcher,
     SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter,
-    VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
+    VideoReconciler, VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -589,6 +589,7 @@ fn task_handlers(infrastructure: &InfrastructureContainer) -> HandlerRegistry {
         video_downloader(infrastructure),
         thumbnail_fetcher(infrastructure),
         subtitle_fetcher(infrastructure),
+        video_reconciler(infrastructure),
         infrastructure.video_repository.clone(),
         VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
         infrastructure.task_repository.clone(),
@@ -683,12 +684,24 @@ fn internal_video_reconciler(
         infrastructure.video_metadata_repository.clone(),
         infrastructure.task_repository.clone(),
         infrastructure.video_file_repository.clone(),
-        subtitle_fetcher(infrastructure),
-        thumbnail_fetcher(infrastructure),
+        video_reconciler(infrastructure),
         video_relocator(infrastructure),
         infrastructure.clock.clone(),
         videos_path(),
     ))
+}
+
+fn video_reconciler(infrastructure: &InfrastructureContainer) -> VideoReconciler {
+    VideoReconciler::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.channel_video_repository.clone(),
+        infrastructure.playlist_video_repository.clone(),
+        infrastructure.channel_repository.clone(),
+        infrastructure.playlist_repository.clone(),
+        infrastructure.task_repository.clone(),
+        infrastructure.clock.clone(),
+        videos_path(),
+    )
 }
 
 fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailFetcher> {
@@ -696,7 +709,6 @@ fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailF
         infrastructure.video_repository.clone(),
         infrastructure.video_downloader_repository.clone(),
         infrastructure.video_file_repository.clone(),
-        infrastructure.task_repository.clone(),
         infrastructure.clock.clone(),
         videos_path(),
     ))
@@ -708,7 +720,6 @@ fn subtitle_fetcher(infrastructure: &InfrastructureContainer) -> Arc<SubtitleFet
         infrastructure.video_transcript_repository.clone(),
         infrastructure.video_downloader_repository.clone(),
         infrastructure.video_file_repository.clone(),
-        infrastructure.task_repository.clone(),
         infrastructure.event_publisher.clone(),
         infrastructure.clock.clone(),
         videos_path(),
@@ -1051,6 +1062,7 @@ mod tests {
                 "fetch_thumbnail",
                 "reconcile_channel",
                 "reconcile_playlist",
+                "sync_video",
                 "update_ytdlp",
             ])
         );
@@ -1073,8 +1085,8 @@ mod tests {
                 ("channel_deleted", 2),
                 ("playlist_created", 1),
                 ("playlist_deleted", 2),
-                ("video_added_to_channel", 2),
-                ("video_added_to_playlist", 2),
+                ("video_added_to_channel", 1),
+                ("video_added_to_playlist", 1),
                 ("video_downloaded", 1),
                 ("video_removed_from_channel", 1),
                 ("video_removed_from_playlist", 1),
@@ -1115,7 +1127,7 @@ mod tests {
             })
             .collect();
 
-        // Without Plex, `video_downloaded` keeps only the subtitle fetch.
+        // Without Plex, `video_downloaded` keeps only the video sync.
         assert_eq!(
             scan_subscribers,
             vec![

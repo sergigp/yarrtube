@@ -8,11 +8,12 @@ pub mod fetch_thumbnail_task;
 pub(crate) mod log_capture;
 pub mod reconcile_channel_task;
 pub mod reconcile_playlist_task;
+pub mod sync_video_task;
 pub mod update_ytdlp_task;
 
 use crate::domain::services::{
     ChannelVideoReconciler, PlaylistVideoReconciler, SubtitleFetcher, ThumbnailFetcher,
-    VideoDownloader, VideoFileDeleter,
+    VideoDownloader, VideoFileDeleter, VideoReconciler,
 };
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -30,6 +31,7 @@ use reconcile_playlist_task::ReconcilePlaylistTask;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use sync_video_task::SyncVideoTask;
 use update_ytdlp_task::UpdateYtdlpTask;
 
 /// Maps each task type to the single handler that runs it, handed to the
@@ -41,6 +43,7 @@ pub fn registry(
     video_downloader: VideoDownloader,
     thumbnail_fetcher: Arc<ThumbnailFetcher>,
     subtitle_fetcher: Arc<SubtitleFetcher>,
+    video_reconciler: VideoReconciler,
     video_repository: Arc<dyn VideoRepository>,
     video_file_deleter: VideoFileDeleter,
     task_repository: Arc<dyn TaskRepository>,
@@ -72,6 +75,10 @@ pub fn registry(
     registry.insert(
         "fetch_subtitles".to_string(),
         Arc::new(FetchSubtitlesTask::new(video_repository, subtitle_fetcher)),
+    );
+    registry.insert(
+        "sync_video".to_string(),
+        Arc::new(SyncVideoTask::new(video_reconciler)),
     );
     registry.insert(
         "delete_video_file".to_string(),

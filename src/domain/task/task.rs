@@ -39,6 +39,9 @@ pub enum Task {
         video_id: String,
         output_dir: String,
     },
+    SyncVideo {
+        video_id: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,6 +98,11 @@ struct FetchSubtitlesPayload {
     output_dir: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct SyncVideoPayload {
+    video_id: String,
+}
+
 impl Task {
     pub fn task_type(&self) -> &'static str {
         match self {
@@ -107,6 +115,7 @@ impl Task {
             Self::UpdateYtdlp => "update_ytdlp",
             Self::FetchThumbnail { .. } => "fetch_thumbnail",
             Self::FetchSubtitles { .. } => "fetch_subtitles",
+            Self::SyncVideo { .. } => "sync_video",
         }
     }
 
@@ -147,6 +156,7 @@ impl Task {
                 video_id,
                 output_dir,
             } => json!({ "video_id": video_id, "output_dir": output_dir }),
+            Self::SyncVideo { video_id } => json!({ "video_id": video_id }),
         }
     }
 
@@ -237,6 +247,14 @@ impl Task {
         Ok((parsed.video_id, parsed.output_dir))
     }
 
+    /// Decodes a `sync_video` task's raw JSON payload, as handed to a
+    /// `TaskHandler`, back into the video's surrogate ID.
+    pub fn decode_sync_video_payload(payload: &str) -> Result<String, TaskError> {
+        let parsed: SyncVideoPayload = serde_json::from_str(payload)
+            .map_err(|e| TaskError(format!("invalid sync_video payload: {e}")))?;
+        Ok(parsed.video_id)
+    }
+
     /// The executor lane a task of `task_type` runs in. Unknown types fall
     /// into `Light`.
     pub fn lane_for(task_type: &str) -> TaskLane {
@@ -267,6 +285,14 @@ impl Task {
             _ => None,
         }?;
         Some(format!("video:{video_id}"))
+    }
+
+    /// Whether scheduling a keyed task is skipped while one of the same type
+    /// for the same video is running, not only pending. False for
+    /// `sync_video`: a running sync must not swallow a newer request.
+    pub fn dedupes_running(task_type: &str) -> bool {
+        let _ = task_type;
+        false
     }
 
     /// The show directory a per-video task (`download_video`,
