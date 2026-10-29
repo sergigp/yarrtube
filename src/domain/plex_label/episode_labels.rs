@@ -21,8 +21,15 @@ pub struct EpisodeLabels {
 
 impl EpisodeLabels {
     /// Dirty, never synced.
-    pub fn pending(_video_id: VideoRecordId) -> Self {
-        todo!()
+    pub fn pending(video_id: VideoRecordId) -> Self {
+        Self {
+            video_id,
+            dirty: true,
+            rating_key: None,
+            section_id: None,
+            labels: PlexLabels::none(),
+            checked_at: None,
+        }
     }
 
     pub fn mark_dirty(self) -> Self {
@@ -36,7 +43,14 @@ impl EpisodeLabels {
     }
 
     /// `labels` written to `episode` at `now`.
-    pub fn synced(self, _episode: &PlexEpisode, _labels: PlexLabels, _now: DateTime<Utc>) -> Self {
-        todo!()
+    pub fn synced(self, episode: &PlexEpisode, labels: PlexLabels, now: DateTime<Utc>) -> Self {
+        Self {
+            dirty: false,
+            rating_key: Some(episode.rating_key.clone()),
+            section_id: Some(episode.section_id.clone()),
+            labels,
+            checked_at: Some(now),
+            ..self
+        }
     }
 }

@@ -1,5 +1,9 @@
-use crate::domain::services::VideoOwnerFinder;
+use crate::domain::category::{CategoryId, CategoryName};
+use crate::domain::plex::{PlexEpisode, PlexLabels, PlexSection, plex_folder_path};
+use crate::domain::plex_label::EpisodeLabels;
+use crate::domain::services::{VideoOwnerFinder, VideoOwnerFinderApi};
 use crate::domain::video::VideoRecordId;
+use crate::domain::video_category::VideoCategories;
 use crate::infrastructure::repositories::plex_library_repository::PlexLibraryRepository;
 use crate::infrastructure::repositories::sqlite_category_playlist_repository::CategoryPlaylistRepository;
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
@@ -9,6 +13,8 @@ use crate::infrastructure::repositories::sqlite_video_categories_repository::Vid
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
 use chrono::{DateTime, Duration, Utc};
+use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 
 /// How often a label sync runs to heal drift.
@@ -96,6 +102,120 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        Ok(())
+        let sections = self.served_sections()?;
+        let episodes = self.episodes_by_file(&sections)?;
+        let rows = self.episode_labels_repository.list_dirty(BATCH_SIZE)?;
+        let desired = self.desired_labels(&rows)?;
+        let labelled = rows
+            .into_iter()
+            .map(|row| self.label(row, &desired, &episodes))
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        self.episode_labels_repository.save_many(&labelled)
     }
+}
+
+impl PlexLabelSyncer {
+    /// The library sections holding yarrtube's videos.
+    fn served_sections(&self) -> anyhow::Result<Vec<PlexSection>> {
+        Ok(self
+            .plex_library_repository
+            .list_sections()?
+            .into_iter()
+            .filter(|section| section.serves(&self.plex_videos_path))
+            .collect())
+    }
+
+    /// Every episode of `sections`, by its server-side file.
+    fn episodes_by_file(
+        &self,
+        sections: &[PlexSection],
+    ) -> anyhow::Result<HashMap<String, PlexEpisode>> {
+        sections
+            .iter()
+            .map(|section| self.plex_library_repository.list_episodes(&section.id))
+            .collect::<anyhow::Result<Vec<_>>>()
+            .map(|episodes| {
+                episodes
+                    .into_iter()
+                    .flatten()
+                    .map(|episode| (episode.file.clone(), episode))
+                    .collect()
+            })
+    }
+
+    /// The labels each row's record should carry: its categories' names.
+    fn desired_labels(
+        &self,
+        rows: &[EpisodeLabels],
+    ) -> anyhow::Result<HashMap<VideoRecordId, PlexLabels>> {
+        let names: HashMap<CategoryId, CategoryName> = self
+            .category_repository
+            .list()?
+            .into_iter()
+            .map(|category| (category.id, category.name))
+            .collect();
+        let ids: Vec<VideoRecordId> = rows.iter().map(|row| row.video_id.clone()).collect();
+        Ok(self
+            .video_categories_repository
+            .find_many(&ids)?
+            .into_iter()
+            .map(|categories| (categories.video_id.clone(), labels_of(&categories, &names)))
+            .collect())
+    }
+
+    /// Writes the record's desired labels to its episode.
+    fn label(
+        &self,
+        row: EpisodeLabels,
+        desired: &HashMap<VideoRecordId, PlexLabels>,
+        episodes: &HashMap<String, PlexEpisode>,
+    ) -> anyhow::Result<EpisodeLabels> {
+        let Some(episode) = self.find_episode(&row.video_id, episodes)? else {
+            return Ok(row);
+        };
+        let desired = desired
+            .get(&row.video_id)
+            .cloned()
+            .unwrap_or_else(PlexLabels::none);
+        self.plex_library_repository
+            .save_labels(&episode, &desired, &[])?;
+        Ok(row.synced(&episode, desired, self.clock.now()))
+    }
+
+    /// The Plex episode of the record's file.
+    fn find_episode(
+        &self,
+        video_id: &VideoRecordId,
+        episodes: &HashMap<String, PlexEpisode>,
+    ) -> anyhow::Result<Option<PlexEpisode>> {
+        let Some(video) = self.video_repository.find(video_id)? else {
+            return Ok(None);
+        };
+        let Some(owner) = self.video_owner_finder.find(&video)? else {
+            return Ok(None);
+        };
+        Ok(video
+            .filename
+            .as_deref()
+            .map(|filename| owner.target.output_dir.join(filename))
+            .and_then(|file| {
+                plex_folder_path(Path::new(&self.videos_path), &self.plex_videos_path, &file)
+            })
+            .and_then(|file| episodes.get(&file).cloned()))
+    }
+}
+
+/// The names of the record's categories.
+fn labels_of(
+    categories: &VideoCategories,
+    names: &HashMap<CategoryId, CategoryName>,
+) -> PlexLabels {
+    PlexLabels::new(
+        categories
+            .category_ids
+            .iter()
+            .filter_map(|id| names.get(id))
+            .map(|name| name.as_str().to_string())
+            .collect(),
+    )
 }

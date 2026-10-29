@@ -20,3 +20,218 @@ impl TaskHandler for SyncPlexLabelsTask {
         self.plex_label_syncer.sync()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::category::{Category, CategoryColor, CategoryId, CategoryName};
+    use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
+    use crate::domain::channel_video::ChannelVideo;
+    use crate::domain::playlist::PlaylistPath;
+    use crate::domain::plex::PlexLabels;
+    use crate::domain::plex_label::EpisodeLabels;
+    use crate::domain::services::VideoOwnerFinder;
+    use crate::domain::shared::{Quality, ReconcileInterval};
+    use crate::domain::video::{Video, VideoId};
+    use crate::domain::video_category::VideoCategories;
+    use crate::infrastructure::repositories::plex_library_repository::FakePlexLibraryRepository;
+    use crate::infrastructure::repositories::sqlite_category_playlist_repository::{
+        CategoryPlaylistRepository, SqliteCategoryPlaylistRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_category_repository::{
+        CategoryRepository, SqliteCategoryRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_channel_repository::{
+        ChannelRepository, SqliteChannelRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_channel_video_repository::{
+        ChannelVideoRepository, SqliteChannelVideoRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_episode_labels_repository::{
+        EpisodeLabelsRepository, SqliteEpisodeLabelsRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_task_repository::SqliteTaskRepository;
+    use crate::infrastructure::repositories::sqlite_video_categories_repository::{
+        SqliteVideoCategoriesRepository, VideoCategoriesRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_video_repository::{
+        SqliteVideoRepository, VideoRepository,
+    };
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use chrono::{DateTime, Utc};
+    use std::sync::Arc;
+
+    #[test]
+    fn it_should_label_the_episode_of_a_categorized_video() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[]),
+        );
+        let video = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        seed_category(&db, "chess", "Chess", &[&video]);
+        episode_labels_repository
+            .save_many(&[EpisodeLabels::pending(video.id.clone())])
+            .unwrap();
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            episode_labels_repository.clone(),
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database())),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(plex.labels("101"), vec!["Chess".to_string()]);
+        assert_eq!(
+            episode_labels_repository
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![synced(&video, "101", &["Chess"])]
+        );
+    }
+
+    /// The syncer over the test database, with Plex seeing `/videos` at
+    /// `/plex/videos`.
+    fn syncer(
+        db: &TestDatabase,
+        plex: Arc<FakePlexLibraryRepository>,
+        episode_labels_repository: Arc<dyn EpisodeLabelsRepository>,
+        category_playlist_repository: Arc<dyn CategoryPlaylistRepository>,
+    ) -> PlexLabelSyncer {
+        PlexLabelSyncer::new(
+            plex,
+            episode_labels_repository,
+            category_playlist_repository,
+            Arc::new(SqliteVideoCategoriesRepository::new(db.database())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(VideoOwnerFinder::new(
+                Arc::new(SqliteChannelVideoRepository::new(db.database())),
+                Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+                Arc::new(SqliteChannelRepository::new(db.database())),
+                Arc::new(SqlitePlaylistRepository::new(db.database())),
+                "/videos",
+            )),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(now())),
+            )),
+            Arc::new(FixedClock(now())),
+            "/videos",
+            "/plex/videos",
+        )
+    }
+
+    /// A video of `my_channel()` downloaded to `Season 2023/<file_name>`,
+    /// stored with its channel.
+    fn seed_downloaded_video(db: &TestDatabase, youtube_id: &str, file_name: &str) -> Video {
+        let channel_repository = SqliteChannelRepository::new(db.database());
+        if channel_repository.find(&my_channel_id()).unwrap().is_none() {
+            channel_repository.insert(&my_channel()).unwrap();
+        }
+        let video = Video::create(VideoId::new(youtube_id).unwrap(), youtube_id, now())
+            .mark_downloaded(
+                Quality::High,
+                format!("Season 2023/{file_name}"),
+                None,
+                None,
+                now(),
+            );
+        SqliteVideoRepository::new(db.database())
+            .save(&video)
+            .unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                now(),
+            ))
+            .unwrap();
+        video
+    }
+
+    /// Stores the category `id` named `name` and puts `videos` in it.
+    fn seed_category(db: &TestDatabase, id: &str, name: &str, videos: &[&Video]) {
+        let category = Category {
+            id: CategoryId::new(id).unwrap(),
+            ..Category::create(
+                CategoryName::new(name).unwrap(),
+                CategoryColor::new(CategoryColor::PALETTE[0]).unwrap(),
+                now(),
+            )
+        };
+        SqliteCategoryRepository::new(db.database())
+            .insert(&category)
+            .unwrap();
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let with_category: Vec<VideoCategories> = video_categories_repository
+            .find_many(
+                &videos
+                    .iter()
+                    .map(|video| video.id.clone())
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap()
+            .into_iter()
+            .map(|current| {
+                VideoCategories::new(
+                    current.video_id,
+                    [current.category_ids, vec![category.id.clone()]].concat(),
+                )
+            })
+            .collect();
+        video_categories_repository
+            .save_many(&with_category)
+            .unwrap();
+    }
+
+    fn synced(video: &Video, rating_key: &str, labels: &[&str]) -> EpisodeLabels {
+        EpisodeLabels {
+            video_id: video.id.clone(),
+            dirty: false,
+            rating_key: Some(rating_key.to_string()),
+            section_id: Some("19".to_string()),
+            labels: PlexLabels::new(labels.iter().map(|label| label.to_string()).collect()),
+            checked_at: Some(now()),
+        }
+    }
+
+    /// Where Plex sees `my_channel()`'s episode `file_name`.
+    fn plex_file(file_name: &str) -> String {
+        format!("/plex/videos/creators/somechannel/Season 2023/{file_name}")
+    }
+
+    fn my_channel_id() -> ChannelHandle {
+        ChannelHandle::new("@somechannel").unwrap()
+    }
+
+    fn my_channel() -> Channel {
+        Channel::create(
+            my_channel_id(),
+            "Some Channel",
+            "UC123",
+            Quality::High,
+            VideoLimit::new(10).unwrap(),
+            ReconcileInterval::default_interval(),
+            PlaylistPath::new("creators/somechannel").unwrap(),
+            None,
+            now(),
+        )
+    }
+
+    fn now() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn run(task: &SyncPlexLabelsTask) -> Result<(), String> {
+        task.handle("{}", false).map_err(|e| e.to_string())
+    }
+}

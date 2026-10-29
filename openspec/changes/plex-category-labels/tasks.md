@@ -8,7 +8,7 @@
 
 ## 2. Behaviour (TDD)
 
-- [ ] 2.1 `it_should_label_the_episode_of_a_categorized_video` — a dirty record's episode gets its categories' names and the row is synced with the rating key.
+- [x] 2.1 `it_should_label_the_episode_of_a_categorized_video` — a dirty record's episode gets its categories' names and the row is synced with the rating key.
 - [ ] 2.2 `it_should_label_an_episode_with_every_category` — all names written.
 - [ ] 2.3 `it_should_clear_the_labels_of_an_uncategorized_video` — yarrtube owns labels: others removed, field unlocked.
 - [ ] 2.4 `it_should_not_rewrite_labels_already_in_sync` — case-insensitive comparison, no Plex write.
