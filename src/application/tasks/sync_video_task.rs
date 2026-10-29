@@ -3,9 +3,10 @@ use crate::domain::task::Task;
 use crate::domain::video::VideoRecordId;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 
-/// Syncs one stored video: schedules whichever of its steps its stored
-/// state still needs. Scheduled by the `SyncVideoOn*` subscribers when a
-/// video is added to a playlist or channel and each time one is downloaded.
+/// Syncs one stored video: brings it to its desired state and schedules
+/// whichever of its steps it still needs (`VideoReconciler`). Scheduled by
+/// the `SyncVideoOn*` subscribers when a video is added to a playlist or
+/// channel and each time one is downloaded.
 pub struct SyncVideoTask {
     video_reconciler: VideoReconciler,
 }
