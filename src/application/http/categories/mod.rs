@@ -1026,6 +1026,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_uncategorize_the_videos_of_a_deleted_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@GothamChess"))
+            .unwrap();
+        let video = downloaded_video("vid1");
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@GothamChess",
+            &video,
+        );
+        let chess = Category {
+            members: vec![channel_member("@GothamChess")],
+            ..category(None, "Chess")
+        };
+        let funny = Category {
+            members: vec![channel_member("@GothamChess")],
+            ..category(None, "Funny")
+        };
+        repository.insert(&chess).unwrap();
+        repository.insert(&funny).unwrap();
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone(), funny.id.clone()],
+            )])
+            .unwrap();
+        let category_deleter =
+            CategoryDeleter::new(repository.clone(), video_category_assigner(db.database()));
+
+        let response = delete(category_deleter, funny.id.as_str()).await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(repository.list().unwrap(), vec![chess.clone()]);
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[video.id.clone()])
+                .unwrap(),
+            vec![VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone()]
+            )]
+        );
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![categories_changed_event(1, &[&video])]
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_fail_to_delete_a_missing_category() {
         let db = TestDatabase::new();
         let category_deleter = CategoryDeleter::new(
