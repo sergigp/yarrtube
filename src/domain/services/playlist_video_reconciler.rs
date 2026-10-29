@@ -378,6 +378,7 @@ impl PlaylistVideoReconciler {
                     .delete(&playlist.id, &video.youtube_id)?;
                 self.video_repository.delete(&video.id)?;
                 self.video_transcript_repository.delete(&video.id)?;
+                self.video_categories_repository.delete(&video.id)?;
                 self.event_publisher
                     .publish(&DomainEvent::VideoRemovedFromPlaylist(
                         VideoRemovedFromPlaylist {

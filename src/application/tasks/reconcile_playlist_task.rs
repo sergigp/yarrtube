@@ -778,6 +778,52 @@ mod tests {
     }
 
     #[test]
+    fn it_should_delete_the_categories_of_a_removed_video() {
+        let db = TestDatabase::new();
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let video_categories_repository = SqliteVideoCategoriesRepository::new(db.database());
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let removed = my_video();
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            &removed,
+            0,
+        );
+        video_categories_repository
+            .save_many(&[VideoCategories::new(
+                removed.id.clone(),
+                vec![CategoryId::new("classified").unwrap()],
+            )])
+            .unwrap();
+        let task = ReconcilePlaylistTask::new(playlist_video_reconciler(
+            &db,
+            playlist_repository,
+            video_repository.clone(),
+            playlist_video_repository,
+            Vec::new(),
+            Arc::new(SqliteTaskRepository::new(
+                db.database(),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+        ));
+
+        let result = run(&task, &payload_for("PL1"));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![]);
+        assert_eq!(
+            video_categories_repository
+                .find_many(&[removed.id.clone()])
+                .unwrap(),
+            vec![VideoCategories::none(removed.id.clone())]
+        );
+    }
+
+    #[test]
     fn it_should_flag_downloaded_state_on_video_removed_events() {
         let db = TestDatabase::new();
         let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
