@@ -32,7 +32,7 @@ mod tests {
     use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
-    use crate::domain::video::{Video, VideoId};
+    use crate::domain::video::{EpisodeNumber, Video, VideoId};
     use crate::infrastructure::repositories::sqlite_channel_repository::{
         ChannelRepository, SqliteChannelRepository,
     };
@@ -175,8 +175,89 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_schedule_the_subtitles_of_a_downloaded_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = downloaded_video();
+        save_channel_video(
+            &video_repository,
+            &channel_repository,
+            &channel_video_repository,
+            &video,
+        );
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            video_repository,
+            channel_video_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_task(
+                1,
+                &Task::FetchSubtitles {
+                    video_id: video.id.as_str().to_string(),
+                    output_dir: "/videos/creators/somechannel".to_string(),
+                },
+            )]
+        );
+    }
+
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+    }
+
+    /// Downloaded and numbered in its season folder, with its thumbnail
+    /// recorded and its subtitles still Missing.
+    fn downloaded_video() -> Video {
+        my_video()
+            .start_download(fixed_timestamp())
+            .mark_downloaded(
+                Quality::High,
+                "Season 2026/S2026E031501 - My Video.mp4",
+                Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                None,
+                fixed_timestamp(),
+            )
+            .with_episode_number(
+                EpisodeNumber::from_columns(2026, 31501).unwrap(),
+                fixed_timestamp(),
+            )
+    }
+
+    /// Stores `video` as the only video of `my_channel()`.
+    fn save_channel_video(
+        video_repository: &SqliteVideoRepository,
+        channel_repository: &SqliteChannelRepository,
+        channel_video_repository: &SqliteChannelVideoRepository,
+        video: &Video,
+    ) {
+        video_repository.save(video).unwrap();
+        video_repository.update(video).unwrap();
+        channel_repository.insert(&my_channel()).unwrap();
+        channel_video_repository
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
     }
 
     fn my_channel_id() -> ChannelHandle {

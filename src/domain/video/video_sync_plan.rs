@@ -10,9 +10,18 @@ pub struct VideoSyncPlan {
 
 impl VideoSyncPlan {
     pub fn for_video(video: &Video) -> Self {
-        let _ = video;
-        Self {
-            steps: vec![VideoSyncStep::Download, VideoSyncStep::FetchThumbnail],
-        }
+        let steps = [
+            (VideoSyncStep::Download, !video.is_download_settled()),
+            (
+                VideoSyncStep::FetchThumbnail,
+                video.thumbnail_filename.is_none(),
+            ),
+            (VideoSyncStep::FetchSubtitles, video.is_subtitle_fetchable()),
+        ]
+        .into_iter()
+        .filter(|(_, needed)| *needed)
+        .map(|(step, _)| step)
+        .collect();
+        Self { steps }
     }
 }

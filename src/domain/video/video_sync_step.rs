@@ -23,7 +23,11 @@ impl VideoSyncStep {
                 quality: target.quality.as_str().to_string(),
                 output_dir,
             },
-            Self::FetchThumbnail | Self::FetchSubtitles => Task::FetchThumbnail {
+            Self::FetchThumbnail => Task::FetchThumbnail {
+                video_id,
+                output_dir,
+            },
+            Self::FetchSubtitles => Task::FetchSubtitles {
                 video_id,
                 output_dir,
             },
