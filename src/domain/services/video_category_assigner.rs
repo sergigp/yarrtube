@@ -44,9 +44,9 @@ impl VideoCategoryAssigner {
 }
 
 pub trait VideoCategoryAssignerApi: Send + Sync {
-    /// Serializes video category writes. `assign_video` takes it itself; callers of `reassign_category` hold it from
-    /// before they change the categories it is computed from until it
-    /// returns.
+    /// Serializes video category writes. `assign_video` takes it itself;
+    /// callers of `reassign_category` hold it from before they change the
+    /// categories it is computed from until it returns.
     fn lock(&self) -> MutexGuard<'_, ()>;
     /// Source regime for one record of `source`: its set = the source's
     /// categories. No-op when the source is in no category (AI regime).

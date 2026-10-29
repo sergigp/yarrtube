@@ -84,9 +84,6 @@ mod tests {
     use chrono::{DateTime, Duration, Utc};
     use std::sync::Arc;
 
-    const STRANDED_WARNING: &str = "stranded video found, scheduling its download";
-    const DOWNLOADED_FILENAME: &str = "Season 2026/S2026E031501 - My Video.mp4";
-
     #[test]
     fn it_should_schedule_the_download_and_thumbnail_of_a_new_channel_video() {
         let db = TestDatabase::new();
@@ -1390,7 +1387,7 @@ mod tests {
             db.database(),
             Arc::new(FixedClock(fixed_timestamp())),
         ));
-        let video = my_video();
+        let video = my_video().start_download(fixed_timestamp());
         save_channel_video(
             &video_repository,
             &channel_repository,
@@ -1429,10 +1426,7 @@ mod tests {
         assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(
             task_repository.list_non_completed().unwrap(),
-            vec![
-                pending_task(1, &fetch_thumbnail(&video)),
-                pending_task(2, &download_video(&video)),
-            ]
+            vec![pending_task(1, &download_video(&video))]
         );
         assert!(logs.contains(&STRANDED_WARNING.to_string()));
     }
@@ -1556,6 +1550,65 @@ mod tests {
         );
         assert!(!logs.contains(&STRANDED_WARNING.to_string()));
     }
+
+    #[test]
+    fn it_should_not_warn_about_a_new_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = my_video();
+        save_channel_video(
+            &video_repository,
+            &channel_repository,
+            &channel_video_repository,
+            &video,
+        );
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            video_repository.clone(),
+            channel_video_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+            video_category_assigner(db.database()),
+        ));
+
+        let mut result = Err(String::new());
+        let logs = captured_log_messages(|| result = run(&task, &payload_for(&video)));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &fetch_thumbnail(&video)),
+                pending_task(2, &download_video(&video)),
+            ]
+        );
+        assert!(!logs.contains(&STRANDED_WARNING.to_string()));
+    }
+
+    const STRANDED_WARNING: &str = "stranded video found, scheduling its download";
+    const DOWNLOADED_FILENAME: &str = "Season 2026/S2026E031501 - My Video.mp4";
 
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())

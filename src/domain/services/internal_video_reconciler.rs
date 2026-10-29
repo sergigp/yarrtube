@@ -12,6 +12,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{info, warn};
 
+/// The extensions of the files a download or thumbnail fetch moves into
+/// place under an episode's base name, see `EpisodePaths`.
+const EPISODE_FILE_EXTENSIONS: [&str; 3] = ["mp4", "jpg", "nfo"];
+
 /// What the database says a playlist's or channel's output folder should
 /// contain: the desired state the folder is reconciled towards.
 pub struct DesiredState {
@@ -120,9 +124,10 @@ struct ActualState {
     files: Vec<String>,
     /// Entries of `output_dir` that orphan cleanup must keep.
     protected_entries: HashSet<String>,
-    /// `Season <s>/<base name>` of every numbered video: whatever a download
-    /// or thumbnail fetch already moved into place under it is kept, even
-    /// before the video records it.
+    /// `Season <s>/<base name>` of every numbered video: the media, thumbnail
+    /// or NFO a download or thumbnail fetch already moved into place under it
+    /// is kept, even before the video records it. A stale container (`.mkv`,
+    /// `.webm`) under it is not, so a reset video's old file is swept.
     numbered_episode_paths: HashSet<String>,
     /// The recorded media file's stem of every numbered video whose
     /// subtitles are still Missing: a subtitle fetch may already have moved
@@ -134,17 +139,22 @@ impl ActualState {
     fn is_protected(&self, entry: &str) -> bool {
         self.protected_entries.contains(entry)
             || is_season_folder(entry)
-            || self.numbered_episode_paths.contains(
-                Path::new(entry)
-                    .with_extension("")
-                    .to_string_lossy()
-                    .as_ref(),
-            )
+            || self.is_numbered_episode_file(entry)
             || self.subtitle_pending_paths.iter().any(|stem| {
                 entry
                     .strip_prefix(stem.as_str())
                     .is_some_and(|rest| rest.starts_with('.'))
             })
+    }
+
+    fn is_numbered_episode_file(&self, entry: &str) -> bool {
+        let path = Path::new(entry);
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| EPISODE_FILE_EXTENSIONS.contains(&ext))
+            && self
+                .numbered_episode_paths
+                .contains(path.with_extension("").to_string_lossy().as_ref())
     }
 }
 

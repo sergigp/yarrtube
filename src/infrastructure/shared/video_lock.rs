@@ -48,38 +48,50 @@ impl Drop for VideoLockGuard<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc;
+    use std::time::Duration;
 
     #[test]
     fn it_should_block_a_second_lock_of_the_same_video_until_released() {
         let lock = VideoLock::default();
         let held = lock.lock(&video_id("v1"));
+        let (acquired_tx, acquired) = mpsc::channel();
 
-        let (waited, acquired) = std::thread::scope(|scope| {
-            let waiting = scope.spawn(|| drop(lock.lock(&video_id("v1"))));
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            let waited = !waiting.is_finished();
+        let (blocked_while_held, acquired_once_released) = std::thread::scope(|scope| {
+            scope.spawn(|| {
+                let _guard = lock.lock(&video_id("v1"));
+                acquired_tx.send(()).unwrap();
+            });
+            let blocked_while_held = acquired.recv_timeout(Duration::from_millis(100)).is_err();
             drop(held);
-            (waited, waiting.join().is_ok())
+            (blocked_while_held, acquired.recv_timeout(TIMEOUT).is_ok())
         });
 
-        assert_eq!((waited, acquired), (true, true));
+        assert_eq!((blocked_while_held, acquired_once_released), (true, true));
     }
 
     #[test]
     fn it_should_not_block_locks_of_different_videos() {
         let lock = VideoLock::default();
         let held = lock.lock(&video_id("v1"));
+        let (acquired_tx, acquired) = mpsc::channel();
 
-        let acquired = std::thread::scope(|scope| {
-            let other = scope.spawn(|| drop(lock.lock(&video_id("v2"))));
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            let acquired = other.is_finished();
+        let acquired_while_held = std::thread::scope(|scope| {
+            scope.spawn(|| {
+                let _guard = lock.lock(&video_id("v2"));
+                acquired_tx.send(()).unwrap();
+            });
+            let acquired_while_held = acquired.recv_timeout(TIMEOUT).is_ok();
             drop(held);
-            acquired
+            acquired_while_held
         });
 
-        assert!(acquired);
+        assert!(acquired_while_held);
     }
+
+    /// How long a lock that should be acquired gets: generous, so a loaded
+    /// machine never fails the test, and only waited out on a regression.
+    const TIMEOUT: Duration = Duration::from_secs(5);
 
     fn video_id(id: &str) -> VideoRecordId {
         VideoRecordId::new(id).unwrap()

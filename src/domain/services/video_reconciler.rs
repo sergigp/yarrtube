@@ -276,15 +276,18 @@ impl VideoReconciler {
             .map_or(true, |metadata| metadata.is_some())
     }
 
-    /// Logs a video waiting to be downloaded with no download pending or
-    /// running: a step lost on a crash or never scheduled, which
-    /// `schedule_steps` then schedules.
+    /// Logs a video whose download started (In Progress or Errored Retrying)
+    /// with no download pending or running: a step lost on a crash, which
+    /// `schedule_steps` then schedules. A Pending video with no download is
+    /// not stranded: a new or just reset video is scheduled by this sync.
     fn warn_if_stranded(&self, video: &Video) -> anyhow::Result<()> {
-        if video.is_download_settled()
-            || self
-                .task_repository
-                .find_non_completed_for_video(DOWNLOAD_VIDEO_TASK_TYPE, &video.id)?
-                .is_some()
+        if !matches!(
+            video.status,
+            VideoStatus::InProgress | VideoStatus::ErroredRetrying
+        ) || self
+            .task_repository
+            .find_non_completed_for_video(DOWNLOAD_VIDEO_TASK_TYPE, &video.id)?
+            .is_some()
         {
             return Ok(());
         }

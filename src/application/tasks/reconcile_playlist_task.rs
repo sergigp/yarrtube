@@ -395,7 +395,7 @@ mod tests {
                         Arc::new(FixedClock(fixed_timestamp())),
                     )),
                     Arc::new(VideoRelocator::new(
-                        video_repository.clone().clone(),
+                        video_repository.clone(),
                         Arc::new(FakeVideoFileRepository::default()),
                         Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                         Arc::new(FixedClock(fixed_timestamp())),
@@ -914,7 +914,7 @@ mod tests {
                         Arc::new(FixedClock(fixed_timestamp())),
                     )),
                     Arc::new(VideoRelocator::new(
-                        video_repository.clone().clone(),
+                        video_repository.clone(),
                         Arc::new(FakeVideoFileRepository::default()),
                         Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                         Arc::new(FixedClock(fixed_timestamp())),
