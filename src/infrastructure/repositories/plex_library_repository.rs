@@ -626,7 +626,7 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
             .unwrap()
             .iter_mut()
             .filter(|fake| fake.episode.rating_key == episode.rating_key)
-            .for_each(|fake| fake.labels = labels.names().to_vec());
+            .for_each(|fake| fake.labels = edited_labels(&fake.labels, labels, removed));
         Ok(())
     }
 
@@ -674,6 +674,14 @@ impl PlexLibraryRepository for FakePlexLibraryRepository {
             .retain(|playlist| playlist.rating_key != rating_key);
         Ok(())
     }
+}
+
+/// Like Plex, a label edit adds the labels it names (ignoring case) and
+/// removes only those it lists as removed.
+#[cfg(test)]
+fn edited_labels(current: &[String], labels: &PlexLabels, removed: &[String]) -> Vec<String> {
+    PlexLabels::new([current, labels.names()].concat())
+        .missing_from(&PlexLabels::new(removed.to_vec()))
 }
 
 #[cfg(test)]

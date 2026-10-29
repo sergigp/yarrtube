@@ -177,8 +177,14 @@ impl PlexLabelSyncer {
             .get(&row.video_id)
             .cloned()
             .unwrap_or_else(PlexLabels::none);
-        self.plex_library_repository
-            .save_labels(&episode, &desired, &[])?;
+        let current = self
+            .plex_library_repository
+            .find_labels(&episode.rating_key)?;
+        self.plex_library_repository.save_labels(
+            &episode,
+            &desired,
+            &current.missing_from(&desired),
+        )?;
         Ok(row.synced(&episode, desired, self.clock.now()))
     }
 
