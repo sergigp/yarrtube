@@ -291,8 +291,15 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
             .ok_or_else(|| anyhow::anyhow!("Plex created no playlist titled {title}"))
     }
 
-    fn delete_playlist(&self, _rating_key: &str) -> anyhow::Result<()> {
-        Ok(())
+    fn delete_playlist(&self, rating_key: &str) -> anyhow::Result<()> {
+        let endpoint = format!("/playlists/{rating_key}");
+        let response = self
+            .client
+            .delete(format!("{}{endpoint}", self.config.base_url))
+            .header("Accept", "application/json")
+            .header("X-Plex-Token", &self.config.token)
+            .send()?;
+        Self::ensure_success(&endpoint, response).map(drop)
     }
 }
 
@@ -1017,6 +1024,22 @@ mod tests {
                 title: "Sci & Tech · Subscriptions".to_string(),
             })
         );
+        mock.assert();
+    }
+
+    #[test]
+    fn it_should_delete_a_playlist() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("DELETE", "/playlists/503")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .create();
+        let repository = repository(&server);
+
+        let result = repository.delete_playlist("503");
+
+        assert_eq!(result.map_err(|e| e.to_string()), Ok(()));
         mock.assert();
     }
 

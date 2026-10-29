@@ -53,7 +53,7 @@ HttpPlexLibraryRepository (mockito):
 - [x] 3.6 `it_should_clear_labels_and_unlock_them` — `label.locked=0`.
 - [x] 3.7 `it_should_list_playlists`
 - [x] 3.8 `it_should_create_a_smart_playlist_filtered_by_label` — exact `uri`.
-- [ ] 3.9 `it_should_delete_a_playlist`
+- [x] 3.9 `it_should_delete_a_playlist`
 
 SqliteEpisodeLabelsRepository:
 - [ ] 3.10 `it_should_round_trip_an_episode_labels_row`
