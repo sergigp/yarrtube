@@ -114,6 +114,13 @@ struct Metadata {
     rating_key: String,
     #[serde(rename = "Media", default)]
     media: Vec<Media>,
+    #[serde(rename = "Label", default)]
+    labels: Vec<Tag>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Tag {
+    tag: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -184,8 +191,18 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         self.list_episodes_from(section_id, 0)
     }
 
-    fn find_labels(&self, _rating_key: &str) -> anyhow::Result<PlexLabels> {
-        Ok(PlexLabels::none())
+    fn find_labels(&self, rating_key: &str) -> anyhow::Result<PlexLabels> {
+        let response: MetadataResponse =
+            self.get_json(&format!("/library/metadata/{rating_key}"), &[])?;
+        Ok(PlexLabels::new(
+            response
+                .media_container
+                .metadata
+                .into_iter()
+                .flat_map(|metadata| metadata.labels)
+                .map(|label| label.tag)
+                .collect(),
+        ))
     }
 
     fn save_labels(
@@ -745,6 +762,32 @@ mod tests {
                 episode("102", "/volume1/b.mkv"),
                 episode("103", "/volume1/c.mp4"),
             ])
+        );
+    }
+
+    #[test]
+    fn it_should_read_an_episode_labels() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/library/metadata/101")
+            .match_header("x-plex-token", "secret-token")
+            .with_status(200)
+            .with_body(
+                r#"{"MediaContainer": {"size": 1, "Metadata": [
+                    {"ratingKey": "101", "Label": [{"id": 7, "tag": "Funny"}, {"id": 8, "tag": "Chess"}]}
+                ]}}"#,
+            )
+            .create();
+        let repository = repository(&server);
+
+        let labels = repository.find_labels("101");
+
+        assert_eq!(
+            labels.map_err(|e| e.to_string()),
+            Ok(PlexLabels::new(vec![
+                "Chess".to_string(),
+                "Funny".to_string()
+            ]))
         );
     }
 
