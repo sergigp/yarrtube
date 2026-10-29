@@ -1,3 +1,4 @@
+use crate::domain::shared::Quality;
 use crate::domain::video::{Video, VideoRecordId, VideoSyncPlan, VideoTarget, resolve_output_dir};
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -91,17 +92,39 @@ impl VideoReconcilerApi for VideoReconciler {
 }
 
 impl VideoReconciler {
-    /// The target of the channel holding `video`.
+    /// The target of the channel holding `video`, else of the playlist
+    /// holding it; `None` when neither is found.
     fn find_target(&self, video: &Video) -> anyhow::Result<Option<VideoTarget>> {
+        match self.find_channel_target(video)? {
+            Some(target) => Ok(Some(target)),
+            None => self.find_playlist_target(video),
+        }
+    }
+
+    fn find_channel_target(&self, video: &Video) -> anyhow::Result<Option<VideoTarget>> {
         let Some(channel_video) = self.channel_video_repository.find_by_video(&video.id)? else {
             return Ok(None);
         };
         Ok(self
             .channel_repository
             .find(&channel_video.channel_id)?
-            .map(|channel| VideoTarget {
-                output_dir: resolve_output_dir(&self.videos_path, channel.path.as_str()),
-                quality: channel.quality,
-            }))
+            .map(|channel| self.target(channel.path.as_str(), channel.quality)))
+    }
+
+    fn find_playlist_target(&self, video: &Video) -> anyhow::Result<Option<VideoTarget>> {
+        let Some(playlist_video) = self.playlist_video_repository.find_by_video(&video.id)? else {
+            return Ok(None);
+        };
+        Ok(self
+            .playlist_repository
+            .find(&playlist_video.playlist_id)?
+            .map(|playlist| self.target(playlist.path.as_str(), playlist.quality)))
+    }
+
+    fn target(&self, path: &str, quality: Quality) -> VideoTarget {
+        VideoTarget {
+            output_dir: resolve_output_dir(&self.videos_path, path),
+            quality,
+        }
     }
 }

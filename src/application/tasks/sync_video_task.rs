@@ -28,7 +28,8 @@ mod tests {
     use super::*;
     use crate::domain::channel::{Channel, ChannelHandle, VideoLimit};
     use crate::domain::channel_video::ChannelVideo;
-    use crate::domain::playlist::PlaylistPath;
+    use crate::domain::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistName, PlaylistPath};
+    use crate::domain::playlist_video::PlaylistVideo;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::task::{ScheduledTask, TaskStatus};
     use crate::domain::video::{Video, VideoId};
@@ -38,8 +39,12 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_channel_video_repository::{
         ChannelVideoRepository, SqliteChannelVideoRepository,
     };
-    use crate::infrastructure::repositories::sqlite_playlist_repository::SqlitePlaylistRepository;
-    use crate::infrastructure::repositories::sqlite_playlist_video_repository::SqlitePlaylistVideoRepository;
+    use crate::infrastructure::repositories::sqlite_playlist_repository::{
+        PlaylistRepository, SqlitePlaylistRepository,
+    };
+    use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
+        PlaylistVideoRepository, SqlitePlaylistVideoRepository,
+    };
     use crate::infrastructure::repositories::sqlite_task_repository::{
         SqliteTaskRepository, TaskRepository,
     };
@@ -113,6 +118,63 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_schedule_the_download_of_a_new_playlist_video_in_its_playlist_folder() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        playlist_repository.insert(&my_playlist()).unwrap();
+        playlist_video_repository
+            .save(&PlaylistVideo::create(
+                my_playlist_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            video_repository,
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            playlist_repository,
+            task_repository.clone(),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(
+                    1,
+                    &Task::DownloadVideo {
+                        video_id: video.id.as_str().to_string(),
+                        quality: "mid".to_string(),
+                        output_dir: "/videos/music/chill".to_string(),
+                    },
+                ),
+                pending_task(
+                    2,
+                    &Task::FetchThumbnail {
+                        video_id: video.id.as_str().to_string(),
+                        output_dir: "/videos/music/chill".to_string(),
+                    },
+                ),
+            ]
+        );
+    }
+
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }
@@ -131,6 +193,23 @@ mod tests {
             ReconcileInterval::default_interval(),
             PlaylistPath::new("creators/somechannel").unwrap(),
             None,
+            fixed_timestamp(),
+        )
+    }
+
+    fn my_playlist_id() -> PlaylistId {
+        PlaylistId::new("PL1").unwrap()
+    }
+
+    fn my_playlist() -> Playlist {
+        Playlist::create(
+            my_playlist_id(),
+            PlaylistName::new("Chill").unwrap(),
+            PlaylistPath::new("music/chill").unwrap(),
+            Quality::Mid,
+            PlaylistKind::YoutubeLinked,
+            false,
+            ReconcileInterval::default_interval(),
             fixed_timestamp(),
         )
     }
