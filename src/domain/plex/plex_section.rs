@@ -5,6 +5,7 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlexSection {
     pub id: String,
+    pub title: String,
     pub locations: Vec<String>,
 }
 
@@ -15,6 +16,11 @@ impl PlexSection {
         self.locations
             .iter()
             .any(|location| Path::new(path).starts_with(location))
+    }
+
+    /// Whether a location is under `root` or `root` is under a location.
+    pub fn serves(&self, _root: &str) -> bool {
+        todo!()
     }
 }
 
@@ -55,6 +61,7 @@ mod tests {
     fn section() -> PlexSection {
         PlexSection {
             id: "19".to_string(),
+            title: "Subscriptions".to_string(),
             locations: vec![
                 "/volume1/media/yarrtube/playlists".to_string(),
                 "/volume1/media/yarrtube/channels".to_string(),

@@ -42,6 +42,7 @@ pub enum Task {
     SyncVideo {
         video_id: String,
     },
+    SyncPlexLabels,
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,6 +104,9 @@ struct SyncVideoPayload {
     video_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct SyncPlexLabelsPayload {}
+
 impl Task {
     pub fn task_type(&self) -> &'static str {
         match self {
@@ -116,6 +120,7 @@ impl Task {
             Self::FetchThumbnail { .. } => "fetch_thumbnail",
             Self::FetchSubtitles { .. } => "fetch_subtitles",
             Self::SyncVideo { .. } => "sync_video",
+            Self::SyncPlexLabels => "sync_plex_labels",
         }
     }
 
@@ -157,6 +162,7 @@ impl Task {
                 output_dir,
             } => json!({ "video_id": video_id, "output_dir": output_dir }),
             Self::SyncVideo { video_id } => json!({ "video_id": video_id }),
+            Self::SyncPlexLabels => json!({}),
         }
     }
 
@@ -253,6 +259,15 @@ impl Task {
         let parsed: SyncVideoPayload = serde_json::from_str(payload)
             .map_err(|e| TaskError(format!("invalid sync_video payload: {e}")))?;
         Ok(parsed.video_id)
+    }
+
+    /// Decodes a `sync_plex_labels` task's raw JSON payload, as handed to a
+    /// `TaskHandler`. The payload carries no fields; this only confirms it's
+    /// well-formed.
+    pub fn decode_sync_plex_labels_payload(payload: &str) -> Result<(), TaskError> {
+        serde_json::from_str::<SyncPlexLabelsPayload>(payload)
+            .map_err(|e| TaskError(format!("invalid sync_plex_labels payload: {e}")))?;
+        Ok(())
     }
 
     /// The executor lane a task of `task_type` runs in. Unknown types fall

@@ -6,6 +6,7 @@ pub mod event;
 pub mod playlist;
 pub mod playlist_video;
 pub mod plex;
+pub mod plex_label;
 pub mod services;
 pub mod shared;
 pub mod show;

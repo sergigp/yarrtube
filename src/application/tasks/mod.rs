@@ -8,12 +8,13 @@ pub mod fetch_thumbnail_task;
 pub(crate) mod log_capture;
 pub mod reconcile_channel_task;
 pub mod reconcile_playlist_task;
+pub mod sync_plex_labels_task;
 pub mod sync_video_task;
 pub mod update_ytdlp_task;
 
 use crate::domain::services::{
-    ChannelVideoReconciler, PlaylistVideoReconciler, SubtitleFetcher, ThumbnailFetcher,
-    VideoDownloader, VideoFileDeleter, VideoReconciler,
+    ChannelVideoReconciler, PlaylistVideoReconciler, PlexLabelSyncer, SubtitleFetcher,
+    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoReconciler,
 };
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
@@ -31,6 +32,7 @@ use reconcile_playlist_task::ReconcilePlaylistTask;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use sync_plex_labels_task::SyncPlexLabelsTask;
 use sync_video_task::SyncVideoTask;
 use update_ytdlp_task::UpdateYtdlpTask;
 
@@ -51,6 +53,7 @@ pub fn registry(
     ytdlp_updater: Arc<dyn YtdlpUpdater>,
     ytdlp_path: PathBuf,
     ytdlp_self_update_enabled: bool,
+    plex_label_syncer: Option<PlexLabelSyncer>,
 ) -> HandlerRegistry {
     let mut registry: HandlerRegistry = HashMap::new();
     registry.insert(
@@ -102,5 +105,11 @@ pub fn registry(
             clock,
         )),
     );
+    if let Some(syncer) = plex_label_syncer {
+        registry.insert(
+            "sync_plex_labels".to_string(),
+            Arc::new(SyncPlexLabelsTask::new(syncer)),
+        );
+    }
     registry
 }

@@ -9,6 +9,8 @@ pub mod remove_playlist_from_categories_on_playlist_deleted;
 pub mod scan_plex_folder_on_show_moved;
 pub mod scan_plex_folder_on_video_downloaded;
 pub mod scan_plex_folder_on_video_subtitles_fetched;
+pub mod sync_plex_labels_on_video_categories_changed;
+pub mod sync_plex_labels_on_video_downloaded;
 pub mod sync_video_on_video_added_to_channel;
 pub mod sync_video_on_video_added_to_playlist;
 pub mod sync_video_on_video_downloaded;
@@ -19,9 +21,11 @@ use crate::domain::playlist::{PlaylistCreated, PlaylistDeleted};
 use crate::domain::playlist_video::{VideoAddedToPlaylist, VideoRemovedFromPlaylist};
 use crate::domain::services::{
     CategoryMemberRemover, ChannelVideoReconciler, PlaylistVideoReconciler, PlexFolderScanner,
+    PlexLabelSyncer,
 };
 use crate::domain::show::ShowMoved;
 use crate::domain::video::{VideoDownloaded, VideoSubtitlesFetched};
+use crate::domain::video_category::VideoCategoriesChanged;
 use crate::infrastructure::repositories::domain_events_consumer::SubscriberRegistry;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
@@ -40,6 +44,8 @@ use scan_plex_folder_on_video_downloaded::ScanPlexFolderOnVideoDownloaded;
 use scan_plex_folder_on_video_subtitles_fetched::ScanPlexFolderOnVideoSubtitlesFetched;
 use std::collections::HashMap;
 use std::sync::Arc;
+use sync_plex_labels_on_video_categories_changed::SyncPlexLabelsOnVideoCategoriesChanged;
+use sync_plex_labels_on_video_downloaded::SyncPlexLabelsOnVideoDownloaded;
 use sync_video_on_video_added_to_channel::SyncVideoOnVideoAddedToChannel;
 use sync_video_on_video_added_to_playlist::SyncVideoOnVideoAddedToPlaylist;
 use sync_video_on_video_downloaded::SyncVideoOnVideoDownloaded;
@@ -56,6 +62,7 @@ pub fn registry(
     clock: Arc<dyn Clock>,
     videos_path: impl Into<String>,
     plex_folder_scanner: Option<PlexFolderScanner>,
+    plex_label_syncer: Option<PlexLabelSyncer>,
     category_member_remover: CategoryMemberRemover,
 ) -> SubscriberRegistry {
     let videos_path = videos_path.into();
@@ -151,6 +158,20 @@ pub fn registry(
         registry.insert(
             ShowMoved::EVENT_TYPE.to_string(),
             vec![Arc::new(ScanPlexFolderOnShowMoved::new(scanner))],
+        );
+    }
+    if let Some(syncer) = plex_label_syncer {
+        registry
+            .entry(VideoDownloaded::EVENT_TYPE.to_string())
+            .or_default()
+            .push(Arc::new(SyncPlexLabelsOnVideoDownloaded::new(
+                syncer.clone(),
+            )));
+        registry.insert(
+            VideoCategoriesChanged::EVENT_TYPE.to_string(),
+            vec![Arc::new(SyncPlexLabelsOnVideoCategoriesChanged::new(
+                syncer,
+            ))],
         );
     }
     registry

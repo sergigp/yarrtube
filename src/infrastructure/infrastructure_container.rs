@@ -11,6 +11,9 @@ use crate::infrastructure::repositories::filesystem_show_file_repository::{
 use crate::infrastructure::repositories::filesystem_video_file_repository::{
     FilesystemVideoFileRepository, VideoFileRepository,
 };
+use crate::infrastructure::repositories::sqlite_category_playlist_repository::{
+    CategoryPlaylistRepository, SqliteCategoryPlaylistRepository,
+};
 use crate::infrastructure::repositories::sqlite_category_repository::{
     CategoryRepository, SqliteCategoryRepository,
 };
@@ -19,6 +22,9 @@ use crate::infrastructure::repositories::sqlite_channel_repository::{
 };
 use crate::infrastructure::repositories::sqlite_channel_video_repository::{
     ChannelVideoRepository, SqliteChannelVideoRepository,
+};
+use crate::infrastructure::repositories::sqlite_episode_labels_repository::{
+    EpisodeLabelsRepository, SqliteEpisodeLabelsRepository,
 };
 use crate::infrastructure::repositories::sqlite_playlist_repository::{
     PlaylistRepository, SqlitePlaylistRepository,
@@ -100,6 +106,8 @@ pub struct InfrastructureContainer {
     pub channel_video_repository: Arc<dyn ChannelVideoRepository>,
     pub video_metadata_repository: Arc<dyn VideoMetadataRepository>,
     pub video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
+    pub episode_labels_repository: Arc<dyn EpisodeLabelsRepository>,
+    pub category_playlist_repository: Arc<dyn CategoryPlaylistRepository>,
     pub task_repository: Arc<dyn TaskRepository>,
     pub event_publisher: Arc<dyn EventPublisher>,
     pub event_repository: Arc<dyn EventRepository>,
@@ -144,6 +152,10 @@ impl InfrastructureContainer {
             channel_video_repository: Arc::new(SqliteChannelVideoRepository::new(db.clone())),
             video_metadata_repository: Arc::new(SqliteVideoMetadataRepository::new(db.clone())),
             video_transcript_repository: Arc::new(SqliteVideoTranscriptRepository::new(db.clone())),
+            episode_labels_repository: Arc::new(SqliteEpisodeLabelsRepository::new(db.clone())),
+            category_playlist_repository: Arc::new(SqliteCategoryPlaylistRepository::new(
+                db.clone(),
+            )),
             task_repository: Arc::new(SqliteTaskRepository::new(db.clone(), clock.clone())),
             event_publisher: Arc::new(SqliteEventPublisher::new(db.clone(), clock.clone())),
             event_repository: Arc::new(SqliteEventRepository::new(db.clone())),
