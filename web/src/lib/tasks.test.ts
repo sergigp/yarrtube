@@ -94,6 +94,12 @@ describe('describeTask', () => {
     expect(describeTask(aTask({ task_type: 'update_ytdlp', payload: {} }))).toBe('Updating yt-dlp')
   })
 
+  it('describes a Plex label sync in plain language', () => {
+    expect(describeTask(aTask({ task_type: 'sync_plex_labels', payload: {} }))).toBe(
+      'Syncing Plex category labels',
+    )
+  })
+
   it('humanizes an unknown type instead of showing the raw snake_case string', () => {
     const description = describeTask(aTask({ task_type: 'mystery_task', payload: {} }))
     expect(description).not.toContain('_')

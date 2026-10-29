@@ -25,6 +25,8 @@ export function describeTask(task: Task): string {
       return `Fetching subtitles of ${videoInContainer(payload)}`
     case 'sync_video':
       return `Syncing ${videoInContainer(payload)}`
+    case 'sync_plex_labels':
+      return 'Syncing Plex category labels'
     case 'delete_video_file':
       return payload.filename ? `Removing file ${payload.filename}` : 'Removing a video file'
     default:
