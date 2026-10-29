@@ -177,15 +177,20 @@ impl PlexLabelSyncer {
             .get(&row.video_id)
             .cloned()
             .unwrap_or_else(PlexLabels::none);
+        self.write_labels(&episode, &desired)?;
+        Ok(row.synced(&episode, desired, self.clock.now()))
+    }
+
+    /// Makes the episode's labels exactly `desired`, unless they already are.
+    fn write_labels(&self, episode: &PlexEpisode, desired: &PlexLabels) -> anyhow::Result<()> {
         let current = self
             .plex_library_repository
             .find_labels(&episode.rating_key)?;
-        self.plex_library_repository.save_labels(
-            &episode,
-            &desired,
-            &current.missing_from(&desired),
-        )?;
-        Ok(row.synced(&episode, desired, self.clock.now()))
+        if &current == desired {
+            return Ok(());
+        }
+        self.plex_library_repository
+            .save_labels(episode, desired, &current.missing_from(desired))
     }
 
     /// The Plex episode of the record's file.

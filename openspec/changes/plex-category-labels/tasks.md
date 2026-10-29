@@ -11,7 +11,7 @@
 - [x] 2.1 `it_should_label_the_episode_of_a_categorized_video` — a dirty record's episode gets its categories' names and the row is synced with the rating key.
 - [x] 2.2 `it_should_label_an_episode_with_every_category` — all names written.
 - [x] 2.3 `it_should_clear_the_labels_of_an_uncategorized_video` — yarrtube owns labels: others removed, field unlocked.
-- [ ] 2.4 `it_should_not_rewrite_labels_already_in_sync` — case-insensitive comparison, no Plex write.
+- [x] 2.4 `it_should_not_rewrite_labels_already_in_sync` — case-insensitive comparison, no Plex write.
 - [ ] 2.5 `it_should_replace_the_label_of_a_renamed_category` — old name removed, new written.
 - [ ] 2.6 `it_should_keep_a_video_dirty_until_plex_imports_it` — no episode for the file ⇒ stays dirty, no error.
 - [ ] 2.7 `it_should_keep_a_video_dirty_until_it_is_downloaded`
