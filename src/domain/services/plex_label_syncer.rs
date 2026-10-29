@@ -31,6 +31,21 @@ pub const CATEGORY_CHANGE_DELAY: Duration = Duration::seconds(10);
 /// Dirty records labelled per sync; more dirty ⇒ the next sync runs now.
 pub const BATCH_SIZE: usize = 500;
 
+/// The Plex library sections holding yarrtube's videos, as one sync reads
+/// them.
+struct PlexLibrary {
+    sections: Vec<PlexSection>,
+    /// Every episode of `sections`, by its server-side file.
+    episodes: HashMap<String, PlexEpisode>,
+}
+
+/// A smart playlist a category should have in a section.
+struct DesiredPlaylist {
+    section_id: String,
+    label: String,
+    title: String,
+}
+
 /// Mirrors each stored video's categories into its Plex episode's labels,
 /// and keeps one smart playlist per category and Plex library on them. Plex
 /// sees yarrtube's `videos_path` at `plex_videos_path`.
@@ -104,17 +119,17 @@ impl PlexLabelSyncerApi for PlexLabelSyncer {
     }
 
     fn sync(&self) -> anyhow::Result<()> {
-        let episodes = match self.list_episodes() {
-            Ok(episodes) => episodes,
+        let library = match self.read_library() {
+            Ok(library) => library,
             Err(e) => {
                 warn!(error = %e, "failed to reach Plex, retrying the label sync later");
                 return self.request_sync(self.clock.now() + SYNC_INTERVAL);
             }
         };
-        self.mark_reimported(&episodes)?;
+        self.mark_reimported(&library.episodes)?;
         self.track_categorized_records()?;
-        let labelled = self.label_dirty_records(&episodes)?;
-        self.reconcile_playlists()?;
+        let labelled = self.label_dirty_records(&library.episodes)?;
+        self.reconcile_playlists(&library.sections)?;
         self.request_next_sync(labelled == BATCH_SIZE)
     }
 }
@@ -139,21 +154,23 @@ impl PlexLabelSyncer {
 
     /// Keeps one smart playlist per label and section holding labelled
     /// episodes.
-    fn reconcile_playlists(&self) -> anyhow::Result<()> {
+    fn reconcile_playlists(&self, sections: &[PlexSection]) -> anyhow::Result<()> {
         let stored = self.category_playlist_repository.list()?;
-        self.desired_playlists()?
+        self.desired_playlists(sections)?
             .into_iter()
-            .filter(|(section_id, label)| {
-                !stored
-                    .iter()
-                    .any(|playlist| &playlist.section_id == section_id && &playlist.label == label)
+            .filter(|desired| {
+                !stored.iter().any(|playlist| {
+                    playlist.section_id == desired.section_id && playlist.label == desired.label
+                })
             })
-            .try_for_each(|(section_id, label)| self.create_playlist(&section_id, &label))
+            .try_for_each(|desired| self.create_playlist(desired))
     }
 
-    /// Each label written to a synced episode, with the episode's section.
-    fn desired_playlists(&self) -> anyhow::Result<BTreeSet<(String, String)>> {
-        Ok(self
+    /// One playlist per label written to a synced episode and the episode's
+    /// section, titled by the label and, when the label spans sections, the
+    /// section's title.
+    fn desired_playlists(&self, sections: &[PlexSection]) -> anyhow::Result<Vec<DesiredPlaylist>> {
+        let labelled: BTreeSet<(String, String)> = self
             .episode_labels_repository
             .list_synced()?
             .into_iter()
@@ -165,17 +182,28 @@ impl PlexLabelSyncer {
                     .map(|label| (section_id.clone(), label.clone()))
                     .collect::<Vec<_>>()
             })
+            .collect();
+        Ok(labelled
+            .iter()
+            .map(|(section_id, label)| DesiredPlaylist {
+                section_id: section_id.clone(),
+                label: label.clone(),
+                title: playlist_title(label, section_id, &labelled, sections),
+            })
             .collect())
     }
 
-    fn create_playlist(&self, section_id: &str, label: &str) -> anyhow::Result<()> {
+    fn create_playlist(&self, desired: DesiredPlaylist) -> anyhow::Result<()> {
         let server_id = self.plex_library_repository.server_id()?;
-        let playlist = self
-            .plex_library_repository
-            .create_smart_playlist(&server_id, section_id, label, label)?;
+        let playlist = self.plex_library_repository.create_smart_playlist(
+            &server_id,
+            &desired.section_id,
+            &desired.label,
+            &desired.title,
+        )?;
         self.category_playlist_repository.save(&CategoryPlaylist {
-            section_id: section_id.to_string(),
-            label: label.to_string(),
+            section_id: desired.section_id,
+            label: desired.label,
             rating_key: playlist.rating_key,
             title: playlist.title,
         })
@@ -188,11 +216,11 @@ impl PlexLabelSyncer {
         self.request_sync(if backlog { now } else { now + SYNC_INTERVAL })
     }
 
-    /// Every episode of the sections holding yarrtube's videos, by its
-    /// server-side file.
-    fn list_episodes(&self) -> anyhow::Result<HashMap<String, PlexEpisode>> {
+    /// The sections holding yarrtube's videos and their episodes.
+    fn read_library(&self) -> anyhow::Result<PlexLibrary> {
         let sections = self.served_sections()?;
-        self.episodes_by_file(&sections)
+        let episodes = self.episodes_by_file(&sections)?;
+        Ok(PlexLibrary { sections, episodes })
     }
 
     /// The library sections holding yarrtube's videos.
@@ -385,4 +413,19 @@ fn labels_of(
             .map(|name| name.as_str().to_string())
             .collect(),
     )
+}
+
+/// `label`, followed by the section's title when `label` has playlists in
+/// more than one section.
+fn playlist_title(
+    label: &str,
+    section_id: &str,
+    labelled: &BTreeSet<(String, String)>,
+    sections: &[PlexSection],
+) -> String {
+    let spans_sections = labelled.iter().filter(|(_, other)| other == label).count() > 1;
+    match sections.iter().find(|section| section.id == section_id) {
+        Some(section) if spans_sections => format!("{label} · {}", section.title),
+        _ => label.to_string(),
+    }
 }

@@ -623,6 +623,58 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_title_playlists_by_library_if_a_category_spans_libraries() {
+        let db = TestDatabase::new();
+        let category_playlist_repository =
+            Arc::new(SqliteCategoryPlaylistRepository::new(db.database()));
+        let plex = Arc::new(
+            FakePlexLibraryRepository::default()
+                .with_location("19", "/plex/videos/creators")
+                .with_section_title("19", "Subscriptions")
+                .with_location("21", "/plex/videos/creators")
+                .with_section_title("21", "Sergi's Playlists")
+                .with_episode("19", "101", &plex_file("S2023E1114 - One.mp4"), &[])
+                .with_episode("21", "201", &plex_file("S2023E1115 - Two.mp4"), &[]),
+        );
+        let one = seed_downloaded_video(&db, "yt1", "S2023E1114 - One.mp4");
+        let two = seed_downloaded_video(&db, "yt2", "S2023E1115 - Two.mp4");
+        seed_category(&db, "chess", "Chess", &[&one, &two]);
+        let task = SyncPlexLabelsTask::new(syncer(
+            &db,
+            plex.clone(),
+            Arc::new(SqliteEpisodeLabelsRepository::new(db.database())),
+            category_playlist_repository.clone(),
+            task_repository(&db),
+        ));
+
+        let result = run(&task);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            plex.playlists(),
+            vec![
+                FakePlaylist {
+                    rating_key: "pl1".to_string(),
+                    title: "Chess · Subscriptions".to_string(),
+                    filter: Some(("19".to_string(), "Chess".to_string())),
+                },
+                FakePlaylist {
+                    rating_key: "pl2".to_string(),
+                    title: "Chess · Sergi's Playlists".to_string(),
+                    filter: Some(("21".to_string(), "Chess".to_string())),
+                },
+            ]
+        );
+        assert_eq!(
+            category_playlist_repository.list().unwrap(),
+            vec![
+                category_playlist("19", "Chess", "pl1", "Chess · Subscriptions"),
+                category_playlist("21", "Chess", "pl2", "Chess · Sergi's Playlists"),
+            ]
+        );
+    }
+
     /// The syncer over the test database, with Plex seeing `/videos` at
     /// `/plex/videos`.
     fn syncer(
