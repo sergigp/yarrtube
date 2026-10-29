@@ -119,7 +119,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(VideoRelocator::new(
-                video_repository,
+                video_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -190,7 +190,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(VideoRelocator::new(
-                video_repository,
+                video_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -259,7 +259,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(VideoRelocator::new(
-                video_repository,
+                video_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -322,7 +322,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(VideoRelocator::new(
-                video_repository,
+                video_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -373,7 +373,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(VideoRelocator::new(
-                video_repository,
+                video_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -430,7 +430,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(VideoRelocator::new(
-                video_repository,
+                video_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -481,7 +481,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(VideoRelocator::new(
-                video_repository,
+                video_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -495,6 +495,7 @@ mod tests {
         let result = run(&task, &payload_for(&video));
 
         assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video.clone()]);
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
@@ -620,7 +621,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(VideoRelocator::new(
-                video_repository,
+                video_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
@@ -715,7 +716,7 @@ mod tests {
                 Arc::new(FixedClock(fixed_timestamp())),
             )),
             Arc::new(VideoRelocator::new(
-                video_repository,
+                video_repository.clone(),
                 Arc::new(FakeVideoFileRepository::default()),
                 Arc::new(SqliteVideoMetadataRepository::new(db.database())),
                 Arc::new(FixedClock(fixed_timestamp())),
