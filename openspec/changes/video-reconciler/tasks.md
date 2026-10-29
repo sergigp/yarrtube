@@ -29,7 +29,7 @@
 ## 3. Infrastructure adapters (TDD)
 
 SqliteTaskRepository:
-- [ ] 3.1 `it_should_not_add_a_video_sync_if_one_is_pending`
+- [x] 3.1 `it_should_not_add_a_video_sync_if_one_is_pending`
 - [ ] 3.2 `it_should_add_a_video_sync_if_the_only_one_is_running` — uses `Task::dedupes_running`.
 
 ## 4. Verification

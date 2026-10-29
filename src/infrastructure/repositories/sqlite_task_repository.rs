@@ -681,6 +681,21 @@ mod tests {
     }
 
     #[test]
+    fn it_should_not_add_a_video_sync_if_one_is_pending() {
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        let repo = repo_with_clock(now);
+        let sync = sync_video_task("rec1");
+
+        repo.schedule(&sync, now).unwrap();
+        repo.schedule(&sync, now).unwrap();
+
+        assert_eq!(
+            repo.list_non_completed().unwrap(),
+            vec![pending_task(1, &sync, now, now)]
+        );
+    }
+
+    #[test]
     fn it_should_schedule_a_download_for_another_video() {
         let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
         let repo = repo_with_clock(now);
@@ -796,6 +811,12 @@ mod tests {
             video_id: video_id.to_string(),
             quality: "high".to_string(),
             output_dir: "/videos/my-playlist".to_string(),
+        }
+    }
+
+    fn sync_video_task(video_id: &str) -> Task {
+        Task::SyncVideo {
+            video_id: video_id.to_string(),
         }
     }
 }
