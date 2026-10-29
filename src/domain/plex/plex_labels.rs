@@ -25,8 +25,27 @@ impl PlexLabels {
 
 impl PartialEq for PlexLabels {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        self.0.len() == other.0.len()
+            && self
+                .0
+                .iter()
+                .zip(&other.0)
+                .all(|(name, other)| name.eq_ignore_ascii_case(other))
     }
 }
 
 impl Eq for PlexLabels {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_equal_labels_ignoring_case() {
+        assert_eq!(labels(&["Chess", "funny"]), labels(&["chess", "Funny"]));
+    }
+
+    fn labels(names: &[&str]) -> PlexLabels {
+        PlexLabels::new(names.iter().map(|name| name.to_string()).collect())
+    }
+}

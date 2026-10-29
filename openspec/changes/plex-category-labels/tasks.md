@@ -35,7 +35,7 @@
 - [ ] 2.24 `it_should_mark_the_video_and_request_a_sync_in_a_minute` — `VideoDownloaded` subscriber.
 - [ ] 2.25 `it_should_request_the_label_sync_at_startup_only_if_plex_is_configured` — `serve::prepare_task_queue`.
 - [x] 2.26 `it_should_run_label_syncs_in_the_plex_lane` — `domain/task/task.rs`.
-- [ ] 2.27 `it_should_equal_labels_ignoring_case` — `PlexLabels`.
+- [x] 2.27 `it_should_equal_labels_ignoring_case` — `PlexLabels`.
 - [ ] 2.28 `it_should_list_labels_missing_from_another_set_ignoring_case` — `PlexLabels`.
 - [ ] 2.29 `it_should_keep_each_label_once_ignoring_case` — `PlexLabels`.
 - [ ] 2.30 `it_should_serve_a_root_under_or_above_its_location` — `PlexSection`.
