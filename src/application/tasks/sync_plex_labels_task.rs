@@ -98,7 +98,7 @@ mod tests {
         assert_eq!(plex.labels("101"), vec!["Chess".to_string()]);
         assert_eq!(
             episode_labels_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![synced(&video, "101", &["Chess"])]
         );
@@ -136,7 +136,7 @@ mod tests {
         );
         assert_eq!(
             episode_labels_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![synced(&video, "101", &["Chess", "Funny"])]
         );
@@ -170,7 +170,7 @@ mod tests {
         assert_eq!(plex.label_edits(), vec!["labels:101::-Chess".to_string()]);
         assert_eq!(
             episode_labels_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![synced(&video, "101", &[])]
         );
@@ -204,7 +204,7 @@ mod tests {
         assert_eq!(plex.label_edits(), Vec::<String>::new());
         assert_eq!(
             episode_labels_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![synced(&video, "101", &["chess"])]
         );
@@ -245,7 +245,7 @@ mod tests {
         );
         assert_eq!(
             episode_labels_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![synced(&video, "101", &["Humor"])]
         );
@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(plex.label_edits(), Vec::<String>::new());
         assert_eq!(
             episode_labels_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![checked(&video)]
         );
@@ -314,7 +314,7 @@ mod tests {
         assert_eq!(plex.label_edits(), Vec::<String>::new());
         assert_eq!(
             episode_labels_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![checked(&video)]
         );
@@ -373,7 +373,7 @@ mod tests {
         assert_eq!(plex.labels("101"), vec!["Chess".to_string()]);
         assert_eq!(
             episode_labels_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![synced(&video, "101", &["Chess"])]
         );
@@ -407,7 +407,7 @@ mod tests {
         assert_eq!(plex.labels("201"), vec!["Chess".to_string()]);
         assert_eq!(
             episode_labels_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![synced(&video, "201", &["Chess"])]
         );
@@ -470,7 +470,7 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(
             episode_labels_repository
-                .find_many(&[video.id.clone()])
+                .find_many(std::slice::from_ref(&video.id))
                 .unwrap(),
             vec![EpisodeLabels::pending(video.id.clone())]
         );
@@ -580,7 +580,7 @@ mod tests {
         assert_eq!(plex.labels("101"), vec!["Chess".to_string()]);
         assert_eq!(
             episode_labels_repository
-                .find_many(&[importable.id.clone()])
+                .find_many(std::slice::from_ref(&importable.id))
                 .unwrap(),
             vec![synced(&importable, "101", &["Chess"])]
         );
