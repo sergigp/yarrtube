@@ -1,4 +1,4 @@
-use super::{Video, VideoSyncStep};
+use super::{Video, VideoStatus, VideoSyncStep};
 
 /// The steps a video's stored state still needs, decided from that state
 /// alone. A step already queued or running is left to `TaskRepository`'s
@@ -14,7 +14,7 @@ impl VideoSyncPlan {
             (VideoSyncStep::Download, !video.is_download_settled()),
             (
                 VideoSyncStep::FetchThumbnail,
-                video.thumbnail_filename.is_none(),
+                video.thumbnail_filename.is_none() && video.status != VideoStatus::InProgress,
             ),
             (VideoSyncStep::FetchSubtitles, video.is_subtitle_fetchable()),
         ]

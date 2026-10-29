@@ -11,7 +11,7 @@
 - [x] 2.3 `it_should_schedule_the_subtitles_of_a_downloaded_video` — subtitle step from stored state only.
 - [x] 2.4 `it_should_schedule_nothing_for_a_fully_synced_video` — finished steps are never redone.
 - [x] 2.5 `it_should_not_schedule_a_second_download_if_one_is_queued` — dedupe via the task queue.
-- [ ] 2.6 `it_should_not_schedule_a_thumbnail_for_a_video_being_downloaded` — InProgress guard.
+- [x] 2.6 `it_should_not_schedule_a_thumbnail_for_a_video_being_downloaded` — InProgress guard.
 - [ ] 2.7 `it_should_schedule_nothing_for_a_settled_errored_video` — settled-status guard.
 - [ ] 2.8 `it_should_skip_if_video_is_gone` — missing record is a no-op.
 - [ ] 2.9 `it_should_skip_if_video_has_no_owner` — orphan record is a no-op.
