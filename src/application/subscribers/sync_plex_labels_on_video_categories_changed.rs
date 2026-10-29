@@ -119,6 +119,38 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_collapse_category_changes_into_one_sync() {
+        let db = TestDatabase::new();
+        let episode_labels_repository = Arc::new(SqliteEpisodeLabelsRepository::new(db.database()));
+        let task_repository = task_repository(&db);
+        let subscriber = SyncPlexLabelsOnVideoCategoriesChanged::new(syncer(
+            &db,
+            episode_labels_repository.clone(),
+            task_repository.clone(),
+        ));
+
+        let results = [
+            handle(&subscriber, &["rec1"]),
+            handle(&subscriber, &["rec2"]),
+        ];
+
+        assert_eq!(results, [Ok(()), Ok(())]);
+        assert_eq!(
+            episode_labels_repository
+                .find_many(&[record("rec1"), record("rec2")])
+                .unwrap(),
+            vec![
+                EpisodeLabels::pending(record("rec1")),
+                EpisodeLabels::pending(record("rec2")),
+            ]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![pending_sync(1, now() + Duration::seconds(10))]
+        );
+    }
+
     /// The syncer over the test database, with a Plex server it never
     /// needs to reach.
     fn syncer(
