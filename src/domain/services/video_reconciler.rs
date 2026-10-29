@@ -3,7 +3,9 @@ use crate::domain::services::{
     MetadataGenerator, VideoCategoryAssigner, VideoCategoryAssignerApi, VideoRelocator,
 };
 use crate::domain::shared::Quality;
-use crate::domain::video::{Video, VideoRecordId, VideoSyncPlan, VideoTarget, resolve_output_dir};
+use crate::domain::video::{
+    Video, VideoRecordId, VideoStatus, VideoSyncPlan, VideoTarget, resolve_output_dir,
+};
 use crate::infrastructure::repositories::filesystem_video_file_repository::VideoFileRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
@@ -15,6 +17,7 @@ use crate::infrastructure::repositories::sqlite_video_repository::VideoRepositor
 use crate::infrastructure::shared::system_clock::Clock;
 use crate::infrastructure::shared::video_lock::VideoLock;
 use std::sync::Arc;
+use tracing::warn;
 
 /// The playlist or channel holding a video, as its sync needs it.
 struct VideoOwner {
@@ -155,8 +158,31 @@ impl VideoReconciler {
         }
     }
 
-    fn reset_if_broken(&self, video: Video, _target: &VideoTarget) -> anyhow::Result<Video> {
-        Ok(video)
+    /// Resets a `Downloaded` video whose file is missing, so it is
+    /// downloaded again.
+    fn reset_if_broken(&self, video: Video, target: &VideoTarget) -> anyhow::Result<Video> {
+        if video.status != VideoStatus::Downloaded || self.has_file(&video, target) {
+            return Ok(video);
+        }
+        warn!(
+            video_id = %video.youtube_id,
+            filename = video.filename.as_deref().unwrap_or(""),
+            "downloaded video's file is missing, resetting for redownload"
+        );
+        self.reset_for_redownload(video)
+    }
+
+    fn has_file(&self, video: &Video, target: &VideoTarget) -> bool {
+        video.filename.as_deref().is_some_and(|filename| {
+            self.video_file_repository
+                .file_exists(&target.output_dir, filename)
+        })
+    }
+
+    fn reset_for_redownload(&self, video: Video) -> anyhow::Result<Video> {
+        let reset = video.reset_for_redownload(self.clock.now());
+        self.video_repository.update(&reset)?;
+        Ok(reset)
     }
 
     fn recover_if_due(&self, video: Video) -> anyhow::Result<Video> {

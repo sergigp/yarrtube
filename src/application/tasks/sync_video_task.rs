@@ -77,6 +77,8 @@ mod tests {
     use chrono::{DateTime, Utc};
     use std::sync::Arc;
 
+    const DOWNLOADED_FILENAME: &str = "Season 2026/S2026E031501 - My Video.mp4";
+
     #[test]
     fn it_should_schedule_the_download_and_thumbnail_of_a_new_channel_video() {
         let db = TestDatabase::new();
@@ -248,7 +250,9 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeVideoFileRepository::with_listing(vec![
+                DOWNLOADED_FILENAME.to_string(),
+            ])),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(MetadataGenerator::new(
                 Arc::new(FakeYoutubeMetadataRepository::default()),
@@ -309,7 +313,9 @@ mod tests {
             channel_repository,
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             task_repository.clone(),
-            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeVideoFileRepository::with_listing(vec![
+                DOWNLOADED_FILENAME.to_string(),
+            ])),
             Arc::new(SqliteVideoMetadataRepository::new(db.database())),
             Arc::new(MetadataGenerator::new(
                 Arc::new(FakeYoutubeMetadataRepository::default()),
@@ -726,6 +732,64 @@ mod tests {
         assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
+    #[test]
+    fn it_should_reset_a_video_whose_file_is_missing() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let task_repository = Arc::new(SqliteTaskRepository::new(
+            db.database(),
+            Arc::new(FixedClock(fixed_timestamp())),
+        ));
+        let video = downloaded_video();
+        save_channel_video(
+            &video_repository,
+            &channel_repository,
+            &channel_video_repository,
+            &video,
+        );
+        let task = SyncVideoTask::new(VideoReconciler::new(
+            video_repository.clone(),
+            channel_video_repository,
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            task_repository.clone(),
+            Arc::new(FakeVideoFileRepository::with_listing(Vec::new())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(MetadataGenerator::new(
+                Arc::new(FakeYoutubeMetadataRepository::default()),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoRelocator::new(
+                video_repository.clone(),
+                Arc::new(FakeVideoFileRepository::default()),
+                Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+                Arc::new(FixedClock(fixed_timestamp())),
+            )),
+            Arc::new(VideoLock::default()),
+            Arc::new(FixedClock(fixed_timestamp())),
+            "/videos",
+            video_category_assigner(db.database()),
+        ));
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![video.clone().reset_for_redownload(fixed_timestamp())]
+        );
+        assert_eq!(
+            task_repository.list_non_completed().unwrap(),
+            vec![
+                pending_task(1, &fetch_thumbnail(&video)),
+                pending_task(2, &download_video(&video)),
+            ]
+        );
+    }
+
     fn my_video() -> Video {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }
@@ -737,7 +801,7 @@ mod tests {
             .start_download(fixed_timestamp())
             .mark_downloaded(
                 Quality::High,
-                "Season 2026/S2026E031501 - My Video.mp4",
+                DOWNLOADED_FILENAME,
                 Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
                 None,
                 fixed_timestamp(),
