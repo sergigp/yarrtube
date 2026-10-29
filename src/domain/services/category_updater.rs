@@ -41,10 +41,12 @@ impl CategoryUpdater {
 
 pub trait CategoryUpdaterApi: Send + Sync {
     /// Applies the present fields of `update` in one save. Another category
-    /// with the same name ignoring case → `NameTaken`.
+    /// with the same name ignoring case → `NameTaken`. A rename is announced
+    /// for every video in the category; a recolor is not.
     fn update(&self, id: &CategoryId, update: CategoryUpdate) -> Result<(), UpdateCategoryError>;
-    /// Replaces the members. Every member must be a tracked channel/playlist;
-    /// the first that is not → `MemberNotTracked`.
+    /// Replaces the members, then recomputes the categories of every video of
+    /// a former or new member. Every member must be a tracked
+    /// channel/playlist; the first that is not → `MemberNotTracked`.
     fn set_members(
         &self,
         id: &CategoryId,
@@ -58,10 +60,12 @@ impl CategoryUpdaterApi for CategoryUpdater {
         if let Some(name) = &update.name {
             self.ensure_name_free(id, name)?;
         }
+        let renamed = update.name.is_some();
         self.save(&Self::applied(category, update))?;
-        self.video_category_assigner
-            .announce_renamed(id)
-            .map_err(UpdateCategoryError::Repository)
+        if renamed {
+            self.announce_renamed(id)?;
+        }
+        Ok(())
     }
 
     fn set_members(
@@ -138,6 +142,12 @@ impl CategoryUpdater {
             Some(color) => category.with_color(color),
             None => category,
         }
+    }
+
+    fn announce_renamed(&self, id: &CategoryId) -> Result<(), UpdateCategoryError> {
+        self.video_category_assigner
+            .announce_renamed(id)
+            .map_err(UpdateCategoryError::Repository)
     }
 
     /// Recomputes the categories of every video `id`'s member change touches.

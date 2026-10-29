@@ -852,6 +852,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_not_announce_a_recolored_category() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let event_repository = SqliteEventRepository::new(db.database());
+        channel_repository.insert(&channel("@chess")).unwrap();
+        let video = downloaded_video("vid1");
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@chess",
+            &video,
+        );
+        let chess = Category {
+            members: vec![channel_member("@chess")],
+            ..category(None, "Chess")
+        };
+        repository.insert(&chess).unwrap();
+        SqliteVideoCategoriesRepository::new(db.database())
+            .save_many(&[VideoCategories::new(
+                video.id.clone(),
+                vec![chess.id.clone()],
+            )])
+            .unwrap();
+        let category_updater = CategoryUpdater::new(
+            repository,
+            channel_repository,
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            video_category_assigner(db.database()),
+        );
+
+        let response = update(
+            category_updater,
+            chess.id.as_str(),
+            UpdateCategoryRequest {
+                name: None,
+                color: Some("#e9def8".to_string()),
+            },
+        )
+        .await;
+
+        assert_eq!(response, Ok(StatusCode::NO_CONTENT));
+        assert_eq!(event_repository.list_eligible().unwrap(), vec![]);
+    }
+
+    #[tokio::test]
     async fn it_should_rename_and_recolor_a_category() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
