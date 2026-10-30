@@ -51,4 +51,4 @@
 - [x] 7.2 Add a `CHANGELOG.md` entry (new category palette, global search, UI refresh) and verify it renders
 - [x] 7.3 Run `scripts/run-tests.sh` with no flags and verify every suite (web, rust, contract, e2e) passes
 - [ ] 7.4 Run `scripts/run-spa-against-remote.sh` against the NAS and check home, a channel, a category, tasks and the search dialog's name groups at 390px and 1440px against the specs (card dates and video results stay empty until the NAS runs the new daemon); record any visual tweaks made
-- [ ] 7.5 Run `scripts/run-local.sh` and check the daemon-backed features (migrated category colours, card and row publish dates, video results in search) and verify they render as specified
+- [x] 7.5 Run `scripts/run-local.sh` and check the daemon-backed features (migrated category colours, card and row publish dates, video results in search) and verify they render as specified
