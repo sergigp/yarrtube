@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AppShell } from './App'
 import { ANNOUNCEMENTS_URL } from '@/api/client'
@@ -232,5 +232,28 @@ describe('AppShell', () => {
     await user.keyboard('{Meta>}k{/Meta}')
 
     expect(screen.queryByRole('combobox', { name: 'Search' })).not.toBeInTheDocument()
+  })
+
+  it('slides the phone header away while scrolling down, unless the sidebar is open', async () => {
+    renderShell()
+    const user = userEvent.setup()
+    const scrollTo = (y: number) =>
+      act(() => {
+        Object.defineProperty(window, 'scrollY', { value: y, configurable: true })
+        window.dispatchEvent(new Event('scroll'))
+      })
+
+    scrollTo(300)
+    const hiddenWhileScrollingDown = screen.getByRole('banner').className
+    scrollTo(200)
+    const shownOnScrollUp = screen.getByRole('banner').className
+    scrollTo(400)
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+    const shownWithSidebarOpen = screen.getByRole('banner').className
+    scrollTo(0)
+
+    expect(hiddenWhileScrollingDown).toContain('max-sm:-translate-y-full')
+    expect(shownOnScrollUp).not.toContain('max-sm:-translate-y-full')
+    expect(shownWithSidebarOpen).not.toContain('max-sm:-translate-y-full')
   })
 })

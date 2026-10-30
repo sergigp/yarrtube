@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
 import { Home } from './components/Home'
 import { PlaylistDetail } from './components/PlaylistDetail'
@@ -16,6 +16,8 @@ import { MobileNavToggle } from './components/MobileNavToggle'
 import { VersionLabel } from './components/VersionLabel'
 import { SearchDialog } from './components/SearchDialog'
 import { SearchTrigger } from './components/SearchTrigger'
+import { useScrollDirection } from './hooks/useScrollDirection'
+import { cn } from './lib/utils'
 
 export default function App() {
   return (
@@ -52,6 +54,14 @@ export function AppShell() {
   }, [sidebarOpen])
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
 
+  // Below `sm` the header slides away while scrolling down, unless the
+  // sidebar is open or a video player is pinned below it.
+  const scrollDirection = useScrollDirection()
+  const headerHidden =
+    scrollDirection === 'down' &&
+    !sidebarOpen &&
+    !document.querySelector('[data-pinned-player]')
+
   // ⌘K / Ctrl+K opens search from anywhere, unless another dialog is open.
   const [searchOpen, setSearchOpen] = useState(false)
   useEffect(() => {
@@ -79,13 +89,19 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col md:h-dvh">
+    <div
+      className="flex min-h-dvh flex-col md:h-dvh"
+      style={headerHidden ? ({ '--header-offset': '0px' } as CSSProperties) : undefined}
+    >
       <div ref={announcementRef} className="shrink-0">
         <AnnouncementBar />
       </div>
       <header
         ref={headerRef}
-        className="sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center gap-4 border-b border-border bg-background px-4 sm:px-6"
+        className={cn(
+          'sticky top-0 z-20 flex h-(--header-height) shrink-0 items-center gap-4 border-b border-border bg-background px-4 transition-transform duration-200 sm:px-6',
+          headerHidden && 'max-sm:-translate-y-full',
+        )}
       >
         <MobileNavToggle open={sidebarOpen} onToggle={toggleSidebar} controls={SIDEBAR_ID} />
         <Link

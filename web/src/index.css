@@ -37,7 +37,10 @@
   --radius: 0.625rem;
 
   /* Shared by the sticky header and the sticky mobile video player below it. */
-  --header-height: 4rem;
+  --header-height: 3.5rem;
+  /* Where the pinned player sits: below the header, or at the top while the
+     mobile header is scrolled out of view. */
+  --header-offset: var(--header-height);
 
   --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
   --font-heading: "Bricolage Grotesque", var(--font-sans);
