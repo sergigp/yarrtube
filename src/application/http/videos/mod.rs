@@ -3972,6 +3972,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_cap_category_sections_at_3_on_home() {
+        let db = TestDatabase::new();
+        let art = save_category_channel(&db, "Art", "@art", 0..5);
+        let biology = save_category_channel(&db, "Biology", "@biology", 10..14);
+        let chess = save_category_channel(&db, "Chess", "@chess", 20..23);
+        let drama = save_category_channel(&db, "Drama", "@drama", 30..32);
+        let economy = save_category_channel(&db, "Economy", "@economy", 40..41);
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                categories: vec![
+                    category_section_of(&art, "@art", (0..5).rev()),
+                    category_section_of(&biology, "@biology", (10..14).rev()),
+                    category_section_of(&chess, "@chess", (20..23).rev()),
+                ],
+                latest: vec![
+                    category_card(&economy, "@economy", 40),
+                    category_card(&drama, "@drama", 31),
+                    category_card(&drama, "@drama", 30),
+                ],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

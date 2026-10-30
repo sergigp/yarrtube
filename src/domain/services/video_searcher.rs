@@ -279,6 +279,7 @@ impl VideoSearcher {
                 (category, pending)
             })
             .filter(|(_, pending)| !pending.is_empty())
+            .take(limits.category_sections)
             .collect()
     }
 

@@ -17,7 +17,7 @@
 - [x] 2.9 `it_should_count_every_pending_video_when_ranking_category_sections_on_home` — full backlog counted, not the 6 shown
 - [x] 2.10 `it_should_not_count_continue_watching_videos_when_ranking_category_sections_on_home` — ranking excludes continue watching
 - [x] 2.11 `it_should_break_category_section_ties_by_name_on_home` — ties by name ignoring case
-- [ ] 2.12 `it_should_cap_category_sections_at_3_on_home` — at most 3 sections
+- [x] 2.12 `it_should_cap_category_sections_at_3_on_home` — at most 3 sections
 - [ ] 2.13 `it_should_list_a_video_in_two_categories_in_the_first_section_only_on_home` — no repeats across sections
 - [ ] 2.14 `it_should_skip_a_category_emptied_by_earlier_sections_on_home` — emptied category skipped, next takes its place
 - [ ] 2.15 `it_should_leave_videos_of_a_playlist_excluded_from_home_out_of_category_sections_on_home` — excluded playlists never feed sections
