@@ -6,6 +6,7 @@ pub mod category_member;
 pub mod category_name;
 pub mod category_view;
 pub mod errors;
+pub mod oklch;
 
 pub use category::Category;
 pub use category_color::CategoryColor;
