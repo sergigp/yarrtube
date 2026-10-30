@@ -17,6 +17,7 @@ Polishing these in one pass gives the app a consistent visual language before da
 - **Video cards**
   - Frameless tiles: no category tint, no border or padding.
   - Hover state: a soft tile background plus a slight thumbnail zoom.
+  - The whole card opens the video; the avatar or playlist icon and the source name lead to the source.
   - **BREAKING (spec):** the "Home Card Category Tint" requirement is removed.
 - **Category chips**
   - On the mixed home sections (Continue watching, Quick watches, Latest videos), each card shows its categories as small text chips.

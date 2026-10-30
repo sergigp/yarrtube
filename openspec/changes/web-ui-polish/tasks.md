@@ -27,6 +27,7 @@
 - [ ] 4.4 Add `layout: 'grid' | 'shelf' | 'feed'` with container-query columns, single-row shelves (no partial row), the mobile snap-scrolling shelf and the mobile one-column Latest feed; make the main content wrapper an `@container`; verify component tests for the layout classes, and check visually at 390px, 1024px and 1440px with `scripts/run-spa-against-remote.sh`
 - [x] 4.5 Update `Home`: chips on Continue watching, Quick watches and Latest only; shelf layout for those and the category sections; skeleton sections while loading (no "Latest videos" flash); larger section headings; update `Home.test.tsx` for the loading, error and chip scenarios and verify it passes
 - [x] 4.6 Make video menu controls ≥44px hit area on touch (`pointer: coarse`) and verify with a test on the class/variant
+- [x] 4.7 Make the whole card open the video (title link stretched over the card, thumbnail no longer a separate link) with the avatar, playlist icon (now a link to its playlist), source name and menu above it; verify component tests for the structure and an e2e that clicks the card's empty space and its playlist icon
 
 ## 5. Web: sidebar and global search
 
@@ -34,6 +35,7 @@
 - [x] 5.2 Make row menus (channels, playlists, categories) hover/focus/active/open-visible on fine pointers and always visible on touch; update the "Sidebar Row Menu" tests and verify they pass
 - [x] 5.3 Remove the sidebar search field and filtering (moving the match logic to `lib/search.ts` with unit tests); update `Sidebar.test.tsx` and verify it passes
 - [x] 5.4 Build `SearchDialog` (grouped results, keyboard navigation, debounced video search, empty/error states) plus the header trigger (field at ≥sm, icon below) and the ⌘K/Ctrl+K shortcut in `AppShell`; add tests covering every "Global Search" scenario and verify they pass
+- [x] 5.5 Hide the search dialog's Categories group while categories are turned off (preferences); verify a SearchDialog test
 
 ## 6. Web: header, announcement, detail views, category and tasks
 

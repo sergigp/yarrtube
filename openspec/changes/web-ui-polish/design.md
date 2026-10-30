@@ -34,6 +34,8 @@ The hover treatment lives on the `<li>`:
 - `group` plus `hover:bg-muted/60` with a negative-margin padding trick (`-m-2 p-2 rounded-xl`), so the hover surface extends past the content without shifting it.
 - The thumbnail sits in an `overflow-hidden rounded-lg` wrapper with `group-hover:scale-[1.03] transition-transform`.
 
+The whole card is the video's target, matching the hover surface: the title's link is stretched over the `<li>` (`after:absolute after:inset-0`, the `<li>` is `relative`), and the thumbnail is no longer a link of its own, so each card has one video link. The avatar, the playlist icon (now a link to its playlist, like a channel's avatar), the source name and the actions menu sit above it with `relative z-10`. Chips stay labels: a click on one opens the video.
+
 *Alternative:* keep a frame on hover only. Rejected because it looks heavier, and touch devices never see it.
 
 ### Category colour model
@@ -82,6 +84,7 @@ A pure `lib/relativeAge.ts` (`formatAge(published, now)` → "3h ago" / "2d ago"
 - `components/SearchDialog.tsx` is built on the existing `ui/dialog` plus a listbox with `aria-activedescendant` keyboard navigation. No `cmdk` dependency; the list is small.
 - Name groups filter the cached `useCategories`/`useChannels`/`usePlaylists` data with the same contains-ignoring-case logic the sidebar uses today. That logic moves into `lib/search.ts`.
 - Videos: `useVideoSearch(q)` is a react-query query keyed by the debounced text (250 ms), enabled at 2 or more trimmed characters.
+- While categories are turned off (`useCategoriesShown`, from the preferences), the Categories group is never listed.
 - The ⌘K/Ctrl+K listener lives in `AppShell` and is ignored while a dialog is open (`document.querySelector('[role=dialog]')`).
 - **Header:** a search button styled as a field ("Search… ⌘K") at or above `sm`, an icon button below.
 

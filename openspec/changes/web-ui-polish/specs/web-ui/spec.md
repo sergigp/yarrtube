@@ -8,6 +8,8 @@ Video cards on the home view and on a category's view SHALL be drawn without a f
 
 The relative date SHALL read as a short age ("3h ago", "2d ago", "5w ago", "4mo ago", "2y ago").
 
+Activating a card anywhere SHALL open its video, except on the card's own controls: the channel's avatar and the playlist icon lead to the source's view, as does the source's name on the meta line, and the actions menu control opens the menu. Category chips are labels, not controls: activating one opens the video like the rest of the card. Each card SHALL offer a single link to its video, so keyboard users move through cards one stop per video plus the source and menu controls.
+
 #### Scenario: Frameless card
 - **WHEN** a user views the home view
 - **THEN** no video card has a border, padding or background colour of its own
@@ -27,6 +29,14 @@ The relative date SHALL read as a short age ("3h ago", "2d ago", "5w ago", "4mo 
 #### Scenario: Unknown publish date
 - **WHEN** a home card shows a channel video with no publish date
 - **THEN** its meta line reads only the channel's name
+
+#### Scenario: Activating the card's empty space
+- **WHEN** a user clicks a card's padding or the empty end of its meta line
+- **THEN** the application opens that card's video
+
+#### Scenario: Activating the playlist icon
+- **WHEN** a user activates the playlist icon on a card of the playlist "Chess Middlegames"
+- **THEN** the application opens the "Chess Middlegames" view, not the video
 
 ### Requirement: Home Card Category Chips
 On the home view's "Continue watching", "Quick watches" and "Latest videos" sections, each video card SHALL show the video's categories, in the order the video lists them, as small text chips below its meta line. Each chip SHALL show the category's name in a dark shade of the category's hue, over a soft tint of that hue. A card SHALL show at most 2 chips, followed by a "+N" chip when the video has more categories. A video in no category SHALL show no chip row. Cards in "More about <category>" sections and on a category's view SHALL NOT show chips.
@@ -157,6 +167,29 @@ The tasks view SHALL open with a page heading "Tasks", in the same heading style
 - **THEN** a "Tasks" heading is shown above the tab bar, aligned with the left edge of the content area
 
 ## MODIFIED Requirements
+
+### Requirement: No Category UI While Categories Are Off
+While `categories_enabled` is off, or the preferences are still loading, the application SHALL NOT show the sidebar Categories section, the Categories field in the add and edit channel and playlist dialogs, home category sections or home card category chips, and the header search SHALL NOT list a Categories group. When the preferences cannot be loaded, the application SHALL behave as with the defaults.
+
+#### Scenario: Sidebar without categories
+- **WHEN** categories are off and "Chess" exists
+- **THEN** the sidebar shows no Categories section and no "Add category" control
+
+#### Scenario: Dialogs without categories
+- **WHEN** categories are off and a user opens the add channel dialog
+- **THEN** the dialog shows no Categories field, and saving it changes no category
+
+#### Scenario: Home without categories
+- **WHEN** categories are off and a home video belongs to "Chess"
+- **THEN** home shows no "More about Chess" section and the video's card shows no category chip
+
+#### Scenario: Search without categories
+- **WHEN** categories are off, "Chess" exists and a user types "chess" in the header search
+- **THEN** the search shows no Categories group
+
+#### Scenario: Preferences fail to load
+- **WHEN** the preferences request fails
+- **THEN** the sidebar shows the Categories section as with the defaults
 
 ### Requirement: Persistent Header
 At or above the small breakpoint, the application header SHALL remain fixed in place (visible, non-scrolling) as the user scrolls any view. Below the small breakpoint, the header SHALL be 56 pixels tall and SHALL slide out of view while the user scrolls the document down, and slide back as soon as the user scrolls up. It SHALL stay visible while the document is at its top, while the mobile sidebar is open, and while a video player is pinned below it. The header's logo SHALL occupy its final size before the logo image loads, so the header's contents do not shift when it appears.
