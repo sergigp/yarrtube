@@ -206,11 +206,7 @@ impl From<HomeVideos> for HomeResponse {
     fn from(home: HomeVideos) -> Self {
         Self {
             continue_watching: cards(home.continue_watching),
-            categories: home
-                .categories
-                .into_iter()
-                .map(HomeCategorySectionResponse::from)
-                .collect(),
+            categories: home.categories.into_iter().map(Into::into).collect(),
             quick_watches: cards(home.quick_watches),
             latest: cards(home.latest),
         }

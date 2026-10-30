@@ -144,13 +144,7 @@ impl VideoSearcherApi for VideoSearcher {
             .map_err(ListVideosError::Repository)?;
         let category_sections =
             Self::category_sections_in(&not_continue_watching, &categories, &by_video, limits);
-        let not_in_categories = Self::not_shown_in(
-            &not_continue_watching,
-            &category_sections
-                .iter()
-                .flat_map(|(_, videos)| videos.clone())
-                .collect::<Vec<_>>(),
-        );
+        let not_in_categories = Self::not_in_sections(&not_continue_watching, &category_sections);
         let quick_watches = Self::quick_watches_in(&not_in_categories, limits.quick_watches);
         let latest = Self::latest_in(
             Self::not_shown_in(&not_in_categories, &quick_watches),
@@ -259,23 +253,18 @@ impl VideoSearcher {
     ) -> Vec<(Category, Vec<SourcedVideo>)> {
         Self::ranked_by_pending(videos, categories, by_video)
             .into_iter()
-            .fold(
-                (Vec::new(), videos.to_vec()),
-                |(mut sections, remaining), category| {
-                    if sections.len() == limits.category_sections {
-                        return (sections, remaining);
-                    }
-                    let mut pending = Self::pending_in(&remaining, &category.id, by_video);
-                    pending.truncate(limits.category_videos);
-                    if pending.is_empty() {
-                        return (sections, remaining);
-                    }
-                    let remaining = Self::not_shown_in(&remaining, &pending);
-                    sections.push((category.clone(), pending));
-                    (sections, remaining)
-                },
-            )
-            .0
+            .scan(videos.to_vec(), |remaining, category| {
+                let pending: Vec<SourcedVideo> =
+                    Self::pending_in(remaining, &category.id, by_video)
+                        .into_iter()
+                        .take(limits.category_videos)
+                        .collect();
+                *remaining = Self::not_shown_in(remaining, &pending);
+                Some((category.clone(), pending))
+            })
+            .filter(|(_, pending)| !pending.is_empty())
+            .take(limits.category_sections)
+            .collect()
     }
 
     /// `categories` by their number of pending videos in `videos`, most
@@ -428,6 +417,18 @@ impl VideoSearcher {
             .filter(|sourced| !shown.contains(&sourced.video.youtube_id))
             .cloned()
             .collect()
+    }
+
+    /// `videos` without any video shown in `sections`.
+    fn not_in_sections(
+        videos: &[SourcedVideo],
+        sections: &[(Category, Vec<SourcedVideo>)],
+    ) -> Vec<SourcedVideo> {
+        let shown: Vec<SourcedVideo> = sections
+            .iter()
+            .flat_map(|(_, videos)| videos.clone())
+            .collect();
+        Self::not_shown_in(videos, &shown)
     }
 
     /// Keeps the first copy of each YouTube video. Applied before sorting,
