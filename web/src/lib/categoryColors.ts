@@ -12,9 +12,6 @@ export const PALETTE: readonly { name: string; hex: string }[] = [
   { name: 'Taupe', hex: '#978364' },
 ]
 
-/** Background of a card in 4 or more categories. */
-export const CROWDED_CARD = '#f2f2f2'
-
 /** The palette color used by the fewest of `used`, the earliest on a tie. */
 export function defaultColor(used: string[]): string {
   const uses = (hex: string) => used.filter((color) => color === hex).length
@@ -52,34 +49,6 @@ export function hueOf(hex: string): number {
   const labA = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s
   const labB = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
   return ((Math.atan2(labB, labA) * 180) / Math.PI + 360) % 360
-}
-
-/** The alpha byte cards are tinted at (50%), so a category color only washes the card. */
-const CARD_TINT_ALPHA = '80'
-
-/** `hex` (`#rrggbb`) at the card tint's transparency, as `#rrggbbaa`. */
-function cardTint(hex: string): string {
-  return `${hex}${CARD_TINT_ALPHA}`
-}
-
-/**
- * A card's background for its categories' colors, each at the card tint's
- * transparency: none for 0, flat for 1, diagonal hard-stop bands for 2–3,
- * `CROWDED_CARD` for 4 or more.
- */
-export function cardBackground(colors: string[]): string | undefined {
-  if (colors.length === 0) {
-    return undefined
-  }
-  if (colors.length === 1) {
-    return cardTint(colors[0])
-  }
-  if (colors.length > 3) {
-    return cardTint(CROWDED_CARD)
-  }
-  const edge = (index: number) => `${Number(((index * 100) / colors.length).toFixed(2))}%`
-  const bands = colors.map((color, index) => `${cardTint(color)} ${edge(index)} ${edge(index + 1)}`)
-  return `linear-gradient(to bottom right, ${bands.join(', ')})`
 }
 
 /**

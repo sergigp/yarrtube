@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 import { videoMediaUrl, avatarMediaUrl } from '@/api/client'
 import type { HomeVideo, HomeVideoSource } from '@/api/types'
-import { cardBackground } from '@/lib/categoryColors'
 import { cn } from '@/lib/utils'
 import { Thumbnail } from './Thumbnail'
 import { ThumbnailOverlay } from './ThumbnailOverlay'
@@ -14,19 +13,12 @@ function videoDetailPath(source: HomeVideoSource): string {
 
 interface VideoGridProps {
   videos: HomeVideo[]
-  /** Category id → color; tints each card by its categories. Absent leaves cards untinted. */
-  categoryColors?: Map<string, string>
   /** Where a card leads; absent, to the video in its channel or playlist. */
   videoPathOf?: (video: HomeVideo) => string
 }
 
-/** The colors of the video's categories, in its order, up to the 4 that make a card grey. */
-function colorsOf(video: HomeVideo, categoryColors: Map<string, string>): string[] {
-  return video.category_ids.slice(0, 4).flatMap((id) => categoryColors.get(id) ?? [])
-}
-
 /** Home-style video cards, each linking to its video in its source. */
-export function VideoGrid({ videos, categoryColors, videoPathOf }: VideoGridProps) {
+export function VideoGrid({ videos, videoPathOf }: VideoGridProps) {
   if (videos.length === 0) {
     return <p className="text-sm text-muted-foreground">No videos synced yet.</p>
   }
@@ -40,18 +32,17 @@ export function VideoGrid({ videos, categoryColors, videoPathOf }: VideoGridProp
         return (
           <li
             key={`${video.source.kind}:${video.source.id}:${video.id}`}
-            // Tinted grids frame every card, tinted or not, so they all line up.
-            className={cn(
-              'animate-enter',
-              categoryColors && 'rounded-lg border border-black/[0.06] p-3',
-            )}
-            style={{
-              animationDelay: `${Math.min(index, 12) * 35}ms`,
-              background: categoryColors && cardBackground(colorsOf(video, categoryColors)),
-            }}
+            // Frameless: the hover surface reaches past the content through the
+            // negative margin, so it never shifts the card.
+            className="group/card animate-enter -m-2 rounded-xl p-2 transition-colors hover:bg-muted/60"
+            style={{ animationDelay: `${Math.min(index, 12) * 35}ms` }}
           >
             <div className="flex flex-col gap-2">
-              <Link className="group relative block" to={videoPath}>
+              <Link
+                className="group relative block overflow-hidden rounded-lg"
+                to={videoPath}
+                data-slot="card-thumbnail"
+              >
                 <Thumbnail
                   src={
                     video.thumbnail_filename
@@ -59,8 +50,8 @@ export function VideoGrid({ videos, categoryColors, videoPathOf }: VideoGridProp
                       : null
                   }
                   className={cn(
-                    'aspect-video w-full rounded-lg object-cover transition-opacity',
-                    video.watched ? 'opacity-60 group-hover:opacity-100' : 'group-hover:opacity-90',
+                    'aspect-video w-full rounded-lg object-cover transition-[opacity,transform] duration-300 group-hover/card:scale-[1.03]',
+                    video.watched && 'opacity-60 group-hover/card:opacity-100',
                   )}
                 />
                 <ThumbnailOverlay

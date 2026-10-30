@@ -1,6 +1,5 @@
-import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useCategories, useCategoriesShown, usePreferences, useRecentVideos } from '@/api/queries'
+import { useCategoriesShown, usePreferences, useRecentVideos } from '@/api/queries'
 import type { HomeVideo } from '@/api/types'
 import { VideoGrid } from './VideoGrid'
 
@@ -11,8 +10,6 @@ interface HomeSectionProps {
   name: string
   videos: HomeVideo[] | undefined
   error: Error | null
-  /** Category id → color, when cards are tinted. */
-  categoryColors: Map<string, string> | undefined
   hideWhenEmpty?: boolean
 }
 
@@ -27,7 +24,6 @@ function HomeSection({
   name,
   videos,
   error,
-  categoryColors,
   hideWhenEmpty,
 }: HomeSectionProps) {
   if (hideWhenEmpty && (error || !videos || videos.length === 0)) {
@@ -58,7 +54,7 @@ function HomeSection({
         </p>
       )}
       {!error && !videos && <p className="text-sm text-muted-foreground">Loading {name}…</p>}
-      {!error && videos && <VideoGrid videos={videos} categoryColors={categoryColors} />}
+      {!error && videos && <VideoGrid videos={videos} />}
     </section>
   )
 }
@@ -94,19 +90,11 @@ function NothingElseShown({
 
 export function Home() {
   const { data: home, error } = useRecentVideos()
-  const { data: categories } = useCategories()
   const { data: preferences } = usePreferences()
-  // Category sections and colors show only while categories do, even when
-  // the cached response is from before they were turned off.
+  // Category sections show only while categories do, even when the cached
+  // response is from before they were turned off.
   const withCategories = useCategoriesShown()
   const categorySections = (withCategories && home?.categories) || []
-  const categoryColors = useMemo(
-    () =>
-      withCategories
-        ? new Map((categories?.categories ?? []).map((category) => [category.id, category.color]))
-        : undefined,
-    [categories, withCategories],
-  )
   // Shown until the preferences say otherwise, as before they existed.
   const showLatest = preferences?.home_show_latest !== false
   // "Latest videos" stands in for an empty home, so it only hides when
@@ -126,7 +114,6 @@ export function Home() {
         name="continue watching videos"
         videos={home?.continue_watching}
         error={error}
-        categoryColors={categoryColors}
         hideWhenEmpty
       />
       {categorySections.map((category) => (
@@ -137,7 +124,6 @@ export function Home() {
           name={`${category.name} videos`}
           videos={category.videos}
           error={error}
-          categoryColors={categoryColors}
           hideWhenEmpty
         />
       ))}
@@ -146,7 +132,6 @@ export function Home() {
         name="quick watches"
         videos={home?.quick_watches}
         error={error}
-        categoryColors={categoryColors}
         hideWhenEmpty
       />
       {showLatest ? (
@@ -155,7 +140,6 @@ export function Home() {
           name="recent videos"
           videos={home?.latest}
           error={error}
-          categoryColors={categoryColors}
           hideWhenEmpty={othersHaveVideos}
         />
       ) : (

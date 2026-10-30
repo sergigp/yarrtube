@@ -419,40 +419,6 @@ describe('Home', () => {
     ])
   })
 
-  it('tints each card by its categories', async () => {
-    mockHomeApi({
-      'GET /api/videos/home': {
-        continue_watching: [],
-        categories: [],
-        quick_watches: [],
-        latest: [
-          aHomeVideo({ title: 'One', category_ids: ['chess'] }),
-          aHomeVideo({ title: 'Two', category_ids: ['chess', 'streams'] }),
-          aHomeVideo({ title: 'Four', category_ids: ['chess', 'streams', 'news', 'music'] }),
-          aHomeVideo({ title: 'None', category_ids: [] }),
-        ],
-      },
-      'GET /api/categories': aCategoryList([
-        aCategory({ id: 'chess', color: '#d3ecf8' }),
-        aCategory({ id: 'streams', color: '#fff1bf' }),
-        aCategory({ id: 'news', color: '#e9def8' }),
-        aCategory({ id: 'music', color: '#ffd9d4' }),
-      ]),
-    })
-
-    renderWithProviders(<Home />)
-
-    const card = async (title: string) =>
-      (await screen.findByText(title)).closest('li') as HTMLElement
-    await waitFor(async () => expect(await card('One')).toHaveStyle({ background: '#d3ecf880' }))
-    // jsdom drops the gradient's `to bottom` (cardBackground's own test pins the exact value).
-    expect((await card('Two')).style.background).toMatch(
-      /^linear-gradient\(.*rgba\(211, 236, 248, 0\.5\d*\) 0% 50%, rgba\(255, 241, 191, 0\.5\d*\) 50% 100%\)$/,
-    )
-    expect(await card('Four')).toHaveStyle({ background: '#f2f2f280' })
-    expect((await card('None')).style.background).toBe('')
-  })
-
   it('leaves cards untinted and unframed when categories are off', async () => {
     const preferences = aPreferences({ categories_enabled: false })
     mockHomeApi({
@@ -470,7 +436,6 @@ describe('Home', () => {
 
     const card = (await screen.findByText('One')).closest('li') as HTMLElement
     await waitFor(() => expect(queryClient.getQueryData(queryKeys.preferences)).toEqual(preferences))
-    await waitFor(() => expect(queryClient.getQueryData(queryKeys.categories)).toBeDefined())
     expect(card.style.background).toBe('')
     expect(card).not.toHaveClass('border')
   })

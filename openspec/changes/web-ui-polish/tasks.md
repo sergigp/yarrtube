@@ -14,14 +14,14 @@
 ## 3. Web: foundations
 
 - [x] 3.1 Update `api/types.ts` (`HomeVideo.published_at`, search response) and the fixture builders (`aHomeVideo`), add `useVideoSearch` to the queries, and verify `npm run typecheck` passes
-- [ ] 3.2 Rework `lib/categoryColors.ts`: new `PALETTE` (Mustard…Taupe), `softTint`, `inkShade`, `solidFromHue`; remove `cardBackground`/`CROWDED_CARD`; update `categoryColors.test.ts` and verify it passes
+- [x] 3.2 Rework `lib/categoryColors.ts`: new `PALETTE` (Mustard…Taupe), `softTint`, `inkShade`, `solidFromHue`; remove `cardBackground`/`CROWDED_CARD`; update `categoryColors.test.ts` and verify it passes
 - [x] 3.3 Add `lib/relativeAge.ts` (`formatAge`) with fake-timer unit tests for h/d/w/mo/y boundaries and verify they pass
 - [x] 3.4 Add `components/ui/skeleton.tsx` and `VideoCardSkeleton`, `VideoGridSkeleton`, `VideoRowSkeleton` (with `aria-busy` + visually hidden status text) and verify a component test finds the loading status by role
 - [ ] 3.5 Add thin, muted scrollbar styles in `index.css` and reserve the header logo's size (explicit `width`/`height`); verify visually with `scripts/run-spa-against-remote.sh` (against the NAS) that the header doesn't shift on load
 
 ## 4. Web: video cards and home
 
-- [ ] 4.1 Make `VideoGrid` cards frameless with the hover surface and thumbnail zoom, remove tint and frame, and verify the updated tests assert no card background or border classes
+- [x] 4.1 Make `VideoGrid` cards frameless with the hover surface and thumbnail zoom, remove tint and frame, and verify the updated tests assert no card background or border classes
 - [ ] 4.2 Add the meta line (source name · age) and the playlist placeholder icon to cards; verify tests for the channel, playlist and unknown-date scenarios
 - [ ] 4.3 Add category chips (max 2 + "+N", soft tint background, ink text), shown only when the caller passes chips; verify tests for the one, many, none and category-section scenarios
 - [ ] 4.4 Add `layout: 'grid' | 'shelf' | 'feed'` with container-query columns, single-row shelves (no partial row), the mobile snap-scrolling shelf and the mobile one-column Latest feed; make the main content wrapper an `@container`; verify component tests for the layout classes, and check visually at 390px, 1024px and 1440px with `scripts/run-spa-against-remote.sh`
