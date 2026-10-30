@@ -57,6 +57,25 @@ describe('PreferencesView', () => {
     )
     expect(screen.getByRole('switch', { name: 'Show quick watches' })).toBeChecked()
   })
+
+  it('disables the home category switches while categories are off', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences({
+        categories_enabled: false,
+        home_show_category_colors: false,
+      }),
+    })
+
+    renderWithProviders(<PreferencesView />)
+
+    const showCategories = await screen.findByRole('switch', { name: 'Show categories' })
+    const showColors = screen.getByRole('switch', { name: 'Show category colors' })
+    expect(showCategories).toBeDisabled()
+    expect(showCategories).toBeChecked()
+    expect(showColors).toBeDisabled()
+    expect(showColors).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Show latest videos' })).toBeEnabled()
+  })
 })
 
 function switchStates(group: HTMLElement): [string, boolean][] {

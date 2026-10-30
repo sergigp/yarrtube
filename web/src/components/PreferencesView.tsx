@@ -9,7 +9,8 @@ type PreferenceKey = keyof Preferences
 
 interface PreferenceGroup {
   title: string
-  switches: { key: PreferenceKey; label: string }[]
+  /** `needsCategories` switches are disabled while categories are off. */
+  switches: { key: PreferenceKey; label: string; needsCategories?: boolean }[]
 }
 
 const GROUPS: PreferenceGroup[] = [
@@ -21,8 +22,8 @@ const GROUPS: PreferenceGroup[] = [
     title: 'Home',
     switches: [
       { key: 'home_show_continue_watching', label: 'Show continue watching' },
-      { key: 'home_show_categories', label: 'Show categories' },
-      { key: 'home_show_category_colors', label: 'Show category colors' },
+      { key: 'home_show_categories', label: 'Show categories', needsCategories: true },
+      { key: 'home_show_category_colors', label: 'Show category colors', needsCategories: true },
       { key: 'home_show_quick_watches', label: 'Show quick watches' },
       { key: 'home_show_latest', label: 'Show latest videos' },
     ],
@@ -64,12 +65,13 @@ export function PreferencesView() {
             <legend className="mb-4 font-heading text-lg font-semibold text-foreground">
               {group.title}
             </legend>
-            {group.switches.map(({ key, label }) => (
+            {group.switches.map(({ key, label, needsCategories }) => (
               <div key={key} className="flex items-center justify-between gap-4">
                 <Label htmlFor={`preference-${key}`}>{label}</Label>
                 <Switch
                   id={`preference-${key}`}
                   checked={preferences[key]}
+                  disabled={needsCategories && !preferences.categories_enabled}
                   onCheckedChange={(value) => void toggle(key, value)}
                 />
               </div>
