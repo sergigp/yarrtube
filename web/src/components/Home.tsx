@@ -1,10 +1,13 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useCategories, useRecentVideos } from '@/api/queries'
 import type { HomeVideo } from '@/api/types'
 import { VideoGrid } from './VideoGrid'
 
 interface HomeSectionProps {
   title: string
+  /** Where the heading links to, when it links anywhere. */
+  href?: string
   name: string
   videos: HomeVideo[] | undefined
   error: Error | null
@@ -19,6 +22,7 @@ interface HomeSectionProps {
  */
 function HomeSection({
   title,
+  href,
   name,
   videos,
   error,
@@ -31,7 +35,15 @@ function HomeSection({
 
   return (
     <section className="min-w-0">
-      <h2 className="mb-4 font-heading text-lg font-semibold text-foreground">{title}</h2>
+      <h2 className="mb-4 font-heading text-lg font-semibold text-foreground">
+        {href ? (
+          <Link to={href} className="hover:underline">
+            {title}
+          </Link>
+        ) : (
+          title
+        )}
+      </h2>
       {error && (
         <p className="text-sm text-destructive">
           Failed to load {name}: {error.message}
@@ -65,6 +77,7 @@ export function Home() {
         <HomeSection
           key={category.id}
           title={`More about ${category.name}`}
+          href={`/categories/${encodeURIComponent(category.id)}`}
           name={`${category.name} videos`}
           videos={category.videos}
           error={null}

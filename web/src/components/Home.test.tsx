@@ -90,6 +90,25 @@ describe('Home', () => {
     expect(within(chess as HTMLElement).getByText('Rook Endgames')).toBeInTheDocument()
   })
 
+  it('links a "More about" heading to its category', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [aHomeCategorySection({ id: 'chess', name: 'Chess' })],
+        quick_watches: [],
+        latest: [],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    const heading = await screen.findByRole('heading', { name: 'More about Chess' })
+    expect(within(heading).getByRole('link', { name: 'More about Chess' })).toHaveAttribute(
+      'href',
+      '/categories/chess',
+    )
+  })
+
   it('shows progress on in-progress cards in every section', async () => {
     mockHomeApi({
       'GET /api/videos/home': {
