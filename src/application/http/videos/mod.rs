@@ -189,6 +189,7 @@ mod tests {
     use crate::domain::channel_video::ChannelVideo;
     use crate::domain::playlist::{Playlist, PlaylistKind, PlaylistName, PlaylistPath};
     use crate::domain::playlist_video::PlaylistVideo;
+    use crate::domain::preferences::Preferences;
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::shared::{Quality, ReconcileInterval};
     use crate::domain::video::{EpisodeNumber, Video, VideoRecordId};
@@ -210,7 +211,9 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
         PlaylistVideoRepository, SqlitePlaylistVideoRepository,
     };
-    use crate::infrastructure::repositories::sqlite_preferences_repository::SqlitePreferencesRepository;
+    use crate::infrastructure::repositories::sqlite_preferences_repository::{
+        PreferencesRepository, SqlitePreferencesRepository,
+    };
     use crate::infrastructure::repositories::sqlite_video_categories_repository::{
         SqliteVideoCategoriesRepository, VideoCategoriesRepository,
     };
@@ -4645,6 +4648,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_leave_out_continue_watching_if_turned_off() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1"))
+            .unwrap();
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            &Video {
+                duration_seconds: Some(600),
+                ..started_video(
+                    "vid1",
+                    "Started",
+                    120,
+                    watched_timestamp() - Duration::days(1),
+                )
+            },
+        );
+        save_preferences(
+            &db,
+            Preferences {
+                home_show_continue_watching: false,
+                ..Preferences::default()
+            },
+        );
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                quick_watches: vec![HomeVideoResponse {
+                    position_seconds: 120,
+                    duration_seconds: Some(600),
+                    ..home_video_response("vid1", "Started", playlist_source())
+                }],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_of_a_playlist_excluded_from_home_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -5247,6 +5296,12 @@ mod tests {
             .unwrap();
         categorize_source(db, &channel_member(handle), &[&category]);
         category
+    }
+
+    fn save_preferences(db: &TestDatabase, preferences: Preferences) {
+        SqlitePreferencesRepository::new(db.database())
+            .save(&preferences)
+            .unwrap();
     }
 
     /// A video searcher over every SQLite repository of `db`.

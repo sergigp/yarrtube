@@ -13,7 +13,17 @@ pub struct HomeLimits {
 
 impl HomeLimits {
     /// 0 for every section the preferences turn off.
-    pub fn following(self, _preferences: &Preferences) -> Self {
-        self
+    pub fn following(self, preferences: &Preferences) -> Self {
+        Self {
+            continue_watching: Self::unless_off(
+                self.continue_watching,
+                preferences.home_show_continue_watching,
+            ),
+            ..self
+        }
+    }
+
+    fn unless_off(limit: usize, shown: bool) -> usize {
+        if shown { limit } else { 0 }
     }
 }

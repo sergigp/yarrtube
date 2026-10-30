@@ -13,7 +13,7 @@ Backend acceptance tests (HTTP handlers):
 - [x] 2.3 `preferences::it_should_replace_previously_saved_preferences` — the second save wins
 - [x] 2.4 `preferences::it_should_fail_to_save_if_a_preference_missing` — no `home_show_latest` → 400 with its message, nothing stored
 - [x] 2.5 `preferences::it_should_return_saved_preferences` — seeded through the repository, GET returns them
-- [ ] 2.6 `videos::it_should_leave_out_continue_watching_if_turned_off` — a started short video appears under quick watches; verify `cargo test videos` passes
+- [x] 2.6 `videos::it_should_leave_out_continue_watching_if_turned_off` — a started short video appears under quick watches; verify `cargo test videos` passes
 - [ ] 2.7 `videos::it_should_leave_out_category_sections_if_categories_off` — no sections, Chess's videos under quick watches/latest
 - [ ] 2.8 `videos::it_should_leave_out_category_sections_if_home_categories_off`
 - [ ] 2.9 `videos::it_should_leave_out_quick_watches_if_turned_off` — the short video appears under latest
