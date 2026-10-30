@@ -405,6 +405,17 @@ mod tests {
     }
 
     #[test]
+    fn it_should_refresh_a_former_solid_palette_color() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_category_color_strengthen(&mut conn);
+        insert_colored_category(&conn, "Chess", "#0193bf");
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(category_colors(&conn), vec!["#0ea5e9"]);
+    }
+
+    #[test]
     fn it_should_backfill_video_categories_from_members() {
         let mut conn = Connection::open_in_memory().unwrap();
         Migrations::new(vec![
@@ -847,6 +858,34 @@ mod tests {
             M::up(PLEX_LABELS_SQL),
             M::up(EPISODE_LABELS_GENERATION_SQL),
             M::up(PREFERENCES_SQL),
+        ])
+        .to_latest(conn)
+        .unwrap();
+    }
+
+    fn migrate_to_category_color_strengthen(conn: &mut Connection) {
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+            M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+            M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
+            M::up(EPISODE_NUMBERS_SQL),
+            M::up(RECONCILE_INTERVAL_SQL),
+            M::up(VIDEO_SUBTITLES_SQL),
+            M::up(CATEGORIES_SQL),
+            M::up(PLAYLIST_HIDE_UNWATCHED_COUNT_SQL),
+            M::up(CATEGORY_COLOR_SQL),
+            M::up(VIDEO_CATEGORIES_SQL),
+            M::up(PLEX_LABELS_SQL),
+            M::up(EPISODE_LABELS_GENERATION_SQL),
+            M::up(PREFERENCES_SQL),
+            M::up_with_hook(
+                CATEGORY_COLOR_STRENGTHEN_SQL,
+                strengthen_light_category_colors,
+            ),
         ])
         .to_latest(conn)
         .unwrap();
