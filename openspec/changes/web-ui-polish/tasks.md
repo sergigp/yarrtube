@@ -26,7 +26,7 @@
 - [x] 4.3 Add category chips (max 2 + "+N", soft tint background, ink text), shown only when the caller passes chips; verify tests for the one, many, none and category-section scenarios
 - [ ] 4.4 Add `layout: 'grid' | 'shelf' | 'feed'` with container-query columns, single-row shelves (no partial row), the mobile snap-scrolling shelf and the mobile one-column Latest feed; make the main content wrapper an `@container`; verify component tests for the layout classes, and check visually at 390px, 1024px and 1440px with `scripts/run-spa-against-remote.sh`
 - [x] 4.5 Update `Home`: chips on Continue watching, Quick watches and Latest only; shelf layout for those and the category sections; skeleton sections while loading (no "Latest videos" flash); larger section headings; update `Home.test.tsx` for the loading, error and chip scenarios and verify it passes
-- [ ] 4.6 Make video menu controls ≥44px hit area on touch (`pointer: coarse`) and verify with a test on the class/variant
+- [x] 4.6 Make video menu controls ≥44px hit area on touch (`pointer: coarse`) and verify with a test on the class/variant
 
 ## 5. Web: sidebar and global search
 
