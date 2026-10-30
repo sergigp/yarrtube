@@ -70,9 +70,11 @@ export function Home() {
     [categories],
   )
   // "Latest videos" stands in for an empty home, so it only hides when
-  // another section has something to show.
+  // another section has something to show. A failed refresh keeps the last
+  // response cached, but those sections hide on error, so Latest shows it.
   const othersHaveVideos =
     !!home &&
+    !error &&
     (home.continue_watching.length > 0 ||
       home.categories.some((category) => category.videos.length > 0) ||
       home.quick_watches.length > 0)
@@ -94,7 +96,7 @@ export function Home() {
           href={`/categories/${encodeURIComponent(category.id)}`}
           name={`${category.name} videos`}
           videos={category.videos}
-          error={null}
+          error={error}
           categoryColors={categoryColors}
           hideWhenEmpty
         />

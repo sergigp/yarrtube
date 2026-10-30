@@ -285,6 +285,30 @@ describe('Home', () => {
     expect(await screen.findByText('Failed to load recent videos: boom')).toBeInTheDocument()
   })
 
+  it('reports a failed refresh in the latest section, hiding the stale sections', async () => {
+    let failing = false
+    mockHomeApi({
+      'GET /api/videos/home': () =>
+        failing
+          ? { status: 500, error: 'boom' }
+          : {
+              continue_watching: [aHomeVideo({ title: 'Half Watched', position_seconds: 60 })],
+              categories: [aHomeCategorySection({ name: 'Chess' })],
+              quick_watches: [],
+              latest: [],
+            },
+    })
+    const { queryClient } = renderWithProviders(<Home />)
+    await screen.findByText('Half Watched')
+
+    failing = true
+    await queryClient.refetchQueries()
+
+    expect(await screen.findByText('Failed to load recent videos: boom')).toBeInTheDocument()
+    expect(screen.queryByText('Continue watching')).not.toBeInTheDocument()
+    expect(screen.queryByText('More about Chess')).not.toBeInTheDocument()
+  })
+
   it('marks watched videos with a tick', async () => {
     mockHomeApi({
       'GET /api/videos/home': {
