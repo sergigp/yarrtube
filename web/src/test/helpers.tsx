@@ -11,6 +11,7 @@ import type {
   CategoryVideo,
   ChannelListItem,
   CreatedCategory,
+  HomeCategorySection,
   HomeVideo,
   PlaylistListItem,
   Task,
@@ -248,6 +249,19 @@ export function aCategory(overrides: Partial<Category> = {}): Category {
     unwatched_count: 0,
     channels: [],
     playlists: [],
+    ...overrides,
+  }
+}
+
+export function aHomeCategorySection(
+  overrides: Partial<HomeCategorySection> = {},
+): HomeCategorySection {
+  uniqueId += 1
+  return {
+    id: `category-${uniqueId}`,
+    name: `Category ${uniqueId}`,
+    color: '#fff1bf',
+    videos: [aHomeVideo()],
     ...overrides,
   }
 }

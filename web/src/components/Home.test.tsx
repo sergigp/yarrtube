@@ -23,6 +23,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [aHomeVideo({ title: 'Fresh Video' })],
       },
@@ -40,6 +41,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [aHomeVideo({ title: 'Half Watched', position_seconds: 60 })],
+        categories: [],
         quick_watches: [aHomeVideo({ title: 'Short One' })],
         latest: [aHomeVideo({ title: 'Fresh Video' })],
       },
@@ -56,6 +58,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [aHomeVideo({ position_seconds: 60, duration_seconds: 600 })],
+        categories: [],
         quick_watches: [],
         latest: [
           aHomeVideo({ title: 'Fresh Video' }),
@@ -83,6 +86,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [
           aHomeVideo({ title: 'Seen', watched: true, duration_seconds: 600 }),
@@ -106,6 +110,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [
           aHomeVideo({
@@ -137,7 +142,7 @@ describe('Home', () => {
 
   it('shows an empty message when nothing has synced yet', async () => {
     mockHomeApi({
-      'GET /api/videos/home': { continue_watching: [], quick_watches: [], latest: [] },
+      'GET /api/videos/home': { continue_watching: [], categories: [], quick_watches: [], latest: [] },
     })
 
     renderWithProviders(<Home />)
@@ -157,6 +162,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [aHomeVideo({ title: 'Seen It', watched: true })],
       },
@@ -172,6 +178,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': () => ({
         continue_watching: marked ? [] : [halfWatched],
+        categories: [],
         quick_watches: [],
         latest: [aHomeVideo({ title: 'Fresh Video' })],
       }),
@@ -202,6 +209,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': () => ({
         continue_watching: [],
+        categories: [],
         quick_watches: excluded ? [] : [aHomeVideo({ title: 'Bluey Short', source: bluey })],
         latest: [
           ...(excluded ? [] : [aHomeVideo({ title: 'Bluey Episode', source: bluey })]),
@@ -228,6 +236,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [
           aHomeVideo({
@@ -257,6 +266,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [
           aHomeVideo({ title: 'One', category_ids: ['chess'] }),

@@ -30,6 +30,8 @@ const VTT_CONTENT_TYPE: &str = "text/vtt; charset=utf-8";
 
 const HOME_LIMITS: HomeLimits = HomeLimits {
     continue_watching: 6,
+    category_sections: 3,
+    category_videos: 6,
     quick_watches: 6,
     latest: 18,
 };
@@ -1157,6 +1159,7 @@ mod tests {
             response,
             Ok(HomeResponse {
                 continue_watching: numbered_started_videos(0..6),
+                categories: vec![],
                 quick_watches: (1..7).rev().map(short_video_response).collect(),
                 latest: [short_video_response(0)]
                     .into_iter()
@@ -4301,6 +4304,7 @@ mod tests {
     fn empty_home() -> HomeResponse {
         HomeResponse {
             continue_watching: vec![],
+            categories: vec![],
             quick_watches: vec![],
             latest: vec![],
         }
