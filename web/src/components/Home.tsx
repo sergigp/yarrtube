@@ -6,7 +6,7 @@ import { VideoGrid } from './VideoGrid'
 
 interface HomeSectionProps {
   title: string
-  /** Where the heading links to, when it links anywhere. */
+  /** Where the heading and a "See all" link lead, when the section links anywhere. */
   href?: string
   name: string
   videos: HomeVideo[] | undefined
@@ -35,15 +35,22 @@ function HomeSection({
 
   return (
     <section className="min-w-0">
-      <h2 className="mb-4 font-heading text-lg font-semibold text-foreground">
-        {href ? (
-          <Link to={href} className="hover:underline">
-            {title}
+      <div className="mb-4 flex items-baseline justify-between gap-4">
+        <h2 className="font-heading text-lg font-semibold text-foreground">
+          {href ? (
+            <Link to={href} className="hover:underline">
+              {title}
+            </Link>
+          ) : (
+            title
+          )}
+        </h2>
+        {href && (
+          <Link to={href} className="shrink-0 text-sm text-muted-foreground hover:text-foreground">
+            See all
           </Link>
-        ) : (
-          title
         )}
-      </h2>
+      </div>
       {error && (
         <p className="text-sm text-destructive">
           Failed to load {name}: {error.message}

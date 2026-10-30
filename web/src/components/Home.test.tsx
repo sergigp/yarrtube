@@ -109,6 +109,26 @@ describe('Home', () => {
     )
   })
 
+  it('offers "See all" in a "More about" section, linking to its category', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [aHomeCategorySection({ id: 'chess', name: 'Chess' })],
+        quick_watches: [],
+        latest: [],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    const heading = await screen.findByRole('heading', { name: 'More about Chess' })
+    const section = heading.closest('section') as HTMLElement
+    expect(within(section).getByRole('link', { name: 'See all' })).toHaveAttribute(
+      'href',
+      '/categories/chess',
+    )
+  })
+
   it('shows progress on in-progress cards in every section', async () => {
     mockHomeApi({
       'GET /api/videos/home': {
