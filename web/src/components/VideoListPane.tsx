@@ -5,6 +5,8 @@ import { Thumbnail } from './Thumbnail'
 import { ThumbnailOverlay } from './ThumbnailOverlay'
 import { Beacon } from './Beacon'
 import { VideoActionsMenu } from './VideoActionsMenu'
+import { VideoRowsSkeleton } from './VideoSkeletons'
+import { formatAge } from '@/lib/relativeAge'
 import { cn } from '@/lib/utils'
 
 const STATUS_MESSAGES: Record<string, string> = {
@@ -59,7 +61,7 @@ export function VideoListPane<T extends Video>({
   return (
     <div className="md:h-full md:min-h-0 md:overflow-y-auto">
       {error && <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>}
-      {!error && !videos && <p className="text-sm text-muted-foreground">Loading videos…</p>}
+      {!error && !videos && <VideoRowsSkeleton count={8} />}
       {!error && videos && videos.length === 0 && (
         <p className="text-sm text-muted-foreground">No videos recorded for this {noun} yet.</p>
       )}
@@ -67,6 +69,7 @@ export function VideoListPane<T extends Video>({
         <ul className="flex flex-col divide-y divide-border">
           {videos.map((video) => {
             const active = selectedVideoId === video.id
+            const age = formatAge(video.published_at)
             return (
               <li
                 key={video.id}
@@ -98,17 +101,20 @@ export function VideoListPane<T extends Video>({
                       size="row"
                     />
                   </div>
-                  <span
-                    className={cn(
-                      'min-w-0 flex-1 text-sm leading-snug',
-                      active
-                        ? 'font-medium text-primary'
-                        : video.watched
-                          ? 'text-muted-foreground'
-                          : 'text-foreground',
-                    )}
-                  >
-                    {video.title}
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span
+                      className={cn(
+                        'text-sm leading-snug',
+                        active
+                          ? 'font-medium text-primary'
+                          : video.watched
+                            ? 'text-muted-foreground'
+                            : 'text-foreground',
+                      )}
+                    >
+                      {video.title}
+                    </span>
+                    {age && <span className="text-xs text-muted-foreground">{age}</span>}
                   </span>
                   <VideoStatusIndicator status={video.status} />
                 </button>
