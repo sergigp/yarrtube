@@ -165,6 +165,22 @@ describe('Home', () => {
     expect(screen.queryByText('No videos synced yet.')).not.toBeInTheDocument()
   })
 
+  it('shows "No videos synced yet." when every section is empty', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [],
+        quick_watches: [],
+        latest: [],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByText('No videos synced yet.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Latest videos' })).toBeInTheDocument()
+  })
+
   it('shows progress on in-progress cards in every section', async () => {
     mockHomeApi({
       'GET /api/videos/home': {
