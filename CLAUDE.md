@@ -14,7 +14,8 @@ from the old per-video-folder layout.
 
 Docs: `doc/INSTALLATION.md` (Docker, Compose, every environment variable),
 `doc/DEVELOPMENT.md` (building from source), `doc/PLEX.md` (Plex TV Shows
-library, scan trigger), `doc/UPGRADING-TO-0.9.0.md` (layout migration
+library, scan trigger, subtitles), `doc/CATEGORIES.md` (categories in the
+web UI and as Plex smart playlists), `doc/UPGRADING-TO-0.9.0.md` (layout migration
 from 0.8.x, temporary), `doc/ARCHITECTURE.md`. Every merge to `main` that
 passes CI publishes the multi-arch image to `ghcr.io` as `:edge` +
 `:sha-<short sha>` via `.github/workflows/release.yml`, with no git tag
