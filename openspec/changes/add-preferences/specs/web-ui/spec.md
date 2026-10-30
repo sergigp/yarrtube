@@ -38,6 +38,35 @@ The application SHALL have a "Preferences" view at `/preferences` showing a labe
 - **WHEN** a user toggles a switch and the save fails
 - **THEN** the view shows the error and the switch returns to its saved value
 
+### Requirement: Preferences Help
+Each preference switch SHALL have a help control shown as a "?" icon with the accessible name "About <switch label>". Hovering, focusing or activating it SHALL show a tooltip saying what the preference does and what turning it off changes. The "Home" group SHALL say that its sections show in the listed order and that a video shows in one section only, so turning a section off can move its videos to a section below.
+
+#### Scenario: Explaining a preference
+- **WHEN** a user activates the "About Enable categories" control
+- **THEN** a tooltip explains that turning categories off hides every category control and section, and that categories and their videos are kept
+
+#### Scenario: Help on touch screens
+- **WHEN** a user taps the "About Show quick watches" control
+- **THEN** its tooltip shows
+
+### Requirement: Preferences Save Confirmation
+After a preference is saved, the preferences view SHALL show "Saved" next to its title for about 2 seconds. A failed save SHALL NOT show it.
+
+#### Scenario: Saved
+- **WHEN** a user turns off "Show quick watches" and the save succeeds
+- **THEN** "Saved" shows next to "Preferences" and is gone about 2 seconds later
+
+#### Scenario: Not saved
+- **WHEN** a user toggles a switch and the save fails
+- **THEN** "Saved" does not show
+
+### Requirement: Preferences View Width
+The preferences view SHALL be centered in the content area at the same maximum width as the tasks view.
+
+#### Scenario: Consistent width
+- **WHEN** a user opens the tasks view and then the preferences view on a wide screen
+- **THEN** both are centered with the same maximum width
+
 ### Requirement: Home Category Switch Needs Categories
 While "Enable categories" is off, the "Show categories" switch SHALL be disabled, keeping its saved value.
 

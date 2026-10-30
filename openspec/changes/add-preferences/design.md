@@ -25,7 +25,9 @@ Storage: one row (`id = 1`) holding the preferences as a JSON document. Keys mis
 - `web/src/lib/preferences.ts` (+ test, new): `DEFAULT_PREFERENCES`, `categoriesShown`.
 - `web/src/test/helpers.tsx`: `aPreferences` builder.
 - `web/src/components/ui/switch.tsx` (new): shadcn switch on `radix-ui`.
-- `web/src/components/PreferencesView.tsx` (+ test, new): the view.
+- `web/src/components/PreferencesView.tsx` (+ test, new): the view: switches with a "?" help tooltip each (Radix tooltip, also toggled on click so a tap opens it), the Home group's ordering note, an inline "Saved" status for 2 s after a save.
+- `web/src/lib/viewWidth.ts` (new): `VIEW_WIDTH`, the centered max width the tasks and preferences views share.
+- `web/src/components/TasksView.tsx`: uses the shared `VIEW_WIDTH`.
 - `web/src/components/SettingsMenu.tsx` (+ test): "Preferences" and "Report a bug".
 - `web/src/App.tsx` (+ `AppShell.test.tsx`): `/preferences` route.
 - `web/src/components/Home.tsx` (+ test): tint gate, latest gate, "Nothing to show here."
@@ -159,7 +161,7 @@ Menu: `SettingsMenu` → `Link to="/preferences"`; `<a href="https://github.com/
 3. Web (Vitest)
    - `lib/preferences`: `categoriesShown` (loading → false, failed → true, loaded → value).
    - `SettingsMenu`: items `Tasks`, `Preferences`, `Report a bug`; Preferences navigates; Report a bug has the issue URL and `target="_blank"`.
-   - `PreferencesView`: shows current values; toggling PUTs the full set with the change; save error shows message and reverts; "Show categories" disabled while categories off.
+   - `PreferencesView`: shows current values; toggling PUTs the full set with the change; save error shows message and reverts; each "?" shows its explanation on hover and on click; "Saved" shows after a save and is gone 2 s later (fake timers), not after a failed one; "Show categories" disabled while categories off.
    - `Sidebar`: no Categories section/Add category while off; search label "Search channels and playlists".
    - `AddChannelDialog` / `AddPlaylistDialog` / `EditChannelDialog` / `EditPlaylistDialog`: no Categories field while off, no category request on save.
    - `CategoryDetail`: "Categories are turned off." with a Preferences link.

@@ -42,6 +42,12 @@ Drop "Show category colors" (tints are removed in a parallel change):
 
 - [x] 2.27 Remove `home_show_category_colors` everywhere: `Preferences`, request/response DTOs and their `MISSING_*` message, `StoredPreferences` (an old stored key is ignored on read), the web `Preferences` type, `aPreferences`, `DEFAULT_PREFERENCES`, the "Show category colors" switch, and `homeTintShown` (`Home` tints only while `categoriesShown`). Update the tests from 2.2–2.5, 2.11, 2.14, 2.17 and 2.24 to match (2.24 keeps only the categories-off case). Done when `cargo test --locked` and `npm run check` pass and `grep -rn category_colors src web/src e2e-tests` finds nothing.
 
+Preferences view polish:
+
+- [ ] 2.28 `PreferencesView` › each switch has an "About <label>" "?" control whose tooltip explains the preference on hover and on click; the Home group shows its ordering note; verify `npm run test` passes
+- [ ] 2.29 `PreferencesView` › "Saved" shows next to the title after a successful save and is gone 2 s later (fake timers); a failed save shows no "Saved"
+- [ ] 2.30 Center the preferences view at the tasks view's width through a shared `VIEW_WIDTH` (`web/src/lib/viewWidth.ts`); no test (layout only, checked in 4.6); `npm run check` passes
+
 ## 3. Infrastructure adapters (TDD)
 
 SqlitePreferencesRepository:
@@ -57,7 +63,7 @@ SqlitePreferencesRepository:
 - [x] 4.3 Add `e2e-tests/tests/preferences.spec.js` (open Preferences from the header menu, turn categories off → sidebar Categories section gone and add channel dialog without Categories field, turn back on → back); `scripts/run-tests.sh` passes and the route coverage reporter lists no missed `/api/preferences` route
 - [x] 4.4 e2e home switches test in `preferences.spec.js`: with a started playlist video and a categorized channel, turning off category colors, categories, continue watching, quick watches and latest videos in turn moves the videos down until home says "Nothing to show here."; `scripts/run-tests.sh --only e2e` passes
 - [x] 4.5 Revise the e2e home switches test after 2.27: drop the category colors step and the tint check; after each step assert every moved video appears once on home; add a step with "Enable categories" off (category section gone with "Show categories" on); end by turning "Show latest videos" back on and seeing the videos again. `scripts/run-tests.sh --only e2e` passes
-- [ ] 4.6 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, seed a playlist and a category with it via the HTTP API, then with the Playwright MCP browser: open Preferences from the gear menu, toggle each home switch and check the home sections change, turn categories off and check sidebar, add/edit dialogs, home and a category address, reload and check values persist (screenshot), check "Report a bug" has the issue URL with `target="_blank"`. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
+- [ ] 4.6 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, seed a playlist and a category with it via the HTTP API, then with the Playwright MCP browser: open Preferences from the gear menu, toggle each home switch and check the home sections change, turn categories off and check sidebar, add/edit dialogs, home and a category address, reload and check values persist (screenshot), hover a "?" and check its tooltip, check "Saved" appears and goes, compare the tasks and preferences views' width and centering (screenshots), check "Report a bug" has the issue URL with `target="_blank"`. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.7 Manual (human): judge the Preferences view's look (switch styling, grouping, dark mode) and on mobile width.
 
 ## Workflow follow-up
