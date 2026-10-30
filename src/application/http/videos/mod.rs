@@ -3866,6 +3866,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_count_every_pending_video_when_ranking_category_sections_on_home() {
+        let db = TestDatabase::new();
+        let chess = save_category_channel(&db, "Chess", "@chess", 0..7);
+        let science = save_category_channel(&db, "Science", "@science", 10..18);
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                categories: vec![
+                    category_section_of(&science, "@science", (12..18).rev()),
+                    category_section_of(&chess, "@chess", (1..7).rev()),
+                ],
+                latest: vec![
+                    category_card(&science, "@science", 11),
+                    category_card(&science, "@science", 10),
+                    category_card(&chess, "@chess", 0),
+                ],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
