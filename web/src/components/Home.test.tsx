@@ -129,6 +129,23 @@ describe('Home', () => {
     )
   })
 
+  it('shows no "More about" section when the response has none', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [],
+        quick_watches: [],
+        latest: [aHomeVideo({ title: 'Fresh Video' })],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByText('Fresh Video')).toBeInTheDocument()
+    expect(screen.queryByText(/^More about/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'See all' })).not.toBeInTheDocument()
+  })
+
   it('shows progress on in-progress cards in every section', async () => {
     mockHomeApi({
       'GET /api/videos/home': {

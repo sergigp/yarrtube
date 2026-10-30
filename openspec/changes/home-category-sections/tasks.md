@@ -25,7 +25,7 @@
 - [x] 2.17 Web: `shows a "More about" section per category between continue watching and quick watches` — headings in response order between CW and QW
 - [x] 2.18 Web: `navigates to the category from the section heading` — heading links to `/categories/:id`
 - [x] 2.19 Web: `navigates to the category from "See all"` — "See all" links to `/categories/:id`
-- [ ] 2.20 Web: `shows no "More about" section when the response has none`
+- [x] 2.20 Web: `shows no "More about" section when the response has none`
 
 ## 3. Infrastructure adapters (TDD)
 
