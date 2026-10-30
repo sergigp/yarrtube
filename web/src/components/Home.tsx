@@ -64,6 +64,35 @@ function HomeSection({
   )
 }
 
+/**
+ * What home says in place of a turned-off "Latest videos": the load error, or
+ * that nothing shows once every other section turned out empty.
+ */
+function NothingElseShown({
+  error,
+  othersHaveVideos,
+  loaded,
+}: {
+  error: Error | null
+  othersHaveVideos: boolean
+  loaded: boolean
+}) {
+  if (error) {
+    return <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>
+  }
+  if (!loaded || othersHaveVideos) {
+    return null
+  }
+  return (
+    <p className="text-sm text-muted-foreground">
+      Nothing to show here.{' '}
+      <Link to="/preferences" className="underline hover:text-foreground">
+        Preferences
+      </Link>
+    </p>
+  )
+}
+
 export function Home() {
   const { data: home, error } = useRecentVideos()
   const { data: categories } = useCategories()
@@ -76,6 +105,8 @@ export function Home() {
         : undefined,
     [categories, tinted],
   )
+  // Shown until the preferences say otherwise, as before they existed.
+  const showLatest = preferences?.home_show_latest !== false
   // "Latest videos" stands in for an empty home, so it only hides when
   // another section has something to show. A failed refresh keeps the last
   // response cached, but those sections hide on error, so Latest shows it.
@@ -116,14 +147,18 @@ export function Home() {
         categoryColors={categoryColors}
         hideWhenEmpty
       />
-      <HomeSection
-        title="Latest videos"
-        name="recent videos"
-        videos={home?.latest}
-        error={error}
-        categoryColors={categoryColors}
-        hideWhenEmpty={othersHaveVideos}
-      />
+      {showLatest ? (
+        <HomeSection
+          title="Latest videos"
+          name="recent videos"
+          videos={home?.latest}
+          error={error}
+          categoryColors={categoryColors}
+          hideWhenEmpty={othersHaveVideos}
+        />
+      ) : (
+        <NothingElseShown error={error} othersHaveVideos={othersHaveVideos} loaded={!!home} />
+      )}
     </div>
   )
 }

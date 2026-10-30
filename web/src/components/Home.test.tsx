@@ -492,4 +492,23 @@ describe('Home', () => {
     expect(await screen.findByText('Half Watched')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Latest videos' })).not.toBeInTheDocument()
   })
+
+  it('says there is nothing to show when latest is off and nothing else shows', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [],
+        quick_watches: [],
+        latest: [],
+      },
+      'GET /api/preferences': aPreferences({ home_show_latest: false }),
+    })
+
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByText(/Nothing to show here\./)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Preferences' })).toHaveAttribute('href', '/preferences')
+    expect(screen.queryByRole('heading', { name: 'Latest videos' })).not.toBeInTheDocument()
+    expect(screen.queryByText('No videos synced yet.')).not.toBeInTheDocument()
+  })
 })

@@ -21,7 +21,7 @@ Storage: one row (`id = 1`) holding the preferences as a JSON document. Keys mis
 - `src/application/http/preferences/dto.rs` (new): `PreferencesResponse`, `UpdatePreferencesRequest`.
 - `src/application/http/mod.rs`: `ApiServices` fields, `/preferences` route (GET, PUT).
 - `src/application/http/videos/mod.rs`: existing `VideoSearcher::new` calls get the repository; new home acceptance tests.
-- `web/src/api/types.ts`, `web/src/api/client.ts`, `web/src/api/queries.ts`: `Preferences`, `fetchPreferences`/`savePreferences`, `usePreferences`/`useSavePreferences`.
+- `web/src/api/types.ts`, `web/src/api/client.ts`, `web/src/api/queries.ts`: `Preferences`, `fetchPreferences`/`savePreferences`, `usePreferences`/`useSavePreferences`/`useCategoriesShown`.
 - `web/src/lib/preferences.ts` (+ test, new): `DEFAULT_PREFERENCES`, `categoriesShown`, `homeTintShown`.
 - `web/src/test/helpers.tsx`: `aPreferences` builder.
 - `web/src/components/ui/switch.tsx` (new): shadcn switch on `radix-ui`.
@@ -117,6 +117,7 @@ export function savePreferences(preferences: Preferences): Promise<Preferences>
 // web/src/api/queries.ts
 export function usePreferences(): UseQueryResult<Preferences, Error>       // key ['preferences']
 export function useSavePreferences(): (preferences: Preferences) => Promise<void>
+export function useCategoriesShown(): boolean // categoriesShown(data, isError)
 // sets ['preferences'] to the response, invalidates home videos
 // web/src/lib/preferences.ts
 export const DEFAULT_PREFERENCES: Preferences
@@ -135,7 +136,7 @@ Home: `GET /api/videos/home` → `list_home_videos` → `VideoSearcher::list_hom
 
 Web toggle: `PreferencesView` switch → `useSavePreferences()({ ...current, [key]: value })` → `PUT /api/preferences` → cache `['preferences']` updated → every `usePreferences()` consumer re-renders; home refetched. On error: message shown, switch reverts (cache untouched).
 
-Web gating: `Sidebar` / dialogs / `CategoryDetail` → `usePreferences()` → `categoriesShown(data, isError)`; `Home` → `homeTintShown(..)` decides whether `categoryColors` is passed to `VideoGrid`, `home_show_latest` decides the "Latest videos" section.
+Web gating: `Sidebar` / dialogs → `useCategoriesShown()`; `CategoryDetail` → `usePreferences()` (says "turned off" only once loaded and off); `Home` → `homeTintShown(..)` decides whether `categoryColors` is passed to `VideoGrid`, `home_show_latest` decides the "Latest videos" section.
 
 Menu: `SettingsMenu` → `Link to="/preferences"`; `<a href="https://github.com/sergigp/yarrtube/issues/new" target="_blank" rel="noreferrer">`.
 
