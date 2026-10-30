@@ -19,6 +19,10 @@ impl HomeLimits {
                 self.continue_watching,
                 preferences.home_show_continue_watching,
             ),
+            category_sections: Self::unless_off(
+                self.category_sections,
+                preferences.shows_home_categories(),
+            ),
             ..self
         }
     }
