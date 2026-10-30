@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Home } from './Home'
+import { queryKeys } from '@/api/queries'
 import type { HomeVideoSource } from '@/api/types'
 import {
   aCategory,
@@ -468,8 +469,8 @@ describe('Home', () => {
     const { queryClient } = renderWithProviders(<Home />)
 
     const card = (await screen.findByText('One')).closest('li') as HTMLElement
-    await waitFor(() => expect(queryClient.getQueryData(['preferences'])).toEqual(preferences))
-    await waitFor(() => expect(queryClient.getQueryData(['categories'])).toBeDefined())
+    await waitFor(() => expect(queryClient.getQueryData(queryKeys.preferences)).toEqual(preferences))
+    await waitFor(() => expect(queryClient.getQueryData(queryKeys.categories)).toBeDefined())
     expect(card.style.background).toBe('')
     expect(card).not.toHaveClass('border')
   })
