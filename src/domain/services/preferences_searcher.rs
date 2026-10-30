@@ -21,6 +21,9 @@ pub trait PreferencesSearcherApi: Send + Sync {
 
 impl PreferencesSearcherApi for PreferencesSearcher {
     fn get(&self) -> Result<Preferences, ReadPreferencesError> {
-        Ok(Preferences::default())
+        self.repository
+            .find()
+            .map(Option::unwrap_or_default)
+            .map_err(ReadPreferencesError::Repository)
     }
 }

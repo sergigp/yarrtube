@@ -159,6 +159,29 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_return_saved_preferences() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        repository
+            .save(&Preferences {
+                home_show_quick_watches: false,
+                ..Preferences::default()
+            })
+            .unwrap();
+        let preferences_searcher = PreferencesSearcher::new(repository);
+
+        let response = get(preferences_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                home_show_quick_watches: false,
+                ..all_on_response()
+            })
+        );
+    }
+
     async fn get(
         preferences_searcher: PreferencesSearcher,
     ) -> Result<PreferencesResponse, ApiError> {
