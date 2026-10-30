@@ -21,7 +21,7 @@ function Picker({ initial, onChange }: { initial: string; onChange: (hex: string
 describe('CategoryColorPicker', () => {
   it('checks a chosen swatch and reports its color', async () => {
     const onChange = vi.fn()
-    render(<Picker initial="#9f8401" onChange={onChange} />)
+    render(<Picker initial="#f59e0b" onChange={onChange} />)
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('radio', { name: 'Sky' }))
@@ -46,7 +46,7 @@ describe('CategoryColorPicker', () => {
   })
 
   it('offers the palette swatches in order, then Custom', () => {
-    render(<Picker initial="#9f8401" onChange={() => {}} />)
+    render(<Picker initial="#f59e0b" onChange={() => {}} />)
 
     expect(screen.getAllByRole('radio').map((radio) => radio.getAttribute('aria-label'))).toEqual([
       'Amber',
@@ -65,7 +65,7 @@ describe('CategoryColorPicker', () => {
 
   it('checks a swatch clicked anywhere on it', async () => {
     const onChange = vi.fn()
-    render(<Picker initial="#9f8401" onChange={onChange} />)
+    render(<Picker initial="#f59e0b" onChange={onChange} />)
 
     await userEvent.setup().click(screen.getByRole('radio', { name: 'Violet' }).closest('label')!)
 
@@ -79,6 +79,17 @@ describe('CategoryColorPicker', () => {
     await userEvent.setup().click(screen.getByRole('radio', { name: 'Custom' }))
 
     expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked()
+    expect(screen.getByRole('slider', { name: 'Hue' })).toBeInTheDocument()
+  })
+
+  it('keeps Custom chosen when its color comes back as a palette color', async () => {
+    const { rerender } = render(<CategoryColorPicker value="#f59e0b" onChange={() => {}} />)
+    await userEvent.setup().click(screen.getByRole('radio', { name: 'Custom' }))
+
+    rerender(<CategoryColorPicker value="#f97316" onChange={() => {}} />)
+
+    expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Orange' })).not.toBeChecked()
     expect(screen.getByRole('slider', { name: 'Hue' })).toBeInTheDocument()
   })
 })
