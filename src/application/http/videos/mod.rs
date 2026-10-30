@@ -4786,6 +4786,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_leave_out_quick_watches_if_turned_off() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1"))
+            .unwrap();
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            &video_lasting("vid1", "Short", Some(600), 100),
+        );
+        save_preferences(
+            &db,
+            Preferences {
+                home_show_quick_watches: false,
+                ..Preferences::default()
+            },
+        );
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: vec![HomeVideoResponse {
+                    duration_seconds: Some(600),
+                    ..home_video_response("vid1", "Short", playlist_source())
+                }],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_of_a_playlist_excluded_from_home_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

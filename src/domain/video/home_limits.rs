@@ -23,6 +23,10 @@ impl HomeLimits {
                 self.category_sections,
                 preferences.shows_home_categories(),
             ),
+            quick_watches: Self::unless_off(
+                self.quick_watches,
+                preferences.home_show_quick_watches,
+            ),
             ..self
         }
     }
