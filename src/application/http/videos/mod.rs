@@ -4147,6 +4147,84 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_leave_videos_of_a_playlist_excluded_from_home_out_of_category_sections_on_home()
+     {
+        let db = TestDatabase::new();
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&Playlist {
+                exclude_from_home: true,
+                ..playlist("PL1")
+            })
+            .unwrap();
+        save_playlist_video(
+            &SqliteVideoRepository::new(db.database()),
+            &SqlitePlaylistVideoRepository::new(db.database()),
+            "PL1",
+            &downloaded_video("vid1", "Highlight", None, 100),
+        );
+        let highlights = named_category("Highlights", &[playlist_member("PL1")]);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&highlights)
+            .unwrap();
+        categorize_source(&db, &playlist_member("PL1"), &[&highlights]);
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(response, Ok(empty_home()));
+    }
+
+    #[tokio::test]
+    async fn it_should_show_a_category_video_through_a_source_shown_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&Playlist {
+                exclude_from_home: true,
+                ..playlist("PL1")
+            })
+            .unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_playlist_video(
+            &video_repository,
+            &SqlitePlaylistVideoRepository::new(db.database()),
+            "PL1",
+            &downloaded_video("vid_shared", "Shared", None, 100),
+        );
+        save_channel_video(
+            &video_repository,
+            &SqliteChannelVideoRepository::new(db.database()),
+            "@somechannel",
+            &downloaded_video("vid_shared", "Shared", None, 100),
+            0,
+        );
+        let highlights = named_category("Highlights", &[playlist_member("PL1")]);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&highlights)
+            .unwrap();
+        categorize_source(&db, &playlist_member("PL1"), &[&highlights]);
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                categories: vec![category_section_response(
+                    &highlights,
+                    vec![in_categories(
+                        home_video_response("vid_shared", "Shared", channel_source(None)),
+                        &[&highlights]
+                    )]
+                )],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
