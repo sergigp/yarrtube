@@ -21,6 +21,9 @@ pub trait PreferencesUpdaterApi: Send + Sync {
 
 impl PreferencesUpdaterApi for PreferencesUpdater {
     fn save(&self, preferences: Preferences) -> Result<Preferences, SavePreferencesError> {
+        self.repository
+            .save(&preferences)
+            .map_err(SavePreferencesError::Repository)?;
         Ok(preferences)
     }
 }

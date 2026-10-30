@@ -9,7 +9,7 @@
 Backend acceptance tests (HTTP handlers):
 
 - [x] 2.1 `preferences::it_should_return_the_defaults_if_nothing_saved` — all `true`; verify `cargo test preferences` passes
-- [ ] 2.2 `preferences::it_should_save_preferences` — PUT with `categories_enabled: false` → 200 with it, repository `find()` returns it
+- [x] 2.2 `preferences::it_should_save_preferences` — PUT with `categories_enabled: false` → 200 with it, repository `find()` returns it
 - [ ] 2.3 `preferences::it_should_replace_previously_saved_preferences` — the second save wins
 - [ ] 2.4 `preferences::it_should_fail_to_save_if_a_preference_missing` — no `home_show_latest` → 400 with its message, nothing stored
 - [ ] 2.5 `preferences::it_should_return_saved_preferences` — seeded through the repository, GET returns them
