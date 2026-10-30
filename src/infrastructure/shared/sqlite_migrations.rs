@@ -29,6 +29,8 @@ const EPISODE_LABELS_GENERATION_SQL: &str =
 const PREFERENCES_SQL: &str = include_str!("../../../migrations/0017_preferences.sql");
 const CATEGORY_COLOR_STRENGTHEN_SQL: &str =
     include_str!("../../../migrations/0018_category_color_strengthen.sql");
+const CATEGORY_PALETTE_REFRESH_SQL: &str =
+    include_str!("../../../migrations/0019_category_palette_refresh.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -53,6 +55,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
             CATEGORY_COLOR_STRENGTHEN_SQL,
             strengthen_light_category_colors,
         ),
+        M::up(CATEGORY_PALETTE_REFRESH_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
