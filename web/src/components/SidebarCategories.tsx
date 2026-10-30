@@ -6,7 +6,12 @@ import { useCategories, useLibraryAction } from '@/api/queries'
 import type { Category } from '@/api/types'
 import { useRememberedFlag } from '@/hooks/useRememberedFlag'
 import { deleteCategoryDescription, orderCategories } from '@/lib/categories'
-import { activeIdFrom, rowMenuClassName, sectionView } from '@/lib/sidebarSections'
+import {
+  activeIdFrom,
+  rowCountSlotClassName,
+  rowMenuClassName,
+  sectionView,
+} from '@/lib/sidebarSections'
 import { cn } from '@/lib/utils'
 import type { ManageSourcesState } from './CategoryDetail'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -26,7 +31,7 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
   const navigate = useNavigate()
   const unwatchedCount = category.unwatched_count
   return (
-    <li className={cn('group/row flex items-center gap-1 rounded-md pr-1', active && 'bg-accent')}>
+    <li className={cn('group/row relative flex items-center gap-1 rounded-md', active && 'bg-accent')}>
       <Link
         to={`/categories/${encodeURIComponent(category.id)}`}
         onClick={onNavigate}
@@ -41,14 +46,14 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
           className="size-2.5 shrink-0 rounded-full border border-black/10"
           style={{ background: category.color }}
         />
-        <span className="min-w-0 flex-1 truncate">{category.name}</span>
-        {unwatchedCount > 0 && (
-          <SidebarCount count={unwatchedCount} active={active} />
-        )}
+        <span className="min-w-0 truncate">{category.name}</span>
+        <span className={rowCountSlotClassName()}>
+          {unwatchedCount > 0 && <SidebarCount count={unwatchedCount} active={active} />}
+        </span>
       </Link>
       <EntryActionsMenu
         name={category.name}
-        className={rowMenuClassName(active)}
+        className={rowMenuClassName()}
         triggerIcon={<Ellipsis className="size-4" />}
         leadingItems={
           <DropdownMenuItem
