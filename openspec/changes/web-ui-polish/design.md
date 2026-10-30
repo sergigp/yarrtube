@@ -50,7 +50,7 @@ The hover treatment lives on the `<li>`:
 *Alternative:* store a hue only. Rejected: it breaks the existing API contract (`#rrggbb`) and arbitrary custom colours.
 
 ### Daemon migration
-`0017_category_color_strengthen`:
+`0018_category_color_strengthen`:
 - An SQL `UPDATE … CASE` maps the 10 old palette hexes to the new ones.
 - An `M::up_with_hook` hook then reads the remaining colours and rewrites any with OKLCH L > 0.85 using a small Rust OKLCH helper next to `CategoryColor`. A port of `hueOf` and the clamping loop, unit-tested against the same values as the TS helper.
 

@@ -2,7 +2,7 @@
 
 - [x] 1.1 Replace `CategoryColor::PALETTE` with the strong palette; update its unit tests and the default-colour tests ("Default Category Color" scenarios) and verify `cargo test category_color` passes
 - [x] 1.2 Add a Rust OKLCH helper (hex → hue/lightness, hue → solid colour with gamut clamp) beside `CategoryColor`, unit-tested with the spec's example values (Sky pastel `#d3ecf8` → `#0193bf`), and verify the tests pass
-- [ ] 1.3 Add migration `0017_category_color_strengthen.sql` (old palette → new palette `CASE` update) plus an `M::up_with_hook` that rewrites remaining colours with OKLCH lightness > 0.85; add migration tests for a former palette colour, a custom pastel and an already-strong colour, and update the 0013 backfill test expectations; verify `cargo test sqlite_migrations` passes
+- [x] 1.3 Add migration `0018_category_color_strengthen.sql` (old palette → new palette `CASE` update) plus an `M::up_with_hook` that rewrites remaining colours with OKLCH lightness > 0.85; add migration tests for a former palette colour, a custom pastel and an already-strong colour, and update the 0013 backfill test expectations; verify `cargo test sqlite_migrations` passes
 
 ## 2. Daemon: home publish date and video search
 
