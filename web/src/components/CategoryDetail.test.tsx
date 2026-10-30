@@ -251,9 +251,9 @@ describe('CategoryDetail', () => {
   })
 
   it('saves the color chosen through "Change color" and tints the header with it', async () => {
-    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#d3ecf8', channels: ['@hikaru'] })
+    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#0193bf', channels: ['@hikaru'] })
     const recolor = vi.fn(() => {
-      chess = { ...chess, color: '#e9def8' }
+      chess = { ...chess, color: '#9870c5' }
       return null
     })
     const { fetchMock } = renderCategory({
@@ -264,21 +264,21 @@ describe('CategoryDetail', () => {
     const user = userEvent.setup()
 
     await user.click(await screen.findByRole('button', { name: 'Change color' }))
-    await user.click(await screen.findByRole('radio', { name: 'Lilac' }))
+    await user.click(await screen.findByRole('radio', { name: 'Violet' }))
 
     const header = screen.getByRole('heading', { name: 'Chess' }).closest('header')
-    await waitFor(() => expect(header).toHaveStyle({ background: '#e9def8' }))
+    await waitFor(() => expect(header).toHaveStyle({ background: '#9870c5' }))
     const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/categories/chess') as [
       string,
       RequestInit,
     ]
-    expect(JSON.parse(init.body as string)).toEqual({ color: '#e9def8' })
+    expect(JSON.parse(init.body as string)).toEqual({ color: '#9870c5' })
   })
 
   it('saves a custom hue once, when the slider settles', async () => {
-    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#d3ecf8', channels: ['@hikaru'] })
+    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#0193bf', channels: ['@hikaru'] })
     const recolor = vi.fn(() => {
-      chess = { ...chess, color: '#cdf4f6' }
+      chess = { ...chess, color: '#03999f' }
       return null
     })
     const { fetchMock } = renderCategory({
@@ -294,12 +294,12 @@ describe('CategoryDetail', () => {
     ;['120', '160', '187', '200'].forEach((value) => fireEvent.change(hue, { target: { value } }))
 
     const header = screen.getByRole('heading', { name: 'Chess' }).closest('header')
-    await waitFor(() => expect(header).toHaveStyle({ background: '#cdf4f6' }))
+    await waitFor(() => expect(header).toHaveStyle({ background: '#03999f' }))
     const saves = fetchMock.mock.calls.filter(([url]) => url === '/api/categories/chess') as [
       string,
       RequestInit,
     ][]
-    expect(saves.map(([, init]) => JSON.parse(init.body as string))).toEqual([{ color: '#cdf4f6' }])
+    expect(saves.map(([, init]) => JSON.parse(init.body as string))).toEqual([{ color: '#03999f' }])
   })
 
   it('renames from the header', async () => {

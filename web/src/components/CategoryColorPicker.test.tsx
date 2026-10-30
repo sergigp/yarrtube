@@ -21,17 +21,17 @@ function Picker({ initial, onChange }: { initial: string; onChange: (hex: string
 describe('CategoryColorPicker', () => {
   it('checks a chosen swatch and reports its color', async () => {
     const onChange = vi.fn()
-    render(<Picker initial="#fff1bf" onChange={onChange} />)
+    render(<Picker initial="#9f8401" onChange={onChange} />)
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('radio', { name: 'Sky' }))
 
-    expect(onChange).toHaveBeenCalledWith('#d3ecf8')
+    expect(onChange).toHaveBeenCalledWith('#0193bf')
     expect(screen.getByRole('radio', { name: 'Sky' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Butter' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Mustard' })).not.toBeChecked()
   })
 
-  it('shows a color outside the palette as Custom, whose hue slider picks pastels', () => {
+  it('shows a color outside the palette as Custom, whose hue slider picks solid colors', () => {
     const onChange = vi.fn()
     render(<Picker initial="#f0e4d0" onChange={onChange} />)
 
@@ -40,7 +40,7 @@ describe('CategoryColorPicker', () => {
 
     fireEvent.change(screen.getByRole('slider', { name: 'Hue' }), { target: { value: '200' } })
 
-    expect(onChange).toHaveBeenCalledWith('#cdf4f6')
+    expect(onChange).toHaveBeenCalledWith('#03999f')
     expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked()
     expect(screen.getByRole('slider', { name: 'Hue' })).toHaveValue('200')
   })

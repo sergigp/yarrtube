@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { PALETTE, hueOf, pastelFromHue } from '@/lib/categoryColors'
+import { PALETTE, hueOf, solidFromHue } from '@/lib/categoryColors'
 import { cn } from '@/lib/utils'
 
 interface CategoryColorPickerProps {
@@ -43,7 +43,7 @@ function Swatch({
   )
 }
 
-const HUE_STOPS = [0, 60, 120, 180, 240, 300, 360].map((hue) => pastelFromHue(hue)).join(', ')
+const HUE_STOPS = [0, 60, 120, 180, 240, 300, 360].map((hue) => solidFromHue(hue)).join(', ')
 
 /** Every pastel hue around a circle, the Custom swatch's face. */
 const CUSTOM_FACE = `conic-gradient(${HUE_STOPS})`
@@ -63,7 +63,7 @@ export function CategoryColorPicker({ value, onChange }: CategoryColorPickerProp
   const [hue, setHue] = useState(() => Math.round(hueOf(value)))
   const chooseHue = (next: number) => {
     setHue(next)
-    onChange(pastelFromHue(next))
+    onChange(solidFromHue(next))
   }
 
   return (

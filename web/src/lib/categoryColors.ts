@@ -1,15 +1,15 @@
 /** The category color presets, in the order defaults are handed out. Mirrors the daemon's palette. */
 export const PALETTE: readonly { name: string; hex: string }[] = [
-  { name: 'Butter', hex: '#fff1bf' },
-  { name: 'Peach', hex: '#ffe0c7' },
-  { name: 'Coral', hex: '#ffd9d4' },
-  { name: 'Rose', hex: '#fadceb' },
-  { name: 'Lilac', hex: '#e9def8' },
-  { name: 'Periwinkle', hex: '#dbe3fb' },
-  { name: 'Sky', hex: '#d3ecf8' },
-  { name: 'Aqua', hex: '#cff0ea' },
-  { name: 'Pistachio', hex: '#e4f0cc' },
-  { name: 'Sand', hex: '#eee5d7' },
+  { name: 'Mustard', hex: '#9f8401' },
+  { name: 'Orange', hex: '#bd7123' },
+  { name: 'Coral', hex: '#c8645b' },
+  { name: 'Rose', hex: '#bd6396' },
+  { name: 'Violet', hex: '#9870c5' },
+  { name: 'Periwinkle', hex: '#6a80d4' },
+  { name: 'Sky', hex: '#0193bf' },
+  { name: 'Teal', hex: '#019b8d' },
+  { name: 'Olive', hex: '#79922c' },
+  { name: 'Taupe', hex: '#978364' },
 ]
 
 /** Background of a card in 4 or more categories. */
@@ -21,21 +21,26 @@ export function defaultColor(used: string[]): string {
   return PALETTE.reduce((least, color) => (uses(color.hex) < uses(least.hex) ? color : least)).hex
 }
 
-const PASTEL_LIGHTNESS = 0.94
-const PASTEL_CHROMA = 0.04
+/** The palette's solid lightness and chroma: what a category stores. */
+const SOLID = { lightness: 0.62, chroma: 0.13 }
+/** Chip and category header backgrounds. */
+const SOFT = { lightness: 0.94, chroma: 0.04 }
+/** Chip text, readable on the soft tint. */
+const INK = { lightness: 0.42, chroma: 0.1 }
 
-/**
- * The soft pastel of `hue` (degrees): oklch(0.94 0.04 hue) as `#rrggbb`. Where
- * that falls outside sRGB, the chroma drops until it fits, so the hue holds.
- */
-export function pastelFromHue(hue: number): string {
-  let chroma = PASTEL_CHROMA
-  let rgb = oklchToLinearRgb(PASTEL_LIGHTNESS, chroma, hue)
-  while (rgb.some((channel) => channel < 0 || channel > 1)) {
-    chroma -= 0.001
-    rgb = oklchToLinearRgb(PASTEL_LIGHTNESS, chroma, hue)
-  }
-  return `#${rgb.map((channel) => toHexByte(gammaEncode(channel))).join('')}`
+/** The solid color of `hue` (degrees), as the custom hue slider picks it. */
+export function solidFromHue(hue: number): string {
+  return fromOklch(SOLID.lightness, SOLID.chroma, hue)
+}
+
+/** The soft tint of `hex`'s hue: chip and category header backgrounds. */
+export function softTint(hex: string): string {
+  return fromOklch(SOFT.lightness, SOFT.chroma, hueOf(hex))
+}
+
+/** The dark shade of `hex`'s hue: chip text, readable on `softTint(hex)`. */
+export function inkShade(hex: string): string {
+  return fromOklch(INK.lightness, INK.chroma, hueOf(hex))
 }
 
 /** The oklch hue of `hex`, in degrees, from 0 up to 360. */
@@ -75,6 +80,20 @@ export function cardBackground(colors: string[]): string | undefined {
   const edge = (index: number) => `${Number(((index * 100) / colors.length).toFixed(2))}%`
   const bands = colors.map((color, index) => `${cardTint(color)} ${edge(index)} ${edge(index + 1)}`)
   return `linear-gradient(to bottom right, ${bands.join(', ')})`
+}
+
+/**
+ * oklch(lightness chroma hue) as `#rrggbb`. Where that falls outside sRGB, the
+ * chroma drops until it fits, so the lightness and hue hold.
+ */
+function fromOklch(lightness: number, startChroma: number, hue: number): string {
+  let chroma = startChroma
+  let rgb = oklchToLinearRgb(lightness, chroma, hue)
+  while (rgb.some((channel) => channel < 0 || channel > 1)) {
+    chroma -= 0.001
+    rgb = oklchToLinearRgb(lightness, chroma, hue)
+  }
+  return `#${rgb.map((channel) => toHexByte(gammaEncode(channel))).join('')}`
 }
 
 /** OKLCH to linear sRGB channels, unclamped (Björn Ottosson's OKLab matrices). */
