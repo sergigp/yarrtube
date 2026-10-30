@@ -1,5 +1,5 @@
 import type { Category, CategoryMembers, ChannelListItem, PlaylistListItem } from '@/api/types'
-import { matchesSearch } from './sidebarSections'
+import { matchesSearch } from './search'
 
 /** A channel or playlist, as a category member. */
 export type SourceRef = { kind: 'channel' | 'playlist'; id: string }

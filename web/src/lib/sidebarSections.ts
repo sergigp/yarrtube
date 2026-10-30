@@ -1,8 +1,5 @@
 import type { LibraryItem } from '@/api/types'
 
-// When the search field appears.
-export const SEARCH_THRESHOLD = 15
-
 /** The unwatched count to display: 0 when the entry hides it. */
 export function shownUnwatchedCount(item: LibraryItem): number {
   return item.hide_unwatched_count ? 0 : (item.unwatched_count ?? 0)
@@ -16,40 +13,30 @@ export function orderByUnwatched<T extends LibraryItem>(items: T[]): T[] {
   return [...items].sort((a, b) => shownUnwatchedCount(b) - shownUnwatchedCount(a))
 }
 
-/** Case-insensitive name match; expects `text` already trimmed. */
-export function matchesSearch(item: { name: string }, text: string): boolean {
-  return item.name.toLowerCase().includes(text.toLowerCase())
-}
-
 export interface SectionViewOptions {
-  searchText: string
   folded: boolean
   activeId: string | null
 }
 
 export interface SectionView<T> {
-  /** True when only the heading shows: folded and not searching. */
+  /** True when only the heading shows. */
   folded: boolean
   /** Folded, and the viewed entry belongs to this section. */
   headingActive: boolean
-  /** Every row, the search matches, or `[]` when folded; undefined while loading. */
+  /** Every row, or `[]` when folded; undefined while loading. */
   rows: T[] | undefined
 }
 
-/**
- * What a section shows: every match while searching, only its heading when
- * folded, otherwise every row.
- */
-export function sectionView<T extends { id: string; name: string }>(
+/** What a section shows: only its heading when folded, otherwise every row. */
+export function sectionView<T extends { id: string }>(
   items: T[] | undefined,
-  { searchText, folded, activeId }: SectionViewOptions,
+  { folded, activeId }: SectionViewOptions,
 ): SectionView<T> {
-  if (folded && !searchText) {
+  if (folded) {
     const headingActive = items?.some((item) => item.id === activeId) ?? false
     return { folded: true, headingActive, rows: [] }
   }
-  const rows = items && searchText ? items.filter((item) => matchesSearch(item, searchText)) : items
-  return { folded: false, headingActive: false, rows }
+  return { folded: false, headingActive: false, rows: items }
 }
 
 /** Sum of the rows' unwatched counts (missing counts as 0). */

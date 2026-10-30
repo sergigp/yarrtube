@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  matchesSearch,
   orderByUnwatched,
   sectionView,
   shownUnwatchedCount,
@@ -57,21 +56,11 @@ describe('shownUnwatchedCount', () => {
   })
 })
 
-describe('matchesSearch', () => {
-  it('matches names case-insensitively by substring', () => {
-    const channel = aChannel({ name: 'Cooking With Sergi' })
-
-    expect(matchesSearch(channel, 'cooking')).toBe(true)
-    expect(matchesSearch(channel, 'WITH')).toBe(true)
-    expect(matchesSearch(channel, 'baking')).toBe(false)
-  })
-})
-
 describe('sectionView', () => {
   it('lists every row when unfolded', () => {
     const items = Array.from({ length: 12 }, () => aChannel())
 
-    const view = sectionView(items, { searchText: '', folded: false, activeId: null })
+    const view = sectionView(items, { folded: false, activeId: null })
 
     expect(view).toEqual({ folded: false, headingActive: false, rows: items })
   })
@@ -79,24 +68,15 @@ describe('sectionView', () => {
   it('shows nothing but the heading when folded', () => {
     const items = [aChannel(), aChannel()]
 
-    const view = sectionView(items, { searchText: '', folded: true, activeId: null })
+    const view = sectionView(items, { folded: true, activeId: null })
 
     expect(view).toEqual({ folded: true, headingActive: false, rows: [] })
-  })
-
-  it('shows every match when folded but searching', () => {
-    const veritasium = aChannel({ name: 'Veritasium' })
-    const items = [veritasium, aChannel({ name: 'Kurzgesagt' })]
-
-    const view = sectionView(items, { searchText: 'ver', folded: true, activeId: null })
-
-    expect(view).toEqual({ folded: false, headingActive: false, rows: [veritasium] })
   })
 
   it('marks the heading active when folded and the active row belongs to the section', () => {
     const items = [aChannel({ id: 'a' }), aChannel({ id: 'b' })]
 
-    const view = sectionView(items, { searchText: '', folded: true, activeId: 'b' })
+    const view = sectionView(items, { folded: true, activeId: 'b' })
 
     expect(view).toEqual({ folded: true, headingActive: true, rows: [] })
   })
@@ -104,7 +84,7 @@ describe('sectionView', () => {
   it('does not mark the heading active when unfolded', () => {
     const items = [aChannel({ id: 'a' }), aChannel({ id: 'b' })]
 
-    const view = sectionView(items, { searchText: '', folded: false, activeId: 'b' })
+    const view = sectionView(items, { folded: false, activeId: 'b' })
 
     expect(view).toEqual({ folded: false, headingActive: false, rows: items })
   })
@@ -112,7 +92,7 @@ describe('sectionView', () => {
   it('does not mark the heading active when the active id is not in the section', () => {
     const items = [aChannel({ id: 'a' }), aChannel({ id: 'b' })]
 
-    const view = sectionView(items, { searchText: '', folded: true, activeId: 'elsewhere' })
+    const view = sectionView(items, { folded: true, activeId: 'elsewhere' })
 
     expect(view).toEqual({ folded: true, headingActive: false, rows: [] })
   })

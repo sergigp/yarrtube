@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Ellipsis, Plus, RotateCw } from 'lucide-react'
 import {
   queryKeys,
-  useCategories,
   useCategoriesShown,
   useChannels,
   useDeleteSource,
@@ -24,9 +23,7 @@ import {
 } from '@/api/client'
 import type { LibraryItem } from '@/api/types'
 import {
-  SEARCH_THRESHOLD,
   activeIdFrom,
-  matchesSearch,
   orderByUnwatched,
   rowMenuClassName,
   sectionView,
@@ -43,7 +40,6 @@ import { SidebarCount } from './SidebarCount'
 import { SidebarSectionHeading } from './SidebarSectionHeading'
 import { Thumbnail } from './Thumbnail'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
 import { useRememberedFlag } from '@/hooks/useRememberedFlag'
 import { useSaveChannelSettings } from '@/hooks/useSaveChannelSettings'
 import { errorMessage } from '@/lib/errorMessage'
@@ -151,9 +147,7 @@ function SidebarRow({
           />
         )}
         <span className="min-w-0 flex-1 truncate">{item.name}</span>
-        {unwatchedCount > 0 && (
-          <SidebarCount count={unwatchedCount} active={active} />
-        )}
+        {unwatchedCount > 0 && <SidebarCount count={unwatchedCount} active={active} />}
       </Link>
       <SidebarRowMenu
         item={item}
@@ -368,9 +362,7 @@ export function Sidebar({
   const navigate = useNavigate()
   const { data: channels, error: channelsError } = useChannels()
   const { data: playlists, error: playlistsError } = usePlaylists()
-  const { data: categoryList } = useCategories()
   const withCategories = useCategoriesShown()
-  const categories = withCategories ? categoryList?.categories : []
   const refreshing = useLibraryAction()
   const deleteSource = useDeleteSource()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
@@ -382,7 +374,6 @@ export function Sidebar({
   const [editingPlaylistId, setEditingPlaylistId] = useState<string | null>(null)
   const editingPlaylist =
     playlists?.find((playlist) => playlist.id === editingPlaylistId) ?? null
-  const [search, setSearch] = useState('')
   const [channelsFolded, toggleChannelsFolded] = useRememberedFlag(
     'yarrtube.sidebar.folded.channels',
     false,
@@ -423,26 +414,15 @@ export function Sidebar({
   const activeChannelId = activeIdFrom(location.pathname, '/channels/')
   const activePlaylistId = activeIdFrom(location.pathname, '/playlists/')
 
-  const searchable =
-    (channels?.length ?? 0) + (playlists?.length ?? 0) + (categories?.length ?? 0) >
-    SEARCH_THRESHOLD
-  const searchText = searchable ? search.trim() : ''
   const orderedChannels = channels && orderByUnwatched(channels)
   const channelsView = sectionView(orderedChannels, {
-    searchText,
     folded: channelsFolded,
     activeId: activeChannelId,
   })
   const playlistsView = sectionView(playlists && orderByUnwatched(playlists), {
-    searchText,
     folded: playlistsFolded,
     activeId: activePlaylistId,
   })
-  const showChannels = !searchText || channelsView.rows?.length !== 0
-  const showPlaylists = !searchText || playlistsView.rows?.length !== 0
-  const showCategories =
-    withCategories &&
-    (!searchText || (categories?.some((category) => matchesSearch(category, searchText)) ?? false))
 
   return (
     <>
@@ -463,85 +443,59 @@ export function Sidebar({
           'md:static md:z-auto md:h-full md:w-60 md:max-w-none md:translate-x-0 md:shadow-none md:transition-none md:py-6',
         )}
       >
-        {searchable && (
-          <Input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search"
-            aria-label={
-              withCategories
-                ? 'Search categories, channels and playlists'
-                : 'Search channels and playlists'
+        {withCategories && <SidebarCategories onAddCategory={onAddCategory} onClose={onClose} />}
+        <SidebarSection
+          title="Channels"
+          addLabel="Add channel"
+          onAdd={onAddChannel}
+          onClose={onClose}
+          items={channelsView.rows}
+          folded={channelsView.folded}
+          headingActive={channelsView.headingActive}
+          onToggleFolded={toggleChannelsFolded}
+          foldedTotal={channels && unwatchedTotal(channels)}
+          error={channelsError}
+          activeId={activeChannelId}
+          hrefFor={(channel) => `/channels/${channel.id}`}
+          showAvatar
+          onNavigate={onClose}
+          onSync={refreshing(reconcileChannel)}
+          onMarkWatched={refreshing(markChannelWatched)}
+          onEditRequest={setEditingChannelId}
+          onDelete={refreshing(async (id: string) => {
+            await deleteSource(queryKeys.channelVideos(id), () => deleteChannel(id))
+            if (activeChannelId === id) {
+              navigate('/')
             }
-          />
-        )}
-        {withCategories && (
-          <SidebarCategories
-            onAddCategory={onAddCategory}
-            onClose={onClose}
-            searchText={searchText}
-          />
-        )}
-        {!showCategories && !showChannels && !showPlaylists && (
-          <p className="px-2 text-sm text-muted-foreground">Nothing matches "{searchText}".</p>
-        )}
-        {showChannels && (
-          <SidebarSection
-            title="Channels"
-            addLabel="Add channel"
-            onAdd={onAddChannel}
-            onClose={onClose}
-            items={channelsView.rows}
-            folded={channelsView.folded}
-            headingActive={channelsView.headingActive}
-            onToggleFolded={toggleChannelsFolded}
-            foldedTotal={channels && unwatchedTotal(channels)}
-            error={channelsError}
-            activeId={activeChannelId}
-            hrefFor={(channel) => `/channels/${channel.id}`}
-            showAvatar
-            onNavigate={onClose}
-            onSync={refreshing(reconcileChannel)}
-            onMarkWatched={refreshing(markChannelWatched)}
-            onEditRequest={setEditingChannelId}
-            onDelete={refreshing(async (id: string) => {
-              await deleteSource(queryKeys.channelVideos(id), () => deleteChannel(id))
-              if (activeChannelId === id) {
-                navigate('/')
-              }
-            })}
-            deleteDescription="This removes the channel from tracking."
-          />
-        )}
-        {showPlaylists && (
-          <SidebarSection
-            title="Playlists"
-            addLabel="Add playlist"
-            onAdd={onAddPlaylist}
-            onClose={onClose}
-            items={playlistsView.rows}
-            folded={playlistsView.folded}
-            headingActive={playlistsView.headingActive}
-            onToggleFolded={togglePlaylistsFolded}
-            error={playlistsError}
-            activeId={activePlaylistId}
-            hrefFor={(playlist) => `/playlists/${playlist.id}`}
-            onNavigate={onClose}
-            onSync={refreshing(reconcilePlaylist)}
-            onMarkWatched={refreshing(markPlaylistWatched)}
-            onSetExcludedFromHome={setPlaylistExcludedFromHome}
-            onSetUnwatchedCountHidden={setPlaylistUnwatchedCountHidden}
-            onEditRequest={setEditingPlaylistId}
-            onDelete={refreshing(async (id: string) => {
-              await deleteSource(queryKeys.playlistVideos(id), () => deletePlaylist(id))
-              if (activePlaylistId === id) {
-                navigate('/')
-              }
-            })}
-            deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
-          />
-        )}
+          })}
+          deleteDescription="This removes the channel from tracking."
+        />
+        <SidebarSection
+          title="Playlists"
+          addLabel="Add playlist"
+          onAdd={onAddPlaylist}
+          onClose={onClose}
+          items={playlistsView.rows}
+          folded={playlistsView.folded}
+          headingActive={playlistsView.headingActive}
+          onToggleFolded={togglePlaylistsFolded}
+          error={playlistsError}
+          activeId={activePlaylistId}
+          hrefFor={(playlist) => `/playlists/${playlist.id}`}
+          onNavigate={onClose}
+          onSync={refreshing(reconcilePlaylist)}
+          onMarkWatched={refreshing(markPlaylistWatched)}
+          onSetExcludedFromHome={setPlaylistExcludedFromHome}
+          onSetUnwatchedCountHidden={setPlaylistUnwatchedCountHidden}
+          onEditRequest={setEditingPlaylistId}
+          onDelete={refreshing(async (id: string) => {
+            await deleteSource(queryKeys.playlistVideos(id), () => deletePlaylist(id))
+            if (activePlaylistId === id) {
+              navigate('/')
+            }
+          })}
+          deleteDescription="This removes the playlist from tracking, along with its video records and downloaded files."
+        />
       </aside>
       {editingChannel && (
         <EditChannelDialog

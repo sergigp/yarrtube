@@ -71,15 +71,10 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
 interface SidebarCategoriesProps {
   onAddCategory: () => void
   onClose: () => void
-  /** Trimmed sidebar search; shows only matching categories, unfolded. */
-  searchText: string
 }
 
-/**
- * The sidebar's Categories section: every category, unread first. Hidden
- * while searching when no category matches.
- */
-export function SidebarCategories({ onAddCategory, onClose, searchText }: SidebarCategoriesProps) {
+/** The sidebar's Categories section: every category, unread first. */
+export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesProps) {
   const { pathname } = useLocation()
   const activeId = activeIdFrom(pathname, '/categories/')
   const navigate = useNavigate()
@@ -95,7 +90,6 @@ export function SidebarCategories({ onAddCategory, onClose, searchText }: Sideba
     headingActive,
     rows: categories,
   } = sectionView(data && orderCategories(data.categories), {
-    searchText,
     folded: rememberedFolded,
     activeId,
   })
@@ -107,10 +101,6 @@ export function SidebarCategories({ onAddCategory, onClose, searchText }: Sideba
   // No categories yet gets a full-width add row; otherwise a compact `+` on the heading.
   const empty = data?.categories.length === 0
   const headingId = useId()
-
-  if (searchText && !categories?.length) {
-    return null
-  }
 
   return (
     <section aria-labelledby={headingId}>
