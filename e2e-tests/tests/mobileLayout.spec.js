@@ -27,7 +27,7 @@ test.describe('with a downloaded playlist, a channel and a category', () => {
 
   test('no view scrolls horizontally @mobile', async ({ page }) => {
     const views = [
-      { path: '/', shown: page.getByRole('heading', { name: 'Latest videos' }) },
+      { path: '/', shown: page.getByRole('heading', { name: 'More about Mobile layout' }) },
       {
         path: `/playlists/${encodeURIComponent(seeded.id)}`,
         shown: page.getByRole('heading', { level: 3, name: seeded.video.title }),

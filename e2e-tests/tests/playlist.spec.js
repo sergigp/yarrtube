@@ -157,22 +157,19 @@ test.describe('with a downloaded playlist', () => {
     await expect(continueWatching(page).getByText(videoTitle, { exact: true })).toBeVisible()
     await expect(continueWatching(page).getByRole('progressbar', { name: 'Watch progress' })).toBeVisible()
     // A video shows in one home section only, so it isn't repeated below.
-    const latestVideos = page.locator('section', {
-      has: page.getByRole('heading', { name: 'Latest videos' }),
-    })
-    await expect(latestVideos).toBeVisible()
-    await expect(latestVideos.getByText(videoTitle, { exact: true })).toHaveCount(0)
+    await expect(page.locator('main').getByText(videoTitle, { exact: true })).toHaveCount(1)
 
     // The home sections render in order: the two short shelves, then the
     // longer "Latest videos". "Quick watches" only shows when a short video is
-    // downloaded, which the e2e playlist doesn't guarantee.
+    // downloaded, which the e2e playlist doesn't guarantee, and "Latest
+    // videos" hides when every other video is shown above it.
     const homeSections = ['Continue watching', 'Quick watches', 'Latest videos']
     await expect
       .poll(async () => {
         const headings = await page.locator('main h2').allInnerTexts()
         return headings.filter((heading) => homeSections.includes(heading))
       })
-      .toEqual(expect.arrayContaining(['Continue watching', 'Latest videos']))
+      .toEqual(expect.arrayContaining(['Continue watching']))
     const headings = (await page.locator('main h2').allInnerTexts()).filter((heading) =>
       homeSections.includes(heading),
     )
