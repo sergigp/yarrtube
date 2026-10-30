@@ -85,43 +85,63 @@ test('preferences: each home switch takes its section off home, and its videos m
   const latest = homeSection(page, 'Latest videos')
   const main = page.locator('main')
 
-  await test.step('everything on: continued, then the tinted category section', async () => {
+  /** Each of `titles` shows once on home: a moved video left its old section. */
+  async function expectOnceOnHome(titles) {
+    for (const title of titles) {
+      await expect(main.getByText(title, { exact: true })).toHaveCount(1)
+    }
+  }
+  const everyTitle = [started.title, ...channelTitles]
+
+  await test.step('everything on: continued, then the category section', async () => {
     await page.goto('/')
     await expect(continueWatching.getByText(started.title, { exact: true })).toBeVisible()
     for (const title of channelTitles) {
       await expect(moreAboutSnails.getByText(title, { exact: true })).toBeVisible()
     }
-    await expect(moreAboutSnails.getByRole('listitem').first()).toHaveAttribute('style', /background/)
-  })
-
-  await test.step('category colors off: the category cards are untinted', async () => {
-    await toggleThenGoHome(page, 'Show category colors')
-    await expect(moreAboutSnails.getByRole('listitem')).toHaveCount(2)
-    for (const card of await moreAboutSnails.getByRole('listitem').all()) {
-      await expect(card).not.toHaveAttribute('style', /background/)
-    }
+    await expectOnceOnHome(everyTitle)
   })
 
   await test.step('categories off: no category section, its videos are quick watches', async () => {
-    await toggleThenGoHome(page, 'Show categories')
-    await expect(main.getByRole('heading', { name: /^More about/ })).toHaveCount(0)
+    await toggleThenGoHome(page, 'Enable categories')
     for (const title of channelTitles) {
       await expect(quickWatches.getByText(title, { exact: true })).toBeVisible()
     }
+    await expect(main.getByRole('heading', { name: /^More about/ })).toHaveCount(0)
+    await expectOnceOnHome(everyTitle)
+  })
+
+  await test.step('categories back on: the category section returns', async () => {
+    await toggleThenGoHome(page, 'Enable categories')
+    for (const title of channelTitles) {
+      await expect(moreAboutSnails.getByText(title, { exact: true })).toBeVisible()
+    }
+    await expectOnceOnHome(everyTitle)
+  })
+
+  await test.step('home categories off: the category section goes again', async () => {
+    await toggleThenGoHome(page, 'Show categories')
+    for (const title of channelTitles) {
+      await expect(quickWatches.getByText(title, { exact: true })).toBeVisible()
+    }
+    await expect(main.getByRole('heading', { name: /^More about/ })).toHaveCount(0)
+    await expectOnceOnHome(everyTitle)
   })
 
   await test.step('continue watching off: the started video is a quick watch', async () => {
     await toggleThenGoHome(page, 'Show continue watching')
     await expect(quickWatches.getByText(started.title, { exact: true })).toBeVisible()
     await expect(main.getByRole('heading', { name: 'Continue watching' })).toHaveCount(0)
+    await expectOnceOnHome(everyTitle)
   })
 
   await test.step('quick watches off: every video is under latest videos', async () => {
     await toggleThenGoHome(page, 'Show quick watches')
-    for (const title of [started.title, ...channelTitles]) {
+    for (const title of everyTitle) {
       await expect(latest.getByText(title, { exact: true })).toBeVisible()
     }
     await expect(main.getByRole('heading', { name: 'Quick watches' })).toHaveCount(0)
+    await expectOnceOnHome(everyTitle)
   })
 
   await test.step('latest videos off: nothing left to show', async () => {
@@ -129,5 +149,17 @@ test('preferences: each home switch takes its section off home, and its videos m
     await expect(main.getByText('Nothing to show here.')).toBeVisible()
     await expect(main.getByRole('link', { name: 'Preferences' })).toHaveAttribute('href', '/preferences')
     await expect(main.getByRole('heading', { name: 'Latest videos' })).toHaveCount(0)
+    for (const title of everyTitle) {
+      await expect(main.getByText(title, { exact: true })).toHaveCount(0)
+    }
+  })
+
+  await test.step('latest videos back on: the videos are back', async () => {
+    await toggleThenGoHome(page, 'Show latest videos')
+    for (const title of everyTitle) {
+      await expect(latest.getByText(title, { exact: true })).toBeVisible()
+    }
+    await expect(main.getByText('Nothing to show here.')).toHaveCount(0)
+    await expectOnceOnHome(everyTitle)
   })
 })
