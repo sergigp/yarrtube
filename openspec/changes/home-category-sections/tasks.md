@@ -11,8 +11,8 @@
 - [x] 2.3 `it_should_cap_a_category_section_at_6_on_home` — section holds the 6 most recent
 - [x] 2.4 `it_should_list_a_category_section_video_once_from_the_channel_on_home` — once per YouTube video, channel copy
 - [x] 2.5 `it_should_not_repeat_a_continue_watching_video_in_category_sections_on_home` — continue watching wins
-- [ ] 2.6 `it_should_not_repeat_a_category_section_video_in_quick_watches_on_home` — sections sit above quick watches
-- [ ] 2.7 `it_should_not_repeat_a_category_section_video_in_latest_on_home` — sections sit above latest
+- [x] 2.6 `it_should_not_repeat_a_category_section_video_in_quick_watches_on_home` — sections sit above quick watches
+- [x] 2.7 `it_should_not_repeat_a_category_section_video_in_latest_on_home` — sections sit above latest
 - [ ] 2.8 `it_should_rank_category_sections_by_pending_videos_on_home` — most pending first
 - [ ] 2.9 `it_should_count_every_pending_video_when_ranking_category_sections_on_home` — full backlog counted, not the 6 shown
 - [ ] 2.10 `it_should_not_count_continue_watching_videos_when_ranking_category_sections_on_home` — ranking excludes continue watching
