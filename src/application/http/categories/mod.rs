@@ -256,7 +256,7 @@ mod tests {
             Ok((
                 StatusCode::CREATED,
                 CategoryResponse {
-                    color: "#fff1bf".to_string(),
+                    color: "#9f8401".to_string(),
                     ..category_response(id.as_ref(), "Chess", &[], &[])
                 }
             ))
@@ -264,7 +264,7 @@ mod tests {
         assert_eq!(
             stored,
             vec![Category {
-                color: color("#fff1bf"),
+                color: color("#9f8401"),
                 ..category(id, "Chess")
             }]
         );
@@ -272,13 +272,13 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_create_a_category_with_the_least_used_palette_color() {
-        let butter_and_coral = vec!["#fff1bf", "#ffd9d4"];
-        let every_color_and_butter_again = CategoryColor::PALETTE
+        let mustard_and_coral = vec!["#9f8401", "#c8645b"];
+        let every_color_and_mustard_again = CategoryColor::PALETTE
             .into_iter()
-            .chain(["#fff1bf"])
+            .chain(["#9f8401"])
             .collect::<Vec<_>>();
         let mut colors = Vec::new();
-        for used in [butter_and_coral, every_color_and_butter_again] {
+        for used in [mustard_and_coral, every_color_and_mustard_again] {
             let db = TestDatabase::new();
             let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
             used.iter().enumerate().for_each(|(index, hex)| {
@@ -298,7 +298,7 @@ mod tests {
 
         assert_eq!(
             colors,
-            vec![Ok("#ffe0c7".to_string()), Ok("#ffe0c7".to_string())]
+            vec![Ok("#bd7123".to_string()), Ok("#bd7123".to_string())]
         );
     }
 

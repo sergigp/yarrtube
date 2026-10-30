@@ -5,10 +5,10 @@ use crate::domain::shared::ValidationError;
 pub struct CategoryColor(String);
 
 impl CategoryColor {
-    /// Soft presets, in the order defaults are handed out.
+    /// Solid presets, in the order defaults are handed out.
     pub const PALETTE: [&'static str; 10] = [
-        "#fff1bf", "#ffe0c7", "#ffd9d4", "#fadceb", "#e9def8", "#dbe3fb", "#d3ecf8", "#cff0ea",
-        "#e4f0cc", "#eee5d7",
+        "#9f8401", "#bd7123", "#c8645b", "#bd6396", "#9870c5", "#6a80d4", "#0193bf", "#019b8d",
+        "#79922c", "#978364",
     ];
 
     pub fn new(color: impl Into<String>) -> Result<Self, ValidationError> {
