@@ -24,7 +24,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, then `scripts/run-tests.sh` with no flags. Verify that all suites pass.
+- [x] 4.1 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, then `scripts/run-tests.sh` with no flags. Verify that all suites pass.
 - [ ] 4.2 Manual (agent): first check whether a repo-root `yarrtube.sqlite3` already exists. It is the user's, so back it up or leave it untouched. Start `scripts/run-local.sh --port <free port> --fresh-videos` and create categories via `POST /api/categories`. Then use the Playwright MCP browser:
   - Open "Change color" on an Orange category, choose Custom and see the slider. Move it and check that a `PATCH` is sent with an OKLCH 0.65 / 0.2 color. Choose Teal and check that the slider hides.
   - Open an add-channel dialog, press a category chip and check its tint/ink style.
