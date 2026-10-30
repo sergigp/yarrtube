@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { FolderPlus, Plus, Settings2 } from 'lucide-react'
 import { deleteCategory, updateCategory } from '@/api/client'
 import {
@@ -7,6 +7,7 @@ import {
   useCategoryVideos,
   useLibraryAction,
   useMarkCategoryWatched,
+  usePreferences,
 } from '@/api/queries'
 import type { Category } from '@/api/types'
 import { deleteCategoryDescription, memberCount } from '@/lib/categories'
@@ -171,7 +172,19 @@ export function CategoryDetail() {
   }, [arrivedManaging, location.pathname, navigate])
   const { data } = useCategories()
   const { data: videos, error } = useCategoryVideos(id)
+  const { data: preferences } = usePreferences()
   const category = data?.categories.find((candidate) => candidate.id === id)
+
+  if (preferences && !preferences.categories_enabled) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Categories are turned off.{' '}
+        <Link to="/preferences" className="underline hover:text-foreground">
+          Preferences
+        </Link>
+      </p>
+    )
+  }
 
   if (!data) {
     return <p className="text-sm text-muted-foreground">Loading category…</p>

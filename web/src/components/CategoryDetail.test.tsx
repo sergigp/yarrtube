@@ -11,13 +11,19 @@ import {
   aChannel,
   aHomeVideo,
   aPlaylist,
+  aPreferences,
   mockApi,
   renderWithProviders,
   type Routes as ApiRoutes,
 } from '@/test/helpers'
 
 function renderCategory(routes: ApiRoutes, route: InitialEntry = '/categories/chess') {
-  const fetchMock = mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
+  const fetchMock = mockApi({
+    'GET /api/channels': [],
+    'GET /api/playlists': [],
+    'GET /api/preferences': aPreferences(),
+    ...routes,
+  })
   const { unmount } = renderWithProviders(
     <>
       <Routes>
@@ -47,6 +53,18 @@ function HistoryControls() {
 }
 
 describe('CategoryDetail', () => {
+  it('says categories are turned off while they are', async () => {
+    renderCategory({
+      'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
+      'GET /api/categories/chess/videos': [],
+      'GET /api/preferences': aPreferences({ categories_enabled: false }),
+    })
+
+    expect(await screen.findByText('Categories are turned off.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Preferences' })).toHaveAttribute('href', '/preferences')
+    expect(screen.queryByRole('heading', { name: 'Chess' })).not.toBeInTheDocument()
+  })
+
   it('shows the summary and video cards newest first', async () => {
     renderCategory({
       'GET /api/categories': aCategoryList([
