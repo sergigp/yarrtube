@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
 import { Home } from './components/Home'
 import { PlaylistDetail } from './components/PlaylistDetail'
@@ -14,6 +14,8 @@ import { SettingsMenu } from './components/SettingsMenu'
 import { AnnouncementBar } from './components/AnnouncementBar'
 import { MobileNavToggle } from './components/MobileNavToggle'
 import { VersionLabel } from './components/VersionLabel'
+import { SearchDialog } from './components/SearchDialog'
+import { SearchTrigger } from './components/SearchTrigger'
 
 export default function App() {
   return (
@@ -50,6 +52,24 @@ export function AppShell() {
   }, [sidebarOpen])
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
 
+  // ⌘K / Ctrl+K opens search from anywhere, unless another dialog is open.
+  const [searchOpen, setSearchOpen] = useState(false)
+  useEffect(() => {
+    const openSearch = (event: KeyboardEvent) => {
+      if (
+        event.key.toLowerCase() === 'k' &&
+        (event.metaKey || event.ctrlKey) &&
+        !document.querySelector('[role=dialog]')
+      ) {
+        event.preventDefault()
+        setSidebarOpen(false)
+        setSearchOpen(true)
+      }
+    }
+    document.addEventListener('keydown', openSearch)
+    return () => document.removeEventListener('keydown', openSearch)
+  }, [])
+
   // Any navigation closes the mobile sidebar, whatever triggered it.
   const { pathname } = useLocation()
   const [shownPathname, setShownPathname] = useState(pathname)
@@ -85,6 +105,12 @@ export function AppShell() {
         </Link>
         <VersionLabel />
         <div className="ml-auto flex items-center gap-2">
+          <SearchTrigger
+            onOpen={() => {
+              closeSidebar()
+              setSearchOpen(true)
+            }}
+          />
           <SettingsMenu />
         </div>
       </header>
@@ -123,6 +149,7 @@ export function AppShell() {
         open={addDialog === 'category'}
         onOpenChange={(open) => !open && setAddDialog(null)}
       />
+      <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
   )
 }

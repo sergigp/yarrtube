@@ -1,8 +1,9 @@
 import { ListVideo } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { videoMediaUrl, avatarMediaUrl } from '@/api/client'
-import type { HomeVideo, HomeVideoSource } from '@/api/types'
+import type { HomeVideo } from '@/api/types'
 import { formatAge } from '@/lib/relativeAge'
+import { videoPathInSource } from '@/lib/videoPath'
 import {
   type VideoGridLayout,
   videoGridItemClassName,
@@ -13,11 +14,6 @@ import { Thumbnail } from './Thumbnail'
 import { CategoryChips, type CategoryChip } from './CategoryChips'
 import { ThumbnailOverlay } from './ThumbnailOverlay'
 import { VideoActionsMenu } from './VideoActionsMenu'
-
-function videoDetailPath(source: HomeVideoSource): string {
-  const base = source.kind === 'channel' ? `/channels/${source.id}` : `/playlists/${source.id}`
-  return `${base}?video=`
-}
 
 interface VideoGridProps {
   videos: HomeVideo[]
@@ -38,8 +34,7 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
   return (
     <ul className={videoGridListClassName(layout)}>
       {videos.map((video, index) => {
-        const videoPath =
-          videoPathOf?.(video) ?? `${videoDetailPath(video.source)}${encodeURIComponent(video.id)}`
+        const videoPath = videoPathOf?.(video) ?? videoPathInSource(video)
         const channelPath = video.source.kind === 'channel' ? `/channels/${video.source.id}` : null
         const sourcePath = channelPath ?? `/playlists/${video.source.id}`
         const age = formatAge(video.published_at)

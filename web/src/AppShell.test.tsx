@@ -185,7 +185,7 @@ describe('AppShell', () => {
   it('shows no version while it is loading', () => {
     renderShell({ version: pendingForever() })
 
-    expect(screen.getByRole('banner')).toHaveTextContent(/^$/)
+    expect(within(screen.getByRole('banner')).queryByText(/^(v\d|edge)/)).not.toBeInTheDocument()
   })
 
   it('shows no version and no error when the request fails', async () => {
@@ -194,8 +194,43 @@ describe('AppShell', () => {
     })
     await waitFor(() => expect(queryClient.isFetching({ queryKey: queryKeys.version })).toBe(0))
 
-    expect(screen.getByRole('banner')).toHaveTextContent(/^$/)
+    expect(within(screen.getByRole('banner')).queryByText(/^(v\d|edge)/)).not.toBeInTheDocument()
     expect(screen.queryByText(/version unavailable/)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Yarrtube' })).toBeInTheDocument()
+  })
+
+  it('opens the search dialog from the header search control', async () => {
+    renderShell()
+    const user = userEvent.setup()
+
+    await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Search' }))
+
+    expect(await screen.findByRole('combobox', { name: 'Search' })).toHaveFocus()
+  })
+
+  it('opens the search dialog with ⌘K or Ctrl+K, its field focused', async () => {
+    renderShell()
+    const user = userEvent.setup()
+
+    await user.keyboard('{Meta>}k{/Meta}')
+    expect(await screen.findByRole('combobox', { name: 'Search' })).toHaveFocus()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    await user.keyboard('{Control>}k{/Control}')
+    expect(await screen.findByRole('combobox', { name: 'Search' })).toHaveFocus()
+  })
+
+  it('ignores ⌘K while another dialog is open', async () => {
+    renderShell()
+    const user = userEvent.setup()
+    // Once the library loads, the empty Channels section offers its add row.
+    await screen.findAllByText('None tracked yet.')
+    await user.click(screen.getByRole('button', { name: 'Add channel' }))
+    await screen.findByRole('dialog')
+
+    await user.keyboard('{Meta>}k{/Meta}')
+
+    expect(screen.queryByRole('combobox', { name: 'Search' })).not.toBeInTheDocument()
   })
 })
