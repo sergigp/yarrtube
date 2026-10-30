@@ -26,12 +26,12 @@ describe('CategoryColorPicker', () => {
 
     await user.click(screen.getByRole('radio', { name: 'Sky' }))
 
-    expect(onChange).toHaveBeenCalledWith('#0193bf')
+    expect(onChange).toHaveBeenCalledWith('#0ea5e9')
     expect(screen.getByRole('radio', { name: 'Sky' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Mustard' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Amber' })).not.toBeChecked()
   })
 
-  it('shows a color outside the palette as Custom, whose hue slider picks solid colors', () => {
+  it('shows a color outside the palette as Custom, whose hue slider picks vivid colors', () => {
     const onChange = vi.fn()
     render(<Picker initial="#f0e4d0" onChange={onChange} />)
 
@@ -40,7 +40,7 @@ describe('CategoryColorPicker', () => {
 
     fireEvent.change(screen.getByRole('slider', { name: 'Hue' }), { target: { value: '200' } })
 
-    expect(onChange).toHaveBeenCalledWith('#03999f')
+    expect(onChange).toHaveBeenCalledWith('#04a3aa')
     expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked()
     expect(screen.getByRole('slider', { name: 'Hue' })).toHaveValue('200')
   })
@@ -49,16 +49,16 @@ describe('CategoryColorPicker', () => {
     render(<Picker initial="#9f8401" onChange={() => {}} />)
 
     expect(screen.getAllByRole('radio').map((radio) => radio.getAttribute('aria-label'))).toEqual([
-      'Mustard',
+      'Amber',
       'Orange',
-      'Coral',
-      'Rose',
+      'Red',
+      'Pink',
       'Violet',
-      'Periwinkle',
+      'Blue',
       'Sky',
       'Teal',
-      'Olive',
-      'Taupe',
+      'Green',
+      'Slate',
       'Custom',
     ])
   })
@@ -69,7 +69,7 @@ describe('CategoryColorPicker', () => {
 
     await userEvent.setup().click(screen.getByRole('radio', { name: 'Violet' }).closest('label')!)
 
-    expect(onChange).toHaveBeenCalledWith('#9870c5')
+    expect(onChange).toHaveBeenCalledWith('#8b5cf6')
     expect(screen.getByRole('radio', { name: 'Violet' })).toBeChecked()
   })
 })
