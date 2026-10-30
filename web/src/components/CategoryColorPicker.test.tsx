@@ -44,4 +44,32 @@ describe('CategoryColorPicker', () => {
     expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked()
     expect(screen.getByRole('slider', { name: 'Hue' })).toHaveValue('200')
   })
+
+  it('offers the palette swatches in order, then Custom', () => {
+    render(<Picker initial="#9f8401" onChange={() => {}} />)
+
+    expect(screen.getAllByRole('radio').map((radio) => radio.getAttribute('aria-label'))).toEqual([
+      'Mustard',
+      'Orange',
+      'Coral',
+      'Rose',
+      'Violet',
+      'Periwinkle',
+      'Sky',
+      'Teal',
+      'Olive',
+      'Taupe',
+      'Custom',
+    ])
+  })
+
+  it('checks a swatch clicked anywhere on it', async () => {
+    const onChange = vi.fn()
+    render(<Picker initial="#9f8401" onChange={onChange} />)
+
+    await userEvent.setup().click(screen.getByRole('radio', { name: 'Violet' }).closest('label')!)
+
+    expect(onChange).toHaveBeenCalledWith('#9870c5')
+    expect(screen.getByRole('radio', { name: 'Violet' })).toBeChecked()
+  })
 })
