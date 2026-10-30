@@ -4002,6 +4002,79 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_a_video_in_two_categories_in_the_first_section_only_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        let channel_repository = SqliteChannelRepository::new(db.database());
+        let category_repository = SqliteCategoryRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1"))
+            .unwrap();
+        channel_repository.insert(&channel("@chess", None)).unwrap();
+        channel_repository
+            .insert(&channel("@science", None))
+            .unwrap();
+        save_playlist_video(
+            &video_repository,
+            &playlist_video_repository,
+            "PL1",
+            &downloaded_video("vid_shared", "Shared", None, 50),
+        );
+        (0..2).for_each(|i| {
+            save_channel_video(
+                &video_repository,
+                &channel_video_repository,
+                "@chess",
+                &downloaded_video(&format!("@chess{i}"), &format!("Chess {i}"), None, i),
+                i,
+            )
+        });
+        save_channel_video(
+            &video_repository,
+            &channel_video_repository,
+            "@science",
+            &downloaded_video("@science10", "Science 10", None, 10),
+            0,
+        );
+        let chess = named_category("Chess", &[channel_member("@chess"), playlist_member("PL1")]);
+        let science = named_category(
+            "Science",
+            &[channel_member("@science"), playlist_member("PL1")],
+        );
+        category_repository.insert(&chess).unwrap();
+        category_repository.insert(&science).unwrap();
+        categorize_source(&db, &channel_member("@chess"), &[&chess]);
+        categorize_source(&db, &channel_member("@science"), &[&science]);
+        categorize_source(&db, &playlist_member("PL1"), &[&chess, &science]);
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                categories: vec![
+                    category_section_response(
+                        &chess,
+                        vec![
+                            in_categories(
+                                home_video_response("vid_shared", "Shared", playlist_source()),
+                                &[&chess, &science]
+                            ),
+                            category_card(&chess, "@chess", 1),
+                            category_card(&chess, "@chess", 0),
+                        ]
+                    ),
+                    category_section_of(&science, "@science", 10..11),
+                ],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

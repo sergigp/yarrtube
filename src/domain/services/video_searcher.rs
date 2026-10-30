@@ -257,30 +257,42 @@ impl VideoSearcher {
         by_video: &HashMap<VideoId, Vec<CategoryId>>,
         limits: HomeLimits,
     ) -> Vec<(Category, Vec<SourcedVideo>)> {
-        let mut ranked: Vec<(Category, Vec<SourcedVideo>)> = categories
-            .iter()
-            .map(|category| {
-                (
-                    category.clone(),
-                    Self::pending_in(videos, &category.id, by_video),
-                )
-            })
-            .collect();
-        ranked.sort_by_key(|(category, pending)| {
+        Self::ranked_by_pending(videos, categories, by_video)
+            .into_iter()
+            .fold(
+                (Vec::new(), videos.to_vec()),
+                |(mut sections, remaining), category| {
+                    if sections.len() == limits.category_sections {
+                        return (sections, remaining);
+                    }
+                    let mut pending = Self::pending_in(&remaining, &category.id, by_video);
+                    pending.truncate(limits.category_videos);
+                    if pending.is_empty() {
+                        return (sections, remaining);
+                    }
+                    let remaining = Self::not_shown_in(&remaining, &pending);
+                    sections.push((category.clone(), pending));
+                    (sections, remaining)
+                },
+            )
+            .0
+    }
+
+    /// `categories` by their number of pending videos in `videos`, most
+    /// first, ties by name ignoring case.
+    fn ranked_by_pending<'a>(
+        videos: &[SourcedVideo],
+        categories: &'a [Category],
+        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+    ) -> Vec<&'a Category> {
+        let mut ranked: Vec<&Category> = categories.iter().collect();
+        ranked.sort_by_cached_key(|category| {
             (
-                std::cmp::Reverse(pending.len()),
+                std::cmp::Reverse(Self::pending_in(videos, &category.id, by_video).len()),
                 category.name.as_str().to_lowercase(),
             )
         });
         ranked
-            .into_iter()
-            .map(|(category, mut pending)| {
-                pending.truncate(limits.category_videos);
-                (category, pending)
-            })
-            .filter(|(_, pending)| !pending.is_empty())
-            .take(limits.category_sections)
-            .collect()
     }
 
     /// Downloaded, unwatched videos of `videos` in `category` per `by_video`,
