@@ -26,6 +26,8 @@
 - [x] 2.18 Web: `navigates to the category from the section heading` — heading links to `/categories/:id`
 - [x] 2.19 Web: `navigates to the category from "See all"` — "See all" links to `/categories/:id`
 - [x] 2.20 Web: `shows no "More about" section when the response has none`
+- [ ] 2.21 Web: `hides an empty "Latest videos" when other sections have videos` — empty latest hidden next to other sections
+- [ ] 2.22 Web: `shows "No videos synced yet." when every section is empty` — message kept for an empty home
 
 ## 3. Infrastructure adapters (TDD)
 
@@ -36,4 +38,5 @@
 - [x] 4.1 `cargo test --locked`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, `npm run check` (in `web/`) all pass
 - [x] 4.2 End-to-end tests via `scripts/run-tests.sh` pass
 - [x] 4.3 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos` (a pre-existing repo-root `yarrtube.sqlite3` is the user's — do not seed into or delete it; move it aside first and restore it after, or ask), seed channels/playlists and 4 categories via the HTTP API with differing pending counts, open home with the Playwright MCP browser and assert: section order CW → "More about" ×3 (most pending first) → Quick watches → Latest; no video id repeated across sections (DOM + `GET /api/videos/home` response); heading and "See all" navigate to `/categories/:id`; screenshot. Stop the server, delete the seeded `yarrtube.sqlite3` and the fresh videos dir, restore the user's DB
+- [ ] 4.5 After 2.21–2.22: `npm run check` and the e2e suite pass; Manual (agent): a home whose videos are all in category sections shows no "Latest videos" heading (same server/cleanup rules as 4.3)
 - [ ] 4.4 Manual (human): visual judgement of the "More about" heading + "See all" row on desktop and phone widths

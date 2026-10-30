@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Home Page Layout
-The home view SHALL display its sections in this order: "Continue watching", up to 3 category sections, "Quick watches" and "Latest videos", loaded together in one request. A video SHALL appear in at most one section. "Latest videos" SHALL display up to 18 recently synced videos. "Continue watching" SHALL display up to 6 videos the user has started and not finished recently. "Quick watches" SHALL display up to 6 short unwatched videos. Each category section SHALL display up to 6 videos, as described in "Home Category Sections". "Continue watching", the category sections and "Quick watches" SHALL be hidden when they have no videos, including while their videos are loading or when they cannot be loaded. Each section SHALL display its videos as a grid of cards, each showing the video's thumbnail with its title below it. For videos from a tracked channel, the card SHALL also show the channel's avatar and name.
+The home view SHALL display its sections in this order: "Continue watching", up to 3 category sections, "Quick watches" and "Latest videos", loaded together in one request. A video SHALL appear in at most one section. "Latest videos" SHALL display up to 18 recently synced videos. "Continue watching" SHALL display up to 6 videos the user has started and not finished recently. "Quick watches" SHALL display up to 6 short unwatched videos. Each category section SHALL display up to 6 videos, as described in "Home Category Sections". "Latest videos" SHALL be hidden when it has no videos while another section has videos; when no section has videos, "Latest videos" SHALL be shown saying no videos have been synced yet. "Continue watching", the category sections and "Quick watches" SHALL be hidden when they have no videos, including while their videos are loading or when they cannot be loaded. Each section SHALL display its videos as a grid of cards, each showing the video's thumbnail with its title below it. For videos from a tracked channel, the card SHALL also show the channel's avatar and name.
 
 #### Scenario: Home view with recent videos
 - **WHEN** one or more videos have been synced
@@ -40,6 +40,14 @@ The home view SHALL display its sections in this order: "Continue watching", up 
 #### Scenario: Empty sections are hidden
 - **WHEN** no video qualifies for "Continue watching" or "Quick watches"
 - **THEN** that section, including its heading, is not shown
+
+#### Scenario: Empty latest videos hidden
+- **WHEN** every video is shown under "Continue watching", a category section or "Quick watches"
+- **THEN** "Latest videos", including its heading, is not shown
+
+#### Scenario: Nothing synced yet
+- **WHEN** no section has videos
+- **THEN** "Latest videos" is shown with "No videos synced yet."
 
 #### Scenario: Optional sections that fail to load are hidden
 - **WHEN** the videos for "Continue watching", the category sections or "Quick watches" are still loading or cannot be loaded

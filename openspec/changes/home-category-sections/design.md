@@ -161,6 +161,8 @@ Home.tsx
 18. `navigates to the category from the section heading` — click heading → `/categories/chess`.
 19. `navigates to the category from "See all"` — click "See all" → `/categories/chess`.
 20. `shows no "More about" section when the response has none`.
+21. `hides an empty "Latest videos" when other sections have videos` — only category sections have videos → no "Latest videos" heading.
+22. `shows "No videos synced yet." when every section is empty` — all sections empty → "Latest videos" with the message.
 
 ### 3. Infrastructure
 

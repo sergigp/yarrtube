@@ -10,6 +10,7 @@ Home only offers time-based entry points (continue watching, quick watches, late
 - Category sections sit between "Continue watching" and "Quick watches"; section order becomes Continue watching → category sections → Quick watches → Latest videos. A video still appears in at most one section; Quick watches and Latest lose the videos the category sections show.
 - A category section holds the category's downloaded, unwatched videos from the home pool (playlists excluded from home never feed it), not shown above, newest sync first.
 - Categories are ranked by their number of pending (downloaded, unwatched, not under Continue watching) videos, most first, ties by name ignoring case; a category left with no videos after removing those shown above is skipped and the next one takes its place.
+- The web home view hides "Latest videos" when it is empty while other sections have videos; "No videos synced yet." remains only for an empty home.
 - The web home view renders one section per returned category, headed "More about <name>", the heading linking to the category view, plus a "See all" link to the same view.
 
 ## Capabilities
