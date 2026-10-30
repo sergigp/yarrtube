@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { PreferencesView } from './PreferencesView'
 import { aPreferences, mockApi, renderWithProviders } from '@/test/helpers'
 
@@ -19,6 +20,26 @@ describe('PreferencesView', () => {
       ['Show quick watches', true],
       ['Show latest videos', false],
     ])
+  })
+
+  it('saves every preference with the toggled one changed', async () => {
+    const fetchMock = mockApi({
+      'GET /api/preferences': aPreferences(),
+      'PUT /api/preferences': aPreferences({ home_show_quick_watches: false }),
+    })
+    renderWithProviders(<PreferencesView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Show quick watches' })).not.toBeChecked(),
+    )
+    expect(
+      fetchMock.mock.calls
+        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
+        .map(([url, init]) => [url, JSON.parse((init as RequestInit).body as string)]),
+    ).toEqual([['/api/preferences', aPreferences({ home_show_quick_watches: false })]])
   })
 })
 

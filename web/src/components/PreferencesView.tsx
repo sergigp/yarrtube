@@ -1,4 +1,4 @@
-import { usePreferences } from '@/api/queries'
+import { usePreferences, useSavePreferences } from '@/api/queries'
 import type { Preferences } from '@/api/types'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -30,6 +30,12 @@ const GROUPS: PreferenceGroup[] = [
 /** The preferences view: a switch per preference, saved as soon as it is toggled. */
 export function PreferencesView() {
   const { data: preferences, error } = usePreferences()
+  const savePreferences = useSavePreferences()
+  const toggle = (key: PreferenceKey, value: boolean) => {
+    if (preferences) {
+      void savePreferences({ ...preferences, [key]: value })
+    }
+  }
 
   return (
     <div className="flex max-w-xl flex-col gap-8">
@@ -47,7 +53,11 @@ export function PreferencesView() {
             {group.switches.map(({ key, label }) => (
               <div key={key} className="flex items-center justify-between gap-4">
                 <Label htmlFor={`preference-${key}`}>{label}</Label>
-                <Switch id={`preference-${key}`} checked={preferences[key]} />
+                <Switch
+                  id={`preference-${key}`}
+                  checked={preferences[key]}
+                  onCheckedChange={(value) => toggle(key, value)}
+                />
               </div>
             ))}
           </fieldset>

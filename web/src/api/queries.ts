@@ -205,10 +205,15 @@ export function usePreferences(): UseQueryResult<Preferences, Error> {
  * everywhere and refetches the home videos, whose sections follow them.
  */
 export function useSavePreferences(): (preferences: Preferences) => Promise<void> {
-  return useCallback(async (preferences: Preferences) => {
-    void preferences
-    void savePreferences
-  }, [])
+  const queryClient = useQueryClient()
+  return useCallback(
+    async (preferences: Preferences) => {
+      const saved = await savePreferences(preferences)
+      queryClient.setQueryData(queryKeys.preferences, saved)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.recentVideos })
+    },
+    [queryClient],
+  )
 }
 
 /**
