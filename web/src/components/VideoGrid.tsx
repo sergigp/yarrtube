@@ -42,19 +42,17 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
           <li
             key={`${video.source.kind}:${video.source.id}:${video.id}`}
             // Frameless: the hover surface reaches past the content through the
-            // negative margin, so it never shifts the card.
+            // negative margin, so it never shifts the card. The title's link is
+            // stretched over the whole card, so a click anywhere opens the
+            // video; the source links and the menu sit above it (`z-10`).
             className={cn(
-              'group/card animate-enter -m-2 rounded-xl p-2 transition-colors hover:bg-muted/60',
+              'group/card animate-enter relative -m-2 rounded-xl p-2 transition-colors hover:bg-muted/60',
               videoGridItemClassName(layout, index),
             )}
             style={{ animationDelay: `${Math.min(index, 12) * 35}ms` }}
           >
             <div className="flex flex-col gap-2">
-              <Link
-                className="group relative block overflow-hidden rounded-lg"
-                to={videoPath}
-                data-slot="card-thumbnail"
-              >
+              <div className="relative overflow-hidden rounded-lg" data-slot="card-thumbnail">
                 <Thumbnail
                   src={
                     video.thumbnail_filename
@@ -72,10 +70,14 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
                   durationSeconds={video.duration_seconds}
                   size="card"
                 />
-              </Link>
+              </div>
               <div className="flex items-start gap-2">
                 {channelPath ? (
-                  <Link to={channelPath} className="mt-0.5 shrink-0" aria-label={video.source.name}>
+                  <Link
+                    to={channelPath}
+                    className="relative z-10 mt-0.5 shrink-0"
+                    aria-label={video.source.name}
+                  >
                     <Thumbnail
                       src={
                         video.source.avatar_filename
@@ -87,15 +89,19 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
                   </Link>
                 ) : (
                   // Stands in for a channel's avatar, so titles line up across cards.
-                  <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <Link
+                    to={sourcePath}
+                    className="relative z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
+                    aria-label={video.source.name}
+                  >
                     <ListVideo role="img" aria-label="Playlist" className="size-3.5" />
-                  </span>
+                  </Link>
                 )}
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <Link
                     to={videoPath}
                     className={cn(
-                      'line-clamp-2 text-sm leading-snug font-medium no-underline',
+                      "line-clamp-2 text-sm leading-snug font-medium no-underline after:absolute after:inset-0 after:rounded-xl after:content-['']",
                       video.watched ? 'text-muted-foreground' : 'text-foreground',
                     )}
                   >
@@ -104,7 +110,7 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
                   <p data-slot="card-meta" className="truncate text-xs text-muted-foreground">
                     <Link
                       to={sourcePath}
-                      className="no-underline transition-colors hover:text-foreground"
+                      className="relative z-10 no-underline transition-colors hover:text-foreground"
                     >
                       {video.source.name}
                     </Link>
@@ -121,7 +127,7 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
                       ? { id: video.source.id, name: video.source.name }
                       : undefined
                   }
-                  className="-mt-0.5 -mr-1.5"
+                  className="relative z-10 -mt-0.5 -mr-1.5"
                 />
               </div>
             </div>

@@ -176,7 +176,7 @@ test.describe('with a downloaded playlist', () => {
     expect(headings).toEqual(homeSections.filter((section) => headings.includes(section)))
     // The first card is the half-watched one under "Continue watching": it
     // shows the time left instead of the duration.
-    const homeCard = page.locator('main').getByRole('link').filter({ has: page.locator('img') }).first()
+    const homeCard = page.locator('main section li').filter({ has: page.locator('img') }).first()
     await expectImageLoaded(homeCard.locator('img').first())
     await expect(homeCard.getByText(TIME_LEFT)).toBeVisible()
   })
@@ -200,6 +200,22 @@ test.describe('with a downloaded playlist', () => {
     await expect(page.locator('main').getByText(videoTitle, { exact: true })).toHaveCount(0)
     await includeItemInHome(page, { section: 'Playlists', name: PLAYLIST_NAME })
     await expect(continueWatching(page).getByText(videoTitle, { exact: true })).toBeVisible()
+  })
+
+  test('opens a home card\'s video from anywhere on the card, and its playlist from its icon', async ({ page }) => {
+    const videoTitle = seeded.video.title
+    await page.goto('/')
+    const card = page.locator('main li').filter({ hasText: videoTitle }).first()
+
+    // The right end of the meta line holds no control of its own.
+    const meta = await card.locator('[data-slot="card-meta"]').boundingBox()
+    const cardBox = await card.boundingBox()
+    await card.click({ position: { x: cardBox.width - 40, y: meta.y - cardBox.y + meta.height / 2 } })
+    await expect(page).toHaveURL(new RegExp(`/playlists/${encodeURIComponent(seeded.id)}\\?video=`))
+
+    await page.goBack()
+    await card.getByRole('link', { name: PLAYLIST_NAME }).first().click()
+    await expect(page).toHaveURL(new RegExp(`/playlists/${encodeURIComponent(seeded.id)}$`))
   })
 
   test("shows its progress in the playlist's video list", async ({ page }) => {

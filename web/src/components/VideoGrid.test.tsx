@@ -54,9 +54,9 @@ describe('VideoGrid', () => {
     renderWithProviders(<VideoGrid videos={[aHomeVideo({ title: 'Fresh Video' })]} />)
 
     expect(card('Fresh Video')).toHaveClass('hover:bg-muted/60')
-    const thumbnailLink = card('Fresh Video').querySelector('[data-slot="card-thumbnail"]')
-    expect(thumbnailLink).toHaveClass('overflow-hidden', 'rounded-lg')
-    expect(thumbnailLink?.firstElementChild).toHaveClass('group-hover/card:scale-[1.03]')
+    const thumbnail = card('Fresh Video').querySelector('[data-slot="card-thumbnail"]')
+    expect(thumbnail).toHaveClass('overflow-hidden', 'rounded-lg')
+    expect(thumbnail?.firstElementChild).toHaveClass('group-hover/card:scale-[1.03]')
   })
 
   it("shows a channel card's avatar and its meta line: the channel's name and the video's age", () => {
@@ -107,10 +107,13 @@ describe('VideoGrid', () => {
         name: 'Playlist',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Chess Middlegames' })).toHaveAttribute(
-      'href',
+    // The icon and the name both lead to the playlist, as a channel's avatar and name do.
+    const playlistLinks = screen.getAllByRole('link', { name: 'Chess Middlegames' })
+    expect(playlistLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/playlists/PLmiddle',
-    )
+      '/playlists/PLmiddle',
+    ])
+    expect(within(playlistLinks[0]).getByRole('img', { name: 'Playlist' })).toBeInTheDocument()
   })
 
   it("shows only the source's name on the meta line of a video with no publish date", () => {
@@ -194,5 +197,34 @@ describe('VideoGrid', () => {
     renderWithProviders(<VideoGrid videos={[aHomeVideo({ title: 'Fresh' })]} layout="feed" />)
 
     expect(screen.getByRole('list')).toHaveClass('max-sm:grid-cols-1!', '@xl:grid-cols-3')
+  })
+
+  it('opens the video from anywhere on the card, through its one video link stretched over it', () => {
+    mockApi({})
+    renderWithProviders(<VideoGrid videos={[aHomeVideo({ id: 'vid1', title: 'Fresh Video' })]} />)
+
+    const videoLinks = within(card('Fresh Video'))
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('href')?.includes('?video='))
+    expect(videoLinks.map((link) => link.textContent)).toEqual(['Fresh Video'])
+    expect(card('Fresh Video')).toHaveClass('relative')
+    expect(videoLinks[0]).toHaveClass('after:absolute', 'after:inset-0')
+  })
+
+  it('keeps the source links and the menu above the stretched video link', () => {
+    mockApi({})
+    renderWithProviders(
+      <VideoGrid
+        videos={[aHomeVideo({ title: 'Rust in 100 seconds', source: BETTATECH })]}
+        chips={CHIPS}
+      />,
+    )
+
+    for (const control of [
+      ...screen.getAllByRole('link', { name: 'BettaTech' }),
+      screen.getByRole('button', { name: 'Actions for Rust in 100 seconds' }),
+    ]) {
+      expect(control).toHaveClass('relative', 'z-10')
+    }
   })
 })
