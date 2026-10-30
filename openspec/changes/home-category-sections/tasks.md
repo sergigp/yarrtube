@@ -26,7 +26,7 @@
 - [x] 2.18 Web: `navigates to the category from the section heading` — heading links to `/categories/:id`
 - [x] 2.19 Web: `navigates to the category from "See all"` — "See all" links to `/categories/:id`
 - [x] 2.20 Web: `shows no "More about" section when the response has none`
-- [ ] 2.21 Web: `hides an empty "Latest videos" when other sections have videos` — empty latest hidden next to other sections
+- [x] 2.21 Web: `hides an empty "Latest videos" when other sections have videos` — empty latest hidden next to other sections
 - [ ] 2.22 Web: `shows "No videos synced yet." when every section is empty` — message kept for an empty home
 
 ## 3. Infrastructure adapters (TDD)

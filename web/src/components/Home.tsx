@@ -69,6 +69,13 @@ export function Home() {
     () => new Map((categories?.categories ?? []).map((category) => [category.id, category.color])),
     [categories],
   )
+  // "Latest videos" stands in for an empty home, so it only hides when
+  // another section has something to show.
+  const othersHaveVideos =
+    !!home &&
+    (home.continue_watching.length > 0 ||
+      home.categories.some((category) => category.videos.length > 0) ||
+      home.quick_watches.length > 0)
 
   return (
     <div className="flex min-w-0 flex-col gap-10">
@@ -106,6 +113,7 @@ export function Home() {
         videos={home?.latest}
         error={error}
         categoryColors={categoryColors}
+        hideWhenEmpty={othersHaveVideos}
       />
     </div>
   )

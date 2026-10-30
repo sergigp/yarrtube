@@ -146,6 +146,25 @@ describe('Home', () => {
     expect(screen.queryByRole('link', { name: 'See all' })).not.toBeInTheDocument()
   })
 
+  it('hides an empty "Latest videos" when other sections have videos', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [
+          aHomeCategorySection({ name: 'Chess', videos: [aHomeVideo({ title: 'Rook Endgames' })] }),
+        ],
+        quick_watches: [],
+        latest: [],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByText('Rook Endgames')).toBeInTheDocument()
+    expect(screen.queryByText('Latest videos')).not.toBeInTheDocument()
+    expect(screen.queryByText('No videos synced yet.')).not.toBeInTheDocument()
+  })
+
   it('shows progress on in-progress cards in every section', async () => {
     mockHomeApi({
       'GET /api/videos/home': {
