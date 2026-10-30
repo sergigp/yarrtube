@@ -203,7 +203,7 @@ describe('SidebarCategories', () => {
       '[@media(hover:hover)]:group-hover/row:opacity-100',
     )
     expect(chess.closest('li')).toHaveClass('group/row')
-    expect(screen.getByRole('button', { name: 'Actions for Sports' })).not.toHaveClass(
+    expect(screen.getByRole('button', { name: 'Actions for Sports' })).toHaveClass(
       '[@media(hover:hover)]:opacity-0',
     )
   })
