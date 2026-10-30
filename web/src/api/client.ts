@@ -10,6 +10,7 @@ import type {
   CreatedChannel,
   DirectoryListing,
   HomeVideos,
+  VideoSearchResults,
   PlaylistListItem,
   PlaylistPreview,
   Preferences,
@@ -64,6 +65,11 @@ export function fetchVideos(playlistId: string): Promise<Video[]> {
 
 export function fetchHomeVideos(): Promise<HomeVideos> {
   return request('/videos/home')
+}
+
+/** Downloaded videos whose title contains `text` (at least 2 characters once trimmed). */
+export function searchVideos(text: string): Promise<VideoSearchResults> {
+  return request(`/videos/search?q=${encodeURIComponent(text)}`)
 }
 
 export function fetchTasks(): Promise<Task[]> {

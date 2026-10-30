@@ -20,6 +20,7 @@ pub mod video_id;
 pub mod video_output_entry;
 pub mod video_owner;
 pub mod video_record_id;
+pub mod video_search_text;
 pub mod video_status;
 pub mod video_sync_plan;
 pub mod video_sync_step;
@@ -51,6 +52,7 @@ pub use video_output_entry::{
 };
 pub use video_owner::VideoOwner;
 pub use video_record_id::VideoRecordId;
+pub use video_search_text::VideoSearchText;
 pub use video_status::VideoStatus;
 pub use video_sync_plan::VideoSyncPlan;
 pub use video_sync_step::VideoSyncStep;

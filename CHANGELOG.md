@@ -13,6 +13,12 @@ All notable changes to yarrtube are documented here. The format follows
 - `PATCH /api/playlists/{id}`: `exclude_from_home` is now optional. A request
   that changes neither it nor `reconcile_interval_minutes` is rejected as
   nothing to update.
+- Category colors use a new, stronger palette (Mustard, Orange, Coral, Rose,
+  Violet, Periwinkle, Sky, Teal, Olive, Taupe; e.g. Sky is `#0193bf`). On
+  upgrade, categories with a former pastel palette color get the new color at
+  the same position, and other light custom colors get the stronger color of
+  the same hue. API clients that hard-code the pastel palette will see the new
+  defaults.
 
 ### Added
 
@@ -23,6 +29,27 @@ All notable changes to yarrtube are documented here. The format follows
 - The web UI header shows the running version (e.g. `v0.9.3`) next to the
   logo, and `GET /api/version` reports it, so you can tell when an
   automatically released image has been picked up.
+- Global search in the header, also opened with ⌘K or Ctrl+K: categories,
+  channels, playlists and downloaded videos by title. It replaces the
+  sidebar's search field. `GET /api/videos/search?q=` searches video titles.
+- `GET /api/videos/home` includes each video's `published_at`.
+
+### Changed
+
+- A web UI refresh:
+  - Video cards are frameless, with the source's name and how long ago the
+    video was published, and category chips on the home view's mixed
+    sections instead of tinted cards.
+  - Home sections sized to the space beside the sidebar: one row each, with
+    "See all" for the rest; swipeable rows and a one-column "Latest videos"
+    on phones.
+  - Placeholders instead of "Loading…" text, and video list rows show the
+    publish date.
+  - Quieter sidebar: plain unwatched counts, row menus shown on hover.
+  - On phones, the header hides while scrolling down and the announcement
+    bar takes one line.
+  - Delete moves into a "More actions" menu in page headers, and the category
+    view gets a tinted header with a "Change color" action.
 
 ## [0.9.0] - 2026-10-13
 

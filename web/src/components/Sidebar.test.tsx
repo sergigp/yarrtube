@@ -42,9 +42,7 @@ describe('Sidebar', () => {
       'GET /api/preferences': aPreferences({ categories_enabled: false }),
     })
 
-    expect(
-      await screen.findByRole('searchbox', { name: 'Search channels and playlists' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Chan 0')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Categories' })).not.toBeInTheDocument()
     expect(screen.queryByText('Chess')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add category' })).not.toBeInTheDocument()
@@ -161,8 +159,9 @@ describe('Sidebar', () => {
 
     await screen.findByText('List B')
 
-    expect(await screen.findByRole('button', { name: 'Add category' })).toHaveTextContent(
-      'Add category',
+    // The full-width row, once the categories have loaded empty.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Add category' })).toHaveTextContent('Add category'),
     )
     expect(screen.getByRole('button', { name: 'Add channel' })).toHaveTextContent('Add channel')
     expect(screen.getByRole('button', { name: 'Add playlist' })).toHaveTextContent('')
@@ -311,80 +310,15 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: 'Playlists' })).not.toHaveAttribute('aria-current')
   })
 
-  it('offers search only above the threshold and filters both sections', async () => {
-    const channels = Array.from({ length: 10 }, (_, index) =>
-      aChannel({ name: `Chan ${index}`, unwatched_count: 1 }),
-    )
-    const playlists = Array.from({ length: 10 }, (_, index) => aPlaylist({ name: `List ${index}` }))
-    renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': playlists })
-
-    const search = await screen.findByRole('searchbox', { name: 'Search categories, channels and playlists' })
-    const user = userEvent.setup()
-    await user.type(search, 'List 3')
-
-    expect(screen.getByText('List 3')).toBeInTheDocument()
-    expect(screen.queryByText('Chan 3')).not.toBeInTheDocument()
-    // The channels section disappears entirely once nothing in it matches.
-    expect(screen.queryByText('Channels')).not.toBeInTheDocument()
-  })
-
-  it('shows matches of a folded section while searching, and folds it again when cleared', async () => {
-    const channels = [
-      aChannel({ name: 'Veritasium' }),
-      ...Array.from({ length: 15 }, (_, index) => aChannel({ name: `Chan ${index}` })),
-    ]
-    renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] })
-
-    const search = await screen.findByRole('searchbox', { name: 'Search categories, channels and playlists' })
-    const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Channels' }))
-    await user.type(search, 'ver')
-    const matchWhileSearching = screen.queryByText('Veritasium')?.textContent
-    await user.clear(search)
-
-    expect(matchWhileSearching).toBe('Veritasium')
-    expect(screen.queryByText('Veritasium')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Channels' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    )
-  })
-
-  it('says when nothing matches the search', async () => {
-    const channels = Array.from({ length: 16 }, (_, index) => aChannel({ name: `Chan ${index}` }))
-    renderSidebar({ 'GET /api/channels': channels, 'GET /api/playlists': [] })
-
-    const search = await screen.findByRole('searchbox', { name: 'Search categories, channels and playlists' })
-    await userEvent.setup().type(search, 'zzz')
-
-    expect(screen.getByText('Nothing matches "zzz".')).toBeInTheDocument()
-  })
-
-  it('puts the search above the categories and counts them toward the threshold', async () => {
+  it('offers no search field, even for a large library', async () => {
     renderSidebar({
-      'GET /api/channels': Array.from({ length: 10 }, (_, index) =>
-        aChannel({ name: `Chan ${index}` }),
+      'GET /api/channels': Array.from({ length: 20 }, (_, index) =>
+        aChannel({ name: `Channel ${index}` }),
       ),
       'GET /api/playlists': [],
-      'GET /api/categories': aCategoryList(
-        Array.from({ length: 6 }, (_, index) => aCategory({ name: `Cat ${index}` })),
-      ),
     })
 
-    const search = await screen.findByRole('searchbox', {
-      name: 'Search categories, channels and playlists',
-    })
-    const categoriesHeading = await screen.findByRole('button', { name: 'Categories' })
-
-    expect(
-      search.compareDocumentPosition(categoriesHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-  })
-
-  it('hides the search box for small libraries', async () => {
-    renderSidebar({ 'GET /api/channels': [aChannel()], 'GET /api/playlists': [] })
-
-    await screen.findByText('Channels')
+    expect(await screen.findByText('Channel 0')).toBeInTheDocument()
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
   })
 
@@ -881,5 +815,66 @@ describe('Sidebar', () => {
     expect(await screen.findByRole('heading', { name: 'Channels' })).toBeInTheDocument()
     expect(screen.queryByText('Menu')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Close menu' })).not.toBeInTheDocument()
+  })
+
+  it('shows counts as muted numerals without a filled pill, in full colour on the active row', async () => {
+    renderSidebar(
+      {
+        'GET /api/channels': [
+          aChannel({ id: '@a', name: 'Chan A', unwatched_count: 3 }),
+          aChannel({ id: '@b', name: 'Chan B', unwatched_count: 5 }),
+        ],
+        'GET /api/playlists': [],
+      },
+      { route: '/channels/@b' },
+    )
+
+    const count = await screen.findByTitle('3 unwatched')
+    expect(count).toHaveClass('tabular-nums', 'text-muted-foreground')
+    expect(count).not.toHaveClass('bg-primary')
+    expect(screen.getByTitle('5 unwatched')).toHaveClass('text-foreground')
+  })
+
+  it("shows a folded section's total as a muted numeral", async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A', unwatched_count: 3 })],
+      'GET /api/playlists': [],
+    })
+    await screen.findByText('Chan A')
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Channels' }))
+
+    const total = screen.getByLabelText('3 unwatched')
+    expect(total).toHaveClass('tabular-nums', 'text-muted-foreground')
+    expect(total).not.toHaveClass('bg-primary')
+  })
+
+  it('shows a row menu control on hover, focus or while open with a mouse, always on the active row and on touch', async () => {
+    renderSidebar(
+      {
+        'GET /api/channels': [
+          aChannel({ id: '@a', name: 'Chan A' }),
+          aChannel({ id: '@b', name: 'Chan B' }),
+        ],
+        'GET /api/playlists': [aPlaylist({ name: 'List C' })],
+      },
+      { route: '/channels/@b' },
+    )
+
+    const inactive = await screen.findByRole('button', { name: 'Actions for Chan A' })
+    // Hidden only where the device can hover; touch devices always see it.
+    expect(inactive).toHaveClass(
+      '[@media(hover:hover)]:opacity-0',
+      '[@media(hover:hover)]:group-hover/row:opacity-100',
+      '[@media(hover:hover)]:group-focus-within/row:opacity-100',
+      '[@media(hover:hover)]:data-[state=open]:opacity-100',
+    )
+    expect(inactive.closest('li')).toHaveClass('group/row')
+    expect(screen.getByRole('button', { name: 'Actions for List C' })).toHaveClass(
+      '[@media(hover:hover)]:opacity-0',
+    )
+    expect(screen.getByRole('button', { name: 'Actions for Chan B' })).not.toHaveClass(
+      '[@media(hover:hover)]:opacity-0',
+    )
   })
 })

@@ -176,6 +176,7 @@ export function aHomeVideo(overrides: Partial<HomeVideo> = {}): HomeVideo {
     duration_seconds: 120,
     watched: false,
     position_seconds: 0,
+    published_at: null,
     source: {
       kind: 'playlist',
       id: `playlist-${uniqueId}`,
@@ -246,7 +247,7 @@ export function aCategory(overrides: Partial<Category> = {}): Category {
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
-    color: '#fff1bf',
+    color: '#9f8401',
     unwatched_count: 0,
     channels: [],
     playlists: [],
@@ -261,7 +262,7 @@ export function aHomeCategorySection(
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
-    color: '#fff1bf',
+    color: '#9f8401',
     videos: [aHomeVideo()],
     ...overrides,
   }
@@ -272,7 +273,7 @@ export function aCreatedCategory(overrides: Partial<CreatedCategory> = {}): Crea
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
-    color: '#fff1bf',
+    color: '#9f8401',
     channels: [],
     playlists: [],
     ...overrides,

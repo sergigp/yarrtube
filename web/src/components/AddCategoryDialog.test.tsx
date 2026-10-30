@@ -82,8 +82,8 @@ describe('AddCategoryDialog', () => {
     const { fetchMock } = renderDialog({
       'POST /api/categories': create,
       'GET /api/categories': aCategoryList([
-        aCategory({ name: 'Cooking', color: '#fff1bf' }),
-        aCategory({ name: 'Sports', color: '#ffd9d4' }),
+        aCategory({ name: 'Cooking', color: '#9f8401' }),
+        aCategory({ name: 'Sports', color: '#c8645b' }),
       ]),
       'GET /api/categories/chess/videos': [],
       'GET /api/channels': [],
@@ -91,15 +91,15 @@ describe('AddCategoryDialog', () => {
     })
     const user = userEvent.setup()
 
-    await waitFor(() => expect(screen.getByRole('radio', { name: 'Peach' })).toBeChecked())
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Orange' })).toBeChecked())
     await user.type(screen.getByLabelText('Name'), 'Chess')
-    await user.click(screen.getByRole('radio', { name: 'Lilac' }))
+    await user.click(screen.getByRole('radio', { name: 'Violet' }))
     await user.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(create).toHaveBeenCalled())
     const [, init] = fetchMock.mock.calls.find(
       ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
     ) as [string, RequestInit]
-    expect(JSON.parse(init.body as string)).toEqual({ name: 'Chess', color: '#e9def8' })
+    expect(JSON.parse(init.body as string)).toEqual({ name: 'Chess', color: '#9870c5' })
   })
 })

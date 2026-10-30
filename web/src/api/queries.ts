@@ -13,6 +13,7 @@ import {
   fetchChannels,
   fetchChannelVideos,
   fetchHomeVideos,
+  searchVideos,
   fetchPlaylists,
   fetchPreferences,
   fetchTasks,
@@ -38,6 +39,7 @@ import type {
   ChannelListItem,
   ChannelPreview,
   HomeVideos,
+  VideoSearchResults,
   PlaylistListItem,
   PlaylistPreview,
   Preferences,
@@ -78,7 +80,11 @@ export const queryKeys = {
   // library leaves them be.
   playlistPreview: (value: string) => ['playlist-preview', value] as const,
   channelPreview: (value: string) => ['channel-preview', value] as const,
+  videoSearch: (text: string) => ['video-search', text] as const,
 }
+
+/** Shortest trimmed text the daemon searches video titles for. */
+export const VIDEO_SEARCH_MIN_LENGTH = 2
 
 export function useChannels(): UseQueryResult<ChannelListItem[], Error> {
   return useQuery({
@@ -161,6 +167,21 @@ export function useRecentVideos(): UseQueryResult<HomeVideos, Error> {
     queryKey: queryKeys.recentVideos,
     queryFn: fetchHomeVideos,
     refetchInterval: LIVE_INTERVAL_MS,
+  })
+}
+
+/**
+ * Searches downloaded video titles for `text`, the caller's debounced input.
+ * Idle below `VIDEO_SEARCH_MIN_LENGTH` trimmed characters.
+ */
+export function useVideoSearch(text: string): UseQueryResult<VideoSearchResults, Error> {
+  const trimmed = text.trim()
+  return useQuery({
+    queryKey: queryKeys.videoSearch(trimmed),
+    queryFn: () => searchVideos(trimmed),
+    enabled: trimmed.length >= VIDEO_SEARCH_MIN_LENGTH,
+    retry: false,
+    staleTime: 30_000,
   })
 }
 

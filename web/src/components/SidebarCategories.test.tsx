@@ -169,49 +169,6 @@ describe('SidebarCategories', () => {
     ).toHaveTextContent('/categories/science')
   })
 
-  it('is filtered by the sidebar search, and hidden when nothing in it matches', async () => {
-    renderSidebar({
-      'GET /api/channels': Array.from({ length: 16 }, (_, index) =>
-        aChannel({ name: `Chan ${index}` }),
-      ),
-      'GET /api/categories': aCategoryList([
-        aCategory({ name: 'Chess' }),
-        aCategory({ name: 'Science' }),
-      ]),
-    })
-
-    const search = await screen.findByRole('searchbox', {
-      name: 'Search categories, channels and playlists',
-    })
-    await screen.findByText('Chess')
-    const user = userEvent.setup()
-    await user.type(search, 'sci')
-    const matches = categoryRowNames()
-    await user.clear(search)
-    await user.type(search, 'Chan 1')
-
-    expect(matches).toEqual(['Science'])
-    expect(screen.queryByRole('button', { name: 'Categories' })).not.toBeInTheDocument()
-  })
-
-  it('shows matches of a folded section while searching', async () => {
-    renderSidebar({
-      'GET /api/channels': Array.from({ length: 16 }, (_, index) =>
-        aChannel({ name: `Chan ${index}` }),
-      ),
-      'GET /api/categories': aCategoryList([aCategory({ name: 'Chess' })]),
-    })
-
-    const search = await screen.findByRole('searchbox', {
-      name: 'Search categories, channels and playlists',
-    })
-    const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Categories' }))
-    await user.type(search, 'che')
-
-    expect(categoryRowNames()).toEqual(['Chess'])
-  })
-
   it("shows a dot in each category's color before its name", async () => {
     renderSidebar({
       'GET /api/categories': aCategoryList([
@@ -227,5 +184,27 @@ describe('SidebarCategories', () => {
     expect(dot(chess)).toHaveAttribute('aria-hidden', 'true')
     expect(dot(chess)).toHaveStyle({ background: '#d3ecf8' })
     expect(dot(sports)).toHaveStyle({ background: '#f0e4d0' })
+  })
+
+  it('shows a category row menu control under the same conditions as channel rows', async () => {
+    renderSidebar(
+      {
+        'GET /api/categories': aCategoryList([
+          aCategory({ id: 'chess', name: 'Chess' }),
+          aCategory({ id: 'sports', name: 'Sports' }),
+        ]),
+      },
+      { route: '/categories/sports' },
+    )
+
+    const chess = await screen.findByRole('button', { name: 'Actions for Chess' })
+    expect(chess).toHaveClass(
+      '[@media(hover:hover)]:opacity-0',
+      '[@media(hover:hover)]:group-hover/row:opacity-100',
+    )
+    expect(chess.closest('li')).toHaveClass('group/row')
+    expect(screen.getByRole('button', { name: 'Actions for Sports' })).not.toHaveClass(
+      '[@media(hover:hover)]:opacity-0',
+    )
   })
 })

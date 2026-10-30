@@ -394,4 +394,23 @@ describe('TasksView', () => {
       .closest('li')!
     expect(within(healthy).queryByText('network timeout')).not.toBeInTheDocument()
   })
+
+  it('opens with a "Tasks" heading above the tab bar, left-aligned at a readable width', async () => {
+    mockApi({ 'GET /api/tasks': aMixOfTasks() })
+    renderWithProviders(<TasksView />)
+
+    const heading = await screen.findByRole('heading', { level: 2, name: 'Tasks' })
+    const view = heading.parentElement as HTMLElement
+    expect(view.firstElementChild).toBe(heading)
+    expect(await within(view).findByRole('tablist')).toBeInTheDocument()
+    expect(view).toHaveClass('max-w-3xl')
+    expect(view).not.toHaveClass('mx-auto')
+  })
+
+  it('shows the "Tasks" heading while loading too', () => {
+    mockApi({ 'GET /api/tasks': pendingForever() })
+    renderWithProviders(<TasksView />)
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Tasks' })).toBeInTheDocument()
+  })
 })

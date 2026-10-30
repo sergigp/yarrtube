@@ -50,7 +50,7 @@ avatars default to `yarrtube.sqlite3` and `avatars/` in the working directory.
 The UI in `web/` is a React + Vite single-page app written in TypeScript.
 To iterate on it with hot reload, keep the backend running
 (`scripts/run-local.sh --skip-web-build`) and start Vite's dev server, which
-proxies `/api` and `/media` to `localhost:8080`:
+proxies `/api`, `/media` and `/avatars` to `localhost:8080`:
 
 ```bash
 cd web
@@ -58,6 +58,21 @@ npm run dev          # dev server with hot reload
 npm run test:watch   # Vitest suite, re-running on change
 npm run check        # typecheck + lint + test, what CI runs
 ```
+
+To try UI changes against a real library instead of an empty local one, point
+the dev server at a running daemon, e.g. on a NAS. Only frontend changes show
+up; backend changes need a daemon running an image that has them.
+
+```bash
+YARRTUBE_REMOTE_URL=http://192.168.1.142:8080 scripts/run-spa-against-remote.sh
+```
+
+It's read-only by default: the dev server answers every request but GET and
+HEAD with 405, so actions like mark watched or delete fail instead of changing
+the remote library. Pass `--allow-writes` to forward them. When node can't
+reach the remote but curl can (macOS Local Network privacy blocks node from LAN
+addresses until the terminal app is allowed under System Settings → Privacy &
+Security → Local Network), the script bridges the proxy through curl by itself.
 
 Layout of `web/src/`:
 
@@ -96,8 +111,14 @@ YouTube, on every pull request and push to `main`. The script only checks:
 it installs and builds nothing, so install the web UI's and `e2e-tests/`'s
 dependencies (and the Playwright browsers) and build the web UI first. Each
 end-to-end worker runs its own container on its own ports, so the suite runs
-in parallel and worktrees can run it at the same time. The script ends with a
-summary of each phase's time and test counts.
+in parallel and worktrees can run it at the same time. Before running
+anything it checks every selected suite's dependencies, listing all that are
+missing, and prints what will run: the suites, CI mode (`--ci` or
+`CI=true`: no contract tests, failing end-to-end tests retried) and the
+end-to-end workers and upgrade check. Each phase's output
+goes to a log rather than the terminal: a progress line while it runs, its
+time and test counts once done, and on failure only the failing tests with
+their errors, plus the path of the kept logs.
 
 ### YouTube contract tests
 

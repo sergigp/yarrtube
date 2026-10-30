@@ -12,6 +12,7 @@ import {
   aPlaylist,
   aPreferences,
   mockApi,
+  pendingForever,
   renderWithProviders,
   type Routes,
 } from '@/test/helpers'
@@ -230,7 +231,8 @@ describe('Home', () => {
 
     renderWithProviders(<Home />)
 
-    const [seen, unknownLength] = (await screen.findAllByRole('listitem')) as [
+    await screen.findByText('Seen')
+    const [seen, unknownLength] = screen.getAllByRole('listitem') as [
       HTMLElement,
       HTMLElement,
     ]
@@ -275,7 +277,12 @@ describe('Home', () => {
 
   it('shows an empty message when nothing has synced yet', async () => {
     mockHomeApi({
-      'GET /api/videos/home': { continue_watching: [], categories: [], quick_watches: [], latest: [] },
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [],
+        quick_watches: [],
+        latest: [],
+      },
     })
 
     renderWithProviders(<Home />)
@@ -419,41 +426,7 @@ describe('Home', () => {
     ])
   })
 
-  it('tints each card by its categories', async () => {
-    mockHomeApi({
-      'GET /api/videos/home': {
-        continue_watching: [],
-        categories: [],
-        quick_watches: [],
-        latest: [
-          aHomeVideo({ title: 'One', category_ids: ['chess'] }),
-          aHomeVideo({ title: 'Two', category_ids: ['chess', 'streams'] }),
-          aHomeVideo({ title: 'Four', category_ids: ['chess', 'streams', 'news', 'music'] }),
-          aHomeVideo({ title: 'None', category_ids: [] }),
-        ],
-      },
-      'GET /api/categories': aCategoryList([
-        aCategory({ id: 'chess', color: '#d3ecf8' }),
-        aCategory({ id: 'streams', color: '#fff1bf' }),
-        aCategory({ id: 'news', color: '#e9def8' }),
-        aCategory({ id: 'music', color: '#ffd9d4' }),
-      ]),
-    })
-
-    renderWithProviders(<Home />)
-
-    const card = async (title: string) =>
-      (await screen.findByText(title)).closest('li') as HTMLElement
-    await waitFor(async () => expect(await card('One')).toHaveStyle({ background: '#d3ecf880' }))
-    // jsdom drops the gradient's `to bottom` (cardBackground's own test pins the exact value).
-    expect((await card('Two')).style.background).toMatch(
-      /^linear-gradient\(.*rgba\(211, 236, 248, 0\.5\d*\) 0% 50%, rgba\(255, 241, 191, 0\.5\d*\) 50% 100%\)$/,
-    )
-    expect(await card('Four')).toHaveStyle({ background: '#f2f2f280' })
-    expect((await card('None')).style.background).toBe('')
-  })
-
-  it('leaves cards untinted and unframed when categories are off', async () => {
+  it('shows no category chips when categories are off', async () => {
     const preferences = aPreferences({ categories_enabled: false })
     mockHomeApi({
       'GET /api/videos/home': {
@@ -462,7 +435,7 @@ describe('Home', () => {
         quick_watches: [],
         latest: [aHomeVideo({ title: 'One', category_ids: ['chess'] })],
       },
-      'GET /api/categories': aCategoryList([aCategory({ id: 'chess', color: '#d3ecf8' })]),
+      'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
       'GET /api/preferences': preferences,
     })
 
@@ -471,8 +444,7 @@ describe('Home', () => {
     const card = (await screen.findByText('One')).closest('li') as HTMLElement
     await waitFor(() => expect(queryClient.getQueryData(queryKeys.preferences)).toEqual(preferences))
     await waitFor(() => expect(queryClient.getQueryData(queryKeys.categories)).toBeDefined())
-    expect(card.style.background).toBe('')
-    expect(card).not.toHaveClass('border')
+    expect(within(card).queryByRole('list', { name: 'Categories' })).not.toBeInTheDocument()
   })
 
   it('shows no "Latest videos" while it is turned off', async () => {
@@ -534,5 +506,88 @@ describe('Home', () => {
     expect(await screen.findByText('Fresh Video')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'More about Chess' })).not.toBeInTheDocument()
     expect(screen.queryByText('Gambit')).not.toBeInTheDocument()
+  })
+
+  it('shows placeholder sections, marked busy and without headings, while loading', async () => {
+    mockHomeApi({ 'GET /api/videos/home': pendingForever() })
+
+    renderWithProviders(<Home />)
+
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('Loading…')
+    expect(status.closest('[aria-busy="true"]')).not.toBeNull()
+    expect(screen.queryByRole('heading')).toBeNull()
+    expect(screen.queryByText('Latest videos')).toBeNull()
+  })
+
+  it('replaces the placeholders with the sections once loaded, nothing busy', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [],
+        quick_watches: [],
+        latest: [aHomeVideo({ title: 'Fresh Video' })],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByRole('heading', { name: 'Latest videos' })).toBeInTheDocument()
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull()
+  })
+
+  it('shows category chips on continue watching, quick watches and latest, not in category sections', async () => {
+    const chessVideo = (title: string) => aHomeVideo({ title, category_ids: ['chess'] })
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [chessVideo('Half Watched')],
+        categories: [
+          aHomeCategorySection({
+            id: 'chess',
+            name: 'Chess',
+            videos: [chessVideo('Rook Endgames')],
+          }),
+        ],
+        quick_watches: [chessVideo('Short One')],
+        latest: [chessVideo('Fresh Video')],
+      },
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', color: '#0193bf' }),
+      ]),
+    })
+
+    renderWithProviders(<Home />)
+
+    const chipsOf = (title: string) =>
+      within(screen.getByRole('link', { name: title }).closest('li') as HTMLElement)
+        .queryAllByRole('listitem')
+        .map((chip) => chip.textContent)
+    await waitFor(() => expect(chipsOf('Half Watched')).toEqual(['Chess']))
+    expect(chipsOf('Short One')).toEqual(['Chess'])
+    expect(chipsOf('Fresh Video')).toEqual(['Chess'])
+    expect(chipsOf('Rook Endgames')).toEqual([])
+  })
+
+  it('lays continue watching, category sections and quick watches out as shelves, latest as a feed', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [aHomeVideo({ title: 'Half Watched' })],
+        categories: [aHomeCategorySection({ name: 'Chess', videos: [aHomeVideo()] })],
+        quick_watches: [aHomeVideo({ title: 'Short One' })],
+        latest: [aHomeVideo({ title: 'Fresh Video' })],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    const listOf = async (heading: string) =>
+      within(
+        (await screen.findByRole('heading', { name: heading })).closest('section') as HTMLElement,
+      ).getAllByRole('list')[0]
+    for (const shelf of ['Continue watching', 'More about Chess', 'Quick watches']) {
+      expect(await listOf(shelf)).toHaveClass('max-sm:flex')
+    }
+    expect(await listOf('Latest videos')).toHaveClass('max-sm:grid-cols-1!')
   })
 })

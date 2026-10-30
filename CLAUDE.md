@@ -25,8 +25,9 @@ only by pushing a `vX.Y.Z` tag by hand; the tag is the version
 ## Commands
 
 ```bash
+scripts/run-tests.sh                  # every suite: web, rust, contract, e2e
 cargo build --release                 # build
-cargo test --locked                   # run all tests
+cargo test --locked                   # Rust unit/integration tests only
 cargo test <substring>                # run a single test / module by name filter
 cargo fmt --all -- --check            # formatting check (CI enforces this)
 cargo clippy --all-targets --all-features --locked -- -D warnings   # lint (CI enforces this, warnings fail)
@@ -41,6 +42,18 @@ npm run test:watch  # same suite, re-running on change
 npm run typecheck   # tsc, strict mode
 npm run build       # produces dist/, embedded into the binary by cargo build
 ```
+
+### Verifying a change
+
+Before calling a change done, run `scripts/run-tests.sh` with no flags: every
+suite, contract and end-to-end included. Locally nothing is excluded, so never
+pass `--ci` (it drops the contract tests) or `--only` to narrow the final run;
+the single-suite commands above are for iterating. It checks its
+dependencies first and lists anything missing (`web/node_modules`,
+`web/dist`, `e2e-tests/node_modules` and Playwright browsers, Docker running,
+`YOUTUBE_API_KEY`, `yt-dlp`, `ffprobe`): install or build what it names rather
+than skipping the suite. On failure it prints only the failing tests and the
+path of the full logs.
 
 ## Frontend testing (web/)
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { FolderPlus, Plus, Settings2 } from 'lucide-react'
+import { FolderPlus, Palette, Plus, Settings2 } from 'lucide-react'
 import { deleteCategory, updateCategory } from '@/api/client'
 import {
   useCategories,
@@ -11,14 +11,15 @@ import {
 } from '@/api/queries'
 import type { Category } from '@/api/types'
 import { deleteCategoryDescription, memberCount } from '@/lib/categories'
+import { softTint } from '@/lib/categoryColors'
 import { Button } from '@/components/ui/button'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { CategoryColorPicker } from './CategoryColorPicker'
 import { CategoryPlayer } from './CategoryPlayer'
 import { DetailHeader } from './DetailHeader'
 import { ManageSourcesDialog } from './ManageSourcesDialog'
 import { VideoGrid } from './VideoGrid'
+import { VideoGridSkeleton } from './VideoSkeletons'
 
 /** Router state that opens the manage sources dialog on arrival at a category's view. */
 export interface ManageSourcesState {
@@ -89,57 +90,52 @@ function useSettledSave(save: (color: string) => Promise<void>) {
 }
 
 /**
- * A dot in the category's color that opens the color picker. The picker
- * shows each choice at once and saves it once it settles (see `useSettledSave`).
+ * The category color picker in a dialog. The header follows each choice at
+ * once (`onDraft`), and the choice is saved once it settles (see
+ * `useSettledSave`) or the dialog closes.
  */
-function CategoryColorControl({
+function CategoryColorDialog({
+  open,
+  onOpenChange,
   color,
+  onDraft,
   onChange,
 }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
   color: string
+  onDraft: (color: string | null) => void
   onChange: (color: string) => Promise<void>
 }) {
   const [draft, setDraft] = useState<string | null>(null)
   const { schedule, flush } = useSettledSave(onChange)
   return (
-    <Popover
-      onOpenChange={(open) => {
-        if (!open) {
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
           flush()
           setDraft(null)
+          onDraft(null)
         }
+        onOpenChange(next)
       }}
     >
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="Change color"
-                className="shrink-0 rounded-full"
-              >
-                <span
-                  className="size-4 rounded-full border border-black/10"
-                  style={{ background: draft ?? color }}
-                />
-              </Button>
-            </PopoverTrigger>
-          </TooltipTrigger>
-          <TooltipContent>Change color</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <PopoverContent align="start" className="w-auto">
+      <DialogContent className="w-auto">
+        <DialogTitle>Change color</DialogTitle>
+        <DialogDescription className="sr-only">
+          The category's color, saved as soon as it is chosen.
+        </DialogDescription>
         <CategoryColorPicker
           value={draft ?? color}
           onChange={(next) => {
             setDraft(next)
+            onDraft(next)
             schedule(next)
           }}
         />
-      </PopoverContent>
-    </Popover>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -170,6 +166,8 @@ export function CategoryDetail() {
       navigate(location.pathname, { replace: true, state: null })
     }
   }, [arrivedManaging, location.pathname, navigate])
+  const [recoloring, setRecoloring] = useState(false)
+  const [draftColor, setDraftColor] = useState<string | null>(null)
   const { data } = useCategories()
   const { data: videos, error } = useCategoryVideos(id)
   const { data: preferences } = usePreferences()
@@ -187,7 +185,7 @@ export function CategoryDetail() {
   }
 
   if (!data) {
-    return <p className="text-sm text-muted-foreground">Loading category…</p>
+    return <VideoGridSkeleton count={12} />
   }
   if (!category) {
     return <p className="text-sm text-muted-foreground">Category not found.</p>
@@ -198,18 +196,13 @@ export function CategoryDetail() {
     <div className={playing ? 'flex flex-col md:h-full md:min-h-[480px]' : 'flex min-w-0 flex-col'}>
       <DetailHeader
         name={category.name}
-        tint={category.color}
-        colorControl={
-          <CategoryColorControl
-            color={category.color}
-            onChange={refreshing((color: string) => updateCategory(category.id, { color }))}
-          />
-        }
+        tint={softTint(draftColor ?? category.color)}
         videos={videos}
         unwatchedCount={category.unwatched_count}
         summaryPrefix={`${sources} ${sources === 1 ? 'source' : 'sources'}`}
         onRename={refreshing((name: string) => updateCategory(category.id, { name }))}
         extraActions={[
+          { label: 'Change color', icon: <Palette />, onSelect: () => setRecoloring(true) },
           { label: 'Manage sources', icon: <Settings2 />, onSelect: () => setManaging(true) },
         ]}
         onMarkWatched={sources > 0 ? () => markCategoryWatched(category.id) : undefined}
@@ -223,6 +216,8 @@ export function CategoryDetail() {
         <EmptyCategory category={category} onManage={() => setManaging(true)} />
       ) : playing ? (
         <CategoryPlayer key={category.id} videos={videos} error={error} />
+      ) : !videos ? (
+        !error && <VideoGridSkeleton count={12} />
       ) : (
         videos && (
           <VideoGrid
@@ -234,6 +229,13 @@ export function CategoryDetail() {
         )
       )}
       <ManageSourcesDialog category={category} open={managing} onOpenChange={setManaging} />
+      <CategoryColorDialog
+        open={recoloring}
+        onOpenChange={setRecoloring}
+        color={category.color}
+        onDraft={setDraftColor}
+        onChange={refreshing((color: string) => updateCategory(category.id, { color }))}
+      />
     </div>
   )
 }

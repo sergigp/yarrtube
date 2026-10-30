@@ -164,4 +164,17 @@ describe('VideoActionsMenu', () => {
     expect(channels).toHaveBeenCalledOnce()
     expect(home).toHaveBeenCalledOnce()
   })
+
+  it("extends the control's hit area to 44 by 44 pixels on touch devices", () => {
+    mockApi({})
+    renderWithProviders(<VideoActionsMenu videoId="abc" title="My Video" markable />)
+
+    // A 28px control (size-7) grown by 8px on every side (-inset-2) under `pointer: coarse`.
+    expect(screen.getByRole('button', { name: 'Actions for My Video' })).toHaveClass(
+      'relative',
+      'size-7',
+      'pointer-coarse:after:absolute',
+      'pointer-coarse:after:-inset-2',
+    )
+  })
 })

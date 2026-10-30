@@ -1,6 +1,8 @@
 use anyhow::Context;
 use rusqlite::Connection;
-use rusqlite_migration::{M, Migrations};
+use rusqlite_migration::{HookResult, M, Migrations};
+
+use crate::domain::category::CategoryColor;
 
 const BASELINE_SQL: &str = include_str!("../../../migrations/0001_baseline.sql");
 const WATCH_STATE_SQL: &str = include_str!("../../../migrations/0002_watch_state.sql");
@@ -25,6 +27,8 @@ const PLEX_LABELS_SQL: &str = include_str!("../../../migrations/0015_plex_labels
 const EPISODE_LABELS_GENERATION_SQL: &str =
     include_str!("../../../migrations/0016_episode_labels_generation.sql");
 const PREFERENCES_SQL: &str = include_str!("../../../migrations/0017_preferences.sql");
+const CATEGORY_COLOR_STRENGTHEN_SQL: &str =
+    include_str!("../../../migrations/0018_category_color_strengthen.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -45,10 +49,40 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(PLEX_LABELS_SQL),
         M::up(EPISODE_LABELS_GENERATION_SQL),
         M::up(PREFERENCES_SQL),
+        M::up_with_hook(
+            CATEGORY_COLOR_STRENGTHEN_SQL,
+            strengthen_light_category_colors,
+        ),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
     .context("failed to apply database migrations")
+}
+
+/// Rewrites every light category color (OKLCH lightness above 0.85) left after
+/// the palette mapping to the solid color of the same hue.
+fn strengthen_light_category_colors(tx: &rusqlite::Transaction) -> HookResult {
+    let colors = tx
+        .prepare("SELECT id, color FROM categories")?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    colors
+        .into_iter()
+        .filter_map(|(id, color)| {
+            let color = CategoryColor::new(color).ok()?;
+            let strong = color.clone().strengthened();
+            (strong != color).then_some((id, strong))
+        })
+        .try_for_each(|(id, color)| {
+            tx.execute(
+                "UPDATE categories SET color = ?1 WHERE id = ?2",
+                rusqlite::params![color.as_str(), id],
+            )
+            .map(|_| ())
+        })?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -328,10 +362,43 @@ mod tests {
         assert_eq!(
             colors,
             vec![
-                "#fff1bf", "#ffe0c7", "#ffd9d4", "#fadceb", "#e9def8", "#dbe3fb", "#d3ecf8",
-                "#cff0ea", "#e4f0cc", "#eee5d7", "#fff1bf",
+                "#9f8401", "#bd7123", "#c8645b", "#bd6396", "#9870c5", "#6a80d4", "#0193bf",
+                "#019b8d", "#79922c", "#978364", "#9f8401",
             ]
         );
+    }
+
+    #[test]
+    fn it_should_strengthen_a_former_palette_color() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_preferences(&mut conn);
+        insert_colored_category(&conn, "Chess", "#d3ecf8");
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(category_colors(&conn), vec!["#0193bf"]);
+    }
+
+    #[test]
+    fn it_should_strengthen_a_custom_pastel_keeping_its_hue() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_preferences(&mut conn);
+        insert_colored_category(&conn, "Garden", "#d9f3dd");
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(category_colors(&conn), vec!["#429b5a"]);
+    }
+
+    #[test]
+    fn it_should_leave_an_already_strong_color_unchanged() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_preferences(&mut conn);
+        insert_colored_category(&conn, "Sports", "#c8645b");
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(category_colors(&conn), vec!["#c8645b"]);
     }
 
     #[test]
@@ -757,5 +824,46 @@ mod tests {
                 "2024-02-01T00:00:00+00:00".to_string()
             ))
         );
+    }
+    fn migrate_to_preferences(conn: &mut Connection) {
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+            M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+            M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
+            M::up(EPISODE_NUMBERS_SQL),
+            M::up(RECONCILE_INTERVAL_SQL),
+            M::up(VIDEO_SUBTITLES_SQL),
+            M::up(CATEGORIES_SQL),
+            M::up(PLAYLIST_HIDE_UNWATCHED_COUNT_SQL),
+            M::up(CATEGORY_COLOR_SQL),
+            M::up(VIDEO_CATEGORIES_SQL),
+            M::up(PLEX_LABELS_SQL),
+            M::up(EPISODE_LABELS_GENERATION_SQL),
+            M::up(PREFERENCES_SQL),
+        ])
+        .to_latest(conn)
+        .unwrap();
+    }
+
+    fn insert_colored_category(conn: &Connection, name: &str, color: &str) {
+        conn.execute(
+            "INSERT INTO categories (id, name, created_at, color) VALUES (?1, ?1, ?2, ?3)",
+            rusqlite::params![name, "2024-01-01T00:00:00+00:00", color],
+        )
+        .unwrap();
+    }
+
+    fn category_colors(conn: &Connection) -> Vec<String> {
+        let mut stmt = conn
+            .prepare("SELECT color FROM categories ORDER BY id")
+            .unwrap();
+        stmt.query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
     }
 }

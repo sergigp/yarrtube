@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes, useNavigate, type InitialEntry } from 'react-router-dom'
 import { CategoryDetail } from './CategoryDetail'
+import { softTint } from '@/lib/categoryColors'
 import { RouteProbe } from '@/test/RouteProbe'
 import {
   aCategory,
@@ -13,6 +14,7 @@ import {
   aPlaylist,
   aPreferences,
   mockApi,
+  pendingForever,
   renderWithProviders,
   type Routes as ApiRoutes,
 } from '@/test/helpers'
@@ -89,17 +91,18 @@ describe('CategoryDetail', () => {
 
     expect(await screen.findByRole('heading', { name: 'Chess' })).toBeInTheDocument()
     expect(await screen.findByText('3 sources · 2 videos · 1 unwatched')).toBeInTheDocument()
-    const cards = await screen.findAllByRole('listitem')
+    await screen.findByText('Newest')
+    const cards = screen.getAllByRole('listitem')
     expect(cards.map((card) => within(card).getAllByRole('link')[1]?.textContent)).toEqual([
       'Newest',
       'Older',
     ])
   })
 
-  it('tints the header with the category color and leaves the cards untinted', async () => {
+  it('tints the header with the soft tint of the category color and leaves the cards untinted', async () => {
     renderCategory({
       'GET /api/categories': aCategoryList([
-        aCategory({ id: 'chess', name: 'Chess', color: '#d3ecf8', channels: ['@hikaru'] }),
+        aCategory({ id: 'chess', name: 'Chess', color: '#0193bf', channels: ['@hikaru'] }),
       ]),
       'GET /api/categories/chess/videos': [
         aHomeVideo({ title: 'Opening', category_ids: ['chess'] }),
@@ -109,7 +112,7 @@ describe('CategoryDetail', () => {
     const heading = await screen.findByRole('heading', { name: 'Chess' })
     const card = await screen.findByRole('listitem')
 
-    expect(heading.closest('header')).toHaveStyle({ background: '#d3ecf8' })
+    expect(heading.closest('header')).toHaveStyle({ background: softTint('#0193bf') })
     expect(card.style.background).toBe('')
   })
 
@@ -125,8 +128,8 @@ describe('CategoryDetail', () => {
       ],
     })
 
-    const cards = await screen.findAllByRole('listitem')
-    const [fresh, started] = cards as [HTMLElement, HTMLElement]
+    await screen.findByText('Started')
+    const [fresh, started] = screen.getAllByRole('listitem') as [HTMLElement, HTMLElement]
     expect(within(started).getByRole('progressbar', { name: 'Watch progress' })).toHaveAttribute(
       'aria-valuenow',
       '20',
@@ -148,8 +151,7 @@ describe('CategoryDetail', () => {
     })
 
     const user = userEvent.setup()
-    await screen.findAllByRole('listitem')
-    await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
+    await user.click(await screen.findByRole('button', { name: 'More actions for Chess' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
 
     expect(
@@ -184,8 +186,7 @@ describe('CategoryDetail', () => {
     })
 
     const user = userEvent.setup()
-    await screen.findAllByRole('listitem')
-    await user.click(screen.getByRole('button', { name: 'More actions for Chess' }))
+    await user.click(await screen.findByRole('button', { name: 'More actions for Chess' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Mark all watched' }))
     await user.click(await screen.findByRole('button', { name: 'Mark watched' }))
 
@@ -244,16 +245,16 @@ describe('CategoryDetail', () => {
     expect(explanation).toBe(
       'Add channels and playlists to Chess to watch their videos here, newest first.',
     )
-    expect(items).toEqual(['Manage sources', 'Delete'])
+    expect(items).toEqual(['Change color', 'Manage sources', 'Delete'])
     expect(dialogTitle).toBe('Manage sources in Chess')
     expect(noVideosMessage).toBe('No videos synced yet.')
     expect(await screen.findByText('Category not found.')).toBeInTheDocument()
   })
 
-  it('saves the color chosen through "Change color" and tints the header with it', async () => {
-    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#d3ecf8', channels: ['@hikaru'] })
+  it('saves the color chosen through the "Change color" action and tints the header with it', async () => {
+    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#0193bf', channels: ['@hikaru'] })
     const recolor = vi.fn(() => {
-      chess = { ...chess, color: '#e9def8' }
+      chess = { ...chess, color: '#9870c5' }
       return null
     })
     const { fetchMock } = renderCategory({
@@ -263,22 +264,25 @@ describe('CategoryDetail', () => {
     })
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: 'Change color' }))
-    await user.click(await screen.findByRole('radio', { name: 'Lilac' }))
+    await user.click(await screen.findByRole('button', { name: 'More actions for Chess' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Change color' }))
+    await user.click(await screen.findByRole('radio', { name: 'Violet' }))
 
-    const header = screen.getByRole('heading', { name: 'Chess' }).closest('header')
-    await waitFor(() => expect(header).toHaveStyle({ background: '#e9def8' }))
+    // The open color dialog hides the page from assistive technology.
+    const header = screen.getByRole('heading', { name: 'Chess', hidden: true }).closest('header')
+    await waitFor(() => expect(header).toHaveStyle({ background: softTint('#9870c5') }))
+    await waitFor(() => expect(recolor).toHaveBeenCalledOnce())
     const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/categories/chess') as [
       string,
       RequestInit,
     ]
-    expect(JSON.parse(init.body as string)).toEqual({ color: '#e9def8' })
+    expect(JSON.parse(init.body as string)).toEqual({ color: '#9870c5' })
   })
 
   it('saves a custom hue once, when the slider settles', async () => {
-    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#d3ecf8', channels: ['@hikaru'] })
+    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#0193bf', channels: ['@hikaru'] })
     const recolor = vi.fn(() => {
-      chess = { ...chess, color: '#cdf4f6' }
+      chess = { ...chess, color: '#03999f' }
       return null
     })
     const { fetchMock } = renderCategory({
@@ -288,18 +292,21 @@ describe('CategoryDetail', () => {
     })
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: 'Change color' }))
+    await user.click(await screen.findByRole('button', { name: 'More actions for Chess' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Change color' }))
     await user.click(await screen.findByRole('radio', { name: 'Custom' }))
     const hue = screen.getByRole('slider', { name: 'Hue' })
     ;['120', '160', '187', '200'].forEach((value) => fireEvent.change(hue, { target: { value } }))
 
-    const header = screen.getByRole('heading', { name: 'Chess' }).closest('header')
-    await waitFor(() => expect(header).toHaveStyle({ background: '#cdf4f6' }))
+    // The open color dialog hides the page from assistive technology.
+    const header = screen.getByRole('heading', { name: 'Chess', hidden: true }).closest('header')
+    await waitFor(() => expect(header).toHaveStyle({ background: softTint('#03999f') }))
+    await waitFor(() => expect(recolor).toHaveBeenCalledOnce())
     const saves = fetchMock.mock.calls.filter(([url]) => url === '/api/categories/chess') as [
       string,
       RequestInit,
     ][]
-    expect(saves.map(([, init]) => JSON.parse(init.body as string))).toEqual([{ color: '#cdf4f6' }])
+    expect(saves.map(([, init]) => JSON.parse(init.body as string))).toEqual([{ color: '#03999f' }])
   })
 
   it('renames from the header', async () => {
@@ -409,5 +416,26 @@ describe('CategoryDetail', () => {
     expect(
       fetchMock.mock.calls.map(([url]) => url as string).filter((url) => url.includes('/videos')),
     ).not.toContainEqual(expect.stringMatching(/^\/api\/(channels|playlists)\//))
+  })
+
+  it('shows the header from the categories list at once, with placeholders while the videos load', async () => {
+    renderCategory({
+      'GET /api/categories': aCategoryList([
+        aCategory({ id: 'chess', name: 'Chess', color: '#0193bf', channels: ['@hikaru'] }),
+      ]),
+      'GET /api/categories/chess/videos': pendingForever(),
+    })
+
+    const heading = await screen.findByRole('heading', { name: 'Chess' })
+    const header = heading.closest('header') as HTMLElement
+    expect(header).toHaveStyle({ background: softTint('#0193bf') })
+    expect(
+      within(header).getByRole('button', { name: 'More actions for Chess' }),
+    ).toBeInTheDocument()
+    expect(header.querySelector('[data-slot="skeleton"]')).not.toBeNull()
+    expect(within(header).queryByText(/sources/)).not.toBeInTheDocument()
+    const status = screen.getByRole('status', { name: '' })
+    expect(status).toHaveTextContent('Loading…')
+    expect(status.closest('[aria-busy="true"]')).not.toBeNull()
   })
 })

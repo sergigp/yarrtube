@@ -55,11 +55,11 @@ export function hitRoutes() {
 // `/api/playlists/PL123/videos` → `/api/playlists/{id}/videos`, and a
 // source's video (`…/videos/abc/subtitles.vtt`) → `…/videos/{video_id}/…`.
 // Literal segments the router declares next to a parameter (`preview`,
-// `home`) are kept as they are.
+// `home`, `search`) are kept as they are.
 function toTemplate(pathname) {
   const segments = pathname.split('/')
   const [, api, resource, id, ...rest] = segments
-  if (id === undefined || ['preview', 'home'].includes(id)) {
+  if (id === undefined || ['preview', 'home', 'search'].includes(id)) {
     return pathname
   }
   const param = resource === 'channels' ? '{handle}' : '{id}'

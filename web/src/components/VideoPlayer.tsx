@@ -77,8 +77,10 @@ export function VideoPlayer({
 
   return (
     <div
+      // Pinned below the header on phones, which keeps the header in view.
+      data-pinned-player=""
       className={cn(
-        'sticky top-(--header-height) z-10 -mx-4 flex overflow-hidden aspect-video items-center justify-center sm:-mx-6',
+        'sticky top-(--header-offset) z-10 -mx-4 flex overflow-hidden aspect-video items-center justify-center sm:-mx-6',
         'md:relative md:top-auto md:z-auto md:m-0 md:aspect-auto md:min-h-80 md:shrink-0 md:rounded-lg',
         filename ? 'bg-black md:bg-secondary/60' : 'bg-secondary md:bg-secondary/60',
       )}

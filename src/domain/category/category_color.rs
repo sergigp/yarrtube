@@ -1,14 +1,21 @@
+use crate::domain::category::oklch::Oklch;
 use crate::domain::shared::ValidationError;
+
+/// Lightness above which a color reads as a pastel.
+const LIGHT_LIGHTNESS: f64 = 0.85;
+/// The palette's solid lightness and chroma.
+const SOLID_LIGHTNESS: f64 = 0.62;
+const SOLID_CHROMA: f64 = 0.13;
 
 /// A category's color: `#` and 6 hexadecimal digits, lowercase.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CategoryColor(String);
 
 impl CategoryColor {
-    /// Soft presets, in the order defaults are handed out.
+    /// Solid presets, in the order defaults are handed out.
     pub const PALETTE: [&'static str; 10] = [
-        "#fff1bf", "#ffe0c7", "#ffd9d4", "#fadceb", "#e9def8", "#dbe3fb", "#d3ecf8", "#cff0ea",
-        "#e4f0cc", "#eee5d7",
+        "#9f8401", "#bd7123", "#c8645b", "#bd6396", "#9870c5", "#6a80d4", "#0193bf", "#019b8d",
+        "#79922c", "#978364",
     ];
 
     pub fn new(color: impl Into<String>) -> Result<Self, ValidationError> {
@@ -30,6 +37,23 @@ impl CategoryColor {
             .min_by_key(|hex| uses(hex))
             .unwrap_or(Self::PALETTE[0]);
         Self(least.to_string())
+    }
+
+    /// The solid color of this color's hue when this one is light (OKLCH
+    /// lightness above 0.85), this color otherwise.
+    pub fn strengthened(self) -> Self {
+        let oklch = Oklch::from_hex(&self.0);
+        if oklch.lightness <= LIGHT_LIGHTNESS {
+            return self;
+        }
+        Self(
+            Oklch {
+                lightness: SOLID_LIGHTNESS,
+                chroma: SOLID_CHROMA,
+                ..oklch
+            }
+            .to_hex(),
+        )
     }
 
     pub fn as_str(&self) -> &str {

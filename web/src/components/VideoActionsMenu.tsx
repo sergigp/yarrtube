@@ -36,6 +36,8 @@ export function VideoActionsMenu({
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger
         className={cn(
+          // On touch, an invisible box 8px past each edge makes the hit area 44px.
+          "relative pointer-coarse:after:absolute pointer-coarse:after:-inset-2 pointer-coarse:after:content-['']",
           'flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground',
           className,
         )}

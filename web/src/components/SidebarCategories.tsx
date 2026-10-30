@@ -6,11 +6,12 @@ import { useCategories, useLibraryAction } from '@/api/queries'
 import type { Category } from '@/api/types'
 import { useRememberedFlag } from '@/hooks/useRememberedFlag'
 import { deleteCategoryDescription, orderCategories } from '@/lib/categories'
-import { activeIdFrom, sectionView } from '@/lib/sidebarSections'
+import { activeIdFrom, rowMenuClassName, sectionView } from '@/lib/sidebarSections'
 import { cn } from '@/lib/utils'
 import type { ManageSourcesState } from './CategoryDetail'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
+import { SidebarCount } from './SidebarCount'
 import { SidebarSectionHeading } from './SidebarSectionHeading'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 
@@ -25,7 +26,7 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
   const navigate = useNavigate()
   const unwatchedCount = category.unwatched_count
   return (
-    <li className={cn('flex items-center gap-1 rounded-md pr-1', active && 'bg-accent')}>
+    <li className={cn('group/row flex items-center gap-1 rounded-md pr-1', active && 'bg-accent')}>
       <Link
         to={`/categories/${encodeURIComponent(category.id)}`}
         onClick={onNavigate}
@@ -42,17 +43,12 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
         />
         <span className="min-w-0 flex-1 truncate">{category.name}</span>
         {unwatchedCount > 0 && (
-          <span
-            className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none font-medium text-primary-foreground"
-            aria-label={`${unwatchedCount} unwatched`}
-            title={`${unwatchedCount} unwatched`}
-          >
-            {unwatchedCount}
-          </span>
+          <SidebarCount count={unwatchedCount} active={active} />
         )}
       </Link>
       <EntryActionsMenu
         name={category.name}
+        className={rowMenuClassName(active)}
         triggerIcon={<Ellipsis className="size-4" />}
         leadingItems={
           <DropdownMenuItem
@@ -75,15 +71,10 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
 interface SidebarCategoriesProps {
   onAddCategory: () => void
   onClose: () => void
-  /** Trimmed sidebar search; shows only matching categories, unfolded. */
-  searchText: string
 }
 
-/**
- * The sidebar's Categories section: every category, unread first. Hidden
- * while searching when no category matches.
- */
-export function SidebarCategories({ onAddCategory, onClose, searchText }: SidebarCategoriesProps) {
+/** The sidebar's Categories section: every category, unread first. */
+export function SidebarCategories({ onAddCategory, onClose }: SidebarCategoriesProps) {
   const { pathname } = useLocation()
   const activeId = activeIdFrom(pathname, '/categories/')
   const navigate = useNavigate()
@@ -99,7 +90,6 @@ export function SidebarCategories({ onAddCategory, onClose, searchText }: Sideba
     headingActive,
     rows: categories,
   } = sectionView(data && orderCategories(data.categories), {
-    searchText,
     folded: rememberedFolded,
     activeId,
   })
@@ -111,10 +101,6 @@ export function SidebarCategories({ onAddCategory, onClose, searchText }: Sideba
   // No categories yet gets a full-width add row; otherwise a compact `+` on the heading.
   const empty = data?.categories.length === 0
   const headingId = useId()
-
-  if (searchText && !categories?.length) {
-    return null
-  }
 
   return (
     <section aria-labelledby={headingId}>

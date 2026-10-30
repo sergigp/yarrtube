@@ -165,7 +165,8 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
   })
 
   await test.step('delete it from its actions menu, keeping its channel', async () => {
-    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await page.getByRole('button', { name: 'More actions for Board games' }).click()
+    await page.getByRole('menuitem', { name: 'Delete', exact: true }).click()
     await expect(dialog).toContainText(
       '"Board games" holds 1 channels and playlists. None of them, nor any video, will be deleted.',
     )

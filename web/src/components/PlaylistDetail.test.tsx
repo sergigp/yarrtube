@@ -143,7 +143,7 @@ describe('PlaylistDetail', () => {
   describe('on desktop', () => {
     useDesktopViewport()
 
-    it('lays every action out as a button, with no ⋮ menu', async () => {
+    it('lays every action but delete out as a button, then a ⋮ menu offering delete', async () => {
       renderPlaylist(
         {
           'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'The Playlist' })],
@@ -158,13 +158,11 @@ describe('PlaylistDetail', () => {
         'Exclude from home',
         'Hide unwatched count',
         'Edit settings',
-        'Delete',
+        'More actions for The Playlist',
       ]) {
         expect(screen.getByRole('button', { name })).toBeInTheDocument()
       }
-      expect(
-        screen.queryByRole('button', { name: 'More actions for The Playlist' }),
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     })
   })
 
