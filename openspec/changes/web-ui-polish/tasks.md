@@ -23,7 +23,7 @@
 
 - [x] 4.1 Make `VideoGrid` cards frameless with the hover surface and thumbnail zoom, remove tint and frame, and verify the updated tests assert no card background or border classes
 - [x] 4.2 Add the meta line (source name · age) and the playlist placeholder icon to cards; verify tests for the channel, playlist and unknown-date scenarios
-- [ ] 4.3 Add category chips (max 2 + "+N", soft tint background, ink text), shown only when the caller passes chips; verify tests for the one, many, none and category-section scenarios
+- [x] 4.3 Add category chips (max 2 + "+N", soft tint background, ink text), shown only when the caller passes chips; verify tests for the one, many, none and category-section scenarios
 - [ ] 4.4 Add `layout: 'grid' | 'shelf' | 'feed'` with container-query columns, single-row shelves (no partial row), the mobile snap-scrolling shelf and the mobile one-column Latest feed; make the main content wrapper an `@container`; verify component tests for the layout classes, and check visually at 390px, 1024px and 1440px with `scripts/run-spa-against-remote.sh`
 - [ ] 4.5 Update `Home`: chips on Continue watching, Quick watches and Latest only; shelf layout for those and the category sections; skeleton sections while loading (no "Latest videos" flash); larger section headings; update `Home.test.tsx` for the loading, error and chip scenarios and verify it passes
 - [ ] 4.6 Make video menu controls ≥44px hit area on touch (`pointer: coarse`) and verify with a test on the class/variant

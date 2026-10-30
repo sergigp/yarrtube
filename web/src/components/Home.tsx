@@ -18,14 +18,7 @@ interface HomeSectionProps {
  * the whole section, heading included, renders nothing unless it has videos
  * to show; otherwise it reports loading, errors and emptiness in place.
  */
-function HomeSection({
-  title,
-  href,
-  name,
-  videos,
-  error,
-  hideWhenEmpty,
-}: HomeSectionProps) {
+function HomeSection({ title, href, name, videos, error, hideWhenEmpty }: HomeSectionProps) {
   if (hideWhenEmpty && (error || !videos || videos.length === 0)) {
     return null
   }

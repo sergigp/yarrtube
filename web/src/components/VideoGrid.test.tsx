@@ -1,137 +1,180 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
-import { VideoGrid } from "./VideoGrid";
-import { aHomeVideo, mockApi, renderWithProviders } from "@/test/helpers";
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { screen, within } from '@testing-library/react'
+import { VideoGrid } from './VideoGrid'
+import { aHomeVideo, mockApi, renderWithProviders } from '@/test/helpers'
+import { inkShade, softTint } from '@/lib/categoryColors'
 
 /** The card (list item) holding the video titled `title`. */
 function card(title: string): HTMLElement {
-  return screen.getByRole("link", { name: title }).closest("li") as HTMLElement;
+  return screen.getByRole('link', { name: title }).closest('li') as HTMLElement
 }
 
 /** The meta line under a card's title, matched by its whole text. */
 function metaLine(text: string): HTMLElement {
   return screen.getByText(
     (_, element) =>
-      element?.getAttribute("data-slot") === "card-meta" &&
-      element.textContent === text,
-  );
+      element?.getAttribute('data-slot') === 'card-meta' && element.textContent === text,
+  )
 }
 
 const BETTATECH = {
-  kind: "channel" as const,
-  id: "@bettatech",
-  name: "BettaTech",
-  path: "channels/bettatech",
-  avatar_filename: "bettatech.jpg",
-};
+  kind: 'channel' as const,
+  id: '@bettatech',
+  name: 'BettaTech',
+  path: 'channels/bettatech',
+  avatar_filename: 'bettatech.jpg',
+}
 
-describe("VideoGrid", () => {
+const CHIPS = new Map([
+  ['ai', { name: 'AI & Code', color: '#9870c5' }],
+  ['chess', { name: 'Chess', color: '#0193bf' }],
+  ['science', { name: 'Science', color: '#019b8d' }],
+])
+
+describe('VideoGrid', () => {
   afterEach(() => {
-    vi.useRealTimers();
-  });
+    vi.useRealTimers()
+  })
 
-  it("draws cards frameless: no border, no background of their own", () => {
-    mockApi({});
-    renderWithProviders(
-      <VideoGrid videos={[aHomeVideo({ title: "Fresh Video" })]} />,
-    );
+  it('draws cards frameless: no border, no background of their own', () => {
+    mockApi({})
+    renderWithProviders(<VideoGrid videos={[aHomeVideo({ title: 'Fresh Video' })]} />)
 
-    expect(card("Fresh Video").style.background).toBe("");
-    expect(card("Fresh Video").className.split(" ")).not.toContain("border");
+    expect(card('Fresh Video').style.background).toBe('')
+    expect(card('Fresh Video').className.split(' ')).not.toContain('border')
     expect(
-      card("Fresh Video")
-        .className.split(" ")
+      card('Fresh Video')
+        .className.split(' ')
         .filter((name) => /^(bg-|border)/.test(name)),
-    ).toEqual([]);
-  });
+    ).toEqual([])
+  })
 
-  it("shows a hover surface behind the card and zooms the thumbnail within its rounded bounds", () => {
-    mockApi({});
-    renderWithProviders(
-      <VideoGrid videos={[aHomeVideo({ title: "Fresh Video" })]} />,
-    );
+  it('shows a hover surface behind the card and zooms the thumbnail within its rounded bounds', () => {
+    mockApi({})
+    renderWithProviders(<VideoGrid videos={[aHomeVideo({ title: 'Fresh Video' })]} />)
 
-    expect(card("Fresh Video")).toHaveClass("hover:bg-muted/60");
-    const thumbnailLink = card("Fresh Video").querySelector(
-      '[data-slot="card-thumbnail"]',
-    );
-    expect(thumbnailLink).toHaveClass("overflow-hidden", "rounded-lg");
-    expect(thumbnailLink?.firstElementChild).toHaveClass(
-      "group-hover/card:scale-[1.03]",
-    );
-  });
+    expect(card('Fresh Video')).toHaveClass('hover:bg-muted/60')
+    const thumbnailLink = card('Fresh Video').querySelector('[data-slot="card-thumbnail"]')
+    expect(thumbnailLink).toHaveClass('overflow-hidden', 'rounded-lg')
+    expect(thumbnailLink?.firstElementChild).toHaveClass('group-hover/card:scale-[1.03]')
+  })
 
   it("shows a channel card's avatar and its meta line: the channel's name and the video's age", () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-10-30T12:00:00Z"));
-    mockApi({});
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-30T12:00:00Z'))
+    mockApi({})
     renderWithProviders(
       <VideoGrid
         videos={[
           aHomeVideo({
-            title: "Rust in 100 seconds",
+            title: 'Rust in 100 seconds',
             source: BETTATECH,
-            published_at: "2026-10-28T10:00:00Z",
+            published_at: '2026-10-28T10:00:00Z',
           }),
         ]}
       />,
-    );
+    )
 
-    expect(metaLine("BettaTech · 2d ago")).toBeInTheDocument();
-    expect(
-      screen
-        .getAllByRole("link", { name: "BettaTech" })[0]
-        .querySelector("img"),
-    ).toBeTruthy();
-  });
+    expect(metaLine('BettaTech · 2d ago')).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'BettaTech' })[0].querySelector('img')).toBeTruthy()
+  })
 
   it("shows a playlist card's icon and its meta line: the playlist's name and the video's age", () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-10-30T12:00:00Z"));
-    mockApi({});
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-30T12:00:00Z'))
+    mockApi({})
     renderWithProviders(
       <VideoGrid
         videos={[
           aHomeVideo({
-            title: "The Minority Attack",
+            title: 'The Minority Attack',
             source: {
-              kind: "playlist",
-              id: "PLmiddle",
-              name: "Chess Middlegames",
-              path: "playlists/middlegames",
+              kind: 'playlist',
+              id: 'PLmiddle',
+              name: 'Chess Middlegames',
+              path: 'playlists/middlegames',
               avatar_filename: null,
             },
-            published_at: "2026-09-24T12:00:00Z",
+            published_at: '2026-09-24T12:00:00Z',
           }),
         ]}
       />,
-    );
+    )
 
-    expect(metaLine("Chess Middlegames · 5w ago")).toBeInTheDocument();
+    expect(metaLine('Chess Middlegames · 5w ago')).toBeInTheDocument()
     expect(
-      within(card("The Minority Attack")).getByRole("img", {
-        name: "Playlist",
+      within(card('The Minority Attack')).getByRole('img', {
+        name: 'Playlist',
       }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Chess Middlegames" }),
-    ).toHaveAttribute("href", "/playlists/PLmiddle");
-  });
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Chess Middlegames' })).toHaveAttribute(
+      'href',
+      '/playlists/PLmiddle',
+    )
+  })
 
   it("shows only the source's name on the meta line of a video with no publish date", () => {
-    mockApi({});
+    mockApi({})
     renderWithProviders(
       <VideoGrid
         videos={[
           aHomeVideo({
-            title: "Undated",
+            title: 'Undated',
             source: BETTATECH,
             published_at: null,
           }),
         ]}
       />,
-    );
+    )
 
-    expect(metaLine("BettaTech")).toBeInTheDocument();
-  });
-});
+    expect(metaLine('BettaTech')).toBeInTheDocument()
+  })
+
+  it("shows a video's category as a chip in its hue: ink text over a soft tint", () => {
+    mockApi({})
+    renderWithProviders(
+      <VideoGrid
+        videos={[aHomeVideo({ title: 'Opening Traps', category_ids: ['chess'] })]}
+        chips={CHIPS}
+      />,
+    )
+
+    const chips = within(card('Opening Traps')).getAllByRole('listitem')
+    expect(chips.map((chip) => chip.textContent)).toEqual(['Chess'])
+    expect(chips[0]).toHaveStyle({ background: softTint('#0193bf'), color: inkShade('#0193bf') })
+  })
+
+  it('shows at most 2 chips, then a "+N" chip for the rest', () => {
+    mockApi({})
+    renderWithProviders(
+      <VideoGrid
+        videos={[aHomeVideo({ title: 'Engines', category_ids: ['ai', 'chess', 'science'] })]}
+        chips={CHIPS}
+      />,
+    )
+
+    expect(
+      within(card('Engines'))
+        .getAllByRole('listitem')
+        .map((chip) => chip.textContent),
+    ).toEqual(['AI & Code', 'Chess', '+1'])
+  })
+
+  it('shows no chip row for a video in no category', () => {
+    mockApi({})
+    renderWithProviders(
+      <VideoGrid videos={[aHomeVideo({ title: 'Loose', category_ids: [] })]} chips={CHIPS} />,
+    )
+
+    expect(within(card('Loose')).queryByRole('list', { name: 'Categories' })).toBeNull()
+  })
+
+  it('shows no chips unless the caller asks for them', () => {
+    mockApi({})
+    renderWithProviders(
+      <VideoGrid videos={[aHomeVideo({ title: 'Opening Traps', category_ids: ['chess'] })]} />,
+    )
+
+    expect(within(card('Opening Traps')).queryByRole('list', { name: 'Categories' })).toBeNull()
+  })
+})
