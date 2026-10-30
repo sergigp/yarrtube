@@ -9,7 +9,7 @@
 - [x] 2.1 `it_should_list_a_category_section_with_its_pending_videos_on_home` — a category's pending videos become a section with id, name, color, newest sync first
 - [x] 2.2 `it_should_list_no_category_sections_if_nothing_pending_on_home` — watched videos are not pending; no section
 - [x] 2.3 `it_should_cap_a_category_section_at_6_on_home` — section holds the 6 most recent
-- [ ] 2.4 `it_should_list_a_category_section_video_once_from_the_channel_on_home` — once per YouTube video, channel copy
+- [x] 2.4 `it_should_list_a_category_section_video_once_from_the_channel_on_home` — once per YouTube video, channel copy
 - [ ] 2.5 `it_should_not_repeat_a_continue_watching_video_in_category_sections_on_home` — continue watching wins
 - [ ] 2.6 `it_should_not_repeat_a_category_section_video_in_quick_watches_on_home` — sections sit above quick watches
 - [ ] 2.7 `it_should_not_repeat_a_category_section_video_in_latest_on_home` — sections sit above latest
