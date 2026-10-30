@@ -28,6 +28,7 @@ import {
   activeIdFrom,
   matchesSearch,
   orderByUnwatched,
+  rowMenuClassName,
   sectionView,
   shownUnwatchedCount,
   unwatchedTotal,
@@ -50,6 +51,7 @@ import { cn } from '@/lib/utils'
 
 interface SidebarRowMenuProps {
   item: LibraryItem
+  className?: string
   onSync: () => Promise<void>
   onMarkWatched?: (() => Promise<void>) | undefined
   onSetExcludedFromHome?: ((excluded: boolean) => Promise<void>) | undefined
@@ -60,6 +62,7 @@ interface SidebarRowMenuProps {
 
 function SidebarRowMenu({
   item,
+  className,
   onSync,
   onMarkWatched,
   onSetExcludedFromHome,
@@ -72,6 +75,7 @@ function SidebarRowMenu({
   return (
     <EntryActionsMenu
       name={item.name}
+      className={className}
       triggerIcon={
         syncing ? <RotateCw className="size-3.5 animate-spin" /> : <Ellipsis className="size-4" />
       }
@@ -131,7 +135,7 @@ function SidebarRow({
 }: SidebarRowProps) {
   const unwatchedCount = shownUnwatchedCount(item)
   return (
-    <li className={cn('flex items-center gap-1 rounded-md pr-1', active && 'bg-accent')}>
+    <li className={cn('group/row flex items-center gap-1 rounded-md pr-1', active && 'bg-accent')}>
       <Link
         to={href}
         onClick={onNavigate}
@@ -153,6 +157,7 @@ function SidebarRow({
       </Link>
       <SidebarRowMenu
         item={item}
+        className={rowMenuClassName(active)}
         onSync={onSync}
         onMarkWatched={onMarkWatched}
         onSetExcludedFromHome={onSetExcludedFromHome}

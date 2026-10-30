@@ -6,7 +6,7 @@ import { useCategories, useLibraryAction } from '@/api/queries'
 import type { Category } from '@/api/types'
 import { useRememberedFlag } from '@/hooks/useRememberedFlag'
 import { deleteCategoryDescription, orderCategories } from '@/lib/categories'
-import { activeIdFrom, sectionView } from '@/lib/sidebarSections'
+import { activeIdFrom, rowMenuClassName, sectionView } from '@/lib/sidebarSections'
 import { cn } from '@/lib/utils'
 import type { ManageSourcesState } from './CategoryDetail'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -26,7 +26,7 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
   const navigate = useNavigate()
   const unwatchedCount = category.unwatched_count
   return (
-    <li className={cn('flex items-center gap-1 rounded-md pr-1', active && 'bg-accent')}>
+    <li className={cn('group/row flex items-center gap-1 rounded-md pr-1', active && 'bg-accent')}>
       <Link
         to={`/categories/${encodeURIComponent(category.id)}`}
         onClick={onNavigate}
@@ -48,6 +48,7 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
       </Link>
       <EntryActionsMenu
         name={category.name}
+        className={rowMenuClassName(active)}
         triggerIcon={<Ellipsis className="size-4" />}
         leadingItems={
           <DropdownMenuItem

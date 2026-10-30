@@ -65,3 +65,14 @@ export function activeIdFrom(pathname: string, prefix: string): string | null {
   const rest = pathname.slice(prefix.length).split('/')[0]
   return rest ? decodeURIComponent(rest) : null
 }
+
+/**
+ * A sidebar row's menu control: where the device can hover, hidden (keeping
+ * its space) until the row (`group/row`) is hovered or focused, or its menu
+ * is open; always shown on the active row and on touch devices.
+ */
+export function rowMenuClassName(active: boolean): string {
+  return active
+    ? ''
+    : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 [@media(hover:hover)]:group-focus-within/row:opacity-100 [@media(hover:hover)]:data-[state=open]:opacity-100'
+}

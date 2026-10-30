@@ -914,4 +914,33 @@ describe('Sidebar', () => {
     expect(total).toHaveClass('tabular-nums', 'text-muted-foreground')
     expect(total).not.toHaveClass('bg-primary')
   })
+
+  it('shows a row menu control on hover, focus or while open with a mouse, always on the active row and on touch', async () => {
+    renderSidebar(
+      {
+        'GET /api/channels': [
+          aChannel({ id: '@a', name: 'Chan A' }),
+          aChannel({ id: '@b', name: 'Chan B' }),
+        ],
+        'GET /api/playlists': [aPlaylist({ name: 'List C' })],
+      },
+      { route: '/channels/@b' },
+    )
+
+    const inactive = await screen.findByRole('button', { name: 'Actions for Chan A' })
+    // Hidden only where the device can hover; touch devices always see it.
+    expect(inactive).toHaveClass(
+      '[@media(hover:hover)]:opacity-0',
+      '[@media(hover:hover)]:group-hover/row:opacity-100',
+      '[@media(hover:hover)]:group-focus-within/row:opacity-100',
+      '[@media(hover:hover)]:data-[state=open]:opacity-100',
+    )
+    expect(inactive.closest('li')).toHaveClass('group/row')
+    expect(screen.getByRole('button', { name: 'Actions for List C' })).toHaveClass(
+      '[@media(hover:hover)]:opacity-0',
+    )
+    expect(screen.getByRole('button', { name: 'Actions for Chan B' })).not.toHaveClass(
+      '[@media(hover:hover)]:opacity-0',
+    )
+  })
 })

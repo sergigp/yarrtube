@@ -228,4 +228,26 @@ describe('SidebarCategories', () => {
     expect(dot(chess)).toHaveStyle({ background: '#d3ecf8' })
     expect(dot(sports)).toHaveStyle({ background: '#f0e4d0' })
   })
+
+  it('shows a category row menu control under the same conditions as channel rows', async () => {
+    renderSidebar(
+      {
+        'GET /api/categories': aCategoryList([
+          aCategory({ id: 'chess', name: 'Chess' }),
+          aCategory({ id: 'sports', name: 'Sports' }),
+        ]),
+      },
+      { route: '/categories/sports' },
+    )
+
+    const chess = await screen.findByRole('button', { name: 'Actions for Chess' })
+    expect(chess).toHaveClass(
+      '[@media(hover:hover)]:opacity-0',
+      '[@media(hover:hover)]:group-hover/row:opacity-100',
+    )
+    expect(chess.closest('li')).toHaveClass('group/row')
+    expect(screen.getByRole('button', { name: 'Actions for Sports' })).not.toHaveClass(
+      '[@media(hover:hover)]:opacity-0',
+    )
+  })
 })
