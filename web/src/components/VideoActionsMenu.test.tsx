@@ -12,7 +12,7 @@ function LibraryObserver() {
   return null
 }
 
-const EMPTY_HOME = { continue_watching: [], quick_watches: [], latest: [] }
+const EMPTY_HOME = { continue_watching: [], categories: [], quick_watches: [], latest: [] }
 
 describe('VideoActionsMenu', () => {
   it('marks the video watched when "Mark as watched" is chosen', async () => {

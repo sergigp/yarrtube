@@ -41,7 +41,8 @@ test('reloading each route shows its view; unknown playlist says Playlist not fo
 
   const main = page.locator('main')
   const views = [
-    { path: '/', shown: main.getByText(/^(No videos synced yet\.|Latest videos)$/).first() },
+    // Home always has some section heading; which one depends on the library.
+    { path: '/', shown: main.getByRole('heading', { level: 2 }).first() },
     {
       path: `/playlists/${encodeURIComponent(PLAYLIST_ID)}`,
       shown: main.getByRole('heading', { level: 2, name: PLAYLIST_NAME }),

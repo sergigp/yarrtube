@@ -3,8 +3,8 @@ use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
 use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
 use crate::domain::video::{
-    CategoryVideoView, HomeLimits, HomeVideoView, HomeVideos, ListVideosError, SourcedVideo, Video,
-    VideoId, VideoSource, VideoStatus, VideoView,
+    CategoryVideoView, HomeCategorySection, HomeLimits, HomeVideoView, HomeVideos, ListVideosError,
+    SourcedVideo, Video, VideoId, VideoSource, VideoStatus, VideoView,
 };
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -138,16 +138,21 @@ impl VideoSearcherApi for VideoSearcher {
         let continue_watching =
             Self::continue_watching_in(&videos, self.clock.now(), limits.continue_watching);
         let not_continue_watching = Self::not_shown_in(&videos, &continue_watching);
-        let quick_watches = Self::quick_watches_in(&not_continue_watching, limits.quick_watches);
+        let categories = self.list_categories()?;
+        let by_video = self
+            .category_ids_by_video(&categories)
+            .map_err(ListVideosError::Repository)?;
+        let category_sections =
+            Self::category_sections_in(&not_continue_watching, &categories, &by_video, limits);
+        let not_in_categories = Self::not_in_sections(&not_continue_watching, &category_sections);
+        let quick_watches = Self::quick_watches_in(&not_in_categories, limits.quick_watches);
         let latest = Self::latest_in(
-            Self::not_shown_in(&not_continue_watching, &quick_watches),
+            Self::not_shown_in(&not_in_categories, &quick_watches),
             limits.latest,
         );
-        let by_video = self
-            .category_ids_by_video()
-            .map_err(ListVideosError::Repository)?;
         Ok(HomeVideos {
             continue_watching: Self::with_categories(Self::views(continue_watching), &by_video),
+            categories: Self::category_section_views(category_sections, &by_video),
             quick_watches: Self::with_categories(Self::views(quick_watches), &by_video),
             latest: Self::with_categories(Self::views(latest), &by_video),
         })
@@ -165,7 +170,7 @@ impl VideoSearcherApi for VideoSearcher {
         );
         videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.created_at));
         let by_video = self
-            .category_ids_by_video()
+            .category_ids_by_video(&self.list_categories()?)
             .map_err(ListVideosError::Repository)?;
         videos
             .into_iter()
@@ -231,10 +236,98 @@ impl VideoSearcher {
             .collect()
     }
 
-    /// YouTube video → ids of categories having it downloaded, in
+    fn list_categories(&self) -> Result<Vec<Category>, ListVideosError> {
+        self.category_repository
+            .list()
+            .map_err(ListVideosError::Repository)
+    }
+
+    /// Category sections of `videos`, ranked by pending count (most first,
+    /// ties by name ignoring case), each without videos shown in earlier
+    /// sections, empty ones skipped, up to `limits.category_sections`.
+    fn category_sections_in(
+        videos: &[SourcedVideo],
+        categories: &[Category],
+        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+        limits: HomeLimits,
+    ) -> Vec<(Category, Vec<SourcedVideo>)> {
+        Self::ranked_by_pending(videos, categories, by_video)
+            .into_iter()
+            .scan(videos.to_vec(), |remaining, category| {
+                let pending: Vec<SourcedVideo> =
+                    Self::pending_in(remaining, &category.id, by_video)
+                        .into_iter()
+                        .take(limits.category_videos)
+                        .collect();
+                *remaining = Self::not_shown_in(remaining, &pending);
+                Some((category.clone(), pending))
+            })
+            .filter(|(_, pending)| !pending.is_empty())
+            .take(limits.category_sections)
+            .collect()
+    }
+
+    /// `categories` by their number of pending videos in `videos`, most
+    /// first, ties by name ignoring case.
+    fn ranked_by_pending<'a>(
+        videos: &[SourcedVideo],
+        categories: &'a [Category],
+        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+    ) -> Vec<&'a Category> {
+        let mut ranked: Vec<&Category> = categories.iter().collect();
+        ranked.sort_by_cached_key(|category| {
+            (
+                std::cmp::Reverse(Self::pending_in(videos, &category.id, by_video).len()),
+                category.name.as_str().to_lowercase(),
+            )
+        });
+        ranked
+    }
+
+    /// Downloaded, unwatched videos of `videos` in `category` per `by_video`,
+    /// once per YouTube video (channel copy first), newest sync first.
+    fn pending_in(
+        videos: &[SourcedVideo],
+        category: &CategoryId,
+        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+    ) -> Vec<SourcedVideo> {
+        Self::pick_once(
+            videos,
+            |video| {
+                video.is_downloaded_and_unwatched()
+                    && by_video
+                        .get(&video.youtube_id)
+                        .is_some_and(|ids| ids.contains(category))
+            },
+            |video| video.created_at,
+            usize::MAX,
+        )
+    }
+
+    /// `sections` as home category sections, their videos with the
+    /// categories having them in `by_video`.
+    fn category_section_views(
+        sections: Vec<(Category, Vec<SourcedVideo>)>,
+        by_video: &HashMap<VideoId, Vec<CategoryId>>,
+    ) -> Vec<HomeCategorySection> {
+        sections
+            .into_iter()
+            .map(|(category, videos)| HomeCategorySection {
+                id: category.id,
+                name: category.name,
+                color: category.color,
+                videos: Self::with_categories(Self::views(videos), by_video),
+            })
+            .collect()
+    }
+
+    /// YouTube video → ids of `categories` having it downloaded, in
     /// category-name order.
-    fn category_ids_by_video(&self) -> anyhow::Result<HashMap<VideoId, Vec<CategoryId>>> {
-        self.category_repository.list()?.iter().try_fold(
+    fn category_ids_by_video(
+        &self,
+        categories: &[Category],
+    ) -> anyhow::Result<HashMap<VideoId, Vec<CategoryId>>> {
+        categories.iter().try_fold(
             HashMap::new(),
             |mut by_video: HashMap<VideoId, Vec<CategoryId>>, category| {
                 self.category_video_collector
@@ -324,6 +417,18 @@ impl VideoSearcher {
             .filter(|sourced| !shown.contains(&sourced.video.youtube_id))
             .cloned()
             .collect()
+    }
+
+    /// `videos` without any video shown in `sections`.
+    fn not_in_sections(
+        videos: &[SourcedVideo],
+        sections: &[(Category, Vec<SourcedVideo>)],
+    ) -> Vec<SourcedVideo> {
+        let shown: Vec<SourcedVideo> = sections
+            .iter()
+            .flat_map(|(_, videos)| videos.clone())
+            .collect();
+        Self::not_shown_in(videos, &shown)
     }
 
     /// Keeps the first copy of each YouTube video. Applied before sorting,

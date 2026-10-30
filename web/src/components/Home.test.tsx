@@ -6,6 +6,7 @@ import type { HomeVideoSource } from '@/api/types'
 import {
   aCategory,
   aCategoryList,
+  aHomeCategorySection,
   aHomeVideo,
   aPlaylist,
   mockApi,
@@ -23,6 +24,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [aHomeVideo({ title: 'Fresh Video' })],
       },
@@ -40,6 +42,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [aHomeVideo({ title: 'Half Watched', position_seconds: 60 })],
+        categories: [],
         quick_watches: [aHomeVideo({ title: 'Short One' })],
         latest: [aHomeVideo({ title: 'Fresh Video' })],
       },
@@ -52,10 +55,137 @@ describe('Home', () => {
     expect(screen.getByText('Latest videos')).toBeInTheDocument()
   })
 
+  it('shows a "More about" section per category between continue watching and quick watches', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [aHomeVideo({ title: 'Half Watched', position_seconds: 60 })],
+        categories: [
+          aHomeCategorySection({
+            id: 'science',
+            name: 'Science',
+            videos: [aHomeVideo({ title: 'Black Holes' })],
+          }),
+          aHomeCategorySection({
+            id: 'chess',
+            name: 'Chess',
+            videos: [aHomeVideo({ title: 'Rook Endgames' })],
+          }),
+        ],
+        quick_watches: [aHomeVideo({ title: 'Short One' })],
+        latest: [aHomeVideo({ title: 'Fresh Video' })],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    await screen.findByRole('heading', { name: 'More about Science' })
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Continue watching',
+      'More about Science',
+      'More about Chess',
+      'Quick watches',
+      'Latest videos',
+    ])
+    const chess = screen.getByRole('heading', { name: 'More about Chess' }).closest('section')
+    expect(within(chess as HTMLElement).getByText('Rook Endgames')).toBeInTheDocument()
+  })
+
+  it('links a "More about" heading to its category', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [aHomeCategorySection({ id: 'chess', name: 'Chess' })],
+        quick_watches: [],
+        latest: [],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    const heading = await screen.findByRole('heading', { name: 'More about Chess' })
+    expect(within(heading).getByRole('link', { name: 'More about Chess' })).toHaveAttribute(
+      'href',
+      '/categories/chess',
+    )
+  })
+
+  it('offers "See all" in a "More about" section, linking to its category', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [aHomeCategorySection({ id: 'chess', name: 'Chess' })],
+        quick_watches: [],
+        latest: [],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    const heading = await screen.findByRole('heading', { name: 'More about Chess' })
+    const section = heading.closest('section') as HTMLElement
+    expect(within(section).getByRole('link', { name: 'See all' })).toHaveAttribute(
+      'href',
+      '/categories/chess',
+    )
+  })
+
+  it('shows no "More about" section when the response has none', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [],
+        quick_watches: [],
+        latest: [aHomeVideo({ title: 'Fresh Video' })],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByText('Fresh Video')).toBeInTheDocument()
+    expect(screen.queryByText(/^More about/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'See all' })).not.toBeInTheDocument()
+  })
+
+  it('hides an empty "Latest videos" when other sections have videos', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [
+          aHomeCategorySection({ name: 'Chess', videos: [aHomeVideo({ title: 'Rook Endgames' })] }),
+        ],
+        quick_watches: [],
+        latest: [],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByText('Rook Endgames')).toBeInTheDocument()
+    expect(screen.queryByText('Latest videos')).not.toBeInTheDocument()
+    expect(screen.queryByText('No videos synced yet.')).not.toBeInTheDocument()
+  })
+
+  it('shows "No videos synced yet." when every section is empty', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [],
+        quick_watches: [],
+        latest: [],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByText('No videos synced yet.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Latest videos' })).toBeInTheDocument()
+  })
+
   it('shows progress on in-progress cards in every section', async () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [aHomeVideo({ position_seconds: 60, duration_seconds: 600 })],
+        categories: [],
         quick_watches: [],
         latest: [
           aHomeVideo({ title: 'Fresh Video' }),
@@ -83,6 +213,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [
           aHomeVideo({ title: 'Seen', watched: true, duration_seconds: 600 }),
@@ -106,6 +237,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [
           aHomeVideo({
@@ -137,7 +269,7 @@ describe('Home', () => {
 
   it('shows an empty message when nothing has synced yet', async () => {
     mockHomeApi({
-      'GET /api/videos/home': { continue_watching: [], quick_watches: [], latest: [] },
+      'GET /api/videos/home': { continue_watching: [], categories: [], quick_watches: [], latest: [] },
     })
 
     renderWithProviders(<Home />)
@@ -153,10 +285,35 @@ describe('Home', () => {
     expect(await screen.findByText('Failed to load recent videos: boom')).toBeInTheDocument()
   })
 
+  it('reports a failed refresh in the latest section, hiding the stale sections', async () => {
+    let failing = false
+    mockHomeApi({
+      'GET /api/videos/home': () =>
+        failing
+          ? { status: 500, error: 'boom' }
+          : {
+              continue_watching: [aHomeVideo({ title: 'Half Watched', position_seconds: 60 })],
+              categories: [aHomeCategorySection({ name: 'Chess' })],
+              quick_watches: [],
+              latest: [],
+            },
+    })
+    const { queryClient } = renderWithProviders(<Home />)
+    await screen.findByText('Half Watched')
+
+    failing = true
+    await queryClient.refetchQueries()
+
+    expect(await screen.findByText('Failed to load recent videos: boom')).toBeInTheDocument()
+    expect(screen.queryByText('Continue watching')).not.toBeInTheDocument()
+    expect(screen.queryByText('More about Chess')).not.toBeInTheDocument()
+  })
+
   it('marks watched videos with a tick', async () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [aHomeVideo({ title: 'Seen It', watched: true })],
       },
@@ -172,6 +329,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': () => ({
         continue_watching: marked ? [] : [halfWatched],
+        categories: [],
         quick_watches: [],
         latest: [aHomeVideo({ title: 'Fresh Video' })],
       }),
@@ -202,6 +360,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': () => ({
         continue_watching: [],
+        categories: [],
         quick_watches: excluded ? [] : [aHomeVideo({ title: 'Bluey Short', source: bluey })],
         latest: [
           ...(excluded ? [] : [aHomeVideo({ title: 'Bluey Episode', source: bluey })]),
@@ -228,6 +387,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [
           aHomeVideo({
@@ -257,6 +417,7 @@ describe('Home', () => {
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],
+        categories: [],
         quick_watches: [],
         latest: [
           aHomeVideo({ title: 'One', category_ids: ['chess'] }),

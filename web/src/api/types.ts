@@ -99,9 +99,18 @@ export interface CategoryVideo extends Video {
   category_ids: string[]
 }
 
+/** A "More about <name>" home section: a category and its pending videos. */
+export interface HomeCategorySection {
+  id: string
+  name: string
+  color: string
+  videos: HomeVideo[]
+}
+
 /** Response of `GET /api/videos/home`. */
 export interface HomeVideos {
   continue_watching: HomeVideo[]
+  categories: HomeCategorySection[]
   quick_watches: HomeVideo[]
   latest: HomeVideo[]
 }

@@ -1,4 +1,6 @@
-use crate::domain::video::{CategoryVideoView, HomeVideoView, HomeVideos, VideoSource, VideoView};
+use crate::domain::video::{
+    CategoryVideoView, HomeCategorySection, HomeVideoView, HomeVideos, VideoSource, VideoView,
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -195,6 +197,7 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
 #[derive(Debug, Serialize, PartialEq)]
 pub struct HomeResponse {
     pub continue_watching: Vec<HomeVideoResponse>,
+    pub categories: Vec<HomeCategorySectionResponse>,
     pub quick_watches: Vec<HomeVideoResponse>,
     pub latest: Vec<HomeVideoResponse>,
 }
@@ -203,8 +206,28 @@ impl From<HomeVideos> for HomeResponse {
     fn from(home: HomeVideos) -> Self {
         Self {
             continue_watching: cards(home.continue_watching),
+            categories: home.categories.into_iter().map(Into::into).collect(),
             quick_watches: cards(home.quick_watches),
             latest: cards(home.latest),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct HomeCategorySectionResponse {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub videos: Vec<HomeVideoResponse>,
+}
+
+impl From<HomeCategorySection> for HomeCategorySectionResponse {
+    fn from(section: HomeCategorySection) -> Self {
+        Self {
+            id: section.id.as_str().to_string(),
+            name: section.name.as_str().to_string(),
+            color: section.color.as_str().to_string(),
+            videos: cards(section.videos),
         }
     }
 }
