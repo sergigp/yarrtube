@@ -98,6 +98,40 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_replace_previously_saved_preferences() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        repository
+            .save(&Preferences {
+                categories_enabled: false,
+                ..Preferences::default()
+            })
+            .unwrap();
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let request = UpdatePreferencesRequest {
+            home_show_latest: Some(false),
+            ..all_on_request()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                home_show_latest: false,
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                home_show_latest: false,
+                ..Preferences::default()
+            })
+        );
+    }
+
     async fn get(
         preferences_searcher: PreferencesSearcher,
     ) -> Result<PreferencesResponse, ApiError> {
