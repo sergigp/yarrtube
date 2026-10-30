@@ -256,7 +256,7 @@ mod tests {
             Ok((
                 StatusCode::CREATED,
                 CategoryResponse {
-                    color: "#9f8401".to_string(),
+                    color: "#f59e0b".to_string(),
                     ..category_response(id.as_ref(), "Chess", &[], &[])
                 }
             ))
@@ -264,7 +264,7 @@ mod tests {
         assert_eq!(
             stored,
             vec![Category {
-                color: color("#9f8401"),
+                color: color("#f59e0b"),
                 ..category(id, "Chess")
             }]
         );
