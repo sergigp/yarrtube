@@ -510,4 +510,29 @@ describe('Home', () => {
     expect(screen.queryByRole('heading', { name: 'Latest videos' })).not.toBeInTheDocument()
     expect(screen.queryByText('No videos synced yet.')).not.toBeInTheDocument()
   })
+
+  it('shows no "More about" section while categories are off, even from an older response', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [
+          aHomeCategorySection({ id: 'chess', name: 'Chess', videos: [aHomeVideo({ title: 'Gambit' })] }),
+        ],
+        quick_watches: [],
+        latest: [aHomeVideo({ title: 'Fresh Video' })],
+      },
+      'GET /api/preferences': aPreferences({ categories_enabled: false }),
+    })
+
+    const { queryClient } = renderWithProviders(<Home />)
+
+    await waitFor(() =>
+      expect(queryClient.getQueryData(queryKeys.preferences)).toEqual(
+        aPreferences({ categories_enabled: false }),
+      ),
+    )
+    expect(await screen.findByText('Fresh Video')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'More about Chess' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Gambit')).not.toBeInTheDocument()
+  })
 })

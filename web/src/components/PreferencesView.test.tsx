@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PreferencesView } from './PreferencesView'
+import { fetchHomeVideos } from '@/api/client'
+import { queryKeys } from '@/api/queries'
 import { aPreferences, heldUntilReleased, mockApi, renderWithProviders } from '@/test/helpers'
 
 describe('PreferencesView', () => {
@@ -176,6 +178,25 @@ describe('PreferencesView', () => {
       aPreferences({ home_show_quick_watches: false }),
       aPreferences({ home_show_quick_watches: false, home_show_latest: false }),
     ])
+  })
+
+  it('reloads cached home videos as soon as a preference is saved', async () => {
+    const emptyHome = { continue_watching: [], categories: [], quick_watches: [], latest: [] }
+    const fetchMock = mockApi({
+      'GET /api/preferences': aPreferences(),
+      'PUT /api/preferences': aPreferences({ home_show_quick_watches: false }),
+      'GET /api/videos/home': emptyHome,
+    })
+    const { queryClient } = renderWithProviders(<PreferencesView />)
+    // Home was visited earlier: its videos are cached, but no view shows them now.
+    await queryClient.prefetchQuery({ queryKey: queryKeys.recentVideos, queryFn: fetchHomeVideos })
+    const homeRequests = () => fetchMock.mock.calls.filter(([url]) => url === '/api/videos/home')
+
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+
+    await waitFor(() => expect(homeRequests()).toHaveLength(2))
   })
 })
 

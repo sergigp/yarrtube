@@ -217,7 +217,9 @@ export function useSavePreferences(): (preferences: Preferences) => Promise<void
     async (preferences: Preferences) => {
       const saved = await savePreferences(preferences)
       queryClient.setQueryData(queryKeys.preferences, saved)
-      await queryClient.invalidateQueries({ queryKey: queryKeys.recentVideos })
+      // Refetched even while home isn't shown, so going back to it doesn't
+      // first show sections from before the change.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.recentVideos, refetchType: 'all' })
     },
     [queryClient],
   )
