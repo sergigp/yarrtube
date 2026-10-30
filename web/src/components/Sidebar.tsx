@@ -38,6 +38,7 @@ import { EditChannelDialog } from './EditChannelDialog'
 import { EditPlaylistDialog } from './EditPlaylistDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
 import { SidebarCategories } from './SidebarCategories'
+import { SidebarCount } from './SidebarCount'
 import { SidebarSectionHeading } from './SidebarSectionHeading'
 import { Thumbnail } from './Thumbnail'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
@@ -147,13 +148,7 @@ function SidebarRow({
         )}
         <span className="min-w-0 flex-1 truncate">{item.name}</span>
         {unwatchedCount > 0 && (
-          <span
-            className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none font-medium text-primary-foreground"
-            aria-label={`${unwatchedCount} unwatched`}
-            title={`${unwatchedCount} unwatched`}
-          >
-            {unwatchedCount}
-          </span>
+          <SidebarCount count={unwatchedCount} active={active} />
         )}
       </Link>
       <SidebarRowMenu

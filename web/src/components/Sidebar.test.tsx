@@ -882,4 +882,36 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Menu')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Close menu' })).not.toBeInTheDocument()
   })
+
+  it('shows counts as muted numerals without a filled pill, in full colour on the active row', async () => {
+    renderSidebar(
+      {
+        'GET /api/channels': [
+          aChannel({ id: '@a', name: 'Chan A', unwatched_count: 3 }),
+          aChannel({ id: '@b', name: 'Chan B', unwatched_count: 5 }),
+        ],
+        'GET /api/playlists': [],
+      },
+      { route: '/channels/@b' },
+    )
+
+    const count = await screen.findByTitle('3 unwatched')
+    expect(count).toHaveClass('tabular-nums', 'text-muted-foreground')
+    expect(count).not.toHaveClass('bg-primary')
+    expect(screen.getByTitle('5 unwatched')).toHaveClass('text-foreground')
+  })
+
+  it("shows a folded section's total as a muted numeral", async () => {
+    renderSidebar({
+      'GET /api/channels': [aChannel({ name: 'Chan A', unwatched_count: 3 })],
+      'GET /api/playlists': [],
+    })
+    await screen.findByText('Chan A')
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Channels' }))
+
+    const total = screen.getByLabelText('3 unwatched')
+    expect(total).toHaveClass('tabular-nums', 'text-muted-foreground')
+    expect(total).not.toHaveClass('bg-primary')
+  })
 })

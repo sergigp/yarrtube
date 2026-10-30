@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SidebarCount } from './SidebarCount'
 
 interface SidebarSectionHeadingProps {
   /** The heading's id, for the section's list to be named after it. */
@@ -47,13 +48,7 @@ export function SidebarSectionHeading({
           )}
           {title}
           {folded && foldedTotal !== undefined && foldedTotal > 0 && (
-            <span
-              className="ml-auto shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none font-medium text-primary-foreground"
-              aria-label={`${foldedTotal} unwatched`}
-              title={`${foldedTotal} unwatched`}
-            >
-              {foldedTotal}
-            </span>
+            <SidebarCount count={foldedTotal} active={headingActive} className="ml-auto" />
           )}
         </button>
       </h3>

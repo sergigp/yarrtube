@@ -30,7 +30,7 @@
 
 ## 5. Web: sidebar and global search
 
-- [ ] 5.1 Restyle sidebar counts as muted tabular numerals (row and folded heading) and verify the badge tests still find counts by text
+- [x] 5.1 Restyle sidebar counts as muted tabular numerals (row and folded heading) and verify the badge tests still find counts by text
 - [ ] 5.2 Make row menus (channels, playlists, categories) hover/focus/active/open-visible on fine pointers and always visible on touch; update the "Sidebar Row Menu" tests and verify they pass
 - [ ] 5.3 Remove the sidebar search field and filtering (moving the match logic to `lib/search.ts` with unit tests); update `Sidebar.test.tsx` and verify it passes
 - [ ] 5.4 Build `SearchDialog` (grouped results, keyboard navigation, debounced video search, empty/error states) plus the header trigger (field at ≥sm, icon below) and the ⌘K/Ctrl+K shortcut in `AppShell`; add tests covering every "Global Search" scenario and verify they pass

@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import type { ManageSourcesState } from './CategoryDetail'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EntryActionsMenu } from './EntryActionsMenu'
+import { SidebarCount } from './SidebarCount'
 import { SidebarSectionHeading } from './SidebarSectionHeading'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 
@@ -42,13 +43,7 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
         />
         <span className="min-w-0 flex-1 truncate">{category.name}</span>
         {unwatchedCount > 0 && (
-          <span
-            className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none font-medium text-primary-foreground"
-            aria-label={`${unwatchedCount} unwatched`}
-            title={`${unwatchedCount} unwatched`}
-          >
-            {unwatchedCount}
-          </span>
+          <SidebarCount count={unwatchedCount} active={active} />
         )}
       </Link>
       <EntryActionsMenu
