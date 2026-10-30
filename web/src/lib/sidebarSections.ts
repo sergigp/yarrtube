@@ -53,13 +53,20 @@ export function activeIdFrom(pathname: string, prefix: string): string | null {
   return rest ? decodeURIComponent(rest) : null
 }
 
+// Where the device can hover, a row's unwatched count and its menu control
+// share the trailing slot: the count by default, the menu while the row
+// (`group/row`) is hovered, keyboard focused or has its menu open. Touch
+// devices can't hover, so they keep both side by side.
+
+/** A sidebar row's menu control, laid over its count slot where the device can hover. */
+export function rowMenuClassName(): string {
+  return '[@media(hover:none)]:mr-1 [@media(hover:hover)]:absolute [@media(hover:hover)]:inset-y-0 [@media(hover:hover)]:right-0 [@media(hover:hover)]:my-auto [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 [@media(hover:hover)]:group-has-[:focus-visible]/row:opacity-100 [@media(hover:hover)]:data-[state=open]:opacity-100'
+}
+
 /**
- * A sidebar row's menu control: where the device can hover, hidden (keeping
- * its space) until the row (`group/row`) is hovered or focused, or its menu
- * is open; always shown on the active row and on touch devices.
+ * A sidebar row's trailing count slot, wide enough for the menu control laid
+ * over it, and hidden while that control shows.
  */
-export function rowMenuClassName(active: boolean): string {
-  return active
-    ? ''
-    : '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 [@media(hover:hover)]:group-focus-within/row:opacity-100 [@media(hover:hover)]:data-[state=open]:opacity-100'
+export function rowCountSlotClassName(): string {
+  return 'ml-auto flex min-w-5 shrink-0 justify-end [@media(hover:hover)]:group-hover/row:opacity-0 [@media(hover:hover)]:group-has-[:focus-visible]/row:opacity-0 [@media(hover:hover)]:group-has-[[data-state=open]]/row:opacity-0'
 }

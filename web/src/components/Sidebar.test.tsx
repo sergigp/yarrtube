@@ -849,11 +849,11 @@ describe('Sidebar', () => {
     expect(total).not.toHaveClass('bg-primary')
   })
 
-  it('shows a row menu control on hover, focus or while open with a mouse, always on the active row and on touch', async () => {
+  it('swaps a row count for its menu control on hover, keyboard focus or while open with a mouse, and shows both on touch', async () => {
     renderSidebar(
       {
         'GET /api/channels': [
-          aChannel({ id: '@a', name: 'Chan A' }),
+          aChannel({ id: '@a', name: 'Chan A', unwatched_count: 3 }),
           aChannel({ id: '@b', name: 'Chan B' }),
         ],
         'GET /api/playlists': [aPlaylist({ name: 'List C' })],
@@ -861,19 +861,25 @@ describe('Sidebar', () => {
       { route: '/channels/@b' },
     )
 
-    const inactive = await screen.findByRole('button', { name: 'Actions for Chan A' })
-    // Hidden only where the device can hover; touch devices always see it.
-    expect(inactive).toHaveClass(
+    const menu = await screen.findByRole('button', { name: 'Actions for Chan A' })
+    // Laid over the count only where the device can hover; touch devices see both.
+    expect(menu).toHaveClass(
+      '[@media(hover:hover)]:absolute',
       '[@media(hover:hover)]:opacity-0',
       '[@media(hover:hover)]:group-hover/row:opacity-100',
-      '[@media(hover:hover)]:group-focus-within/row:opacity-100',
+      '[@media(hover:hover)]:group-has-[:focus-visible]/row:opacity-100',
       '[@media(hover:hover)]:data-[state=open]:opacity-100',
     )
-    expect(inactive.closest('li')).toHaveClass('group/row')
+    expect(menu.closest('li')).toHaveClass('group/row', 'relative')
+    expect(screen.getByLabelText('3 unwatched').parentElement).toHaveClass(
+      '[@media(hover:hover)]:group-hover/row:opacity-0',
+      '[@media(hover:hover)]:group-has-[:focus-visible]/row:opacity-0',
+      '[@media(hover:hover)]:group-has-[[data-state=open]]/row:opacity-0',
+    )
     expect(screen.getByRole('button', { name: 'Actions for List C' })).toHaveClass(
       '[@media(hover:hover)]:opacity-0',
     )
-    expect(screen.getByRole('button', { name: 'Actions for Chan B' })).not.toHaveClass(
+    expect(screen.getByRole('button', { name: 'Actions for Chan B' })).toHaveClass(
       '[@media(hover:hover)]:opacity-0',
     )
   })

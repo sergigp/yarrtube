@@ -55,7 +55,7 @@ export function SidebarSectionHeading({
       {add && !folded && (
         <button
           type="button"
-          className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          className="mr-0.5 shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           aria-label={add.label}
           title={add.label}
           onClick={add.onClick}

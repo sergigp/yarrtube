@@ -25,6 +25,7 @@ import type { LibraryItem } from '@/api/types'
 import {
   activeIdFrom,
   orderByUnwatched,
+  rowCountSlotClassName,
   rowMenuClassName,
   sectionView,
   shownUnwatchedCount,
@@ -131,7 +132,7 @@ function SidebarRow({
 }: SidebarRowProps) {
   const unwatchedCount = shownUnwatchedCount(item)
   return (
-    <li className={cn('group/row flex items-center gap-1 rounded-md pr-1', active && 'bg-accent')}>
+    <li className={cn('group/row relative flex items-center gap-1 rounded-md', active && 'bg-accent')}>
       <Link
         to={href}
         onClick={onNavigate}
@@ -146,12 +147,14 @@ function SidebarRow({
             className="size-5 shrink-0 rounded-full object-cover"
           />
         )}
-        <span className="min-w-0 flex-1 truncate">{item.name}</span>
-        {unwatchedCount > 0 && <SidebarCount count={unwatchedCount} active={active} />}
+        <span className="min-w-0 truncate">{item.name}</span>
+        <span className={rowCountSlotClassName()}>
+          {unwatchedCount > 0 && <SidebarCount count={unwatchedCount} active={active} />}
+        </span>
       </Link>
       <SidebarRowMenu
         item={item}
-        className={rowMenuClassName(active)}
+        className={rowMenuClassName()}
         onSync={onSync}
         onMarkWatched={onMarkWatched}
         onSetExcludedFromHome={onSetExcludedFromHome}
