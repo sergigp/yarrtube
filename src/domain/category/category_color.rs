@@ -14,8 +14,8 @@ pub struct CategoryColor(String);
 impl CategoryColor {
     /// Solid presets, in the order defaults are handed out.
     pub const PALETTE: [&'static str; 10] = [
-        "#9f8401", "#bd7123", "#c8645b", "#bd6396", "#9870c5", "#6a80d4", "#0193bf", "#019b8d",
-        "#79922c", "#978364",
+        "#f59e0b", "#f97316", "#ef4444", "#ec4899", "#8b5cf6", "#3b82f6", "#0ea5e9", "#14b8a6",
+        "#22c55e", "#64748b",
     ];
 
     pub fn new(color: impl Into<String>) -> Result<Self, ValidationError> {

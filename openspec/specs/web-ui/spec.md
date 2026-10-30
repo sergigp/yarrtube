@@ -1387,12 +1387,12 @@ The "Add category" control SHALL open a dialog asking for a name and a color thr
 - **THEN** the dialog closes and the "Chess" category view opens with the manage sources dialog open and its search field focused
 
 #### Scenario: Next free color preselected
-- **WHEN** a user opens "Add category" and the existing categories are colored Butter and Coral
-- **THEN** "Peach" is preselected
+- **WHEN** a user opens "Add category" and the existing categories are colored Amber and Red
+- **THEN** "Orange" is preselected
 
 #### Scenario: Creating with a chosen color
-- **WHEN** a user enters "Chess", chooses "Lilac" and creates it
-- **THEN** "Chess" is created with the color "#e9def8"
+- **WHEN** a user enters "Chess", chooses "Violet" and creates it
+- **THEN** "Chess" is created with the color "#8b5cf6"
 
 #### Scenario: Blank name
 - **WHEN** the name field is empty or blank
@@ -1414,7 +1414,7 @@ Each category SHALL have a view at an address of its own with a header and its v
 - **THEN** the application stays on the "Chess" view and plays that video, as described in "Category Playback"
 
 #### Scenario: Header tinted
-- **WHEN** a user opens the "Chess" view and "Chess" is colored "#0193bf"
+- **WHEN** a user opens the "Chess" view and "Chess" is colored "#0ea5e9"
 - **THEN** the header's background is the soft tint of that color's hue
 
 #### Scenario: Header while loading
@@ -1423,7 +1423,7 @@ Each category SHALL have a view at an address of its own with a header and its v
 
 #### Scenario: Changing the color
 - **WHEN** a user activates "Change color" on the "Chess" view and chooses "Violet"
-- **THEN** "Chess" is saved with the color "#9870c5", and the header, the sidebar dot and the home chips of its videos show it
+- **THEN** "Chess" is saved with the color "#8b5cf6", and the header, the sidebar dot and the home chips of its videos show it
 
 #### Scenario: Mark all watched
 - **WHEN** a user chooses "Mark all watched" from a category view's header and confirms
@@ -1519,15 +1519,15 @@ The manage sources dialog SHALL be titled "Manage sources in <name>" and SHALL s
 - **THEN** the dialog says there are no channels or playlists to add yet
 
 ### Requirement: Categories Field In Add And Edit Dialogs
-The add channel, add playlist, edit channel and edit playlist dialogs SHALL offer a "Categories" field showing every existing category as a toggle chip, ordered by name ignoring case. A chip's pressed state SHALL mean the source is chosen for that category. A chosen chip SHALL be filled with its category's color and show a check mark. A chip not chosen SHALL be outlined and show a dot in its category's color. Toggling a chip SHALL NOT change the order of the chips. The field SHALL also offer a "New category" text field with an "Add" control. Adding the typed name SHALL create a category with that name at once and choose it, or, when a category already has that name ignoring case, SHALL choose that category without creating one. Pressing Enter in the "New category" field SHALL add the typed name and SHALL NOT submit the dialog. Saving an add dialog SHALL track the source and then make it a member of exactly the chosen categories. Saving an edit dialog SHALL make the source a member of exactly the chosen categories, and a change of categories alone SHALL count as a change to save. When the source is saved but its categories cannot be, the dialog SHALL say so and keep the source saved.
+The add channel, add playlist, edit channel and edit playlist dialogs SHALL offer a "Categories" field showing every existing category as a toggle chip, ordered by name ignoring case. A chip's pressed state SHALL mean the source is chosen for that category. A chosen chip SHALL be filled with the soft tint of its category's hue, show its name in the dark shade of that hue, as the home card chips do, and show a check mark. A chip not chosen SHALL be outlined and show a dot in its category's color. Toggling a chip SHALL NOT change the order of the chips. The field SHALL also offer a "New category" text field with an "Add" control. Adding the typed name SHALL create a category with that name at once and choose it, or, when a category already has that name ignoring case, SHALL choose that category without creating one. Pressing Enter in the "New category" field SHALL add the typed name and SHALL NOT submit the dialog. Saving an add dialog SHALL track the source and then make it a member of exactly the chosen categories. Saving an edit dialog SHALL make the source a member of exactly the chosen categories, and a change of categories alone SHALL count as a change to save. When the source is saved but its categories cannot be, the dialog SHALL say so and keep the source saved.
 
 #### Scenario: Every category shown
 - **WHEN** a user opens the add channel dialog and the categories "Streams", "Chess" and "Science" exist
 - **THEN** the Categories field shows the chips "Chess", "Science" and "Streams", none pressed, without typing anything
 
 #### Scenario: Chosen chips in their category's color
-- **WHEN** a user presses the "Chess" chip and "Chess" is colored "#d3ecf8"
-- **THEN** the chip is pressed, filled with "#d3ecf8" and shows a check mark
+- **WHEN** a user presses the "Chess" chip and "Chess" is colored "#0ea5e9"
+- **THEN** the chip is pressed, filled with the soft tint of that color's hue, its name in the dark shade of that hue, and shows a check mark
 
 #### Scenario: Choosing categories when adding a channel
 - **WHEN** a user adds a channel with the "Chess" and "Streams" chips pressed
@@ -1900,11 +1900,11 @@ Marking a channel, playlist or category watched, from its page header or its sid
 - **THEN** the confirmation stays open, shows the error, and no video is marked watched
 
 ### Requirement: Category Color Picker
-The category color picker SHALL offer the 10 palette colors as swatches in palette order, each a radio option named Mustard, Orange, Coral, Rose, Violet, Periwinkle, Sky, Teal, Olive and Taupe, plus a "Custom" option with a hue slider. Every custom color SHALL have the palette's solid lightness and saturation, so only the hue changes. The chosen option SHALL be shown checked. A color not in the palette SHALL show as "Custom" with the slider at its hue.
+The category color picker SHALL offer the 10 palette colors as swatches in palette order, each a radio option named Amber, Orange, Red, Pink, Violet, Blue, Sky, Teal, Green and Slate, plus a "Custom" option with a hue slider. Every custom color SHALL have OKLCH lightness 0.65 and chroma 0.2 (chroma lowered as needed to fit sRGB), so only the hue changes. The chosen option SHALL be shown checked. "Custom" SHALL stay chosen, with its slider shown, until a swatch is chosen, even when the slider lands on a palette color. A color not in the palette SHALL show as "Custom" with the slider at its hue.
 
 #### Scenario: Choosing a swatch
 - **WHEN** a user chooses the "Sky" swatch
-- **THEN** "Sky" is shown checked and the chosen color is "#0193bf"
+- **THEN** "Sky" is shown checked and the chosen color is "#0ea5e9"
 
 #### Scenario: Clicking a swatch
 - **WHEN** a user clicks anywhere on the "Violet" swatch
@@ -1912,7 +1912,19 @@ The category color picker SHALL offer the 10 palette colors as swatches in palet
 
 #### Scenario: Choosing a custom hue
 - **WHEN** a user chooses "Custom" and moves the hue slider
-- **THEN** the chosen color follows the hue and keeps the palette's solid lightness and saturation
+- **THEN** the chosen color follows the hue at OKLCH lightness 0.65 and chroma 0.2
+
+#### Scenario: Choosing Custom from any swatch
+- **WHEN** the "Orange" or "Blue" swatch is checked and a user chooses "Custom"
+- **THEN** "Custom" is shown checked and the hue slider is shown
+
+#### Scenario: Custom hue matching a palette color
+- **WHEN** "Custom" is chosen and the user moves the slider to a hue whose color equals a palette color
+- **THEN** "Custom" stays checked and the slider stays shown
+
+#### Scenario: Swatch after Custom
+- **WHEN** "Custom" is chosen and the user chooses the "Teal" swatch
+- **THEN** "Teal" is shown checked and the hue slider is hidden
 
 #### Scenario: Existing custom color
 - **WHEN** the picker opens for a category whose color is not in the palette

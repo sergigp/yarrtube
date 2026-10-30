@@ -1,15 +1,15 @@
 /** The category color presets, in the order defaults are handed out. Mirrors the daemon's palette. */
 export const PALETTE: readonly { name: string; hex: string }[] = [
-  { name: 'Mustard', hex: '#9f8401' },
-  { name: 'Orange', hex: '#bd7123' },
-  { name: 'Coral', hex: '#c8645b' },
-  { name: 'Rose', hex: '#bd6396' },
-  { name: 'Violet', hex: '#9870c5' },
-  { name: 'Periwinkle', hex: '#6a80d4' },
-  { name: 'Sky', hex: '#0193bf' },
-  { name: 'Teal', hex: '#019b8d' },
-  { name: 'Olive', hex: '#79922c' },
-  { name: 'Taupe', hex: '#978364' },
+  { name: 'Amber', hex: '#f59e0b' },
+  { name: 'Orange', hex: '#f97316' },
+  { name: 'Red', hex: '#ef4444' },
+  { name: 'Pink', hex: '#ec4899' },
+  { name: 'Violet', hex: '#8b5cf6' },
+  { name: 'Blue', hex: '#3b82f6' },
+  { name: 'Sky', hex: '#0ea5e9' },
+  { name: 'Teal', hex: '#14b8a6' },
+  { name: 'Green', hex: '#22c55e' },
+  { name: 'Slate', hex: '#64748b' },
 ]
 
 /** The palette color used by the fewest of `used`, the earliest on a tie. */
@@ -18,16 +18,16 @@ export function defaultColor(used: string[]): string {
   return PALETTE.reduce((least, color) => (uses(color.hex) < uses(least.hex) ? color : least)).hex
 }
 
-/** The palette's solid lightness and chroma: what a category stores. */
-const SOLID = { lightness: 0.62, chroma: 0.13 }
+/** The custom hue slider's lightness and chroma, vivid like the palette. */
+const CUSTOM = { lightness: 0.65, chroma: 0.2 }
 /** Chip and category header backgrounds. */
 const SOFT = { lightness: 0.94, chroma: 0.04 }
 /** Chip text, readable on the soft tint. */
 const INK = { lightness: 0.42, chroma: 0.1 }
 
-/** The solid color of `hue` (degrees), as the custom hue slider picks it. */
+/** The color of `hue` (degrees), as the custom hue slider picks it. */
 export function solidFromHue(hue: number): string {
-  return fromOklch(SOLID.lightness, SOLID.chroma, hue)
+  return fromOklch(CUSTOM.lightness, CUSTOM.chroma, hue)
 }
 
 /** The soft tint of `hex`'s hue: chip and category header backgrounds. */

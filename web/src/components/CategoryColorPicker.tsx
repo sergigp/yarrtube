@@ -53,11 +53,14 @@ const HUE_TRACK = `linear-gradient(to right, ${HUE_STOPS})`
 
 /**
  * The palette swatches plus "Custom", as one radio group. Custom shows a hue
- * slider whose colors keep the palette's solid lightness and chroma.
+ * slider whose colors share one vivid lightness and chroma.
  */
 export function CategoryColorPicker({ value, onChange }: CategoryColorPickerProps) {
   const group = useId()
-  const custom = !PALETTE.some((color) => color.hex === value)
+  const inPalette = PALETTE.some((color) => color.hex === value)
+  // Custom stays chosen even when its color lands on a palette color.
+  const [customChosen, setCustomChosen] = useState(!inPalette)
+  const custom = customChosen || !inPalette
   // Held apart from `value` so the slider stays where it was put, even though
   // a hex only approximates its hue.
   const [hue, setHue] = useState(() => Math.round(hueOf(value)))
@@ -75,8 +78,11 @@ export function CategoryColorPicker({ value, onChange }: CategoryColorPickerProp
             name={color.name}
             group={group}
             color={color.hex}
-            checked={value === color.hex}
-            onSelect={() => onChange(color.hex)}
+            checked={!custom && value === color.hex}
+            onSelect={() => {
+              setCustomChosen(false)
+              onChange(color.hex)
+            }}
           />
         ))}
         <Swatch
@@ -84,7 +90,10 @@ export function CategoryColorPicker({ value, onChange }: CategoryColorPickerProp
           group={group}
           color={custom ? value : CUSTOM_FACE}
           checked={custom}
-          onSelect={() => chooseHue(hue)}
+          onSelect={() => {
+            setCustomChosen(true)
+            chooseHue(hue)
+          }}
         />
       </div>
       {custom && (

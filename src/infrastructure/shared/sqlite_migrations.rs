@@ -29,6 +29,8 @@ const EPISODE_LABELS_GENERATION_SQL: &str =
 const PREFERENCES_SQL: &str = include_str!("../../../migrations/0017_preferences.sql");
 const CATEGORY_COLOR_STRENGTHEN_SQL: &str =
     include_str!("../../../migrations/0018_category_color_strengthen.sql");
+const CATEGORY_PALETTE_REFRESH_SQL: &str =
+    include_str!("../../../migrations/0019_category_palette_refresh.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -53,6 +55,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
             CATEGORY_COLOR_STRENGTHEN_SQL,
             strengthen_light_category_colors,
         ),
+        M::up(CATEGORY_PALETTE_REFRESH_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
@@ -362,8 +365,8 @@ mod tests {
         assert_eq!(
             colors,
             vec![
-                "#9f8401", "#bd7123", "#c8645b", "#bd6396", "#9870c5", "#6a80d4", "#0193bf",
-                "#019b8d", "#79922c", "#978364", "#9f8401",
+                "#f59e0b", "#f97316", "#ef4444", "#ec4899", "#8b5cf6", "#3b82f6", "#0ea5e9",
+                "#14b8a6", "#22c55e", "#64748b", "#f59e0b",
             ]
         );
     }
@@ -376,7 +379,7 @@ mod tests {
 
         apply(&mut conn).unwrap();
 
-        assert_eq!(category_colors(&conn), vec!["#0193bf"]);
+        assert_eq!(category_colors(&conn), vec!["#0ea5e9"]);
     }
 
     #[test]
@@ -394,11 +397,46 @@ mod tests {
     fn it_should_leave_an_already_strong_color_unchanged() {
         let mut conn = Connection::open_in_memory().unwrap();
         migrate_to_preferences(&mut conn);
-        insert_colored_category(&conn, "Sports", "#c8645b");
+        insert_colored_category(&conn, "Sports", "#03999f");
 
         apply(&mut conn).unwrap();
 
-        assert_eq!(category_colors(&conn), vec!["#c8645b"]);
+        assert_eq!(category_colors(&conn), vec!["#03999f"]);
+    }
+
+    #[test]
+    fn it_should_refresh_a_former_solid_palette_color() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_category_color_strengthen(&mut conn);
+        insert_colored_category(&conn, "Chess", "#0193bf");
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(category_colors(&conn), vec!["#0ea5e9"]);
+    }
+
+    #[test]
+    fn it_should_refresh_every_former_solid_palette_color_by_position() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_category_color_strengthen(&mut conn);
+        let former = [
+            "#9f8401", "#bd7123", "#c8645b", "#bd6396", "#9870c5", "#6a80d4", "#0193bf", "#019b8d",
+            "#79922c", "#978364",
+        ];
+        former
+            .iter()
+            .enumerate()
+            .for_each(|(index, color)| insert_colored_category(&conn, &format!("c{index}"), color));
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(
+            category_colors(&conn),
+            vec![
+                "#f59e0b", "#f97316", "#ef4444", "#ec4899", "#8b5cf6", "#3b82f6", "#0ea5e9",
+                "#14b8a6", "#22c55e", "#64748b",
+            ]
+        );
     }
 
     #[test]
@@ -844,6 +882,34 @@ mod tests {
             M::up(PLEX_LABELS_SQL),
             M::up(EPISODE_LABELS_GENERATION_SQL),
             M::up(PREFERENCES_SQL),
+        ])
+        .to_latest(conn)
+        .unwrap();
+    }
+
+    fn migrate_to_category_color_strengthen(conn: &mut Connection) {
+        Migrations::new(vec![
+            M::up(BASELINE_SQL),
+            M::up(WATCH_STATE_SQL),
+            M::up(PUBLISHED_AT_AND_SYNCED_AT_SQL),
+            M::up(LAST_ERRORED_AT_SQL),
+            M::up(LAST_PLAYED_AT_SQL),
+            M::up(PLAYLIST_VIDEO_POSITION_REQUIRED_SQL),
+            M::up(PLAYLIST_EXCLUDE_FROM_HOME_SQL),
+            M::up(EPISODE_NUMBERS_SQL),
+            M::up(RECONCILE_INTERVAL_SQL),
+            M::up(VIDEO_SUBTITLES_SQL),
+            M::up(CATEGORIES_SQL),
+            M::up(PLAYLIST_HIDE_UNWATCHED_COUNT_SQL),
+            M::up(CATEGORY_COLOR_SQL),
+            M::up(VIDEO_CATEGORIES_SQL),
+            M::up(PLEX_LABELS_SQL),
+            M::up(EPISODE_LABELS_GENERATION_SQL),
+            M::up(PREFERENCES_SQL),
+            M::up_with_hook(
+                CATEGORY_COLOR_STRENGTHEN_SQL,
+                strengthen_light_category_colors,
+            ),
         ])
         .to_latest(conn)
         .unwrap();

@@ -553,7 +553,7 @@ describe('Home', () => {
         latest: [chessVideo('Fresh Video')],
       },
       'GET /api/categories': aCategoryList([
-        aCategory({ id: 'chess', name: 'Chess', color: '#0193bf' }),
+        aCategory({ id: 'chess', name: 'Chess', color: '#0ea5e9' }),
       ]),
     })
 

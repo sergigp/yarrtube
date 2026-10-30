@@ -21,17 +21,17 @@ function Picker({ initial, onChange }: { initial: string; onChange: (hex: string
 describe('CategoryColorPicker', () => {
   it('checks a chosen swatch and reports its color', async () => {
     const onChange = vi.fn()
-    render(<Picker initial="#9f8401" onChange={onChange} />)
+    render(<Picker initial="#f59e0b" onChange={onChange} />)
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('radio', { name: 'Sky' }))
 
-    expect(onChange).toHaveBeenCalledWith('#0193bf')
+    expect(onChange).toHaveBeenCalledWith('#0ea5e9')
     expect(screen.getByRole('radio', { name: 'Sky' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Mustard' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Amber' })).not.toBeChecked()
   })
 
-  it('shows a color outside the palette as Custom, whose hue slider picks solid colors', () => {
+  it('shows a color outside the palette as Custom, whose hue slider picks vivid colors', () => {
     const onChange = vi.fn()
     render(<Picker initial="#f0e4d0" onChange={onChange} />)
 
@@ -40,36 +40,70 @@ describe('CategoryColorPicker', () => {
 
     fireEvent.change(screen.getByRole('slider', { name: 'Hue' }), { target: { value: '200' } })
 
-    expect(onChange).toHaveBeenCalledWith('#03999f')
+    expect(onChange).toHaveBeenCalledWith('#04a3aa')
     expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked()
     expect(screen.getByRole('slider', { name: 'Hue' })).toHaveValue('200')
   })
 
   it('offers the palette swatches in order, then Custom', () => {
-    render(<Picker initial="#9f8401" onChange={() => {}} />)
+    render(<Picker initial="#f59e0b" onChange={() => {}} />)
 
     expect(screen.getAllByRole('radio').map((radio) => radio.getAttribute('aria-label'))).toEqual([
-      'Mustard',
+      'Amber',
       'Orange',
-      'Coral',
-      'Rose',
+      'Red',
+      'Pink',
       'Violet',
-      'Periwinkle',
+      'Blue',
       'Sky',
       'Teal',
-      'Olive',
-      'Taupe',
+      'Green',
+      'Slate',
       'Custom',
     ])
   })
 
   it('checks a swatch clicked anywhere on it', async () => {
     const onChange = vi.fn()
-    render(<Picker initial="#9f8401" onChange={onChange} />)
+    render(<Picker initial="#f59e0b" onChange={onChange} />)
 
     await userEvent.setup().click(screen.getByRole('radio', { name: 'Violet' }).closest('label')!)
 
-    expect(onChange).toHaveBeenCalledWith('#9870c5')
+    expect(onChange).toHaveBeenCalledWith('#8b5cf6')
     expect(screen.getByRole('radio', { name: 'Violet' })).toBeChecked()
+  })
+
+  it.each(['#f97316', '#3b82f6'])('chooses Custom from the %s swatch', async (initial) => {
+    render(<Picker initial={initial} onChange={() => {}} />)
+
+    await userEvent.setup().click(screen.getByRole('radio', { name: 'Custom' }))
+
+    expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked()
+    expect(screen.getByRole('slider', { name: 'Hue' })).toBeInTheDocument()
+  })
+
+  it('keeps Custom chosen when its color comes back as a palette color', async () => {
+    const { rerender } = render(<CategoryColorPicker value="#f59e0b" onChange={() => {}} />)
+    await userEvent.setup().click(screen.getByRole('radio', { name: 'Custom' }))
+
+    rerender(<CategoryColorPicker value="#f97316" onChange={() => {}} />)
+
+    expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Orange' })).not.toBeChecked()
+    expect(screen.getByRole('slider', { name: 'Hue' })).toBeInTheDocument()
+  })
+
+  it('checks a swatch chosen after Custom and hides the slider', async () => {
+    const onChange = vi.fn()
+    render(<Picker initial="#f59e0b" onChange={onChange} />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('radio', { name: 'Custom' }))
+
+    await user.click(screen.getByRole('radio', { name: 'Teal' }))
+
+    expect(onChange).toHaveBeenLastCalledWith('#14b8a6')
+    expect(screen.getByRole('radio', { name: 'Teal' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Custom' })).not.toBeChecked()
+    expect(screen.queryByRole('slider', { name: 'Hue' })).not.toBeInTheDocument()
   })
 })
