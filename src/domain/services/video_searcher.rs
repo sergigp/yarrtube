@@ -252,23 +252,41 @@ impl VideoSearcher {
     /// ties by name ignoring case), each without videos shown in earlier
     /// sections, empty ones skipped, up to `limits.category_sections`.
     fn category_sections_in(
-        _videos: &[SourcedVideo],
-        _categories: &[Category],
-        _by_video: &HashMap<VideoId, Vec<CategoryId>>,
+        videos: &[SourcedVideo],
+        categories: &[Category],
+        by_video: &HashMap<VideoId, Vec<CategoryId>>,
         _limits: HomeLimits,
     ) -> Vec<(Category, Vec<SourcedVideo>)> {
-        Vec::new()
+        categories
+            .iter()
+            .map(|category| {
+                (
+                    category.clone(),
+                    Self::pending_in(videos, &category.id, by_video),
+                )
+            })
+            .filter(|(_, pending)| !pending.is_empty())
+            .collect()
     }
 
     /// Downloaded, unwatched videos of `videos` in `category` per `by_video`,
     /// once per YouTube video (channel copy first), newest sync first.
-    #[allow(dead_code)]
     fn pending_in(
-        _videos: &[SourcedVideo],
-        _category: &CategoryId,
-        _by_video: &HashMap<VideoId, Vec<CategoryId>>,
+        videos: &[SourcedVideo],
+        category: &CategoryId,
+        by_video: &HashMap<VideoId, Vec<CategoryId>>,
     ) -> Vec<SourcedVideo> {
-        Vec::new()
+        Self::pick_once(
+            videos,
+            |video| {
+                video.is_downloaded_and_unwatched()
+                    && by_video
+                        .get(&video.youtube_id)
+                        .is_some_and(|ids| ids.contains(category))
+            },
+            |video| video.created_at,
+            usize::MAX,
+        )
     }
 
     /// `sections` as home category sections, their videos with the
