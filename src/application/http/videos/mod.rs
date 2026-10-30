@@ -3548,6 +3548,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_cap_a_category_section_at_6_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        (0..10).for_each(|i| {
+            save_channel_video(
+                video_repository.as_ref(),
+                channel_video_repository.as_ref(),
+                "@somechannel",
+                &downloaded_video(&format!("vid{i}"), &format!("Video {i}"), None, i),
+                i,
+            )
+        });
+        let chess = named_category("Chess", &[channel_member("@somechannel")]);
+        category_repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess]);
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = home(video_searcher).await;
+
+        let chess_card = |i: i64| {
+            in_categories(
+                home_video_response(
+                    &format!("vid{i}"),
+                    &format!("Video {i}"),
+                    channel_source(None),
+                ),
+                &[&chess],
+            )
+        };
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                categories: vec![category_section_response(
+                    &chess,
+                    (4..10).rev().map(chess_card).collect()
+                )],
+                latest: (0..4).rev().map(chess_card).collect(),
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

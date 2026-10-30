@@ -255,15 +255,14 @@ impl VideoSearcher {
         videos: &[SourcedVideo],
         categories: &[Category],
         by_video: &HashMap<VideoId, Vec<CategoryId>>,
-        _limits: HomeLimits,
+        limits: HomeLimits,
     ) -> Vec<(Category, Vec<SourcedVideo>)> {
         categories
             .iter()
             .map(|category| {
-                (
-                    category.clone(),
-                    Self::pending_in(videos, &category.id, by_video),
-                )
+                let mut pending = Self::pending_in(videos, &category.id, by_video);
+                pending.truncate(limits.category_videos);
+                (category.clone(), pending)
             })
             .filter(|(_, pending)| !pending.is_empty())
             .collect()
