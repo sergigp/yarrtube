@@ -92,4 +92,18 @@ describe('CategoryColorPicker', () => {
     expect(screen.getByRole('radio', { name: 'Orange' })).not.toBeChecked()
     expect(screen.getByRole('slider', { name: 'Hue' })).toBeInTheDocument()
   })
+
+  it('checks a swatch chosen after Custom and hides the slider', async () => {
+    const onChange = vi.fn()
+    render(<Picker initial="#f59e0b" onChange={onChange} />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('radio', { name: 'Custom' }))
+
+    await user.click(screen.getByRole('radio', { name: 'Teal' }))
+
+    expect(onChange).toHaveBeenLastCalledWith('#14b8a6')
+    expect(screen.getByRole('radio', { name: 'Teal' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Custom' })).not.toBeChecked()
+    expect(screen.queryByRole('slider', { name: 'Hue' })).not.toBeInTheDocument()
+  })
 })

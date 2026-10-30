@@ -78,8 +78,11 @@ export function CategoryColorPicker({ value, onChange }: CategoryColorPickerProp
             name={color.name}
             group={group}
             color={color.hex}
-            checked={value === color.hex}
-            onSelect={() => onChange(color.hex)}
+            checked={!custom && value === color.hex}
+            onSelect={() => {
+              setCustomChosen(false)
+              onChange(color.hex)
+            }}
           />
         ))}
         <Swatch
