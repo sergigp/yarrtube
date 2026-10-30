@@ -3,8 +3,6 @@
 All notable changes to yarrtube are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
-
 ## [0.10.0] - 2026-10-30
 
 Categories, subtitles and a redesigned web UI.
@@ -78,7 +76,6 @@ Existing libraries need a one-time migration. Read
   ([b0a6358], @jason-s13r)
 - The image builds with podman. ([491c8ff], @jason-s13r)
 
-[Unreleased]: https://github.com/sergigp/yarrtube/compare/v0.10.0...HEAD
 [0.10.0]: https://github.com/sergigp/yarrtube/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/sergigp/yarrtube/compare/v0.8.0...v0.9.0
 [33a1416]: https://github.com/sergigp/yarrtube/commit/33a1416
