@@ -2,7 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
-use super::validation::{MISSING_POSITION, MISSING_WAS_WATCHED, required};
+use super::validation::{MISSING_POSITION, MISSING_SEARCH_TEXT, MISSING_WAS_WATCHED, required};
 use crate::domain::category::CategoryId;
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
@@ -92,7 +92,7 @@ pub async fn search_videos(
     State(video_searcher): State<VideoSearcher>,
     Query(query): Query<SearchVideosQuery>,
 ) -> Result<Json<SearchVideosResponse>, ApiError> {
-    let text = VideoSearchText::new(query.q.unwrap_or_default())?;
+    let text = VideoSearchText::new(required(query.q, MISSING_SEARCH_TEXT)?)?;
 
     let videos = run_blocking(move || video_searcher.search_by_title(&text, SEARCH_LIMIT))
         .await?
@@ -2642,6 +2642,30 @@ mod tests {
                 }],
                 ..empty_home()
             })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_search_if_text_too_short() {
+        let response = search(any_video_searcher(), Some(" a ")).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Search text must be at least 2 characters"
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_search_if_text_missing() {
+        let response = search(any_video_searcher(), None).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Search text must be at least 2 characters (missing)"
+            ))
         );
     }
 
