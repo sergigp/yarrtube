@@ -209,7 +209,10 @@ test.describe('with a downloaded playlist', () => {
     await openPlaylist(page)
     await assertVideoPlays(page)
     await recordPosition(page)
-    const row = page.getByRole('button', { name: new RegExp(`^(?!Actions for).*${escapeRegExp(videoTitle)}$`) })
+    // The row's name ends with the title, then how long ago it was published.
+    const row = page.getByRole('button', {
+      name: new RegExp(`^(?!Actions for).*${escapeRegExp(videoTitle)}(?:\\s*(?:\\d+(?:h|d|w|mo|y) ago|just now))?$`),
+    })
     await expect(row.getByRole('progressbar', { name: 'Watch progress' })).toBeVisible()
     await expect(row.getByText(TIME_LEFT)).toBeVisible()
   })

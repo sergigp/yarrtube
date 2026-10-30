@@ -16,7 +16,8 @@ test('announcements bar shows, links, dismisses and remembers dismissals', async
   await page.goto('/')
 
   const bar = page.getByRole('region', { name: 'Announcement' })
-  await expect(bar).toHaveText('Second docs')
+  // Rendered text only: below `sm` the links repeat after the truncated text.
+  await expect(bar).toHaveText('Second docs', { useInnerText: true })
   const link = bar.getByRole('link', { name: 'docs' })
   await expect(link).toHaveAttribute('href', 'https://example.com/docs')
   await expect(link).toHaveAttribute('target', '_blank')
