@@ -24,7 +24,7 @@ The header SHALL offer, at its trailing edge, a settings control shown as a gear
 ## ADDED Requirements
 
 ### Requirement: Preferences View
-The application SHALL have a "Preferences" view at `/preferences` showing a labelled switch per preference: "Enable categories" in a "Categories" group, and "Show continue watching", "Show categories", "Show category colors", "Show quick watches" and "Show latest videos" in a "Home" group. Toggling a switch SHALL save the preferences at once and update the whole application.
+The application SHALL have a "Preferences" view at `/preferences` showing a labelled switch per preference: "Enable categories" in a "Categories" group, and "Show continue watching", "Show categories", "Show quick watches" and "Show latest videos" in a "Home" group. Toggling a switch SHALL save the preferences at once and update the whole application.
 
 #### Scenario: Current values shown
 - **WHEN** a user opens the preferences view and only `home_show_latest` is off
@@ -38,12 +38,12 @@ The application SHALL have a "Preferences" view at `/preferences` showing a labe
 - **WHEN** a user toggles a switch and the save fails
 - **THEN** the view shows the error and the switch returns to its saved value
 
-### Requirement: Home Category Switches Need Categories
-While "Enable categories" is off, the "Show categories" and "Show category colors" switches SHALL be disabled, keeping their saved values.
+### Requirement: Home Category Switch Needs Categories
+While "Enable categories" is off, the "Show categories" switch SHALL be disabled, keeping its saved value.
 
 #### Scenario: Categories off
 - **WHEN** a user turns off "Enable categories"
-- **THEN** "Show categories" and "Show category colors" are disabled and keep their values
+- **THEN** "Show categories" is disabled and keeps its value
 
 ### Requirement: No Category UI While Categories Are Off
 While `categories_enabled` is off, or the preferences are still loading, the application SHALL NOT show the sidebar Categories section, the Categories field in the add and edit channel and playlist dialogs, home category sections or home card tints, and the sidebar search field SHALL be labelled for channels and playlists only. When the preferences cannot be loaded, the application SHALL behave as with the defaults.
@@ -66,13 +66,6 @@ While `categories_enabled` is off, a category view address SHALL say "Categories
 #### Scenario: Category address while off
 - **WHEN** categories are off and a user opens the "Chess" view's address
 - **THEN** the view says "Categories are turned off." and links to the preferences view
-
-### Requirement: Home Card Tint Follows Preferences
-Home video cards SHALL be tinted and framed as described in "Home Card Category Tint" only while both `categories_enabled` and `home_show_category_colors` are on; otherwise they SHALL look like the cards on a category's view.
-
-#### Scenario: Colors off
-- **WHEN** `home_show_category_colors` is off and a home video belongs to "Chess"
-- **THEN** its card has no tint and no frame
 
 ### Requirement: Home Without Latest Videos
 While `home_show_latest` is off, the home view SHALL NOT show "Latest videos". When no shown section has videos, the home view SHALL say "Nothing to show here." with a link to the preferences view.

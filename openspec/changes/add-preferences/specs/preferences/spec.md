@@ -7,7 +7,7 @@ Holds the user's daemon-wide display preferences (whether categories are used, w
 ## ADDED Requirements
 
 ### Requirement: Preferences And Their Defaults
-The daemon SHALL keep one set of preferences: `categories_enabled`, `home_show_continue_watching`, `home_show_categories`, `home_show_category_colors`, `home_show_quick_watches` and `home_show_latest`, each a boolean that defaults to `true`. A preference never saved SHALL read as its default, including after an upgrade that adds a new preference.
+The daemon SHALL keep one set of preferences: `categories_enabled`, `home_show_continue_watching`, `home_show_categories`, `home_show_quick_watches` and `home_show_latest`, each a boolean that defaults to `true`. A preference never saved SHALL read as its default, including after an upgrade that adds a new preference.
 
 #### Scenario: Fresh install
 - **WHEN** no preferences have been saved

@@ -22,7 +22,7 @@ Storage: one row (`id = 1`) holding the preferences as a JSON document. Keys mis
 - `src/application/http/mod.rs`: `ApiServices` fields, `/preferences` route (GET, PUT).
 - `src/application/http/videos/mod.rs`: existing `VideoSearcher::new` calls get the repository; new home acceptance tests.
 - `web/src/api/types.ts`, `web/src/api/client.ts`, `web/src/api/queries.ts`: `Preferences`, `fetchPreferences`/`savePreferences`, `usePreferences`/`useSavePreferences`/`useCategoriesShown`.
-- `web/src/lib/preferences.ts` (+ test, new): `DEFAULT_PREFERENCES`, `categoriesShown`, `homeTintShown`.
+- `web/src/lib/preferences.ts` (+ test, new): `DEFAULT_PREFERENCES`, `categoriesShown`.
 - `web/src/test/helpers.tsx`: `aPreferences` builder.
 - `web/src/components/ui/switch.tsx` (new): shadcn switch on `radix-ui`.
 - `web/src/components/PreferencesView.tsx` (+ test, new): the view.
@@ -33,7 +33,8 @@ Storage: one row (`id = 1`) holding the preferences as a JSON document. Keys mis
 - `web/src/components/AddChannelDialog.tsx`, `AddPlaylistDialog.tsx`, `EditChannelDialog.tsx`, `EditPlaylistDialog.tsx` (+ tests): Categories field gated; no category save when hidden.
 - `web/src/components/CategoryDetail.tsx` (+ test): "Categories are turned off." when off.
 - Existing web tests rendering any gated component: add `'GET /api/preferences': aPreferences()` to their route tables.
-- `e2e-tests/tests/preferences.spec.js` (new): toggles categories off/on through the UI (covers GET and PUT routes).
+- `e2e-tests/tests/preferences.spec.js` (new): toggles categories off/on through the UI (covers GET and PUT routes); turns each home switch off in turn and checks where the videos land.
+- `e2e-tests/helpers/fixtures.js`: every test starts with default preferences (each worker's daemon is shared by its tests).
 
 ## Types & Signatures
 
@@ -44,7 +45,6 @@ pub struct Preferences {
     pub categories_enabled: bool,
     pub home_show_continue_watching: bool,
     pub home_show_categories: bool,
-    pub home_show_category_colors: bool,
     pub home_show_quick_watches: bool,
     pub home_show_latest: bool,
 }
@@ -107,7 +107,6 @@ export interface Preferences {
   categories_enabled: boolean
   home_show_continue_watching: boolean
   home_show_categories: boolean
-  home_show_category_colors: boolean
   home_show_quick_watches: boolean
   home_show_latest: boolean
 }
@@ -123,7 +122,6 @@ export function useCategoriesShown(): boolean // categoriesShown(data, isError)
 export const DEFAULT_PREFERENCES: Preferences
 /** Hidden while loading; the defaults when loading failed. */
 export function categoriesShown(preferences: Preferences | undefined, failed: boolean): boolean
-export function homeTintShown(preferences: Preferences | undefined, failed: boolean): boolean
 ```
 
 ## Call Stack
@@ -136,7 +134,7 @@ Home: `GET /api/videos/home` → `list_home_videos` → `VideoSearcher::list_hom
 
 Web toggle: `PreferencesView` switch → `useSavePreferences()({ ...current, [key]: value })` → `PUT /api/preferences` → cache `['preferences']` updated → every `usePreferences()` consumer re-renders; home refetched. On error: message shown, switch reverts (cache untouched).
 
-Web gating: `Sidebar` / dialogs → `useCategoriesShown()`; `CategoryDetail` → `usePreferences()` (says "turned off" only once loaded and off); `Home` → `homeTintShown(..)` decides whether `categoryColors` is passed to `VideoGrid`, `home_show_latest` decides the "Latest videos" section.
+Web gating: `Sidebar` / dialogs → `useCategoriesShown()`; `CategoryDetail` → `usePreferences()` (says "turned off" only once loaded and off); `Home` → `categoriesShown(..)` decides whether `categoryColors` is passed to `VideoGrid` (the tints themselves go in a parallel change; there is no colors preference), `home_show_latest` decides the "Latest videos" section.
 
 Menu: `SettingsMenu` → `Link to="/preferences"`; `<a href="https://github.com/sergigp/yarrtube/issues/new" target="_blank" rel="noreferrer">`.
 
@@ -159,11 +157,11 @@ Menu: `SettingsMenu` → `Link to="/preferences"`; `<a href="https://github.com/
      - `it_should_find_saved_preferences`
      - `it_should_read_missing_keys_as_defaults`: row with `{"categories_enabled": false}` → others `true`.
 3. Web (Vitest)
-   - `lib/preferences`: `categoriesShown` (loading → false, failed → true, loaded → value); `homeTintShown` needs both flags.
+   - `lib/preferences`: `categoriesShown` (loading → false, failed → true, loaded → value).
    - `SettingsMenu`: items `Tasks`, `Preferences`, `Report a bug`; Preferences navigates; Report a bug has the issue URL and `target="_blank"`.
-   - `PreferencesView`: shows current values; toggling PUTs the full set with the change; save error shows message and reverts; category home switches disabled while categories off.
+   - `PreferencesView`: shows current values; toggling PUTs the full set with the change; save error shows message and reverts; "Show categories" disabled while categories off.
    - `Sidebar`: no Categories section/Add category while off; search label "Search channels and playlists".
    - `AddChannelDialog` / `AddPlaylistDialog` / `EditChannelDialog` / `EditPlaylistDialog`: no Categories field while off, no category request on save.
    - `CategoryDetail`: "Categories are turned off." with a Preferences link.
-   - `Home`: cards untinted with colors off; untinted with categories off; no "Latest videos" when off; "Nothing to show here." with a Preferences link.
+   - `Home`: cards untinted with categories off; no "Latest videos" when off; "Nothing to show here." with a Preferences link.
    - `AppShell`: `/preferences` renders the view.
