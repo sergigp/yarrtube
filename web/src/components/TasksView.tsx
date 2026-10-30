@@ -58,21 +58,36 @@ const KIND_ICON: Record<TaskKind, LucideIcon> = {
   maintenance: Wrench,
 }
 
+/**
+ * The tasks view: a "Tasks" heading over the task tabs, at a readable width
+ * and aligned to the left like the other views.
+ */
 export function TasksView() {
+  return (
+    <div className={VIEW_WIDTH}>
+      <h2 className="mb-4 truncate font-heading text-lg font-semibold text-foreground md:mb-6 md:text-xl">
+        Tasks
+      </h2>
+      <TaskTabs />
+    </div>
+  )
+}
+
+function TaskTabs() {
   const { data: tasks, error } = useTasks()
   const [tab, setTab] = useState<TaskTab>('active')
   const [search, setSearch] = useState('')
 
   if (error) {
-    return <p className={cn(VIEW_WIDTH, 'text-sm text-destructive')}>Failed to load tasks: {error.message}</p>
+    return <p className="text-sm text-destructive">Failed to load tasks: {error.message}</p>
   }
 
   if (!tasks) {
-    return <p className={cn(VIEW_WIDTH, 'text-sm text-muted-foreground')}>Loading tasks…</p>
+    return <p className="text-sm text-muted-foreground">Loading tasks…</p>
   }
 
   if (tasks.length === 0) {
-    return <p className={cn(VIEW_WIDTH, 'text-sm text-muted-foreground')}>No pending or in-progress tasks.</p>
+    return <p className="text-sm text-muted-foreground">No pending or in-progress tasks.</p>
   }
 
   const counts = tabCounts(tasks)
@@ -84,7 +99,7 @@ export function TasksView() {
   return (
     <TooltipProvider>
       <Tabs
-        className={VIEW_WIDTH}
+        className="w-full"
         value={tab}
         onValueChange={(value) => {
           setTab(value as TaskTab)
