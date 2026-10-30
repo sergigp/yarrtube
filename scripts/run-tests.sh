@@ -12,9 +12,13 @@
 # `--only` (repeatable) runs just those suites. `--workers` sets how many
 # end-to-end tests run at once, each worker against its own daemon
 # (default 3). In CI (`--ci`, or `CI=true`, which GitHub Actions sets) the
-# contract tests are left out: YouTube bot-checks CI runners. It only runs
-# checks: dependencies, the Playwright browsers and the web UI build must
-# already be in place. It ends with a summary: each phase's time and tests.
+# contract tests are left out (YouTube bot-checks CI runners) and failing
+# end-to-end tests are retried. It only runs checks: dependencies, the
+# Playwright browsers and the web UI build must already be in place, and are
+# checked before anything runs. It first prints what will run and how. Each
+# phase's output goes to a log, not the terminal:
+# a progress line while it runs, its time and tests after, and when it fails
+# just the failing tests (the logs are kept, their directory printed).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -49,7 +53,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     -h | --help)
-      sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -67,6 +71,12 @@ if [[ ! "$WORKERS" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 
+# CI mode also makes Playwright retry a failing end-to-end test (see
+# e2e-tests/playwright.config.js), which reads CI.
+if [[ "$CI_MODE" == true ]]; then
+  export CI=true
+fi
+
 if [[ -f "$REPO_ROOT/.env" ]]; then
   set -a
   # shellcheck source=/dev/null
@@ -79,42 +89,129 @@ step() {
   echo "==> $*"
 }
 
-# The summary printed at the end: each phase appends a line (name, seconds,
-# tests) to SUMMARY_FILE, the end-to-end suite's subshell too. A phase still
-# open when the script exits is the one that failed.
-SUMMARY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/yarrtube-tests.XXXXXX")"
-SUMMARY_FILE="$SUMMARY_DIR/summary"
-: >"$SUMMARY_FILE"
-PHASE_NAME=""
+# Every phase's output, kept when the run fails.
+LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/yarrtube-tests.XXXXXX")"
 SCRIPT_START=$(date +%s)
+INTERACTIVE=false
+if [[ -t 1 ]]; then
+  INTERACTIVE=true
+fi
 
-phase_begin() {
+SUITE=""
+PHASE_NAME=""
+PHASE_KIND=""
+PHASE_LOG=""
+PHASE_START=0
+TICKER_PID=""
+
+# Runs a phase: `run_phase <name> <kind> <command>...`, the command's output
+# going to the phase's log. The kind (vitest, cargo, cargo-build, playwright,
+# docker, plain) says how to show its progress and pick out its tests. A
+# failing command exits the script, whose EXIT trap reports the phase still
+# open as the failed one. The command runs in this shell, so the state it
+# sets (e.g. CONTAINER_STARTED) is seen by the cleanup.
+run_phase() {
   PHASE_NAME="$1"
+  PHASE_KIND="$2"
+  shift 2
+  PHASE_LOG="$LOG_DIR/$(tr -cs 'A-Za-z0-9' '-' <<<"$SUITE $PHASE_NAME" | sed 's/-$//').log"
   PHASE_START=$(date +%s)
-}
-
-phase_end() {
-  printf '%s\t%s\t%s\n' "$PHASE_NAME" "$(( $(date +%s) - PHASE_START ))" "${1:-}" >>"$SUMMARY_FILE"
+  if [[ "$INTERACTIVE" == true ]]; then
+    ticker &
+    TICKER_PID=$!
+  else
+    echo "  … $PHASE_NAME"
+  fi
+  "$@" >"$PHASE_LOG" 2>&1
+  stop_ticker
+  phase_line "✓" "$(phase_tests)"
   PHASE_NAME=""
 }
 
-# Records the open phase, if any, as failed.
+# Reports the open phase, if any, as failed, with its failing tests.
 phase_fail_open() {
-  if [[ -n "$PHASE_NAME" ]]; then
-    phase_end "FAILED"
+  if [[ -z "$PHASE_NAME" ]]; then
+    return
   fi
+  stop_ticker
+  phase_line "✗" "FAILED"
+  print_failures
+  echo "    full output: $PHASE_LOG"
+  PHASE_NAME=""
 }
 
-# Runs a command with its output shown and also kept in `log`, to count its
-# tests from.
-run_logged() {
-  local log="$1"
-  shift
-  "$@" 2>&1 | tee "$log"
+phase_line() {
+  local mark="$1" detail="$2"
+  if [[ "$INTERACTIVE" == true ]]; then
+    case "$mark" in
+      ✓) mark=$'\033[32m✓\033[0m' ;;
+      ✗) mark=$'\033[31m✗\033[0m' ;;
+    esac
+  fi
+  printf '  %s %-24s %7s  %s\n' "$mark" "$PHASE_NAME" "$(duration $(( $(date +%s) - PHASE_START )))" "$detail"
+}
+
+# The progress line, redrawn while a phase runs on a terminal.
+ticker() {
+  set +e
+  local frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏) i=0
+  while true; do
+    printf '\r\033[K  %s %-24s %7s  %s' "${frames[i++ % 10]}" "$PHASE_NAME" \
+      "$(duration $(( $(date +%s) - PHASE_START )))" "$(phase_progress)"
+    sleep 0.5
+  done
+}
+
+stop_ticker() {
+  if [[ -n "$TICKER_PID" ]]; then
+    kill "$TICKER_PID" 2>/dev/null || true
+    wait "$TICKER_PID" 2>/dev/null || true
+    TICKER_PID=""
+    printf '\r\033[K'
+  fi
 }
 
 strip_colors() {
   sed $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$@"
+}
+
+# How far the open phase got, from its log so far.
+phase_progress() {
+  case "$PHASE_KIND" in
+    vitest)
+      strip_colors "$PHASE_LOG" | awk '/^ *[✓❯×↓] .*\([0-9]+ tests?/ {
+          match($0, /\([0-9]+ tests?/); n += substr($0, RSTART + 1, RLENGTH - 1) + 0
+        }
+        END { if (n) printf "%d tests", n }'
+      ;;
+    cargo | cargo-build)
+      local finished
+      finished=$(grep -cE '^test .* \.\.\. ' "$PHASE_LOG")
+      if (( finished > 0 )); then
+        echo "$finished tests"
+      elif grep -qE '^ *(Compiling|Checking) ' "$PHASE_LOG"; then
+        echo "compiling"
+      fi
+      ;;
+    playwright)
+      strip_colors "$PHASE_LOG" | awk '
+        /Running [0-9]+ tests? using/ { total += $2 }
+        /^ +[✓✘-] +[0-9]+ / { done++ }
+        END { if (total) printf "%d/%d tests", done, total }'
+      ;;
+    docker)
+      strip_colors "$PHASE_LOG" | grep -oE '\[[^]]+ [0-9]+/[0-9]+\]' | tail -1
+      ;;
+  esac
+}
+
+# The open phase's test counts, from its finished log.
+phase_tests() {
+  case "$PHASE_KIND" in
+    vitest) count_vitest "$PHASE_LOG" ;;
+    cargo) count_cargo "$PHASE_LOG" ;;
+    playwright) count_playwright "$PHASE_LOG" ;;
+  esac
 }
 
 # "426 passed" from Vitest's closing "Tests  426 passed (426)".
@@ -122,25 +219,61 @@ count_vitest() {
   strip_colors "$1" | sed -nE 's/^ *Tests +(.*) \([0-9]+\) *$/\1/p' | tail -1
 }
 
-# Every cargo test binary's "test result:" line, added up.
+# Every cargo test binary's "test result:" line's passed tests, added up.
+# The ignored ones aren't counted: they're the contract tests, a suite of
+# their own.
 count_cargo() {
   strip_colors "$1" | awk '/^test result:/ {
-      for (i = 1; i <= NF; i++) {
-        if ($(i + 1) ~ /^passed/) passed += $i
-        if ($(i + 1) ~ /^ignored/) ignored += $i
-      }
+      for (i = 1; i <= NF; i++) if ($(i + 1) ~ /^passed/) passed += $i
     }
-    END { printf "%d passed", passed; if (ignored) printf ", %d ignored", ignored }'
+    END { printf "%d passed", passed }'
 }
 
 # Playwright's closing counts ("65 passed (1.4m)", "1 flaky", ...) of every
-# given log, added up per kind.
+# run in the log, added up per kind.
 count_playwright() {
   strip_colors "$@" | awk '/^ +[0-9]+ (passed|failed|flaky|skipped|did not run)/ {
       n = $1; $1 = ""; sub(/^ /, ""); sub(/ \(.*\)$/, ""); count[$0] += n
       if (!($0 in seen)) { seen[$0] = 1; order[++kinds] = $0 }
     }
     END { for (i = 1; i <= kinds; i++) printf "%s%d %s", (i > 1 ? ", " : ""), count[order[i]], order[i] }'
+}
+
+# The failed phase's failing tests, each with its error's first lines. When
+# none can be picked out (a compile error, lint, a container that never got
+# ready...), the log from its first error, or its tail.
+print_failures() {
+  local failures=""
+  case "$PHASE_KIND" in
+    vitest)
+      failures=$(strip_colors "$PHASE_LOG" | awk '
+        /^ *FAIL / { sub(/^ *FAIL +/, ""); print "    ✗ " $0; want = 1; next }
+        want && NF && !/⎯/ { sub(/^ +/, ""); print "        " $0; want = 0 }')
+      ;;
+    cargo)
+      failures=$(strip_colors "$PHASE_LOG" | awk '
+        /^---- .* stdout ----$/ { print "    ✗ " $2; block = 1; lines = -1; next }
+        /^failures:$/ { block = 0 }
+        block && /panicked at|^Error: / { lines = 0 }
+        block && lines >= 0 && lines < 8 && NF && !/^note: run with/ { print "        " $0; lines++ }')
+      ;;
+    playwright)
+      failures=$(strip_colors "$PHASE_LOG" | awk '
+        /^ +[0-9]+\) \[/ { sub(/^ +[0-9]+\) /, ""); sub(/ *─+ *$/, ""); print "    ✗ " $0; want = 1; next }
+        want && /Error/ { sub(/^ +/, ""); print "        " $0; want = 0 }')
+      ;;
+  esac
+  if [[ -n "$failures" ]]; then
+    echo "$failures"
+    return
+  fi
+  local cleaned
+  cleaned=$(strip_colors "$PHASE_LOG" | grep -vE '^ *(Compiling|Checking|Downloading|Downloaded|Blocking|Updating|Locking|Finished) ')
+  if grep -qE '^error' <<<"$cleaned"; then
+    sed -n '/^error/,$p' <<<"$cleaned" | head -60 | sed 's/^/    /'
+  else
+    tail -40 <<<"$cleaned" | sed 's/^/    /'
+  fi
 }
 
 duration() {
@@ -152,28 +285,22 @@ duration() {
   fi
 }
 
-print_summary() {
+finish() {
   local exit_code=$?
   phase_fail_open
-  step "summary"
-  local name seconds tests
-  while IFS=$'\t' read -r name seconds tests; do
-    if [[ "$seconds" == "-" ]]; then
-      printf '  %-28s %7s  %s\n' "$name" "" "$tests"
-    else
-      printf '  %-28s %7s  %s\n' "$name" "$(duration "$seconds")" "$tests"
-    fi
-  done <"$SUMMARY_FILE"
-  printf '  %-28s %7s\n' "total" "$(duration $(( $(date +%s) - SCRIPT_START )))"
-  rm -rf "$SUMMARY_DIR"
+  local total
+  total=$(duration $(( $(date +%s) - SCRIPT_START )))
   if [[ $exit_code -eq 0 ]]; then
-    step "all selected suites passed"
+    rm -rf "$LOG_DIR"
+    step "all selected suites passed ($total)"
+  elif [[ -z "$(ls -A "$LOG_DIR")" ]]; then
+    rm -rf "$LOG_DIR"
   else
-    step "failed (exit $exit_code)"
+    step "failed (exit $exit_code, $total); logs in $LOG_DIR"
   fi
   exit $exit_code
 }
-trap print_summary EXIT
+trap finish EXIT
 
 selected() {
   local suite="$1"
@@ -184,37 +311,113 @@ selected() {
   fi
 }
 
-require_dir() {
-  local dir="$1" how="$2"
-  if [[ ! -d "$REPO_ROOT/$dir" ]]; then
-    echo "error: $dir is missing; run '$how' first" >&2
+# The contract tests' yt-dlp.
+YTDLP="${YTDLP_PATH:-$(command -v yt-dlp || true)}"
+# The image the end-to-end upgrade check starts from: the latest release, so
+# every change is checked against the data the version users run today
+# leaves behind. `none` skips the check. Only the upgrade check needs the
+# real YouTube, since the released image it starts can't be pointed at the
+# fake one: it runs only with a real YOUTUBE_API_KEY.
+UPGRADE_FROM_IMAGE="${E2E_UPGRADE_FROM_IMAGE:-ghcr.io/sergigp/yarrtube:latest}"
+UPGRADE_SKIPPED_BECAUSE=""
+if [[ "$UPGRADE_FROM_IMAGE" == "none" ]]; then
+  UPGRADE_SKIPPED_BECAUSE="E2E_UPGRADE_FROM_IMAGE=none"
+elif [[ -z "${YOUTUBE_API_KEY:-}" ]]; then
+  UPGRADE_SKIPPED_BECAUSE="no YOUTUBE_API_KEY, it needs the real YouTube"
+  UPGRADE_FROM_IMAGE="none"
+fi
+
+# What the selected suites need, all checked before any runs, so a missing
+# one doesn't fail the run halfway. Every problem is listed at once.
+check_dependencies() {
+  local missing=()
+  need_dir() {
+    if [[ ! -d "$REPO_ROOT/$1" ]]; then
+      missing+=("$1 is missing: run '$2'")
+    fi
+  }
+  need_command() {
+    if ! command -v "$1" >/dev/null; then
+      missing+=("$1 not found on PATH${2:+ ($2)}")
+    fi
+  }
+  if selected web; then
+    need_command npm
+    need_dir web/node_modules "npm --prefix web ci"
+  fi
+  if selected rust || selected contract; then
+    need_command cargo
+    # The Rust binary embeds the built web UI.
+    need_dir web/dist "npm --prefix web ci && npm --prefix web run build"
+  fi
+  if selected contract; then
+    if [[ -z "${YOUTUBE_API_KEY:-}" ]]; then
+      missing+=("YOUTUBE_API_KEY is not set (in the environment or .env)")
+    fi
+    if [[ -z "$YTDLP" ]]; then
+      missing+=("yt-dlp not found on PATH (or set YTDLP_PATH)")
+    fi
+    need_command ffprobe "it comes with ffmpeg, which yt-dlp also needs"
+  fi
+  if selected e2e; then
+    need_command node
+    need_dir e2e-tests/node_modules \
+      "npm --prefix e2e-tests ci && npx --prefix e2e-tests playwright install --with-deps chromium webkit"
+    if ! command -v docker >/dev/null; then
+      missing+=("docker not found on PATH")
+    elif ! docker info >/dev/null 2>&1; then
+      missing+=("the Docker daemon isn't running")
+    fi
+  fi
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    step "missing dependencies"
+    printf '  ✗ %s\n' "${missing[@]}"
     exit 1
   fi
 }
 
+# What is about to run, and how.
+print_plan() {
+  local run=() skipped=() suite
+  for suite in "${ALL_SUITES[@]}"; do
+    if selected "$suite"; then run+=("$suite"); else skipped+=("$suite"); fi
+  done
+  step "plan"
+  printf '  %-10s %s\n' "suites" "${run[*]}${skipped[*]:+ (skipped: ${skipped[*]})}"
+  if [[ "$CI_MODE" == true ]]; then
+    printf '  %-10s %s\n' "CI mode" "on: contract tests left out unless --only names them" \
+      "" "(YouTube bot-checks CI runners), failing e2e tests retried twice"
+  else
+    printf '  %-10s %s\n' "CI mode" "off (--ci or CI=true: no contract tests, e2e retries)"
+  fi
+  if selected contract; then
+    printf '  %-10s %s\n' "yt-dlp" "$("$YTDLP" --version) at $YTDLP"
+  fi
+  if selected e2e; then
+    printf '  %-10s %s\n' "e2e" "$WORKERS workers, image ${E2E_IMAGE:-built from this tree}"
+    if [[ -n "$UPGRADE_SKIPPED_BECAUSE" ]]; then
+      printf '  %-10s %s\n' "upgrade" "skipped: $UPGRADE_SKIPPED_BECAUSE"
+    else
+      printf '  %-10s %s\n' "upgrade" "from $UPGRADE_FROM_IMAGE"
+    fi
+  fi
+}
+
 run_web() {
-  require_dir web/node_modules "npm --prefix web ci"
-  step "web UI: typecheck, lint, test"
-  phase_begin "web UI checks"
-  run_logged "$SUMMARY_DIR/web.log" npm --prefix "$REPO_ROOT/web" run check
-  phase_end "$(count_vitest "$SUMMARY_DIR/web.log")"
+  step "web UI"
+  run_phase "typecheck" plain npm --prefix "$REPO_ROOT/web" run typecheck
+  run_phase "lint" plain npm --prefix "$REPO_ROOT/web" run lint
+  # Vitest's default reporter lists each test file as it finishes (others,
+  # picked when it detects an agent or CI, only the failing ones), which the
+  # progress line counts.
+  run_phase "tests" vitest npm --prefix "$REPO_ROOT/web" run test -- --reporter=default
 }
 
 run_rust() {
-  # The Rust binary embeds the built web UI.
-  require_dir web/dist "npm --prefix web ci && npm --prefix web run build"
-  step "Rust: formatting"
-  phase_begin "Rust formatting"
-  cargo fmt --all -- --check
-  phase_end
-  step "Rust: clippy"
-  phase_begin "Rust clippy"
-  cargo clippy --all-targets --all-features --locked -- -D warnings
-  phase_end
-  step "Rust: tests"
-  phase_begin "Rust tests"
-  run_logged "$SUMMARY_DIR/rust.log" cargo test --locked
-  phase_end "$(count_cargo "$SUMMARY_DIR/rust.log")"
+  step "Rust"
+  run_phase "formatting" plain cargo fmt --all -- --check
+  run_phase "clippy" cargo-build cargo clippy --all-targets --all-features --locked -- -D warnings
+  run_phase "tests" cargo cargo test --locked
 }
 
 # The adapters' `#[ignore]`d tests against the real yt-dlp and YouTube Data
@@ -222,22 +425,9 @@ run_rust() {
 # yt-dlp or when downloads start failing, to see whether YouTube's side
 # changed.
 run_contract() {
-  require_dir web/dist "npm --prefix web ci && npm --prefix web run build"
-  : "${YOUTUBE_API_KEY:?YOUTUBE_API_KEY must be set (in the environment or $REPO_ROOT/.env)}"
-  local ytdlp_path="${YTDLP_PATH:-$(command -v yt-dlp || true)}"
-  if [[ -z "$ytdlp_path" ]]; then
-    echo "error: yt-dlp not found on PATH (or set YTDLP_PATH)" >&2
-    exit 1
-  fi
-  if ! command -v ffprobe >/dev/null; then
-    echo "error: ffprobe not found on PATH (it comes with ffmpeg, which yt-dlp also needs)" >&2
-    exit 1
-  fi
-  step "YouTube contract tests (yt-dlp $("$ytdlp_path" --version) at $ytdlp_path)"
-  phase_begin "YouTube contract tests"
-  YOUTUBE_API_KEY="$YOUTUBE_API_KEY" YTDLP_PATH="$ytdlp_path" \
-    run_logged "$SUMMARY_DIR/contract.log" cargo test --locked -- --ignored youtube_contract
-  phase_end "$(count_cargo "$SUMMARY_DIR/contract.log")"
+  step "YouTube contract tests"
+  YOUTUBE_API_KEY="$YOUTUBE_API_KEY" YTDLP_PATH="$YTDLP" \
+    run_phase "tests" cargo cargo test --locked -- --ignored youtube_contract
 }
 
 # Builds the release Docker image (or takes `E2E_IMAGE`), runs it with fresh
@@ -248,17 +438,11 @@ run_contract() {
 # and ports, so runs from different worktrees can go at the same time. Run in
 # a subshell, so its cleanup trap is its own.
 run_e2e() {
-  require_dir e2e-tests/node_modules \
-    "npm --prefix e2e-tests ci && npx --prefix e2e-tests playwright install --with-deps chromium webkit"
-  step "end-to-end suite"
+  step "end-to-end"
 
   local run_id
   run_id="$(date +%s)-$$"
   IMAGE_TAG="${E2E_IMAGE:-yarrtube:e2e-$run_id}"
-  # The image the upgrade check starts from: the latest release, so every
-  # change is checked against the data the version users run today leaves
-  # behind. `none` skips the check.
-  UPGRADE_FROM_IMAGE="${E2E_UPGRADE_FROM_IMAGE:-ghcr.io/sergigp/yarrtube:latest}"
   CONTAINER_NAME="yarrtube-e2e-$run_id"
   READY_TIMEOUT_SECONDS="${E2E_READY_TIMEOUT_SECONDS:-120}"
   # Free ports for the daemon and both stubs, unless set; asked for together
@@ -279,13 +463,7 @@ run_e2e() {
   # when the check fails (each worker keeps its own daemon's, see daemon.js).
   LOG_FILE="$REPO_ROOT/e2e-tests/test-results/upgrade-container.log"
 
-  # The suite runs against a fake YouTube (see e2e-tests/README.md). Only
-  # the upgrade check needs the real one, since the released image it starts
-  # can't be pointed at the fake: it runs only with a real YOUTUBE_API_KEY.
-  if [[ "$UPGRADE_FROM_IMAGE" != "none" && -z "${YOUTUBE_API_KEY:-}" ]]; then
-    echo "==> no YOUTUBE_API_KEY: skipping the upgrade check, which needs the real YouTube"
-    UPGRADE_FROM_IMAGE="none"
-  fi
+  # The suite runs against a fake YouTube (see e2e-tests/README.md).
   # The upgrade check's fixture: the maintainer-owned "test" playlist on the
   # real YouTube.
   E2E_PLAYLIST_ID="${E2E_PLAYLIST_ID:-PLXWRoRTUXjks}"
@@ -297,20 +475,15 @@ run_e2e() {
   YOUTUBE_STUB_PID=""
   trap e2e_cleanup EXIT
 
-  if [[ -n "${E2E_IMAGE:-}" ]]; then
-    echo "==> testing $IMAGE_TAG"
-  else
-    echo "==> building $IMAGE_TAG"
-    phase_begin "e2e image build"
-    docker build -t "$IMAGE_TAG" "$REPO_ROOT"
-    phase_end
+  if [[ -z "${E2E_IMAGE:-}" ]]; then
+    run_phase "image build" docker docker build -t "$IMAGE_TAG" "$REPO_ROOT"
   fi
 
   # The fake YouTube Data API on the host, shared by every daemon (it only
   # reads); the stand-in yt-dlp is mounted into each container (see
   # e2e-tests/fake-youtube/).
-  echo "==> starting YouTube stub on port $YOUTUBE_STUB_PORT"
-  E2E_YOUTUBE_STUB_PORT="$YOUTUBE_STUB_PORT" node "$REPO_ROOT/e2e-tests/fake-youtube/youtube-stub.js" &
+  E2E_YOUTUBE_STUB_PORT="$YOUTUBE_STUB_PORT" \
+    node "$REPO_ROOT/e2e-tests/fake-youtube/youtube-stub.js" >"$LOG_DIR/youtube-stub.log" 2>&1 &
   YOUTUBE_STUB_PID=$!
 
   if [[ "$UPGRADE_FROM_IMAGE" != "none" ]]; then
@@ -318,36 +491,36 @@ run_e2e() {
     mkdir -p "$TMP_DIR/videos" "$TMP_DIR/config"
     # A stand-in Plex server on the host, so the check can see yarrtube asks
     # Plex to scan what it downloads (see e2e-tests/plex-stub.js).
-    echo "==> starting Plex stub on port $PLEX_STUB_PORT"
-    E2E_PLEX_STUB_PORT="$PLEX_STUB_PORT" node "$REPO_ROOT/e2e-tests/plex-stub.js" &
+    E2E_PLEX_STUB_PORT="$PLEX_STUB_PORT" \
+      node "$REPO_ROOT/e2e-tests/plex-stub.js" >"$LOG_DIR/plex-stub.log" 2>&1 &
     PLEX_STUB_PID=$!
-
-    echo "==> upgrade check: seeding a library with $UPGRADE_FROM_IMAGE"
-    phase_begin "e2e upgrade check"
-    docker pull "$UPGRADE_FROM_IMAGE"
-    e2e_start_container "$UPGRADE_FROM_IMAGE" real
-    run_logged "$SUMMARY_DIR/upgrade-seed.log" e2e_run_upgrade_phase seed
-    e2e_stop_container
-
-    echo "==> upgrade check: verifying the seeded library on $IMAGE_TAG"
-    e2e_start_container "$IMAGE_TAG" fake
-    run_logged "$SUMMARY_DIR/upgrade-verify.log" e2e_run_upgrade_phase verify
-    e2e_fail_on_panic
-    e2e_stop_container
-    phase_end "$(count_playwright "$SUMMARY_DIR"/upgrade-*.log)"
+    run_phase "upgrade check" playwright e2e_upgrade_check
   fi
 
   # Each worker starts its own daemon from the image (see
   # e2e-tests/helpers/daemon.js).
-  echo "==> running Playwright suite on $WORKERS worker(s)"
-  phase_begin "e2e suite ($WORKERS workers)"
   E2E_IMAGE="$IMAGE_TAG" \
     E2E_RUN_ID="$run_id" \
     E2E_YOUTUBE_STUB_PORT="$YOUTUBE_STUB_PORT" \
     E2E_WORKERS="$WORKERS" \
     E2E_CHECK_ROUTE_COVERAGE=1 \
-    run_logged "$SUMMARY_DIR/e2e.log" npm --prefix "$REPO_ROOT/e2e-tests" test
-  phase_end "$(count_playwright "$SUMMARY_DIR/e2e.log")"
+    run_phase "suite ($WORKERS workers)" playwright npm --prefix "$REPO_ROOT/e2e-tests" test
+}
+
+# The released image seeds a library, then this build starts on it and must
+# carry it on as it was.
+e2e_upgrade_check() {
+  echo "==> seeding a library with $UPGRADE_FROM_IMAGE"
+  docker pull "$UPGRADE_FROM_IMAGE"
+  e2e_start_container "$UPGRADE_FROM_IMAGE" real
+  e2e_run_upgrade_phase seed
+  e2e_stop_container
+
+  echo "==> verifying the seeded library on $IMAGE_TAG"
+  e2e_start_container "$IMAGE_TAG" fake
+  e2e_run_upgrade_phase verify
+  e2e_fail_on_panic
+  e2e_stop_container
 }
 
 e2e_cleanup() {
@@ -355,7 +528,7 @@ e2e_cleanup() {
   phase_fail_open
   if [[ "$CONTAINER_STARTED" == true ]]; then
     if [[ $exit_code -ne 0 ]]; then
-      echo "==> run failed (exit $exit_code); saving container logs to $LOG_FILE"
+      echo "    container logs: $LOG_FILE"
       mkdir -p "$(dirname "$LOG_FILE")"
       docker logs "$CONTAINER_NAME" >"$LOG_FILE" 2>&1 || true
     fi
@@ -470,16 +643,16 @@ e2e_fail_on_panic() {
 }
 
 cd "$REPO_ROOT"
+check_dependencies
+print_plan
 for suite in "${ALL_SUITES[@]}"; do
   if selected "$suite"; then
+    SUITE="$suite"
     case "$suite" in
       web) run_web ;;
       rust) run_rust ;;
       contract) run_contract ;;
       e2e) (run_e2e) ;;
     esac
-  else
-    step "skipped: $suite"
-    printf '%s\t-\tskipped\n' "$suite" >>"$SUMMARY_FILE"
   fi
 done

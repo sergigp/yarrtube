@@ -96,8 +96,14 @@ YouTube, on every pull request and push to `main`. The script only checks:
 it installs and builds nothing, so install the web UI's and `e2e-tests/`'s
 dependencies (and the Playwright browsers) and build the web UI first. Each
 end-to-end worker runs its own container on its own ports, so the suite runs
-in parallel and worktrees can run it at the same time. The script ends with a
-summary of each phase's time and test counts.
+in parallel and worktrees can run it at the same time. Before running
+anything it checks every selected suite's dependencies, listing all that are
+missing, and prints what will run: the suites, CI mode (`--ci` or
+`CI=true`: no contract tests, failing end-to-end tests retried) and the
+end-to-end workers and upgrade check. Each phase's output
+goes to a log rather than the terminal: a progress line while it runs, its
+time and test counts once done, and on failure only the failing tests with
+their errors, plus the path of the kept logs.
 
 ### YouTube contract tests
 
