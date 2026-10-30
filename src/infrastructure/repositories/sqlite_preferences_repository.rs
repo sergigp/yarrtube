@@ -93,3 +93,35 @@ impl From<StoredPreferences> for Preferences {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+
+    #[test]
+    fn it_should_find_nothing_if_never_saved() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(repository.find().unwrap(), None);
+    }
+
+    #[test]
+    fn it_should_find_saved_preferences() {
+        let db = TestDatabase::new();
+        let repository = SqlitePreferencesRepository::new(db.database());
+        let preferences = Preferences {
+            categories_enabled: false,
+            home_show_continue_watching: false,
+            home_show_categories: true,
+            home_show_category_colors: false,
+            home_show_quick_watches: true,
+            home_show_latest: false,
+        };
+
+        repository.save(&preferences).unwrap();
+
+        assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+}

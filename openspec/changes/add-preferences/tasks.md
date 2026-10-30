@@ -42,8 +42,8 @@ Web (Vitest):
 
 SqlitePreferencesRepository:
 
-- [ ] 3.1 `it_should_find_nothing_if_never_saved`; verify `cargo test sqlite_preferences_repository` passes
-- [ ] 3.2 `it_should_find_saved_preferences`
+- [x] 3.1 `it_should_find_nothing_if_never_saved`; verify `cargo test sqlite_preferences_repository` passes
+- [x] 3.2 `it_should_find_saved_preferences`
 - [ ] 3.3 `it_should_read_missing_keys_as_defaults` — row `{"categories_enabled": false}` → every other preference `true`
 
 ## 4. Verification
