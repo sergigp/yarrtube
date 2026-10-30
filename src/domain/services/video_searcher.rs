@@ -157,10 +157,10 @@ impl VideoSearcherApi for VideoSearcher {
             limits.latest,
         );
         Ok(HomeVideos {
-            continue_watching: Self::with_categories(Self::views(continue_watching), &by_video),
-            categories: Self::category_section_views(category_sections, &by_video),
-            quick_watches: Self::with_categories(Self::views(quick_watches), &by_video),
-            latest: Self::with_categories(Self::views(latest), &by_video),
+            continue_watching: Self::with_categories(self.views(continue_watching)?, &by_video),
+            categories: self.category_section_views(category_sections, &by_video)?,
+            quick_watches: Self::with_categories(self.views(quick_watches)?, &by_video),
+            latest: Self::with_categories(self.views(latest)?, &by_video),
         })
     }
 
@@ -230,8 +230,18 @@ impl VideoSearcher {
         })
     }
 
-    fn views(videos: Vec<SourcedVideo>) -> Vec<HomeVideoView> {
-        videos.into_iter().map(HomeVideoView::from).collect()
+    /// `videos` as home cards, each with its publish date when its metadata
+    /// has one.
+    fn views(&self, videos: Vec<SourcedVideo>) -> Result<Vec<HomeVideoView>, ListVideosError> {
+        videos
+            .into_iter()
+            .map(|sourced| {
+                let metadata = self.video_metadata_repository.find(&sourced.video.id)?;
+                Ok(HomeVideoView::from(sourced)
+                    .with_published_at(metadata.map(|metadata| metadata.published_at)))
+            })
+            .collect::<anyhow::Result<Vec<HomeVideoView>>>()
+            .map_err(ListVideosError::Repository)
     }
 
     /// `views`, each with the categories having its YouTube video in
@@ -320,16 +330,19 @@ impl VideoSearcher {
     /// `sections` as home category sections, their videos with the
     /// categories having them in `by_video`.
     fn category_section_views(
+        &self,
         sections: Vec<(Category, Vec<SourcedVideo>)>,
         by_video: &HashMap<VideoId, Vec<CategoryId>>,
-    ) -> Vec<HomeCategorySection> {
+    ) -> Result<Vec<HomeCategorySection>, ListVideosError> {
         sections
             .into_iter()
-            .map(|(category, videos)| HomeCategorySection {
-                id: category.id,
-                name: category.name,
-                color: category.color,
-                videos: Self::with_categories(Self::views(videos), by_video),
+            .map(|(category, videos)| {
+                Ok(HomeCategorySection {
+                    id: category.id,
+                    name: category.name,
+                    color: category.color,
+                    videos: Self::with_categories(self.views(videos)?, by_video),
+                })
             })
             .collect()
     }

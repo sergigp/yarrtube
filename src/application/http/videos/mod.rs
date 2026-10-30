@@ -1369,6 +1369,69 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_the_publish_date_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let video_metadata_repository = Arc::new(SqliteVideoMetadataRepository::new(db.database()));
+        let video_dir = tempfile::tempdir().unwrap();
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        let published = downloaded_video("vid1", "Published", None, 200);
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &published,
+            0,
+        );
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &downloaded_video("vid2", "Unknown date", None, 100),
+            1,
+        );
+        video_metadata_repository
+            .save(
+                &published.id,
+                &video_metadata(),
+                &EpisodeNumber::from_columns(2024, 10101).unwrap(),
+                &video_dir.path().join("S2024E010101 - Published.nfo"),
+            )
+            .unwrap();
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            video_metadata_repository,
+            Arc::new(FixedClock(watched_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                latest: vec![
+                    HomeVideoResponse {
+                        published_at: Some(published_timestamp()),
+                        ..home_video_response("vid1", "Published", channel_source(None))
+                    },
+                    home_video_response("vid2", "Unknown date", channel_source(None)),
+                ],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_a_home_video_with_its_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -5355,6 +5418,7 @@ mod tests {
             duration_seconds: None,
             watched: false,
             position_seconds: 0,
+            published_at: None,
             source,
             category_ids: vec![],
         }
