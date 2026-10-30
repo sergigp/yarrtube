@@ -16,7 +16,7 @@
 - [x] 3.1 Update `api/types.ts` (`HomeVideo.published_at`, search response) and the fixture builders (`aHomeVideo`), add `useVideoSearch` to the queries, and verify `npm run typecheck` passes
 - [ ] 3.2 Rework `lib/categoryColors.ts`: new `PALETTE` (Mustard…Taupe), `softTint`, `inkShade`, `solidFromHue`; remove `cardBackground`/`CROWDED_CARD`; update `categoryColors.test.ts` and verify it passes
 - [x] 3.3 Add `lib/relativeAge.ts` (`formatAge`) with fake-timer unit tests for h/d/w/mo/y boundaries and verify they pass
-- [ ] 3.4 Add `components/ui/skeleton.tsx` and `VideoCardSkeleton`, `VideoGridSkeleton`, `VideoRowSkeleton` (with `aria-busy` + visually hidden status text) and verify a component test finds the loading status by role
+- [x] 3.4 Add `components/ui/skeleton.tsx` and `VideoCardSkeleton`, `VideoGridSkeleton`, `VideoRowSkeleton` (with `aria-busy` + visually hidden status text) and verify a component test finds the loading status by role
 - [ ] 3.5 Add thin, muted scrollbar styles in `index.css` and reserve the header logo's size (explicit `width`/`height`); verify visually with `scripts/run-spa-against-remote.sh` (against the NAS) that the header doesn't shift on load
 
 ## 4. Web: video cards and home
