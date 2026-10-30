@@ -71,7 +71,7 @@ impl From<VideoView> for VideoResponse {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct HomeVideoSourceResponse {
     pub kind: String,
     pub id: String,
@@ -80,7 +80,18 @@ pub struct HomeVideoSourceResponse {
     pub avatar_filename: Option<String>,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Deserialize)]
+pub struct SearchVideosQuery {
+    #[serde(default)]
+    pub q: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SearchVideosResponse {
+    pub videos: Vec<HomeVideoResponse>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct HomeVideoResponse {
     pub id: String,
     pub title: String,

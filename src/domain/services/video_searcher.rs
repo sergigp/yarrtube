@@ -5,7 +5,7 @@ use crate::domain::preferences::Preferences;
 use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
 use crate::domain::video::{
     CategoryVideoView, HomeCategorySection, HomeLimits, HomeVideoView, HomeVideos, ListVideosError,
-    SourcedVideo, Video, VideoId, VideoSource, VideoStatus, VideoView,
+    SourcedVideo, Video, VideoId, VideoSearchText, VideoSource, VideoStatus, VideoView,
 };
 use crate::infrastructure::repositories::sqlite_category_repository::CategoryRepository;
 use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepository;
@@ -91,6 +91,16 @@ pub trait VideoSearcherApi: Send + Sync {
     /// (channel copy preferred), newest sync first.
     fn list_for_category(&self, id: &CategoryId)
     -> Result<Vec<CategoryVideoView>, ListVideosError>;
+
+    /// Up to `limit` downloaded videos whose title contains `text`, ignoring
+    /// ASCII case, newest sync first, once per YouTube video through a
+    /// tracking channel when there is one, otherwise a tracking playlist,
+    /// home exclusions ignored.
+    fn search_by_title(
+        &self,
+        text: &VideoSearchText,
+        limit: usize,
+    ) -> Result<Vec<HomeVideoView>, ListVideosError>;
 }
 
 impl VideoSearcherApi for VideoSearcher {
@@ -183,6 +193,26 @@ impl VideoSearcherApi for VideoSearcher {
             .map(|sourced| self.category_view(sourced, &by_video))
             .collect::<anyhow::Result<Vec<CategoryVideoView>>>()
             .map_err(ListVideosError::Repository)
+    }
+
+    fn search_by_title(
+        &self,
+        text: &VideoSearchText,
+        limit: usize,
+    ) -> Result<Vec<HomeVideoView>, ListVideosError> {
+        let found = self
+            .video_repository
+            .find_downloaded_by_title(text.as_str(), limit)
+            .map_err(ListVideosError::Repository)?;
+        let mut videos = Self::once_per_youtube_video(Self::channels_first(
+            self.with_sources(found)
+                .map_err(ListVideosError::Repository)?,
+        ));
+        videos.sort_by_key(|sourced| std::cmp::Reverse(sourced.video.created_at));
+        let by_video = self
+            .category_ids_by_video(&self.list_categories()?)
+            .map_err(ListVideosError::Repository)?;
+        Ok(Self::with_categories(self.views(videos)?, &by_video))
     }
 }
 
@@ -475,6 +505,55 @@ impl VideoSearcher {
                 },
             )
             .1
+    }
+
+    /// `videos`, each with the channel or playlist tracking it, keeping their
+    /// order. A video tracked by neither is left out.
+    fn with_sources(&self, videos: Vec<Video>) -> anyhow::Result<Vec<SourcedVideo>> {
+        videos
+            .into_iter()
+            .map(|video| {
+                Ok(self
+                    .source_of(&video)?
+                    .map(|source| SourcedVideo { video, source }))
+            })
+            .filter_map(Result::transpose)
+            .collect()
+    }
+
+    /// The channel tracking `video` (a video record is tracked by one
+    /// source), otherwise the playlist tracking it.
+    fn source_of(&self, video: &Video) -> anyhow::Result<Option<VideoSource>> {
+        if let Some(channel_video) = self.channel_video_repository.find_by_video(&video.id)? {
+            return Ok(self
+                .channel_repository
+                .find(&channel_video.channel_id)?
+                .map(|channel| VideoSource::Channel {
+                    handle: channel.id,
+                    name: channel.name,
+                    path: channel.path,
+                    avatar_filename: channel.avatar_filename,
+                }));
+        }
+        let Some(playlist_video) = self.playlist_video_repository.find_by_video(&video.id)? else {
+            return Ok(None);
+        };
+        Ok(self
+            .playlist_repository
+            .find(&playlist_video.playlist_id)?
+            .map(|playlist| VideoSource::Playlist {
+                id: playlist.id,
+                name: playlist.name,
+                path: playlist.path,
+            }))
+    }
+
+    /// `videos` with every channel copy ahead of the playlist copies, each
+    /// group keeping its order, so `once_per_youtube_video` keeps the
+    /// channel's.
+    fn channels_first(mut videos: Vec<SourcedVideo>) -> Vec<SourcedVideo> {
+        videos.sort_by_key(|sourced| matches!(sourced.source, VideoSource::Playlist { .. }));
+        videos
     }
 
     fn downloaded_from_playlists(&self) -> Result<Vec<SourcedVideo>, ListVideosError> {
