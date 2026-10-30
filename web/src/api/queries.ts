@@ -45,6 +45,7 @@ import type {
   Video,
 } from './types'
 import { anyWorkInProgress } from '@/lib/libraryPolling'
+import { categoriesShown } from '@/lib/preferences'
 
 // The sidebar lists change rarely and are refetched right after the user's
 // own actions; views showing live download progress poll quickly.
@@ -198,6 +199,12 @@ export function usePreferences(): UseQueryResult<Preferences, Error> {
     queryKey: queryKeys.preferences,
     queryFn: fetchPreferences,
   })
+}
+
+/** Whether category UI shows, as decided by `categoriesShown`. */
+export function useCategoriesShown(): boolean {
+  const { data, isError } = usePreferences()
+  return categoriesShown(data, isError)
 }
 
 /**

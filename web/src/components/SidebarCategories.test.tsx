@@ -8,6 +8,7 @@ import {
   aCategory,
   aCategoryList,
   aChannel,
+  aPreferences,
   mockApi,
   renderWithProviders,
   type Routes as ApiRoutes,
@@ -16,7 +17,12 @@ import { RouteProbe } from '@/test/RouteProbe'
 
 /** Renders the sidebar beside a probe of the current route and, optionally, the category view. */
 function renderSidebar(routes: ApiRoutes, { route = '/', withCategoryView = false } = {}) {
-  mockApi({ 'GET /api/channels': [], 'GET /api/playlists': [], ...routes })
+  mockApi({
+    'GET /api/channels': [],
+    'GET /api/playlists': [],
+    'GET /api/preferences': aPreferences(),
+    ...routes,
+  })
   return renderWithProviders(
     <>
       {withCategoryView && (

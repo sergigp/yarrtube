@@ -28,7 +28,7 @@ Web (Vitest):
 - [x] 2.15 `PreferencesView` › toggling a switch PUTs the full set with the change and the switch reflects the saved value
 - [x] 2.16 `PreferencesView` › a failed save shows the error and the switch returns to its saved value
 - [x] 2.17 `PreferencesView` › "Show categories" and "Show category colors" are disabled while "Enable categories" is off
-- [ ] 2.18 `Sidebar` › no Categories section or "Add category" while categories are off, search labelled "Search channels and playlists"
+- [x] 2.18 `Sidebar` › no Categories section or "Add category" while categories are off, search labelled "Search channels and playlists"
 - [ ] 2.19 `AddChannelDialog` › no Categories field while off, saving makes no category request
 - [ ] 2.20 `AddPlaylistDialog` › same as 2.19
 - [ ] 2.21 `EditChannelDialog` › same as 2.19
