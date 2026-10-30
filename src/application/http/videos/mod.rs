@@ -3892,6 +3892,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_not_count_continue_watching_videos_when_ranking_category_sections_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@chess", None))
+            .unwrap();
+        (0..3).for_each(|i| {
+            save_channel_video(
+                &video_repository,
+                &channel_video_repository,
+                "@chess",
+                &downloaded_video(&format!("@chess{i}"), &format!("Chess {i}"), None, i),
+                i,
+            )
+        });
+        (3..5).for_each(|i| {
+            save_channel_video(
+                &video_repository,
+                &channel_video_repository,
+                "@chess",
+                &started_video(
+                    &format!("@chess{i}"),
+                    &format!("Chess {i}"),
+                    120,
+                    watched_timestamp() - Duration::hours(i),
+                ),
+                i,
+            )
+        });
+        let chess = named_category("Chess", &[channel_member("@chess")]);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&chess)
+            .unwrap();
+        categorize_source(&db, &channel_member("@chess"), &[&chess]);
+        let science = save_category_channel(&db, "Science", "@science", 10..14);
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                continue_watching: (3..5)
+                    .map(|i| HomeVideoResponse {
+                        position_seconds: 120,
+                        ..category_card(&chess, "@chess", i)
+                    })
+                    .collect(),
+                categories: vec![
+                    category_section_of(&science, "@science", (10..14).rev()),
+                    category_section_of(&chess, "@chess", (0..3).rev()),
+                ],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
