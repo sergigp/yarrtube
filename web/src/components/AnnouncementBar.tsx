@@ -8,9 +8,8 @@ import {
   writeDismissedAnnouncements,
 } from '@/lib/announcements'
 import { parseAnnouncementText } from '@/lib/announcementText'
-import { cn } from '@/lib/utils'
 
-const LINK_CLASS = 'font-medium underline underline-offset-2'
+const LINK_CLASS = 'font-medium whitespace-nowrap underline underline-offset-2'
 
 function linkProps(url: string) {
   return { href: url, target: '_blank', rel: 'noopener noreferrer' }
@@ -32,7 +31,6 @@ export function AnnouncementBar() {
   }
 
   const segments = parseAnnouncementText(announcement.text)
-  const links = segments.flatMap((segment) => (segment.kind === 'link' ? [segment] : []))
 
   const dismiss = () => {
     const next = new Set(dismissed).add(announcement.id)
@@ -46,31 +44,16 @@ export function AnnouncementBar() {
       aria-label="Announcement"
       className="flex shrink-0 items-center gap-3 border-b border-border bg-muted px-4 py-1.5 text-sm sm:px-6 sm:py-2"
     >
-      {/* Below `sm`: one line, the text truncated and its links after it. */}
-      <p className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="min-w-0 max-sm:truncate">
-          {segments.map((segment, index) =>
-            segment.kind === 'link' ? (
-              <a
-                key={index}
-                {...linkProps(segment.url)}
-                className={cn(LINK_CLASS, 'max-sm:hidden')}
-              >
-                {segment.label}
-              </a>
-            ) : (
-              <span key={index}>{segment.text}</span>
-            ),
-          )}
-        </span>
-        {links.length > 0 && (
-          <span className="flex shrink-0 gap-2 sm:hidden">
-            {links.map((link, index) => (
-              <a key={index} {...linkProps(link.url)} className={LINK_CLASS}>
-                {link.label}
-              </a>
-            ))}
-          </span>
+      {/* Wraps rather than truncates, so the whole note shows on phones too. */}
+      <p className="min-w-0 flex-1">
+        {segments.map((segment, index) =>
+          segment.kind === 'link' ? (
+            <a key={index} {...linkProps(segment.url)} className={LINK_CLASS}>
+              {segment.label}
+            </a>
+          ) : (
+            <span key={index}>{segment.text}</span>
+          ),
         )}
       </p>
       <Button

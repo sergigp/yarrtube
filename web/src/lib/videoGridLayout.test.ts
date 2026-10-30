@@ -14,13 +14,13 @@ describe('videoGridLayout', () => {
 
   it('shows a shelf card only once its column fits, so the shelf keeps to one row', () => {
     expect([0, 1, 2, 3, 4, 5, 6].map((index) => videoGridItemClassName('shelf', index))).toEqual([
-      'max-sm:w-[75%] max-sm:shrink-0 max-sm:snap-start',
-      'max-sm:w-[75%] max-sm:shrink-0 max-sm:snap-start',
-      'max-sm:w-[75%] max-sm:shrink-0 max-sm:snap-start hidden max-sm:block @xl:block',
-      'max-sm:w-[75%] max-sm:shrink-0 max-sm:snap-start hidden max-sm:block @3xl:block',
-      'max-sm:w-[75%] max-sm:shrink-0 max-sm:snap-start hidden max-sm:block @5xl:block',
-      'max-sm:w-[75%] max-sm:shrink-0 max-sm:snap-start hidden max-sm:block @7xl:block',
-      'max-sm:w-[75%] max-sm:shrink-0 max-sm:snap-start hidden max-sm:block',
+      'max-sm:w-[92%] max-sm:shrink-0 max-sm:snap-start',
+      'max-sm:w-[92%] max-sm:shrink-0 max-sm:snap-start',
+      'max-sm:w-[92%] max-sm:shrink-0 max-sm:snap-start hidden max-sm:block @xl:block',
+      'max-sm:w-[92%] max-sm:shrink-0 max-sm:snap-start hidden max-sm:block @3xl:block',
+      'max-sm:w-[92%] max-sm:shrink-0 max-sm:snap-start hidden max-sm:block @5xl:block',
+      'max-sm:w-[92%] max-sm:shrink-0 max-sm:snap-start hidden max-sm:block @7xl:block',
+      'max-sm:w-[92%] max-sm:shrink-0 max-sm:snap-start hidden max-sm:block',
     ])
   })
 

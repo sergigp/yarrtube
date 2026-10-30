@@ -23,10 +23,10 @@ const GRID = ['grid gap-x-4 gap-y-6', ...COLUMNS.map((step) => step.columns)].jo
 
 /** Below `sm`, a shelf scrolls sideways from edge to edge, snapping card by card. */
 const PHONE_SHELF =
-  'max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-px-4 max-sm:gap-3 max-sm:overflow-x-auto max-sm:px-4 max-sm:pb-2'
+  'max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-px-4 max-sm:gap-3 max-sm:overflow-x-auto max-sm:px-4'
 
-/** About three quarters of the width, so the next card peeks in. */
-const PHONE_SHELF_CARD = 'max-sm:w-[75%] max-sm:shrink-0 max-sm:snap-start'
+/** Nearly the full width, leaving a sliver of the next card to show the shelf swipes. */
+const PHONE_SHELF_CARD = 'max-sm:w-[92%] max-sm:shrink-0 max-sm:snap-start'
 
 export function videoGridListClassName(layout: VideoGridLayout): string {
   switch (layout) {

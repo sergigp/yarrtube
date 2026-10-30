@@ -37,14 +37,10 @@ describe('AnnouncementBar', () => {
   it('renders inline links that open in a new tab', async () => {
     renderBar([anAnnouncement({ text: 'New release, see [docs](https://example.com/docs) now' })])
 
-    // Inline from the small breakpoint up, after the text below it.
-    const links = await screen.findAllByRole('link', { name: 'docs' })
-    expect(links).toHaveLength(2)
-    for (const link of links) {
-      expect(link).toHaveAttribute('href', 'https://example.com/docs')
-      expect(link).toHaveAttribute('target', '_blank')
-      expect(link).toHaveAttribute('rel', 'noopener noreferrer')
-    }
+    const link = await screen.findByRole('link', { name: 'docs' })
+    expect(link).toHaveAttribute('href', 'https://example.com/docs')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
     expect(screen.getByText(/New release, see/).parentElement).toHaveTextContent(
       'New release, see docs now',
     )
@@ -122,16 +118,16 @@ describe('AnnouncementBar', () => {
     expect(await screen.findByRole('region', { name: 'Announcement' })).toHaveTextContent('First')
   })
 
-  it('compacts to one line on phones: the text truncated, then its links, then the dismiss control', async () => {
+  it('wraps the whole text with its links inline, then the dismiss control', async () => {
     renderBar([
       anAnnouncement({ text: 'A long release note, see [docs](https://example.com/docs)' }),
     ])
 
     const region = await screen.findByRole('region', { name: 'Announcement' })
-    const [inline, trailing] = screen.getAllByRole('link', { name: 'docs' })
-    expect(screen.getByText(/A long release note/).parentElement).toHaveClass('max-sm:truncate')
-    expect(inline).toHaveClass('max-sm:hidden')
-    expect(trailing.parentElement).toHaveClass('sm:hidden', 'shrink-0')
+    expect(screen.getByText(/A long release note/).parentElement).not.toHaveClass(
+      'max-sm:truncate',
+    )
+    expect(screen.getByRole('link', { name: 'docs' })).toBeVisible()
     expect(region.lastElementChild).toBe(
       screen.getByRole('button', { name: 'Dismiss announcement' }),
     )
