@@ -79,7 +79,7 @@ The system SHALL include each video's publish time, description and channel name
 - **THEN** that video's entry reports its publish time, description and channel name as absent, and every other field is still returned
 
 ### Requirement: List Home Videos Across Sources
-The system SHALL provide an HTTP endpoint that returns, in one response, the downloaded videos of the three home sections across every tracked channel and every tracked playlist not excluded from home, so that a YouTube video appears in at most one section.
+The system SHALL provide an HTTP endpoint that returns, in one response, the downloaded videos of the home sections across every tracked channel and every tracked playlist not excluded from home, so that a YouTube video appears in at most one section.
 
 A playlist excluded from home SHALL NOT be the source of any video in any section. A video it tracks SHALL still appear when another source that is not excluded tracks it, through that source.
 
@@ -88,12 +88,14 @@ A playlist excluded from home SHALL NOT be the source of any video in any sectio
 - ordered by last played time, most recent first
 
 "Quick watches" SHALL hold up to 6 short videos:
-- each is unwatched, with a recorded duration shorter than 15 minutes (900 seconds), and not shown under "Continue watching"
+- each is unwatched, with a recorded duration shorter than 15 minutes (900 seconds), and not shown under "Continue watching" or any category section
 - ordered by sync time (the time the video was recorded by the system), newest first
 
-In these two sections, a YouTube video tracked by more than one source SHALL appear once, from a tracking channel when there is one.
+Category sections, described in "Home Category Sections", SHALL come after "Continue watching" and before "Quick watches".
 
-"Latest videos" SHALL hold up to 18 videos that are not shown under "Continue watching" or "Quick watches", ordered by sync time, newest first, once per source that tracks them.
+In these sections, a YouTube video tracked by more than one source SHALL appear once, from a tracking channel when there is one.
+
+"Latest videos" SHALL hold up to 18 videos that are not shown under "Continue watching", any category section or "Quick watches", ordered by sync time, newest first, once per source that tracks them.
 
 Only the videos a section shows SHALL be left out of the sections after it.
 
@@ -109,14 +111,14 @@ Each returned video SHALL include:
 
 #### Scenario: Nothing downloaded
 - **WHEN** no downloaded video is recorded
-- **THEN** the daemon responds with HTTP status 200 and three empty sections
+- **THEN** the daemon responds with HTTP status 200, three empty sections and no category sections
 
 #### Scenario: A started short video counts as continue watching
 - **WHEN** a video qualifies for both "Continue watching" and "Quick watches"
 - **THEN** it appears under "Continue watching" only
 
 #### Scenario: A video shown above is not repeated in latest videos
-- **WHEN** a video appears under "Continue watching" or "Quick watches"
+- **WHEN** a video appears under "Continue watching", a category section or "Quick watches"
 - **THEN** it does not appear under "Latest videos"
 
 #### Scenario: Sections are bounded
@@ -203,6 +205,10 @@ Each returned video SHALL include:
 - **WHEN** a playlist excluded from home is included in home again
 - **THEN** its downloaded videos appear in the home sections they qualify for
 
+#### Scenario: A video shown in a category section is not a quick watch
+- **WHEN** a short, unwatched video is shown in a category section
+- **THEN** it does not appear under "Quick watches"
+
 ### Requirement: Listed Videos Include Their Subtitle Language
 The system SHALL include each video's subtitle language in the responses that list the videos of a playlist and of a channel. The language SHALL be the code its subtitle file is named with (the base code, e.g. `es` for an `es-US` track). The system SHALL report it as absent for a video whose subtitles are not fetched.
 
@@ -279,3 +285,53 @@ Each video returned by the home endpoint and the category videos endpoint SHALL 
 #### Scenario: Category videos include their categories
 - **WHEN** a video listed for the category "Chess" is also tracked by a member of "Streams"
 - **THEN** its category identifiers are those of ["Chess", "Streams"]
+
+### Requirement: Home Category Sections
+The home endpoint SHALL return up to 3 category sections, each with the category's identifier, name and color and up to 6 of its pending videos: downloaded, unwatched videos from the home sources that belong to the category and are not shown under "Continue watching" or an earlier category section, newest sync first. A category with no such videos SHALL get no section.
+
+#### Scenario: Category with pending videos
+- **WHEN** "Chess" has 2 downloaded, unwatched videos and no other category has any
+- **THEN** the response holds one category section for "Chess", with its identifier, name and color, listing both videos, the more recently synced first
+
+#### Scenario: Watched videos are not pending
+- **WHEN** every downloaded video of "Chess" is watched
+- **THEN** the response holds no category section for "Chess"
+
+#### Scenario: Category section is bounded
+- **WHEN** "Chess" has 10 pending videos
+- **THEN** its section holds the 6 most recently synced
+
+#### Scenario: Continue watching videos are left out
+- **WHEN** a video of "Chess" is shown under "Continue watching"
+- **THEN** it does not appear in the "Chess" section
+
+#### Scenario: Video in two categories appears once
+- **WHEN** a pending video belongs to "Chess" and "Streams", and both get a section
+- **THEN** it appears only in the first of the two sections
+
+#### Scenario: Excluded playlists do not feed category sections
+- **WHEN** a pending video of "Highlights" is tracked only by a playlist excluded from home
+- **THEN** it appears in no category section
+
+#### Scenario: Video reached through a source shown on home
+- **WHEN** a pending video belongs to "Highlights" through a playlist excluded from home and is also tracked by a channel that is not excluded
+- **THEN** it can appear in the "Highlights" section, with the channel as its source
+
+### Requirement: Home Category Section Ranking
+Categories SHALL be ranked by their number of pending videos not shown under "Continue watching", counted in full and not only up to 6, most first, ties broken by category name ignoring case. Sections SHALL follow the ranking; a category left without videos once those shown in earlier sections are removed SHALL be skipped and the next ranked category SHALL take its place, until 3 sections are filled or no category remains.
+
+#### Scenario: Most pending first
+- **WHEN** "Chess" has 4 pending videos, "Science" has 9 and "Streams" has 1
+- **THEN** the sections are, in order, "Science", "Chess" and "Streams"
+
+#### Scenario: At most three sections
+- **WHEN** 5 categories have pending videos
+- **THEN** only the 3 with the most pending videos get a section
+
+#### Scenario: Ties by name
+- **WHEN** "chess" and "Astronomy" both have 3 pending videos
+- **THEN** "Astronomy" comes before "chess"
+
+#### Scenario: Emptied category is skipped
+- **WHEN** every pending video of the second-ranked category is shown in the first-ranked section, and a fourth category has pending videos
+- **THEN** the second-ranked category gets no section and the fourth one does
