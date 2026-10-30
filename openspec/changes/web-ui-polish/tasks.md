@@ -41,7 +41,7 @@
 - [ ] 6.2 Compact the announcement bar to one line below `sm` and verify `AnnouncementBar.test.tsx` and a visual check with `scripts/run-spa-against-remote.sh`
 - [x] 6.3 Move desktop delete into a "More actions for <name>" "⋮" menu in `DetailHeader`; update `DetailHeader.test.tsx` for the desktop scenario and verify it passes
 - [x] 6.4 Show the publish age on video list rows (`VideoListPane` and the category playback list) and the skeleton rows while loading; verify tests for the row date scenarios and the loading status
-- [ ] 6.5 `CategoryDetail`: header tinted with `softTint`, color circle replaced by a "Change color" header action, header rendered from the cached categories list while videos load (summary placeholder, skeleton grid); update `CategoryDetail.test.tsx` (including the "Violet" `#9870c5` scenario) and verify it passes
+- [x] 6.5 `CategoryDetail`: header tinted with `softTint`, color circle replaced by a "Change color" header action, header rendered from the cached categories list while videos load (summary placeholder, skeleton grid); update `CategoryDetail.test.tsx` (including the "Violet" `#9870c5` scenario) and verify it passes
 - [ ] 6.6 Update `CategoryColorPicker` for the new swatch names/values and the solid custom slider; update its tests and verify they pass
 - [ ] 6.7 `TasksView`: add the "Tasks" heading and left-align the view; update `TasksView.test.tsx` and verify it passes
 

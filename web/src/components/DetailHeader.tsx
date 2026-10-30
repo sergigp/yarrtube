@@ -14,6 +14,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { EditableTitle } from './EditableTitle'
 import { Thumbnail } from './Thumbnail'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -141,10 +142,8 @@ function MoreActionsMenu({
 
 interface DetailHeaderProps {
   name: string
-  /** Background color of the whole header, e.g. a category's color. */
+  /** Background color of the whole header, e.g. a category's soft tint. */
   tint?: string
-  /** Shown before the name, e.g. a category's color control. */
-  colorControl?: ReactNode
   avatarSrc?: string | null
   showAvatar?: boolean
   videos: readonly unknown[] | undefined
@@ -180,7 +179,6 @@ interface DetailHeaderProps {
 export function DetailHeader({
   name,
   tint,
-  colorControl,
   avatarSrc,
   showAvatar,
   videos,
@@ -271,7 +269,6 @@ export function DetailHeader({
       )}
       style={tint ? { background: tint } : undefined}
     >
-      {colorControl}
       {showAvatar && (
         <Thumbnail
           src={avatarSrc}
@@ -286,7 +283,12 @@ export function DetailHeader({
             {name}
           </h2>
         )}
-        {summary && <p className="truncate text-xs text-muted-foreground md:text-sm">{summary}</p>}
+        {summary ? (
+          <p className="truncate text-xs text-muted-foreground md:text-sm">{summary}</p>
+        ) : (
+          // Holds the summary's line until the videos it counts have loaded.
+          <Skeleton className="mt-1 h-3.5 w-40" />
+        )}
       </div>
       {isDesktop ? (
         <TooltipProvider>
