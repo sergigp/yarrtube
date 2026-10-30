@@ -3,6 +3,7 @@ import { Check, Plus } from 'lucide-react'
 import { createCategory } from '@/api/client'
 import { useCategories, useInvalidateLibrary } from '@/api/queries'
 import { byName } from '@/lib/categories'
+import { inkShade, softTint } from '@/lib/categoryColors'
 import { errorMessage } from '@/lib/errorMessage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -85,10 +86,14 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
                   className={cn(
                     'flex items-center gap-1.5 rounded-full border py-1 pr-3 pl-2 text-xs font-medium transition-colors',
                     chosen
-                      ? 'border-black/10 text-foreground'
+                      ? 'border-black/10'
                       : 'border-border text-muted-foreground hover:text-foreground',
                   )}
-                  style={chosen ? { background: category.color } : undefined}
+                  style={
+                    chosen
+                      ? { background: softTint(category.color), color: inkShade(category.color) }
+                      : undefined
+                  }
                   onClick={() => toggle(category.id)}
                 >
                   {chosen ? (

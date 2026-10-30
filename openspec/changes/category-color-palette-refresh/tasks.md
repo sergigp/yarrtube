@@ -13,7 +13,7 @@
 - [x] 2.5 `CategoryColorPicker.test.tsx`: choosing Custom from Orange shows Custom checked and the slider. Choosing it from Blue does the same. Make the picker derive `custom` from `customChosen || !inPalette(value)`. Verify with `npm run test -- CategoryColorPicker`.
 - [x] 2.6 `CategoryColorPicker.test.tsx`: after choosing Custom, re-rendering with the palette value `#f97316` keeps Custom checked and the slider shown. Verify with `npm run test -- CategoryColorPicker`.
 - [x] 2.7 `CategoryColorPicker.test.tsx`: choosing a swatch after Custom checks the swatch and hides the slider. A swatch clears `customChosen`. Verify with `npm run test -- CategoryColorPicker`.
-- [ ] 2.8 `CategoryPicker.test.tsx`: a chosen chip has a `softTint` background and `inkShade` text. Change the chosen chip's style in `CategoryPicker.tsx`. Verify with `npm run test -- CategoryPicker`.
+- [x] 2.8 `CategoryPicker.test.tsx`: a chosen chip has a `softTint` background and `inkShade` text. Change the chosen chip's style in `CategoryPicker.tsx`. Verify with `npm run test -- CategoryPicker`.
 - [ ] 2.9 Update the old-palette hexes and names in `AddCategoryDialog`, `CategoryDetail`, `VideoGrid` and `Home` tests (e.g. "Violet" → `#8b5cf6`, header tint from `#0ea5e9`). Verify with `npm run check`.
 
 ## 3. Infrastructure adapters (TDD)

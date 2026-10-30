@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { inkShade, softTint } from '@/lib/categoryColors'
 import { CategoryPicker } from './CategoryPicker'
 import {
   aCategory,
@@ -25,7 +26,7 @@ describe('CategoryPicker', () => {
   it('shows every category, toggles them and colors the chosen ones', async () => {
     mockApi({
       'GET /api/categories': aCategoryList([
-        aCategory({ id: 'streams', name: 'Streams', color: '#fff1bf' }),
+        aCategory({ id: 'streams', name: 'Streams', color: '#0ea5e9' }),
         aCategory({ id: 'chess', name: 'Chess', color: '#d3ecf8' }),
         aCategory({ id: 'science', name: 'Science', color: '#e9def8' }),
       ]),
@@ -48,7 +49,8 @@ describe('CategoryPicker', () => {
     expect(afterPick).toEqual(['Chess', 'Streams'])
     expect(chosen()).toEqual(['Streams'])
     expect(screen.getByRole('button', { name: 'Streams' })).toHaveStyle({
-      background: '#fff1bf',
+      background: softTint('#0ea5e9'),
+      color: inkShade('#0ea5e9'),
     })
     expect(screen.getByRole('button', { name: 'Chess' }).style.background).toBe('')
   })
