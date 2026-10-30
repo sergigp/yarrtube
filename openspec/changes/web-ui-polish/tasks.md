@@ -7,7 +7,7 @@
 ## 2. Daemon: home publish date and video search
 
 - [x] 2.1 Add `published_at` to the home video view/DTO (`HomeVideoResponse`) for every section and verify a home endpoint test asserts it, including `null` for unknown dates
-- [ ] 2.2 Add `VideoRepository::find_downloaded_by_title(text, limit)` (LIKE with escaped `%`, `_`, `\`) with repository tests for matching, case, escaping, not-downloaded exclusion and limit; verify they pass
+- [x] 2.2 Add `VideoRepository::find_downloaded_by_title(text, limit)` (LIKE with escaped `%`, `_`, `\`) with repository tests for matching, case, escaping, not-downloaded exclusion and limit; verify they pass
 - [ ] 2.3 Add `VideoSearcher::search_by_title` (one entry per YouTube video, channel source first, home exclusion ignored, newest sync first, max 20) with service tests for the "Search Videos By Title" scenarios; verify they pass
 - [ ] 2.4 Add route `GET /api/videos/search` with query validation (trimmed ≥ 2 chars, else 400) and handler tests for the "Search Text Validation" scenarios; verify `cargo test`, `cargo fmt --all -- --check` and `cargo clippy --all-targets --all-features --locked -- -D warnings` pass
 

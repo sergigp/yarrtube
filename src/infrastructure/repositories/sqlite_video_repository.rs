@@ -84,6 +84,9 @@ pub trait VideoRepository: Send + Sync {
     ) -> anyhow::Result<EpisodeNumber>;
     /// Every `Downloaded` video, across all playlists and channels.
     fn list_downloaded(&self) -> anyhow::Result<Vec<Video>>;
+    /// Up to `limit` `Downloaded` videos whose title contains `text`, ignoring
+    /// ASCII case, newest sync first.
+    fn find_downloaded_by_title(&self, text: &str, limit: usize) -> anyhow::Result<Vec<Video>>;
     /// The number `assign_episode_number` would return right now, without
     /// recording it.
     fn next_episode_number(
@@ -376,9 +379,45 @@ impl VideoRepository for SqliteVideoRepository {
             .map(Self::row_to_video)
             .collect()
     }
+
+    fn find_downloaded_by_title(&self, text: &str, limit: usize) -> anyhow::Result<Vec<Video>> {
+        let conn = self.db.read()?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {VIDEO_COLUMNS} FROM videos \
+                 WHERE status = ?1 AND title LIKE '%' || ?2 || '%' ESCAPE '\\' \
+                 ORDER BY created_at DESC, rowid DESC LIMIT ?3"
+            ))
+            .context("failed to prepare find downloaded videos by title")?;
+        stmt.query_map(
+            params![
+                VideoStatus::Downloaded.as_str(),
+                Self::escape_like(text),
+                i64::try_from(limit).unwrap_or(i64::MAX)
+            ],
+            Self::read_row,
+        )
+        .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+        .inspect_err(|e| tracing::error!(error = %e, "failed to find downloaded videos by title"))
+        .context("failed to find downloaded videos by title")?
+        .into_iter()
+        .map(Self::row_to_video)
+        .collect()
+    }
 }
 
 impl SqliteVideoRepository {
+    /// `text` with LIKE's wildcards and escape character escaped, so they
+    /// match literally.
+    fn escape_like(text: &str) -> String {
+        text.chars()
+            .flat_map(|c| match c {
+                '%' | '_' | '\\' => vec!['\\', c],
+                _ => vec![c],
+            })
+            .collect()
+    }
+
     fn recorded_episode_number(
         conn: &Connection,
         id: &VideoRecordId,
@@ -1089,6 +1128,69 @@ mod tests {
     }
 
     #[test]
+    fn it_should_find_downloaded_videos_by_title_ignoring_case() {
+        let repo = repo();
+        let tactics = downloaded("Chess Tactics: Spot the Trigger", 100);
+        let endgame = downloaded("Endgame Skills", 200);
+        let accented = downloaded("Víctor Falcón explica", 300);
+        [&tactics, &endgame, &accented]
+            .into_iter()
+            .for_each(|video| repo.save(video).unwrap());
+
+        let found = ["tactics", "TACTICS", "falcon"]
+            .map(|text| repo.find_downloaded_by_title(text, 20).unwrap());
+
+        assert_eq!(found, [vec![tactics.clone()], vec![tactics], vec![]]);
+    }
+
+    #[test]
+    fn it_should_match_wildcards_in_a_title_search_literally() {
+        let repo = repo();
+        let percent = downloaded("100% Accuracy", 100);
+        let underscore = downloaded("snake_case explained", 200);
+        let backslash = downloaded("C:\\Windows tour", 300);
+        let other = downloaded("1000 Accuracy snakeXcase C:Windows", 400);
+        [&percent, &underscore, &backslash, &other]
+            .into_iter()
+            .for_each(|video| repo.save(video).unwrap());
+
+        let found =
+            ["0%", "e_c", ":\\W"].map(|text| repo.find_downloaded_by_title(text, 20).unwrap());
+
+        assert_eq!(found, [vec![percent], vec![underscore], vec![backslash]]);
+    }
+
+    #[test]
+    fn it_should_find_only_downloaded_videos_by_title() {
+        let repo = repo();
+        let pending = video("Tactics pending", fixed_timestamp());
+        let downloaded = downloaded("Tactics downloaded", 100);
+        [&pending, &downloaded]
+            .into_iter()
+            .for_each(|video| repo.save(video).unwrap());
+
+        let found = repo.find_downloaded_by_title("tactics", 20);
+
+        assert_eq!(found.unwrap(), vec![downloaded]);
+    }
+
+    #[test]
+    fn it_should_find_the_newest_synced_videos_by_title_up_to_the_limit() {
+        let repo = repo();
+        let videos = (0..5)
+            .map(|index| downloaded(&format!("Tactics {index}"), index * 100))
+            .collect::<Vec<_>>();
+        videos.iter().for_each(|video| repo.save(video).unwrap());
+
+        let found = repo.find_downloaded_by_title("tactics", 3);
+
+        assert_eq!(
+            found.unwrap(),
+            vec![videos[4].clone(), videos[3].clone(), videos[2].clone()]
+        );
+    }
+
+    #[test]
     fn it_should_peek_the_next_episode_number_without_recording_it() {
         let db = TestDatabase::new();
         let repo = SqliteVideoRepository::new(db.database());
@@ -1104,6 +1206,19 @@ mod tests {
 
         assert_eq!(number.unwrap(), episode(31502));
         assert_eq!(repo.find(&video.id).unwrap(), Some(video));
+    }
+
+    fn downloaded(title: &str, created_at_seconds: i64) -> Video {
+        let created_at = DateTime::<Utc>::from_timestamp(created_at_seconds, 0).unwrap();
+        Video::create(VideoId::new("yt1").unwrap(), title, created_at)
+            .start_download(created_at)
+            .mark_downloaded(
+                Quality::High,
+                &format!("{title}.mp4"),
+                None,
+                None,
+                created_at,
+            )
     }
 
     fn link_to_playlist(db: &TestDatabase, video: &Video, playlist_id: &str) {
