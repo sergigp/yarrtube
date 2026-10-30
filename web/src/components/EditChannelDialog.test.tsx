@@ -6,6 +6,7 @@ import {
   aCategory,
   aCategoryList,
   aChannel,
+  aPreferences,
   mockApi,
   renderWithProviders,
   type Routes,
@@ -17,7 +18,7 @@ function renderDialog(
   onSave: (changes: object) => Promise<void> = vi.fn(async () => {}),
   routes: Routes = { 'GET /api/categories': aCategoryList() },
 ) {
-  const fetchMock = mockApi(routes)
+  const fetchMock = mockApi({ 'GET /api/preferences': aPreferences(), ...routes })
   const onOpenChange = vi.fn()
   renderWithProviders(
     <EditChannelDialog channel={channel} open onOpenChange={onOpenChange} onSave={onSave} />,
@@ -65,6 +66,29 @@ describe('EditChannelDialog', () => {
 
     expect(onSave).toHaveBeenCalledExactlyOnceWith({ quality: 'low' })
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('offers no categories and saves none while categories are off', async () => {
+    const { onSave, onOpenChange, fetchMock } = renderDialog(
+      aChannel({ quality: 'high' }),
+      undefined,
+      {
+        'GET /api/categories': aCategoryList(),
+        'GET /api/preferences': aPreferences({ categories_enabled: false }),
+      },
+    )
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('combobox', { name: /Video quality/ }))
+    await user.click(await screen.findByRole('option', { name: 'Low' }))
+    expect(screen.queryByRole('group', { name: 'Categories' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ quality: 'low' })
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT'),
+    ).toEqual([])
   })
 
   it('notes that a changed quality applies to new videos only', async () => {
@@ -213,8 +237,8 @@ describe('EditChannelDialog', () => {
       vi.fn(async () => {}),
       { 'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]) },
     )
-    const field = screen.getByRole('textbox', { name: 'New category' })
     await screen.findByRole('button', { name: 'Chess' })
+    const field = screen.getByRole('textbox', { name: 'New category' })
 
     await userEvent.setup().type(field, 'chess{Enter}')
 

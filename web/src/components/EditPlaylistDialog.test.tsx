@@ -6,6 +6,7 @@ import {
   aCategory,
   aCategoryList,
   aPlaylist,
+  aPreferences,
   mockApi,
   renderWithProviders,
   type Routes,
@@ -17,7 +18,7 @@ function renderDialog(
   onSave: (changes: object) => Promise<void> = vi.fn(async () => {}),
   routes: Routes = { 'GET /api/categories': aCategoryList() },
 ) {
-  const fetchMock = mockApi(routes)
+  const fetchMock = mockApi({ 'GET /api/preferences': aPreferences(), ...routes })
   const onOpenChange = vi.fn()
   renderWithProviders(
     <EditPlaylistDialog playlist={playlist} open onOpenChange={onOpenChange} onSave={onSave} />,
