@@ -188,7 +188,7 @@ describe('VideoGrid', () => {
 
     expect(screen.getByRole('list')).toHaveClass('@xl:grid-cols-3', 'max-sm:flex', 'max-sm:snap-x')
     expect(card('Video 1')).not.toHaveClass('hidden')
-    expect(card('Video 2')).toHaveClass('hidden', 'max-sm:block', '@xl:block', 'max-sm:w-[75%]')
+    expect(card('Video 2')).toHaveClass('hidden', 'max-sm:block', '@xl:block', 'max-sm:w-[92%]')
     expect(card('Video 5')).toHaveClass('hidden', '@7xl:block')
   })
 

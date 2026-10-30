@@ -71,7 +71,7 @@ function HomeSection({
 function HomeSkeleton() {
   return (
     <Busy>
-      <div className="flex flex-col gap-10">
+      <div className="flex flex-col gap-5 sm:gap-10">
         {[0, 1].map((shelf) => (
           <div key={shelf} className="flex flex-col gap-4">
             <div aria-hidden className="h-7 w-48 animate-pulse rounded-md bg-muted" />
@@ -153,7 +153,7 @@ export function Home() {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-10">
+    <div className="flex min-w-0 flex-col gap-5 sm:gap-10">
       <HomeSection
         title="Continue watching"
         name="continue watching videos"
