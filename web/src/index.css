@@ -102,6 +102,12 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }
+
+  /* Thin, muted scrollbars, so nested scroll areas don't weigh on the layout. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
+  }
 }
 
 @keyframes beacon-pulse {

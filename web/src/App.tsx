@@ -74,7 +74,14 @@ export function AppShell() {
           className="flex items-center no-underline"
           aria-label="Yarrtube"
         >
-          <img src="/logo.png" alt="Yarrtube" className="h-10 w-auto sm:h-12" />
+          <img
+            src="/logo.png"
+            alt="Yarrtube"
+            // The intrinsic size reserves the logo's box before the image loads.
+            width={2048}
+            height={768}
+            className="h-10 w-auto sm:h-12"
+          />
         </Link>
         <VersionLabel />
         <div className="ml-auto flex items-center gap-2">
