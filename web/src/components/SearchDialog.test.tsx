@@ -10,6 +10,7 @@ import {
   aChannel,
   aHomeVideo,
   aPlaylist,
+  aPreferences,
   mockApi,
   pendingForever,
   renderWithProviders,
@@ -40,6 +41,7 @@ function renderSearch(routes: Routes) {
     'GET /api/categories': aCategoryList([aCategory({ id: 'chess', name: 'Chess' })]),
     'GET /api/channels': [aChannel({ id: '@andras', name: 'ChessCoach Andras' })],
     'GET /api/playlists': [aPlaylist({ id: 'PLmusic', name: 'Music' })],
+    'GET /api/preferences': aPreferences(),
     ...routes,
   })
   renderWithProviders(<OpenSearch />)
@@ -191,5 +193,17 @@ describe('SearchDialog', () => {
     await user.keyboard('{Escape}')
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('searches no categories while categories are turned off', async () => {
+    const { user } = renderSearch({
+      'GET /api/preferences': aPreferences({ categories_enabled: false }),
+      'GET /api/videos/search?q=chess': { videos: [] },
+    })
+
+    await user.type(screen.getByRole('combobox', { name: 'Search' }), 'chess')
+
+    expect(await screen.findByRole('option', { name: 'ChessCoach Andras' })).toBeInTheDocument()
+    expect(groupOptions('Categories')).toBeNull()
   })
 })

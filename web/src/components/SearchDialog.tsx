@@ -5,6 +5,7 @@ import { avatarMediaUrl, videoMediaUrl } from '@/api/client'
 import {
   VIDEO_SEARCH_MIN_LENGTH,
   useCategories,
+  useCategoriesShown,
   useChannels,
   usePlaylists,
   useVideoSearch,
@@ -64,6 +65,8 @@ function SearchPanel({ onChosen }: { onChosen: () => void }) {
   const searchesVideos = text.trim().length >= VIDEO_SEARCH_MIN_LENGTH
   const videoSearch = useVideoSearch(searchesVideos ? debouncedText : '')
   const { data: categoryList } = useCategories()
+  // No category is found while categories are turned off.
+  const categoriesShown = useCategoriesShown()
   const { data: channels } = useChannels()
   const { data: playlists } = usePlaylists()
   const listboxId = useId()
@@ -73,20 +76,22 @@ function SearchPanel({ onChosen }: { onChosen: () => void }) {
     () => [
       {
         name: 'Categories',
-        results: searchByName(categoryList?.categories ?? [], text).map((category) => ({
-          key: `category:${category.id}`,
-          path: `/categories/${encodeURIComponent(category.id)}`,
-          content: (
-            <>
-              <span
-                aria-hidden="true"
-                className="size-2.5 shrink-0 rounded-full"
-                style={{ background: category.color }}
-              />
-              <span className="truncate">{category.name}</span>
-            </>
-          ),
-        })),
+        results: searchByName(categoriesShown ? (categoryList?.categories ?? []) : [], text).map(
+          (category) => ({
+            key: `category:${category.id}`,
+            path: `/categories/${encodeURIComponent(category.id)}`,
+            content: (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ background: category.color }}
+                />
+                <span className="truncate">{category.name}</span>
+              </>
+            ),
+          }),
+        ),
       },
       {
         name: 'Channels',
@@ -118,7 +123,7 @@ function SearchPanel({ onChosen }: { onChosen: () => void }) {
         })),
       },
     ],
-    [categoryList, channels, playlists, text],
+    [categoryList, categoriesShown, channels, playlists, text],
   )
   // Results for older text never show for newer text.
   const videos =
