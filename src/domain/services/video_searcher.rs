@@ -257,12 +257,21 @@ impl VideoSearcher {
         by_video: &HashMap<VideoId, Vec<CategoryId>>,
         limits: HomeLimits,
     ) -> Vec<(Category, Vec<SourcedVideo>)> {
-        categories
+        let mut ranked: Vec<(Category, Vec<SourcedVideo>)> = categories
             .iter()
             .map(|category| {
-                let mut pending = Self::pending_in(videos, &category.id, by_video);
+                (
+                    category.clone(),
+                    Self::pending_in(videos, &category.id, by_video),
+                )
+            })
+            .collect();
+        ranked.sort_by_key(|(_, pending)| std::cmp::Reverse(pending.len()));
+        ranked
+            .into_iter()
+            .map(|(category, mut pending)| {
                 pending.truncate(limits.category_videos);
-                (category.clone(), pending)
+                (category, pending)
             })
             .filter(|(_, pending)| !pending.is_empty())
             .collect()

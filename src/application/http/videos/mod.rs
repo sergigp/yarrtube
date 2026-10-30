@@ -224,6 +224,7 @@ mod tests {
     use chrono::{DateTime, Duration, Utc};
     use dto::{HomeCategorySectionResponse, HomeVideoResponse, HomeVideoSourceResponse};
     use rusqlite::Connection;
+    use std::ops::Range;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -3838,6 +3839,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_rank_category_sections_by_pending_videos_on_home() {
+        let db = TestDatabase::new();
+        let chess = save_category_channel(&db, "Chess", "@chess", 0..4);
+        let science = save_category_channel(&db, "Science", "@science", 10..19);
+        let streams = save_category_channel(&db, "Streams", "@streams", 30..31);
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                categories: vec![
+                    category_section_of(&science, "@science", (13..19).rev()),
+                    category_section_of(&chess, "@chess", (0..4).rev()),
+                    category_section_of(&streams, "@streams", 30..31),
+                ],
+                latest: (10..13)
+                    .rev()
+                    .map(|i| category_card(&science, "@science", i))
+                    .collect(),
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
@@ -4835,6 +4863,82 @@ mod tests {
             color: category.color.as_str().to_string(),
             videos,
         }
+    }
+
+    /// Saves the channel `handle` with downloaded, unwatched videos created at
+    /// each of `created` (id `<handle><i>`, title `<name> <i>`), and a category
+    /// `name` holding it.
+    fn save_category_channel(
+        db: &TestDatabase,
+        name: &str,
+        handle: &str,
+        created: Range<i64>,
+    ) -> Category {
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel(handle, None))
+            .unwrap();
+        created.for_each(|i| {
+            save_channel_video(
+                &video_repository,
+                &channel_video_repository,
+                handle,
+                &downloaded_video(&format!("{handle}{i}"), &format!("{name} {i}"), None, i),
+                i,
+            )
+        });
+        let category = named_category(name, &[channel_member(handle)]);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&category)
+            .unwrap();
+        categorize_source(db, &channel_member(handle), &[&category]);
+        category
+    }
+
+    /// A video searcher over every SQLite repository of `db`.
+    fn home_video_searcher(db: &TestDatabase) -> VideoSearcher {
+        VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoRepository::new(db.database())),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(db),
+        )
+    }
+
+    /// The card of video `i` saved by `save_category_channel`.
+    fn category_card(category: &Category, handle: &str, i: i64) -> HomeVideoResponse {
+        in_categories(
+            home_video_response(
+                &format!("{handle}{i}"),
+                &format!("{} {i}", category.name.as_str()),
+                HomeVideoSourceResponse {
+                    id: handle.to_string(),
+                    ..channel_source(None)
+                },
+            ),
+            &[category],
+        )
+    }
+
+    /// The section of `category` listing videos `numbers` saved by
+    /// `save_category_channel`.
+    fn category_section_of(
+        category: &Category,
+        handle: &str,
+        numbers: impl Iterator<Item = i64>,
+    ) -> HomeCategorySectionResponse {
+        category_section_response(
+            category,
+            numbers
+                .map(|i| category_card(category, handle, i))
+                .collect(),
+        )
     }
 
     fn playlist_source() -> HomeVideoSourceResponse {
