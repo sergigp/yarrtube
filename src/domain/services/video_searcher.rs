@@ -11,6 +11,7 @@ use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepos
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -30,6 +31,7 @@ pub struct VideoSearcher {
     clock: Arc<dyn Clock>,
     category_repository: Arc<dyn CategoryRepository>,
     category_video_collector: CategoryVideoCollector,
+    preferences_repository: Arc<dyn PreferencesRepository>,
 }
 
 impl VideoSearcher {
@@ -44,6 +46,7 @@ impl VideoSearcher {
         clock: Arc<dyn Clock>,
         category_repository: Arc<dyn CategoryRepository>,
         category_video_collector: CategoryVideoCollector,
+        preferences_repository: Arc<dyn PreferencesRepository>,
     ) -> Self {
         Self {
             playlist_repository,
@@ -55,6 +58,7 @@ impl VideoSearcher {
             clock,
             category_repository,
             category_video_collector,
+            preferences_repository,
         }
     }
 }

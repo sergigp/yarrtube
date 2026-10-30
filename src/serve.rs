@@ -6,10 +6,11 @@ use crate::domain::services::{
     ChannelDeleter, ChannelPreviewer, ChannelUpdater, ChannelVideoReconciler, ChannelViewSearcher,
     DirectorySearcher, InternalVideoReconciler, LayoutMigrator, MetadataGenerator, PlaylistCreator,
     PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater, PlaylistVideoReconciler,
-    PlaylistViewSearcher, PlexFolderScanner, PlexLabelSyncer, PlexLabelSyncerApi, ShowFileWriter,
-    ShowMover, SubtitleFetcher, SubtitleReader, TaskViewSearcher, ThumbnailFetcher,
-    VideoCategoryAssigner, VideoDownloader, VideoFileDeleter, VideoOwnerFinder, VideoReconciler,
-    VideoRelocator, VideoSearcher, VideoWatchStateUpdater,
+    PlaylistViewSearcher, PlexFolderScanner, PlexLabelSyncer, PlexLabelSyncerApi,
+    PreferencesSearcher, PreferencesUpdater, ShowFileWriter, ShowMover, SubtitleFetcher,
+    SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoCategoryAssigner, VideoDownloader,
+    VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator, VideoSearcher,
+    VideoWatchStateUpdater,
 };
 use crate::domain::video::STAGING_DIRNAME;
 use crate::infrastructure::client::ytdlp_updater::{RealYtdlpUpdater, YtdlpUpdater, target_path};
@@ -455,6 +456,7 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
             infrastructure.clock.clone(),
             infrastructure.category_repository.clone(),
             category_video_collector(infrastructure),
+            infrastructure.preferences_repository.clone(),
         ),
         task_view_searcher: TaskViewSearcher::new(
             infrastructure.task_repository.clone(),
@@ -518,6 +520,10 @@ fn api_services(infrastructure: &InfrastructureContainer) -> ApiServices {
         ),
         videos_root: VideosRoot(videos_path()),
         running_version: RunningVersion(AppVersion::current()),
+        preferences_searcher: PreferencesSearcher::new(
+            infrastructure.preferences_repository.clone(),
+        ),
+        preferences_updater: PreferencesUpdater::new(infrastructure.preferences_repository.clone()),
         category_creator: CategoryCreator::new(
             infrastructure.category_repository.clone(),
             infrastructure.clock.clone(),
