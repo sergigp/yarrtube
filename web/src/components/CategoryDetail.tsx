@@ -10,6 +10,7 @@ import {
   usePreferences,
 } from '@/api/queries'
 import type { Category } from '@/api/types'
+import { useTheme } from '@/hooks/useTheme'
 import { deleteCategoryDescription, memberCount } from '@/lib/categories'
 import { softTint } from '@/lib/categoryColors'
 import { Button } from '@/components/ui/button'
@@ -152,6 +153,7 @@ export function CategoryDetail() {
   const location = useLocation()
   const refreshing = useLibraryAction()
   const markCategoryWatched = useMarkCategoryWatched()
+  const theme = useTheme()
   const [managing, setManaging] = useState(false)
   // Arriving with ManageSourcesState opens the dialog once per navigation;
   // the state is then dropped from history so reload and back don't reopen it.
@@ -196,7 +198,7 @@ export function CategoryDetail() {
     <div className={playing ? 'flex flex-col md:h-full md:min-h-[480px]' : 'flex min-w-0 flex-col'}>
       <DetailHeader
         name={category.name}
-        tint={softTint(draftColor ?? category.color)}
+        tint={softTint(draftColor ?? category.color, theme)}
         videos={videos}
         unwatchedCount={category.unwatched_count}
         summaryPrefix={`${sources} ${sources === 1 ? 'source' : 'sources'}`}

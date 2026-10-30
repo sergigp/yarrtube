@@ -43,7 +43,7 @@ function CategoryRow({ category, active, onNavigate, onDeleteRequest }: Category
       >
         <span
           aria-hidden="true"
-          className="size-2.5 shrink-0 rounded-full border border-black/10"
+          className="size-2.5 shrink-0 rounded-full border border-foreground/10"
           style={{ background: category.color }}
         />
         <span className="min-w-0 truncate">{category.name}</span>

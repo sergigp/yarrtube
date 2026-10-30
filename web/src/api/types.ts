@@ -244,4 +244,5 @@ export interface Preferences {
   home_show_categories: boolean
   home_show_quick_watches: boolean
   home_show_latest: boolean
+  theme: 'light' | 'dark'
 }

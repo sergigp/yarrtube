@@ -11,12 +11,14 @@ import { AddPlaylistDialog } from './components/AddPlaylistDialog'
 import { AddCategoryDialog } from './components/AddCategoryDialog'
 import { SIDEBAR_ID, Sidebar } from './components/Sidebar'
 import { SettingsMenu } from './components/SettingsMenu'
+import { ThemeToggle } from './components/ThemeToggle'
 import { AnnouncementBar } from './components/AnnouncementBar'
 import { MobileNavToggle } from './components/MobileNavToggle'
 import { VersionLabel } from './components/VersionLabel'
 import { SearchDialog } from './components/SearchDialog'
 import { SearchTrigger } from './components/SearchTrigger'
 import { useScrollDirection } from './hooks/useScrollDirection'
+import { useSavedTheme } from './hooks/useTheme'
 import { cn } from './lib/utils'
 
 export default function App() {
@@ -29,6 +31,7 @@ export default function App() {
 
 /** The routed layout; split from `App` so tests can render it in a memory router. */
 export function AppShell() {
+  useSavedTheme()
   const [addDialog, setAddDialog] = useState<'channel' | 'playlist' | 'category' | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const closeSidebar = () => setSidebarOpen(false)
@@ -127,6 +130,7 @@ export function AppShell() {
               setSearchOpen(true)
             }}
           />
+          <ThemeToggle />
           <SettingsMenu />
         </div>
       </header>

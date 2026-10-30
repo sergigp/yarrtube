@@ -24,7 +24,7 @@ function Swatch({
   return (
     <label
       className={cn(
-        'relative flex size-7 cursor-pointer items-center justify-center rounded-full border border-black/10 transition-shadow',
+        'relative flex size-7 cursor-pointer items-center justify-center rounded-full border border-foreground/10 transition-shadow',
         'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2',
         checked && 'ring-2 ring-foreground ring-offset-2',
       )}

@@ -13,6 +13,8 @@ pub struct UpdatePreferencesRequest {
     pub home_show_quick_watches: Option<bool>,
     #[serde(default)]
     pub home_show_latest: Option<bool>,
+    #[serde(default)]
+    pub theme: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -22,6 +24,7 @@ pub struct PreferencesResponse {
     pub home_show_categories: bool,
     pub home_show_quick_watches: bool,
     pub home_show_latest: bool,
+    pub theme: String,
 }
 
 impl From<Preferences> for PreferencesResponse {
@@ -32,6 +35,7 @@ impl From<Preferences> for PreferencesResponse {
             home_show_categories: preferences.home_show_categories,
             home_show_quick_watches: preferences.home_show_quick_watches,
             home_show_latest: preferences.home_show_latest,
+            theme: preferences.theme.as_str().to_string(),
         }
     }
 }

@@ -2,6 +2,7 @@ import { useId, useState, type KeyboardEvent } from 'react'
 import { Check, Plus } from 'lucide-react'
 import { createCategory } from '@/api/client'
 import { useCategories, useInvalidateLibrary } from '@/api/queries'
+import { useTheme } from '@/hooks/useTheme'
 import { byName } from '@/lib/categories'
 import { inkShade, softTint } from '@/lib/categoryColors'
 import { errorMessage } from '@/lib/errorMessage'
@@ -24,6 +25,7 @@ interface CategoryPickerProps {
 export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
   const { data } = useCategories()
   const invalidateLibrary = useInvalidateLibrary()
+  const theme = useTheme()
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const labelId = useId()
@@ -86,12 +88,15 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
                   className={cn(
                     'flex items-center gap-1.5 rounded-full border py-1 pr-3 pl-2 text-xs font-medium transition-colors',
                     chosen
-                      ? 'border-black/10'
+                      ? 'border-foreground/10'
                       : 'border-border text-muted-foreground hover:text-foreground',
                   )}
                   style={
                     chosen
-                      ? { background: softTint(category.color), color: inkShade(category.color) }
+                      ? {
+                          background: softTint(category.color, theme),
+                          color: inkShade(category.color, theme),
+                        }
                       : undefined
                   }
                   onClick={() => toggle(category.id)}
@@ -101,7 +106,7 @@ export function CategoryPicker({ value, onChange }: CategoryPickerProps) {
                   ) : (
                     <span
                       aria-hidden
-                      className="size-3 rounded-full border border-black/10"
+                      className="size-3 rounded-full border border-foreground/10"
                       style={{ background: category.color }}
                     />
                   )}

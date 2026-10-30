@@ -247,6 +247,25 @@ export function useSavePreferences(): (preferences: Preferences) => Promise<void
 }
 
 /**
+ * Returns a function that saves the preferences with only the theme changed,
+ * then shows the saved ones everywhere. Unlike `useSavePreferences`, home
+ * videos aren't refetched: the theme doesn't change them.
+ */
+export function useSaveTheme(): (
+  preferences: Preferences,
+  theme: Preferences['theme'],
+) => Promise<void> {
+  const queryClient = useQueryClient()
+  return useCallback(
+    async (preferences: Preferences, theme: Preferences['theme']) => {
+      const saved = await savePreferences({ ...preferences, theme })
+      queryClient.setQueryData(queryKeys.preferences, saved)
+    },
+    [queryClient],
+  )
+}
+
+/**
  * Returns a function that refetches the channel, playlist and category lists
  * (and, by prefix, their video lists) after an action that changed them.
  */

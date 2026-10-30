@@ -1,3 +1,5 @@
+use super::Theme;
+
 /// The user's daemon-wide display preferences.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Preferences {
@@ -6,10 +8,11 @@ pub struct Preferences {
     pub home_show_categories: bool,
     pub home_show_quick_watches: bool,
     pub home_show_latest: bool,
+    pub theme: Theme,
 }
 
 impl Default for Preferences {
-    /// Everything on.
+    /// Everything on, in the light theme.
     fn default() -> Self {
         Self {
             categories_enabled: true,
@@ -17,6 +20,7 @@ impl Default for Preferences {
             home_show_categories: true,
             home_show_quick_watches: true,
             home_show_latest: true,
+            theme: Theme::default(),
         }
     }
 }

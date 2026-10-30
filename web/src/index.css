@@ -4,6 +4,8 @@
    ui/tabs classes (data-horizontal: / group-data-horizontal/tabs: …) target it. */
 @custom-variant data-horizontal (&[data-orientation="horizontal"]);
 @custom-variant data-vertical (&[data-orientation="vertical"]);
+/* Dark mode follows the `dark` class on <html> (the header toggle), not the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #ffffff;
@@ -46,6 +48,38 @@
   --font-heading: "Bricolage Grotesque", var(--font-sans);
 
   color-scheme: light;
+}
+
+.dark {
+  --background: #0f0f0f;
+  --foreground: #f1f1f1;
+
+  --card: #181818;
+  --card-foreground: #f1f1f1;
+
+  --popover: #212121;
+  --popover-foreground: #f1f1f1;
+
+  --primary: #3fa168;
+  --primary-foreground: #ffffff;
+
+  --secondary: #272727;
+  --secondary-foreground: #f1f1f1;
+
+  --muted: #272727;
+  --muted-foreground: #aaaaaa;
+
+  --accent: #1d2e23;
+  --accent-foreground: #f1f1f1;
+
+  --destructive: #f05252;
+  --destructive-foreground: #ffffff;
+
+  --border: #2e2e2e;
+  --input: #3a3a3a;
+  --ring: #3fa168;
+
+  color-scheme: dark;
 }
 
 @theme inline {
