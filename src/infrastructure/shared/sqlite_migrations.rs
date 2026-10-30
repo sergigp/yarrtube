@@ -365,8 +365,8 @@ mod tests {
         assert_eq!(
             colors,
             vec![
-                "#9f8401", "#bd7123", "#c8645b", "#bd6396", "#9870c5", "#6a80d4", "#0193bf",
-                "#019b8d", "#79922c", "#978364", "#9f8401",
+                "#f59e0b", "#f97316", "#ef4444", "#ec4899", "#8b5cf6", "#3b82f6", "#0ea5e9",
+                "#14b8a6", "#22c55e", "#64748b", "#f59e0b",
             ]
         );
     }
@@ -379,7 +379,7 @@ mod tests {
 
         apply(&mut conn).unwrap();
 
-        assert_eq!(category_colors(&conn), vec!["#0193bf"]);
+        assert_eq!(category_colors(&conn), vec!["#0ea5e9"]);
     }
 
     #[test]
@@ -397,11 +397,11 @@ mod tests {
     fn it_should_leave_an_already_strong_color_unchanged() {
         let mut conn = Connection::open_in_memory().unwrap();
         migrate_to_preferences(&mut conn);
-        insert_colored_category(&conn, "Sports", "#c8645b");
+        insert_colored_category(&conn, "Sports", "#03999f");
 
         apply(&mut conn).unwrap();
 
-        assert_eq!(category_colors(&conn), vec!["#c8645b"]);
+        assert_eq!(category_colors(&conn), vec!["#03999f"]);
     }
 
     #[test]
