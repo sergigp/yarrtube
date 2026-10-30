@@ -19,7 +19,7 @@
 ## 3. Infrastructure adapters (TDD)
 
 - [x] 3.1 `it_should_refresh_a_former_solid_palette_color`: seed `#0193bf` after the chain through 0018 (new helper `migrate_to_category_color_strengthen`) → `#0ea5e9`. Write the 0019 `CASE` mapping. Verify with `cargo test sqlite_migrations`.
-- [ ] 3.2 `it_should_refresh_every_former_solid_palette_color_by_position`: all 10 old hexes → the 10 new ones in order. Verify with `cargo test sqlite_migrations`.
+- [x] 3.2 `it_should_refresh_every_former_solid_palette_color_by_position`: all 10 old hexes → the 10 new ones in order. Verify with `cargo test sqlite_migrations`.
 - [ ] 3.3 Update the existing chain tests: `it_should_backfill_existing_categories_with_palette_colors_in_creation_order` gets the new hexes; `it_should_strengthen_a_former_palette_color` expects `#d3ecf8` → `#0ea5e9`; `it_should_leave_an_already_strong_color_unchanged` seeds `#03999f`; `it_should_strengthen_a_custom_pastel_keeping_its_hue` still expects `#429b5a`. Verify with `cargo test sqlite_migrations`.
 
 ## 4. Verification

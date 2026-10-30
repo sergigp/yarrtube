@@ -416,6 +416,30 @@ mod tests {
     }
 
     #[test]
+    fn it_should_refresh_every_former_solid_palette_color_by_position() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to_category_color_strengthen(&mut conn);
+        let former = [
+            "#9f8401", "#bd7123", "#c8645b", "#bd6396", "#9870c5", "#6a80d4", "#0193bf", "#019b8d",
+            "#79922c", "#978364",
+        ];
+        former
+            .iter()
+            .enumerate()
+            .for_each(|(index, color)| insert_colored_category(&conn, &format!("c{index}"), color));
+
+        apply(&mut conn).unwrap();
+
+        assert_eq!(
+            category_colors(&conn),
+            vec![
+                "#f59e0b", "#f97316", "#ef4444", "#ec4899", "#8b5cf6", "#3b82f6", "#0ea5e9",
+                "#14b8a6", "#22c55e", "#64748b",
+            ]
+        );
+    }
+
+    #[test]
     fn it_should_backfill_video_categories_from_members() {
         let mut conn = Connection::open_in_memory().unwrap();
         Migrations::new(vec![
