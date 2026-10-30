@@ -27,6 +27,7 @@ impl HomeLimits {
                 self.quick_watches,
                 preferences.home_show_quick_watches,
             ),
+            latest: Self::unless_off(self.latest, preferences.home_show_latest),
             ..self
         }
     }
