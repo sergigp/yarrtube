@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { CircleHelp } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, CircleHelp } from 'lucide-react'
 import { usePreferences, useSavePreferences } from '@/api/queries'
 import type { Preferences } from '@/api/types'
 import { Label } from '@/components/ui/label'
@@ -62,6 +62,28 @@ const GROUPS: PreferenceGroup[] = [
   },
 ]
 
+const SAVED_SHOWN_MS = 2000
+
+/**
+ * Whether "Saved" shows: from each `flash()` for `SAVED_SHOWN_MS`, restarting
+ * on the next, until `clear()`.
+ */
+function useSavedFlash(): { shown: boolean; flash: () => void; clear: () => void } {
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+  useEffect(() => {
+    if (savedAt === null) {
+      return undefined
+    }
+    const timer = setTimeout(() => setSavedAt(null), SAVED_SHOWN_MS)
+    return () => clearTimeout(timer)
+  }, [savedAt])
+  return {
+    shown: savedAt !== null,
+    flash: () => setSavedAt(Date.now()),
+    clear: () => setSavedAt(null),
+  }
+}
+
 /**
  * A "?" next to a preference whose tooltip explains it. It opens on hover and
  * focus, and also on click, since a tap never hovers.
@@ -90,13 +112,16 @@ export function PreferencesView() {
   const { data: preferences, error } = usePreferences()
   const savePreferences = useSavePreferences()
   const [saveError, setSaveError] = useState<string | null>(null)
+  const saved = useSavedFlash()
   const toggle = async (key: PreferenceKey, value: boolean) => {
     if (!preferences) {
       return
     }
     setSaveError(null)
+    saved.clear()
     try {
       await savePreferences({ ...preferences, [key]: value })
+      saved.flash()
     } catch (err) {
       setSaveError(errorMessage(err))
     }
@@ -105,7 +130,17 @@ export function PreferencesView() {
   return (
     <TooltipProvider>
       <div className="flex max-w-xl flex-col gap-8">
+        <div className="flex items-center justify-between gap-4">
         <h1 className="font-heading text-xl font-semibold text-foreground">Preferences</h1>
+        <p role="status" className="flex items-center gap-1 text-sm text-muted-foreground">
+          {saved.shown && (
+            <>
+              <Check className="size-4" aria-hidden="true" />
+              Saved
+            </>
+          )}
+        </p>
+      </div>
         {error && (
           <p className="text-sm text-destructive">Failed to load preferences: {error.message}</p>
         )}

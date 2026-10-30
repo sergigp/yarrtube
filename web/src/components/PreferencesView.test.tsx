@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PreferencesView } from './PreferencesView'
 import { aPreferences, mockApi, renderWithProviders } from '@/test/helpers'
 
 describe('PreferencesView', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('shows a switch per preference with its current value', async () => {
     mockApi({ 'GET /api/preferences': aPreferences({ home_show_latest: false }) })
 
@@ -108,6 +112,36 @@ describe('PreferencesView', () => {
         'Sections show in this order, and a video shows in one section only: turning a section off can move its videos to a section below.',
       ),
     ).toBeInTheDocument()
+  })
+
+  it('says "Saved" after a save, for 2 seconds', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mockApi({
+      'GET /api/preferences': aPreferences(),
+      'PUT /api/preferences': aPreferences({ home_show_quick_watches: false }),
+    })
+    renderWithProviders(<PreferencesView />)
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+
+    await user.click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'))
+    await act(() => vi.advanceTimersByTimeAsync(2000))
+    expect(screen.getByRole('status')).toHaveTextContent('')
+  })
+
+  it('does not say "Saved" when the save fails', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences(),
+      'PUT /api/preferences': { status: 500, error: 'disk full' },
+    })
+    renderWithProviders(<PreferencesView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('disk full')
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument()
   })
 })
 
