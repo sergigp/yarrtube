@@ -34,7 +34,7 @@ Web (Vitest):
 - [x] 2.21 `EditChannelDialog` › same as 2.19
 - [x] 2.22 `EditPlaylistDialog` › same as 2.19
 - [x] 2.23 `CategoryDetail` › says "Categories are turned off." with a link to Preferences while off
-- [ ] 2.24 `Home` › cards untinted and unframed when `home_show_category_colors` is off, and when categories are off
+- [x] 2.24 `Home` › cards untinted and unframed when `home_show_category_colors` is off, and when categories are off
 - [ ] 2.25 `Home` › no "Latest videos" when `home_show_latest` is off
 - [ ] 2.26 `Home` › "Nothing to show here." with a Preferences link when latest is off and nothing else shows
 

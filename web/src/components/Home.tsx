@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useCategories, useRecentVideos } from '@/api/queries'
+import { useCategories, usePreferences, useRecentVideos } from '@/api/queries'
+import { homeTintShown } from '@/lib/preferences'
 import type { HomeVideo } from '@/api/types'
 import { VideoGrid } from './VideoGrid'
 
@@ -11,7 +12,8 @@ interface HomeSectionProps {
   name: string
   videos: HomeVideo[] | undefined
   error: Error | null
-  categoryColors: Map<string, string>
+  /** Category id → color, when cards are tinted. */
+  categoryColors: Map<string, string> | undefined
   hideWhenEmpty?: boolean
 }
 
@@ -65,9 +67,14 @@ function HomeSection({
 export function Home() {
   const { data: home, error } = useRecentVideos()
   const { data: categories } = useCategories()
+  const { data: preferences, isError: preferencesFailed } = usePreferences()
+  const tinted = homeTintShown(preferences, preferencesFailed)
   const categoryColors = useMemo(
-    () => new Map((categories?.categories ?? []).map((category) => [category.id, category.color])),
-    [categories],
+    () =>
+      tinted
+        ? new Map((categories?.categories ?? []).map((category) => [category.id, category.color]))
+        : undefined,
+    [categories, tinted],
   )
   // "Latest videos" stands in for an empty home, so it only hides when
   // another section has something to show. A failed refresh keeps the last
