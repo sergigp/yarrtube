@@ -26,7 +26,7 @@ function VideoStatusIndicator({ status }: { status: VideoStatus }) {
 
   const message = STATUS_MESSAGES[status] ?? 'This video is pending.'
   return (
-    <TriangleAlert className="size-3.5 shrink-0 text-amber-600" role="img" aria-label={message}>
+    <TriangleAlert className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" role="img" aria-label={message}>
       <title>{message}</title>
     </TriangleAlert>
   )
@@ -66,7 +66,7 @@ export function VideoListPane<T extends Video>({
         <p className="text-sm text-muted-foreground">No videos recorded for this {noun} yet.</p>
       )}
       {!error && videos && videos.length > 0 && (
-        <ul className="flex flex-col divide-y divide-border">
+        <ul className="flex flex-col">
           {videos.map((video) => {
             const active = selectedVideoId === video.id
             const age = formatAge(video.published_at)
@@ -74,7 +74,9 @@ export function VideoListPane<T extends Video>({
               <li
                 key={video.id}
                 className={cn(
-                  'flex items-start gap-1 rounded-md pr-1 transition-colors hover:bg-accent',
+                  // The separator is a straight line, not a border: a border
+                  // on the rounded row would curl up at its corners.
+                  'relative flex items-start gap-1 rounded-md pr-1 transition-colors not-last:after:absolute not-last:after:inset-x-2 not-last:after:bottom-0 not-last:after:h-px not-last:after:bg-border hover:bg-accent',
                   active && 'bg-accent',
                 )}
               >

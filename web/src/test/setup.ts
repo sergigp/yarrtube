@@ -8,6 +8,8 @@ import { viewport } from './viewport'
 // viewport, which `useDesktopViewport()` opts a test into.
 afterEach(() => {
   viewport.desktop = false
+  // The theme lives on <html>, which outlives each test's render.
+  document.documentElement.classList.remove('dark')
 })
 
 Object.defineProperty(window, 'matchMedia', {

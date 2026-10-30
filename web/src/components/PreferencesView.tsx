@@ -10,7 +10,8 @@ import { VIEW_WIDTH } from '@/lib/viewWidth'
 import { errorMessage } from '@/lib/errorMessage'
 import { useSavedFlash } from '@/hooks/useSavedFlash'
 
-type PreferenceKey = keyof Preferences
+/** The preferences shown as switches here; the theme has its header toggle. */
+type PreferenceKey = Exclude<keyof Preferences, 'theme'>
 
 interface PreferenceGroup {
   title: string

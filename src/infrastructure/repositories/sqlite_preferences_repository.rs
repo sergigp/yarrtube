@@ -1,4 +1,4 @@
-use crate::domain::preferences::Preferences;
+use crate::domain::preferences::{Preferences, Theme};
 use crate::infrastructure::shared::sqlite_connection::Database;
 use anyhow::Context;
 use rusqlite::{OptionalExtension, params};
@@ -66,6 +66,7 @@ struct StoredPreferences {
     home_show_categories: Option<bool>,
     home_show_quick_watches: Option<bool>,
     home_show_latest: Option<bool>,
+    theme: Option<String>,
 }
 
 impl From<&Preferences> for StoredPreferences {
@@ -76,6 +77,7 @@ impl From<&Preferences> for StoredPreferences {
             home_show_categories: Some(preferences.home_show_categories),
             home_show_quick_watches: Some(preferences.home_show_quick_watches),
             home_show_latest: Some(preferences.home_show_latest),
+            theme: Some(preferences.theme.as_str().to_string()),
         }
     }
 }
@@ -97,6 +99,12 @@ impl From<StoredPreferences> for Preferences {
                 .home_show_quick_watches
                 .unwrap_or(defaults.home_show_quick_watches),
             home_show_latest: stored.home_show_latest.unwrap_or(defaults.home_show_latest),
+            // An unknown stored theme reads as the default rather than
+            // failing every read of the preferences.
+            theme: stored
+                .theme
+                .and_then(|theme| Theme::new(theme).ok())
+                .unwrap_or(defaults.theme),
         }
     }
 }
@@ -124,6 +132,7 @@ mod tests {
             home_show_categories: true,
             home_show_quick_watches: true,
             home_show_latest: false,
+            theme: Theme::Dark,
         };
 
         repository.save(&preferences).unwrap();

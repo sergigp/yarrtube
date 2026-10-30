@@ -1,3 +1,4 @@
+import { useTheme } from '@/hooks/useTheme'
 import { inkShade, softTint } from '@/lib/categoryColors'
 
 /** What a chip shows of a category. */
@@ -20,6 +21,7 @@ export function CategoryChips({
   categoryIds: string[]
   chips: Map<string, CategoryChip>
 }) {
+  const theme = useTheme()
   const known = categoryIds.flatMap((id) => chips.get(id) ?? [])
   if (known.length === 0) {
     return null
@@ -31,7 +33,7 @@ export function CategoryChips({
         <li
           key={chip.name}
           className="max-w-full truncate rounded px-1.5 py-px text-[0.6875rem] leading-4 font-medium"
-          style={{ background: softTint(chip.color), color: inkShade(chip.color) }}
+          style={{ background: softTint(chip.color, theme), color: inkShade(chip.color, theme) }}
         >
           {chip.name}
         </li>

@@ -1,3 +1,5 @@
+import type { Theme } from './theme'
+
 /** The category color presets, in the order defaults are handed out. Mirrors the daemon's palette. */
 export const PALETTE: readonly { name: string; hex: string }[] = [
   { name: 'Amber', hex: '#f59e0b' },
@@ -20,10 +22,16 @@ export function defaultColor(used: string[]): string {
 
 /** The custom hue slider's lightness and chroma, vivid like the palette. */
 const CUSTOM = { lightness: 0.65, chroma: 0.2 }
-/** Chip and category header backgrounds. */
-const SOFT = { lightness: 0.92, chroma: 0.07 }
-/** Chip text, readable on the soft tint. */
-const INK = { lightness: 0.4, chroma: 0.12 }
+/** Chip and category header backgrounds, per theme. */
+const SOFT: Record<Theme, { lightness: number; chroma: number }> = {
+  light: { lightness: 0.92, chroma: 0.07 },
+  dark: { lightness: 0.32, chroma: 0.06 },
+}
+/** Chip text, readable on the soft tint, per theme. */
+const INK: Record<Theme, { lightness: number; chroma: number }> = {
+  light: { lightness: 0.4, chroma: 0.12 },
+  dark: { lightness: 0.88, chroma: 0.08 },
+}
 /** Chroma from which a color gets the full tint; more muted colors get a fainter one. */
 const VIVID_CHROMA = 0.15
 
@@ -32,14 +40,16 @@ export function solidFromHue(hue: number): string {
   return fromOklch(CUSTOM.lightness, CUSTOM.chroma, hue)
 }
 
-/** The soft tint of `hex`'s hue: chip and category header backgrounds. */
-export function softTint(hex: string): string {
-  return fromOklch(SOFT.lightness, SOFT.chroma * vividness(hex), hueOf(hex))
+/** The soft tint of `hex`'s hue in `theme`: chip and category header backgrounds. */
+export function softTint(hex: string, theme: Theme = 'light'): string {
+  const soft = SOFT[theme]
+  return fromOklch(soft.lightness, soft.chroma * vividness(hex), hueOf(hex))
 }
 
-/** The dark shade of `hex`'s hue: chip text, readable on `softTint(hex)`. */
-export function inkShade(hex: string): string {
-  return fromOklch(INK.lightness, INK.chroma * vividness(hex), hueOf(hex))
+/** The contrasting shade of `hex`'s hue in `theme`: chip text, readable on `softTint(hex, theme)`. */
+export function inkShade(hex: string, theme: Theme = 'light'): string {
+  const ink = INK[theme]
+  return fromOklch(ink.lightness, ink.chroma * vividness(hex), hueOf(hex))
 }
 
 /** The oklch hue of `hex`, in degrees, from 0 up to 360. */

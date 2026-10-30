@@ -3,7 +3,7 @@ pub mod dto;
 use super::blocking::run_blocking;
 use super::error::ApiError;
 use super::validation::required;
-use crate::domain::preferences::Preferences;
+use crate::domain::preferences::{Preferences, Theme};
 use crate::domain::services::{
     PreferencesSearcher, PreferencesSearcherApi, PreferencesUpdater, PreferencesUpdaterApi,
 };
@@ -20,6 +20,7 @@ const MISSING_HOME_SHOW_QUICK_WATCHES: &str =
     "Whether to show quick watches on home must be stated (missing)";
 const MISSING_HOME_SHOW_LATEST: &str =
     "Whether to show latest videos on home must be stated (missing)";
+const MISSING_THEME: &str = "Theme must be stated (missing)";
 
 pub async fn get_preferences(
     State(preferences_searcher): State<PreferencesSearcher>,
@@ -46,6 +47,7 @@ pub async fn update_preferences(
             MISSING_HOME_SHOW_QUICK_WATCHES,
         )?,
         home_show_latest: required(request.home_show_latest, MISSING_HOME_SHOW_LATEST)?,
+        theme: Theme::new(required(request.theme, MISSING_THEME)?)?,
     };
     let saved = run_blocking(move || preferences_updater.save(preferences))
         .await?
@@ -154,6 +156,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_save_the_theme() {
+        let db = TestDatabase::new();
+        let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
+        let preferences_updater = PreferencesUpdater::new(repository.clone());
+        let request = UpdatePreferencesRequest {
+            theme: Some("dark".to_string()),
+            ..all_on_request()
+        };
+
+        let response = update(preferences_updater, request).await;
+
+        assert_eq!(
+            response,
+            Ok(PreferencesResponse {
+                theme: "dark".to_string(),
+                ..all_on_response()
+            })
+        );
+        assert_eq!(
+            repository.find().unwrap(),
+            Some(Preferences {
+                theme: Theme::Dark,
+                ..Preferences::default()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_save_if_theme_missing() {
+        let request = UpdatePreferencesRequest {
+            theme: None,
+            ..all_on_request()
+        };
+
+        let response = update(any_preferences_updater(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request("Theme must be stated (missing)"))
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_fail_to_save_if_theme_invalid() {
+        let request = UpdatePreferencesRequest {
+            theme: Some("sepia".to_string()),
+            ..all_on_request()
+        };
+
+        let response = update(any_preferences_updater(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Theme must be \"light\" or \"dark\" (got \"sepia\")"
+            ))
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_return_saved_preferences() {
         let db = TestDatabase::new();
         let repository = Arc::new(SqlitePreferencesRepository::new(db.database()));
@@ -209,6 +271,7 @@ mod tests {
             home_show_categories: Some(true),
             home_show_quick_watches: Some(true),
             home_show_latest: Some(true),
+            theme: Some("light".to_string()),
         }
     }
 
@@ -219,6 +282,7 @@ mod tests {
             home_show_categories: true,
             home_show_quick_watches: true,
             home_show_latest: true,
+            theme: "light".to_string(),
         }
     }
 }

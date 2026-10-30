@@ -74,4 +74,23 @@ describe('categoryColors', () => {
       PALETTE.filter((color) => contrast(inkShade(color.hex), softTint(color.hex)) < 4.5),
     ).toEqual([])
   })
+
+  it("derives a dark-mode tint of a color's hue, dark enough for a background", () => {
+    expect(
+      PALETTE.filter((color) => Math.max(...channels(softTint(color.hex, 'dark'))) > 110),
+    ).toEqual([])
+    expect(
+      PALETTE.filter(
+        (color) => hueDistance(hueOf(softTint(color.hex, 'dark')), hueOf(color.hex)) > 5,
+      ),
+    ).toEqual([])
+  })
+
+  it('derives a dark-mode ink shade readable on the dark-mode tint, at least 4.5:1', () => {
+    expect(
+      PALETTE.filter(
+        (color) => contrast(inkShade(color.hex, 'dark'), softTint(color.hex, 'dark')) < 4.5,
+      ),
+    ).toEqual([])
+  })
 })

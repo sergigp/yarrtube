@@ -18,7 +18,8 @@ import {
 function renderShell({
   route = '/',
   version = pendingForever(),
-}: { route?: string; version?: Routes[string] } = {}) {
+  preferences = aPreferences(),
+}: { route?: string; version?: Routes[string]; preferences?: Routes[string] } = {}) {
   mockApi({
     'GET /api/channels': [],
     'GET /api/playlists': [],
@@ -26,7 +27,7 @@ function renderShell({
     'GET /api/videos/home': pendingForever(),
     'GET /api/tasks': pendingForever(),
     'GET /api/version': version,
-    'GET /api/preferences': aPreferences(),
+    'GET /api/preferences': preferences,
     [`GET ${ANNOUNCEMENTS_URL}`]: [],
   })
   return renderWithProviders(<AppShell />, { route })
@@ -37,6 +38,21 @@ describe('AppShell', () => {
     renderShell({ route: '/preferences' })
 
     expect(await screen.findByRole('heading', { name: 'Preferences' })).toBeInTheDocument()
+  })
+
+  it('draws the saved theme once preferences load', async () => {
+    renderShell({ preferences: aPreferences({ theme: 'dark' }) })
+
+    await waitFor(() => expect(document.documentElement).toHaveClass('dark'))
+    expect(screen.getByRole('switch', { name: 'Dark mode' })).toBeChecked()
+  })
+
+  it('draws the saved light theme over a cached dark one', async () => {
+    document.documentElement.classList.add('dark')
+
+    renderShell({ preferences: aPreferences({ theme: 'light' }) })
+
+    await waitFor(() => expect(document.documentElement).not.toHaveClass('dark'))
   })
 
   it('opens and closes the sidebar from the header toggle', async () => {

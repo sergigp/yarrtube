@@ -298,6 +298,7 @@ export function aPreferences(overrides: Partial<Preferences> = {}): Preferences 
     home_show_categories: true,
     home_show_quick_watches: true,
     home_show_latest: true,
+    theme: 'light',
     ...overrides,
   }
 }

@@ -14,6 +14,16 @@
       href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400..700;1,400..700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&display=swap"
     />
     <title>Yarrtube</title>
+    <script>
+      // Draws the last drawn theme before first paint, from the cache
+      // src/hooks/useTheme.ts keeps; the saved preference follows once loaded.
+      try {
+        if (localStorage.getItem('yarrtube.theme') === 'dark') {
+          document.documentElement.classList.add('dark')
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0f0f0f')
+        }
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
