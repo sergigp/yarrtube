@@ -46,7 +46,7 @@ Preferences view polish:
 
 - [x] 2.28 `PreferencesView` › each switch has an "About <label>" "?" control whose tooltip explains the preference on hover and on click; the Home group shows its ordering note; verify `npm run test` passes
 - [x] 2.29 `PreferencesView` › "Saved" shows next to the title after a successful save and is gone 2 s later (fake timers); a failed save shows no "Saved"
-- [ ] 2.30 Center the preferences view at the tasks view's width through a shared `VIEW_WIDTH` (`web/src/lib/viewWidth.ts`); no test (layout only, checked in 4.6); `npm run check` passes
+- [x] 2.30 Center the preferences view at the tasks view's width through a shared `VIEW_WIDTH` (`web/src/lib/viewWidth.ts`); no test (layout only, checked in 4.6); `npm run check` passes
 
 ## 3. Infrastructure adapters (TDD)
 

@@ -5,6 +5,8 @@ import type { Preferences } from '@/api/types'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
+import { VIEW_WIDTH } from '@/lib/viewWidth'
 import { errorMessage } from '@/lib/errorMessage'
 
 type PreferenceKey = keyof Preferences
@@ -129,7 +131,7 @@ export function PreferencesView() {
 
   return (
     <TooltipProvider>
-      <div className="flex max-w-xl flex-col gap-8">
+      <div className={cn(VIEW_WIDTH, 'flex flex-col gap-8')}>
         <div className="flex items-center justify-between gap-4">
         <h1 className="font-heading text-xl font-semibold text-foreground">Preferences</h1>
         <p role="status" className="flex items-center gap-1 text-sm text-muted-foreground">
