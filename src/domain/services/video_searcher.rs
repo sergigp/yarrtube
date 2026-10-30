@@ -266,7 +266,12 @@ impl VideoSearcher {
                 )
             })
             .collect();
-        ranked.sort_by_key(|(_, pending)| std::cmp::Reverse(pending.len()));
+        ranked.sort_by_key(|(category, pending)| {
+            (
+                std::cmp::Reverse(pending.len()),
+                category.name.as_str().to_lowercase(),
+            )
+        });
         ranked
             .into_iter()
             .map(|(category, mut pending)| {

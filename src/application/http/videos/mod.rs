@@ -3951,6 +3951,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_break_category_section_ties_by_name_on_home() {
+        let db = TestDatabase::new();
+        let chess = save_category_channel(&db, "chess", "@chess", 0..3);
+        let astronomy = save_category_channel(&db, "Astronomy", "@astronomy", 10..13);
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                categories: vec![
+                    category_section_of(&astronomy, "@astronomy", (10..13).rev()),
+                    category_section_of(&chess, "@chess", (0..3).rev()),
+                ],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
