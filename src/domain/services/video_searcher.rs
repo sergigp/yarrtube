@@ -1,6 +1,7 @@
 use crate::domain::category::{Category, CategoryId};
 use crate::domain::channel::ChannelHandle;
 use crate::domain::playlist::PlaylistId;
+use crate::domain::preferences::Preferences;
 use crate::domain::services::{CategoryVideoCollector, CategoryVideoCollectorApi};
 use crate::domain::video::{
     CategoryVideoView, HomeCategorySection, HomeLimits, HomeVideoView, HomeVideos, ListVideosError,
@@ -11,6 +12,7 @@ use crate::infrastructure::repositories::sqlite_channel_repository::ChannelRepos
 use crate::infrastructure::repositories::sqlite_channel_video_repository::ChannelVideoRepository;
 use crate::infrastructure::repositories::sqlite_playlist_repository::PlaylistRepository;
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::PlaylistVideoRepository;
+use crate::infrastructure::repositories::sqlite_preferences_repository::PreferencesRepository;
 use crate::infrastructure::repositories::sqlite_video_metadata_repository::VideoMetadataRepository;
 use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
 use crate::infrastructure::shared::system_clock::Clock;
@@ -30,6 +32,7 @@ pub struct VideoSearcher {
     clock: Arc<dyn Clock>,
     category_repository: Arc<dyn CategoryRepository>,
     category_video_collector: CategoryVideoCollector,
+    preferences_repository: Arc<dyn PreferencesRepository>,
 }
 
 impl VideoSearcher {
@@ -44,6 +47,7 @@ impl VideoSearcher {
         clock: Arc<dyn Clock>,
         category_repository: Arc<dyn CategoryRepository>,
         category_video_collector: CategoryVideoCollector,
+        preferences_repository: Arc<dyn PreferencesRepository>,
     ) -> Self {
         Self {
             playlist_repository,
@@ -55,6 +59,7 @@ impl VideoSearcher {
             clock,
             category_repository,
             category_video_collector,
+            preferences_repository,
         }
     }
 }
@@ -134,6 +139,7 @@ impl VideoSearcherApi for VideoSearcher {
     }
 
     fn list_home(&self, limits: HomeLimits) -> Result<HomeVideos, ListVideosError> {
+        let limits = limits.following(&self.find_preferences()?);
         let videos = self.downloaded_across_sources()?;
         let continue_watching =
             Self::continue_watching_in(&videos, self.clock.now(), limits.continue_watching);
@@ -188,6 +194,13 @@ fn is_excluded(video: &anyhow::Result<Video>) -> bool {
 }
 
 impl VideoSearcher {
+    fn find_preferences(&self) -> Result<Preferences, ListVideosError> {
+        self.preferences_repository
+            .find()
+            .map(Option::unwrap_or_default)
+            .map_err(ListVideosError::Repository)
+    }
+
     fn find_category(&self, id: &CategoryId) -> Result<Category, ListVideosError> {
         self.category_repository
             .find(id)

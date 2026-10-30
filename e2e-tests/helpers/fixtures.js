@@ -9,6 +9,8 @@ import { startDaemon } from './daemon.js'
  * Every spec imports `test`/`expect` from here instead of
  * `@playwright/test`, so each test:
  *
+ * - starts with every preference at its default, so a test that turns one
+ *   off can't change the UI the tests after it see;
  * - starts from an empty library (unless it opts out with
  *   `test.use({ keepLibrary: true })`): whatever an earlier (possibly failed)
  *   test left tracked, and every category, is deleted through the API, and its files are waited
@@ -24,6 +26,14 @@ import { startDaemon } from './daemon.js'
  */
 const ANNOUNCEMENTS_URL =
   'https://raw.githubusercontent.com/sergigp/yarrtube/main/announcements/announcements.json'
+
+const DEFAULT_PREFERENCES = {
+  categories_enabled: true,
+  home_show_continue_watching: true,
+  home_show_categories: true,
+  home_show_quick_watches: true,
+  home_show_latest: true,
+}
 
 export const test = base.extend({
   // This worker's own daemon: tests talk only to it (through `baseURL`), and
@@ -51,6 +61,15 @@ export const test = base.extend({
   expectedApiErrors: [[], { option: true }],
   // `console.error` messages the test tolerates, as RegExps.
   consoleErrorAllowlist: [[], { option: true }],
+
+  defaultPreferences: [
+    async ({ request }, use) => {
+      const response = await request.put('/api/preferences', { data: DEFAULT_PREFERENCES })
+      expect(response.ok(), 'PUT /api/preferences').toBeTruthy()
+      await use()
+    },
+    { auto: true },
+  ],
 
   cleanLibrary: [
     async ({ request, keepLibrary }, use) => {

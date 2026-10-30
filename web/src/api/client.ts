@@ -12,6 +12,7 @@ import type {
   HomeVideos,
   PlaylistListItem,
   PlaylistPreview,
+  Preferences,
   RecordProgressResponse,
   Task,
   Video,
@@ -72,6 +73,15 @@ export function fetchTasks(): Promise<Task[]> {
 /** The version the running daemon was built for (`dev` for local builds). */
 export function fetchVersion(): Promise<AppVersion> {
   return request('/version')
+}
+
+export function fetchPreferences(): Promise<Preferences> {
+  return request('/preferences')
+}
+
+/** Replaces every preference; resolves with the saved ones. */
+export function savePreferences(preferences: Preferences): Promise<Preferences> {
+  return request('/preferences', { method: 'PUT', body: preferences })
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   fetchChannelVideos,
   fetchHomeVideos,
   fetchPlaylists,
+  fetchPreferences,
   fetchTasks,
   fetchVersion,
   fetchVideos,
@@ -24,6 +25,7 @@ import {
   previewChannel,
   previewPlaylist,
   updateChannel,
+  savePreferences,
   updatePlaylist,
   type UpdateChannelRequest,
   type UpdatePlaylistRequest,
@@ -38,10 +40,12 @@ import type {
   HomeVideos,
   PlaylistListItem,
   PlaylistPreview,
+  Preferences,
   Task,
   Video,
 } from './types'
 import { anyWorkInProgress } from '@/lib/libraryPolling'
+import { categoriesShown } from '@/lib/preferences'
 
 // The sidebar lists change rarely and are refetched right after the user's
 // own actions; views showing live download progress poll quickly.
@@ -69,6 +73,7 @@ export const queryKeys = {
   tasks: ['tasks'] as const,
   announcements: ['announcements'] as const,
   version: ['version'] as const,
+  preferences: ['preferences'] as const,
   // Outside the `['playlists']` and `['channels']` prefixes so refetching the
   // library leaves them be.
   playlistPreview: (value: string) => ['playlist-preview', value] as const,
@@ -187,6 +192,35 @@ export function useVersion(): UseQueryResult<AppVersion, Error> {
     refetchOnWindowFocus: false,
     retry: false,
   })
+}
+
+export function usePreferences(): UseQueryResult<Preferences, Error> {
+  return useQuery({
+    queryKey: queryKeys.preferences,
+    queryFn: fetchPreferences,
+  })
+}
+
+/** Whether category UI shows, as decided by `categoriesShown`. */
+export function useCategoriesShown(): boolean {
+  const { data, isError } = usePreferences()
+  return categoriesShown(data, isError)
+}
+
+/**
+ * Returns a function that saves every preference, then shows the saved ones
+ * everywhere and refetches the home videos, whose sections follow them.
+ */
+export function useSavePreferences(): (preferences: Preferences) => Promise<void> {
+  const queryClient = useQueryClient()
+  return useCallback(
+    async (preferences: Preferences) => {
+      const saved = await savePreferences(preferences)
+      queryClient.setQueryData(queryKeys.preferences, saved)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.recentVideos })
+    },
+    [queryClient],
+  )
 }
 
 /**

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { movePlaylist, type UpdatePlaylistRequest } from '@/api/client'
+import { useCategoriesShown } from '@/api/queries'
 import type { PlaylistListItem } from '@/api/types'
 import { intervalForm, intervalMinutes, type IntervalForm } from '@/lib/reconcileInterval'
 import { useSourceCategoriesField } from '@/hooks/useSourceCategoriesField'
@@ -82,6 +83,7 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const categories = useSourceCategoriesField({ kind: 'playlist', id: playlist.id })
+  const withCategories = useCategoriesShown()
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -115,7 +117,9 @@ function EditPlaylistForm({ playlist, onSave, onClose, onMoveRequest }: EditPlay
         moveBlocked={playlist.work_in_progress}
       />
       <ReconcileIntervalField id="edit-playlist-interval" value={interval} onChange={changeInterval} />
-      <CategoryPicker value={categories.value} onChange={categories.onChange} />
+      {withCategories && (
+        <CategoryPicker value={categories.value} onChange={categories.onChange} />
+      )}
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
       <Button type="submit" disabled={submitting} className="self-start">

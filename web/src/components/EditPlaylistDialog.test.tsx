@@ -6,6 +6,7 @@ import {
   aCategory,
   aCategoryList,
   aPlaylist,
+  aPreferences,
   mockApi,
   renderWithProviders,
   type Routes,
@@ -17,7 +18,7 @@ function renderDialog(
   onSave: (changes: object) => Promise<void> = vi.fn(async () => {}),
   routes: Routes = { 'GET /api/categories': aCategoryList() },
 ) {
-  const fetchMock = mockApi(routes)
+  const fetchMock = mockApi({ 'GET /api/preferences': aPreferences(), ...routes })
   const onOpenChange = vi.fn()
   renderWithProviders(
     <EditPlaylistDialog playlist={playlist} open onOpenChange={onOpenChange} onSave={onSave} />,
@@ -47,6 +48,30 @@ describe('EditPlaylistDialog', () => {
 
     expect(onSave).toHaveBeenCalledExactlyOnceWith({ reconcile_interval_minutes: 30 })
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('offers no categories and saves none while categories are off', async () => {
+    const { onSave, onOpenChange, fetchMock } = renderDialog(
+      aPlaylist({ reconcile_interval_minutes: 180 }),
+      undefined,
+      {
+        'GET /api/categories': aCategoryList(),
+        'GET /api/preferences': aPreferences({ categories_enabled: false }),
+      },
+    )
+    const user = userEvent.setup()
+    const amount = screen.getByLabelText('Check for new videos every')
+
+    await user.clear(amount)
+    await user.type(amount, '4')
+    expect(screen.queryByRole('group', { name: 'Categories' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ reconcile_interval_minutes: 240 })
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT'),
+    ).toEqual([])
   })
 
   it('sends nothing and closes when nothing changed', async () => {

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { moveChannel, type UpdateChannelRequest } from '@/api/client'
+import { useCategoriesShown } from '@/api/queries'
 import type { ChannelListItem } from '@/api/types'
 import {
   channelSettingsChanges,
@@ -94,6 +95,7 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
   const [error, setError] = useState<Error | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const categories = useSourceCategoriesField({ kind: 'channel', id: channel.id })
+  const withCategories = useCategoriesShown()
   const lowersLimit = lowersVideoLimit(channel.video_limit, form.video_limit)
   const changesQuality = form.quality !== channel.quality
 
@@ -167,7 +169,9 @@ function EditChannelForm({ channel, onSave, onClose, onMoveRequest }: EditChanne
         onChange={changeInterval}
       />
 
-      <CategoryPicker value={categories.value} onChange={categories.onChange} />
+      {withCategories && (
+        <CategoryPicker value={categories.value} onChange={categories.onChange} />
+      )}
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
       <Button type="submit" disabled={submitting} className="self-start">

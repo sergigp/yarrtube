@@ -32,6 +32,9 @@ use crate::infrastructure::repositories::sqlite_playlist_repository::{
 use crate::infrastructure::repositories::sqlite_playlist_video_repository::{
     PlaylistVideoRepository, SqlitePlaylistVideoRepository,
 };
+use crate::infrastructure::repositories::sqlite_preferences_repository::{
+    PreferencesRepository, SqlitePreferencesRepository,
+};
 use crate::infrastructure::repositories::sqlite_task_repository::{
     SqliteTaskRepository, TaskRepository,
 };
@@ -108,6 +111,7 @@ pub struct InfrastructureContainer {
     pub video_transcript_repository: Arc<dyn VideoTranscriptRepository>,
     pub episode_labels_repository: Arc<dyn EpisodeLabelsRepository>,
     pub category_playlist_repository: Arc<dyn CategoryPlaylistRepository>,
+    pub preferences_repository: Arc<dyn PreferencesRepository>,
     pub task_repository: Arc<dyn TaskRepository>,
     pub event_publisher: Arc<dyn EventPublisher>,
     pub event_repository: Arc<dyn EventRepository>,
@@ -156,6 +160,7 @@ impl InfrastructureContainer {
             category_playlist_repository: Arc::new(SqliteCategoryPlaylistRepository::new(
                 db.clone(),
             )),
+            preferences_repository: Arc::new(SqlitePreferencesRepository::new(db.clone())),
             task_repository: Arc::new(SqliteTaskRepository::new(db.clone(), clock.clone())),
             event_publisher: Arc::new(SqliteEventPublisher::new(db.clone(), clock.clone())),
             event_repository: Arc::new(SqliteEventRepository::new(db.clone())),

@@ -28,11 +28,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { VIEW_WIDTH } from '@/lib/viewWidth'
 import { cn } from '@/lib/utils'
 
 // The view keeps to a readable width, centred beside the sidebar.
-const VIEW_WIDTH = 'mx-auto w-full max-w-3xl'
-
 const CATEGORY_BADGE_VARIANT: Record<string, 'default' | 'outline' | 'secondary'> = {
   running: 'default',
   queued: 'outline',

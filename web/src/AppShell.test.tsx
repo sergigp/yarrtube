@@ -7,6 +7,7 @@ import { queryKeys } from '@/api/queries'
 import { formatDateTime } from '@/lib/formatDateTime'
 import {
   aCategoryList,
+  aPreferences,
   aVersion,
   mockApi,
   pendingForever,
@@ -25,12 +26,19 @@ function renderShell({
     'GET /api/videos/home': pendingForever(),
     'GET /api/tasks': pendingForever(),
     'GET /api/version': version,
+    'GET /api/preferences': aPreferences(),
     [`GET ${ANNOUNCEMENTS_URL}`]: [],
   })
   return renderWithProviders(<AppShell />, { route })
 }
 
 describe('AppShell', () => {
+  it('shows the preferences view at /preferences', async () => {
+    renderShell({ route: '/preferences' })
+
+    expect(await screen.findByRole('heading', { name: 'Preferences' })).toBeInTheDocument()
+  })
+
   it('opens and closes the sidebar from the header toggle', async () => {
     renderShell()
     const user = userEvent.setup()

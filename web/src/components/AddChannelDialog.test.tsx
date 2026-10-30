@@ -7,12 +7,14 @@ import {
   aCategoryList,
   aChannel,
   aPlaylist,
+  aPreferences,
   mockApi,
   renderWithProviders,
   type Routes,
 } from '@/test/helpers'
 
 const baseRoutes: Routes = {
+  'GET /api/preferences': aPreferences(),
   'GET /api/categories': aCategoryList(),
   'GET /api/channels': [],
   'GET /api/playlists': [],
@@ -104,6 +106,30 @@ describe('AddChannelDialog', () => {
       path: 'channels/chan',
       reconcile_interval_minutes: 180,
     })
+  })
+
+  it('offers no categories and saves none while categories are off', async () => {
+    const { fetchMock, onOpenChange } = renderDialog({
+      'GET /api/preferences': aPreferences({ categories_enabled: false }),
+      'GET /api/channels/preview?channel=%40chan': {
+        id: '@chan',
+        title: 'The Channel',
+        avatar_url: null,
+      },
+      'POST /api/channels': aChannel(),
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Channel Handle or URL'), '@chan')
+    const submit = screen.getByRole('button', { name: 'Create Channel' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    expect(screen.queryByRole('group', { name: 'Categories' })).not.toBeInTheDocument()
+    await user.click(submit)
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/categories')),
+    ).toEqual([])
   })
 
   it('should show the add channel submit error as an alert', async () => {

@@ -24,6 +24,7 @@ const VIDEO_CATEGORIES_SQL: &str = include_str!("../../../migrations/0014_video_
 const PLEX_LABELS_SQL: &str = include_str!("../../../migrations/0015_plex_labels.sql");
 const EPISODE_LABELS_GENERATION_SQL: &str =
     include_str!("../../../migrations/0016_episode_labels_generation.sql");
+const PREFERENCES_SQL: &str = include_str!("../../../migrations/0017_preferences.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -43,6 +44,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
         M::up(VIDEO_CATEGORIES_SQL),
         M::up(PLEX_LABELS_SQL),
         M::up(EPISODE_LABELS_GENERATION_SQL),
+        M::up(PREFERENCES_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
@@ -85,6 +87,7 @@ mod tests {
                 "events",
                 "playlist_videos",
                 "playlists",
+                "preferences",
                 "tasks",
                 "tasks_dead_letter",
                 "video_categories",

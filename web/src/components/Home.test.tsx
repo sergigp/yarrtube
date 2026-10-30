@@ -9,14 +9,19 @@ import {
   aHomeCategorySection,
   aHomeVideo,
   aPlaylist,
+  aPreferences,
   mockApi,
   renderWithProviders,
   type Routes,
 } from '@/test/helpers'
 
-/** Mocks the API with no categories unless `routes` says otherwise. */
+/** Mocks the API with no categories and default preferences unless `routes` says otherwise. */
 function mockHomeApi(routes: Routes) {
-  return mockApi({ 'GET /api/categories': aCategoryList(), ...routes })
+  return mockApi({
+    'GET /api/categories': aCategoryList(),
+    'GET /api/preferences': aPreferences(),
+    ...routes,
+  })
 }
 
 describe('Home', () => {
@@ -445,5 +450,63 @@ describe('Home', () => {
     )
     expect(await card('Four')).toHaveStyle({ background: '#f2f2f280' })
     expect((await card('None')).style.background).toBe('')
+  })
+
+  it('leaves cards untinted and unframed when categories are off', async () => {
+    const preferences = aPreferences({ categories_enabled: false })
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [],
+        quick_watches: [],
+        latest: [aHomeVideo({ title: 'One', category_ids: ['chess'] })],
+      },
+      'GET /api/categories': aCategoryList([aCategory({ id: 'chess', color: '#d3ecf8' })]),
+      'GET /api/preferences': preferences,
+    })
+
+    const { queryClient } = renderWithProviders(<Home />)
+
+    const card = (await screen.findByText('One')).closest('li') as HTMLElement
+    await waitFor(() => expect(queryClient.getQueryData(['preferences'])).toEqual(preferences))
+    await waitFor(() => expect(queryClient.getQueryData(['categories'])).toBeDefined())
+    expect(card.style.background).toBe('')
+    expect(card).not.toHaveClass('border')
+  })
+
+  it('shows no "Latest videos" while it is turned off', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [aHomeVideo({ title: 'Half Watched', position_seconds: 60 })],
+        categories: [],
+        quick_watches: [],
+        latest: [],
+      },
+      'GET /api/preferences': aPreferences({ home_show_latest: false }),
+    })
+
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByText('Half Watched')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Latest videos' })).not.toBeInTheDocument()
+  })
+
+  it('says there is nothing to show when latest is off and nothing else shows', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [],
+        quick_watches: [],
+        latest: [],
+      },
+      'GET /api/preferences': aPreferences({ home_show_latest: false }),
+    })
+
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByText(/Nothing to show here\./)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Preferences' })).toHaveAttribute('href', '/preferences')
+    expect(screen.queryByRole('heading', { name: 'Latest videos' })).not.toBeInTheDocument()
+    expect(screen.queryByText('No videos synced yet.')).not.toBeInTheDocument()
   })
 })

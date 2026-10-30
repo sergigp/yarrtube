@@ -1,6 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { createPlaylist } from '@/api/client'
-import { useInvalidateLibrary, usePlaylistPreview, usePlaylists } from '@/api/queries'
+import {
+  useCategoriesShown,
+  useInvalidateLibrary,
+  usePlaylistPreview,
+  usePlaylists,
+} from '@/api/queries'
 import type { PlaylistListItem, PlaylistPreview } from '@/api/types'
 import { useLookup, type Lookup } from '@/hooks/useLookup'
 import { useSaveLocation, type LocationValue } from '@/hooks/useSaveLocation'
@@ -91,6 +96,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
   const [categoryIds, setCategoryIds] = useState<string[]>([])
   const invalidateLibrary = useInvalidateLibrary()
   const saveSourceCategories = useSaveSourceCategories()
+  const withCategories = useCategoriesShown()
   const entered = form.playlist.trim()
   const playlists = usePlaylists()
   const lookup = useLookup(entered, usePlaylistPreview, playlists.data, sameId)
@@ -122,12 +128,14 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
       })
       location.remember()
       invalidateLibrary()
-      try {
-        await saveSourceCategories({ kind: 'playlist', id: playlist.id }, categoryIds)
-      } catch (err) {
-        throw new Error(
-          `The playlist was added, but its categories were not saved: ${errorMessage(err)}`,
-        )
+      if (withCategories) {
+        try {
+          await saveSourceCategories({ kind: 'playlist', id: playlist.id }, categoryIds)
+        } catch (err) {
+          throw new Error(
+            `The playlist was added, but its categories were not saved: ${errorMessage(err)}`,
+          )
+        }
       }
       onClose()
     } catch (err) {
@@ -154,7 +162,7 @@ function AddPlaylistForm({ onClose }: { onClose: () => void }) {
 
       {entered && <PlaylistNotice lookup={lookup} location={location.value} />}
 
-      <CategoryPicker value={categoryIds} onChange={setCategoryIds} />
+      {withCategories && <CategoryPicker value={categoryIds} onChange={setCategoryIds} />}
 
       <div className="min-w-0 border-t border-border pt-4">
         <button

@@ -14,6 +14,7 @@ import type {
   HomeCategorySection,
   HomeVideo,
   PlaylistListItem,
+  Preferences,
   Task,
   Video,
 } from '@/api/types'
@@ -285,6 +286,17 @@ export function aCategoryList(
   return {
     categories,
     unwatched_total: 0,
+    ...overrides,
+  }
+}
+
+export function aPreferences(overrides: Partial<Preferences> = {}): Preferences {
+  return {
+    categories_enabled: true,
+    home_show_continue_watching: true,
+    home_show_categories: true,
+    home_show_quick_watches: true,
+    home_show_latest: true,
     ...overrides,
   }
 }

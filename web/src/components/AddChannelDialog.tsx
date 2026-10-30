@@ -1,6 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { createChannel } from '@/api/client'
-import { useChannelPreview, useChannels, useInvalidateLibrary } from '@/api/queries'
+import {
+  useCategoriesShown,
+  useChannelPreview,
+  useChannels,
+  useInvalidateLibrary,
+} from '@/api/queries'
 import type { ChannelListItem, ChannelPreview } from '@/api/types'
 import { useLookup, type Lookup } from '@/hooks/useLookup'
 import { useSaveLocation, type LocationValue } from '@/hooks/useSaveLocation'
@@ -100,6 +105,7 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
   const [categoryIds, setCategoryIds] = useState<string[]>([])
   const invalidateLibrary = useInvalidateLibrary()
   const saveSourceCategories = useSaveSourceCategories()
+  const withCategories = useCategoriesShown()
   const entered = form.channel.trim()
   const channels = useChannels()
   const lookup = useLookup(entered, useChannelPreview, channels.data, sameHandle)
@@ -131,12 +137,14 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
       })
       location.remember()
       invalidateLibrary()
-      try {
-        await saveSourceCategories({ kind: 'channel', id: channel.id }, categoryIds)
-      } catch (err) {
-        throw new Error(
-          `The channel was added, but its categories were not saved: ${errorMessage(err)}`,
-        )
+      if (withCategories) {
+        try {
+          await saveSourceCategories({ kind: 'channel', id: channel.id }, categoryIds)
+        } catch (err) {
+          throw new Error(
+            `The channel was added, but its categories were not saved: ${errorMessage(err)}`,
+          )
+        }
       }
       onClose()
     } catch (err) {
@@ -166,7 +174,7 @@ function AddChannelForm({ onClose }: { onClose: () => void }) {
         <ChannelNotice lookup={lookup} videoLimit={form.video_limit} location={location.value} />
       )}
 
-      <CategoryPicker value={categoryIds} onChange={setCategoryIds} />
+      {withCategories && <CategoryPicker value={categoryIds} onChange={setCategoryIds} />}
 
       <div className="min-w-0 border-t border-border pt-4">
         <button

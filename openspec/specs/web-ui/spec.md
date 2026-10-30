@@ -198,11 +198,19 @@ The sidebar's Channels section SHALL offer an "Add channel" control and its Play
 - **THEN** the sidebar closes and the matching add dialog is shown
 
 ### Requirement: Header Settings Menu
-The header SHALL offer, at its trailing edge, a settings control shown as a gear icon with the accessible name "Settings". Activating it SHALL open a menu whose items are navigation to other views. The menu SHALL contain a "Tasks" item that navigates to the tasks view. The header SHALL NOT show any other control for adding channels or playlists or for reaching the tasks view.
+The header SHALL offer, at its trailing edge, a settings control shown as a gear icon with the accessible name "Settings". Activating it SHALL open a menu with, in order, "Tasks", which navigates to the tasks view, "Preferences", which navigates to the preferences view, and "Report a bug", which opens `https://github.com/sergigp/yarrtube/issues/new` in a new browser tab. The header SHALL NOT show any other control for adding channels or playlists or for reaching the tasks view.
 
 #### Scenario: Reaching the tasks view
 - **WHEN** a user activates the header's settings control and chooses "Tasks"
 - **THEN** the application navigates to the tasks view
+
+#### Scenario: Reaching the preferences view
+- **WHEN** a user activates the header's settings control and chooses "Preferences"
+- **THEN** the application navigates to the preferences view
+
+#### Scenario: Reporting a bug
+- **WHEN** a user activates the header's settings control and chooses "Report a bug"
+- **THEN** the GitHub new issue page for yarrtube opens in a new tab and the application stays where it was
 
 #### Scenario: Header controls
 - **WHEN** a user views any page
@@ -1965,3 +1973,87 @@ Each category section on the home view SHALL be headed "More about <category nam
 #### Scenario: No category sections
 - **WHEN** the home response holds no category sections
 - **THEN** no "More about" section is shown
+
+### Requirement: Preferences View
+The application SHALL have a "Preferences" view at `/preferences` showing a labelled switch per preference: "Enable categories" in a "Categories" group, and "Show continue watching", "Show categories", "Show quick watches" and "Show latest videos" in a "Home" group. Toggling a switch SHALL save the preferences at once and update the whole application.
+
+#### Scenario: Current values shown
+- **WHEN** a user opens the preferences view and only `home_show_latest` is off
+- **THEN** every switch is on except "Show latest videos"
+
+#### Scenario: Toggling saves
+- **WHEN** a user turns off "Show quick watches"
+- **THEN** the preferences are saved with `home_show_quick_watches` off and the switch stays off after reloading the page
+
+#### Scenario: Save fails
+- **WHEN** a user toggles a switch and the save fails
+- **THEN** the view shows the error and the switch returns to its saved value
+
+### Requirement: Preferences Help
+Each preference switch SHALL have a help control shown as a "?" icon with the accessible name "About <switch label>". Hovering, focusing or activating it SHALL show a tooltip saying what the preference does and what turning it off changes. The "Home" group SHALL say that its sections show in the listed order and that a video shows in one section only, so turning a section off can move its videos to a section below.
+
+#### Scenario: Explaining a preference
+- **WHEN** a user activates the "About Enable categories" control
+- **THEN** a tooltip explains that turning categories off hides every category control and section, and that categories and their videos are kept
+
+#### Scenario: Help on touch screens
+- **WHEN** a user taps the "About Show quick watches" control
+- **THEN** its tooltip shows
+
+### Requirement: Preferences Save Confirmation
+After a preference is saved, the preferences view SHALL show "Saved" next to its title for about 2 seconds. A failed save SHALL NOT show it.
+
+#### Scenario: Saved
+- **WHEN** a user turns off "Show quick watches" and the save succeeds
+- **THEN** "Saved" shows next to "Preferences" and is gone about 2 seconds later
+
+#### Scenario: Not saved
+- **WHEN** a user toggles a switch and the save fails
+- **THEN** "Saved" does not show
+
+### Requirement: Preferences View Width
+The preferences view SHALL be centered in the content area at the same maximum width as the tasks view.
+
+#### Scenario: Consistent width
+- **WHEN** a user opens the tasks view and then the preferences view on a wide screen
+- **THEN** both are centered with the same maximum width
+
+### Requirement: Home Category Switch Needs Categories
+While "Enable categories" is off, the "Show categories" switch SHALL be disabled, keeping its saved value.
+
+#### Scenario: Categories off
+- **WHEN** a user turns off "Enable categories"
+- **THEN** "Show categories" is disabled and keeps its value
+
+### Requirement: No Category UI While Categories Are Off
+While `categories_enabled` is off, or the preferences are still loading, the application SHALL NOT show the sidebar Categories section, the Categories field in the add and edit channel and playlist dialogs, home category sections or home card tints, and the sidebar search field SHALL be labelled for channels and playlists only. When the preferences cannot be loaded, the application SHALL behave as with the defaults.
+
+#### Scenario: Sidebar without categories
+- **WHEN** categories are off and "Chess" exists
+- **THEN** the sidebar shows no Categories section and no "Add category" control
+
+#### Scenario: Dialogs without categories
+- **WHEN** categories are off and a user opens the add channel dialog
+- **THEN** the dialog shows no Categories field, and saving it changes no category
+
+#### Scenario: Preferences fail to load
+- **WHEN** the preferences request fails
+- **THEN** the sidebar shows the Categories section as with the defaults
+
+### Requirement: Category View While Categories Are Off
+While `categories_enabled` is off, a category view address SHALL say "Categories are turned off." with a link to the preferences view instead of the category.
+
+#### Scenario: Category address while off
+- **WHEN** categories are off and a user opens the "Chess" view's address
+- **THEN** the view says "Categories are turned off." and links to the preferences view
+
+### Requirement: Home Without Latest Videos
+While `home_show_latest` is off, the home view SHALL NOT show "Latest videos". When no shown section has videos, the home view SHALL say "Nothing to show here." with a link to the preferences view.
+
+#### Scenario: Latest off with other sections
+- **WHEN** `home_show_latest` is off and "Continue watching" has videos
+- **THEN** the home view shows "Continue watching" and no "Latest videos" heading
+
+#### Scenario: Nothing to show
+- **WHEN** `home_show_latest` is off and every other section is empty or off
+- **THEN** the home view says "Nothing to show here." and links to the preferences view

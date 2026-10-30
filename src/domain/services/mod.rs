@@ -23,6 +23,8 @@ pub mod playlist_video_reconciler;
 pub mod playlist_view_searcher;
 pub mod plex_folder_scanner;
 pub mod plex_label_syncer;
+pub mod preferences_searcher;
+pub mod preferences_updater;
 pub mod show_file_writer;
 pub mod show_mover;
 pub mod subtitle_fetcher;
@@ -65,6 +67,8 @@ pub use playlist_video_reconciler::{PlaylistVideoReconciler, PlaylistVideoReconc
 pub use playlist_view_searcher::{PlaylistViewSearcher, PlaylistViewSearcherApi};
 pub use plex_folder_scanner::{PlexFolderScanner, PlexFolderScannerApi};
 pub use plex_label_syncer::{PlexLabelSyncer, PlexLabelSyncerApi};
+pub use preferences_searcher::{PreferencesSearcher, PreferencesSearcherApi};
+pub use preferences_updater::{PreferencesUpdater, PreferencesUpdaterApi};
 pub use show_file_writer::{ShowFileWriter, ShowFileWriterApi};
 pub use show_mover::{ShowMover, ShowMoverApi};
 pub use subtitle_fetcher::{SubtitleFetcher, SubtitleFetcherApi};

@@ -10,6 +10,7 @@ import {
   aCategoryList,
   aChannel,
   aPlaylist,
+  aPreferences,
   heldUntilReleased,
   mockApi,
   renderWithProviders,
@@ -17,7 +18,7 @@ import {
 } from '@/test/helpers'
 
 function renderSidebar(routes: Routes, { route = '/' } = {}) {
-  mockApi(routes)
+  mockApi({ 'GET /api/preferences': aPreferences(), ...routes })
   return renderWithProviders(
     <Sidebar open onClose={() => {}} onAddChannel={() => {}} onAddPlaylist={() => {}}
       onAddCategory={() => {}}
@@ -29,6 +30,24 @@ function renderSidebar(routes: Routes, { route = '/' } = {}) {
 describe('Sidebar', () => {
   beforeEach(() => {
     window.localStorage.clear()
+  })
+
+  it('shows no categories while they are turned off', async () => {
+    const channels = Array.from({ length: 10 }, (_, index) => aChannel({ name: `Chan ${index}` }))
+    const playlists = Array.from({ length: 10 }, (_, index) => aPlaylist({ name: `List ${index}` }))
+    renderSidebar({
+      'GET /api/channels': channels,
+      'GET /api/playlists': playlists,
+      'GET /api/categories': aCategoryList([aCategory({ name: 'Chess' })]),
+      'GET /api/preferences': aPreferences({ categories_enabled: false }),
+    })
+
+    expect(
+      await screen.findByRole('searchbox', { name: 'Search channels and playlists' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Categories' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Chess')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add category' })).not.toBeInTheDocument()
   })
 
   it('lists channels and playlists with unwatched badges', async () => {

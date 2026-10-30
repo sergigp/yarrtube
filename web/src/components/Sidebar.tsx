@@ -4,6 +4,7 @@ import { Ellipsis, Plus, RotateCw } from 'lucide-react'
 import {
   queryKeys,
   useCategories,
+  useCategoriesShown,
   useChannels,
   useDeleteSource,
   useLibraryAction,
@@ -368,7 +369,8 @@ export function Sidebar({
   const { data: channels, error: channelsError } = useChannels()
   const { data: playlists, error: playlistsError } = usePlaylists()
   const { data: categoryList } = useCategories()
-  const categories = categoryList?.categories
+  const withCategories = useCategoriesShown()
+  const categories = withCategories ? categoryList?.categories : []
   const refreshing = useLibraryAction()
   const deleteSource = useDeleteSource()
   const setPlaylistExcludedFromHome = useSetPlaylistExcludedFromHome()
@@ -439,7 +441,8 @@ export function Sidebar({
   const showChannels = !searchText || channelsView.rows?.length !== 0
   const showPlaylists = !searchText || playlistsView.rows?.length !== 0
   const showCategories =
-    !searchText || (categories?.some((category) => matchesSearch(category, searchText)) ?? false)
+    withCategories &&
+    (!searchText || (categories?.some((category) => matchesSearch(category, searchText)) ?? false))
 
   return (
     <>
@@ -466,10 +469,20 @@ export function Sidebar({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search"
-            aria-label="Search categories, channels and playlists"
+            aria-label={
+              withCategories
+                ? 'Search categories, channels and playlists'
+                : 'Search channels and playlists'
+            }
           />
         )}
-        <SidebarCategories onAddCategory={onAddCategory} onClose={onClose} searchText={searchText} />
+        {withCategories && (
+          <SidebarCategories
+            onAddCategory={onAddCategory}
+            onClose={onClose}
+            searchText={searchText}
+          />
+        )}
         {!showCategories && !showChannels && !showPlaylists && (
           <p className="px-2 text-sm text-muted-foreground">Nothing matches "{searchText}".</p>
         )}

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useCategories, useRecentVideos } from '@/api/queries'
+import { useCategories, useCategoriesShown, usePreferences, useRecentVideos } from '@/api/queries'
 import type { HomeVideo } from '@/api/types'
 import { VideoGrid } from './VideoGrid'
 
@@ -11,7 +11,8 @@ interface HomeSectionProps {
   name: string
   videos: HomeVideo[] | undefined
   error: Error | null
-  categoryColors: Map<string, string>
+  /** Category id → color, when cards are tinted. */
+  categoryColors: Map<string, string> | undefined
   hideWhenEmpty?: boolean
 }
 
@@ -62,13 +63,50 @@ function HomeSection({
   )
 }
 
+/**
+ * What home says in place of a turned-off "Latest videos": the load error, or
+ * that nothing shows once every other section turned out empty.
+ */
+function NothingElseShown({
+  error,
+  othersHaveVideos,
+  loaded,
+}: {
+  error: Error | null
+  othersHaveVideos: boolean
+  loaded: boolean
+}) {
+  if (error) {
+    return <p className="text-sm text-destructive">Failed to load videos: {error.message}</p>
+  }
+  if (!loaded || othersHaveVideos) {
+    return null
+  }
+  return (
+    <p className="text-sm text-muted-foreground">
+      Nothing to show here.{' '}
+      <Link to="/preferences" className="underline hover:text-foreground">
+        Preferences
+      </Link>
+    </p>
+  )
+}
+
 export function Home() {
   const { data: home, error } = useRecentVideos()
   const { data: categories } = useCategories()
+  const { data: preferences } = usePreferences()
+  // Category colors tint home cards only while categories show.
+  const tinted = useCategoriesShown()
   const categoryColors = useMemo(
-    () => new Map((categories?.categories ?? []).map((category) => [category.id, category.color])),
-    [categories],
+    () =>
+      tinted
+        ? new Map((categories?.categories ?? []).map((category) => [category.id, category.color]))
+        : undefined,
+    [categories, tinted],
   )
+  // Shown until the preferences say otherwise, as before they existed.
+  const showLatest = preferences?.home_show_latest !== false
   // "Latest videos" stands in for an empty home, so it only hides when
   // another section has something to show. A failed refresh keeps the last
   // response cached, but those sections hide on error, so Latest shows it.
@@ -109,14 +147,18 @@ export function Home() {
         categoryColors={categoryColors}
         hideWhenEmpty
       />
-      <HomeSection
-        title="Latest videos"
-        name="recent videos"
-        videos={home?.latest}
-        error={error}
-        categoryColors={categoryColors}
-        hideWhenEmpty={othersHaveVideos}
-      />
+      {showLatest ? (
+        <HomeSection
+          title="Latest videos"
+          name="recent videos"
+          videos={home?.latest}
+          error={error}
+          categoryColors={categoryColors}
+          hideWhenEmpty={othersHaveVideos}
+        />
+      ) : (
+        <NothingElseShown error={error} othersHaveVideos={othersHaveVideos} loaded={!!home} />
+      )}
     </div>
   )
 }
