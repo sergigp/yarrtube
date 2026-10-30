@@ -94,10 +94,14 @@ export function PreferencesView() {
   const savePreferences = useSavePreferences()
   const [saveError, setSaveError] = useState<string | null>(null)
   const saved = useSavedFlash()
+  // Each save sends every preference, so one at a time: a toggle while
+  // another saves would send that one's old value and undo it.
+  const [saving, setSaving] = useState(false)
   const toggle = async (key: PreferenceKey, value: boolean) => {
-    if (!preferences) {
+    if (!preferences || saving) {
       return
     }
+    setSaving(true)
     setSaveError(null)
     saved.clear()
     try {
@@ -105,6 +109,8 @@ export function PreferencesView() {
       saved.flash()
     } catch (err) {
       setSaveError(errorMessage(err))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -151,7 +157,7 @@ export function PreferencesView() {
                   <Switch
                     id={`preference-${key}`}
                     checked={preferences[key]}
-                    disabled={needsCategories && !preferences.categories_enabled}
+                    disabled={saving || (needsCategories && !preferences.categories_enabled)}
                     onCheckedChange={(value) => void toggle(key, value)}
                   />
                 </div>
