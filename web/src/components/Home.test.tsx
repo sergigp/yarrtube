@@ -6,6 +6,7 @@ import type { HomeVideoSource } from '@/api/types'
 import {
   aCategory,
   aCategoryList,
+  aHomeCategorySection,
   aHomeVideo,
   aPlaylist,
   mockApi,
@@ -52,6 +53,41 @@ describe('Home', () => {
     expect(await screen.findByText('Continue watching')).toBeInTheDocument()
     expect(screen.getByText('Quick watches')).toBeInTheDocument()
     expect(screen.getByText('Latest videos')).toBeInTheDocument()
+  })
+
+  it('shows a "More about" section per category between continue watching and quick watches', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [aHomeVideo({ title: 'Half Watched', position_seconds: 60 })],
+        categories: [
+          aHomeCategorySection({
+            id: 'science',
+            name: 'Science',
+            videos: [aHomeVideo({ title: 'Black Holes' })],
+          }),
+          aHomeCategorySection({
+            id: 'chess',
+            name: 'Chess',
+            videos: [aHomeVideo({ title: 'Rook Endgames' })],
+          }),
+        ],
+        quick_watches: [aHomeVideo({ title: 'Short One' })],
+        latest: [aHomeVideo({ title: 'Fresh Video' })],
+      },
+    })
+
+    renderWithProviders(<Home />)
+
+    await screen.findByRole('heading', { name: 'More about Science' })
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Continue watching',
+      'More about Science',
+      'More about Chess',
+      'Quick watches',
+      'Latest videos',
+    ])
+    const chess = screen.getByRole('heading', { name: 'More about Chess' }).closest('section')
+    expect(within(chess as HTMLElement).getByText('Rook Endgames')).toBeInTheDocument()
   })
 
   it('shows progress on in-progress cards in every section', async () => {

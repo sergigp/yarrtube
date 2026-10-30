@@ -61,6 +61,17 @@ export function Home() {
         categoryColors={categoryColors}
         hideWhenEmpty
       />
+      {home?.categories.map((category) => (
+        <HomeSection
+          key={category.id}
+          title={`More about ${category.name}`}
+          name={`${category.name} videos`}
+          videos={category.videos}
+          error={null}
+          categoryColors={categoryColors}
+          hideWhenEmpty
+        />
+      ))}
       <HomeSection
         title="Quick watches"
         name="quick watches"
