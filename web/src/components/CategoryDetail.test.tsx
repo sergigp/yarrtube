@@ -102,7 +102,7 @@ describe('CategoryDetail', () => {
   it('tints the header with the soft tint of the category color and leaves the cards untinted', async () => {
     renderCategory({
       'GET /api/categories': aCategoryList([
-        aCategory({ id: 'chess', name: 'Chess', color: '#0193bf', channels: ['@hikaru'] }),
+        aCategory({ id: 'chess', name: 'Chess', color: '#0ea5e9', channels: ['@hikaru'] }),
       ]),
       'GET /api/categories/chess/videos': [
         aHomeVideo({ title: 'Opening', category_ids: ['chess'] }),
@@ -112,7 +112,7 @@ describe('CategoryDetail', () => {
     const heading = await screen.findByRole('heading', { name: 'Chess' })
     const card = await screen.findByRole('listitem')
 
-    expect(heading.closest('header')).toHaveStyle({ background: softTint('#0193bf') })
+    expect(heading.closest('header')).toHaveStyle({ background: softTint('#0ea5e9') })
     expect(card.style.background).toBe('')
   })
 
@@ -252,9 +252,9 @@ describe('CategoryDetail', () => {
   })
 
   it('saves the color chosen through the "Change color" action and tints the header with it', async () => {
-    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#0193bf', channels: ['@hikaru'] })
+    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#0ea5e9', channels: ['@hikaru'] })
     const recolor = vi.fn(() => {
-      chess = { ...chess, color: '#9870c5' }
+      chess = { ...chess, color: '#8b5cf6' }
       return null
     })
     const { fetchMock } = renderCategory({
@@ -270,19 +270,19 @@ describe('CategoryDetail', () => {
 
     // The open color dialog hides the page from assistive technology.
     const header = screen.getByRole('heading', { name: 'Chess', hidden: true }).closest('header')
-    await waitFor(() => expect(header).toHaveStyle({ background: softTint('#9870c5') }))
+    await waitFor(() => expect(header).toHaveStyle({ background: softTint('#8b5cf6') }))
     await waitFor(() => expect(recolor).toHaveBeenCalledOnce())
     const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/categories/chess') as [
       string,
       RequestInit,
     ]
-    expect(JSON.parse(init.body as string)).toEqual({ color: '#9870c5' })
+    expect(JSON.parse(init.body as string)).toEqual({ color: '#8b5cf6' })
   })
 
   it('saves a custom hue once, when the slider settles', async () => {
-    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#0193bf', channels: ['@hikaru'] })
+    let chess = aCategory({ id: 'chess', name: 'Chess', color: '#0ea5e9', channels: ['@hikaru'] })
     const recolor = vi.fn(() => {
-      chess = { ...chess, color: '#03999f' }
+      chess = { ...chess, color: '#04a3aa' }
       return null
     })
     const { fetchMock } = renderCategory({
@@ -300,13 +300,13 @@ describe('CategoryDetail', () => {
 
     // The open color dialog hides the page from assistive technology.
     const header = screen.getByRole('heading', { name: 'Chess', hidden: true }).closest('header')
-    await waitFor(() => expect(header).toHaveStyle({ background: softTint('#03999f') }))
+    await waitFor(() => expect(header).toHaveStyle({ background: softTint('#04a3aa') }))
     await waitFor(() => expect(recolor).toHaveBeenCalledOnce())
     const saves = fetchMock.mock.calls.filter(([url]) => url === '/api/categories/chess') as [
       string,
       RequestInit,
     ][]
-    expect(saves.map(([, init]) => JSON.parse(init.body as string))).toEqual([{ color: '#03999f' }])
+    expect(saves.map(([, init]) => JSON.parse(init.body as string))).toEqual([{ color: '#04a3aa' }])
   })
 
   it('renames from the header', async () => {
@@ -421,14 +421,14 @@ describe('CategoryDetail', () => {
   it('shows the header from the categories list at once, with placeholders while the videos load', async () => {
     renderCategory({
       'GET /api/categories': aCategoryList([
-        aCategory({ id: 'chess', name: 'Chess', color: '#0193bf', channels: ['@hikaru'] }),
+        aCategory({ id: 'chess', name: 'Chess', color: '#0ea5e9', channels: ['@hikaru'] }),
       ]),
       'GET /api/categories/chess/videos': pendingForever(),
     })
 
     const heading = await screen.findByRole('heading', { name: 'Chess' })
     const header = heading.closest('header') as HTMLElement
-    expect(header).toHaveStyle({ background: softTint('#0193bf') })
+    expect(header).toHaveStyle({ background: softTint('#0ea5e9') })
     expect(
       within(header).getByRole('button', { name: 'More actions for Chess' }),
     ).toBeInTheDocument()

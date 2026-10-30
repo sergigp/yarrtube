@@ -82,8 +82,8 @@ describe('AddCategoryDialog', () => {
     const { fetchMock } = renderDialog({
       'POST /api/categories': create,
       'GET /api/categories': aCategoryList([
-        aCategory({ name: 'Cooking', color: '#9f8401' }),
-        aCategory({ name: 'Sports', color: '#c8645b' }),
+        aCategory({ name: 'Cooking', color: '#f59e0b' }),
+        aCategory({ name: 'Sports', color: '#ef4444' }),
       ]),
       'GET /api/categories/chess/videos': [],
       'GET /api/channels': [],
@@ -100,6 +100,6 @@ describe('AddCategoryDialog', () => {
     const [, init] = fetchMock.mock.calls.find(
       ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
     ) as [string, RequestInit]
-    expect(JSON.parse(init.body as string)).toEqual({ name: 'Chess', color: '#9870c5' })
+    expect(JSON.parse(init.body as string)).toEqual({ name: 'Chess', color: '#8b5cf6' })
   })
 })

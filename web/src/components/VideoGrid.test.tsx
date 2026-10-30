@@ -26,9 +26,9 @@ const BETTATECH = {
 }
 
 const CHIPS = new Map([
-  ['ai', { name: 'AI & Code', color: '#9870c5' }],
-  ['chess', { name: 'Chess', color: '#0193bf' }],
-  ['science', { name: 'Science', color: '#019b8d' }],
+  ['ai', { name: 'AI & Code', color: '#8b5cf6' }],
+  ['chess', { name: 'Chess', color: '#0ea5e9' }],
+  ['science', { name: 'Science', color: '#14b8a6' }],
 ])
 
 describe('VideoGrid', () => {
@@ -144,7 +144,7 @@ describe('VideoGrid', () => {
 
     const chips = within(card('Opening Traps')).getAllByRole('listitem')
     expect(chips.map((chip) => chip.textContent)).toEqual(['Chess'])
-    expect(chips[0]).toHaveStyle({ background: softTint('#0193bf'), color: inkShade('#0193bf') })
+    expect(chips[0]).toHaveStyle({ background: softTint('#0ea5e9'), color: inkShade('#0ea5e9') })
   })
 
   it('shows at most 2 chips, then a "+N" chip for the rest', () => {
