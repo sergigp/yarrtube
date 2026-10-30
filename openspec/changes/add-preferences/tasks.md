@@ -32,7 +32,7 @@ Web (Vitest):
 - [x] 2.19 `AddChannelDialog` › no Categories field while off, saving makes no category request
 - [x] 2.20 `AddPlaylistDialog` › same as 2.19
 - [x] 2.21 `EditChannelDialog` › same as 2.19
-- [ ] 2.22 `EditPlaylistDialog` › same as 2.19
+- [x] 2.22 `EditPlaylistDialog` › same as 2.19
 - [ ] 2.23 `CategoryDetail` › says "Categories are turned off." with a link to Preferences while off
 - [ ] 2.24 `Home` › cards untinted and unframed when `home_show_category_colors` is off, and when categories are off
 - [ ] 2.25 `Home` › no "Latest videos" when `home_show_latest` is off
