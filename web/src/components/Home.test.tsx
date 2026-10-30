@@ -475,4 +475,21 @@ describe('Home', () => {
     expect(card.style.background).toBe('')
     expect(card).not.toHaveClass('border')
   })
+
+  it('shows no "Latest videos" while it is turned off', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [aHomeVideo({ title: 'Half Watched', position_seconds: 60 })],
+        categories: [],
+        quick_watches: [],
+        latest: [],
+      },
+      'GET /api/preferences': aPreferences({ home_show_latest: false }),
+    })
+
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByText('Half Watched')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Latest videos' })).not.toBeInTheDocument()
+  })
 })
