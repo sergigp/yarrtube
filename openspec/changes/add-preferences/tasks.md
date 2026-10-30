@@ -30,7 +30,7 @@ Web (Vitest):
 - [x] 2.17 `PreferencesView` › "Show categories" and "Show category colors" are disabled while "Enable categories" is off
 - [x] 2.18 `Sidebar` › no Categories section or "Add category" while categories are off, search labelled "Search channels and playlists"
 - [x] 2.19 `AddChannelDialog` › no Categories field while off, saving makes no category request
-- [ ] 2.20 `AddPlaylistDialog` › same as 2.19
+- [x] 2.20 `AddPlaylistDialog` › same as 2.19
 - [ ] 2.21 `EditChannelDialog` › same as 2.19
 - [ ] 2.22 `EditPlaylistDialog` › same as 2.19
 - [ ] 2.23 `CategoryDetail` › says "Categories are turned off." with a link to Preferences while off

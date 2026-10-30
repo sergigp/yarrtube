@@ -6,12 +6,14 @@ import {
   aCategory,
   aCategoryList,
   aPlaylist,
+  aPreferences,
   mockApi,
   renderWithProviders,
   type Routes,
 } from '@/test/helpers'
 
 const baseRoutes: Routes = {
+  'GET /api/preferences': aPreferences(),
   'GET /api/categories': aCategoryList(),
   'GET /api/playlists': [],
   'GET /api/channels': [],
@@ -253,6 +255,26 @@ describe('AddPlaylistDialog', () => {
       exclude_from_home: false,
       reconcile_interval_minutes: 180,
     })
+  })
+
+  it('offers no categories and saves none while categories are off', async () => {
+    const { fetchMock, onOpenChange } = renderDialog({
+      'GET /api/preferences': aPreferences({ categories_enabled: false }),
+      'GET /api/playlists/preview?playlist=PL1': { id: 'PL1', title: 'My Mix', video_count: 3 },
+      'POST /api/playlists': aPlaylist(),
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Playlist ID or URL'), 'PL1')
+    const submit = screen.getByRole('button', { name: 'Create Playlist' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    expect(screen.queryByRole('group', { name: 'Categories' })).not.toBeInTheDocument()
+    await user.click(submit)
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/categories')),
+    ).toEqual([])
   })
 
   it('creates the playlist with the interval set under advanced options', async () => {
