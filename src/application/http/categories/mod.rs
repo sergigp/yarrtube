@@ -272,13 +272,13 @@ mod tests {
 
     #[tokio::test]
     async fn it_should_create_a_category_with_the_least_used_palette_color() {
-        let mustard_and_coral = vec!["#9f8401", "#c8645b"];
-        let every_color_and_mustard_again = CategoryColor::PALETTE
+        let amber_and_red = vec!["#f59e0b", "#ef4444"];
+        let every_color_and_amber_again = CategoryColor::PALETTE
             .into_iter()
-            .chain(["#9f8401"])
+            .chain(["#f59e0b"])
             .collect::<Vec<_>>();
         let mut colors = Vec::new();
-        for used in [mustard_and_coral, every_color_and_mustard_again] {
+        for used in [amber_and_red, every_color_and_amber_again] {
             let db = TestDatabase::new();
             let repository = Arc::new(SqliteCategoryRepository::new(db.database()));
             used.iter().enumerate().for_each(|(index, hex)| {
@@ -298,7 +298,7 @@ mod tests {
 
         assert_eq!(
             colors,
-            vec![Ok("#bd7123".to_string()), Ok("#bd7123".to_string())]
+            vec![Ok("#f97316".to_string()), Ok("#f97316".to_string())]
         );
     }
 
