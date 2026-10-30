@@ -63,7 +63,8 @@ describe('AppShell', () => {
 
     await user.click(screen.getByRole('link', { name: 'Yarrtube' }))
 
-    expect(await screen.findByRole('heading', { name: 'Latest videos' })).toBeInTheDocument()
+    // Home, its videos still loading.
+    await waitFor(() => expect(document.querySelector('main [aria-busy="true"]')).not.toBeNull())
     expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
       'aria-expanded',
       'false',

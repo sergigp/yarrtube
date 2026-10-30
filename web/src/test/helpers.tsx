@@ -247,7 +247,7 @@ export function aCategory(overrides: Partial<Category> = {}): Category {
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
-    color: '#fff1bf',
+    color: '#9f8401',
     unwatched_count: 0,
     channels: [],
     playlists: [],
@@ -262,7 +262,7 @@ export function aHomeCategorySection(
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
-    color: '#fff1bf',
+    color: '#9f8401',
     videos: [aHomeVideo()],
     ...overrides,
   }
@@ -273,7 +273,7 @@ export function aCreatedCategory(overrides: Partial<CreatedCategory> = {}): Crea
   return {
     id: `category-${uniqueId}`,
     name: `Category ${uniqueId}`,
-    color: '#fff1bf',
+    color: '#9f8401',
     channels: [],
     playlists: [],
     ...overrides,

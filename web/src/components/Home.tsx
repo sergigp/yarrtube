@@ -1,7 +1,11 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useCategoriesShown, usePreferences, useRecentVideos } from '@/api/queries'
+import { useCategories, useCategoriesShown, usePreferences, useRecentVideos } from '@/api/queries'
 import type { HomeVideo } from '@/api/types'
+import type { VideoGridLayout } from '@/lib/videoGridLayout'
+import type { CategoryChip } from './CategoryChips'
 import { VideoGrid } from './VideoGrid'
+import { Busy, VideoGridSkeleton } from './VideoSkeletons'
 
 interface HomeSectionProps {
   title: string
@@ -10,6 +14,9 @@ interface HomeSectionProps {
   name: string
   videos: HomeVideo[] | undefined
   error: Error | null
+  layout: VideoGridLayout
+  /** Category chips for the cards, on the sections mixing categories. */
+  chips?: Map<string, CategoryChip>
   hideWhenEmpty?: boolean
 }
 
@@ -18,7 +25,16 @@ interface HomeSectionProps {
  * the whole section, heading included, renders nothing unless it has videos
  * to show; otherwise it reports loading, errors and emptiness in place.
  */
-function HomeSection({ title, href, name, videos, error, hideWhenEmpty }: HomeSectionProps) {
+function HomeSection({
+  title,
+  href,
+  name,
+  videos,
+  error,
+  layout,
+  chips,
+  hideWhenEmpty,
+}: HomeSectionProps) {
   if (hideWhenEmpty && (error || !videos || videos.length === 0)) {
     return null
   }
@@ -26,7 +42,7 @@ function HomeSection({ title, href, name, videos, error, hideWhenEmpty }: HomeSe
   return (
     <section className="min-w-0">
       <div className="mb-4 flex items-baseline justify-between gap-4">
-        <h2 className="font-heading text-lg font-semibold text-foreground">
+        <h2 className="font-heading text-xl font-bold tracking-tight text-foreground">
           {href ? (
             <Link to={href} className="hover:underline">
               {title}
@@ -46,9 +62,28 @@ function HomeSection({ title, href, name, videos, error, hideWhenEmpty }: HomeSe
           Failed to load {name}: {error.message}
         </p>
       )}
-      {!error && !videos && <p className="text-sm text-muted-foreground">Loading {name}…</p>}
-      {!error && videos && <VideoGrid videos={videos} />}
+      {!error && videos && <VideoGrid videos={videos} chips={chips} layout={layout} />}
     </section>
+  )
+}
+
+/** Stands in for the sections while the home videos load: two shelves over a grid. */
+function HomeSkeleton() {
+  return (
+    <Busy>
+      <div className="flex flex-col gap-10">
+        {[0, 1].map((shelf) => (
+          <div key={shelf} className="flex flex-col gap-4">
+            <div aria-hidden className="h-7 w-48 animate-pulse rounded-md bg-muted" />
+            <VideoGridSkeleton count={6} layout="shelf" announced={false} />
+          </div>
+        ))}
+        <div className="flex flex-col gap-4">
+          <div aria-hidden className="h-7 w-40 animate-pulse rounded-md bg-muted" />
+          <VideoGridSkeleton count={12} layout="feed" announced={false} />
+        </div>
+      </div>
+    </Busy>
   )
 }
 
@@ -83,11 +118,24 @@ function NothingElseShown({
 
 export function Home() {
   const { data: home, error } = useRecentVideos()
+  const { data: categories } = useCategories()
   const { data: preferences } = usePreferences()
-  // Category sections show only while categories do, even when the cached
-  // response is from before they were turned off.
+  // Category sections and chips show only while categories do, even when the
+  // cached response is from before they were turned off.
   const withCategories = useCategoriesShown()
   const categorySections = (withCategories && home?.categories) || []
+  const chips = useMemo(
+    () =>
+      withCategories
+        ? new Map(
+            (categories?.categories ?? []).map((category) => [
+              category.id,
+              { name: category.name, color: category.color },
+            ]),
+          )
+        : undefined,
+    [categories, withCategories],
+  )
   // Shown until the preferences say otherwise, as before they existed.
   const showLatest = preferences?.home_show_latest !== false
   // "Latest videos" stands in for an empty home, so it only hides when
@@ -100,6 +148,10 @@ export function Home() {
       categorySections.some((category) => category.videos.length > 0) ||
       home.quick_watches.length > 0)
 
+  if (!home && !error) {
+    return <HomeSkeleton />
+  }
+
   return (
     <div className="flex min-w-0 flex-col gap-10">
       <HomeSection
@@ -107,6 +159,8 @@ export function Home() {
         name="continue watching videos"
         videos={home?.continue_watching}
         error={error}
+        layout="shelf"
+        chips={chips}
         hideWhenEmpty
       />
       {categorySections.map((category) => (
@@ -117,6 +171,7 @@ export function Home() {
           name={`${category.name} videos`}
           videos={category.videos}
           error={error}
+          layout="shelf"
           hideWhenEmpty
         />
       ))}
@@ -125,6 +180,8 @@ export function Home() {
         name="quick watches"
         videos={home?.quick_watches}
         error={error}
+        layout="shelf"
+        chips={chips}
         hideWhenEmpty
       />
       {showLatest ? (
@@ -133,6 +190,8 @@ export function Home() {
           name="recent videos"
           videos={home?.latest}
           error={error}
+          layout="feed"
+          chips={chips}
           hideWhenEmpty={othersHaveVideos}
         />
       ) : (

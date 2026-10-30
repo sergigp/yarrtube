@@ -36,25 +36,29 @@ export function VideoRowSkeleton() {
   )
 }
 
-/** `count` placeholder cards laid out as `layout`, announced as loading. */
+/**
+ * `count` placeholder cards laid out as `layout`, announced as loading unless
+ * `announced` is false, for a grid inside a region already announced.
+ */
 export function VideoGridSkeleton({
   count,
   layout = 'grid',
+  announced = true,
 }: {
   count: number
   layout?: VideoGridLayout
+  announced?: boolean
 }) {
-  return (
-    <Busy>
-      <ul className={videoGridListClassName(layout)}>
-        {Array.from({ length: count }, (_, index) => (
-          <li key={index} className={videoGridItemClassName(layout, index)}>
-            <VideoCardSkeleton />
-          </li>
-        ))}
-      </ul>
-    </Busy>
+  const grid = (
+    <ul className={videoGridListClassName(layout)}>
+      {Array.from({ length: count }, (_, index) => (
+        <li key={index} className={videoGridItemClassName(layout, index)}>
+          <VideoCardSkeleton />
+        </li>
+      ))}
+    </ul>
   )
+  return announced ? <Busy>{grid}</Busy> : grid
 }
 
 /** `count` placeholder video list rows, announced as loading. */
