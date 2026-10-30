@@ -72,6 +72,43 @@ describe('PreferencesView', () => {
     expect(showCategories).not.toBeChecked()
     expect(screen.getByRole('switch', { name: 'Show latest videos' })).toBeEnabled()
   })
+
+  it('explains a preference on hover', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+    renderWithProviders(<PreferencesView />)
+
+    await userEvent
+      .setup()
+      .hover(await screen.findByRole('button', { name: 'About Enable categories' }))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Use categories across Yarrtube: the sidebar section, category pages, the Categories field when adding or editing a channel or playlist, and category sections on home. Turning it off only hides them: your categories and their videos are kept.',
+    )
+  })
+
+  it('explains a preference on click, as a tap would', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+    renderWithProviders(<PreferencesView />)
+    const user = userEvent.setup({ skipHover: true })
+
+    await user.click(await screen.findByRole('button', { name: 'About Show quick watches' }))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Unwatched videos shorter than 15 minutes.',
+    )
+  })
+
+  it('says how home sections share their videos', async () => {
+    mockApi({ 'GET /api/preferences': aPreferences() })
+
+    renderWithProviders(<PreferencesView />)
+
+    expect(
+      within(await screen.findByRole('group', { name: 'Home' })).getByText(
+        'Sections show in this order, and a video shows in one section only: turning a section off can move its videos to a section below.',
+      ),
+    ).toBeInTheDocument()
+  })
 })
 
 function switchStates(group: HTMLElement): [string, boolean][] {
