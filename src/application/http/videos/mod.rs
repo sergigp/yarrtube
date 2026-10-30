@@ -3669,6 +3669,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_not_repeat_a_continue_watching_video_in_category_sections_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &started_video(
+                "vid1",
+                "Started",
+                120,
+                watched_timestamp() - Duration::days(1),
+            ),
+            0,
+        );
+        let chess = named_category("Chess", &[channel_member("@somechannel")]);
+        category_repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess]);
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(watched_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+        );
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                continue_watching: vec![in_categories(
+                    HomeVideoResponse {
+                        position_seconds: 120,
+                        ..home_video_response("vid1", "Started", channel_source(None))
+                    },
+                    &[&chess]
+                )],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
