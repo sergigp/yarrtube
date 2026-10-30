@@ -168,6 +168,13 @@ The tasks view SHALL open with a page heading "Tasks", in the same heading style
 
 ## MODIFIED Requirements
 
+### Requirement: Preferences View Width
+The preferences view SHALL be aligned to the left edge of the content area, like the other views, at the same maximum width as the tasks view.
+
+#### Scenario: Consistent width
+- **WHEN** a user opens the tasks view and then the preferences view on a wide screen
+- **THEN** both start at the left edge of the content area with the same maximum width
+
 ### Requirement: No Category UI While Categories Are Off
 While `categories_enabled` is off, or the preferences are still loading, the application SHALL NOT show the sidebar Categories section, the Categories field in the add and edit channel and playlist dialogs, home category sections or home card category chips, and the header search SHALL NOT list a Categories group. When the preferences cannot be loaded, the application SHALL behave as with the defaults.
 

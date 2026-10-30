@@ -46,6 +46,7 @@
 - [x] 6.5 `CategoryDetail`: header tinted with `softTint`, color circle replaced by a "Change color" header action, header rendered from the cached categories list while videos load (summary placeholder, skeleton grid); update `CategoryDetail.test.tsx` (including the "Violet" `#9870c5` scenario) and verify it passes
 - [x] 6.6 Update `CategoryColorPicker` for the new swatch names/values and the solid custom slider; update its tests and verify they pass
 - [x] 6.7 `TasksView`: add the "Tasks" heading and left-align the view; update `TasksView.test.tsx` and verify it passes
+  - The shared `VIEW_WIDTH` (Tasks and Preferences) is left-aligned, so Preferences aligns left too ("Preferences View Width" modified).
 
 ## 7. Integration
 

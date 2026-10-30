@@ -108,6 +108,11 @@ A pure `lib/relativeAge.ts` (`formatAge(published, now)` → "3h ago" / "2d ago"
 - The space stays reserved, so the count doesn't shift.
 - The sidebar search and its threshold logic are removed.
 
+### Settings-like views width
+Tasks and Preferences share `VIEW_WIDTH` (`lib/viewWidth.ts`, from the preferences change): a readable `max-w-3xl` column. It is left-aligned (no `mx-auto`), so both views start at the content area's left edge like every other view; the "Preferences View Width" requirement is modified to match.
+
+*Alternative:* centre Preferences only. Rejected: the two settings views would differ, and the shared constant would split.
+
 ### Scrollbars
 The desktop fixed video area keeps its own scroll for the detail pane; that's the existing spec. Instead of restructuring, scrollbars get `scrollbar-width: thin` and a muted `scrollbar-color` globally, in `index.css`.
 
