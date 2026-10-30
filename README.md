@@ -36,7 +36,7 @@ Yarrtube is designed to run on your NAS via Docker alongside the rest of your me
 - Group channels and playlists into categories ("Science", "Kids"…) and watch each one as a single feed, in the webapp and as auto-updating smart playlists in Plex. See [Categories](doc/CATEGORIES.md).
 
 <p align="center">
-  <img src="doc/screenshot_mobile.png" alt="Yarrtube mobile UI screenshot" width="150"/>
+  <img src="doc/screenshot_mobile.jpeg" alt="Yarrtube mobile UI screenshot" width="150"/>
   <img src="doc/screenshot_plex.jpeg" alt="Yarrtube Plex Integration screenshot" width="520"/>
 </p>
 
