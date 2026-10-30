@@ -3,53 +3,47 @@
 All notable changes to yarrtube are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.10.0] - 2026-10-30
 
-### Breaking
+Categories, subtitles and a redesigned web UI.
 
-- `YARRTUBE_RECONCILE_INTERVAL_SECONDS` is removed, and a value set there is
-  not carried over. Every channel and playlist now has its own check
-  interval, 3 hours by default (the env variable defaulted to 1 hour).
-- `PATCH /api/playlists/{id}`: `exclude_from_home` is now optional. A request
-  that changes neither it nor `reconcile_interval_minutes` is rejected as
-  nothing to update.
-- Category colors use a new, stronger palette (Mustard, Orange, Coral, Rose,
-  Violet, Periwinkle, Sky, Teal, Olive, Taupe; e.g. Sky is `#0193bf`). On
-  upgrade, categories with a former pastel palette color get the new color at
-  the same position, and other light custom colors get the stronger color of
-  the same hue. API clients that hard-code the pastel palette will see the new
-  defaults.
+### Highlights
 
-### Added
+- **Categories.** Group channels and playlists by topic ("Science", "Kids")
+  and watch each one as a single feed: its own page you can play as one
+  queue, "More about Science" rows on Home, and colors throughout the UI.
+  See [Categories](doc/CATEGORIES.md).
+- **Smart playlists in Plex.** Each category becomes a Plex playlist of
+  its unwatched episodes, newest first, across all its shows. Kept
+  in sync automatically.
+- **Subtitles.** Every download gets its captions as an `.srt` next to it,
+  picked up by Plex and playable in the web UI player.
+- **A redesigned web UI.** New Home with Continue watching, category rows
+  and Quick watches; global search (⌘K / Ctrl+K); watch state on every
+  thumbnail; foldable sidebar; a Preferences page to show only the
+  sections you want.
 
-- Set how often each channel and playlist is checked for new videos, from
-  1 minute to 24 hours: under "Advanced options" when adding it, or from
-  "Edit settings" afterwards (playlists gain an "Edit settings" dialog).
-  A shorter interval brings the next check forward right away.
-- The web UI header shows the running version (e.g. `v0.9.3`) next to the
-  logo, and `GET /api/version` reports it, so you can tell when an
-  automatically released image has been picked up.
-- Global search in the header, also opened with ⌘K or Ctrl+K: categories,
-  channels, playlists and downloaded videos by title. It replaces the
-  sidebar's search field. `GET /api/videos/search?q=` searches video titles.
-- `GET /api/videos/home` includes each video's `published_at`.
+### Also new
 
-### Changed
+- Set how often each channel and playlist is checked, from 1 minute to 24
+  hours.
+- Move a playlist or channel to a new folder, Plex follows it.
+- Unwatched counts on playlists.
+- The running version shows in the header.
 
-- A web UI refresh:
-  - Video cards are frameless, with the source's name and how long ago the
-    video was published, and category chips on the home view's mixed
-    sections instead of tinted cards.
-  - Home sections sized to the space beside the sidebar: one row each, with
-    "See all" for the rest; swipeable rows and a one-column "Latest videos"
-    on phones.
-  - Placeholders instead of "Loading…" text, and video list rows show the
-    publish date.
-  - Quieter sidebar: plain unwatched counts, row menus shown on hover.
-  - On phones, the header hides while scrolling down and the announcement
-    bar takes one line.
-  - Delete moves into a "More actions" menu in page headers, and the category
-    view gets a tinted header with a "Change color" action.
+### Fixed
+
+- Downloads now get the quality you chose, instead of sometimes falling
+  back to 360p.
+- Marking a video watched while it downloads no longer gets lost.
+
+### Upgrade notes
+
+- `YARRTUBE_RECONCILE_INTERVAL_SECONDS` is gone: each channel and playlist
+  now has its own interval (3 hours by default), editable in the web UI.
+- `:latest` now moves only on stable releases. To get every change as it's
+  merged, use `:edge`. See [Image tags](doc/INSTALLATION.md#image-tags).
+- API: `PATCH /api/playlists/{id}` no longer requires `exclude_from_home`.
 
 ## [0.9.0] - 2026-10-13
 
@@ -82,7 +76,7 @@ Existing libraries need a one-time migration. Read
   ([b0a6358], @jason-s13r)
 - The image builds with podman. ([491c8ff], @jason-s13r)
 
-[Unreleased]: https://github.com/sergigp/yarrtube/compare/v0.9.0...HEAD
+[0.10.0]: https://github.com/sergigp/yarrtube/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/sergigp/yarrtube/compare/v0.8.0...v0.9.0
 [33a1416]: https://github.com/sergigp/yarrtube/commit/33a1416
 [d4b84eb]: https://github.com/sergigp/yarrtube/commit/d4b84eb

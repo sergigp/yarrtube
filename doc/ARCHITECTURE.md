@@ -193,8 +193,15 @@ Several layers, from fast/isolated to slow/real:
   for pure logic in `src/lib/` and hooks, and component tests that render
   through the real `QueryClient`/router with only `fetch` mocked. Assert
   user-visible behavior.
-- **End-to-end tests** (`e2e-tests/`, Playwright) — end-to-end against the
-  real Docker image, hitting the real YouTube API and downloading a real
-  video with `yt-dlp`. No doubles. Covers the full create → download →
-  playback flow; run manually (locally or via the `workflow_dispatch`
-  workflow), not on every PR.
+- **YouTube contract tests** — `#[ignore]`d `youtube_contract_tests`
+  modules next to each YouTube adapter, run against the real `yt-dlp` and
+  Data API. They pin down what the fakes assume, so a YouTube change is
+  told apart from a bug of ours. Run locally only (they need the network
+  and an API key), not in CI.
+- **End-to-end tests** (`e2e-tests/`, Playwright) — the real Docker image
+  driven through real browsers against a fake YouTube and a Plex stub, one
+  daemon per parallel worker. Covers add → download → playback and the
+  rest of the UI flows; runs in CI on every pull request.
+
+`scripts/run-tests.sh` runs every suite; see
+[DEVELOPMENT.md](DEVELOPMENT.md).
