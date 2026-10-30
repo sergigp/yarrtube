@@ -1,6 +1,25 @@
 import { test, expect } from '../helpers/fixtures.js'
 import { openAddChannelDialog } from '../helpers/addDialog.js'
 import { sectionHeading } from '../helpers/sidebar.js'
+import { addChannel, addPlaylist } from '../helpers/seed.js'
+import { CHANNEL, PLAYLIST } from '../helpers/fakeYoutube.js'
+
+/** The home section headed `title`. */
+function homeSection(page, title) {
+  return page.locator('main section', {
+    has: page.getByRole('heading', { name: title, exact: true }),
+  })
+}
+
+/** Flips one preference from the preferences view, then goes home through the logo. */
+async function toggleThenGoHome(page, name) {
+  await page.goto('/preferences')
+  const toggle = page.getByRole('switch', { name })
+  const before = await toggle.getAttribute('aria-checked')
+  await toggle.click()
+  await expect(toggle).not.toHaveAttribute('aria-checked', before)
+  await page.getByRole('link', { name: 'Yarrtube', exact: true }).click()
+}
 
 test('preferences: turning categories off hides them everywhere, and back on shows them again', async ({ page }) => {
   await page.goto('/')
@@ -39,5 +58,76 @@ test('preferences: turning categories off hides them everywhere, and back on sho
     await enableCategories.click()
     await expect(enableCategories).toBeChecked()
     await expect(sectionHeading(page, 'Categories')).toBeVisible()
+  })
+})
+
+test('preferences: each home switch takes its section off home, and its videos move down', async ({ page, request }) => {
+  // The playlist's only video is started, so it is continued; the channel's
+  // two are in "Snails", so they get a category section. Every fixture clip
+  // lasts 61 s, so each unwatched video is also a quick watch.
+  const playlist = await addPlaylist(request, PLAYLIST)
+  const started = playlist.videos[0]
+  const progress = await request.post(`/api/videos/${started.id}/progress`, {
+    data: { position_seconds: 40, duration_seconds: 61, was_watched: false },
+  })
+  expect(progress.ok(), await progress.text()).toBeTruthy()
+  const channel = await addChannel(request, CHANNEL, { videoLimit: 2 })
+  const category = await request.post('/api/categories', { data: { name: 'Snails' } })
+  expect(category.ok(), await category.text()).toBeTruthy()
+  const members = await request.put(`/api/categories/${(await category.json()).id}/members`, {
+    data: { channels: [CHANNEL.handle], playlists: [] },
+  })
+  expect(members.ok(), await members.text()).toBeTruthy()
+  const channelTitles = channel.videos.map((video) => video.title)
+  const continueWatching = homeSection(page, 'Continue watching')
+  const moreAboutSnails = homeSection(page, 'More about Snails')
+  const quickWatches = homeSection(page, 'Quick watches')
+  const latest = homeSection(page, 'Latest videos')
+  const main = page.locator('main')
+
+  await test.step('everything on: continued, then the tinted category section', async () => {
+    await page.goto('/')
+    await expect(continueWatching.getByText(started.title, { exact: true })).toBeVisible()
+    for (const title of channelTitles) {
+      await expect(moreAboutSnails.getByText(title, { exact: true })).toBeVisible()
+    }
+    await expect(moreAboutSnails.getByRole('listitem').first()).toHaveAttribute('style', /background/)
+  })
+
+  await test.step('category colors off: the category cards are untinted', async () => {
+    await toggleThenGoHome(page, 'Show category colors')
+    await expect(moreAboutSnails.getByRole('listitem')).toHaveCount(2)
+    for (const card of await moreAboutSnails.getByRole('listitem').all()) {
+      await expect(card).not.toHaveAttribute('style', /background/)
+    }
+  })
+
+  await test.step('categories off: no category section, its videos are quick watches', async () => {
+    await toggleThenGoHome(page, 'Show categories')
+    await expect(main.getByRole('heading', { name: /^More about/ })).toHaveCount(0)
+    for (const title of channelTitles) {
+      await expect(quickWatches.getByText(title, { exact: true })).toBeVisible()
+    }
+  })
+
+  await test.step('continue watching off: the started video is a quick watch', async () => {
+    await toggleThenGoHome(page, 'Show continue watching')
+    await expect(quickWatches.getByText(started.title, { exact: true })).toBeVisible()
+    await expect(main.getByRole('heading', { name: 'Continue watching' })).toHaveCount(0)
+  })
+
+  await test.step('quick watches off: every video is under latest videos', async () => {
+    await toggleThenGoHome(page, 'Show quick watches')
+    for (const title of [started.title, ...channelTitles]) {
+      await expect(latest.getByText(title, { exact: true })).toBeVisible()
+    }
+    await expect(main.getByRole('heading', { name: 'Quick watches' })).toHaveCount(0)
+  })
+
+  await test.step('latest videos off: nothing left to show', async () => {
+    await toggleThenGoHome(page, 'Show latest videos')
+    await expect(main.getByText('Nothing to show here.')).toBeVisible()
+    await expect(main.getByRole('link', { name: 'Preferences' })).toHaveAttribute('href', '/preferences')
+    await expect(main.getByRole('heading', { name: 'Latest videos' })).toHaveCount(0)
   })
 })
