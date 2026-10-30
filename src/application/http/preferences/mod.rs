@@ -2,6 +2,7 @@ pub mod dto;
 
 use super::blocking::run_blocking;
 use super::error::ApiError;
+use super::validation::required;
 use crate::domain::preferences::Preferences;
 use crate::domain::services::{
     PreferencesSearcher, PreferencesSearcherApi, PreferencesUpdater, PreferencesUpdaterApi,
@@ -9,6 +10,18 @@ use crate::domain::services::{
 use axum::Json;
 use axum::extract::State;
 use dto::{PreferencesResponse, UpdatePreferencesRequest};
+
+const MISSING_CATEGORIES_ENABLED: &str = "Whether categories are enabled must be stated (missing)";
+const MISSING_HOME_SHOW_CONTINUE_WATCHING: &str =
+    "Whether to show continue watching on home must be stated (missing)";
+const MISSING_HOME_SHOW_CATEGORIES: &str =
+    "Whether to show categories on home must be stated (missing)";
+const MISSING_HOME_SHOW_CATEGORY_COLORS: &str =
+    "Whether to show category colors on home must be stated (missing)";
+const MISSING_HOME_SHOW_QUICK_WATCHES: &str =
+    "Whether to show quick watches on home must be stated (missing)";
+const MISSING_HOME_SHOW_LATEST: &str =
+    "Whether to show latest videos on home must be stated (missing)";
 
 pub async fn get_preferences(
     State(preferences_searcher): State<PreferencesSearcher>,
@@ -23,26 +36,22 @@ pub async fn update_preferences(
     State(preferences_updater): State<PreferencesUpdater>,
     Json(request): Json<UpdatePreferencesRequest>,
 ) -> Result<Json<PreferencesResponse>, ApiError> {
-    let defaults = Preferences::default();
     let preferences = Preferences {
-        categories_enabled: request
-            .categories_enabled
-            .unwrap_or(defaults.categories_enabled),
-        home_show_continue_watching: request
-            .home_show_continue_watching
-            .unwrap_or(defaults.home_show_continue_watching),
-        home_show_categories: request
-            .home_show_categories
-            .unwrap_or(defaults.home_show_categories),
-        home_show_category_colors: request
-            .home_show_category_colors
-            .unwrap_or(defaults.home_show_category_colors),
-        home_show_quick_watches: request
-            .home_show_quick_watches
-            .unwrap_or(defaults.home_show_quick_watches),
-        home_show_latest: request
-            .home_show_latest
-            .unwrap_or(defaults.home_show_latest),
+        categories_enabled: required(request.categories_enabled, MISSING_CATEGORIES_ENABLED)?,
+        home_show_continue_watching: required(
+            request.home_show_continue_watching,
+            MISSING_HOME_SHOW_CONTINUE_WATCHING,
+        )?,
+        home_show_categories: required(request.home_show_categories, MISSING_HOME_SHOW_CATEGORIES)?,
+        home_show_category_colors: required(
+            request.home_show_category_colors,
+            MISSING_HOME_SHOW_CATEGORY_COLORS,
+        )?,
+        home_show_quick_watches: required(
+            request.home_show_quick_watches,
+            MISSING_HOME_SHOW_QUICK_WATCHES,
+        )?,
+        home_show_latest: required(request.home_show_latest, MISSING_HOME_SHOW_LATEST)?,
     };
     let saved = run_blocking(move || preferences_updater.save(preferences))
         .await?
@@ -56,7 +65,8 @@ mod tests {
     use crate::infrastructure::repositories::sqlite_preferences_repository::{
         PreferencesRepository, SqlitePreferencesRepository,
     };
-    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::sqlite_connection::{Database, TestDatabase};
+    use rusqlite::Connection;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -132,6 +142,23 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn it_should_fail_to_save_if_a_preference_missing() {
+        let request = UpdatePreferencesRequest {
+            home_show_latest: None,
+            ..all_on_request()
+        };
+
+        let response = update(any_preferences_updater(), request).await;
+
+        assert_eq!(
+            response,
+            Err(ApiError::bad_request(
+                "Whether to show latest videos on home must be stated (missing)"
+            ))
+        );
+    }
+
     async fn get(
         preferences_searcher: PreferencesSearcher,
     ) -> Result<PreferencesResponse, ApiError> {
@@ -147,6 +174,15 @@ mod tests {
         update_preferences(State(preferences_updater), Json(request))
             .await
             .map(|Json(response)| response)
+    }
+
+    /// An updater for tests whose request is rejected before reaching it: its
+    /// repository sits on an unmigrated in-memory database, so a request that
+    /// wrongly got through would fail loudly instead of passing.
+    fn any_preferences_updater() -> PreferencesUpdater {
+        PreferencesUpdater::new(Arc::new(SqlitePreferencesRepository::new(
+            Database::single(Connection::open_in_memory().unwrap()),
+        )))
     }
 
     fn all_on_request() -> UpdatePreferencesRequest {

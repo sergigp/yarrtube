@@ -17,9 +17,8 @@ Storage: one row (`id = 1`) holding the preferences as a JSON document. Keys mis
 - `src/infrastructure/repositories/sqlite_preferences_repository.rs` (new): `PreferencesRepository` trait + SQLite impl; private serde `StoredPreferences` with optional fields.
 - `src/infrastructure/repositories/mod.rs`: registers it.
 - `src/infrastructure/infrastructure_container.rs`, `src/serve.rs`: build the repository and services, inject into `VideoSearcher` and `ApiServices`.
-- `src/application/http/preferences/mod.rs` (new): `get_preferences`, `update_preferences` + acceptance tests.
+- `src/application/http/preferences/mod.rs` (new): `get_preferences`, `update_preferences`, one `MISSING_*` message per preference (local, like `categories`) + acceptance tests.
 - `src/application/http/preferences/dto.rs` (new): `PreferencesResponse`, `UpdatePreferencesRequest`.
-- `src/application/http/validation.rs`: one `MISSING_*` message per preference.
 - `src/application/http/mod.rs`: `ApiServices` fields, `/preferences` route (GET, PUT).
 - `src/application/http/videos/mod.rs`: existing `VideoSearcher::new` calls get the repository; new home acceptance tests.
 - `web/src/api/types.ts`, `web/src/api/client.ts`, `web/src/api/queries.ts`: `Preferences`, `fetchPreferences`/`savePreferences`, `usePreferences`/`useSavePreferences`.
