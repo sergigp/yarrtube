@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useCategories, usePreferences, useRecentVideos } from '@/api/queries'
-import { homeTintShown } from '@/lib/preferences'
+import { useCategories, useCategoriesShown, usePreferences, useRecentVideos } from '@/api/queries'
 import type { HomeVideo } from '@/api/types'
 import { VideoGrid } from './VideoGrid'
 
@@ -96,8 +95,9 @@ function NothingElseShown({
 export function Home() {
   const { data: home, error } = useRecentVideos()
   const { data: categories } = useCategories()
-  const { data: preferences, isError: preferencesFailed } = usePreferences()
-  const tinted = homeTintShown(preferences, preferencesFailed)
+  const { data: preferences } = usePreferences()
+  // Category colors tint home cards only while categories show.
+  const tinted = useCategoriesShown()
   const categoryColors = useMemo(
     () =>
       tinted

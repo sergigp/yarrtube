@@ -452,10 +452,8 @@ describe('Home', () => {
     expect((await card('None')).style.background).toBe('')
   })
 
-  it.each([
-    ['category colors are off', aPreferences({ home_show_category_colors: false })],
-    ['categories are off', aPreferences({ categories_enabled: false })],
-  ])('leaves cards untinted and unframed when %s', async (_, preferences) => {
+  it('leaves cards untinted and unframed when categories are off', async () => {
+    const preferences = aPreferences({ categories_enabled: false })
     mockHomeApi({
       'GET /api/videos/home': {
         continue_watching: [],

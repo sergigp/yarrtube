@@ -64,7 +64,6 @@ struct StoredPreferences {
     categories_enabled: Option<bool>,
     home_show_continue_watching: Option<bool>,
     home_show_categories: Option<bool>,
-    home_show_category_colors: Option<bool>,
     home_show_quick_watches: Option<bool>,
     home_show_latest: Option<bool>,
 }
@@ -75,7 +74,6 @@ impl From<&Preferences> for StoredPreferences {
             categories_enabled: Some(preferences.categories_enabled),
             home_show_continue_watching: Some(preferences.home_show_continue_watching),
             home_show_categories: Some(preferences.home_show_categories),
-            home_show_category_colors: Some(preferences.home_show_category_colors),
             home_show_quick_watches: Some(preferences.home_show_quick_watches),
             home_show_latest: Some(preferences.home_show_latest),
         }
@@ -95,9 +93,6 @@ impl From<StoredPreferences> for Preferences {
             home_show_categories: stored
                 .home_show_categories
                 .unwrap_or(defaults.home_show_categories),
-            home_show_category_colors: stored
-                .home_show_category_colors
-                .unwrap_or(defaults.home_show_category_colors),
             home_show_quick_watches: stored
                 .home_show_quick_watches
                 .unwrap_or(defaults.home_show_quick_watches),
@@ -127,7 +122,6 @@ mod tests {
             categories_enabled: false,
             home_show_continue_watching: false,
             home_show_categories: true,
-            home_show_category_colors: false,
             home_show_quick_watches: true,
             home_show_latest: false,
         };

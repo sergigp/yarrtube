@@ -295,7 +295,6 @@ export function aPreferences(overrides: Partial<Preferences> = {}): Preferences 
     categories_enabled: true,
     home_show_continue_watching: true,
     home_show_categories: true,
-    home_show_category_colors: true,
     home_show_quick_watches: true,
     home_show_latest: true,
     ...overrides,

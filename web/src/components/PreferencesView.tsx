@@ -23,7 +23,6 @@ const GROUPS: PreferenceGroup[] = [
     switches: [
       { key: 'home_show_continue_watching', label: 'Show continue watching' },
       { key: 'home_show_categories', label: 'Show categories', needsCategories: true },
-      { key: 'home_show_category_colors', label: 'Show category colors', needsCategories: true },
       { key: 'home_show_quick_watches', label: 'Show quick watches' },
       { key: 'home_show_latest', label: 'Show latest videos' },
     ],

@@ -16,8 +16,6 @@ const MISSING_HOME_SHOW_CONTINUE_WATCHING: &str =
     "Whether to show continue watching on home must be stated (missing)";
 const MISSING_HOME_SHOW_CATEGORIES: &str =
     "Whether to show categories on home must be stated (missing)";
-const MISSING_HOME_SHOW_CATEGORY_COLORS: &str =
-    "Whether to show category colors on home must be stated (missing)";
 const MISSING_HOME_SHOW_QUICK_WATCHES: &str =
     "Whether to show quick watches on home must be stated (missing)";
 const MISSING_HOME_SHOW_LATEST: &str =
@@ -43,10 +41,6 @@ pub async fn update_preferences(
             MISSING_HOME_SHOW_CONTINUE_WATCHING,
         )?,
         home_show_categories: required(request.home_show_categories, MISSING_HOME_SHOW_CATEGORIES)?,
-        home_show_category_colors: required(
-            request.home_show_category_colors,
-            MISSING_HOME_SHOW_CATEGORY_COLORS,
-        )?,
         home_show_quick_watches: required(
             request.home_show_quick_watches,
             MISSING_HOME_SHOW_QUICK_WATCHES,
@@ -213,7 +207,6 @@ mod tests {
             categories_enabled: Some(true),
             home_show_continue_watching: Some(true),
             home_show_categories: Some(true),
-            home_show_category_colors: Some(true),
             home_show_quick_watches: Some(true),
             home_show_latest: Some(true),
         }
@@ -224,7 +217,6 @@ mod tests {
             categories_enabled: true,
             home_show_continue_watching: true,
             home_show_categories: true,
-            home_show_category_colors: true,
             home_show_quick_watches: true,
             home_show_latest: true,
         }

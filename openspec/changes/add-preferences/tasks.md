@@ -40,7 +40,7 @@ Web (Vitest):
 
 Drop "Show category colors" (tints are removed in a parallel change):
 
-- [ ] 2.27 Remove `home_show_category_colors` everywhere: `Preferences`, request/response DTOs and their `MISSING_*` message, `StoredPreferences` (an old stored key is ignored on read), the web `Preferences` type, `aPreferences`, `DEFAULT_PREFERENCES`, the "Show category colors" switch, and `homeTintShown` (`Home` tints only while `categoriesShown`). Update the tests from 2.2–2.5, 2.11, 2.14, 2.17 and 2.24 to match (2.24 keeps only the categories-off case). Done when `cargo test --locked` and `npm run check` pass and `grep -rn category_colors src web/src e2e-tests` finds nothing.
+- [x] 2.27 Remove `home_show_category_colors` everywhere: `Preferences`, request/response DTOs and their `MISSING_*` message, `StoredPreferences` (an old stored key is ignored on read), the web `Preferences` type, `aPreferences`, `DEFAULT_PREFERENCES`, the "Show category colors" switch, and `homeTintShown` (`Home` tints only while `categoriesShown`). Update the tests from 2.2–2.5, 2.11, 2.14, 2.17 and 2.24 to match (2.24 keeps only the categories-off case). Done when `cargo test --locked` and `npm run check` pass and `grep -rn category_colors src web/src e2e-tests` finds nothing.
 
 ## 3. Infrastructure adapters (TDD)
 

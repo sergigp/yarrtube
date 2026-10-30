@@ -235,7 +235,6 @@ export interface Preferences {
   categories_enabled: boolean
   home_show_continue_watching: boolean
   home_show_categories: boolean
-  home_show_category_colors: boolean
   home_show_quick_watches: boolean
   home_show_latest: boolean
 }
