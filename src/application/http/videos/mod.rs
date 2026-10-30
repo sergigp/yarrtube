@@ -4740,6 +4740,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_leave_out_category_sections_if_home_categories_off() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_channel_video(
+            &video_repository,
+            &channel_video_repository,
+            "@somechannel",
+            &video_lasting("vid1", "Short", Some(600), 100),
+            0,
+        );
+        let chess = named_category("Chess", &[channel_member("@somechannel")]);
+        SqliteCategoryRepository::new(db.database())
+            .insert(&chess)
+            .unwrap();
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess]);
+        save_preferences(
+            &db,
+            Preferences {
+                home_show_categories: false,
+                ..Preferences::default()
+            },
+        );
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                quick_watches: vec![in_categories(
+                    HomeVideoResponse {
+                        duration_seconds: Some(600),
+                        ..home_video_response("vid1", "Short", channel_source(None))
+                    },
+                    &[&chess]
+                )],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_of_a_playlist_excluded_from_home_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));

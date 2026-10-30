@@ -26,6 +26,6 @@ impl Default for Preferences {
 impl Preferences {
     /// Category sections on home need categories on as well.
     pub fn shows_home_categories(&self) -> bool {
-        self.categories_enabled
+        self.categories_enabled && self.home_show_categories
     }
 }
