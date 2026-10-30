@@ -11,7 +11,7 @@ describe('formatAge', () => {
     vi.useRealTimers()
   })
 
-  it('reads as the largest whole unit: hours, days, weeks, months then years', () => {
+  it('reads as the largest whole unit: hours, days, weeks (under 2 months), months then years', () => {
     expect(
       [
         '2026-10-30T11:00:00Z',
@@ -20,7 +20,9 @@ describe('formatAge', () => {
         '2026-10-23T12:00:01Z',
         '2026-10-23T12:00:00Z',
         '2026-10-01T12:00:00Z',
-        '2026-09-30T12:00:00Z',
+        '2026-09-25T12:00:00Z',
+        '2026-09-01T12:00:01Z',
+        '2026-08-31T12:00:00Z',
         '2025-10-31T12:00:00Z',
         '2025-10-30T12:00:00Z',
         '2023-06-01T12:00:00Z',
@@ -32,7 +34,9 @@ describe('formatAge', () => {
       '6d ago',
       '1w ago',
       '4w ago',
-      '1mo ago',
+      '5w ago',
+      '8w ago',
+      '2mo ago',
       '12mo ago',
       '1y ago',
       '3y ago',

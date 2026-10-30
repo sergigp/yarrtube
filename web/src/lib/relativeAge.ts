@@ -1,13 +1,18 @@
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
 
-/** Largest unit first: a year is 365 days and a month 30. */
-const AGE_UNITS: [string, number][] = [
-  ['y', 365 * DAY_MS],
-  ['mo', 30 * DAY_MS],
-  ['w', 7 * DAY_MS],
-  ['d', DAY_MS],
-  ['h', HOUR_MS],
+const MONTH_MS = 30 * DAY_MS
+
+/**
+ * Largest unit first, each with the age it starts at and its length: a year
+ * is 365 days and a month 30. Months start at 2, so "5w ago" reads as weeks.
+ */
+const AGE_UNITS: [string, number, number][] = [
+  ['y', 365 * DAY_MS, 365 * DAY_MS],
+  ['mo', 2 * MONTH_MS, MONTH_MS],
+  ['w', 7 * DAY_MS, 7 * DAY_MS],
+  ['d', DAY_MS, DAY_MS],
+  ['h', HOUR_MS, HOUR_MS],
 ]
 
 /**
@@ -21,6 +26,6 @@ export function formatAge(published: string | null): string | null {
     return null
   }
   const elapsed = Date.now() - time
-  const unit = AGE_UNITS.find(([, unitMs]) => elapsed >= unitMs)
-  return unit ? `${Math.floor(elapsed / unit[1])}${unit[0]} ago` : 'just now'
+  const unit = AGE_UNITS.find(([, startsAtMs]) => elapsed >= startsAtMs)
+  return unit ? `${Math.floor(elapsed / unit[2])}${unit[0]} ago` : 'just now'
 }
