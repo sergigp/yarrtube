@@ -107,14 +107,15 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
                   >
                     {video.title}
                   </Link>
-                  <p data-slot="card-meta" className="truncate text-xs text-muted-foreground">
+                  {/* The source's name truncates first, so the age always shows whole. */}
+                  <p data-slot="card-meta" className="flex min-w-0 text-xs text-muted-foreground">
                     <Link
                       to={sourcePath}
-                      className="relative z-10 no-underline transition-colors hover:text-foreground"
+                      className="relative z-10 truncate no-underline transition-colors hover:text-foreground"
                     >
                       {video.source.name}
                     </Link>
-                    {age && ` · ${age}`}
+                    {age && <span className="shrink-0 whitespace-pre">{` · ${age}`}</span>}
                   </p>
                   {chips && <CategoryChips categoryIds={video.category_ids} chips={chips} />}
                 </div>

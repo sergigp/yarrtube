@@ -227,4 +227,24 @@ describe('VideoGrid', () => {
       expect(control).toHaveClass('relative', 'z-10')
     }
   })
+
+  it("truncates a long source name before the video's age", () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-30T12:00:00Z'))
+    mockApi({})
+    renderWithProviders(
+      <VideoGrid
+        videos={[
+          aHomeVideo({
+            title: 'Rust in 100 seconds',
+            source: BETTATECH,
+            published_at: '2026-10-28T10:00:00Z',
+          }),
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('BettaTech', { selector: 'p a' })).toHaveClass('truncate')
+    expect(screen.getByText('· 2d ago', { exact: false })).toHaveClass('shrink-0')
+  })
 })

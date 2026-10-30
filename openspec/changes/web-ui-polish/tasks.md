@@ -17,14 +17,14 @@
 - [x] 3.2 Rework `lib/categoryColors.ts`: new `PALETTE` (Mustard…Taupe), `softTint`, `inkShade`, `solidFromHue`; remove `cardBackground`/`CROWDED_CARD`; update `categoryColors.test.ts` and verify it passes
 - [x] 3.3 Add `lib/relativeAge.ts` (`formatAge`) with fake-timer unit tests for h/d/w/mo/y boundaries and verify they pass
 - [x] 3.4 Add `components/ui/skeleton.tsx` and `VideoCardSkeleton`, `VideoGridSkeleton`, `VideoRowSkeleton` (with `aria-busy` + visually hidden status text) and verify a component test finds the loading status by role
-- [ ] 3.5 Add thin, muted scrollbar styles in `index.css` and reserve the header logo's size (explicit `width`/`height`); verify visually with `scripts/run-spa-against-remote.sh` (against the NAS) that the header doesn't shift on load
+- [x] 3.5 Add thin, muted scrollbar styles in `index.css` and reserve the header logo's size (explicit `width`/`height`); verify visually with `scripts/run-spa-against-remote.sh` (against the NAS) that the header doesn't shift on load
 
 ## 4. Web: video cards and home
 
 - [x] 4.1 Make `VideoGrid` cards frameless with the hover surface and thumbnail zoom, remove tint and frame, and verify the updated tests assert no card background or border classes
 - [x] 4.2 Add the meta line (source name · age) and the playlist placeholder icon to cards; verify tests for the channel, playlist and unknown-date scenarios
 - [x] 4.3 Add category chips (max 2 + "+N", soft tint background, ink text), shown only when the caller passes chips; verify tests for the one, many, none and category-section scenarios
-- [ ] 4.4 Add `layout: 'grid' | 'shelf' | 'feed'` with container-query columns, single-row shelves (no partial row), the mobile snap-scrolling shelf and the mobile one-column Latest feed; make the main content wrapper an `@container`; verify component tests for the layout classes, and check visually at 390px, 1024px and 1440px with `scripts/run-spa-against-remote.sh`
+- [x] 4.4 Add `layout: 'grid' | 'shelf' | 'feed'` with container-query columns, single-row shelves (no partial row), the mobile snap-scrolling shelf and the mobile one-column Latest feed; make the main content wrapper an `@container`; verify component tests for the layout classes, and check visually at 390px, 1024px and 1440px with `scripts/run-spa-against-remote.sh`
 - [x] 4.5 Update `Home`: chips on Continue watching, Quick watches and Latest only; shelf layout for those and the category sections; skeleton sections while loading (no "Latest videos" flash); larger section headings; update `Home.test.tsx` for the loading, error and chip scenarios and verify it passes
 - [x] 4.6 Make video menu controls ≥44px hit area on touch (`pointer: coarse`) and verify with a test on the class/variant
 - [x] 4.7 Make the whole card open the video (title link stretched over the card, thumbnail no longer a separate link) with the avatar, playlist icon (now a link to its playlist), source name and menu above it; verify component tests for the structure and an e2e that clicks the card's empty space and its playlist icon
@@ -39,8 +39,8 @@
 
 ## 6. Web: header, announcement, detail views, category and tasks
 
-- [ ] 6.1 Add the mobile hide-on-scroll header (56px, `useScrollDirection`, disabled at top, with the sidebar open or a pinned player; `--header-offset` for the pinned player) and verify with a hook unit test plus a manual check at 390px with `scripts/run-spa-against-remote.sh`
-- [ ] 6.2 Compact the announcement bar to one line below `sm` and verify `AnnouncementBar.test.tsx` and a visual check with `scripts/run-spa-against-remote.sh`
+- [x] 6.1 Add the mobile hide-on-scroll header (56px, `useScrollDirection`, disabled at top, with the sidebar open or a pinned player; `--header-offset` for the pinned player) and verify with a hook unit test plus a manual check at 390px with `scripts/run-spa-against-remote.sh`
+- [x] 6.2 Compact the announcement bar to one line below `sm` and verify `AnnouncementBar.test.tsx` and a visual check with `scripts/run-spa-against-remote.sh`
 - [x] 6.3 Move desktop delete into a "More actions for <name>" "⋮" menu in `DetailHeader`; update `DetailHeader.test.tsx` for the desktop scenario and verify it passes
 - [x] 6.4 Show the publish age on video list rows (`VideoListPane` and the category playback list) and the skeleton rows while loading; verify tests for the row date scenarios and the loading status
 - [x] 6.5 `CategoryDetail`: header tinted with `softTint`, color circle replaced by a "Change color" header action, header rendered from the cached categories list while videos load (summary placeholder, skeleton grid); update `CategoryDetail.test.tsx` (including the "Violet" `#9870c5` scenario) and verify it passes
@@ -52,5 +52,6 @@
 - [x] 7.1 Update e2e tests that relied on "Loading…" text, the sidebar search field or the desktop delete button; add an e2e for the header search finding a video; verify the e2e suite passes
 - [x] 7.2 Add a `CHANGELOG.md` entry (new category palette, global search, UI refresh) and verify it renders
 - [x] 7.3 Run `scripts/run-tests.sh` with no flags and verify every suite (web, rust, contract, e2e) passes
-- [ ] 7.4 Run `scripts/run-spa-against-remote.sh` against the NAS and check home, a channel, a category, tasks and the search dialog's name groups at 390px and 1440px against the specs (card dates and video results stay empty until the NAS runs the new daemon); record any visual tweaks made
+- [x] 7.4 Run `scripts/run-spa-against-remote.sh` against the NAS and check home, a channel, a category, tasks and the search dialog's name groups at 390px and 1440px against the specs (card dates and video results stay empty until the NAS runs the new daemon); record any visual tweaks made
+  - Visual tweak made: the card meta line truncated its end, cutting the age off on narrow cards ("ChessCoach Andras · 5d a…"); the source's name now truncates first and the age always shows whole.
 - [x] 7.5 Run `scripts/run-local.sh` and check the daemon-backed features (migrated category colours, card and row publish dates, video results in search) and verify they render as specified
