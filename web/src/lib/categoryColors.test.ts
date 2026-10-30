@@ -20,38 +20,38 @@ function contrast(a: string, b: string): number {
 describe('categoryColors', () => {
   it('names the solid palette in the order defaults are handed out', () => {
     expect(PALETTE).toEqual([
-      { name: 'Mustard', hex: '#9f8401' },
-      { name: 'Orange', hex: '#bd7123' },
-      { name: 'Coral', hex: '#c8645b' },
-      { name: 'Rose', hex: '#bd6396' },
-      { name: 'Violet', hex: '#9870c5' },
-      { name: 'Periwinkle', hex: '#6a80d4' },
-      { name: 'Sky', hex: '#0193bf' },
-      { name: 'Teal', hex: '#019b8d' },
-      { name: 'Olive', hex: '#79922c' },
-      { name: 'Taupe', hex: '#978364' },
+      { name: 'Amber', hex: '#f59e0b' },
+      { name: 'Orange', hex: '#f97316' },
+      { name: 'Red', hex: '#ef4444' },
+      { name: 'Pink', hex: '#ec4899' },
+      { name: 'Violet', hex: '#8b5cf6' },
+      { name: 'Blue', hex: '#3b82f6' },
+      { name: 'Sky', hex: '#0ea5e9' },
+      { name: 'Teal', hex: '#14b8a6' },
+      { name: 'Green', hex: '#22c55e' },
+      { name: 'Slate', hex: '#64748b' },
     ])
   })
 
   it('defaults to the least used palette color, the earliest on a tie', () => {
-    const everyColorAndMustardAgain = [...PALETTE.map((color) => color.hex), '#9f8401']
+    const everyColorAndAmberAgain = [...PALETTE.map((color) => color.hex), '#f59e0b']
 
     expect([
       defaultColor([]),
-      defaultColor(['#9f8401', '#c8645b']),
-      defaultColor(everyColorAndMustardAgain),
+      defaultColor(['#f59e0b', '#ef4444']),
+      defaultColor(everyColorAndAmberAgain),
       defaultColor(['#f0e4d0']),
-    ]).toEqual(['#9f8401', '#bd7123', '#bd7123', '#9f8401'])
+    ]).toEqual(['#f59e0b', '#f97316', '#f97316', '#f59e0b'])
   })
 
-  it('makes the solid color of every hue, whose hue reads back within 3 degrees', () => {
+  it('makes the custom color of every hue, whose hue reads back within 3 degrees', () => {
     const hues = Array.from({ length: 24 }, (_, index) => index * 15)
 
     const solids = hues.map(solidFromHue)
 
     expect(solids.filter((hex) => !/^#[0-9a-f]{6}$/.test(hex))).toEqual([])
     expect(hues.filter((hue, index) => hueDistance(hueOf(solids[index]), hue) > 3)).toEqual([])
-    expect(solidFromHue(hueOf('#d3ecf8'))).toBe('#0193bf')
+    expect(solidFromHue(hueOf('#0ea5e9'))).toBe('#039ada')
   })
 
   it("derives a soft tint of a color's hue, light enough for a background", () => {
