@@ -87,9 +87,16 @@ export interface HomeVideo {
   duration_seconds: number | null
   watched: boolean
   position_seconds: number
+  /** When YouTube published the video (RFC 3339), `null` when unknown. */
+  published_at: string | null
   source: HomeVideoSource
   /** Categories having the YouTube video, in category-name order. */
   category_ids: string[]
+}
+
+/** Response of `GET /api/videos/search`. */
+export interface VideoSearchResults {
+  videos: HomeVideo[]
 }
 
 /** An entry of `GET /api/categories/:id/videos`: a source's video, with where it's listed from. */

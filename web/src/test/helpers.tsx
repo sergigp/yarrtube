@@ -176,6 +176,7 @@ export function aHomeVideo(overrides: Partial<HomeVideo> = {}): HomeVideo {
     duration_seconds: 120,
     watched: false,
     position_seconds: 0,
+    published_at: null,
     source: {
       kind: 'playlist',
       id: `playlist-${uniqueId}`,
