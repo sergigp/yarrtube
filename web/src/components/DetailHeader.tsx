@@ -65,12 +65,12 @@ async function alertOnFailure(action: () => Promise<void>, failure: string): Pro
 }
 
 /** A square, icon-only button naming its action in a tooltip and its accessible name. */
-function IconAction({ action, destructive }: { action: HeaderAction; destructive?: boolean }) {
+function IconAction({ action }: { action: HeaderAction }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
-          variant={destructive ? 'destructive' : 'outline'}
+          variant="outline"
           size="icon"
           aria-label={action.label}
           disabled={action.disabled}
@@ -81,6 +81,61 @@ function IconAction({ action, destructive }: { action: HeaderAction; destructive
       </TooltipTrigger>
       <TooltipContent>{action.label}</TooltipContent>
     </Tooltip>
+  )
+}
+
+/**
+ * The "⋮" menu: on desktop it holds only delete, after the icon buttons; on
+ * mobile every action, with delete set apart. Non-modal so opening the delete
+ * confirmation from it doesn't leave the page with pointer events disabled.
+ * Labelled apart from the sidebar row's "Actions for <name>", which is on
+ * screen at the same time.
+ */
+function MoreActionsMenu({
+  name,
+  actions,
+  onDelete,
+  desktop = false,
+}: {
+  name: string
+  actions: HeaderAction[]
+  onDelete: () => void
+  desktop?: boolean
+}) {
+  return (
+    <DropdownMenu modal={false}>
+      {desktop ? (
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="icon" aria-label={`More actions for ${name}`}>
+            <EllipsisVertical />
+          </Button>
+        </DropdownMenuTrigger>
+      ) : (
+        <DropdownMenuTrigger
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
+          aria-label={`More actions for ${name}`}
+        >
+          <EllipsisVertical className="size-4" />
+        </DropdownMenuTrigger>
+      )}
+      <DropdownMenuContent align="end" className="w-auto min-w-44">
+        {actions.map((action) => (
+          <DropdownMenuItem
+            key={action.label}
+            disabled={action.disabled}
+            onSelect={action.onSelect}
+          >
+            {action.icon}
+            {action.label}
+          </DropdownMenuItem>
+        ))}
+        {actions.length > 0 && <DropdownMenuSeparator />}
+        <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+          <Trash2 />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -119,8 +174,8 @@ interface DetailHeaderProps {
  * Title block at the top of a channel/playlist/category page: optional
  * avatar, the name, a video/unwatched summary and the page-level actions
  * (sync, mark all watched, settings, delete behind a confirmation). Desktop
- * lays every action out as an icon button named in its tooltip; mobile keeps
- * them all behind one "⋮".
+ * lays every action but delete out as an icon button named in its tooltip,
+ * then a "⋮" offering delete; mobile keeps them all behind one "⋮".
  */
 export function DetailHeader({
   name,
@@ -239,41 +294,11 @@ export function DetailHeader({
             {actions.map((action) => (
               <IconAction key={action.label} action={action} />
             ))}
-            <IconAction
-              action={{ label: 'Delete', icon: <Trash2 />, onSelect: requestDelete }}
-              destructive
-            />
+            <MoreActionsMenu name={name} actions={[]} onDelete={requestDelete} desktop />
           </div>
         </TooltipProvider>
       ) : (
-        // Non-modal so opening the delete confirmation from it doesn't leave
-        // the page with pointer events disabled. Labelled apart from the
-        // sidebar row's "Actions for <name>", which is on screen at the same time.
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[state=open]:bg-secondary data-[state=open]:text-foreground"
-            aria-label={`More actions for ${name}`}
-          >
-            <EllipsisVertical className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-auto min-w-44">
-            {actions.map((action) => (
-              <DropdownMenuItem
-                key={action.label}
-                disabled={action.disabled}
-                onSelect={action.onSelect}
-              >
-                {action.icon}
-                {action.label}
-              </DropdownMenuItem>
-            ))}
-            {actions.length > 0 && <DropdownMenuSeparator />}
-            <DropdownMenuItem variant="destructive" onSelect={requestDelete}>
-              <Trash2 />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <MoreActionsMenu name={name} actions={actions} onDelete={requestDelete} />
       )}
 
       <ConfirmDialog
