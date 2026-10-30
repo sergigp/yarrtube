@@ -100,9 +100,8 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    date, the sync runs `VideoReconciler` inline for every stored video of
    the channel, including the ones it just added, holding each video's lock
    so it never overlaps a `SyncVideo` task of the same video. Per video it
-   assigns the channel's categories (see
-   [categories and Plex labels](#example-categories-and-plex-labels)),
-   resets a `DOWNLOADED` video whose file is missing or not mp4, recovers an `ERRORED` video after its 24h
+   assigns the channel's categories, resets a `DOWNLOADED` video whose file
+   is missing or not mp4, recovers an `ERRORED` video after its 24h
    cooldown, regenerates missing metadata (relocating a video still in the
    previous layout), warns about a stranded video, and schedules every step
    still needed (`FetchThumbnail`, `DownloadVideo`, `FetchSubtitles`, each
@@ -148,60 +147,6 @@ sequenceDiagram
     Events->>Plex: scan show folder again (if configured)
 
     Note over Reconciler,Executor: One interval later, ReconcileChannel<br/>re-syncs and schedules the next run.
-```
-
-## Example: categories and Plex labels
-
-Categories follow the same split: the request only updates SQLite, and the
-slow, fallible part (Plex) runs later as a task.
-
-1. `PUT /api/categories/{id}/members` (or a rename or delete) calls
-   `VideoCategoryAssigner`, which recomputes the categories of every
-   affected stored video and publishes one `VideoCategoriesChanged` event
-   naming them. Video syncs (step 6 above) do the same for a single video.
-2. `SyncPlexLabelsOnVideoCategoriesChanged` marks those videos' rows in
-   `episode_labels` dirty and requests a `SyncPlexLabels` task ~10s later.
-   `SyncPlexLabelsOnVideoDownloaded` does the same ~60s after a download,
-   giving Plex time to import the episode. Both subscribers are registered
-   only when the Plex integration is configured.
-3. `SyncPlexLabelsTask` runs `PlexLabelSyncer` in its own `Plex` lane, so a
-   slow Plex never holds up downloads. One sync:
-   - reads the Plex library and matches episodes to videos by file path,
-     marking dirty any episode Plex re-imported under a new identity, and
-     adds a dirty row for every categorized video without one (the backfill
-     after an upgrade);
-   - writes the labels of up to 500 dirty rows, least recently checked
-     first; a row whose episode isn't imported yet stays dirty;
-   - reconciles `category_playlists`: one smart playlist per category label
-     and library section, created or deleted to match (a renamed category
-     is a delete plus a create);
-   - schedules the next sync: right away if the batch was full and made
-     progress, otherwise in 15 minutes.
-4. If Plex is unreachable, the sync logs a warning, leaves every row dirty
-   and schedules the next one in 15 minutes. Each row carries a
-   `generation` counter, so a category change that lands while a sync is
-   running is never overwritten by it.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant API as HTTP API
-    participant Events as events table
-    participant Tasks as tasks table
-    participant Syncer as PlexLabelSyncer
-    participant Plex
-
-    User->>API: PUT /api/categories/{id}/members
-    API->>Events: update video categories, publish VideoCategoriesChanged
-    API-->>User: 204 No Content
-
-    Events->>Tasks: mark rows dirty, schedule SyncPlexLabels (+10s)
-    Tasks->>Syncer: run in Plex lane
-    Syncer->>Plex: read library, match episodes by file
-    Syncer->>Plex: write labels of dirty episodes
-    Syncer->>Plex: create / delete smart playlists
-    Syncer->>Tasks: schedule next SyncPlexLabels (+15 min, or now if backlog)
 ```
 
 ## Videos on disk
