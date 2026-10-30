@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PreferencesView } from './PreferencesView'
-import { aPreferences, mockApi, renderWithProviders } from '@/test/helpers'
+import { fetchHomeVideos } from '@/api/client'
+import { queryKeys } from '@/api/queries'
+import { aPreferences, heldUntilReleased, mockApi, renderWithProviders } from '@/test/helpers'
 
 describe('PreferencesView', () => {
   afterEach(() => {
@@ -142,6 +144,59 @@ describe('PreferencesView', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('disk full')
     expect(screen.queryByText('Saved')).not.toBeInTheDocument()
+  })
+
+  it('keeps a second toggle from undoing one still being saved', async () => {
+    const firstSave = heldUntilReleased(aPreferences({ home_show_quick_watches: false }))
+    const fetchMock = mockApi({
+      'GET /api/preferences': aPreferences(),
+      'PUT /api/preferences': () =>
+        fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT').length === 1
+          ? (firstSave.route as () => Promise<unknown>)()
+          : aPreferences({ home_show_quick_watches: false, home_show_latest: false }),
+    })
+    renderWithProviders(<PreferencesView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+    await waitFor(() => expect(firstSave.route).toHaveBeenCalled())
+    expect(screen.getByRole('switch', { name: 'Show latest videos' })).toBeDisabled()
+    firstSave.release()
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Show latest videos' })).toBeEnabled(),
+    )
+    await user.click(screen.getByRole('switch', { name: 'Show latest videos' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Show latest videos' })).not.toBeChecked(),
+    )
+    expect(
+      fetchMock.mock.calls
+        .filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
+        .map(([, init]) => JSON.parse((init as RequestInit).body as string)),
+    ).toEqual([
+      aPreferences({ home_show_quick_watches: false }),
+      aPreferences({ home_show_quick_watches: false, home_show_latest: false }),
+    ])
+  })
+
+  it('reloads cached home videos as soon as a preference is saved', async () => {
+    const emptyHome = { continue_watching: [], categories: [], quick_watches: [], latest: [] }
+    const fetchMock = mockApi({
+      'GET /api/preferences': aPreferences(),
+      'PUT /api/preferences': aPreferences({ home_show_quick_watches: false }),
+      'GET /api/videos/home': emptyHome,
+    })
+    const { queryClient } = renderWithProviders(<PreferencesView />)
+    // Home was visited earlier: its videos are cached, but no view shows them now.
+    await queryClient.prefetchQuery({ queryKey: queryKeys.recentVideos, queryFn: fetchHomeVideos })
+    const homeRequests = () => fetchMock.mock.calls.filter(([url]) => url === '/api/videos/home')
+
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+
+    await waitFor(() => expect(homeRequests()).toHaveLength(2))
   })
 })
 

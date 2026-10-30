@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Check, CircleHelp } from 'lucide-react'
 import { usePreferences, useSavePreferences } from '@/api/queries'
 import type { Preferences } from '@/api/types'
@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils'
 import { VIEW_WIDTH } from '@/lib/viewWidth'
 import { errorMessage } from '@/lib/errorMessage'
+import { useSavedFlash } from '@/hooks/useSavedFlash'
 
 type PreferenceKey = keyof Preferences
 
@@ -64,28 +65,6 @@ const GROUPS: PreferenceGroup[] = [
   },
 ]
 
-const SAVED_SHOWN_MS = 2000
-
-/**
- * Whether "Saved" shows: from each `flash()` for `SAVED_SHOWN_MS`, restarting
- * on the next, until `clear()`.
- */
-function useSavedFlash(): { shown: boolean; flash: () => void; clear: () => void } {
-  const [savedAt, setSavedAt] = useState<number | null>(null)
-  useEffect(() => {
-    if (savedAt === null) {
-      return undefined
-    }
-    const timer = setTimeout(() => setSavedAt(null), SAVED_SHOWN_MS)
-    return () => clearTimeout(timer)
-  }, [savedAt])
-  return {
-    shown: savedAt !== null,
-    flash: () => setSavedAt(Date.now()),
-    clear: () => setSavedAt(null),
-  }
-}
-
 /**
  * A "?" next to a preference whose tooltip explains it. It opens on hover and
  * focus, and also on click, since a tap never hovers.
@@ -115,10 +94,14 @@ export function PreferencesView() {
   const savePreferences = useSavePreferences()
   const [saveError, setSaveError] = useState<string | null>(null)
   const saved = useSavedFlash()
+  // Each save sends every preference, so one at a time: a toggle while
+  // another saves would send that one's old value and undo it.
+  const [saving, setSaving] = useState(false)
   const toggle = async (key: PreferenceKey, value: boolean) => {
-    if (!preferences) {
+    if (!preferences || saving) {
       return
     }
+    setSaving(true)
     setSaveError(null)
     saved.clear()
     try {
@@ -126,6 +109,8 @@ export function PreferencesView() {
       saved.flash()
     } catch (err) {
       setSaveError(errorMessage(err))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -133,16 +118,16 @@ export function PreferencesView() {
     <TooltipProvider>
       <div className={cn(VIEW_WIDTH, 'flex flex-col gap-8')}>
         <div className="flex items-center justify-between gap-4">
-        <h1 className="font-heading text-xl font-semibold text-foreground">Preferences</h1>
-        <p role="status" className="flex items-center gap-1 text-sm text-muted-foreground">
-          {saved.shown && (
-            <>
-              <Check className="size-4" aria-hidden="true" />
-              Saved
-            </>
-          )}
-        </p>
-      </div>
+          <h1 className="font-heading text-xl font-semibold text-foreground">Preferences</h1>
+          <p role="status" className="flex items-center gap-1 text-sm text-muted-foreground">
+            {saved.shown && (
+              <>
+                <Check className="size-4" aria-hidden="true" />
+                Saved
+              </>
+            )}
+          </p>
+        </div>
         {error && (
           <p className="text-sm text-destructive">Failed to load preferences: {error.message}</p>
         )}
@@ -172,7 +157,7 @@ export function PreferencesView() {
                   <Switch
                     id={`preference-${key}`}
                     checked={preferences[key]}
-                    disabled={needsCategories && !preferences.categories_enabled}
+                    disabled={saving || (needsCategories && !preferences.categories_enabled)}
                     onCheckedChange={(value) => void toggle(key, value)}
                   />
                 </div>

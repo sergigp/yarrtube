@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Home } from './Home'
+import { queryKeys } from '@/api/queries'
 import type { HomeVideoSource } from '@/api/types'
 import {
   aCategory,
@@ -468,8 +469,8 @@ describe('Home', () => {
     const { queryClient } = renderWithProviders(<Home />)
 
     const card = (await screen.findByText('One')).closest('li') as HTMLElement
-    await waitFor(() => expect(queryClient.getQueryData(['preferences'])).toEqual(preferences))
-    await waitFor(() => expect(queryClient.getQueryData(['categories'])).toBeDefined())
+    await waitFor(() => expect(queryClient.getQueryData(queryKeys.preferences)).toEqual(preferences))
+    await waitFor(() => expect(queryClient.getQueryData(queryKeys.categories)).toBeDefined())
     expect(card.style.background).toBe('')
     expect(card).not.toHaveClass('border')
   })
@@ -508,5 +509,30 @@ describe('Home', () => {
     expect(screen.getByRole('link', { name: 'Preferences' })).toHaveAttribute('href', '/preferences')
     expect(screen.queryByRole('heading', { name: 'Latest videos' })).not.toBeInTheDocument()
     expect(screen.queryByText('No videos synced yet.')).not.toBeInTheDocument()
+  })
+
+  it('shows no "More about" section while categories are off, even from an older response', async () => {
+    mockHomeApi({
+      'GET /api/videos/home': {
+        continue_watching: [],
+        categories: [
+          aHomeCategorySection({ id: 'chess', name: 'Chess', videos: [aHomeVideo({ title: 'Gambit' })] }),
+        ],
+        quick_watches: [],
+        latest: [aHomeVideo({ title: 'Fresh Video' })],
+      },
+      'GET /api/preferences': aPreferences({ categories_enabled: false }),
+    })
+
+    const { queryClient } = renderWithProviders(<Home />)
+
+    await waitFor(() =>
+      expect(queryClient.getQueryData(queryKeys.preferences)).toEqual(
+        aPreferences({ categories_enabled: false }),
+      ),
+    )
+    expect(await screen.findByText('Fresh Video')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'More about Chess' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Gambit')).not.toBeInTheDocument()
   })
 })

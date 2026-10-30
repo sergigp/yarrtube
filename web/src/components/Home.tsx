@@ -96,14 +96,16 @@ export function Home() {
   const { data: home, error } = useRecentVideos()
   const { data: categories } = useCategories()
   const { data: preferences } = usePreferences()
-  // Category colors tint home cards only while categories show.
-  const tinted = useCategoriesShown()
+  // Category sections and colors show only while categories do, even when
+  // the cached response is from before they were turned off.
+  const withCategories = useCategoriesShown()
+  const categorySections = (withCategories && home?.categories) || []
   const categoryColors = useMemo(
     () =>
-      tinted
+      withCategories
         ? new Map((categories?.categories ?? []).map((category) => [category.id, category.color]))
         : undefined,
-    [categories, tinted],
+    [categories, withCategories],
   )
   // Shown until the preferences say otherwise, as before they existed.
   const showLatest = preferences?.home_show_latest !== false
@@ -114,7 +116,7 @@ export function Home() {
     !!home &&
     !error &&
     (home.continue_watching.length > 0 ||
-      home.categories.some((category) => category.videos.length > 0) ||
+      categorySections.some((category) => category.videos.length > 0) ||
       home.quick_watches.length > 0)
 
   return (
@@ -127,7 +129,7 @@ export function Home() {
         categoryColors={categoryColors}
         hideWhenEmpty
       />
-      {home?.categories.map((category) => (
+      {categorySections.map((category) => (
         <HomeSection
           key={category.id}
           title={`More about ${category.name}`}
