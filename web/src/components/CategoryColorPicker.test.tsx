@@ -72,4 +72,13 @@ describe('CategoryColorPicker', () => {
     expect(onChange).toHaveBeenCalledWith('#8b5cf6')
     expect(screen.getByRole('radio', { name: 'Violet' })).toBeChecked()
   })
+
+  it.each(['#f97316', '#3b82f6'])('chooses Custom from the %s swatch', async (initial) => {
+    render(<Picker initial={initial} onChange={() => {}} />)
+
+    await userEvent.setup().click(screen.getByRole('radio', { name: 'Custom' }))
+
+    expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked()
+    expect(screen.getByRole('slider', { name: 'Hue' })).toBeInTheDocument()
+  })
 })
