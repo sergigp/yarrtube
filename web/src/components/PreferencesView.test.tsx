@@ -41,6 +41,22 @@ describe('PreferencesView', () => {
         .map(([url, init]) => [url, JSON.parse((init as RequestInit).body as string)]),
     ).toEqual([['/api/preferences', aPreferences({ home_show_quick_watches: false })]])
   })
+
+  it('reports a failed save and keeps the saved value', async () => {
+    mockApi({
+      'GET /api/preferences': aPreferences(),
+      'PUT /api/preferences': { status: 500, error: 'disk full' },
+    })
+    renderWithProviders(<PreferencesView />)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('switch', { name: 'Show quick watches' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Failed to save preferences: disk full',
+    )
+    expect(screen.getByRole('switch', { name: 'Show quick watches' })).toBeChecked()
+  })
 })
 
 function switchStates(group: HTMLElement): [string, boolean][] {

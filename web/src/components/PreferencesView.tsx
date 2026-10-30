@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { usePreferences, useSavePreferences } from '@/api/queries'
 import type { Preferences } from '@/api/types'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { errorMessage } from '@/lib/errorMessage'
 
 type PreferenceKey = keyof Preferences
 
@@ -31,9 +33,16 @@ const GROUPS: PreferenceGroup[] = [
 export function PreferencesView() {
   const { data: preferences, error } = usePreferences()
   const savePreferences = useSavePreferences()
-  const toggle = (key: PreferenceKey, value: boolean) => {
-    if (preferences) {
-      void savePreferences({ ...preferences, [key]: value })
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const toggle = async (key: PreferenceKey, value: boolean) => {
+    if (!preferences) {
+      return
+    }
+    setSaveError(null)
+    try {
+      await savePreferences({ ...preferences, [key]: value })
+    } catch (err) {
+      setSaveError(errorMessage(err))
     }
   }
 
@@ -42,6 +51,11 @@ export function PreferencesView() {
       <h1 className="font-heading text-xl font-semibold text-foreground">Preferences</h1>
       {error && (
         <p className="text-sm text-destructive">Failed to load preferences: {error.message}</p>
+      )}
+      {saveError && (
+        <p role="alert" className="text-sm text-destructive">
+          Failed to save preferences: {saveError}
+        </p>
       )}
       {!error && !preferences && <p className="text-sm text-muted-foreground">Loading preferences…</p>}
       {preferences &&
@@ -56,7 +70,7 @@ export function PreferencesView() {
                 <Switch
                   id={`preference-${key}`}
                   checked={preferences[key]}
-                  onCheckedChange={(value) => toggle(key, value)}
+                  onCheckedChange={(value) => void toggle(key, value)}
                 />
               </div>
             ))}

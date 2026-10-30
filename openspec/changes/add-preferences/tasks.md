@@ -26,7 +26,7 @@ Web (Vitest):
 - [x] 2.13 `AppShell` › `/preferences` renders the Preferences view
 - [x] 2.14 `PreferencesView` › shows a switch per preference with its current value, grouped "Categories" and "Home"
 - [x] 2.15 `PreferencesView` › toggling a switch PUTs the full set with the change and the switch reflects the saved value
-- [ ] 2.16 `PreferencesView` › a failed save shows the error and the switch returns to its saved value
+- [x] 2.16 `PreferencesView` › a failed save shows the error and the switch returns to its saved value
 - [ ] 2.17 `PreferencesView` › "Show categories" and "Show category colors" are disabled while "Enable categories" is off
 - [ ] 2.18 `Sidebar` › no Categories section or "Add category" while categories are off, search labelled "Search channels and playlists"
 - [ ] 2.19 `AddChannelDialog` › no Categories field while off, saving makes no category request
