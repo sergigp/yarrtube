@@ -21,7 +21,7 @@ Backend acceptance tests (HTTP handlers):
 
 Web (Vitest):
 
-- [ ] 2.11 `lib/preferences` › `categoriesShown`: loading → false, failed → true, loaded → `categories_enabled`; `homeTintShown` needs both flags; verify `npm run test` passes
+- [x] 2.11 `lib/preferences` › `categoriesShown`: loading → false, failed → true, loaded → `categories_enabled`; `homeTintShown` needs both flags; verify `npm run test` passes
 - [ ] 2.12 `SettingsMenu` › lists `Tasks`, `Preferences`, `Report a bug`; Preferences navigates to `/preferences`; Report a bug links to `https://github.com/sergigp/yarrtube/issues/new` in a new tab
 - [ ] 2.13 `AppShell` › `/preferences` renders the Preferences view
 - [ ] 2.14 `PreferencesView` › shows a switch per preference with its current value, grouped "Categories" and "Home"

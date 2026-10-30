@@ -9,16 +9,21 @@ export const DEFAULT_PREFERENCES: Preferences = {
   home_show_latest: true,
 }
 
-/** Whether category UI shows: hidden while loading, the defaults when loading failed. */
+/**
+ * The preferences to show the UI with: none while loading, so preference-gated
+ * UI stays hidden instead of flashing, and the defaults when loading failed.
+ */
+function effective(preferences: Preferences | undefined, failed: boolean): Preferences | null {
+  return preferences ?? (failed ? DEFAULT_PREFERENCES : null)
+}
+
+/** Whether category UI shows. */
 export function categoriesShown(preferences: Preferences | undefined, failed: boolean): boolean {
-  void preferences
-  void failed
-  return true
+  return effective(preferences, failed)?.categories_enabled ?? false
 }
 
 /** Whether home cards are tinted with their categories' colors. */
 export function homeTintShown(preferences: Preferences | undefined, failed: boolean): boolean {
-  void preferences
-  void failed
-  return true
+  const shown = effective(preferences, failed)
+  return !!shown && shown.categories_enabled && shown.home_show_category_colors
 }
