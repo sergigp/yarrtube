@@ -1214,7 +1214,7 @@ mod tests {
             .start_download(created_at)
             .mark_downloaded(
                 Quality::High,
-                &format!("{title}.mp4"),
+                format!("{title}.mp4"),
                 None,
                 None,
                 created_at,
