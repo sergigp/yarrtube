@@ -21,9 +21,11 @@ export function defaultColor(used: string[]): string {
 /** The custom hue slider's lightness and chroma, vivid like the palette. */
 const CUSTOM = { lightness: 0.65, chroma: 0.2 }
 /** Chip and category header backgrounds. */
-const SOFT = { lightness: 0.94, chroma: 0.04 }
+const SOFT = { lightness: 0.92, chroma: 0.07 }
 /** Chip text, readable on the soft tint. */
-const INK = { lightness: 0.42, chroma: 0.1 }
+const INK = { lightness: 0.4, chroma: 0.12 }
+/** Chroma from which a color gets the full tint; more muted colors get a fainter one. */
+const VIVID_CHROMA = 0.15
 
 /** The color of `hue` (degrees), as the custom hue slider picks it. */
 export function solidFromHue(hue: number): string {
@@ -32,23 +34,36 @@ export function solidFromHue(hue: number): string {
 
 /** The soft tint of `hex`'s hue: chip and category header backgrounds. */
 export function softTint(hex: string): string {
-  return fromOklch(SOFT.lightness, SOFT.chroma, hueOf(hex))
+  return fromOklch(SOFT.lightness, SOFT.chroma * vividness(hex), hueOf(hex))
 }
 
 /** The dark shade of `hex`'s hue: chip text, readable on `softTint(hex)`. */
 export function inkShade(hex: string): string {
-  return fromOklch(INK.lightness, INK.chroma, hueOf(hex))
+  return fromOklch(INK.lightness, INK.chroma * vividness(hex), hueOf(hex))
 }
 
 /** The oklch hue of `hex`, in degrees, from 0 up to 360. */
 export function hueOf(hex: string): number {
+  const [labA, labB] = toOklab(hex)
+  return ((Math.atan2(labB, labA) * 180) / Math.PI + 360) % 360
+}
+
+/** How vivid `hex` is, from 0 (gray) up to 1 (at or above `VIVID_CHROMA`). */
+function vividness(hex: string): number {
+  const [labA, labB] = toOklab(hex)
+  return Math.min(1, Math.hypot(labA, labB) / VIVID_CHROMA)
+}
+
+/** The OKLab a and b of `hex`. */
+function toOklab(hex: string): [number, number] {
   const [r, g, b] = [1, 3, 5].map((at) => gammaDecode(parseInt(hex.slice(at, at + 2), 16) / 255))
   const l = Math.cbrt(0.4122214708 * r + 0.5363329363 * g + 0.0514459929 * b)
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
-  const labA = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s
-  const labB = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
-  return ((Math.atan2(labB, labA) * 180) / Math.PI + 360) % 360
+  return [
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ]
 }
 
 /**

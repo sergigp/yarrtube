@@ -55,10 +55,18 @@ describe('categoryColors', () => {
   })
 
   it("derives a soft tint of a color's hue, light enough for a background", () => {
-    expect(PALETTE.filter((color) => Math.min(...channels(softTint(color.hex))) < 200)).toEqual([])
+    expect(PALETTE.filter((color) => Math.min(...channels(softTint(color.hex))) < 185)).toEqual([])
     expect(
       PALETTE.filter((color) => hueDistance(hueOf(softTint(color.hex)), hueOf(color.hex)) > 3),
     ).toEqual([])
+  })
+
+  it('tints vivid colors strongly and muted ones faintly', () => {
+    const spread = (hex: string) => Math.max(...channels(hex)) - Math.min(...channels(hex))
+    const vivid = PALETTE.filter((color) => color.name !== 'Slate')
+
+    expect(vivid.filter((color) => spread(softTint(color.hex)) < 30)).toEqual([])
+    expect(spread(softTint('#64748b'))).toBeLessThan(spread(softTint('#3b82f6')) / 1.5)
   })
 
   it('derives an ink shade readable on the soft tint, at least 4.5:1', () => {
