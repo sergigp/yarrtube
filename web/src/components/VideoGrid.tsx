@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom'
 import { videoMediaUrl, avatarMediaUrl } from '@/api/client'
 import type { HomeVideo, HomeVideoSource } from '@/api/types'
 import { formatAge } from '@/lib/relativeAge'
+import {
+  type VideoGridLayout,
+  videoGridItemClassName,
+  videoGridListClassName,
+} from '@/lib/videoGridLayout'
 import { cn } from '@/lib/utils'
 import { Thumbnail } from './Thumbnail'
 import { CategoryChips, type CategoryChip } from './CategoryChips'
@@ -18,18 +23,20 @@ interface VideoGridProps {
   videos: HomeVideo[]
   /** Category id → chip; each card shows its categories' chips. Absent shows none. */
   chips?: Map<string, CategoryChip>
+  /** How the cards are laid out; a wrapping grid by default. */
+  layout?: VideoGridLayout
   /** Where a card leads; absent, to the video in its channel or playlist. */
   videoPathOf?: (video: HomeVideo) => string
 }
 
 /** Home-style video cards, each linking to its video in its source. */
-export function VideoGrid({ videos, chips, videoPathOf }: VideoGridProps) {
+export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: VideoGridProps) {
   if (videos.length === 0) {
     return <p className="text-sm text-muted-foreground">No videos synced yet.</p>
   }
 
   return (
-    <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+    <ul className={videoGridListClassName(layout)}>
       {videos.map((video, index) => {
         const videoPath =
           videoPathOf?.(video) ?? `${videoDetailPath(video.source)}${encodeURIComponent(video.id)}`
@@ -41,7 +48,10 @@ export function VideoGrid({ videos, chips, videoPathOf }: VideoGridProps) {
             key={`${video.source.kind}:${video.source.id}:${video.id}`}
             // Frameless: the hover surface reaches past the content through the
             // negative margin, so it never shifts the card.
-            className="group/card animate-enter -m-2 rounded-xl p-2 transition-colors hover:bg-muted/60"
+            className={cn(
+              'group/card animate-enter -m-2 rounded-xl p-2 transition-colors hover:bg-muted/60',
+              videoGridItemClassName(layout, index),
+            )}
             style={{ animationDelay: `${Math.min(index, 12) * 35}ms` }}
           >
             <div className="flex flex-col gap-2">

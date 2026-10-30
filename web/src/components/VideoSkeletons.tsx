@@ -1,4 +1,9 @@
 import type { ReactNode } from 'react'
+import {
+  type VideoGridLayout,
+  videoGridItemClassName,
+  videoGridListClassName,
+} from '@/lib/videoGridLayout'
 import { Skeleton } from './ui/skeleton'
 
 /** A video card's placeholder: thumbnail, two title lines and a meta line. */
@@ -31,13 +36,19 @@ export function VideoRowSkeleton() {
   )
 }
 
-/** `count` placeholder cards in a video grid, announced as loading. */
-export function VideoGridSkeleton({ count }: { count: number }) {
+/** `count` placeholder cards laid out as `layout`, announced as loading. */
+export function VideoGridSkeleton({
+  count,
+  layout = 'grid',
+}: {
+  count: number
+  layout?: VideoGridLayout
+}) {
   return (
     <Busy>
-      <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+      <ul className={videoGridListClassName(layout)}>
         {Array.from({ length: count }, (_, index) => (
-          <li key={index}>
+          <li key={index} className={videoGridItemClassName(layout, index)}>
             <VideoCardSkeleton />
           </li>
         ))}

@@ -177,4 +177,22 @@ describe('VideoGrid', () => {
 
     expect(within(card('Opening Traps')).queryByRole('list', { name: 'Categories' })).toBeNull()
   })
+
+  it('lays a shelf out as one row sized by the content area, swiping on phones', () => {
+    mockApi({})
+    const videos = Array.from({ length: 6 }, (_, index) => aHomeVideo({ title: `Video ${index}` }))
+    renderWithProviders(<VideoGrid videos={videos} layout="shelf" />)
+
+    expect(screen.getByRole('list')).toHaveClass('@xl:grid-cols-3', 'max-sm:flex', 'max-sm:snap-x')
+    expect(card('Video 1')).not.toHaveClass('hidden')
+    expect(card('Video 2')).toHaveClass('hidden', 'max-sm:block', '@xl:block', 'max-sm:w-[75%]')
+    expect(card('Video 5')).toHaveClass('hidden', '@7xl:block')
+  })
+
+  it('lays a feed out as one column on phones', () => {
+    mockApi({})
+    renderWithProviders(<VideoGrid videos={[aHomeVideo({ title: 'Fresh' })]} layout="feed" />)
+
+    expect(screen.getByRole('list')).toHaveClass('max-sm:grid-cols-1!', '@xl:grid-cols-3')
+  })
 })

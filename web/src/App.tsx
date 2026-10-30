@@ -98,7 +98,8 @@ export function AppShell() {
           onAddCategory={() => setAddDialog('category')}
         />
         <main className="min-w-0 flex-1 md:min-h-0 md:overflow-y-auto">
-          <div className="h-full px-4 pt-4 pb-6 sm:px-6 md:pt-6">
+          {/* The container video grids size their columns by. */}
+          <div className="@container h-full px-4 pt-4 pb-6 sm:px-6 md:pt-6">
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/playlists/:id" element={<PlaylistDetail />} />
