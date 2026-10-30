@@ -4075,6 +4075,78 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_skip_a_category_emptied_by_earlier_sections_on_home() {
+        let db = TestDatabase::new();
+        let video_repository = SqliteVideoRepository::new(db.database());
+        let playlist_video_repository = SqlitePlaylistVideoRepository::new(db.database());
+        let channel_video_repository = SqliteChannelVideoRepository::new(db.database());
+        let category_repository = SqliteCategoryRepository::new(db.database());
+        SqlitePlaylistRepository::new(db.database())
+            .insert(&playlist("PL1"))
+            .unwrap();
+        SqliteChannelRepository::new(db.database())
+            .insert(&channel("@chess", None))
+            .unwrap();
+        (50..53).for_each(|i| {
+            save_playlist_video(
+                &video_repository,
+                &playlist_video_repository,
+                "PL1",
+                &downloaded_video(&format!("shared{i}"), &format!("Shared {i}"), None, i),
+            )
+        });
+        (0..2).for_each(|i| {
+            save_channel_video(
+                &video_repository,
+                &channel_video_repository,
+                "@chess",
+                &downloaded_video(&format!("@chess{i}"), &format!("Chess {i}"), None, i),
+                i,
+            )
+        });
+        let chess = named_category("Chess", &[channel_member("@chess"), playlist_member("PL1")]);
+        let science = named_category("Science", &[playlist_member("PL1")]);
+        category_repository.insert(&chess).unwrap();
+        category_repository.insert(&science).unwrap();
+        categorize_source(&db, &channel_member("@chess"), &[&chess]);
+        categorize_source(&db, &playlist_member("PL1"), &[&chess, &science]);
+        let streams = save_category_channel(&db, "Streams", "@streams", 20..22);
+        let drama = save_category_channel(&db, "Drama", "@drama", 30..31);
+        let video_searcher = home_video_searcher(&db);
+
+        let response = home(video_searcher).await;
+
+        let shared_card = |i: i64| {
+            in_categories(
+                home_video_response(
+                    &format!("shared{i}"),
+                    &format!("Shared {i}"),
+                    playlist_source(),
+                ),
+                &[&chess, &science],
+            )
+        };
+        assert_eq!(
+            response,
+            Ok(HomeResponse {
+                categories: vec![
+                    category_section_response(
+                        &chess,
+                        (50..53)
+                            .rev()
+                            .map(shared_card)
+                            .chain((0..2).rev().map(|i| category_card(&chess, "@chess", i)))
+                            .collect()
+                    ),
+                    category_section_of(&streams, "@streams", (20..22).rev()),
+                    category_section_of(&drama, "@drama", 30..31),
+                ],
+                ..empty_home()
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_videos_for_a_category() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
