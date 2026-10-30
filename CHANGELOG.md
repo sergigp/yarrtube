@@ -5,7 +5,7 @@ All notable changes to yarrtube are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.10.0] - YYYY-MM-DD
+## [0.10.0] - 2026-10-30
 
 Categories, subtitles and a redesigned web UI.
 
