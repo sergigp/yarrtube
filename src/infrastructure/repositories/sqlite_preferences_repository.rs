@@ -57,39 +57,51 @@ impl SqlitePreferencesRepository {
     }
 }
 
-/// The stored JSON document.
+/// The stored JSON document. Keys missing from it, e.g. a preference added
+/// after it was saved, read as their default.
 #[derive(Serialize, Deserialize)]
 struct StoredPreferences {
-    categories_enabled: bool,
-    home_show_continue_watching: bool,
-    home_show_categories: bool,
-    home_show_category_colors: bool,
-    home_show_quick_watches: bool,
-    home_show_latest: bool,
+    categories_enabled: Option<bool>,
+    home_show_continue_watching: Option<bool>,
+    home_show_categories: Option<bool>,
+    home_show_category_colors: Option<bool>,
+    home_show_quick_watches: Option<bool>,
+    home_show_latest: Option<bool>,
 }
 
 impl From<&Preferences> for StoredPreferences {
     fn from(preferences: &Preferences) -> Self {
         Self {
-            categories_enabled: preferences.categories_enabled,
-            home_show_continue_watching: preferences.home_show_continue_watching,
-            home_show_categories: preferences.home_show_categories,
-            home_show_category_colors: preferences.home_show_category_colors,
-            home_show_quick_watches: preferences.home_show_quick_watches,
-            home_show_latest: preferences.home_show_latest,
+            categories_enabled: Some(preferences.categories_enabled),
+            home_show_continue_watching: Some(preferences.home_show_continue_watching),
+            home_show_categories: Some(preferences.home_show_categories),
+            home_show_category_colors: Some(preferences.home_show_category_colors),
+            home_show_quick_watches: Some(preferences.home_show_quick_watches),
+            home_show_latest: Some(preferences.home_show_latest),
         }
     }
 }
 
 impl From<StoredPreferences> for Preferences {
     fn from(stored: StoredPreferences) -> Self {
+        let defaults = Preferences::default();
         Self {
-            categories_enabled: stored.categories_enabled,
-            home_show_continue_watching: stored.home_show_continue_watching,
-            home_show_categories: stored.home_show_categories,
-            home_show_category_colors: stored.home_show_category_colors,
-            home_show_quick_watches: stored.home_show_quick_watches,
-            home_show_latest: stored.home_show_latest,
+            categories_enabled: stored
+                .categories_enabled
+                .unwrap_or(defaults.categories_enabled),
+            home_show_continue_watching: stored
+                .home_show_continue_watching
+                .unwrap_or(defaults.home_show_continue_watching),
+            home_show_categories: stored
+                .home_show_categories
+                .unwrap_or(defaults.home_show_categories),
+            home_show_category_colors: stored
+                .home_show_category_colors
+                .unwrap_or(defaults.home_show_category_colors),
+            home_show_quick_watches: stored
+                .home_show_quick_watches
+                .unwrap_or(defaults.home_show_quick_watches),
+            home_show_latest: stored.home_show_latest.unwrap_or(defaults.home_show_latest),
         }
     }
 }
@@ -123,5 +135,25 @@ mod tests {
         repository.save(&preferences).unwrap();
 
         assert_eq!(repository.find().unwrap(), Some(preferences));
+    }
+
+    #[test]
+    fn it_should_read_missing_keys_as_defaults() {
+        let db = TestDatabase::new();
+        db.connection()
+            .execute(
+                "INSERT INTO preferences (id, data) VALUES (1, '{\"categories_enabled\": false}')",
+                [],
+            )
+            .unwrap();
+        let repository = SqlitePreferencesRepository::new(db.database());
+
+        assert_eq!(
+            repository.find().map_err(|e| e.to_string()),
+            Ok(Some(Preferences {
+                categories_enabled: false,
+                ..Preferences::default()
+            }))
+        );
     }
 }
