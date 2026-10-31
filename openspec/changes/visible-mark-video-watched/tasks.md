@@ -10,7 +10,7 @@
 
 - [x] 2.1 Add `web/src/components/VideoWatchedControl.tsx`: renders nothing unless downloaded; "Mark watched" outline button (marks via `useMarkVideoWatched`, disabled while pending, alerts on failure) when unwatched; muted non-interactive "Watched" with `title="Rewatch past 10% to mark it unwatched"` when watched. Verify: `VideoWatchedControl.test.tsx` covers marking (POST route hit), watched status (no button, hint present), not downloaded (renders nothing) and failure (alert, still "Mark watched").
 - [x] 2.2 In `VideoDetail.tsx`, render `VideoWatchedControl` in its own row below `MetaLine` and remove `VideoActionsMenu` from the title row. Verify: `VideoDetail.test.tsx` replaces the menu-based mark test with the button, and asserts no "Actions for <title>" button in the pane.
-- [ ] 2.3 Update `ChannelDetail.test.tsx` (lines ~190–200: the selected video has no "⋮" anywhere; the detail pane shows "Mark watched") and any other test that opened the detail pane's menu. Verify: `npm run check` in `web/` passes.
+- [x] 2.3 Update `ChannelDetail.test.tsx` (lines ~190–200: the selected video has no "⋮" anywhere; the detail pane shows "Mark watched") and any other test that opened the detail pane's menu. Verify: `npm run check` in `web/` passes.
 - [ ] 2.4 Update `e2e-tests/tests/channel.spec.js:113` to mark the selected video via the "Mark watched" button if it targets the detail pane's menu (it uses `.first()`, so check which control it hits). Verify: the spec passes.
 
 ## 3. Verification
