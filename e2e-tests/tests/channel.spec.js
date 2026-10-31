@@ -127,6 +127,32 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     await expect(unwatchedBadge(channelRow)).toHaveCount(0)
   })
 
+  await test.step('rewatching it marks it unwatched again', async () => {
+    // The detail pane's "Watched" status turns back into "Mark watched" once a
+    // rewatch passes 10% (halfway stays below the 90% that marks it watched),
+    // and the channel's badge comes back, without a reload.
+    const main = page.locator('main')
+    await expect(main.getByText('Watched', { exact: true })).toHaveAttribute(
+      'title',
+      'Rewatch past 10% to mark it unwatched',
+    )
+    const progressReported = page.waitForResponse(
+      (response) => response.url().endsWith('/progress') && response.request().method() === 'POST',
+    )
+    // Marking watched left the player paused at the start, so play it first:
+    // pausing an already paused video reports nothing.
+    await page.locator('video').evaluate(async (el) => {
+      el.muted = true
+      el.currentTime = el.duration / 2
+      await el.play()
+      el.pause()
+    })
+    expect(await (await progressReported).json()).toEqual({ watched: false })
+    await expect(main.getByRole('button', { name: 'Mark watched', exact: true })).toBeVisible()
+    await expect(main.getByText('Watched', { exact: true })).toHaveCount(0)
+    await expect(unwatchedBadge(channelRow)).toHaveText('1')
+  })
+
   await test.step('sync it', async () => {
     // Sync from the sidebar completes without an error dialog/alert.
     await syncItem(page, { section: 'Channels', name: CHANNEL_HANDLE })
