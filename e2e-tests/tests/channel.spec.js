@@ -97,7 +97,7 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
 
   await test.step('mark its video watched', async () => {
     // The downloaded, unwatched video shows as a badge on the channel's row
-    // until the video is marked watched from its own actions menu (covers
+    // until the video is marked watched from its detail pane's "Mark watched" (covers
     // POST /videos/{id}/watched). Folding the Channels section meanwhile
     // keeps it folded on the channel's own route, marks its heading active
     // and shows the section's unwatched total, which follows the video.
@@ -110,14 +110,14 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     const markedOne = page.waitForResponse(
       (response) => response.url().endsWith('/watched') && response.request().method() === 'POST',
     )
-    await page.getByRole('button', { name: `Actions for ${videoTitle}` }).first().click()
-    await page.getByRole('menuitem', { name: 'Mark as watched' }).click()
+    await page.locator('main').getByRole('button', { name: 'Mark watched', exact: true }).click()
     expect(new URL((await markedOne).url()).pathname).toMatch(/^\/api\/videos\/[^/]+\/watched$/)
     await expect(channelsHeading).toHaveAccessibleName('Channels')
     await channelsHeading.click()
     await expect(channelRow).toBeVisible()
     await expect(unwatchedBadge(channelRow)).toHaveCount(0)
     await expect(page.locator('main ul li').getByLabel('Watched')).toBeVisible()
+    await expect(page.locator('main').getByText('Watched', { exact: true })).toBeVisible()
   })
 
   await test.step('mark the whole channel watched', async () => {
@@ -125,6 +125,32 @@ test('channel lifecycle: add, download, play, resume, mark watched, sync, edit s
     // its only video already watched there is nothing left to change.
     await markItemWatched(page, { section: 'Channels', name: CHANNEL_HANDLE })
     await expect(unwatchedBadge(channelRow)).toHaveCount(0)
+  })
+
+  await test.step('rewatching it marks it unwatched again', async () => {
+    // The detail pane's "Watched" status turns back into "Mark watched" once a
+    // rewatch passes 10% (halfway stays below the 90% that marks it watched),
+    // and the channel's badge comes back, without a reload.
+    const main = page.locator('main')
+    await expect(main.getByText('Watched', { exact: true })).toHaveAttribute(
+      'title',
+      'Rewatch past 10% to mark it unwatched',
+    )
+    const progressReported = page.waitForResponse(
+      (response) => response.url().endsWith('/progress') && response.request().method() === 'POST',
+    )
+    // Marking watched left the player paused at the start, so play it first:
+    // pausing an already paused video reports nothing.
+    await page.locator('video').evaluate(async (el) => {
+      el.muted = true
+      el.currentTime = el.duration / 2
+      await el.play()
+      el.pause()
+    })
+    expect(await (await progressReported).json()).toEqual({ watched: false })
+    await expect(main.getByRole('button', { name: 'Mark watched', exact: true })).toBeVisible()
+    await expect(main.getByText('Watched', { exact: true })).toHaveCount(0)
+    await expect(unwatchedBadge(channelRow)).toHaveText('1')
   })
 
   await test.step('sync it', async () => {

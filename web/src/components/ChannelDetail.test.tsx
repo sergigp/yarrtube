@@ -178,7 +178,7 @@ describe('ChannelDetail', () => {
     expect(within(fresh).getByText('2:00')).toBeInTheDocument()
   })
 
-  it('the selected row shows no menu', async () => {
+  it('shows no menu for the selected video, only its watched control', async () => {
     const channel = aChannel({ id: 'chan' })
     renderChannel(
       {
@@ -196,7 +196,8 @@ describe('ChannelDetail', () => {
       within(list).queryByRole('button', { name: 'Actions for First Video' }),
     ).not.toBeInTheDocument()
     expect(within(list).getByRole('button', { name: 'Actions for Second Video' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Actions for First Video' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Actions for First Video' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mark watched' })).toBeInTheDocument()
   })
 
   it('explains when the selected video is not downloaded yet', async () => {

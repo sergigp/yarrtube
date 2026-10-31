@@ -157,12 +157,11 @@ describe('VideoDetail', () => {
         onPlaybackRateChange={() => {}}
       />,
     )
-    const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: 'Actions for My Video' }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Mark as watched' }))
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Mark watched' }))
 
     expect(markWatched).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: 'Actions for My Video' })).not.toBeInTheDocument()
   })
 
   it('disables the speed control until the video is downloaded', () => {

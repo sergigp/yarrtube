@@ -327,7 +327,7 @@ describe('DetailHeader', () => {
       expect(await screen.findByRole('tooltip')).toHaveTextContent('Sync')
     })
 
-    it('lays every action but delete out as an icon button, then a ⋮ menu offering delete', async () => {
+    it('lays every action but mark-all-watched and delete out as an icon button, then a ⋮ menu offering both', async () => {
       const onEditRequest = vi.fn()
       render(
         <DetailHeader
@@ -348,13 +348,8 @@ describe('DetailHeader', () => {
       const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
       await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
 
-      expect(buttons).toEqual([
-        'Sync',
-        'Mark all watched',
-        'Edit settings',
-        'More actions for The Channel',
-      ])
-      expect(items).toEqual(['Delete'])
+      expect(buttons).toEqual(['Sync', 'Edit settings', 'More actions for The Channel'])
+      expect(items).toEqual(['Mark all watched', 'Delete'])
       expect(onEditRequest).toHaveBeenCalledOnce()
       expect(screen.getByRole('dialog', { name: 'Delete "The Channel"?' })).toBeVisible()
     })
