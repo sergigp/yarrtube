@@ -1,0 +1,56 @@
+{
+  "title": "La Aparente Inutilidad de la IA Cuántica",
+  "lang": "es",
+  "duration_s": 1306,
+  "summary": {
+    "facts": [
+      {
+        "id": "not-the-next-revolution",
+        "fact": "The video's verdict is that quantum AI is at an intermediate point: not pure hype, but not the next revolution replacing classical AI, at least in the medium term; promising theoretical results have yet to become practical advantages.",
+        "critical": true,
+        "trap": "Quantum AI will replace classical AI / is the next AI revolution.",
+        "evidence": {
+          "at": "20:34",
+          "quote": "¿Es la siguiente revolución, la que sucederá a la IA clásica? Ya lo digo, desde luego no."
+        }
+      },
+      {
+        "id": "hybrid-quantum-classical",
+        "fact": "Quantum AI is typically hybrid: a quantum computer operates on qubits while a classical computer tunes the parameters (variational quantum circuits) or, in the kernel example, a classical support vector machine finds the boundary.",
+        "critical": false,
+        "evidence": {
+          "at": "5:33",
+          "quote": "tenemos un ordenador cuántico para hacer las operaciones con los qubits y uno clásico para afinar sus parámetros. Un enfoque híbrido que es bastante habitual en la IA cuántica."
+        }
+      },
+      {
+        "id": "advantage-only-on-artificial-problem",
+        "fact": "The worked example of a proven quantum advantage (classifying roulette squares, based on the discrete logarithm problem) is an artificially constructed problem with no practical application; it would not work on general data such as diagnosing patients.",
+        "critical": true,
+        "trap": "The quantum classifier is useful for real tasks such as medical diagnosis.",
+        "evidence": {
+          "at": "16:27",
+          "quote": "es un problema que hemos construido artificialmente para demostrar una ventaja cuántica"
+        }
+      },
+      {
+        "id": "practical-obstacles",
+        "fact": "The advantage cannot yet be tested in practice because it needs quantum computers with many well error-controlled qubits; repeated measurements and loading classical data into quantum states can also eat up the advantage, and some quantum algorithms have later been 'dequantized'.",
+        "critical": false,
+        "evidence": {
+          "at": "17:05",
+          "quote": "Por el momento, ni siquiera podemos comprobar esa ventaja en la práctica."
+        }
+      },
+      {
+        "id": "promise-in-quantum-data-and-niches",
+        "fact": "The most promising use is processing data that is already quantum (molecules, materials); its real potential is complementing classical AI in specific tasks, e.g. advanced science, not replacing it.",
+        "critical": false,
+        "evidence": {
+          "at": "20:55",
+          "quote": "No de sustituir a la IA clásica, sino complementarla en ciertas tareas específicas, tal vez de ciencia avanzada."
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "title": "The world's most extreme places, explained",
+  "lang": "en",
+  "duration_s": 10824,
+  "summary": {
+    "facts": [
+      {
+        "id": "five-places-covered",
+        "fact": "The video is a compilation of five of the creator's field documentaries, covering Greenland, Switzerland, Saudi Arabia (NEOM), Finland and Cyprus.",
+        "critical": true,
+        "trap": "Lists only four places, omitting Greenland (the first segment), or presents it as a single documentary about one place.",
+        "evidence": {
+          "at": "0:18",
+          "quote": "I thought I would share with you my top five favorite films that I've made out in the field, starting with an adventure through Greenland"
+        }
+      },
+      {
+        "id": "neom-fallen-apart",
+        "fact": "In the Saudi segment, NEOM is a megaproject meant to replace the oil economy; in his afterword the creator says NEOM (The Line, Sindalah, Trojena) has since largely fallen apart due to physical and budget constraints.",
+        "critical": true,
+        "trap": "Says NEOM is on track, completed, or successfully transforming Saudi Arabia.",
+        "evidence": {
+          "at": "1:34:07",
+          "quote": "since I made that video, the Neom project, The Line, Sindalah, Trojena, it's all kind of fallen apart, as many predicted it would"
+        }
+      },
+      {
+        "id": "finland-joined-nato",
+        "fact": "Finland, shaped by its wars with the Soviet Union and a culture of preparedness (conscription, Arctic warfare skills, civilian bunkers), abandoned decades of non-alignment and joined NATO after Russia invaded Ukraine.",
+        "critical": false,
+        "trap": "Says Finland remains neutral/non-aligned, or that Switzerland joined NATO.",
+        "note": "The transcript says Finland and Sweden joined 'in April, 2023'; Finland's date is correct, Sweden actually joined in March 2024, so don't penalise a summary that omits the date.",
+        "evidence": {
+          "at": "2:09:45",
+          "quote": "Finland and their neighbor Sweden joined the Alliance in April, 2023, putting a final end to decades of non-alignment"
+        }
+      },
+      {
+        "id": "cyprus-divided-in-four",
+        "fact": "Cyprus is shown as divided into four parts: the Republic of Cyprus (about 60% of the island), the self-declared Turkish Republic of Northern Cyprus, a UN buffer zone, and British military bases, a division rooted in the 1974 Turkish invasion.",
+        "critical": false,
+        "trap": "Says Cyprus is divided in two (Greek and Turkish) only.",
+        "evidence": {
+          "at": "2:27:05",
+          "quote": "you realize it's divided in four"
+        }
+      },
+      {
+        "id": "human-element-announcement",
+        "fact": "The video ends by announcing the creator's upcoming, most ambitious field documentary project, \"The Human Element\", to be published in a few weeks.",
+        "critical": false,
+        "trap": "Presents \"The Human Element\" as one of the films in the compilation, or as already released.",
+        "evidence": {
+          "at": "2:58:27",
+          "quote": "Again, \"The Human Element\" publishes in a few weeks."
+        }
+      }
+    ]
+  }
+}

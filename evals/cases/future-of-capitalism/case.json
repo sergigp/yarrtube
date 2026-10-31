@@ -1,0 +1,59 @@
+{
+  "title": "¿Hay futuro en el capitalismo-",
+  "lang": "es",
+  "duration_s": 992,
+  "summary": {
+    "facts": [
+      {
+        "id": "paris-agreement-goals-and-weaknesses",
+        "fact": "The Paris Agreement (COP21) aimed to keep warming well below 2 °C, aspiring to 1.5 °C; it was a diplomatic success but its commitments are non-binding with no real sanctions.",
+        "critical": false,
+        "evidence": {
+          "at": "1:06",
+          "quote": "limitar el aumento de la temperatura media del planeta muy por debajo de los 2 gr respecto a niveles preindustriales, aspirando a no superar, eso sí, los 1,5ºC"
+        }
+      },
+      {
+        "id": "climate-policy-adapts-capitalism",
+        "fact": "Following philosopher Kohei Saito, the video argues that Paris and later policies (Green New Deal, Fit for 55, REPowerEU, Inflation Reduction Act) do not question the economic system but try to adapt capitalism via green growth and technology, a techno-optimism it considers insufficient.",
+        "critical": true,
+        "trap": "The video presents green growth / the Green New Deal as the solution to climate change.",
+        "note": "Captions spell Saito's first name 'Coge'; correct name is Kohei Saito.",
+        "evidence": {
+          "at": "2:50",
+          "quote": "Según Saito, el acuerdo de París no cuestiona el sistema económico dominante."
+        }
+      },
+      {
+        "id": "decoupling-would-come-too-late",
+        "fact": "Absolute decoupling of growth from emissions might take around 100 years, too late because cuts must happen in the next 10–20 years.",
+        "critical": false,
+        "trap": "Decoupling can be achieved within the next 10–20 years.",
+        "evidence": {
+          "at": "3:42",
+          "quote": "los estudios proponen que en 100 años esto se podría conseguir, pero para entonces ya será demasiado tarde"
+        }
+      },
+      {
+        "id": "north-externalizes-costs-to-south",
+        "fact": "Rich Global North countries keep their consumption by externalizing ecological and social costs to the Global South ('imperial mode of living'), and green policies reproduce this logic.",
+        "critical": false,
+        "note": "Captions write 'Ulrick Brand y Marcus Bisen'; correct names are Ulrich Brand and Markus Wissen.",
+        "evidence": {
+          "at": "5:02",
+          "quote": "los países del norte global mantienen su nivel de consumo externalizando costes ecológicos y sociales al sur global"
+        }
+      },
+      {
+        "id": "conclusion-embrace-degrowth",
+        "fact": "The video concludes that a future on Earth requires alternative ways of life that embrace degrowth, since Western consumption levels cannot be universalized; the ecological transition is a dispute between ideas of the future, not a technical question.",
+        "critical": true,
+        "trap": "The video concludes capitalism can be fixed with small adjustments or green technology.",
+        "evidence": {
+          "at": "15:04",
+          "quote": "Si realmente queremos que haya un futuro en la Tierra, lo primero será empezar a leer y a pensarnos en modelos de vida alternativos que abracen el decrecimiento."
+        }
+      }
+    ]
+  }
+}

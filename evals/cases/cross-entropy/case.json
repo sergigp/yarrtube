@@ -1,0 +1,58 @@
+{
+  "title": "But what is cross-entropy- - Compression is Intelligence Part 2",
+  "lang": "en",
+  "duration_s": 2008,
+  "summary": {
+    "facts": [
+      {
+        "id": "language-trees-zipping",
+        "fact": "The video opens with the 2002 paper 'Language Trees and Zipping', which used plain gzip compression of concatenated documents to cluster texts by language and recover the tree of language lineage; this works as a rough empirical estimate of cross-entropy.",
+        "critical": false,
+        "trap": "The paper used a neural network or language model.",
+        "evidence": {
+          "at": "0:40",
+          "quote": "What's crazy is how the authors showed that you can do this just by using gzip"
+        }
+      },
+      {
+        "id": "cross-entropy-definition",
+        "fact": "Cross-entropy measures the average bits per symbol when you use a code optimized for one distribution (Q) on data that actually follows another (P); it is asymmetric, swapping P and Q changes the value.",
+        "critical": true,
+        "trap": "Cross-entropy is symmetric, or is just the entropy of a single distribution.",
+        "evidence": {
+          "at": "6:20",
+          "quote": "If you've optimized a compression scheme around one context, how does it perform in another context?"
+        }
+      },
+      {
+        "id": "minimum-at-p-equals-q",
+        "fact": "The key property: with P fixed, cross-entropy is smallest exactly when Q equals P, and that minimum equals the entropy of P; the gap between them is the KL divergence (bits wasted by a poorly optimized code).",
+        "critical": false,
+        "note": "KL divergence is introduced at 31:35 as cross-entropy minus entropy.",
+        "evidence": {
+          "at": "12:08",
+          "quote": "it takes on its smallest possible value when Q is equal to P, and more specifically, that smallest value is the entropy of P."
+        }
+      },
+      {
+        "id": "llm-pretraining-loss",
+        "fact": "Language-model pre-training minimizes the average negative log probability the model gives to the true next token ('cross-entropy loss'); requiring the loss to be minimized only when the model's output matches the data's statistics forces the log, which makes the average loss exactly cross-entropy.",
+        "critical": true,
+        "trap": "The loss is called cross-entropy only by convention / any decreasing function would work equally well.",
+        "evidence": {
+          "at": "25:44",
+          "quote": "if you want a loss function with the property that it's minimized only when the model matches the statistics of the data, your hand is forced. You actually have to use the negative log."
+        }
+      },
+      {
+        "id": "distillation",
+        "fact": "In distillation, a small model is trained with the cross-entropy against a larger model's full predicted distribution instead of the single true next token, which gives a much richer training signal.",
+        "critical": false,
+        "evidence": {
+          "at": "27:21",
+          "quote": "You define the loss at this token to be the cross-entropy of the small model's distribution relative to the big model's."
+        }
+      }
+    ]
+  }
+}

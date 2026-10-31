@@ -1,0 +1,60 @@
+{
+  "title": "browser tabs",
+  "lang": "es",
+  "duration_s": 472,
+  "summary": {
+    "facts": [
+      {
+        "id": "built-browser-tabs-cli",
+        "fact": "The speaker presents browser-tabs (browser tabs CLI), an open-source command-line tool he built to open and organize browser tabs into named groups, to prepare Codely's weekly news livestream (\"el café con Codely\").",
+        "critical": true,
+        "trap": "Describes it as a browser extension, an MCP server, or a review of someone else's tool.",
+        "note": "Captions write \"codely\"; the company is Codely. The speaker is Javi (Codely).",
+        "evidence": {
+          "at": "2:17",
+          "quote": "os presento aquí ni más ni menos que browser tabs CLI, una utilidad de CLI"
+        }
+      },
+      {
+        "id": "vivaldi-api-not-computer-use",
+        "fact": "It talks directly to Vivaldi's API (the browser he uses for the show) to batch-open tabs from a JSON file in about a second, naming tabs and groups and setting colors, instead of slow AI computer use that clicks through the browser and blocks it.",
+        "critical": true,
+        "trap": "Says it works with Firefox or Chrome, or that it uses AI/computer use to open the tabs.",
+        "evidence": {
+          "at": "3:16",
+          "quote": "está tirando por las API por la API directamente de Vivaldi para poder hacer esto"
+        }
+      },
+      {
+        "id": "motivation-weekly-manual-work",
+        "fact": "The motivation is the tedious weekly work of opening all the news links, renaming and grouping them; automating it with AI computer use was too slow and blocked the browser.",
+        "critical": false,
+        "evidence": {
+          "at": "1:42",
+          "quote": "es un trabajo que cada semana hay que hacer de abrir todos los enlaces, ponerle un nombrecito, agruparlos"
+        }
+      },
+      {
+        "id": "open-source-semantic-release",
+        "fact": "The tool is open source (MIT, on npm and GitHub), vibe-coded, and uses semantic-release (instead of release-please, which Codely used before) to publish releases automatically from conventional commits.",
+        "critical": false,
+        "trap": "Says it uses release-please, or that it is paid/closed source.",
+        "note": "\"by codeado\" in captions is \"vibe codeado\".",
+        "evidence": {
+          "at": "4:40",
+          "quote": "veníamos usando tradicionalmente para las distintas librerías release please y es curioso porque simplifica bastante el tinglado esto"
+        }
+      },
+      {
+        "id": "worth-it-saves-time",
+        "fact": "He concludes the time was worth it: he learned things (badges, semantic-release, Agent Browser differences) and the tool will save him a lot of time every week.",
+        "critical": false,
+        "trap": "Says he concluded it wasn't worth the effort.",
+        "evidence": {
+          "at": "7:42",
+          "quote": "ahora esto nos va a servir de base para ahorrarme mucho tiempo cada semana"
+        }
+      }
+    ]
+  }
+}
