@@ -1,0 +1,58 @@
+{
+  "title": "The GOLDEN AGE of ARGENTINE ANARCHISM",
+  "lang": "es",
+  "duration_s": 1936,
+  "summary": {
+    "facts": [
+      {
+        "id": "anarchist-golden-age-early-1900s",
+        "fact": "The video's subject is the golden age of the Argentine anarchist labour movement, which it places in the first years/first decade of the 20th century, after the FORA was founded in 1901.",
+        "critical": true,
+        "trap": "Anarchism's golden age was 1880–1916.",
+        "evidence": {
+          "at": "0:32",
+          "quote": "si nos referimos a la trayectoria del movimiento obrero anarquista, no sería erróneo afirmar que los primeros años del siglo XX representaron su época de oro"
+        }
+      },
+      {
+        "id": "1880-1916-is-oligarchy-narrative",
+        "fact": "The claim that Argentina lived a golden age during the conservative order (1880–1916) is presented as a recurring narrative of the local oligarchy, which the video rejects; it argues instead that the exclusionary conditions of that conservative order are what made workers receptive to anarchism.",
+        "critical": true,
+        "trap": "The video presents 1880–1916 as Argentina's (or anarchism's) golden age.",
+        "evidence": {
+          "at": "0:00",
+          "quote": "Escuchar que la Argentina vivió su época de oro durante el orden conservador, es decir, entre 1880 y 1916, es un discurso que de forma recurrente quiere instalar la oligarquía local."
+        }
+      },
+      {
+        "id": "fora-unions-27-to-almost-100",
+        "fact": "The number of unions (resistance societies) at FORA congresses roughly quadrupled, from 27 at its founding to almost 100 by 1905.",
+        "critical": false,
+        "trap": "FORA grew to more than 100 unions.",
+        "note": "Transcript says 'en apenas seis años' but gives 1905 as the end year (1901–1905 is four years); the video also says the figures are only illustrative.",
+        "evidence": {
+          "at": "8:58",
+          "quote": "la cantidad de sindicatos se cuadriplicó, pasando de 27 en su fundación a casi 100 en 1905"
+        }
+      },
+      {
+        "id": "state-responded-with-repression",
+        "fact": "The state answered the growth of the labour movement with repression aimed at anarchists: the Residence Law (Ley 4144) after the 1902 general strike, states of siege, the 1909 'Red Week' massacre, and the 1910 Social Defence Law, which left the anarchist movement weakened.",
+        "critical": false,
+        "evidence": {
+          "at": "30:52",
+          "quote": "La respuesta que el Estado llevó adelante ante este panorama fue la aplicación de diferentes mecanismos represivos que pusieron el foco de atención en el movimiento libertario."
+        }
+      },
+      {
+        "id": "culture-and-press-fed-golden-age",
+        "fact": "Anarchists spread their ideas through a cultural network (union libraries, literacy courses, libertarian schools, theatre, poetry, songs and a large press including the daily La Protesta), and the video concludes that this combination with FORA's union action produced the golden age of FORA and anarchism.",
+        "critical": false,
+        "evidence": {
+          "at": "30:31",
+          "quote": "Producto de esta retroalimentación, se gestó la época de oro de la FORA y del anarquismo en Argentina."
+        }
+      }
+    ]
+  }
+}
