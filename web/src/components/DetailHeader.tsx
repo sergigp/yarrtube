@@ -54,6 +54,8 @@ export interface HeaderAction {
   icon: ReactNode
   onSelect: () => void
   disabled?: boolean
+  /** On desktop, offered in the "⋮" menu rather than as an icon button. */
+  menuOnDesktop?: boolean
 }
 
 /** Runs `action`, alerting `failure: <error>` when it throws. */
@@ -86,8 +88,8 @@ function IconAction({ action }: { action: HeaderAction }) {
 }
 
 /**
- * The "⋮" menu: on desktop it holds only delete, after the icon buttons; on
- * mobile every action, with delete set apart. Non-modal so opening the delete
+ * The "⋮" menu: on desktop it holds the menu-only actions and delete, after
+ * the icon buttons; on mobile every action. Delete is always set apart. Non-modal so opening the delete
  * confirmation from it doesn't leave the page with pointer events disabled.
  * Labelled apart from the sidebar row's "Actions for <name>", which is on
  * screen at the same time.
@@ -173,8 +175,9 @@ interface DetailHeaderProps {
  * Title block at the top of a channel/playlist/category page: optional
  * avatar, the name, a video/unwatched summary and the page-level actions
  * (sync, mark all watched, settings, delete behind a confirmation). Desktop
- * lays every action but delete out as an icon button named in its tooltip,
- * then a "⋮" offering delete; mobile keeps them all behind one "⋮".
+ * lays every action but mark all watched and delete out as an icon button
+ * named in its tooltip, then a "⋮" offering those two; mobile keeps them all
+ * behind one "⋮".
  */
 export function DetailHeader({
   name,
@@ -223,6 +226,8 @@ export function DetailHeader({
       label: 'Mark all watched',
       icon: <CheckCheck />,
       disabled: markingWatched,
+      // Bulk and hard to undo: kept behind the menu so it isn't hit by mistake.
+      menuOnDesktop: true,
       onSelect: async () => {
         if (markWatchedPrompt) {
           setConfirmingMarkWatched(true)
@@ -293,10 +298,17 @@ export function DetailHeader({
       {isDesktop ? (
         <TooltipProvider>
           <div className="flex shrink-0 items-center gap-1.5">
-            {actions.map((action) => (
-              <IconAction key={action.label} action={action} />
-            ))}
-            <MoreActionsMenu name={name} actions={[]} onDelete={requestDelete} desktop />
+            {actions
+              .filter((action) => !action.menuOnDesktop)
+              .map((action) => (
+                <IconAction key={action.label} action={action} />
+              ))}
+            <MoreActionsMenu
+              name={name}
+              actions={actions.filter((action) => action.menuOnDesktop)}
+              onDelete={requestDelete}
+              desktop
+            />
           </div>
         </TooltipProvider>
       ) : (
