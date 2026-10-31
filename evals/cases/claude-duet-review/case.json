@@ -1,0 +1,60 @@
+{
+  "title": "Claude Duet review- Great design, but...",
+  "lang": "en",
+  "duration_s": 982,
+  "summary": {
+    "facts": [
+      {
+        "id": "topic-claude-duet",
+        "fact": "The video is an early review of Claude Duet, Anthropic's new personal agent, a phone app (iPhone/Android) synced with Claude and aimed at small business owners and busy professionals.",
+        "critical": true,
+        "trap": "Claude Duet is a desktop app, or it was made by OpenAI.",
+        "note": "Captions write 'cloud' for Claude in places. The reviewer had early TestFlight / research-preview access.",
+        "evidence": {
+          "at": "0:46",
+          "quote": "It is a phone, iPhone, Android based personal agent that is synced up with Claude"
+        }
+      },
+      {
+        "id": "liked-design",
+        "fact": "The reviewer praises its exceptionally polished design and onboarding, plus features like task lists, artifacts and Slack-like channels, and says it inherits Claude's plugins and connectors.",
+        "critical": true,
+        "trap": "The reviewer criticizes the design or calls the app unpolished.",
+        "note": "Compared with competitors the transcript names 'Dots' (OpenAI/Codex's agent, said to be far less polished), 'Muse' (once 'Muse Meta') and 'Grockbot'; names come from auto-captions and may be misheard, so a summary shouldn't be penalized for omitting them.",
+        "evidence": {
+          "at": "1:57",
+          "quote": "the polish of the agent design. This app is beautiful."
+        }
+      },
+      {
+        "id": "not-proactive-and-slow",
+        "fact": "The main criticisms: it isn't proactive enough (after setup it never pulled him back) and it is slow, with tasks taking 10+ minutes, so it fails to close loops and he forgot about it.",
+        "critical": true,
+        "trap": "The reviewer says it is fast or too noisy/annoying.",
+        "evidence": {
+          "at": "7:56",
+          "quote": "it's slow, man. And I get so disengaged waiting for the models to finish."
+        }
+      },
+      {
+        "id": "no-desktop-no-multiplayer",
+        "fact": "Also missing: there is no desktop app, and it is single-player only, with no way to share agents with his small team.",
+        "critical": false,
+        "evidence": {
+          "at": "14:04",
+          "quote": "Duet right now is clearly a agent for single player use."
+        }
+      },
+      {
+        "id": "verdict",
+        "fact": "Verdict: worth trying and well made, but it fell to the bottom of his use list and he doubts it will become part of his own agent stack; it does not replace his current agents.",
+        "critical": true,
+        "trap": "The reviewer says Claude Duet will become his main personal agent.",
+        "evidence": {
+          "at": "15:46",
+          "quote": "let me know if Claude Duet becomes part of your stack because I'm just not sure it's going to become part of mine."
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "title": "How to Deal With the e4 Knight in the Stonewall",
+  "lang": "en",
+  "duration_s": 1719,
+  "summary": {
+    "facts": [
+      {
+        "id": "white-vs-black-stonewall-knight",
+        "fact": "The video answers a viewer's tweet asking how White should handle Black's knight on e4 in the Dutch Stonewall: Black plays the Stonewall, and the troublesome e4 knight is Black's.",
+        "critical": true,
+        "trap": "White plays the Stonewall, or the e4 knight belongs to White.",
+        "evidence": {
+          "at": "0:46",
+          "quote": "Chess players I need help on how to handle such positions as white. What am I to do against a bloodthirsty knight on E4?"
+        }
+      },
+      {
+        "id": "dont-take-on-d5",
+        "fact": "The presenter says the real problems came earlier: White should not have played cxd5 (it releases tension, gives up center and frees Black's c8 bishop) and should not have put the bishop on g5 after g3, since ...h6 forces a bad trade.",
+        "critical": false,
+        "trap": "The presenter recommends cxd5 or Bg5 for White.",
+        "evidence": {
+          "at": "26:00",
+          "quote": "First lesson do not take on d5. Period."
+        }
+      },
+      {
+        "id": "f3-is-the-answer",
+        "fact": "The recipe against the e4 knight: either clear pieces out of its way so it cannot be traded and kick it with f3, or trade on e4 and then break with f3; f3 is always part of the plan.",
+        "critical": true,
+        "trap": "White should leave the knight alone, or simply capture it with a bishop.",
+        "evidence": {
+          "at": "27:24",
+          "quote": "No matter which way you go, F3 is always part of the equation."
+        }
+      },
+      {
+        "id": "model-games-karpov",
+        "fact": "He illustrates this with model games, notably one by Karpov where White kicks the knight, controls the dark squares and plants a knight on e5 while Black's light-squared bishop stays bad, giving White a strategically winning position.",
+        "critical": false,
+        "note": "Second example is by 'Hill person'/'Hilap' in captions, likely Tiger Hillarp Persson (not certain).",
+        "evidence": {
+          "at": "15:56",
+          "quote": "this was a masterpiece in terms of strategy against the um Stonewall."
+        }
+      },
+      {
+        "id": "c1-bishop-no-hurry",
+        "fact": "On the tweet's question of where White's c1 bishop should go: it is usually developed last; there is no hurry to find it a square, White should pursue queenside play (Rb1, b4-b5) and place it when a good square appears.",
+        "critical": false,
+        "evidence": {
+          "at": "21:14",
+          "quote": "no good squares don't move it we want to play Rook B1. We want to play B4 B5."
+        }
+      }
+    ]
+  }
+}
