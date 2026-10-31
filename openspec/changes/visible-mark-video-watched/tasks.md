@@ -16,4 +16,4 @@
 ## 3. Verification
 
 - [x] 3.1 Run `scripts/run-tests.sh` with no flags; all suites (web, rust, contract, e2e) pass.
-- [ ] 3.2 Manually check with `scripts/run-local.sh` on desktop and mobile widths: header shows no mark-all icon; detail pane shows "Mark watched" → "Watched" after clicking; title keeps full width on mobile.
+- [x] 3.2 Manually check with `scripts/run-local.sh` on desktop and mobile widths: header shows no mark-all icon; detail pane shows "Mark watched" → "Watched" after clicking; title keeps full width on mobile.
