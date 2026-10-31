@@ -135,7 +135,8 @@ test('category lifecycle: create, manage sources, rename, assign from the add ch
     const marked = page.waitForResponse(
       (response) => response.url().endsWith('/watched') && response.request().method() === 'POST',
     )
-    await page.getByRole('button', { name: 'Mark all watched' }).click()
+    await page.locator('main').getByRole('button', { name: /^More actions for / }).click()
+    await page.getByRole('menuitem', { name: 'Mark all watched' }).click()
     expect((await marked).status()).toBe(204)
     await expect(cards.getByRole('img', { name: 'Watched' })).toBeVisible()
     await expect(categoryRows.getByLabel(/ unwatched$/)).toHaveCount(0)
