@@ -143,7 +143,7 @@ describe('PlaylistDetail', () => {
   describe('on desktop', () => {
     useDesktopViewport()
 
-    it('lays every action but delete out as a button, then a ⋮ menu offering delete', async () => {
+    it('lays every action but mark-all-watched and delete out as a button, then a ⋮ menu offering both', async () => {
       renderPlaylist(
         {
           'GET /api/playlists': [aPlaylist({ id: 'PL1', name: 'The Playlist' })],
@@ -154,7 +154,6 @@ describe('PlaylistDetail', () => {
 
       expect(await screen.findByRole('button', { name: 'Sync' })).toBeInTheDocument()
       for (const name of [
-        'Mark all watched',
         'Exclude from home',
         'Hide unwatched count',
         'Edit settings',
@@ -162,7 +161,15 @@ describe('PlaylistDetail', () => {
       ]) {
         expect(screen.getByRole('button', { name })).toBeInTheDocument()
       }
+      expect(screen.queryByRole('button', { name: 'Mark all watched' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+      await userEvent
+        .setup()
+        .click(screen.getByRole('button', { name: 'More actions for The Playlist' }))
+      expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual([
+        'Mark all watched',
+        'Delete',
+      ])
     })
   })
 
