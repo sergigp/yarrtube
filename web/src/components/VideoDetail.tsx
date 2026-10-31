@@ -6,7 +6,7 @@ import type { ChannelListItem, Video } from '@/api/types'
 import { formatDate, formatDateTime, formatRelativeTime } from '@/lib/formatDateTime'
 import { Thumbnail } from './Thumbnail'
 import { PlaybackSpeedMenu } from './PlaybackSpeedMenu'
-import { VideoActionsMenu } from './VideoActionsMenu'
+import { VideoWatchedControl } from './VideoWatchedControl'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { storageLocation } from '@/lib/storageLocation'
@@ -69,14 +69,15 @@ export function VideoDetail({
           disabled={video.status !== 'DOWNLOADED'}
           className="mt-0.5"
         />
-        <VideoActionsMenu
-          videoId={video.id}
-          title={video.title}
-          markable={!video.watched && video.status === 'DOWNLOADED'}
-          className="mt-0.5"
-        />
       </div>
       <MetaLine video={video} showChannelName={!channel} />
+      <VideoWatchedControl
+        videoId={video.id}
+        title={video.title}
+        watched={video.watched}
+        downloaded={video.status === 'DOWNLOADED'}
+        className="mt-2"
+      />
       {expanded && (
         <div className="mt-3 mb-1">
           {video.status !== 'DOWNLOADED' && (
