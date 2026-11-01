@@ -7,7 +7,7 @@
       {
         "id": "three-games-as-black",
         "fact": "The video shows three online games in which the streamer plays Black and tries the Accelerated Dragon (Sicilian with an early ...g6).",
-        "critical": false,
+        "critical": true,
         "trap": "The video is a single game.",
         "note": "Games start at 0:00, 17:12 and 36:38. Streamer is likely Alex Banzea (caption spells the email 'alexpansza.com').",
         "evidence": {
@@ -54,6 +54,10 @@
           "quote": "Only only made a draw, but I was dominating um this game."
         }
       }
-    ]
+    ],
+    "review": {
+      "reviewed_on": "2026-11-01",
+      "note": "Facts confirmed by a viewer. All three summaries judged bad: they describe a single game, while the video is essentially '3 games playing the Accelerated Dragon'. YouTube chapters for this video are the three games."
+    }
   }
 }
