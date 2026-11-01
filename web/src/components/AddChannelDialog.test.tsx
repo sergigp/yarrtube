@@ -79,6 +79,41 @@ describe('AddChannelDialog', () => {
     expect(screen.getByRole('button', { name: 'Create Channel' })).toBeEnabled()
   })
 
+  it('keeps a non-Latin handle in the folder name and allows creating it', async () => {
+    renderDialog({
+      [`GET /api/channels/preview?channel=${encodeURIComponent('@НаучныйСон')}`]: {
+        id: '@НаучныйСон',
+        title: 'Научный Сон',
+        avatar_url: null,
+      },
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Channel Handle or URL'), '@НаучныйСон')
+
+    expect(
+      await screen.findByText(/The latest 3 videos from “Научный Сон” will be downloaded to/),
+    ).toBeInTheDocument()
+    expect(screen.getByText('/videos/channels/научныйсон')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create Channel' })).toBeEnabled()
+  })
+
+  it('names the folder after the decoded handle when it is entered percent-encoded', async () => {
+    const encoded = '@%D0%9D%D0%B0%D1%83%D1%87%D0%BD%D1%8B%D0%B9%D0%A1%D0%BE%D0%BD'
+    renderDialog({
+      [`GET /api/channels/preview?channel=${encodeURIComponent(encoded)}`]: {
+        id: '@НаучныйСон',
+        title: 'Научный Сон',
+        avatar_url: null,
+      },
+    })
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('Channel Handle or URL'), encoded)
+
+    expect(await screen.findByText('/videos/channels/научныйсон')).toBeInTheDocument()
+  })
+
   it('creates the channel with the numeric video limit and closes', async () => {
     const { fetchMock, onOpenChange } = renderDialog({
       'GET /api/channels/preview?channel=%40chan': {

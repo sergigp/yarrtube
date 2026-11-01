@@ -13,6 +13,7 @@ import {
   renderWithProviders,
   type Routes as ApiRoutes,
 } from '@/test/helpers'
+import { channelPath } from '@/lib/sourcePath'
 
 function renderChannel(routes: ApiRoutes, route: string) {
   const fetchMock = mockApi(routes)
@@ -46,6 +47,23 @@ describe('ChannelDetail', () => {
 
     expect(await screen.findByText('The Channel')).toBeInTheDocument()
     expect(await screen.findByText('2 videos · 1 unwatched')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['a non-Latin handle', '@НаучныйСон'],
+    ['a handle holding a literal %', '@%D0%9D'],
+  ])('opens a channel with %s from its link', async (_, id) => {
+    const channel = aChannel({ id, name: 'Научный Сон' })
+    renderChannel(
+      {
+        'GET /api/channels': [channel],
+        [`GET /api/channels/${encodeURIComponent(id)}/videos`]: [aVideo()],
+      },
+      channelPath(id),
+    )
+
+    expect(await screen.findByText('Научный Сон')).toBeInTheDocument()
+    expect(screen.queryByText('Channel not found.')).not.toBeInTheDocument()
   })
 
   it('plays the first video by default without autoplay', async () => {

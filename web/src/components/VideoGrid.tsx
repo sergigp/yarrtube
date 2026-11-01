@@ -14,6 +14,7 @@ import { Thumbnail } from './Thumbnail'
 import { CategoryChips, type CategoryChip } from './CategoryChips'
 import { ThumbnailOverlay } from './ThumbnailOverlay'
 import { VideoActionsMenu } from './VideoActionsMenu'
+import { channelPath, playlistPath } from '@/lib/sourcePath'
 
 interface VideoGridProps {
   videos: HomeVideo[]
@@ -35,8 +36,8 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
     <ul className={videoGridListClassName(layout)}>
       {videos.map((video, index) => {
         const videoPath = videoPathOf?.(video) ?? videoPathInSource(video)
-        const channelPath = video.source.kind === 'channel' ? `/channels/${video.source.id}` : null
-        const sourcePath = channelPath ?? `/playlists/${video.source.id}`
+        const channelLink = video.source.kind === 'channel' ? channelPath(video.source.id) : null
+        const sourcePath = channelLink ?? playlistPath(video.source.id)
         const age = formatAge(video.published_at)
         return (
           <li
@@ -72,9 +73,9 @@ export function VideoGrid({ videos, chips, layout = 'grid', videoPathOf }: Video
                 />
               </div>
               <div className="flex items-start gap-2">
-                {channelPath ? (
+                {channelLink ? (
                   <Link
-                    to={channelPath}
+                    to={channelLink}
                     className="relative z-10 mt-0.5 shrink-0"
                     aria-label={video.source.name}
                   >

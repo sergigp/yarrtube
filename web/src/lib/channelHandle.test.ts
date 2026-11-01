@@ -9,6 +9,16 @@ describe('deriveChannelPathSegment', () => {
     expect(deriveChannelPathSegment(undefined)).toBe('')
   })
 
+  it('decodes a percent-encoded handle, bare or in a URL', () => {
+    const encoded = '@%D0%9D%D0%B0%D1%83%D1%87%D0%BD%D1%8B%D0%B9%D0%A1%D0%BE%D0%BD'
+    expect(deriveChannelPathSegment(encoded)).toBe('НаучныйСон')
+    expect(deriveChannelPathSegment(`https://www.youtube.com/${encoded}/videos`)).toBe('НаучныйСон')
+  })
+
+  it('keeps a malformed percent sequence as entered', () => {
+    expect(deriveChannelPathSegment('@bad%zz')).toBe('bad%zz')
+  })
+
   it('strips a leading @ from a bare handle', () => {
     expect(deriveChannelPathSegment('@somechannel')).toBe('somechannel')
     expect(deriveChannelPathSegment('somechannel')).toBe('somechannel')

@@ -17,6 +17,7 @@ import { searchByName } from '@/lib/search'
 import { videoPathInSource } from '@/lib/videoPath'
 import { cn } from '@/lib/utils'
 import { Thumbnail } from './Thumbnail'
+import { channelPath } from '@/lib/sourcePath'
 
 /** How long typing must pause before videos are searched. */
 const VIDEO_SEARCH_DEBOUNCE_MS = 250
@@ -97,7 +98,7 @@ function SearchPanel({ onChosen }: { onChosen: () => void }) {
         name: 'Channels',
         results: searchByName(channels ?? [], text).map((channel) => ({
           key: `channel:${channel.id}`,
-          path: `/channels/${channel.id}`,
+          path: channelPath(channel.id),
           content: (
             <>
               <Thumbnail
