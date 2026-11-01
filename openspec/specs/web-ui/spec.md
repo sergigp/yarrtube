@@ -1394,6 +1394,17 @@ The tasks view SHALL describe a subtitle fetch task in plain language, naming th
 - **WHEN** the tasks view lists a subtitle fetch task whose video title could not be resolved
 - **THEN** the task is still described as a subtitle fetch, using a generic placeholder in place of the missing names
 
+### Requirement: Tasks View Describes Chapter Fetches
+The tasks view SHALL describe a chapters fetch task in plain language, naming the video whose chapters are being fetched and the playlist or channel it belongs to, and SHALL list it with the download tasks, the same way it describes and lists a subtitle fetch task.
+
+#### Scenario: Chapters fetch task with resolvable context
+- **WHEN** the tasks view lists a chapters fetch task whose video title and playlist or channel name were resolved
+- **THEN** the task is described as fetching the chapters of that video in that playlist or channel, under the downloads tab
+
+#### Scenario: Chapters fetch task whose video can no longer be found
+- **WHEN** the tasks view lists a chapters fetch task whose video title could not be resolved
+- **THEN** the task is still described as a chapters fetch, using a generic placeholder in place of the missing names
+
 ### Requirement: Player Offers Subtitles
 When the selected video in a playlist or channel detail view is downloaded and has a subtitle language, the video player SHALL offer its subtitles as a captions track, loaded from that video's subtitles endpoint and labelled with the language's name in English (e.g. "English" for `en`, "Spanish" for `es`), falling back to the language code when no name is known. The track SHALL be off when playback starts. The user SHALL turn it on and off through the player's native captions control. When the selected video has no subtitle language, the player SHALL offer no captions track.
 

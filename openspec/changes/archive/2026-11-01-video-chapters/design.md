@@ -145,6 +145,7 @@ FetchChaptersTask::handle(payload)
     VideoRepository::update_chapters(&video)
 ```
 Always returns `Ok(())` (best-effort, like thumbnails): a failed fetch is retried by the next reconcile pass, not the queue.
+After upgrading, the backfill queues one chapters fetch per downloaded video in the Subtitles lane, so new downloads' subtitles wait behind it once, as with the 0010 subtitle backfill; accepted.
 
 **Listing**
 ```
