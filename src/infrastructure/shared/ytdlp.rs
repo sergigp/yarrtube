@@ -251,9 +251,37 @@ pub fn download_video(
 }
 
 /// Reads the video's chapters via `yt-dlp --print %(chapters)j`,
-/// downloading nothing. `Err` on any failure, clean or systemic.
-pub fn fetch_chapters(_ytdlp_path: &Path, _video_url: &str) -> Result<Vec<VideoChapter>> {
-    Ok(vec![])
+/// downloading nothing; `vec![]` when the video has none. `Err` on any
+/// failure, clean or systemic, including a printed line that can't be read
+/// as chapters.
+pub fn fetch_chapters(ytdlp_path: &Path, video_url: &str) -> Result<Vec<VideoChapter>> {
+    let mut cmd = Command::new(ytdlp_path);
+    cmd.args([
+        "--skip-download",
+        "--quiet",
+        "--no-warnings",
+        "--print",
+        "%(chapters)j",
+    ])
+    .arg(video_url)
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
+    match run(
+        &mut cmd,
+        || not_found_message(ytdlp_path),
+        |e| format!("Failed to run yt-dlp to fetch the chapters of {video_url}: {e}"),
+    )? {
+        RunOutcome::Success(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let line = stdout.lines().last().unwrap_or_default();
+            parse_chapters(line)
+                .ok_or_else(|| anyhow!("yt-dlp printed unreadable chapters for {video_url}"))
+        }
+        RunOutcome::CleanFailure { stderr_raw } => Err(anyhow!(
+            "yt-dlp failed to fetch the chapters of {video_url}: {}",
+            reason_excluding_warnings(&stderr_raw).unwrap_or_else(|| "no reason given".to_string())
+        )),
+    }
 }
 
 /// A thumbnail-only fetch's result: the staged thumbnail's path and the
@@ -1446,6 +1474,43 @@ mod tests {
 
         assert!(fake.captured_args().contains(&"--embed-chapters".to_string()));
         std::fs::remove_dir_all(&output_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_fetch_the_chapters_without_downloading() {
+        let fake = test_support::FakeYtDlp::with_stdout(
+            "[{\"start_time\": 0.0, \"title\": \"Intro\", \"end_time\": 61.5}, {\"start_time\": 61.5, \"title\": \"Main\", \"end_time\": 600.9}]\n",
+        );
+
+        let chapters = fetch_chapters(&fake.path, "https://example.com/video").unwrap();
+
+        assert_eq!(
+            chapters,
+            vec![
+                VideoChapter {
+                    start_seconds: 0,
+                    end_seconds: 61,
+                    title: "Intro".to_string(),
+                },
+                VideoChapter {
+                    start_seconds: 61,
+                    end_seconds: 600,
+                    title: "Main".to_string(),
+                },
+            ]
+        );
+        assert_eq!(
+            fake.captured_args(),
+            vec![
+                "--skip-download",
+                "--quiet",
+                "--no-warnings",
+                "--print",
+                "%(chapters)j",
+                "https://example.com/video",
+            ]
+        );
     }
 
     #[test]
