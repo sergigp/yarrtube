@@ -47,7 +47,7 @@ export function ChapterRail({ chapters, currentTime, onPick }: ChapterRailProps)
               onClick={() => onPick(chapter)}
               aria-current={index === current ? 'true' : undefined}
               className={cn(
-                'relative flex w-40 flex-col items-start gap-0.5 overflow-hidden rounded-md border border-border px-2.5 py-1.5 text-left transition-colors hover:bg-accent',
+                'relative flex h-16 w-40 flex-col items-start gap-0.5 overflow-hidden rounded-md border border-border px-2.5 py-1.5 text-left transition-colors hover:bg-accent',
                 index === current && 'border-primary bg-accent',
               )}
             >

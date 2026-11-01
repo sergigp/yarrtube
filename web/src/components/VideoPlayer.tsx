@@ -116,7 +116,11 @@ export function VideoPlayer({
             ref={videoRef}
             controls
             autoPlay={autoplay}
-            className="block h-full w-full md:h-auto md:max-h-[70vh] md:rounded-lg"
+            className={cn(
+            'block h-full w-full md:h-auto md:rounded-lg',
+            // With chapters, the rail (4 rem cards + 0.5 rem gap) comes out of the same 70vh.
+            chapters.length > 0 ? 'md:max-h-[calc(70vh-4.5rem)]' : 'md:max-h-[70vh]',
+          )}
             src={videoMediaUrl(basePath, filename)}
             poster={
               video.thumbnail_filename ? videoMediaUrl(basePath, video.thumbnail_filename) : undefined
