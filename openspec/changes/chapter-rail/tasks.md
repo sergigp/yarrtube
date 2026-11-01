@@ -17,7 +17,7 @@ Each task is one red-green-refactor cycle; verified by the named test passing an
 - [x] 2.7 `marks no chapter before the first chapter starts`
 - [x] 2.8 `seeks to a chapter start and plays when its card is clicked`
 - [x] 2.9 `scrolls the current card into view when the current chapter changes` (the rail scrolls its own list; `scrollTo` stub added to `test/setup.ts`)
-- [ ] 2.10 `offers no "All chapters" control on desktop`
+- [x] 2.10 `offers no "All chapters" control on desktop`
 - [ ] 2.11 `lists every chapter in a sheet from "All chapters" on mobile, marking the current one`
 - [ ] 2.12 `seeks, plays and closes the sheet when a chapter is picked from it`
 - [ ] 2.13 `shows the rail in the category player`

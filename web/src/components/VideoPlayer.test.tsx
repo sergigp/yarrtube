@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Chapter, Video } from '@/api/types'
 import { aVideo } from '@/test/helpers'
+import { useDesktopViewport } from '@/test/viewport'
 import { VideoPlayer } from './VideoPlayer'
 
 const PLAYLIST = { kind: 'playlist', id: 'PL1' } as const
@@ -264,6 +265,16 @@ describe('VideoPlayer', () => {
       expect(scrolled.length).toBe(scrollsBefore + 1)
       expect(scrolled.at(-1)).toBe(rail)
       scrollTo.mockRestore()
+    })
+
+    describe('on desktop', () => {
+      useDesktopViewport()
+
+      it('offers no "All chapters" control on desktop', () => {
+        renderWith({ chapters: CHAPTERS })
+
+        expect(screen.queryByRole('button', { name: 'All chapters' })).not.toBeInTheDocument()
+      })
     })
   })
 })
