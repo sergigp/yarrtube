@@ -44,6 +44,7 @@ mod tests {
     use crate::domain::video::PlaybackPosition;
     use crate::domain::video::PlaylistEpisodeNumber;
     use crate::domain::video::Video;
+    use crate::domain::video::VideoChapter;
     use crate::domain::video::VideoDownloaded;
     use crate::domain::video::VideoId;
     use crate::domain::video_metadata::{VideoMetadata, render_episode_nfo};
@@ -176,6 +177,59 @@ mod tests {
                     folder: "Season 2026".to_string(),
                 })
             )]
+        );
+    }
+
+    #[test]
+    fn it_should_record_the_chapters_of_a_downloaded_video() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    chapters: Some(game_chapters()),
+                    ..staged_download()
+                },
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                chapters: Some(game_chapters()),
+                ..video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "Season 2026/S2026E031501 - My Video.mp4",
+                        Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+                    .with_episode_number(published_episode(), fixed_timestamp())
+            }]
         );
     }
 
@@ -1889,6 +1943,26 @@ mod tests {
 
     /// A download `yt-dlp` staged for `my_video()`, published on
     /// 2026-03-15, with its converted thumbnail.
+    fn game_chapters() -> Vec<VideoChapter> {
+        vec![
+            VideoChapter {
+                start_seconds: 0,
+                end_seconds: 1037,
+                title: "Game 1".to_string(),
+            },
+            VideoChapter {
+                start_seconds: 1037,
+                end_seconds: 2201,
+                title: "Game 2".to_string(),
+            },
+            VideoChapter {
+                start_seconds: 2201,
+                end_seconds: 3521,
+                title: "Game 3".to_string(),
+            },
+        ]
+    }
+
     fn staged_download() -> DownloadedVideo {
         DownloadedVideo {
             media_path: PathBuf::from("yt1.mp4"),

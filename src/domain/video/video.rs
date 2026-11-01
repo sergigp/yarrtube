@@ -338,8 +338,12 @@ impl Video {
     /// Records the video's checked chapters. Touches only `chapters` and
     /// `updated_at`, stored through `VideoRepository::update_chapters` when
     /// recorded by a chapters fetch.
-    pub fn with_chapters(self, _chapters: Vec<VideoChapter>, _now: DateTime<Utc>) -> Self {
-        self
+    pub fn with_chapters(self, chapters: Vec<VideoChapter>, now: DateTime<Utc>) -> Self {
+        Self {
+            chapters: Some(chapters),
+            updated_at: now,
+            ..self
+        }
     }
 
     /// The language code the fetched subtitle file is named with (`en` for

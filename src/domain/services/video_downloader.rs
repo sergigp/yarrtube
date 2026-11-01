@@ -268,6 +268,10 @@ impl VideoDownloader {
                 now,
             )
             .with_episode_number(number, now);
+        let downloaded_video = match &downloaded.chapters {
+            Some(chapters) => downloaded_video.with_chapters(chapters.clone(), now),
+            None => downloaded_video,
+        };
         let downloaded_video = self.save(downloaded_video)?;
         info!(video_id = %downloaded_video.id, "video downloaded");
         Ok(downloaded_video)
