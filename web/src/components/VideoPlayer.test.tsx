@@ -293,5 +293,20 @@ describe('VideoPlayer', () => {
       ])
       expect(within(sheet).getByRole('button', { current: true })).toHaveTextContent('1:15 Game 1')
     })
+
+    it('seeks, plays and closes the sheet when a chapter is picked from it', async () => {
+      const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+      const { container } = renderWith({ chapters: CHAPTERS })
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: 'All chapters' }))
+
+      const sheet = screen.getByRole('dialog', { name: 'Chapters' })
+      await user.click(within(sheet).getByRole('button', { name: '17:17 Game 2' }))
+
+      expect(container.querySelector('video')!.currentTime).toBe(1037)
+      expect(play).toHaveBeenCalled()
+      expect(screen.queryByRole('dialog', { name: 'Chapters' })).not.toBeInTheDocument()
+      play.mockRestore()
+    })
   })
 })

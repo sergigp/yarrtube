@@ -21,6 +21,7 @@ export function ChapterListSheet({
   currentIndex,
   open,
   onOpenChange,
+  onPick,
 }: ChapterListSheetProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -35,6 +36,10 @@ export function ChapterListSheet({
               <button
                 type="button"
                 aria-current={index === currentIndex ? 'true' : undefined}
+                onClick={() => {
+                  onPick(chapter)
+                  onOpenChange(false)
+                }}
                 className={cn(
                   'flex w-full items-baseline gap-3 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-accent',
                   index === currentIndex && 'bg-accent font-medium',
