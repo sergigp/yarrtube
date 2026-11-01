@@ -8,7 +8,7 @@
 
 Each task is one red-green-refactor cycle; verified by the named test passing and `npm run test` green.
 
-- [ ] 2.1 `shows a card per chapter with its start time and title, in order`
+- [x] 2.1 `shows a card per chapter with its start time and title, in order`
 - [ ] 2.2 `shows hour-long start times as h:mm:ss`
 - [ ] 2.3 `shows no rail for a video without chapters`
 - [ ] 2.4 `shows no rail for a video that is not downloaded`

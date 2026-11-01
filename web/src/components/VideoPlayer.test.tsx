@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Chapter, Video } from '@/api/types'
 import { aVideo } from '@/test/helpers'
 import { VideoPlayer } from './VideoPlayer'
 
@@ -134,6 +135,40 @@ describe('VideoPlayer', () => {
 
       expect(video.currentTime).toBe(30)
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('chapter rail', () => {
+    const CHAPTERS: Chapter[] = [
+      { start_seconds: 0, end_seconds: 75, title: 'Intro' },
+      { start_seconds: 75, end_seconds: 1037, title: 'Game 1' },
+      { start_seconds: 1037, end_seconds: 2201, title: 'Game 2' },
+    ]
+
+    function renderWith(video: Partial<Video>) {
+      return render(
+        <VideoPlayer
+          basePath="music"
+          source={PLAYLIST}
+          video={aVideo({ id: 'vid1', ...video })}
+          autoplay={false}
+          onVideoElement={() => {}}
+        />,
+      )
+    }
+
+    /** The text of each chapter card in the rail, in order. */
+    function railCards(): string[] {
+      const rail = screen.getByRole('navigation', { name: 'Chapters' })
+      return within(rail)
+        .getAllByRole('button')
+        .map((card) => card.textContent ?? '')
+    }
+
+    it('shows a card per chapter with its start time and title, in order', () => {
+      renderWith({ chapters: CHAPTERS })
+
+      expect(railCards()).toEqual(['0:00 Intro', '1:15 Game 1', '17:17 Game 2'])
     })
   })
 })
