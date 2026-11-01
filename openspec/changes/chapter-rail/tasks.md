@@ -9,9 +9,9 @@
 Each task is one red-green-refactor cycle; verified by the named test passing and `npm run test` green.
 
 - [x] 2.1 `shows a card per chapter with its start time and title, in order`
-- [ ] 2.2 `shows hour-long start times as h:mm:ss`
-- [ ] 2.3 `shows no rail for a video without chapters`
-- [ ] 2.4 `shows no rail for a video that is not downloaded`
+- [x] 2.2 `shows hour-long start times as h:mm:ss`
+- [x] 2.3 `shows no rail for a video without chapters`
+- [x] 2.4 `shows no rail for a video that is not downloaded`
 - [ ] 2.5 `marks the chapter containing the playback position as current` (drives `useCurrentTime` and `currentChapterIndex`)
 - [ ] 2.6 `moves the current mark when playback enters the next chapter`
 - [ ] 2.7 `marks no chapter before the first chapter starts`

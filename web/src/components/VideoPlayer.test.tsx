@@ -170,5 +170,23 @@ describe('VideoPlayer', () => {
 
       expect(railCards()).toEqual(['0:00 Intro', '1:15 Game 1', '17:17 Game 2'])
     })
+
+    it('shows hour-long start times as h:mm:ss', () => {
+      renderWith({ chapters: [{ start_seconds: 3725, end_seconds: 4000, title: 'Overtime' }] })
+
+      expect(railCards()).toEqual(['1:02:05 Overtime'])
+    })
+
+    it('shows no rail for a video without chapters', () => {
+      renderWith({ chapters: [] })
+
+      expect(screen.queryByRole('navigation', { name: 'Chapters' })).not.toBeInTheDocument()
+    })
+
+    it('shows no rail for a video that is not downloaded', () => {
+      renderWith({ status: 'PENDING', filename: null, chapters: CHAPTERS })
+
+      expect(screen.queryByRole('navigation', { name: 'Chapters' })).not.toBeInTheDocument()
+    })
   })
 })
