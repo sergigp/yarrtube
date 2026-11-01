@@ -530,8 +530,8 @@ mod youtube_contract_tests {
     use super::*;
     use crate::domain::video_transcript::{CaptionLanguage, CaptionSource, CaptionTracks};
     use crate::infrastructure::shared::youtube_contract::{
-        CAPTIONED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs, video_height,
-        video_url, ytdlp_path,
+        CAPTIONED_VIDEO_ID, CHAPTERED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs,
+        video_height, video_url, ytdlp_path,
     };
     use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
     use crate::infrastructure::shared::ytdlp::{
@@ -565,7 +565,7 @@ mod youtube_contract_tests {
                 duration_seconds: Some(14),
                 published_at: DateTime::from_timestamp(1_550_518_860, 0),
                 sabr_notice,
-                chapters: None,
+                chapters: Some(vec![]),
             })
         );
         // H.264 + AAC, what every browser (iPhone Safari included) plays,
@@ -579,6 +579,37 @@ mod youtube_contract_tests {
             ]
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_fetch_the_chapters_of_a_real_video() {
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let chapters = repository
+            .fetch_chapters(&video_url(CHAPTERED_VIDEO_ID))
+            .unwrap();
+
+        assert_eq!(
+            chapters,
+            vec![
+                VideoChapter {
+                    start_seconds: 0,
+                    end_seconds: 1037,
+                    title: "Game 1".to_string(),
+                },
+                VideoChapter {
+                    start_seconds: 1037,
+                    end_seconds: 2201,
+                    title: "Game 2".to_string(),
+                },
+                VideoChapter {
+                    start_seconds: 2201,
+                    end_seconds: 3521,
+                    title: "Game 3".to_string(),
+                },
+            ]
+        );
     }
 
     #[test]

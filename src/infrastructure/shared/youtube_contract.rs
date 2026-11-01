@@ -12,6 +12,8 @@ pub(crate) const SHORT_VIDEO_ID: &str = "mqWUW6ypo6w";
 /// "Big Buck Bunny", CC BY, Blender Foundation (@BlenderOfficial), with
 /// uploaded `en` and `fr` subtitles.
 pub(crate) const CAPTIONED_VIDEO_ID: &str = "YE7VzlLtp-4";
+/// A video split into three chapters, "Game 1" to "Game 3".
+pub(crate) const CHAPTERED_VIDEO_ID: &str = "NklJAUizpZs";
 /// An id YouTube has no video for.
 pub(crate) const MISSING_VIDEO_ID: &str = "aaaaaaaaaaa";
 /// The project's "test" playlist (maintainer-owned), holding only Big Buck
