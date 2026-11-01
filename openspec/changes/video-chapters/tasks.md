@@ -44,7 +44,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Mention embedded chapters in `doc/PLEX.md` (new downloads only; Plex chapter thumbnails setting) and verify the doc reads correctly.
+- [x] 4.1 Mention embedded chapters in `doc/PLEX.md` (new downloads only; Plex chapter thumbnails setting) and verify the doc reads correctly.
 - [ ] 4.2 `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings` and `scripts/run-tests.sh` (no flags, every suite incl. contract and e2e) all pass.
 - [ ] 4.3 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, track a playlist or channel containing `NklJAUizpZs` via the HTTP API, wait for the download, then assert (a) its listing entry has the 3 chapters, (b) `ffprobe -show_chapters` on the downloaded file lists 3 chapters, (c) after setting its `chapters` back to NULL and reconciling, a `fetch_chapters` task runs and restores them. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.4 Manual (human): in Plex (and any other client in use), open the downloaded episode and check the chapter menu shows Game 1–3 and jumping works; optionally enable chapter thumbnails.

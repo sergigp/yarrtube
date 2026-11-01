@@ -40,6 +40,14 @@ YouTube can take a while to generate captions for new videos, so yarrtube keeps
 trying for about a week. After upgrading, captions for episodes already
 downloaded are fetched in the background.
 
+### Chapters
+
+When a video has YouTube chapters, they're embedded in its file as chapter
+markers, so Plex (and Kodi or Jellyfin) shows a chapter list in the player
+to jump between them. For a picture per chapter, turn on _Settings → Library
+→ Generate chapter thumbnails_. Only videos downloaded since chapters were
+added get them in the file; older episodes keep playing without.
+
 ## Setup
 
 Setting up Plex takes two steps, and only the first is required. The second

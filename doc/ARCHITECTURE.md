@@ -73,7 +73,9 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
 4. The `TaskExecutor` runs them. The download calls `yt-dlp` inside the
    video's staging folder (`<videos root>/.downloads/<youtube id>`), takes
    its episode number from the publish time `yt-dlp` reports, and moves the
-   result into the show's season folder (see below). The thumbnail task is
+   result into the show's season folder (see below). It also records the
+   chapters `yt-dlp` reports and embeds them in the mp4 (`videos.chapters`,
+   JSON; NULL = never checked, `[]` = none). The thumbnail task is
    scheduled first, so it usually arrives first and the UI can show it
    while the video is still downloading.
    A finished download publishes `VideoDownloaded`, which has two
@@ -104,9 +106,11 @@ To illustrate this domain-driven flow we can take a look at what happens when a 
    is missing or not mp4, recovers an `ERRORED` video after its 24h
    cooldown, regenerates missing metadata (relocating a video still in the
    previous layout), warns about a stranded video, and schedules every step
-   still needed (`FetchThumbnail`, `DownloadVideo`, `FetchSubtitles`, each
-   skipped when one is already pending). That backfills an upgraded library
-   and retries videos whose captions weren't available yet. Only then does
+   still needed (`FetchThumbnail`, `DownloadVideo`, `FetchSubtitles`,
+   `FetchChapters`, each skipped when one is already pending). That backfills
+   an upgraded library and retries videos whose captions weren't available
+   yet. `FetchChapters` (subtitles lane) reads a `DOWNLOADED` video's
+   chapters with `yt-dlp` when they were never checked, downloading nothing. Only then does
    it sweep files of the show folder that no stored video accounts for.
 
 ```mermaid
