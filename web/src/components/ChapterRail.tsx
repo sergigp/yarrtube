@@ -1,8 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { ListIcon } from 'lucide-react'
 import type { Chapter } from '@/api/types'
+import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { currentChapterIndex } from '@/lib/chapters'
 import { formatDuration } from '@/lib/formatDuration'
 import { cn } from '@/lib/utils'
+import { ChapterListSheet } from './ChapterListSheet'
 
 interface ChapterRailProps {
   chapters: Chapter[]
@@ -17,6 +20,8 @@ interface ChapterRailProps {
 export function ChapterRail({ chapters, currentTime, onPick }: ChapterRailProps) {
   const current = currentChapterIndex(chapters, currentTime)
   const listRef = useRef<HTMLUListElement>(null)
+  const isDesktop = useIsDesktop()
+  const [listOpen, setListOpen] = useState(false)
 
   // Centre the current card in the rail, only when the current chapter
   // changes, so a user scrolling the rail isn't pulled back on every tick.
@@ -32,8 +37,8 @@ export function ChapterRail({ chapters, currentTime, onPick }: ChapterRailProps)
   }, [current])
 
   return (
-    <nav aria-label="Chapters" className="px-4 py-2 sm:px-6 md:p-0">
-      <ul ref={listRef} className="relative flex gap-2 overflow-x-auto">
+    <nav aria-label="Chapters" className="flex items-stretch gap-2 px-4 py-2 sm:px-6 md:p-0">
+      <ul ref={listRef} className="relative flex min-w-0 flex-1 gap-2 overflow-x-auto">
         {chapters.map((chapter, index) => (
           <li key={chapter.start_seconds} className="shrink-0">
             <button
@@ -56,6 +61,25 @@ export function ChapterRail({ chapters, currentTime, onPick }: ChapterRailProps)
           </li>
         ))}
       </ul>
+      {!isDesktop && (
+        <>
+          <button
+            type="button"
+            aria-label="All chapters"
+            onClick={() => setListOpen(true)}
+            className="flex shrink-0 items-center rounded-md border border-border px-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <ListIcon className="size-4" />
+          </button>
+          <ChapterListSheet
+            chapters={chapters}
+            currentIndex={current}
+            open={listOpen}
+            onOpenChange={setListOpen}
+            onPick={onPick}
+          />
+        </>
+      )}
     </nav>
   )
 }

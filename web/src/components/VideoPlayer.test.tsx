@@ -161,7 +161,7 @@ describe('VideoPlayer', () => {
     /** The text of each chapter card in the rail, in order. */
     function railCards(): string[] {
       const rail = screen.getByRole('navigation', { name: 'Chapters' })
-      return within(rail)
+      return within(within(rail).getByRole('list'))
         .getAllByRole('button')
         .map((card) => card.textContent ?? '')
     }
@@ -275,6 +275,23 @@ describe('VideoPlayer', () => {
 
         expect(screen.queryByRole('button', { name: 'All chapters' })).not.toBeInTheDocument()
       })
+    })
+
+    it('lists every chapter in a sheet from "All chapters" on mobile, marking the current one', async () => {
+      const { container } = renderWith({ chapters: CHAPTERS })
+      playTo(container, 1000)
+      const user = userEvent.setup()
+
+      await user.click(screen.getByRole('button', { name: 'All chapters' }))
+
+      const sheet = screen.getByRole('dialog', { name: 'Chapters' })
+      const rows = within(sheet).getAllByRole('button', { name: /^\d/ })
+      expect(rows.map((row) => row.textContent)).toEqual([
+        '0:00 Intro',
+        '1:15 Game 1',
+        '17:17 Game 2',
+      ])
+      expect(within(sheet).getByRole('button', { current: true })).toHaveTextContent('1:15 Game 1')
     })
   })
 })
