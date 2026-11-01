@@ -313,7 +313,20 @@ impl VideoRepository for SqliteVideoRepository {
         Ok(())
     }
 
-    fn update_chapters(&self, _video: &Video) -> anyhow::Result<()> {
+    fn update_chapters(&self, video: &Video) -> anyhow::Result<()> {
+        let conn = self.db.write()?;
+        conn.execute(
+            "UPDATE videos SET chapters = ?2, updated_at = ?3 WHERE id = ?1",
+            params![
+                video.id.as_str(),
+                Self::encode_chapters(&video.chapters)?,
+                video.updated_at.to_rfc3339(),
+            ],
+        )
+        .inspect_err(|e| {
+            tracing::error!(video_id = %video.id, error = %e, "failed to update video chapters")
+        })
+        .context("failed to update video chapters")?;
         Ok(())
     }
 

@@ -35,3 +35,100 @@ impl TaskHandler for FetchChaptersTask {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::shared::Quality;
+    use crate::domain::video::{Video, VideoChapter, VideoId};
+    use crate::infrastructure::repositories::sqlite_video_repository::SqliteVideoRepository;
+    use crate::infrastructure::repositories::youtube_video_downloader_repository::FakeVideoDownloaderRepository;
+    use crate::infrastructure::shared::sqlite_connection::TestDatabase;
+    use crate::infrastructure::shared::system_clock::FixedClock;
+    use chrono::{DateTime, Utc};
+
+    #[test]
+    fn it_should_record_the_fetched_chapters() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default().with_chapters_result(Ok(intro_chapters())),
+        );
+        let video = downloaded_video();
+        video_repository.save(&video).unwrap();
+        let task = FetchChaptersTask::new(
+            video_repository.clone(),
+            Arc::new(ChapterFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                chapters: Some(intro_chapters()),
+                updated_at: later(),
+                ..video
+            }]
+        );
+        assert_eq!(
+            *video_downloader_repository.chapters_calls.lock().unwrap(),
+            vec![YT1_URL.to_string()]
+        );
+    }
+
+    const YT1_URL: &str = "https://www.youtube.com/watch?v=yt1";
+
+    /// `yt1`, downloaded with its chapters never checked.
+    fn downloaded_video() -> Video {
+        Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
+            .start_download(fixed_timestamp())
+            .mark_downloaded(
+                Quality::High,
+                "Season 2026/S2026E031501 - My Video.mp4",
+                None,
+                Some(600),
+                fixed_timestamp(),
+            )
+    }
+
+    fn intro_chapters() -> Vec<VideoChapter> {
+        vec![
+            VideoChapter {
+                start_seconds: 0,
+                end_seconds: 60,
+                title: "Intro".to_string(),
+            },
+            VideoChapter {
+                start_seconds: 60,
+                end_seconds: 600,
+                title: "Main".to_string(),
+            },
+        ]
+    }
+
+    fn payload_for(video: &Video) -> String {
+        Task::FetchChapters {
+            video_id: video.id.as_str().to_string(),
+        }
+        .payload()
+        .to_string()
+    }
+
+    fn fixed_timestamp() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    fn later() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_600, 0).unwrap()
+    }
+
+    fn run(task: &FetchChaptersTask, payload: &str) -> Result<(), String> {
+        task.handle(payload, false).map_err(|e| e.to_string())
+    }
+}
