@@ -209,5 +209,26 @@ describe('VideoPlayer', () => {
 
       expect(currentCard()).toBe('17:17 Game 2')
     })
+
+    it('moves the current mark when playback enters the next chapter', () => {
+      const { container } = renderWith({ chapters: CHAPTERS })
+
+      playTo(container, 1000)
+      const before = currentCard()
+      playTo(container, 1100)
+
+      expect(before).toBe('1:15 Game 1')
+      expect(currentCard()).toBe('17:17 Game 2')
+    })
+
+    it('marks no chapter before the first chapter starts', () => {
+      const { container } = renderWith({
+        chapters: [{ start_seconds: 10, end_seconds: 60, title: 'Late start' }],
+      })
+
+      playTo(container, 5)
+
+      expect(currentCard()).toBeNull()
+    })
   })
 })

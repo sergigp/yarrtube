@@ -13,8 +13,8 @@ Each task is one red-green-refactor cycle; verified by the named test passing an
 - [x] 2.3 `shows no rail for a video without chapters`
 - [x] 2.4 `shows no rail for a video that is not downloaded`
 - [x] 2.5 `marks the chapter containing the playback position as current` (drives `useCurrentTime` and `currentChapterIndex`)
-- [ ] 2.6 `moves the current mark when playback enters the next chapter`
-- [ ] 2.7 `marks no chapter before the first chapter starts`
+- [x] 2.6 `moves the current mark when playback enters the next chapter`
+- [x] 2.7 `marks no chapter before the first chapter starts`
 - [ ] 2.8 `seeks to a chapter start and plays when its card is clicked`
 - [ ] 2.9 `scrolls the current card into view when the current chapter changes` (add a `scrollIntoView` stub to `test/setup.ts` if jsdom lacks it)
 - [ ] 2.10 `offers no "All chapters" control on desktop`
