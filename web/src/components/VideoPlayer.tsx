@@ -49,6 +49,13 @@ function SeekIndicator({ feedback }: { feedback: SeekFeedback }) {
   )
 }
 
+/** Moves `element` to `seconds` and plays it. */
+function playFrom(element: HTMLVideoElement, seconds: number) {
+  element.currentTime = seconds
+  // A rejected play (e.g. autoplay policy) leaves it paused there.
+  element.play().catch(() => {})
+}
+
 /**
  * The player area of a playlist or channel detail view: plays `video` from
  * `basePath` once downloaded, or explains why it can't yet. ← / → seek 10 s
@@ -72,12 +79,9 @@ export function VideoPlayer({
   const currentTime = useCurrentTime(videoElement)
   const pickChapter = useCallback(
     (chapter: Chapter) => {
-      if (!videoElement) {
-        return
+      if (videoElement) {
+        playFrom(videoElement, chapter.start_seconds)
       }
-      videoElement.currentTime = chapter.start_seconds
-      // A rejected play (e.g. autoplay policy) leaves it paused at the chapter start.
-      videoElement.play().catch(() => {})
     },
     [videoElement],
   )

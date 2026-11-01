@@ -243,5 +243,27 @@ describe('VideoPlayer', () => {
       expect(play).toHaveBeenCalled()
       play.mockRestore()
     })
+
+    it('scrolls the current card into view when the current chapter changes', () => {
+      const scrolled: Element[] = []
+      const scrollTo = vi
+        .spyOn(Element.prototype, 'scrollTo')
+        .mockImplementation(function (this: Element) {
+          scrolled.push(this)
+        })
+      const { container } = renderWith({ chapters: CHAPTERS })
+      const rail = within(screen.getByRole('navigation', { name: 'Chapters' })).getByRole('list')
+      playTo(container, 1000)
+      const scrollsBefore = scrolled.length
+
+      playTo(container, 1010)
+      const scrollsWithinChapter = scrolled.length
+      playTo(container, 1100)
+
+      expect(scrollsWithinChapter).toBe(scrollsBefore)
+      expect(scrolled.length).toBe(scrollsBefore + 1)
+      expect(scrolled.at(-1)).toBe(rail)
+      scrollTo.mockRestore()
+    })
   })
 })

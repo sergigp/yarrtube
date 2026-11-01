@@ -84,6 +84,10 @@ if (!Element.prototype.hasPointerCapture) {
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {}
 }
+// jsdom has no layout, so no element scrolling either (the chapter rail scrolls itself).
+if (!Element.prototype.scrollTo) {
+  Element.prototype.scrollTo = () => {}
+}
 
 // jsdom has no media playback: its `pause()`/`load()` log "Not implemented".
 HTMLMediaElement.prototype.pause = () => {}

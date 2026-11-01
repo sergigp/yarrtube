@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { Chapter } from '@/api/types'
 import { currentChapterIndex } from '@/lib/chapters'
 import { formatDuration } from '@/lib/formatDuration'
@@ -15,10 +16,24 @@ interface ChapterRailProps {
  */
 export function ChapterRail({ chapters, currentTime, onPick }: ChapterRailProps) {
   const current = currentChapterIndex(chapters, currentTime)
+  const listRef = useRef<HTMLUListElement>(null)
+
+  // Centre the current card in the rail, only when the current chapter
+  // changes, so a user scrolling the rail isn't pulled back on every tick.
+  // Scrolls the rail itself, never the page.
+  useEffect(() => {
+    const list = listRef.current
+    const card = current == null ? null : list?.children[current]
+    if (!list || !(card instanceof HTMLElement)) {
+      return
+    }
+    const left = card.offsetLeft - (list.clientWidth - card.offsetWidth) / 2
+    list.scrollTo({ left, behavior: 'smooth' })
+  }, [current])
 
   return (
     <nav aria-label="Chapters" className="px-4 py-2 sm:px-6 md:p-0">
-      <ul className="flex gap-2 overflow-x-auto">
+      <ul ref={listRef} className="relative flex gap-2 overflow-x-auto">
         {chapters.map((chapter, index) => (
           <li key={chapter.start_seconds} className="shrink-0">
             <button

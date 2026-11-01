@@ -68,7 +68,7 @@ PlaylistDetail | ChannelDetail | CategoryPlayer
        -> ChapterRail({ chapters: video.chapters, currentTime, onPick })
             index = currentChapterIndex(chapters, currentTime)
             progress = chapterProgress(chapters[index], currentTime)
-            useEffect([index]) -> card.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' })
+            useEffect([index]) -> list.scrollTo({ left: <card centred>, behavior: 'smooth' })   (rail only; scrollIntoView would also scroll the page)
             !useIsDesktop() -> "All chapters" button
                  -> ChapterListSheet({ chapters, currentIndex: index, open, onOpenChange, onPick })
 ```
@@ -94,7 +94,7 @@ Behaviour (`VideoPlayer.test.tsx`, `describe('chapter rail')`), simplest first:
 6. `moves the current mark when playback enters the next chapter` — 1000 → 1100 s; mark moves Game 1 → Game 2.
 7. `marks no chapter before the first chapter starts` — first chapter at 10 s, time 5 s.
 8. `seeks to a chapter start and plays when its card is clicked` — paused at 30 s, click "Game 2" → `currentTime` 1037, `play` called (jsdom: spy on `HTMLMediaElement.prototype.play`).
-9. `scrolls the current card into view when the current chapter changes` — `scrollIntoView` (stub in `test/setup.ts` if missing) called on the new current card.
+9. `scrolls the current card into view when the current chapter changes` — the rail's list `scrollTo` (stubbed in `test/setup.ts`) called once on a chapter change, not within a chapter.
 10. `offers no "All chapters" control on desktop` — `matchMedia` desktop.
 11. `lists every chapter in a sheet from "All chapters" on mobile, marking the current one` — mobile `matchMedia`, open sheet, rows + `aria-current`.
 12. `seeks, plays and closes the sheet when a chapter is picked from it` — mobile.
