@@ -1390,8 +1390,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn it_should_report_no_chapters_when_yt_dlp_prints_na() {
-        let fake =
-            test_support::FakeYtDlp::with_stdout("NA\n1773568800\n20260315\n223\nyt1.mp4\n");
+        let fake = test_support::FakeYtDlp::with_stdout("NA\n1773568800\n20260315\n223\nyt1.mp4\n");
         let staging_dir = test_support::unique_temp_dir("ytdlp-output-no-chapters");
 
         let result = unwrap_succeeded(
@@ -1472,7 +1471,10 @@ mod tests {
         )
         .unwrap();
 
-        assert!(fake.captured_args().contains(&"--embed-chapters".to_string()));
+        assert!(
+            fake.captured_args()
+                .contains(&"--embed-chapters".to_string())
+        );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
 

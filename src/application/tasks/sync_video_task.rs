@@ -416,10 +416,7 @@ mod tests {
         let result = run(&task, &payload_for(&video));
 
         assert_eq!(result, Ok(()));
-        assert_eq!(
-            task_repository.list_non_completed().unwrap(),
-            vec![]
-        );
+        assert_eq!(task_repository.list_non_completed().unwrap(), vec![]);
     }
 
     #[test]

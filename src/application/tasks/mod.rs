@@ -14,8 +14,8 @@ pub mod sync_video_task;
 pub mod update_ytdlp_task;
 
 use crate::domain::services::{
-    ChannelVideoReconciler, ChapterFetcher, PlaylistVideoReconciler, PlexLabelSyncer, SubtitleFetcher,
-    ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoReconciler,
+    ChannelVideoReconciler, ChapterFetcher, PlaylistVideoReconciler, PlexLabelSyncer,
+    SubtitleFetcher, ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoReconciler,
 };
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;

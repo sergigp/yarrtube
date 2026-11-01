@@ -914,8 +914,8 @@ mod tests {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
         let unchecked = Video::create(VideoId::new("yt1").unwrap(), "Unchecked", now);
-        let without = Video::create(VideoId::new("yt2").unwrap(), "Without", now)
-            .with_chapters(vec![], now);
+        let without =
+            Video::create(VideoId::new("yt2").unwrap(), "Without", now).with_chapters(vec![], now);
         let with = Video::create(VideoId::new("yt3").unwrap(), "With", now).with_chapters(
             vec![
                 VideoChapter {
@@ -945,10 +945,13 @@ mod tests {
         let later = DateTime::<Utc>::from_timestamp(60, 0).unwrap();
         let read = video("First", now);
         repo.save(&read).unwrap();
-        let downloaded = read
-            .clone()
-            .start_download(now)
-            .mark_downloaded(Quality::High, "First.mp4", None, None, now);
+        let downloaded = read.clone().start_download(now).mark_downloaded(
+            Quality::High,
+            "First.mp4",
+            None,
+            None,
+            now,
+        );
         repo.save(&downloaded).unwrap();
         let chapters = vec![VideoChapter {
             start_seconds: 0,

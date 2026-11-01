@@ -798,7 +798,11 @@ mod tests {
         channel_repository
             .insert(&channel("@somechannel", None))
             .unwrap();
-        let unchecked = Video::create(VideoId::new("vid1").unwrap(), "Unchecked", fixed_timestamp());
+        let unchecked = Video::create(
+            VideoId::new("vid1").unwrap(),
+            "Unchecked",
+            fixed_timestamp(),
+        );
         let without_chapters =
             Video::create(VideoId::new("vid2").unwrap(), "Without", fixed_timestamp())
                 .with_chapters(vec![], fixed_timestamp());
