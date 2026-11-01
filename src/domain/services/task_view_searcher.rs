@@ -81,6 +81,7 @@ impl TaskViewSearcher {
             "download_video" => self.resolve_download_video(&task.payload),
             "fetch_thumbnail" => self.resolve_fetch_thumbnail(&task.payload),
             "fetch_subtitles" => self.resolve_fetch_subtitles(&task.payload),
+            "fetch_chapters" => self.resolve_fetch_chapters(&task.payload),
             "sync_video" => self.resolve_sync_video(&task.payload),
             "delete_video_file" => self.resolve_delete_video_file(&task.payload),
             "delete_playlist_files" => self.resolve_delete_playlist_files(&task.payload),
@@ -124,6 +125,11 @@ impl TaskViewSearcher {
 
     fn resolve_fetch_subtitles(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
         let (video_id, _output_dir) = Task::decode_fetch_subtitles_payload(payload)?;
+        self.resolve_video(VideoRecordId::new(video_id)?)
+    }
+
+    fn resolve_fetch_chapters(&self, payload: &str) -> anyhow::Result<HashMap<String, String>> {
+        let video_id = Task::decode_fetch_chapters_payload(payload)?;
         self.resolve_video(VideoRecordId::new(video_id)?)
     }
 
