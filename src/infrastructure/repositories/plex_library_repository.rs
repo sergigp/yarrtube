@@ -172,18 +172,11 @@ impl From<PlaylistMetadata> for PlexPlaylist {
 
 pub struct HttpPlexLibraryRepository {
     config: PlexConfig,
-    client: reqwest::blocking::Client,
 }
 
 impl HttpPlexLibraryRepository {
     pub fn new(config: PlexConfig) -> Self {
-        Self {
-            config,
-            client: reqwest::blocking::Client::builder()
-                .timeout(REQUEST_TIMEOUT)
-                .build()
-                .expect("failed to build the Plex HTTP client"),
-        }
+        Self { config }
     }
 }
 
@@ -209,7 +202,7 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
     fn scan_path(&self, section_id: &str, path: &str) -> anyhow::Result<()> {
         let endpoint = format!("/library/sections/{section_id}/refresh");
         let request = self
-            .client
+            .client()?
             .get(self.url(&endpoint))
             .query(&[("path", path)]);
         self.send(&endpoint, request).map(drop)
@@ -246,7 +239,7 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
     ) -> anyhow::Result<()> {
         let endpoint = format!("/library/sections/{}/all", episode.section_id);
         let request = self
-            .client
+            .client()?
             .put(self.url(&endpoint))
             .query(&label_edit_query(episode, labels, removed));
         self.send(&endpoint, request).map(drop)
@@ -271,7 +264,7 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
         title: &str,
     ) -> anyhow::Result<PlexPlaylist> {
         let uri = smart_playlist_uri(server_id, section_id, label);
-        let request = self.client.post(self.url("/playlists")).query(&[
+        let request = self.client()?.post(self.url("/playlists")).query(&[
             ("type", "video"),
             ("title", title),
             ("smart", "1"),
@@ -289,7 +282,7 @@ impl PlexLibraryRepository for HttpPlexLibraryRepository {
 
     fn delete_playlist(&self, rating_key: &str) -> anyhow::Result<()> {
         let endpoint = format!("/playlists/{rating_key}");
-        let request = self.client.delete(self.url(&endpoint));
+        let request = self.client()?.delete(self.url(&endpoint));
         self.send(&endpoint, request).map(drop)
     }
 }
@@ -329,8 +322,18 @@ impl HttpPlexLibraryRepository {
         path: &str,
         query: &[(&str, &str)],
     ) -> anyhow::Result<T> {
-        let request = self.client.get(self.url(path)).query(query);
+        let request = self.client()?.get(self.url(path)).query(query);
         Ok(self.send(path, request)?.json()?)
+    }
+
+    /// A fresh client per request rather than one shared for the daemon's
+    /// life: a blocking client runs its requests on a private thread, and
+    /// once that thread dies every later request on it panics, so a shared
+    /// one would break Plex until a restart.
+    fn client(&self) -> anyhow::Result<reqwest::blocking::Client> {
+        Ok(reqwest::blocking::Client::builder()
+            .timeout(REQUEST_TIMEOUT)
+            .build()?)
     }
 
     fn url(&self, path: &str) -> String {

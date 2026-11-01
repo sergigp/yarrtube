@@ -11,7 +11,7 @@
 
 ## 3. Plex client per request
 
-- [ ] 3.1 Replace the shared `client` field in `HttpPlexLibraryRepository` with a `client()` helper that builds a blocking client with `REQUEST_TIMEOUT` per request, returning an error instead of panicking on build failure; verify `cargo test plex_library_repository` passes
+- [x] 3.1 Replace the shared `client` field in `HttpPlexLibraryRepository` with a `client()` helper that builds a blocking client with `REQUEST_TIMEOUT` per request, returning an error instead of panicking on build failure; verify `cargo test plex_library_repository` passes
 
 ## 4. Verification
 
