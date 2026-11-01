@@ -47,6 +47,9 @@ export default defineConfig({
     },
   },
   server: {
+    // Tailscale MagicDNS names, so a dev server exposed with `--host` (as
+    // scripts/run-spa-against-remote.sh does) is reachable away from home.
+    allowedHosts: ['.ts.net'],
     proxy: Object.fromEntries(
       PROXIED_PATHS.map((prefix) => [prefix, { target: apiTarget, changeOrigin: true }]),
     ),

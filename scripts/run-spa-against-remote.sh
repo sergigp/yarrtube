@@ -2,7 +2,8 @@
 # Runs the web UI from this checkout (Vite dev server, hot reload) against a
 # remote yarrtube daemon's library, e.g. the one on a NAS: `/api`, `/media`
 # and `/avatars` are proxied to YARRTUBE_REMOTE_URL, so there's no need to run an empty
-# local server for manual UI testing. Read-only by default: every request but
+# local server for manual UI testing. Listens on every interface, so other
+# devices on the LAN or a Tailscale tailnet can open it. Read-only by default: every request but
 # GET and HEAD is answered with 405 so clicking around can't change the
 # remote library. Only frontend changes show up; backend changes need a
 # remote running an image that has them (or scripts/run-local.sh).
@@ -155,4 +156,6 @@ else
 fi
 
 cd "$REPO_ROOT/web"
-YARRTUBE_API_URL="$API_URL" YARRTUBE_API_READ_ONLY="$READ_ONLY" npm run dev
+# --host: listen on every interface, so phones on the LAN or the tailnet
+# (e.g. http://<machine>.<tailnet>.ts.net:5173) can open it too.
+YARRTUBE_API_URL="$API_URL" YARRTUBE_API_READ_ONLY="$READ_ONLY" npm run dev -- --host
