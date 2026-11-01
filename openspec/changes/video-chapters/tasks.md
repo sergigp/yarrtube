@@ -33,7 +33,7 @@
 - [x] 3.3 `it_should_report_unreadable_chapters_as_unchecked` — unparseable line → `None`, download still succeeds.
 - [x] 3.4 `it_should_pass_the_embed_chapters_flag_to_yt_dlp` — `--embed-chapters` in the download args.
 - [x] 3.5 `it_should_fetch_the_chapters_without_downloading` — `--skip-download`, printed line parsed, fractional seconds floored.
-- [ ] 3.6 `it_should_fail_the_chapters_fetch_on_a_clean_failed_exit` — non-zero exit → `Err`.
+- [x] 3.6 `it_should_fail_the_chapters_fetch_on_a_clean_failed_exit` — non-zero exit → `Err`.
 
 `infrastructure/repositories/sqlite_video_repository.rs`
 - [ ] 3.7 `it_should_round_trip_chapters_none_empty_and_some` — `None`, `Some([])`, `Some([..])` persist distinctly.

@@ -1766,6 +1766,23 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn it_should_fail_the_chapters_fetch_on_a_clean_failed_exit() {
+        let ytdlp = fake_ytdlp_writing_stderr(
+            "ytdlp-chapters-failing",
+            "ERROR: [youtube] yt1: Video unavailable",
+            1,
+        );
+
+        let result = fetch_chapters(&ytdlp, "https://example.com/video");
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err("yt-dlp failed to fetch the chapters of https://example.com/video: ERROR: [youtube] yt1: Video unavailable".to_string())
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn it_should_pass_manual_subtitle_flags_for_a_manual_track() {
         let staging_dir = test_support::unique_temp_dir("ytdlp-subtitles-staging");
         let fake = test_support::FakeYtDlp::with_downloaded_files("", &["yt1.en.srt"]);
