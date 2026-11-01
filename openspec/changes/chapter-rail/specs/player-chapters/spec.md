@@ -57,11 +57,15 @@ Activating a chapter card SHALL move the video's playback position to that chapt
 - **THEN** the video is playing from 1037 s and "Game 2" is the current chapter
 
 ### Requirement: Player Makes Room For The Rail On Desktop
-At or above the desktop breakpoint, when the chapter rail is shown, the video SHALL be shrunk just enough that the player and the rail together are no taller than the video alone is without the rail.
+At or above the desktop breakpoint, when the chapter rail is shown, the video and the rail together SHALL stay within the same maximum height the video alone is limited to without the rail. A video already shorter than that limit SHALL NOT be shrunk; the rail is added below it.
 
-#### Scenario: Desktop video with chapters
-- **WHEN** a user on a desktop-width viewport selects a downloaded video with chapters
-- **THEN** the video and the rail below it together take no more height than a video without chapters takes alone
+#### Scenario: Video limited by the maximum height
+- **WHEN** a user on a short desktop-width viewport, where a video without chapters is shown at the maximum player height, selects a downloaded video with chapters
+- **THEN** the video and the rail below it together take no more than that maximum height
+
+#### Scenario: Video below the maximum height
+- **WHEN** a user on a desktop-width viewport, where the video is limited by its width and below the maximum player height, selects a downloaded video with chapters
+- **THEN** the video keeps its size and the rail is shown below it
 
 ### Requirement: Rail Pinned With The Mobile Player
 Below the desktop breakpoint, the chapter rail SHALL stay pinned directly under the pinned player while the page scrolls, as a single row of cards swiped sideways.
