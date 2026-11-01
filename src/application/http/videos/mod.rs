@@ -806,15 +806,18 @@ mod tests {
         let without_chapters =
             Video::create(VideoId::new("vid2").unwrap(), "Without", fixed_timestamp())
                 .with_chapters(vec![], fixed_timestamp());
-        for (position, video) in [&unchecked, &without_chapters].into_iter().enumerate() {
-            save_channel_video(
-                video_repository.as_ref(),
-                channel_video_repository.as_ref(),
-                "@somechannel",
-                video,
-                position as i64,
-            );
-        }
+        [&unchecked, &without_chapters]
+            .into_iter()
+            .enumerate()
+            .for_each(|(position, video)| {
+                save_channel_video(
+                    video_repository.as_ref(),
+                    channel_video_repository.as_ref(),
+                    "@somechannel",
+                    video,
+                    position as i64,
+                )
+            });
         let video_searcher = VideoSearcher::new(
             Arc::new(SqlitePlaylistRepository::new(db.database())),
             Arc::new(SqlitePlaylistVideoRepository::new(db.database())),

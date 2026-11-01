@@ -1786,8 +1786,8 @@ mod tests {
     }
 
     /// Downloaded and numbered in its season folder, with its thumbnail
-    /// recorded and its subtitles still Missing.
-    /// Its chapters already checked, so a sync schedules no chapters fetch.
+    /// recorded and its subtitles still Missing, with its chapters already
+    /// checked so a sync schedules no chapters fetch.
     fn downloaded_video() -> Video {
         my_video()
             .start_download(fixed_timestamp())

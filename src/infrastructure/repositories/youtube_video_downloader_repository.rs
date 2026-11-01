@@ -521,6 +521,35 @@ mod tests {
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
     }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_map_the_printed_chapters_of_a_yt_dlp_process() {
+        let fake = test_support::FakeYtDlp::with_stdout(
+            r#"[{"start_time": 0.0, "title": "Intro", "end_time": 61.7}, {"start_time": 61.7, "title": "Main part", "end_time": 300.0}]
+"#,
+        );
+
+        let result = YtDlpVideoDownloaderRepository::new(fake.path.clone())
+            .fetch_chapters("https://example.com/video")
+            .unwrap();
+
+        assert_eq!(
+            result,
+            vec![
+                VideoChapter {
+                    start_seconds: 0,
+                    end_seconds: 61,
+                    title: "Intro".to_string(),
+                },
+                VideoChapter {
+                    start_seconds: 61,
+                    end_seconds: 300,
+                    title: "Main part".to_string(),
+                },
+            ]
+        );
+    }
 }
 
 /// Against the real `yt-dlp` and YouTube: run with
@@ -772,9 +801,6 @@ mod youtube_contract_tests {
         files
     }
 
-    /// Downloads the short fixture at `quality` and returns its video height.
-    /// The fixture offers h264 up to 1080p plus YouTube's muxed 360p format
-    /// `18`, the stream that used to win every tier (issue #116).
     /// The chapters YouTube reports for `CHAPTERED_VIDEO_ID`.
     fn flamenco_chapters() -> Vec<VideoChapter> {
         [
@@ -797,6 +823,9 @@ mod youtube_contract_tests {
         .collect()
     }
 
+    /// Downloads the short fixture at `quality` and returns its video height.
+    /// The fixture offers h264 up to 1080p plus YouTube's muxed 360p format
+    /// `18`, the stream that used to win every tier (issue #116).
     fn downloaded_height(quality: Quality) -> u32 {
         let staging_dir = unique_temp_dir("contract-download-quality");
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());

@@ -2047,8 +2047,6 @@ mod tests {
         }
     }
 
-    /// A download `yt-dlp` staged for `my_video()`, published on
-    /// 2026-03-15, with its converted thumbnail.
     fn game_chapters() -> Vec<VideoChapter> {
         vec![
             VideoChapter {
@@ -2069,6 +2067,8 @@ mod tests {
         ]
     }
 
+    /// A download `yt-dlp` staged for `my_video()`, published on
+    /// 2026-03-15, with its converted thumbnail.
     fn staged_download() -> DownloadedVideo {
         DownloadedVideo {
             media_path: PathBuf::from("yt1.mp4"),

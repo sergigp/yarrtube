@@ -1916,8 +1916,8 @@ mod tests {
             )
     }
 
-    /// A playlist video numbered `episode`, downloaded in the TV-show layout.
-    /// Its chapters already checked, so a sync schedules no chapters fetch.
+    /// A playlist video numbered `episode`, downloaded in the TV-show layout,
+    /// with its chapters already checked so a sync schedules no chapters fetch.
     fn downloaded_playlist_episode(youtube_id: &str, title: &str, episode: u32) -> Video {
         let base = format!("Season 1/S01E{episode:03} - {title}");
         playlist_episode(youtube_id, title, episode)

@@ -113,38 +113,6 @@ fn parse_duration_seconds(line: &str) -> Option<i64> {
     trimmed.parse::<f64>().ok().map(|seconds| seconds as i64)
 }
 
-/// One entry of `yt-dlp`'s `%(chapters)j`, times in (possibly fractional)
-/// seconds.
-#[derive(serde::Deserialize)]
-struct PrintedChapter {
-    start_time: f64,
-    end_time: f64,
-    title: String,
-}
-
-/// Parses `yt-dlp`'s `--print %(chapters)j` line, flooring times to whole
-/// seconds. `yt-dlp` prints `NA` (or `null`) for a video without chapters,
-/// read as none. `None` when the line can't be read as chapters, so the
-/// video's chapters stay unchecked rather than failing the download.
-fn parse_chapters(line: &str) -> Option<Vec<VideoChapter>> {
-    let trimmed = line.trim();
-    if trimmed.eq_ignore_ascii_case("na") || trimmed == "null" {
-        return Some(vec![]);
-    }
-    serde_json::from_str::<Vec<PrintedChapter>>(trimmed)
-        .ok()
-        .map(|chapters| {
-            chapters
-                .into_iter()
-                .map(|chapter| VideoChapter {
-                    start_seconds: chapter.start_time as i64,
-                    end_seconds: chapter.end_time as i64,
-                    title: chapter.title,
-                })
-                .collect()
-        })
-}
-
 /// Names every staged file after the video's YouTube id, so the media and
 /// its thumbnail share one stem whatever the title.
 const STAGED_OUTPUT_TEMPLATE: &str = "%(id)s.%(ext)s";
@@ -844,6 +812,38 @@ fn staged_srt(staging_dir: &Path, key: &str) -> Result<Option<PathBuf>> {
             path.file_name()
                 .is_some_and(|name| name.to_string_lossy().ends_with(&suffix))
         }))
+}
+
+/// One entry of `yt-dlp`'s `%(chapters)j`, times in (possibly fractional)
+/// seconds.
+#[derive(serde::Deserialize)]
+struct PrintedChapter {
+    start_time: f64,
+    end_time: f64,
+    title: String,
+}
+
+/// Parses `yt-dlp`'s `--print %(chapters)j` line, flooring times to whole
+/// seconds. `yt-dlp` prints `NA` (or `null`) for a video without chapters,
+/// read as none. `None` when the line can't be read as chapters, so the
+/// video's chapters stay unchecked rather than failing the download.
+fn parse_chapters(line: &str) -> Option<Vec<VideoChapter>> {
+    let trimmed = line.trim();
+    if trimmed.eq_ignore_ascii_case("na") || trimmed == "null" {
+        return Some(vec![]);
+    }
+    serde_json::from_str::<Vec<PrintedChapter>>(trimmed)
+        .ok()
+        .map(|chapters| {
+            chapters
+                .into_iter()
+                .map(|chapter| VideoChapter {
+                    start_seconds: chapter.start_time as i64,
+                    end_seconds: chapter.end_time as i64,
+                    title: chapter.title,
+                })
+                .collect()
+        })
 }
 
 /// The printed line `back` lines before the last one, when printed.
