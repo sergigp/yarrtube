@@ -27,7 +27,7 @@
       {
         "id": "decoupling-would-come-too-late",
         "fact": "Absolute decoupling of growth from emissions might take around 100 years, too late because cuts must happen in the next 10–20 years.",
-        "critical": false,
+        "critical": true,
         "trap": "Decoupling can be achieved within the next 10–20 years.",
         "evidence": {
           "at": "3:42",
@@ -54,6 +54,10 @@
           "quote": "Si realmente queremos que haya un futuro en la Tierra, lo primero será empezar a leer y a pensarnos en modelos de vida alternativos que abracen el decrecimiento."
         }
       }
-    ]
+    ],
+    "review": {
+      "reviewed_on": "2026-11-01",
+      "note": "Facts confirmed by a viewer. Preferred summaries: qwen3:4b (thinking) and qwen3:4b-instruct over gemma3:4b; all three judged acceptable."
+    }
   }
 }
