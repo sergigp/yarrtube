@@ -234,6 +234,112 @@ mod tests {
     }
 
     #[test]
+    fn it_should_record_no_chapters_for_a_downloaded_video_without_them() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    chapters: Some(vec![]),
+                    ..staged_download()
+                },
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                chapters: Some(vec![]),
+                ..video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "Season 2026/S2026E031501 - My Video.mp4",
+                        Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+                    .with_episode_number(published_episode(), fixed_timestamp())
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_leave_chapters_unchecked_if_unreadable_on_download() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let output_dir = tempfile::tempdir().unwrap();
+        let video = my_video();
+        video_repository.save(&video).unwrap();
+        SqliteChannelVideoRepository::new(db.database())
+            .save(&ChannelVideo::create(
+                my_channel_id(),
+                video.id.clone(),
+                0,
+                fixed_timestamp(),
+            ))
+            .unwrap();
+        let task = DownloadVideoTask::new(video_downloader(
+            &db,
+            video_repository.clone(),
+            Arc::new(FakeVideoDownloaderRepository::succeeding_with(
+                DownloadedVideo {
+                    chapters: None,
+                    ..staged_download()
+                },
+            )),
+            Arc::new(FakeVideoFileRepository::default()),
+            Arc::new(FakeYoutubeMetadataRepository {
+                metadata: Some(youtube_metadata()),
+            }),
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+        ));
+
+        let result = run(&task, &output_dir_payload(&video, output_dir.path()), false);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                chapters: None,
+                ..video
+                    .clone()
+                    .start_download(fixed_timestamp())
+                    .mark_downloaded(
+                        Quality::High,
+                        "Season 2026/S2026E031501 - My Video.mp4",
+                        Some("Season 2026/S2026E031501 - My Video.jpg".to_string()),
+                        None,
+                        fixed_timestamp(),
+                    )
+                    .with_episode_number(published_episode(), fixed_timestamp())
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_write_the_episode_nfo_before_moving_the_media_into_place() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
