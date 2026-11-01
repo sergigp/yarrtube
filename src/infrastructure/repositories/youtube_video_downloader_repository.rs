@@ -530,8 +530,8 @@ mod youtube_contract_tests {
     use super::*;
     use crate::domain::video_transcript::{CaptionLanguage, CaptionSource, CaptionTracks};
     use crate::infrastructure::shared::youtube_contract::{
-        CAPTIONED_VIDEO_ID, CHAPTERED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID, stream_codecs,
-        video_height, video_url, ytdlp_path,
+        CAPTIONED_VIDEO_ID, CHAPTERED_VIDEO_ID, MISSING_VIDEO_ID, SHORT_VIDEO_ID,
+        embedded_chapters, stream_codecs, video_height, video_url, ytdlp_path,
     };
     use crate::infrastructure::shared::ytdlp::test_support::unique_temp_dir;
     use crate::infrastructure::shared::ytdlp::{
@@ -590,26 +590,32 @@ mod youtube_contract_tests {
             .fetch_chapters(&video_url(CHAPTERED_VIDEO_ID))
             .unwrap();
 
+        assert_eq!(chapters, flamenco_chapters());
+    }
+
+    #[test]
+    #[ignore = "real YouTube: run scripts/run-tests.sh --only contract"]
+    fn it_should_download_a_video_with_its_chapters_embedded() {
+        let staging_dir = unique_temp_dir("contract-download-chapters");
+        let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());
+
+        let attempt = repository
+            .download(&video_url(CHAPTERED_VIDEO_ID), Quality::Low, &staging_dir)
+            .unwrap();
+
+        let downloaded_chapters = match &attempt {
+            DownloadAttempt::Succeeded(video) => video.chapters.clone(),
+            DownloadAttempt::Failed { stderr, .. } => panic!("download failed: {stderr:?}"),
+        };
+        assert_eq!(downloaded_chapters, Some(flamenco_chapters()));
         assert_eq!(
-            chapters,
-            vec![
-                VideoChapter {
-                    start_seconds: 0,
-                    end_seconds: 1037,
-                    title: "Game 1".to_string(),
-                },
-                VideoChapter {
-                    start_seconds: 1037,
-                    end_seconds: 2201,
-                    title: "Game 2".to_string(),
-                },
-                VideoChapter {
-                    start_seconds: 2201,
-                    end_seconds: 3521,
-                    title: "Game 3".to_string(),
-                },
-            ]
+            embedded_chapters(&staging_dir.join(format!("{CHAPTERED_VIDEO_ID}.mp4"))),
+            flamenco_chapters()
+                .into_iter()
+                .map(|chapter| (chapter.start_seconds, chapter.title))
+                .collect::<Vec<_>>()
         );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
     }
 
     #[test]
@@ -769,6 +775,28 @@ mod youtube_contract_tests {
     /// Downloads the short fixture at `quality` and returns its video height.
     /// The fixture offers h264 up to 1080p plus YouTube's muxed 360p format
     /// `18`, the stream that used to win every tier (issue #116).
+    /// The chapters YouTube reports for `CHAPTERED_VIDEO_ID`.
+    fn flamenco_chapters() -> Vec<VideoChapter> {
+        [
+            (0, 33, "Flamenco overview"),
+            (33, 68, "Setting up shared storage"),
+            (68, 104, "Installing the manager"),
+            (104, 133, "Configuring the manager"),
+            (133, 156, "Installing the Blender add-on"),
+            (156, 215, "Submitting a render job"),
+            (215, 244, "Setting up the worker"),
+            (244, 271, "Monitoring rendering progress"),
+            (271, 299, "Reviewing final output"),
+        ]
+        .into_iter()
+        .map(|(start_seconds, end_seconds, title)| VideoChapter {
+            start_seconds,
+            end_seconds,
+            title: title.to_string(),
+        })
+        .collect()
+    }
+
     fn downloaded_height(quality: Quality) -> u32 {
         let staging_dir = unique_temp_dir("contract-download-quality");
         let repository = YtDlpVideoDownloaderRepository::new(ytdlp_path());

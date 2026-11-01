@@ -204,4 +204,5 @@ list_videos_for_playlist / list_videos_for_channel / list_videos_for_category
 24. `it_should_update_only_the_chapters` — `update_chapters` leaves other columns as stored.
 
 `infrastructure/repositories/youtube_video_downloader_repository.rs` (contract, `#[ignore]`, real YouTube)
-25. `it_should_fetch_the_chapters_of_a_real_video` — `NklJAUizpZs` → Game 1 (0–1037), Game 2 (1037–2201), Game 3 (2201–3521).
+25. `it_should_fetch_the_chapters_of_a_real_video` — `O728EFaXuBk` (Blender Studio, CC BY, 299 s) → its 9 chapters.
+26. `it_should_download_a_video_with_its_chapters_embedded` — real 480p download reports the 9 chapters and the mp4 carries 9 matching markers (`ffprobe`).

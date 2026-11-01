@@ -40,7 +40,8 @@
 - [x] 3.8 `it_should_update_only_the_chapters` — `update_chapters` leaves every other column as stored.
 
 `infrastructure/repositories/youtube_video_downloader_repository.rs` (contract, `#[ignore]`)
-- [x] 3.9 `it_should_fetch_the_chapters_of_a_real_video` — `NklJAUizpZs` → Game 1 (0–1037), Game 2 (1037–2201), Game 3 (2201–3521); verify with `scripts/run-tests.sh --only contract` while iterating.
+- [x] 3.9 `it_should_fetch_the_chapters_of_a_real_video` — `O728EFaXuBk` (Blender Studio, CC BY, 299 s) → its 9 chapters; verify with `scripts/run-tests.sh --only contract` while iterating.
+- [x] 3.10 `it_should_download_a_video_with_its_chapters_embedded` (contract) — a real 480p download of `O728EFaXuBk` reports its 9 chapters and the mp4 carries 9 matching chapter markers (`ffprobe`).
 
 ## 4. Verification
 

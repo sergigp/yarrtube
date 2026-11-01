@@ -12,8 +12,9 @@ pub(crate) const SHORT_VIDEO_ID: &str = "mqWUW6ypo6w";
 /// "Big Buck Bunny", CC BY, Blender Foundation (@BlenderOfficial), with
 /// uploaded `en` and `fr` subtitles.
 pub(crate) const CAPTIONED_VIDEO_ID: &str = "YE7VzlLtp-4";
-/// A video split into three chapters, "Game 1" to "Game 3".
-pub(crate) const CHAPTERED_VIDEO_ID: &str = "NklJAUizpZs";
+/// "Installing Flamenco in 5 minutes", 299 s, CC BY, by Blender Studio
+/// (@BlenderStudio), split into 9 chapters.
+pub(crate) const CHAPTERED_VIDEO_ID: &str = "O728EFaXuBk";
 /// An id YouTube has no video for.
 pub(crate) const MISSING_VIDEO_ID: &str = "aaaaaaaaaaa";
 /// The project's "test" playlist (maintainer-owned), holding only Big Buck
@@ -56,6 +57,29 @@ pub(crate) fn stream_codecs(media: &Path) -> Vec<(String, String)> {
     .lines()
     .filter_map(|line| line.split_once(','))
     .map(|(name, kind)| (kind.to_string(), name.to_string()))
+    .collect()
+}
+
+/// `(start in whole seconds, title)` of every chapter marker embedded in
+/// `media`, via `ffprobe`.
+pub(crate) fn embedded_chapters(media: &Path) -> Vec<(i64, String)> {
+    ffprobe(
+        &[
+            "-show_entries",
+            "chapter=start_time:chapter_tags=title",
+            "-of",
+            "csv=p=0",
+        ],
+        media,
+    )
+    .lines()
+    .filter_map(|line| line.split_once(','))
+    .filter_map(|(start, title)| {
+        start
+            .parse::<f64>()
+            .ok()
+            .map(|start| (start as i64, title.to_string()))
+    })
     .collect()
 }
 
