@@ -18,7 +18,7 @@
 - [x] 2.10 `it_should_skip_if_chapters_already_checked` (fetch_chapters_task) — no yt-dlp call when chapters already checked.
 - [x] 2.11 `it_should_skip_if_the_video_is_gone` (fetch_chapters_task) — missing record: `Ok`, no yt-dlp call.
 - [x] 2.12 `it_should_keep_a_playback_position_recorded_during_the_fetch` (fetch_chapters_task) — recording chapters writes only chapters (drives `update_chapters`).
-- [ ] 2.13 `it_should_include_the_chapters_when_listing_playlist_videos` (http/videos) — listed video carries its chapters in order.
+- [x] 2.13 `it_should_include_the_chapters_when_listing_playlist_videos` (http/videos) — listed video carries its chapters in order.
 - [ ] 2.14 `it_should_list_unchecked_chapters_as_empty` (http/videos) — unchecked chapters listed as `[]`.
 - [ ] 2.15 `it_should_include_the_chapters_when_listing_category_videos` (http/videos) — category entry carries the chapters.
 - [ ] 2.16 `it_should_run_fetch_chapters_in_the_subtitles_lane_exclusive_per_video` (domain/task) — lane `Subtitles`, exclusivity key `video:<id>`.

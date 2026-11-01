@@ -208,7 +208,7 @@ mod tests {
     use crate::domain::preferences::Preferences;
     use crate::domain::services::CategoryVideoCollector;
     use crate::domain::shared::{Quality, ReconcileInterval};
-    use crate::domain::video::{EpisodeNumber, Video, VideoRecordId};
+    use crate::domain::video::{EpisodeNumber, Video, VideoChapter, VideoRecordId};
     use crate::domain::video_category::VideoCategories;
     use crate::domain::video_metadata::VideoMetadata;
     use crate::infrastructure::repositories::filesystem_video_file_repository::FakeVideoFileRepository;
@@ -242,7 +242,9 @@ mod tests {
     use crate::infrastructure::shared::sqlite_connection::TestDatabase;
     use crate::infrastructure::shared::system_clock::FixedClock;
     use chrono::{DateTime, Duration, Utc};
-    use dto::{HomeCategorySectionResponse, HomeVideoResponse, HomeVideoSourceResponse};
+    use dto::{
+        ChapterResponse, HomeCategorySectionResponse, HomeVideoResponse, HomeVideoSourceResponse,
+    };
     use rusqlite::Connection;
     use std::ops::Range;
     use std::sync::Arc;
@@ -429,6 +431,45 @@ mod tests {
                 published_at: Some(published_timestamp()),
                 description: Some("A description\nwith two lines".to_string()),
                 channel_name: Some("Some Channel".to_string()),
+                ..pending_video_response("vid1", "My Video")
+            }])
+        );
+    }
+
+    #[tokio::test]
+    async fn it_should_include_the_chapters_when_listing_playlist_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let playlist_video_repository = Arc::new(SqlitePlaylistVideoRepository::new(db.database()));
+        let playlist_repository = Arc::new(SqlitePlaylistRepository::new(db.database()));
+        playlist_repository.insert(&playlist("PL1")).unwrap();
+        let video = Video::create(VideoId::new("vid1").unwrap(), "My Video", fixed_timestamp())
+            .with_chapters(game_chapters(), fixed_timestamp());
+        save_playlist_video(
+            video_repository.as_ref(),
+            playlist_video_repository.as_ref(),
+            "PL1",
+            &video,
+        );
+        let video_searcher = VideoSearcher::new(
+            playlist_repository,
+            playlist_video_repository,
+            Arc::new(SqliteChannelRepository::new(db.database())),
+            Arc::new(SqliteChannelVideoRepository::new(db.database())),
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+        );
+
+        let response = list_for_playlist(video_searcher, "PL1").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![VideoResponse {
+                chapters: game_chapter_responses(),
                 ..pending_video_response("vid1", "My Video")
             }])
         );
@@ -5686,6 +5727,36 @@ mod tests {
             quick_watches: vec![],
             latest: vec![],
         }
+    }
+
+    fn game_chapters() -> Vec<VideoChapter> {
+        vec![
+            VideoChapter {
+                start_seconds: 0,
+                end_seconds: 1037,
+                title: "Game 1".to_string(),
+            },
+            VideoChapter {
+                start_seconds: 1037,
+                end_seconds: 2201,
+                title: "Game 2".to_string(),
+            },
+        ]
+    }
+
+    fn game_chapter_responses() -> Vec<ChapterResponse> {
+        vec![
+            ChapterResponse {
+                start_seconds: 0,
+                end_seconds: 1037,
+                title: "Game 1".to_string(),
+            },
+            ChapterResponse {
+                start_seconds: 1037,
+                end_seconds: 2201,
+                title: "Game 2".to_string(),
+            },
+        ]
     }
 
     fn pending_video_response(youtube_id: &str, title: &str) -> VideoResponse {

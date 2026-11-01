@@ -1,5 +1,6 @@
 use crate::domain::video::{
-    CategoryVideoView, HomeCategorySection, HomeVideoView, HomeVideos, VideoSource, VideoView,
+    CategoryVideoView, HomeCategorySection, HomeVideoView, HomeVideos, VideoChapter, VideoSource,
+    VideoView,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -48,6 +49,16 @@ pub struct ChapterResponse {
     pub title: String,
 }
 
+impl From<VideoChapter> for ChapterResponse {
+    fn from(chapter: VideoChapter) -> Self {
+        Self {
+            start_seconds: chapter.start_seconds,
+            end_seconds: chapter.end_seconds,
+            title: chapter.title,
+        }
+    }
+}
+
 impl From<VideoView> for VideoResponse {
     fn from(view: VideoView) -> Self {
         let video = view.video;
@@ -76,7 +87,12 @@ impl From<VideoView> for VideoResponse {
             published_at,
             description,
             channel_name,
-            chapters: vec![],
+            chapters: video
+                .chapters
+                .unwrap_or_default()
+                .into_iter()
+                .map(ChapterResponse::from)
+                .collect(),
         }
     }
 }
