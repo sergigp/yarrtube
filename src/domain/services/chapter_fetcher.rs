@@ -40,6 +40,9 @@ pub trait ChapterFetcherApi: Send + Sync {
 
 impl ChapterFetcherApi for ChapterFetcher {
     fn fetch(&self, video: &Video) {
+        if !video.is_chapters_fetchable() {
+            return;
+        }
         if let Err(e) = self.fetch_and_record(video) {
             warn!(video_id = %video.id, error = %e, "failed to fetch video chapters");
         }

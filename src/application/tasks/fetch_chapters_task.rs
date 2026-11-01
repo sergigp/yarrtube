@@ -141,6 +141,34 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_skip_if_chapters_already_checked() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default().with_chapters_result(Ok(intro_chapters())),
+        );
+        let video = downloaded_video().with_chapters(vec![], fixed_timestamp());
+        video_repository.save(&video).unwrap();
+        let task = FetchChaptersTask::new(
+            video_repository.clone(),
+            Arc::new(ChapterFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            *video_downloader_repository.chapters_calls.lock().unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
     const YT1_URL: &str = "https://www.youtube.com/watch?v=yt1";
 
     /// `yt1`, downloaded with its chapters never checked.
