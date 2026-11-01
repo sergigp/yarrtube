@@ -9,6 +9,10 @@ export function currentChapterIndex(chapters: Chapter[], time: number): number |
 }
 
 /** 0..1 progress of `time` through `chapter`, clamped. */
-export function chapterProgress(_chapter: Chapter, _time: number): number {
-  return 0
+export function chapterProgress(chapter: Chapter, time: number): number {
+  const length = chapter.end_seconds - chapter.start_seconds
+  if (length <= 0) {
+    return 0
+  }
+  return Math.min(Math.max((time - chapter.start_seconds) / length, 0), 1)
 }

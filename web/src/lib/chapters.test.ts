@@ -26,3 +26,16 @@ describe('currentChapterIndex', () => {
     expect(currentChapterIndex([], 10)).toBeNull()
   })
 })
+
+describe('chapterProgress', () => {
+  const chapter: Chapter = { start_seconds: 100, end_seconds: 200, title: 'Game' }
+
+  it('is the fraction of the chapter played', () => {
+    expect(chapterProgress(chapter, 150)).toBe(0.5)
+  })
+
+  it('is kept between 0 and 1', () => {
+    expect(chapterProgress(chapter, 50)).toBe(0)
+    expect(chapterProgress(chapter, 250)).toBe(1)
+  })
+})

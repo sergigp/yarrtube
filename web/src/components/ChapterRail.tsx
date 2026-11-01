@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ListIcon } from 'lucide-react'
 import type { Chapter } from '@/api/types'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
-import { currentChapterIndex } from '@/lib/chapters'
+import { chapterProgress, currentChapterIndex } from '@/lib/chapters'
 import { formatDuration } from '@/lib/formatDuration'
 import { cn } from '@/lib/utils'
 import { ChapterListSheet } from './ChapterListSheet'
@@ -47,7 +47,7 @@ export function ChapterRail({ chapters, currentTime, onPick }: ChapterRailProps)
               onClick={() => onPick(chapter)}
               aria-current={index === current ? 'true' : undefined}
               className={cn(
-                'flex w-40 flex-col items-start gap-0.5 rounded-md border border-border px-2.5 py-1.5 text-left transition-colors hover:bg-accent',
+                'relative flex w-40 flex-col items-start gap-0.5 overflow-hidden rounded-md border border-border px-2.5 py-1.5 text-left transition-colors hover:bg-accent',
                 index === current && 'border-primary bg-accent',
               )}
             >
@@ -57,6 +57,13 @@ export function ChapterRail({ chapters, currentTime, onPick }: ChapterRailProps)
               <span className="line-clamp-2 text-sm leading-snug text-foreground">
                 {chapter.title}
               </span>
+              {index === current && (
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-primary"
+                  style={{ transform: `scaleX(${chapterProgress(chapter, currentTime)})` }}
+                />
+              )}
             </button>
           </li>
         ))}
