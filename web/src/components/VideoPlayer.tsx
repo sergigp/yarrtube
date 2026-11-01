@@ -118,8 +118,8 @@ export function VideoPlayer({
             autoPlay={autoplay}
             className={cn(
             'block h-full w-full md:h-auto md:rounded-lg',
-            // With chapters, the rail (4 rem cards + 0.5 rem gap) comes out of the same 70vh.
-            chapters.length > 0 ? 'md:max-h-[calc(70vh-4.5rem)]' : 'md:max-h-[70vh]',
+            // With chapters, the rail (4.5 rem cards + 0.5 rem gap) comes out of the same 70vh.
+            chapters.length > 0 ? 'md:max-h-[calc(70vh-5rem)]' : 'md:max-h-[70vh]',
           )}
             src={videoMediaUrl(basePath, filename)}
             poster={
