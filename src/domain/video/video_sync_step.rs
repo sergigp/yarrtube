@@ -10,6 +10,7 @@ pub enum VideoSyncStep {
     Download,
     FetchThumbnail,
     FetchSubtitles,
+    FetchChapters,
 }
 
 impl VideoSyncStep {
@@ -31,6 +32,7 @@ impl VideoSyncStep {
                 video_id,
                 output_dir,
             },
+            Self::FetchChapters => Task::FetchChapters { video_id },
         }
     }
 }

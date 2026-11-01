@@ -23,6 +23,7 @@ impl VideoSyncPlan {
             ),
             (VideoSyncStep::Download, !video.is_download_settled()),
             (VideoSyncStep::FetchSubtitles, video.is_subtitle_fetchable()),
+            (VideoSyncStep::FetchChapters, video.is_chapters_fetchable()),
         ]
         .into_iter()
         .filter(|(_, needed)| *needed)

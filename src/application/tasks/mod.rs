@@ -2,6 +2,7 @@ pub mod delete_channel_files_task;
 pub mod delete_playlist_files_task;
 pub mod delete_video_file_task;
 pub mod download_video_task;
+pub mod fetch_chapters_task;
 pub mod fetch_subtitles_task;
 pub mod fetch_thumbnail_task;
 #[cfg(test)]
@@ -13,7 +14,7 @@ pub mod sync_video_task;
 pub mod update_ytdlp_task;
 
 use crate::domain::services::{
-    ChannelVideoReconciler, PlaylistVideoReconciler, PlexLabelSyncer, SubtitleFetcher,
+    ChannelVideoReconciler, ChapterFetcher, PlaylistVideoReconciler, PlexLabelSyncer, SubtitleFetcher,
     ThumbnailFetcher, VideoDownloader, VideoFileDeleter, VideoReconciler,
 };
 use crate::infrastructure::client::ytdlp_updater::YtdlpUpdater;
@@ -25,6 +26,7 @@ use delete_channel_files_task::DeleteChannelFilesTask;
 use delete_playlist_files_task::DeletePlaylistFilesTask;
 use delete_video_file_task::DeleteVideoFileTask;
 use download_video_task::DownloadVideoTask;
+use fetch_chapters_task::FetchChaptersTask;
 use fetch_subtitles_task::FetchSubtitlesTask;
 use fetch_thumbnail_task::FetchThumbnailTask;
 use reconcile_channel_task::ReconcileChannelTask;
@@ -45,6 +47,7 @@ pub fn registry(
     video_downloader: VideoDownloader,
     thumbnail_fetcher: Arc<ThumbnailFetcher>,
     subtitle_fetcher: Arc<SubtitleFetcher>,
+    chapter_fetcher: Arc<ChapterFetcher>,
     video_reconciler: VideoReconciler,
     video_repository: Arc<dyn VideoRepository>,
     video_file_deleter: VideoFileDeleter,
@@ -77,7 +80,14 @@ pub fn registry(
     );
     registry.insert(
         "fetch_subtitles".to_string(),
-        Arc::new(FetchSubtitlesTask::new(video_repository, subtitle_fetcher)),
+        Arc::new(FetchSubtitlesTask::new(
+            video_repository.clone(),
+            subtitle_fetcher,
+        )),
+    );
+    registry.insert(
+        "fetch_chapters".to_string(),
+        Arc::new(FetchChaptersTask::new(video_repository, chapter_fetcher)),
     );
     registry.insert(
         "sync_video".to_string(),

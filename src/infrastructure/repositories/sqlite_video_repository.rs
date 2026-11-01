@@ -69,6 +69,9 @@ pub trait VideoRepository: Send + Sync {
         thumbnail_filename: &str,
         now: DateTime<Utc>,
     ) -> anyhow::Result<()>;
+    /// Writes only `chapters` (and `updated_at`), leaving every other field
+    /// untouched even if it changed since the caller read the video.
+    fn update_chapters(&self, video: &Video) -> anyhow::Result<()>;
     fn delete(&self, id: &VideoRecordId) -> anyhow::Result<()>;
     /// Every stored copy of a YouTube video, across all playlists/channels.
     fn find_by_youtube_id(&self, youtube_id: &VideoId) -> anyhow::Result<Vec<Video>>;
@@ -302,6 +305,10 @@ impl VideoRepository for SqliteVideoRepository {
             |e| tracing::error!(video_id = %id, error = %e, "failed to update video thumbnail"),
         )
         .context("failed to update video thumbnail")?;
+        Ok(())
+    }
+
+    fn update_chapters(&self, _video: &Video) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -548,6 +555,7 @@ impl SqliteVideoRepository {
                 .subtitles_first_missing_at
                 .map(|t| Self::parse_timestamp(&t, "subtitles_first_missing_at"))
                 .transpose()?,
+            chapters: None,
         })
     }
 

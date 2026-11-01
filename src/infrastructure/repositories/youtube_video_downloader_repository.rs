@@ -1,4 +1,5 @@
 use crate::domain::shared::Quality;
+use crate::domain::video::VideoChapter;
 use crate::domain::video_transcript::CaptionTrack;
 use crate::infrastructure::shared::ytdlp;
 pub use crate::infrastructure::shared::ytdlp::{
@@ -59,6 +60,9 @@ pub trait VideoDownloaderRepository: Send + Sync {
         track: &CaptionTrack,
         staging_dir: &Path,
     ) -> anyhow::Result<FetchedSubtitles>;
+    /// The video's chapters (`vec![]` when it has none), downloading
+    /// nothing. `Err` on any failure, clean or systemic.
+    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<Vec<VideoChapter>>;
 }
 
 /// Invokes `yt-dlp` at `ytdlp_path`, the same configured path `update-ytdlp`
@@ -107,6 +111,10 @@ impl VideoDownloaderRepository for YtDlpVideoDownloaderRepository {
     ) -> anyhow::Result<FetchedSubtitles> {
         ytdlp::fetch_subtitles(&self.ytdlp_path, probe, track, staging_dir)
     }
+
+    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<Vec<VideoChapter>> {
+        ytdlp::fetch_chapters(&self.ytdlp_path, video_url)
+    }
 }
 
 /// What a `FakeVideoDownloaderRepository`'s `diagnose` yields: a determined
@@ -142,6 +150,14 @@ pub struct FakeVideoDownloaderRepository {
     /// How many times the downloader was contacted for captions, probe or
     /// download.
     pub(crate) caption_calls: std::sync::Mutex<usize>,
+    #[allow(clippy::type_complexity)]
+    pub(crate) chapters_result: std::sync::Mutex<Option<anyhow::Result<Vec<VideoChapter>>>>,
+    /// The video URLs `fetch_chapters` was called with.
+    pub(crate) chapters_calls: std::sync::Mutex<Vec<String>>,
+    /// Runs while `fetch_chapters` is in flight, e.g. to record watch
+    /// progress mid-fetch.
+    #[allow(clippy::type_complexity)]
+    pub(crate) on_fetch_chapters: Option<Box<dyn Fn() + Send + Sync>>,
 }
 
 #[cfg(test)]
@@ -164,6 +180,7 @@ impl FakeVideoDownloaderRepository {
                 duration_seconds: None,
                 published_at: None,
                 sabr_notice: None,
+                chapters: None,
             }))
         } else {
             Self::with_result(DownloadAttempt::Failed {
@@ -197,6 +214,7 @@ impl FakeVideoDownloaderRepository {
             duration_seconds: None,
             published_at: None,
             sabr_notice: Some(reason.to_string()),
+            chapters: None,
         }))
     }
 
@@ -244,6 +262,22 @@ impl FakeVideoDownloaderRepository {
     pub fn with_subtitles_result(self, result: anyhow::Result<FetchedSubtitles>) -> Self {
         Self {
             subtitles_result: std::sync::Mutex::new(Some(result)),
+            ..self
+        }
+    }
+
+    /// Configures what `fetch_chapters` returns; unconfigured, it fails.
+    pub fn with_chapters_result(self, result: anyhow::Result<Vec<VideoChapter>>) -> Self {
+        Self {
+            chapters_result: std::sync::Mutex::new(Some(result)),
+            ..self
+        }
+    }
+
+    /// Runs `hook` while `fetch_chapters` is in flight.
+    pub fn with_on_fetch_chapters(self, hook: impl Fn() + Send + Sync + 'static) -> Self {
+        Self {
+            on_fetch_chapters: Some(Box::new(hook)),
             ..self
         }
     }
@@ -296,6 +330,9 @@ impl FakeVideoDownloaderRepository {
             caption_probe: Default::default(),
             subtitles_result: Default::default(),
             caption_calls: Default::default(),
+            chapters_result: Default::default(),
+            chapters_calls: Default::default(),
+            on_fetch_chapters: None,
         }
     }
 }
@@ -389,6 +426,21 @@ impl VideoDownloaderRepository for FakeVideoDownloaderRepository {
                 ..fetched
             })
     }
+
+    fn fetch_chapters(&self, video_url: &str) -> anyhow::Result<Vec<VideoChapter>> {
+        self.chapters_calls
+            .lock()
+            .unwrap()
+            .push(video_url.to_string());
+        if let Some(hook) = &self.on_fetch_chapters {
+            hook();
+        }
+        self.chapters_result
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or_else(|| Err(anyhow::anyhow!("no fake chapters configured")))
+    }
 }
 
 #[cfg(test)]
@@ -414,6 +466,7 @@ mod tests {
                 duration_seconds: None,
                 published_at: None,
                 sabr_notice: None,
+                chapters: None,
             })
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -512,6 +565,7 @@ mod youtube_contract_tests {
                 duration_seconds: Some(14),
                 published_at: DateTime::from_timestamp(1_550_518_860, 0),
                 sabr_notice,
+                chapters: None,
             })
         );
         // H.264 + AAC, what every browser (iPhone Safari included) plays,

@@ -70,6 +70,15 @@ export interface Video {
   channel_name: string | null
   /** The fetched subtitles' language code (e.g. `en`), null until fetched. */
   subtitle_language: string | null
+  /** YouTube chapters in playback order; empty when none or not checked yet. */
+  chapters: Chapter[]
+}
+
+/** One of a video's chapters, in whole seconds from the start of the video. */
+export interface Chapter {
+  start_seconds: number
+  end_seconds: number
+  title: string
 }
 
 export interface HomeVideoSource {

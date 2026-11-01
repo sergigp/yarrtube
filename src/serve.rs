@@ -7,7 +7,7 @@ use crate::domain::services::{
     DirectorySearcher, InternalVideoReconciler, LayoutMigrator, MetadataGenerator, PlaylistCreator,
     PlaylistDeleter, PlaylistPreviewer, PlaylistUpdater, PlaylistVideoReconciler,
     PlaylistViewSearcher, PlexFolderScanner, PlexLabelSyncer, PlexLabelSyncerApi,
-    PreferencesSearcher, PreferencesUpdater, ShowFileWriter, ShowMover, SubtitleFetcher,
+    PreferencesSearcher, PreferencesUpdater, ShowFileWriter, ShowMover, SubtitleFetcher, ChapterFetcher,
     SubtitleReader, TaskViewSearcher, ThumbnailFetcher, VideoCategoryAssigner, VideoDownloader,
     VideoFileDeleter, VideoOwnerFinder, VideoReconciler, VideoRelocator, VideoSearcher,
     VideoWatchStateUpdater,
@@ -648,6 +648,7 @@ fn task_handlers(
         video_downloader(infrastructure),
         thumbnail_fetcher(infrastructure),
         subtitle_fetcher(infrastructure),
+        chapter_fetcher(infrastructure),
         video_reconciler(infrastructure),
         infrastructure.video_repository.clone(),
         VideoFileDeleter::new(infrastructure.video_file_repository.clone(), videos_path()),
@@ -791,6 +792,14 @@ fn thumbnail_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ThumbnailF
         infrastructure.video_file_repository.clone(),
         infrastructure.clock.clone(),
         videos_path(),
+    ))
+}
+
+fn chapter_fetcher(infrastructure: &InfrastructureContainer) -> Arc<ChapterFetcher> {
+    Arc::new(ChapterFetcher::new(
+        infrastructure.video_repository.clone(),
+        infrastructure.video_downloader_repository.clone(),
+        infrastructure.clock.clone(),
     ))
 }
 
@@ -1177,6 +1186,7 @@ mod tests {
                 "delete_playlist_files",
                 "delete_video_file",
                 "download_video",
+                "fetch_chapters",
                 "fetch_subtitles",
                 "fetch_thumbnail",
                 "reconcile_channel",

@@ -37,6 +37,15 @@ pub struct VideoResponse {
     pub description: Option<String>,
     pub channel_name: Option<String>,
     pub subtitle_language: Option<String>,
+    pub chapters: Vec<ChapterResponse>,
+}
+
+/// One of a video's chapters, in whole seconds from the start of the video.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ChapterResponse {
+    pub start_seconds: i64,
+    pub end_seconds: i64,
+    pub title: String,
 }
 
 impl From<VideoView> for VideoResponse {
@@ -67,6 +76,7 @@ impl From<VideoView> for VideoResponse {
             published_at,
             description,
             channel_name,
+            chapters: vec![],
         }
     }
 }
@@ -169,6 +179,7 @@ pub struct CategoryVideoResponse {
     pub description: Option<String>,
     pub channel_name: Option<String>,
     pub subtitle_language: Option<String>,
+    pub chapters: Vec<ChapterResponse>,
     pub source: HomeVideoSourceResponse,
     pub category_ids: Vec<String>,
 }
@@ -197,6 +208,7 @@ impl From<CategoryVideoView> for CategoryVideoResponse {
             description: video.description,
             channel_name: video.channel_name,
             subtitle_language: video.subtitle_language,
+            chapters: video.chapters,
             source: HomeVideoSourceResponse::from(view.source),
             category_ids: view
                 .category_ids

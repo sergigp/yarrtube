@@ -14,6 +14,7 @@ pub mod sourced_video;
 pub mod subtitle_state;
 #[allow(clippy::module_inception)]
 pub mod video;
+pub mod video_chapter;
 pub mod video_duration;
 pub mod video_filename;
 pub mod video_id;
@@ -43,6 +44,7 @@ pub use playlist_episode_number::PlaylistEpisodeNumber;
 pub use sourced_video::{SourcedVideo, VideoSource};
 pub use subtitle_state::SubtitleState;
 pub use video::Video;
+pub use video_chapter::VideoChapter;
 pub use video_duration::VideoDuration;
 pub use video_id::VideoId;
 pub use video_output_entry::{

@@ -5706,6 +5706,7 @@ mod tests {
             description: None,
             channel_name: None,
             subtitle_language: None,
+            chapters: vec![],
         }
     }
 
@@ -5761,6 +5762,7 @@ mod tests {
             description: None,
             channel_name: None,
             subtitle_language: None,
+            chapters: vec![],
             source,
             category_ids: vec![],
         }

@@ -731,6 +731,7 @@ mod tests {
             Arc::new(FakeVideoDownloaderRepository::succeeding_with(
                 DownloadedVideo {
                     sabr_notice: Some("SABR-only streaming experiment".to_string()),
+                    chapters: None,
                     ..staged_download()
                 },
             )),
@@ -1899,6 +1900,7 @@ mod tests {
                     .to_utc(),
             ),
             sabr_notice: None,
+            chapters: None,
         }
     }
 

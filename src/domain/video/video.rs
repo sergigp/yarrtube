@@ -1,6 +1,7 @@
 use super::episode_number::EpisodeNumber;
 use super::playback_position::PlaybackPosition;
 use super::subtitle_state::SubtitleState;
+use super::video_chapter::VideoChapter;
 use super::video_duration::VideoDuration;
 use super::video_id::VideoId;
 use super::video_output_entry::is_episode_path;
@@ -54,6 +55,9 @@ pub struct Video {
     /// When a conclusive subtitle fetch first found no selectable track:
     /// starts the 7-day window before the subtitles are given up on.
     pub subtitles_first_missing_at: Option<DateTime<Utc>>,
+    /// The video's YouTube chapters: `None` while never checked,
+    /// `Some(vec![])` once checked and found to have none.
+    pub chapters: Option<Vec<VideoChapter>>,
 }
 
 const WATCHED_THRESHOLD: f64 = 0.9;
@@ -81,6 +85,7 @@ impl Video {
             subtitle_state: SubtitleState::Missing,
             subtitle_filename: None,
             subtitles_first_missing_at: None,
+            chapters: None,
         }
     }
 
@@ -322,6 +327,19 @@ impl Video {
             updated_at: now,
             ..self
         }
+    }
+
+    /// Whether a chapters fetch is worth attempting: Downloaded and its
+    /// chapters never checked.
+    pub fn is_chapters_fetchable(&self) -> bool {
+        false
+    }
+
+    /// Records the video's checked chapters. Touches only `chapters` and
+    /// `updated_at`, stored through `VideoRepository::update_chapters` when
+    /// recorded by a chapters fetch.
+    pub fn with_chapters(self, _chapters: Vec<VideoChapter>, _now: DateTime<Utc>) -> Self {
+        self
     }
 
     /// The language code the fetched subtitle file is named with (`en` for

@@ -4,6 +4,7 @@ pub mod category_member_remover;
 pub mod category_updater;
 pub mod category_video_collector;
 pub mod category_view_searcher;
+pub mod chapter_fetcher;
 pub mod channel_avatar_restorer;
 pub mod channel_creator;
 pub mod channel_deleter;
@@ -58,6 +59,7 @@ pub use internal_video_reconciler::{
     DesiredState, InternalVideoReconciler, InternalVideoReconcilerApi,
 };
 pub use layout_migrator::{LayoutMigrator, LayoutMigratorApi, MigrationReport};
+pub use chapter_fetcher::{ChapterFetcher, ChapterFetcherApi};
 pub use metadata_generator::{MetadataGenerator, MetadataGeneratorApi};
 pub use playlist_creator::{CreatePlaylistOutcome, PlaylistCreator, PlaylistCreatorApi};
 pub use playlist_deleter::{PlaylistDeleter, PlaylistDeleterApi};

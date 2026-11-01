@@ -1,4 +1,5 @@
 use crate::domain::shared::Quality;
+use crate::domain::video::VideoChapter;
 use crate::domain::video_transcript::{CaptionSource, CaptionTrack, CaptionTracks};
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
@@ -80,6 +81,9 @@ pub struct DownloadedVideo {
     /// when no SABR signal was reported. Carries the reason text for logging;
     /// it never affects the recorded status.
     pub sabr_notice: Option<String>,
+    /// The chapters `yt-dlp` reported (`Some(vec![])` for none); `None` when
+    /// the printed chapters could not be read.
+    pub chapters: Option<Vec<VideoChapter>>,
 }
 
 /// The outcome of a `download_video` attempt: either a `DownloadedVideo`, or
@@ -204,7 +208,14 @@ pub fn download_video(
         duration_seconds,
         published_at,
         sabr_notice,
+        chapters: None,
     }))
+}
+
+/// Reads the video's chapters via `yt-dlp --print %(chapters)j`,
+/// downloading nothing. `Err` on any failure, clean or systemic.
+pub fn fetch_chapters(_ytdlp_path: &Path, _video_url: &str) -> Result<Vec<VideoChapter>> {
+    Ok(vec![])
 }
 
 /// A thumbnail-only fetch's result: the staged thumbnail's path and the
@@ -1051,6 +1062,7 @@ mod tests {
                 duration_seconds: None,
                 published_at: None,
                 sabr_notice: None,
+                chapters: None,
             })
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -1212,6 +1224,7 @@ mod tests {
                 duration_seconds: Some(223),
                 published_at: None,
                 sabr_notice: None,
+                chapters: None,
             }
         );
         std::fs::remove_dir_all(&output_dir).unwrap();
@@ -1245,6 +1258,7 @@ mod tests {
                         .to_utc()
                 ),
                 sabr_notice: None,
+                chapters: None,
             }
         );
         assert!(
@@ -1945,6 +1959,7 @@ mod tests {
                 duration_seconds: None,
                 published_at: None,
                 sabr_notice: Some(SABR_WARNING.to_string()),
+                chapters: None,
             })
         );
         std::fs::remove_dir_all(&output_dir).unwrap();

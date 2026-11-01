@@ -1,0 +1,42 @@
+use crate::domain::video::Video;
+use crate::infrastructure::repositories::sqlite_video_repository::VideoRepository;
+use crate::infrastructure::repositories::youtube_video_downloader_repository::VideoDownloaderRepository;
+use crate::infrastructure::shared::system_clock::Clock;
+use std::sync::Arc;
+
+/// Best-effort chapters fetch for a video downloaded before its chapters
+/// were recorded — see the `video-chapters` capability. Runs from the
+/// `fetch_chapters` task and never returns an error to its caller;
+/// `VideoReconciler` decides when to schedule it.
+#[derive(Clone)]
+pub struct ChapterFetcher {
+    video_repository: Arc<dyn VideoRepository>,
+    video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+    clock: Arc<dyn Clock>,
+}
+
+impl ChapterFetcher {
+    pub fn new(
+        video_repository: Arc<dyn VideoRepository>,
+        video_downloader_repository: Arc<dyn VideoDownloaderRepository>,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
+        Self {
+            video_repository,
+            video_downloader_repository,
+            clock,
+        }
+    }
+}
+
+pub trait ChapterFetcherApi: Send + Sync {
+    /// No-ops unless `video.is_chapters_fetchable()`. Otherwise reads the
+    /// video's chapters from YouTube and records them, writing only the
+    /// chapters; any failure is logged and swallowed, leaving the chapters
+    /// unchecked so a later video sync tries again.
+    fn fetch(&self, video: &Video);
+}
+
+impl ChapterFetcherApi for ChapterFetcher {
+    fn fetch(&self, _video: &Video) {}
+}

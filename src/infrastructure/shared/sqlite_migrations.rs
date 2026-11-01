@@ -31,6 +31,7 @@ const CATEGORY_COLOR_STRENGTHEN_SQL: &str =
     include_str!("../../../migrations/0018_category_color_strengthen.sql");
 const CATEGORY_PALETTE_REFRESH_SQL: &str =
     include_str!("../../../migrations/0019_category_palette_refresh.sql");
+const VIDEO_CHAPTERS_SQL: &str = include_str!("../../../migrations/0020_video_chapters.sql");
 
 pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
     Migrations::new(vec![
@@ -56,6 +57,7 @@ pub fn apply(conn: &mut Connection) -> anyhow::Result<()> {
             strengthen_light_category_colors,
         ),
         M::up(CATEGORY_PALETTE_REFRESH_SQL),
+        M::up(VIDEO_CHAPTERS_SQL),
     ])
     .to_latest(conn)
     .inspect_err(|e| tracing::error!(error = %e, "failed to apply database migrations"))
