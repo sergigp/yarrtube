@@ -790,6 +790,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_list_unchecked_chapters_as_empty() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        let unchecked = Video::create(VideoId::new("vid1").unwrap(), "Unchecked", fixed_timestamp());
+        let without_chapters =
+            Video::create(VideoId::new("vid2").unwrap(), "Without", fixed_timestamp())
+                .with_chapters(vec![], fixed_timestamp());
+        for (position, video) in [&unchecked, &without_chapters].into_iter().enumerate() {
+            save_channel_video(
+                video_repository.as_ref(),
+                channel_video_repository.as_ref(),
+                "@somechannel",
+                video,
+                position as i64,
+            );
+        }
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            Arc::new(SqliteCategoryRepository::new(db.database())),
+            category_video_collector(&db),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+        );
+
+        let response = list_for_channel(video_searcher, "@somechannel").await;
+
+        assert_eq!(
+            response,
+            Ok(vec![
+                pending_video_response("vid1", "Unchecked"),
+                pending_video_response("vid2", "Without"),
+            ])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_include_the_metadata_when_listing_channel_videos() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
