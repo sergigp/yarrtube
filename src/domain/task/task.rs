@@ -294,7 +294,7 @@ impl Task {
         match task_type {
             "download_video" => TaskLane::Download,
             "fetch_thumbnail" => TaskLane::Thumbnail,
-            "fetch_subtitles" => TaskLane::Subtitles,
+            "fetch_subtitles" | "fetch_chapters" => TaskLane::Subtitles,
             "sync_video" => TaskLane::VideoSync,
             "sync_plex_labels" => TaskLane::Plex,
             "update_ytdlp" => TaskLane::Exclusive,
@@ -303,7 +303,7 @@ impl Task {
     }
 
     /// `Some("video:<id>")` for `download_video`, `fetch_thumbnail`,
-    /// `fetch_subtitles` and `sync_video`: two tasks sharing a key never run
+    /// `fetch_subtitles`, `fetch_chapters` and `sync_video`: two tasks sharing a key never run
     /// at the same time, and a task with a key is not scheduled twice while
     /// one is pending (or running, see `dedupes_running`).
     pub fn exclusivity_key(task_type: &str, payload: &str) -> Option<String> {
@@ -318,6 +318,7 @@ impl Task {
                 .ok()
                 .map(|(video_id, _)| video_id),
             "sync_video" => Self::decode_sync_video_payload(payload).ok(),
+            "fetch_chapters" => Self::decode_fetch_chapters_payload(payload).ok(),
             _ => None,
         }?;
         Some(format!("video:{video_id}"))
@@ -688,6 +689,22 @@ mod tests {
         .collect();
 
         assert_eq!(dedupes, vec![true, true, true, false]);
+    }
+
+    #[test]
+    fn it_should_run_fetch_chapters_in_the_subtitles_lane_exclusive_per_video() {
+        let task = Task::FetchChapters {
+            video_id: "rec1".to_string(),
+        };
+
+        assert_eq!(
+            (
+                Task::lane_for(task.task_type()),
+                Task::exclusivity_key(task.task_type(), &task.payload().to_string()),
+                Task::dedupes_running(task.task_type()),
+            ),
+            (TaskLane::Subtitles, Some("video:rec1".to_string()), true)
+        );
     }
 
     #[test]
