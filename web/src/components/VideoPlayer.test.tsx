@@ -230,5 +230,18 @@ describe('VideoPlayer', () => {
 
       expect(currentCard()).toBeNull()
     })
+
+    it('seeks to a chapter start and plays when its card is clicked', async () => {
+      const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+      const { container } = renderWith({ chapters: CHAPTERS })
+      playTo(container, 30)
+      const user = userEvent.setup()
+
+      await user.click(screen.getByRole('button', { name: '17:17 Game 2' }))
+
+      expect(container.querySelector('video')!.currentTime).toBe(1037)
+      expect(play).toHaveBeenCalled()
+      play.mockRestore()
+    })
   })
 })

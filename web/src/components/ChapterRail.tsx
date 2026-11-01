@@ -13,7 +13,7 @@ interface ChapterRailProps {
  * The chapters of the playing video as a row of same-width cards under the
  * player, the current one highlighted and kept in view.
  */
-export function ChapterRail({ chapters, currentTime }: ChapterRailProps) {
+export function ChapterRail({ chapters, currentTime, onPick }: ChapterRailProps) {
   const current = currentChapterIndex(chapters, currentTime)
 
   return (
@@ -24,6 +24,7 @@ export function ChapterRail({ chapters, currentTime }: ChapterRailProps) {
             <button
               type="button"
               title={chapter.title}
+              onClick={() => onPick(chapter)}
               aria-current={index === current ? 'true' : undefined}
               className={cn(
                 'flex w-40 flex-col items-start gap-0.5 rounded-md border border-border px-2.5 py-1.5 text-left transition-colors hover:bg-accent',

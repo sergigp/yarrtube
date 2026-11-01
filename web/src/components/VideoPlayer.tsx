@@ -70,7 +70,17 @@ export function VideoPlayer({
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
   const seekFeedback = useSeekKeys(videoElement)
   const currentTime = useCurrentTime(videoElement)
-  const pickChapter = useCallback((_chapter: Chapter) => {}, [])
+  const pickChapter = useCallback(
+    (chapter: Chapter) => {
+      if (!videoElement) {
+        return
+      }
+      videoElement.currentTime = chapter.start_seconds
+      // A rejected play (e.g. autoplay policy) leaves it paused at the chapter start.
+      videoElement.play().catch(() => {})
+    },
+    [videoElement],
+  )
   const videoRef = useCallback(
     (element: HTMLVideoElement | null) => {
       setVideoElement(element)

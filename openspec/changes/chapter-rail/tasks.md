@@ -15,7 +15,7 @@ Each task is one red-green-refactor cycle; verified by the named test passing an
 - [x] 2.5 `marks the chapter containing the playback position as current` (drives `useCurrentTime` and `currentChapterIndex`)
 - [x] 2.6 `moves the current mark when playback enters the next chapter`
 - [x] 2.7 `marks no chapter before the first chapter starts`
-- [ ] 2.8 `seeks to a chapter start and plays when its card is clicked`
+- [x] 2.8 `seeks to a chapter start and plays when its card is clicked`
 - [ ] 2.9 `scrolls the current card into view when the current chapter changes` (add a `scrollIntoView` stub to `test/setup.ts` if jsdom lacks it)
 - [ ] 2.10 `offers no "All chapters" control on desktop`
 - [ ] 2.11 `lists every chapter in a sheet from "All chapters" on mobile, marking the current one`
