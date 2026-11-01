@@ -15,4 +15,4 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, and `scripts/run-tests.sh` (all suites) and verify they pass
+- [x] 4.1 Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features --locked -- -D warnings`, and `scripts/run-tests.sh` (all suites) and verify they pass
