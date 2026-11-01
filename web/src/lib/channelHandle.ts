@@ -4,7 +4,7 @@
  * value looks like a URL, takes the handle segment (the first path segment
  * after the host, e.g. `@name` in `youtube.com/@name/videos`) rather than
  * the last one, since a channel URL may carry trailing segments like
- * `/videos` or `/featured`. Mirrors the shape of the backend's
+ * `/videos` or `/featured`. A percent-encoded handle is decoded. Mirrors the shape of the backend's
  * `ChannelHandle::from_url_or_handle` without contacting YouTube or
  * replicating its full validation.
  */
@@ -24,5 +24,14 @@ export function deriveChannelPathSegment(rawValue: string | null | undefined): s
     candidate = segments[1] ?? ''
   }
 
-  return candidate.replace(/^@+/, '')
+  return decodePercentEncoding(candidate).replace(/^@+/, '')
+}
+
+/** `@%D0%9D...` -> `@Н...`, as the backend stores it; malformed input is kept as is. */
+function decodePercentEncoding(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
 }

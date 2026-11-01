@@ -1,11 +1,13 @@
 /**
- * Converts a string into a filesystem-safe slug: lowercased, with runs of
- * non-alphanumeric characters collapsed to a single `-`, and leading/trailing
- * `-` trimmed.
+ * Converts a string into a filesystem-safe slug: NFC-normalized, lowercased,
+ * with runs of characters that are not letters, marks or digits (in any
+ * script, so `НаучныйСон` stays `научныйсон`) collapsed to a single `-`, and
+ * leading/trailing `-` trimmed.
  */
 export function slugify(value: string | null | undefined): string {
   return (value ?? '')
+    .normalize('NFC')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, '-')
     .replace(/^-+|-+$/g, '')
 }
