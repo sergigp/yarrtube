@@ -2,8 +2,8 @@ use crate::domain::task::{ScheduledTask, Task, TaskFailureOutcome, TaskLane};
 use crate::infrastructure::repositories::sqlite_task_repository::TaskRepository;
 use crate::infrastructure::repositories::task_handler::TaskHandler;
 use crate::infrastructure::shared::error_report;
+use crate::infrastructure::shared::panic_message::panic_message;
 use crate::infrastructure::shared::system_clock::Clock;
-use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -340,14 +340,6 @@ impl Drop for SlotRelease {
         self.executor.lock_state().finish(&self.slot);
         self.executor.wake.notify_one();
     }
-}
-
-fn panic_message(payload: &(dyn Any + Send)) -> &str {
-    payload
-        .downcast_ref::<&str>()
-        .copied()
-        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
-        .unwrap_or("unknown panic")
 }
 
 #[cfg(test)]

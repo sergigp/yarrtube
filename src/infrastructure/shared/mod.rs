@@ -2,6 +2,7 @@ pub mod app_version;
 pub mod category_lock;
 pub mod domain_events;
 pub mod error_report;
+pub mod panic_message;
 pub mod show_locks;
 pub mod sqlite_connection;
 pub mod sqlite_migrations;
