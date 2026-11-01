@@ -81,6 +81,22 @@ describe('describeTask', () => {
     )
   })
 
+  it('describes chapter fetches as downloads, falling back to placeholders for missing names', () => {
+    expect(
+      describeTask(
+        aTask({
+          task_type: 'fetch_chapters',
+          payload: { video_title: 'Intro', channel_name: 'Chan' },
+        }),
+      ),
+    ).toBe('Fetching chapters of Intro in Chan')
+    expect(describeTask(aTask({ task_type: 'fetch_chapters', payload: {} }))).toBe(
+      'Fetching chapters of a video in an unknown playlist or channel',
+    )
+    expect(taskFamily(aTask({ task_type: 'fetch_chapters' }))).toBe('downloads')
+    expect(taskKind(aTask({ task_type: 'fetch_chapters' }))).toBe('download')
+  })
+
   it('describes file removals', () => {
     expect(
       describeTask(aTask({ task_type: 'delete_video_file', payload: { filename: 'a.mp4' } })),

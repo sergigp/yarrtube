@@ -23,7 +23,7 @@
 - [x] 2.15 `it_should_include_the_chapters_when_listing_category_videos` (http/videos) — category entry carries the chapters.
 - [x] 2.16 `it_should_run_fetch_chapters_in_the_subtitles_lane_exclusive_per_video` (domain/task) — lane `Subtitles`, exclusivity key `video:<id>`.
 - [x] 2.17 `it_should_list_a_fetch_chapters_task_with_video_and_playlist_names` (http/tasks) — the task view resolves the video title and owner name.
-- [ ] 2.18 `describes chapter fetches` (web `lib/tasks.test.ts`) — "Fetching chapters of <video> in <source>", placeholder when unresolved, Downloads tab, download icon; `npm run test` passes.
+- [x] 2.18 `describes chapter fetches` (web `lib/tasks.test.ts`) — "Fetching chapters of <video> in <source>", placeholder when unresolved, Downloads tab, download icon; `npm run test` passes.
 
 ## 3. Infrastructure adapters (TDD)
 

@@ -23,6 +23,8 @@ export function describeTask(task: Task): string {
       return `Fetching thumbnail of ${videoInContainer(payload)}`
     case 'fetch_subtitles':
       return `Fetching subtitles of ${videoInContainer(payload)}`
+    case 'fetch_chapters':
+      return `Fetching chapters of ${videoInContainer(payload)}`
     case 'sync_video':
       return `Syncing ${videoInContainer(payload)}`
     case 'sync_plex_labels':
@@ -58,6 +60,7 @@ const FAMILY_BY_TYPE: Record<string, TaskFamily> = {
   download_video: 'downloads',
   fetch_thumbnail: 'downloads',
   fetch_subtitles: 'downloads',
+  fetch_chapters: 'downloads',
   reconcile_playlist: 'syncs',
   reconcile_channel: 'syncs',
   sync_video: 'syncs',
@@ -91,6 +94,7 @@ const KIND_BY_TYPE: Record<string, TaskKind> = {
   download_video: 'download',
   fetch_thumbnail: 'download',
   fetch_subtitles: 'download',
+  fetch_chapters: 'download',
   reconcile_playlist: 'sync',
   reconcile_channel: 'sync',
   sync_video: 'sync',
