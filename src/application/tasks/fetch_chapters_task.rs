@@ -82,6 +82,65 @@ mod tests {
         );
     }
 
+    #[test]
+    fn it_should_record_no_chapters_if_the_video_has_none() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_downloader_repository =
+            Arc::new(FakeVideoDownloaderRepository::default().with_chapters_result(Ok(vec![])));
+        let video = downloaded_video();
+        video_repository.save(&video).unwrap();
+        let task = FetchChaptersTask::new(
+            video_repository.clone(),
+            Arc::new(ChapterFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            video_repository.list().unwrap(),
+            vec![Video {
+                chapters: Some(vec![]),
+                updated_at: later(),
+                ..video
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_leave_chapters_unchecked_if_the_fetch_fails() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let video_downloader_repository = Arc::new(
+            FakeVideoDownloaderRepository::default()
+                .with_chapters_result(Err(anyhow::anyhow!("Video unavailable"))),
+        );
+        let video = downloaded_video();
+        video_repository.save(&video).unwrap();
+        let task = FetchChaptersTask::new(
+            video_repository.clone(),
+            Arc::new(ChapterFetcher::new(
+                video_repository.clone(),
+                video_downloader_repository.clone(),
+                Arc::new(FixedClock(later())),
+            )),
+        );
+
+        let result = run(&task, &payload_for(&video));
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(video_repository.list().unwrap(), vec![video]);
+        assert_eq!(
+            *video_downloader_repository.chapters_calls.lock().unwrap(),
+            vec![YT1_URL.to_string()]
+        );
+    }
+
     const YT1_URL: &str = "https://www.youtube.com/watch?v=yt1";
 
     /// `yt1`, downloaded with its chapters never checked.
