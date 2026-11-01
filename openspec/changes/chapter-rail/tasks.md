@@ -30,8 +30,8 @@ None: no adapter changes.
 
 ## 4. Verification
 
-- [ ] 4.1 `cd web && npm run check` passes (typecheck, lint, tests).
-- [ ] 4.2 `scripts/run-tests.sh` with no flags passes (all suites).
+- [x] 4.1 `cd web && npm run check` passes (typecheck, lint, tests).
+- [x] 4.2 `scripts/run-tests.sh` with no flags passes (all suites).
 - [ ] 4.3 Manual (agent): start `scripts/run-local.sh --port <free port> --fresh-videos`, add via the HTTP API a playlist containing a short video with YouTube chapters, wait for the download and chapters, then with the Playwright MCP browser: desktop width — rail shows the cards in order, video + rail height ≤ video alone without chapters (compare with a no-chapter video), clicking a card sets `currentTime` to its start and plays, current card has `aria-current`; mobile width (390 px) — after scrolling, player and rail are both pinned under the header (screenshot), "All chapters" opens the sheet, picking a row seeks and closes it. Stop the server and delete `yarrtube.sqlite3` and the fresh videos dir.
 - [ ] 4.4 Manual (human): on a real phone, swiping the rail and the sheet feel right, the pinned player + rail doesn't take too much screen; on desktop, the auto-scroll is smooth and doesn't fight manual scrolling of the rail; overall visual judgement in light and dark themes.
 
