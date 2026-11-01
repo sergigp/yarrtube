@@ -20,7 +20,7 @@
 - [x] 2.12 `it_should_keep_a_playback_position_recorded_during_the_fetch` (fetch_chapters_task) — recording chapters writes only chapters (drives `update_chapters`).
 - [x] 2.13 `it_should_include_the_chapters_when_listing_playlist_videos` (http/videos) — listed video carries its chapters in order.
 - [x] 2.14 `it_should_list_unchecked_chapters_as_empty` (http/videos) — unchecked chapters listed as `[]`.
-- [ ] 2.15 `it_should_include_the_chapters_when_listing_category_videos` (http/videos) — category entry carries the chapters.
+- [x] 2.15 `it_should_include_the_chapters_when_listing_category_videos` (http/videos) — category entry carries the chapters.
 - [ ] 2.16 `it_should_run_fetch_chapters_in_the_subtitles_lane_exclusive_per_video` (domain/task) — lane `Subtitles`, exclusivity key `video:<id>`.
 - [ ] 2.17 `it_should_list_a_fetch_chapters_task_with_video_and_playlist_names` (http/tasks) — the task view resolves the video title and owner name.
 - [ ] 2.18 `describes chapter fetches` (web `lib/tasks.test.ts`) — "Fetching chapters of <video> in <source>", placeholder when unresolved, Downloads tab, download icon; `npm run test` passes.

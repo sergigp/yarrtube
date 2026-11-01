@@ -5412,6 +5412,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_should_include_the_chapters_when_listing_category_videos() {
+        let db = TestDatabase::new();
+        let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
+        let channel_video_repository = Arc::new(SqliteChannelVideoRepository::new(db.database()));
+        let channel_repository = Arc::new(SqliteChannelRepository::new(db.database()));
+        let category_repository = Arc::new(SqliteCategoryRepository::new(db.database()));
+        channel_repository
+            .insert(&channel("@somechannel", None))
+            .unwrap();
+        save_channel_video(
+            video_repository.as_ref(),
+            channel_video_repository.as_ref(),
+            "@somechannel",
+            &video_with_subtitles("vid1").with_chapters(game_chapters(), fixed_timestamp()),
+            0,
+        );
+        let chess = category_with_members(&[channel_member("@somechannel")]);
+        category_repository.insert(&chess).unwrap();
+        categorize_source(&db, &channel_member("@somechannel"), &[&chess]);
+        let video_searcher = VideoSearcher::new(
+            Arc::new(SqlitePlaylistRepository::new(db.database())),
+            Arc::new(SqlitePlaylistVideoRepository::new(db.database())),
+            channel_repository,
+            channel_video_repository,
+            video_repository,
+            Arc::new(SqliteVideoMetadataRepository::new(db.database())),
+            Arc::new(FixedClock(fixed_timestamp())),
+            category_repository,
+            category_video_collector(&db),
+            Arc::new(SqlitePreferencesRepository::new(db.database())),
+        );
+
+        let response = list_for_category(video_searcher, chess.id.as_str()).await;
+
+        assert_eq!(
+            response,
+            Ok(vec![CategoryVideoResponse {
+                subtitle_language: Some("en".to_string()),
+                chapters: game_chapter_responses(),
+                ..category_video_in(
+                    category_video_response(
+                        "vid1",
+                        "My Video",
+                        1_700_000_000,
+                        channel_source(None)
+                    ),
+                    &[&chess]
+                )
+            }])
+        );
+    }
+
+    #[tokio::test]
     async fn it_should_list_category_videos_with_their_metadata() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
