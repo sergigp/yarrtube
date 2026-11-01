@@ -113,6 +113,33 @@ fn parse_duration_seconds(line: &str) -> Option<i64> {
     trimmed.parse::<f64>().ok().map(|seconds| seconds as i64)
 }
 
+/// One entry of `yt-dlp`'s `%(chapters)j`, times in (possibly fractional)
+/// seconds.
+#[derive(serde::Deserialize)]
+struct PrintedChapter {
+    start_time: f64,
+    end_time: f64,
+    title: String,
+}
+
+/// Parses `yt-dlp`'s `--print %(chapters)j` line, flooring times to whole
+/// seconds. `None` when the line can't be read as chapters, so the video's
+/// chapters stay unchecked rather than failing the download.
+fn parse_chapters(line: &str) -> Option<Vec<VideoChapter>> {
+    serde_json::from_str::<Vec<PrintedChapter>>(line.trim())
+        .ok()
+        .map(|chapters| {
+            chapters
+                .into_iter()
+                .map(|chapter| VideoChapter {
+                    start_seconds: chapter.start_time as i64,
+                    end_seconds: chapter.end_time as i64,
+                    title: chapter.title,
+                })
+                .collect()
+        })
+}
+
 /// Names every staged file after the video's YouTube id, so the media and
 /// its thumbnail share one stem whatever the title.
 const STAGED_OUTPUT_TEMPLATE: &str = "%(id)s.%(ext)s";
@@ -120,9 +147,10 @@ const STAGED_OUTPUT_TEMPLATE: &str = "%(id)s.%(ext)s";
 /// Runs `<ytdlp_path> <args> <video_url>` inside `staging_dir` (created
 /// first), outside any show directory, so partial files never reach the
 /// library. This is a pure process-invocation layer with no YouTube API or
-/// XML knowledge. Asks `yt-dlp` to print its duration followed by the exact
-/// filename it saved via `--print %(duration)s --print after_move:filename`,
-/// in quiet mode so those are the only lines on stdout, filename last.
+/// XML knowledge. Asks `yt-dlp` to print its chapters, publish timestamp,
+/// upload date and duration followed by the exact filename it saved (`--print
+/// after_move:filename`), in quiet mode so those are the only lines on
+/// stdout, filename last; each is read by its position from the end.
 /// Returns `Ok(DownloadAttempt::Succeeded(..))` on a successful download,
 /// `Ok(DownloadAttempt::Failed { stderr })` for a clean `yt-dlp` failure
 /// (non-zero exit), carrying whatever `yt-dlp` wrote to its stderr. Returns
@@ -152,6 +180,8 @@ pub fn download_video(
         // `sabr_reason` can detect it. `--quiet` still gives us the clean
         // `--print` stdout. See the `log-sabr-detection` change.
         "--quiet".to_string(),
+        "--print".to_string(),
+        "%(chapters)j".to_string(),
         "--print".to_string(),
         "%(timestamp)s".to_string(),
         "--print".to_string(),
@@ -200,6 +230,7 @@ pub fn download_video(
     };
     let duration_seconds = line_before_last(&lines, 1).and_then(parse_duration_seconds);
     let published_at = parse_published_at(line_before_last(&lines, 3), line_before_last(&lines, 2));
+    let chapters = line_before_last(&lines, 4).and_then(parse_chapters);
 
     let media_path = staging_dir.join(filename);
     Ok(DownloadAttempt::Succeeded(DownloadedVideo {
@@ -208,7 +239,7 @@ pub fn download_video(
         duration_seconds,
         published_at,
         sabr_notice,
-        chapters: None,
+        chapters,
     }))
 }
 
@@ -1265,6 +1296,58 @@ mod tests {
             fake.captured_args()
                 .windows(4)
                 .any(|args| args == ["--print", "%(timestamp)s", "--print", "%(upload_date)s"])
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_parse_the_printed_chapters_of_a_download() {
+        let fake = test_support::FakeYtDlp::with_stdout(
+            "[{\"start_time\": 0, \"title\": \"Game 1\", \"end_time\": 1037}, {\"start_time\": 1037, \"title\": \"Game 2\", \"end_time\": 2201}]\n1773568800\n20260315\n223\nyt1.mp4\n",
+        );
+        let staging_dir = test_support::unique_temp_dir("ytdlp-output-chapters");
+
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                Quality::High,
+                &staging_dir,
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            result,
+            DownloadedVideo {
+                media_path: staging_dir.join("yt1.mp4"),
+                thumbnail_path: None,
+                duration_seconds: Some(223),
+                published_at: Some(
+                    DateTime::parse_from_rfc3339("2026-03-15T10:00:00Z")
+                        .unwrap()
+                        .to_utc()
+                ),
+                sabr_notice: None,
+                chapters: Some(vec![
+                    VideoChapter {
+                        start_seconds: 0,
+                        end_seconds: 1037,
+                        title: "Game 1".to_string(),
+                    },
+                    VideoChapter {
+                        start_seconds: 1037,
+                        end_seconds: 2201,
+                        title: "Game 2".to_string(),
+                    },
+                ]),
+            }
+        );
+        assert!(
+            fake.captured_args()
+                .windows(4)
+                .any(|args| args == ["--print", "%(chapters)j", "--print", "%(timestamp)s"])
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
