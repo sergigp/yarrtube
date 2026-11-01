@@ -1,10 +1,12 @@
 import { useCallback, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { type VideoSourceRef, videoMediaUrl, videoSubtitlesUrl } from '@/api/client'
-import type { Video } from '@/api/types'
+import type { Chapter, Video } from '@/api/types'
+import { useCurrentTime } from '@/hooks/useCurrentTime'
 import { type SeekFeedback, useSeekKeys } from '@/hooks/useSeekKeys'
 import { languageName } from '@/lib/languageName'
 import { cn } from '@/lib/utils'
+import { ChapterRail } from './ChapterRail'
 
 interface VideoPlayerProps {
   basePath: string
@@ -67,6 +69,8 @@ export function VideoPlayer({
   const filename = video?.status === 'DOWNLOADED' ? video.filename : null
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
   const seekFeedback = useSeekKeys(videoElement)
+  const currentTime = useCurrentTime(videoElement)
+  const pickChapter = useCallback((_chapter: Chapter) => {}, [])
   const videoRef = useCallback(
     (element: HTMLVideoElement | null) => {
       setVideoElement(element)
@@ -75,46 +79,58 @@ export function VideoPlayer({
     [onVideoElement],
   )
 
+  const chapters = video && filename ? video.chapters : []
+
   return (
     <div
-      // Pinned below the header on phones, which keeps the header in view.
+      // Pinned below the header on phones, chapter rail included, which keeps the header in view.
       data-pinned-player=""
       className={cn(
-        'sticky top-(--header-offset) z-10 -mx-4 flex overflow-hidden aspect-video items-center justify-center sm:-mx-6',
-        'md:relative md:top-auto md:z-auto md:m-0 md:aspect-auto md:min-h-80 md:shrink-0 md:rounded-lg',
-        filename ? 'bg-black md:bg-secondary/60' : 'bg-secondary md:bg-secondary/60',
+        'sticky top-(--header-offset) z-10 -mx-4 flex flex-col bg-background sm:-mx-6',
+        'md:relative md:top-auto md:z-auto md:m-0 md:shrink-0 md:gap-2',
       )}
     >
-      {video && filename ? (
-        <video
-          ref={videoRef}
-          controls
-          autoPlay={autoplay}
-          className="block h-full w-full md:h-auto md:max-h-[70vh] md:rounded-lg"
-          src={videoMediaUrl(basePath, filename)}
-          poster={
-            video.thumbnail_filename ? videoMediaUrl(basePath, video.thumbnail_filename) : undefined
-          }
-        >
-          {video.subtitle_language && (
-            // Not `default`: captions stay off until turned on from the player's own controls.
-            // Keyed per video so a new track starts off; the <video> itself isn't remounted.
-            <track
-              key={video.id}
-              kind="subtitles"
-              src={videoSubtitlesUrl(source, video.id)}
-              srcLang={video.subtitle_language}
-              label={languageName(video.subtitle_language)}
-            />
-          )}
-        </video>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          {video ? 'This video has not been downloaded yet.' : 'Select a video to play it.'}
-        </p>
-      )}
-      {filename && seekFeedback && (
-        <SeekIndicator key={seekFeedback.press} feedback={seekFeedback} />
+      <div
+        className={cn(
+          'relative flex overflow-hidden aspect-video items-center justify-center',
+          'md:aspect-auto md:min-h-80 md:rounded-lg',
+          filename ? 'bg-black md:bg-secondary/60' : 'bg-secondary md:bg-secondary/60',
+        )}
+      >
+        {video && filename ? (
+          <video
+            ref={videoRef}
+            controls
+            autoPlay={autoplay}
+            className="block h-full w-full md:h-auto md:max-h-[70vh] md:rounded-lg"
+            src={videoMediaUrl(basePath, filename)}
+            poster={
+              video.thumbnail_filename ? videoMediaUrl(basePath, video.thumbnail_filename) : undefined
+            }
+          >
+            {video.subtitle_language && (
+              // Not `default`: captions stay off until turned on from the player's own controls.
+              // Keyed per video so a new track starts off; the <video> itself isn't remounted.
+              <track
+                key={video.id}
+                kind="subtitles"
+                src={videoSubtitlesUrl(source, video.id)}
+                srcLang={video.subtitle_language}
+                label={languageName(video.subtitle_language)}
+              />
+            )}
+          </video>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {video ? 'This video has not been downloaded yet.' : 'Select a video to play it.'}
+          </p>
+        )}
+        {filename && seekFeedback && (
+          <SeekIndicator key={seekFeedback.press} feedback={seekFeedback} />
+        )}
+      </div>
+      {chapters.length > 0 && (
+        <ChapterRail chapters={chapters} currentTime={currentTime} onPick={pickChapter} />
       )}
     </div>
   )
