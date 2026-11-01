@@ -30,8 +30,8 @@
 `infrastructure/shared/ytdlp.rs` (fake `yt-dlp` script)
 - [x] 3.1 `it_should_parse_the_printed_chapters_of_a_download` — chapters JSON line parsed; timestamp/date/duration/filename still parsed.
 - [x] 3.2 `it_should_report_no_chapters_when_yt_dlp_prints_na` — `NA` → `Some(vec![])`.
-- [ ] 3.3 `it_should_report_unreadable_chapters_as_unchecked` — unparseable line → `None`, download still succeeds.
-- [ ] 3.4 `it_should_pass_the_embed_chapters_flag_to_yt_dlp` — `--embed-chapters` in the download args.
+- [x] 3.3 `it_should_report_unreadable_chapters_as_unchecked` — unparseable line → `None`, download still succeeds.
+- [x] 3.4 `it_should_pass_the_embed_chapters_flag_to_yt_dlp` — `--embed-chapters` in the download args.
 - [ ] 3.5 `it_should_fetch_the_chapters_without_downloading` — `--skip-download`, printed line parsed, fractional seconds floored.
 - [ ] 3.6 `it_should_fail_the_chapters_fetch_on_a_clean_failed_exit` — non-zero exit → `Err`.
 

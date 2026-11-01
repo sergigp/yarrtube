@@ -179,6 +179,8 @@ pub fn download_video(
         "--write-thumbnail".to_string(),
         "--convert-thumbnails".to_string(),
         "jpg".to_string(),
+        // Chapter markers in the mp4, for Plex, Kodi and Jellyfin.
+        "--embed-chapters".to_string(),
         // Note: unlike the thumbnail/diagnose/listing invocations, this one
         // deliberately keeps warnings on (no `--no-warnings`) so `yt-dlp`'s
         // SABR-only streaming warning reaches our captured stderr, where
@@ -1390,6 +1392,60 @@ mod tests {
             }
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_report_unreadable_chapters_as_unchecked() {
+        let fake = test_support::FakeYtDlp::with_stdout(
+            "not chapters\n1773568800\n20260315\n223\nyt1.mp4\n",
+        );
+        let staging_dir = test_support::unique_temp_dir("ytdlp-output-bad-chapters");
+
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                Quality::High,
+                &staging_dir,
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            result,
+            DownloadedVideo {
+                media_path: staging_dir.join("yt1.mp4"),
+                thumbnail_path: None,
+                duration_seconds: Some(223),
+                published_at: Some(
+                    DateTime::parse_from_rfc3339("2026-03-15T10:00:00Z")
+                        .unwrap()
+                        .to_utc()
+                ),
+                sabr_notice: None,
+                chapters: None,
+            }
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_pass_the_embed_chapters_flag_to_yt_dlp() {
+        let output_dir = test_support::unique_temp_dir("ytdlp-output-embed-chapters");
+        let fake = test_support::FakeYtDlp::with_exit_code(0);
+
+        download_video(
+            &fake.path,
+            "https://example.com/video",
+            Quality::High,
+            &output_dir,
+        )
+        .unwrap();
+
+        assert!(fake.captured_args().contains(&"--embed-chapters".to_string()));
+        std::fs::remove_dir_all(&output_dir).unwrap();
     }
 
     #[test]
