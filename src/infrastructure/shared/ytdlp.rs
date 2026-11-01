@@ -123,10 +123,15 @@ struct PrintedChapter {
 }
 
 /// Parses `yt-dlp`'s `--print %(chapters)j` line, flooring times to whole
-/// seconds. `None` when the line can't be read as chapters, so the video's
-/// chapters stay unchecked rather than failing the download.
+/// seconds. `yt-dlp` prints `NA` (or `null`) for a video without chapters,
+/// read as none. `None` when the line can't be read as chapters, so the
+/// video's chapters stay unchecked rather than failing the download.
 fn parse_chapters(line: &str) -> Option<Vec<VideoChapter>> {
-    serde_json::from_str::<Vec<PrintedChapter>>(line.trim())
+    let trimmed = line.trim();
+    if trimmed.eq_ignore_ascii_case("na") || trimmed == "null" {
+        return Some(vec![]);
+    }
+    serde_json::from_str::<Vec<PrintedChapter>>(trimmed)
         .ok()
         .map(|chapters| {
             chapters
@@ -1348,6 +1353,41 @@ mod tests {
             fake.captured_args()
                 .windows(4)
                 .any(|args| args == ["--print", "%(chapters)j", "--print", "%(timestamp)s"])
+        );
+        std::fs::remove_dir_all(&staging_dir).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn it_should_report_no_chapters_when_yt_dlp_prints_na() {
+        let fake =
+            test_support::FakeYtDlp::with_stdout("NA\n1773568800\n20260315\n223\nyt1.mp4\n");
+        let staging_dir = test_support::unique_temp_dir("ytdlp-output-no-chapters");
+
+        let result = unwrap_succeeded(
+            download_video(
+                &fake.path,
+                "https://example.com/video",
+                Quality::High,
+                &staging_dir,
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            result,
+            DownloadedVideo {
+                media_path: staging_dir.join("yt1.mp4"),
+                thumbnail_path: None,
+                duration_seconds: Some(223),
+                published_at: Some(
+                    DateTime::parse_from_rfc3339("2026-03-15T10:00:00Z")
+                        .unwrap()
+                        .to_utc()
+                ),
+                sabr_notice: None,
+                chapters: Some(vec![]),
+            }
         );
         std::fs::remove_dir_all(&staging_dir).unwrap();
     }
