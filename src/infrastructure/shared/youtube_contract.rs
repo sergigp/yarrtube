@@ -20,7 +20,8 @@ pub(crate) const MISSING_VIDEO_ID: &str = "aaaaaaaaaaa";
 /// The project's "test" playlist (maintainer-owned), holding only Big Buck
 /// Bunny.
 pub(crate) const PLAYLIST_ID: &str = "PLXWRoRTUXjks";
-/// "Free HD videos - no copyright": CC BY uploads, inactive since 2023.
+/// "Free HD videos - no copyright": CC BY uploads, inactive since 2023. Its
+/// listing order isn't stable: don't pin which videos come first.
 pub(crate) const CHANNEL_HANDLE: &str = "@FreeHDvideosnocopyright";
 
 pub(crate) fn video_url(id: &str) -> String {

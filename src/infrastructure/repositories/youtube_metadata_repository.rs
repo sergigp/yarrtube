@@ -312,24 +312,34 @@ mod youtube_contract_tests {
 
         let metadata = repository
             .find(&VideoId::new(CAPTIONED_VIDEO_ID).unwrap())
+            .unwrap()
             .unwrap();
 
+        // Title, channel, date and category can't drift; the description and
+        // tags are the uploader's to edit, so only a stable part of each is
+        // pinned.
+        assert!(
+            metadata
+                .description
+                .contains("Big Buck Bunny tells the story"),
+            "description: {:?}",
+            metadata.description
+        );
+        assert!(
+            metadata.tags.contains(&"Blender".to_string()),
+            "tags: {:?}",
+            metadata.tags
+        );
         assert_eq!(
             metadata,
-            Some(YoutubeMetadata {
+            YoutubeMetadata {
                 title: "Big Buck Bunny".to_string(),
-                description: "Support Blender and open movie productions at https://studio.blender.org\n\nBig Buck Bunny tells the story of a giant rabbit with a heart bigger than himself. When one sunny day three rodents rudely harass him, something snaps... and the rabbit ain't no bunny anymore! In the typical cartoon tradition he prepares the nasty rodents a comical revenge.\r\n\r\nLicensed under the Creative Commons Attribution license.\r\nhttps://www.bigbuckbunny.org/".to_string(),
+                description: metadata.description.clone(),
                 channel_title: "Blender".to_string(),
                 published_at: "2008-05-29T11:24:26Z".parse().unwrap(),
-                tags: [
-                    "Animation", "CGI", "Big", "Buck", "Bunny", "Blender", "3D", "Creative",
-                    "Commons", "blender", "open", "movie", "content", "cartoon", "animated",
-                    "animation art",
-                ]
-                .map(str::to_string)
-                .to_vec(),
+                tags: metadata.tags.clone(),
                 category_id: Some("1".to_string()),
-            })
+            }
         );
     }
 
