@@ -12,7 +12,7 @@ Each task is one red-green-refactor cycle; verified by the named test passing an
 - [x] 2.2 `shows hour-long start times as h:mm:ss`
 - [x] 2.3 `shows no rail for a video without chapters`
 - [x] 2.4 `shows no rail for a video that is not downloaded`
-- [ ] 2.5 `marks the chapter containing the playback position as current` (drives `useCurrentTime` and `currentChapterIndex`)
+- [x] 2.5 `marks the chapter containing the playback position as current` (drives `useCurrentTime` and `currentChapterIndex`)
 - [ ] 2.6 `moves the current mark when playback enters the next chapter`
 - [ ] 2.7 `marks no chapter before the first chapter starts`
 - [ ] 2.8 `seeks to a chapter start and plays when its card is clicked`

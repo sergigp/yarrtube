@@ -188,5 +188,26 @@ describe('VideoPlayer', () => {
 
       expect(screen.queryByRole('navigation', { name: 'Chapters' })).not.toBeInTheDocument()
     })
+
+    /** Moves the player's <video> to `seconds`, as playback would. */
+    function playTo(container: HTMLElement, seconds: number) {
+      const video = container.querySelector('video')!
+      video.currentTime = seconds
+      fireEvent.timeUpdate(video)
+    }
+
+    /** The text of the card marked as the current chapter, or null. */
+    function currentCard(): string | null {
+      const rail = screen.getByRole('navigation', { name: 'Chapters' })
+      return within(rail).queryByRole('button', { current: true })?.textContent ?? null
+    }
+
+    it('marks the chapter containing the playback position as current', () => {
+      const { container } = renderWith({ chapters: CHAPTERS })
+
+      playTo(container, 1500)
+
+      expect(currentCard()).toBe('17:17 Game 2')
+    })
   })
 })
