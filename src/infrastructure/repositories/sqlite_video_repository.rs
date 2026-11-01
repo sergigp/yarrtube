@@ -910,6 +910,66 @@ mod tests {
     }
 
     #[test]
+    fn it_should_round_trip_chapters_none_empty_and_some() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let unchecked = Video::create(VideoId::new("yt1").unwrap(), "Unchecked", now);
+        let without = Video::create(VideoId::new("yt2").unwrap(), "Without", now)
+            .with_chapters(vec![], now);
+        let with = Video::create(VideoId::new("yt3").unwrap(), "With", now).with_chapters(
+            vec![
+                VideoChapter {
+                    start_seconds: 0,
+                    end_seconds: 60,
+                    title: "Intro \"quoted\" & more".to_string(),
+                },
+                VideoChapter {
+                    start_seconds: 60,
+                    end_seconds: 600,
+                    title: "Main".to_string(),
+                },
+            ],
+            now,
+        );
+        [&unchecked, &without, &with]
+            .into_iter()
+            .for_each(|video| repo.save(video).unwrap());
+
+        assert_eq!(repo.list().unwrap(), vec![unchecked, without, with]);
+    }
+
+    #[test]
+    fn it_should_update_only_the_chapters() {
+        let repo = repo();
+        let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+        let later = DateTime::<Utc>::from_timestamp(60, 0).unwrap();
+        let read = video("First", now);
+        repo.save(&read).unwrap();
+        let downloaded = read
+            .clone()
+            .start_download(now)
+            .mark_downloaded(Quality::High, "First.mp4", None, None, now);
+        repo.save(&downloaded).unwrap();
+        let chapters = vec![VideoChapter {
+            start_seconds: 0,
+            end_seconds: 60,
+            title: "Intro".to_string(),
+        }];
+
+        repo.update_chapters(&read.with_chapters(chapters.clone(), later))
+            .unwrap();
+
+        assert_eq!(
+            repo.find(&downloaded.id).unwrap(),
+            Some(Video {
+                chapters: Some(chapters),
+                updated_at: later,
+                ..downloaded
+            })
+        );
+    }
+
+    #[test]
     fn it_should_round_trip_the_first_check_without_captions() {
         let repo = repo();
         let now = DateTime::<Utc>::from_timestamp(0, 0).unwrap();

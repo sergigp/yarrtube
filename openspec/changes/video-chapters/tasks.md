@@ -36,8 +36,8 @@
 - [x] 3.6 `it_should_fail_the_chapters_fetch_on_a_clean_failed_exit` — non-zero exit → `Err`.
 
 `infrastructure/repositories/sqlite_video_repository.rs`
-- [ ] 3.7 `it_should_round_trip_chapters_none_empty_and_some` — `None`, `Some([])`, `Some([..])` persist distinctly.
-- [ ] 3.8 `it_should_update_only_the_chapters` — `update_chapters` leaves every other column as stored.
+- [x] 3.7 `it_should_round_trip_chapters_none_empty_and_some` — `None`, `Some([])`, `Some([..])` persist distinctly.
+- [x] 3.8 `it_should_update_only_the_chapters` — `update_chapters` leaves every other column as stored.
 
 `infrastructure/repositories/youtube_video_downloader_repository.rs` (contract, `#[ignore]`)
 - [ ] 3.9 `it_should_fetch_the_chapters_of_a_real_video` — `NklJAUizpZs` → Game 1 (0–1037), Game 2 (1037–2201), Game 3 (2201–3521); verify with `scripts/run-tests.sh --only contract` while iterating.
