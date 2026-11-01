@@ -2938,6 +2938,7 @@ mod tests {
         Video::create(VideoId::new("yt1").unwrap(), "My Video", fixed_timestamp())
     }
 
+    /// Its chapters already checked, so a sync schedules no chapters fetch.
     fn downloaded_video(filename: &str, thumbnail_filename: Option<&str>) -> Video {
         my_video()
             .start_download(fixed_timestamp())
@@ -2948,6 +2949,7 @@ mod tests {
                 None,
                 fixed_timestamp(),
             )
+            .with_chapters(vec![], fixed_timestamp())
     }
 
     /// `my_video()` downloaded into its season folder as episode

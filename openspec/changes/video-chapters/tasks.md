@@ -9,7 +9,7 @@
 - [x] 2.1 `it_should_record_the_chapters_of_a_downloaded_video` (download_video_task) — a successful download stores the chapters yt-dlp reported.
 - [x] 2.2 `it_should_record_no_chapters_for_a_downloaded_video_without_them` (download_video_task) — `Some(vec![])` is stored as checked-with-none.
 - [x] 2.3 `it_should_leave_chapters_unchecked_if_unreadable_on_download` (download_video_task) — `None` keeps chapters unchecked; video still Downloaded.
-- [ ] 2.4 `it_should_schedule_the_chapters_fetch_of_a_downloaded_video` (sync_video_task) — Downloaded + unchecked chapters schedules `fetch_chapters`.
+- [x] 2.4 `it_should_schedule_the_chapters_fetch_of_a_downloaded_video` (sync_video_task) — Downloaded + unchecked chapters schedules `fetch_chapters`.
 - [ ] 2.5 `it_should_not_schedule_a_chapters_fetch_if_already_checked` (sync_video_task) — checked chapters schedule nothing.
 - [ ] 2.6 `it_should_not_schedule_a_chapters_fetch_for_a_pending_video` (sync_video_task) — a not-yet-downloaded video gets no chapters fetch.
 - [ ] 2.7 `it_should_record_the_fetched_chapters` (fetch_chapters_task) — fetched chapters are stored, nothing else changes.
