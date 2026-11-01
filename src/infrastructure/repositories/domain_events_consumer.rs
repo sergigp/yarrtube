@@ -1,8 +1,10 @@
 use crate::domain::event::EventFailureOutcome;
 use crate::infrastructure::repositories::event_subscriber::EventSubscriber;
 use crate::infrastructure::shared::domain_events::event_repository::EventRepository;
+use crate::infrastructure::shared::panic_message::panic_message;
 use crate::infrastructure::shared::system_clock::Clock;
 use std::collections::HashMap;
+use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{error, info, warn};
@@ -44,7 +46,7 @@ impl DomainEventsConsumer {
                         "dispatching event"
                     );
                     for subscriber in subscribers {
-                        if let Err(e) = subscriber.handle(&event.payload) {
+                        if let Err(e) = Self::dispatch(subscriber.as_ref(), &event.payload) {
                             failure = Some(e.to_string());
                         }
                     }
@@ -100,11 +102,26 @@ impl DomainEventsConsumer {
             }
         }
     }
+
+    /// A subscriber that panics counts as a failed invocation, like one that
+    /// returns an error, so its event is retried or dead-lettered instead of
+    /// the panic escaping the poll and leaving the event untouched.
+    fn dispatch(subscriber: &dyn EventSubscriber, payload: &str) -> anyhow::Result<()> {
+        panic::catch_unwind(AssertUnwindSafe(|| subscriber.handle(payload))).unwrap_or_else(
+            |payload| {
+                Err(anyhow::anyhow!(
+                    "subscriber panicked: {}",
+                    panic_message(payload.as_ref())
+                ))
+            },
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::channel::ChannelCreated;
     use crate::domain::event::{DeadLetteredEvent, DomainEvent, ScheduledEvent};
     use crate::domain::playlist::PlaylistCreated;
     use crate::infrastructure::shared::domain_events::event_publisher::{
@@ -248,6 +265,119 @@ mod tests {
     }
 
     #[test]
+    fn it_should_retry_an_event_whose_subscriber_panics() {
+        let db = TestDatabase::new();
+        let event_publisher = SqliteEventPublisher::new(db.database(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.database()));
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let panicking = Arc::new(FakeSubscriber::panicking("panicking", calls.clone()));
+        let succeeding = Arc::new(FakeSubscriber::succeeding("succeeding", calls.clone()));
+        event_publisher.publish(&event()).unwrap();
+        let mut subscribers: SubscriberRegistry = HashMap::new();
+        subscribers.insert(
+            event().event_type().to_string(),
+            vec![panicking, succeeding],
+        );
+        let consumer = DomainEventsConsumer::new(
+            event_repository.clone(),
+            subscribers,
+            Arc::new(FixedClock(now())),
+        );
+
+        let result = consumer.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(*calls.lock().unwrap(), vec!["panicking", "succeeding"]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![ScheduledEvent {
+                retries: 1,
+                last_error: Some("subscriber panicked: panicking panicked".to_string()),
+                ..pending_event(0)
+            }]
+        );
+        assert_eq!(
+            event_repository.list_dead_lettered().unwrap(),
+            Vec::<DeadLetteredEvent>::new()
+        );
+    }
+
+    #[test]
+    fn it_should_dead_letter_an_event_whose_subscriber_panics_on_the_fifth_attempt() {
+        let db = TestDatabase::new();
+        let event_publisher = SqliteEventPublisher::new(db.database(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.database()));
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let panicking = Arc::new(FakeSubscriber::panicking("panicking", calls.clone()));
+        event_publisher.publish(&event()).unwrap();
+        event_repository.update(&pending_event(4)).unwrap();
+        let mut subscribers: SubscriberRegistry = HashMap::new();
+        subscribers.insert(event().event_type().to_string(), vec![panicking]);
+        let consumer = DomainEventsConsumer::new(
+            event_repository.clone(),
+            subscribers,
+            Arc::new(FixedClock(now())),
+        );
+
+        let result = consumer.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(*calls.lock().unwrap(), vec!["panicking"]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            Vec::<ScheduledEvent>::new()
+        );
+        assert_eq!(
+            event_repository.list_dead_lettered().unwrap(),
+            vec![DeadLetteredEvent {
+                original_event_id: 1,
+                event_type: event().event_type().to_string(),
+                payload: event().payload().to_string(),
+                retries: 5,
+                last_error: "subscriber panicked: panicking panicked".to_string(),
+                created_at: now(),
+                failed_at: now(),
+            }]
+        );
+    }
+
+    #[test]
+    fn it_should_process_the_other_pending_events_if_a_subscriber_panics() {
+        let db = TestDatabase::new();
+        let event_publisher = SqliteEventPublisher::new(db.database(), Arc::new(FixedClock(now())));
+        let event_repository = Arc::new(SqliteEventRepository::new(db.database()));
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let panicking = Arc::new(FakeSubscriber::panicking("panicking", calls.clone()));
+        let succeeding = Arc::new(FakeSubscriber::succeeding("succeeding", calls.clone()));
+        let other_event = DomainEvent::ChannelCreated(ChannelCreated {
+            channel_id: "UC1".to_string(),
+        });
+        event_publisher.publish(&event()).unwrap();
+        event_publisher.publish(&other_event).unwrap();
+        let mut subscribers: SubscriberRegistry = HashMap::new();
+        subscribers.insert(event().event_type().to_string(), vec![panicking]);
+        subscribers.insert(other_event.event_type().to_string(), vec![succeeding]);
+        let consumer = DomainEventsConsumer::new(
+            event_repository.clone(),
+            subscribers,
+            Arc::new(FixedClock(now())),
+        );
+
+        let result = consumer.poll_once();
+
+        assert!(result.is_ok());
+        assert_eq!(*calls.lock().unwrap(), vec!["panicking", "succeeding"]);
+        assert_eq!(
+            event_repository.list_eligible().unwrap(),
+            vec![ScheduledEvent {
+                retries: 1,
+                last_error: Some("subscriber panicked: panicking panicked".to_string()),
+                ..pending_event(0)
+            }]
+        );
+    }
+
+    #[test]
     fn it_should_mark_an_event_with_no_registered_subscribers_as_done() {
         let db = TestDatabase::new();
         let event_publisher = SqliteEventPublisher::new(db.database(), Arc::new(FixedClock(now())));
@@ -297,15 +427,21 @@ mod tests {
 
     struct FakeSubscriber {
         name: &'static str,
-        fails: bool,
+        outcome: FakeOutcome,
         calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    enum FakeOutcome {
+        Succeed,
+        Fail,
+        Panic,
     }
 
     impl FakeSubscriber {
         fn succeeding(name: &'static str, calls: Arc<Mutex<Vec<String>>>) -> Self {
             Self {
                 name,
-                fails: false,
+                outcome: FakeOutcome::Succeed,
                 calls,
             }
         }
@@ -313,7 +449,15 @@ mod tests {
         fn failing(name: &'static str, calls: Arc<Mutex<Vec<String>>>) -> Self {
             Self {
                 name,
-                fails: true,
+                outcome: FakeOutcome::Fail,
+                calls,
+            }
+        }
+
+        fn panicking(name: &'static str, calls: Arc<Mutex<Vec<String>>>) -> Self {
+            Self {
+                name,
+                outcome: FakeOutcome::Panic,
                 calls,
             }
         }
@@ -322,10 +466,11 @@ mod tests {
     impl EventSubscriber for FakeSubscriber {
         fn handle(&self, _payload: &str) -> anyhow::Result<()> {
             self.calls.lock().unwrap().push(self.name.to_string());
-            if self.fails {
-                anyhow::bail!("{} failed", self.name);
+            match self.outcome {
+                FakeOutcome::Succeed => Ok(()),
+                FakeOutcome::Fail => anyhow::bail!("{} failed", self.name),
+                FakeOutcome::Panic => panic!("{} panicked", self.name),
             }
-            Ok(())
         }
     }
 }

@@ -6,8 +6,8 @@
 
 ## 2. Consumer catches subscriber panics
 
-- [ ] 2.1 Wrap each `subscriber.handle` call in `DomainEventsConsumer::poll_once` with `catch_unwind`, mapping a panic to `subscriber panicked: <msg>` so it flows into the retry/dead-letter path
-- [ ] 2.2 Add consumer tests: a panicking subscriber increments retries with the panic message as `last_error`; panicking on the 5th attempt dead-letters; a second pending event is still processed in the same poll. Verify `cargo test domain_events_consumer` passes
+- [x] 2.1 Wrap each `subscriber.handle` call in `DomainEventsConsumer::poll_once` with `catch_unwind`, mapping a panic to `subscriber panicked: <msg>` so it flows into the retry/dead-letter path
+- [x] 2.2 Add consumer tests: a panicking subscriber increments retries with the panic message as `last_error`; panicking on the 5th attempt dead-letters; a second pending event is still processed in the same poll. Verify `cargo test domain_events_consumer` passes
 
 ## 3. Plex client per request
 
