@@ -21,7 +21,10 @@ them now lets a follow-up change add chapter navigation to the web player.
   reconcile passes.
 - The playlist, channel and category video listings return each video's
   chapters (`[]` when it has none or they were not checked yet). Web API
-  types and test fixture builders are updated to match. No UI.
+  types and test fixture builders are updated to match. No player UI.
+- The Tasks page describes the new chapters fetch task ("Fetching
+  chapters of <video> in <source>", under Downloads), since the backfill
+  queues one per downloaded video.
 - Out of scope: the player UI (follow-up change), adding chapters to files
   that were downloaded before this change.
 
@@ -37,6 +40,10 @@ them now lets a follow-up change add chapter navigation to the web player.
   video whose chapters were never checked.
 - `video-listing`: the playlist, channel and category video listings
   include each video's chapters.
+- `task-listing`: a chapters fetch task resolves its video title and
+  playlist/channel name.
+- `web-ui`: the tasks view describes a chapters fetch task and lists it
+  with the downloads.
 
 ## Impact
 

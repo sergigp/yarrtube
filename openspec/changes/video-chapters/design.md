@@ -18,7 +18,10 @@
 - `src/application/tasks/mod.rs` — register `fetch_chapters`.
 - `src/serve.rs` — build `ChapterFetcher`, pass to the registry.
 - `src/application/http/videos/dto.rs` — `ChapterResponse`, `chapters` on `VideoResponse` and `CategoryVideoResponse`.
+- `src/domain/services/task_view_searcher.rs` — resolve `fetch_chapters` to the video's title and owner name.
+- `src/serve.rs` test — `fetch_chapters` in the registered task types.
 - `web/src/api/types.ts` — `Chapter`, `chapters` on `Video` and `CategoryVideo`.
+- `web/src/lib/tasks.ts` — describe `fetch_chapters`, family `downloads`, kind `download`.
 - `web/src/test/helpers.tsx` — `aVideo` / `aCategoryVideo` default `chapters: []`.
 
 ## Types & Signatures
@@ -179,6 +182,12 @@ list_videos_for_playlist / list_videos_for_channel / list_videos_for_category
 
 `domain/task/task.rs`
 16. `it_should_run_fetch_chapters_in_the_subtitles_lane_exclusive_per_video` — lane `Subtitles`, key `video:<id>`.
+
+`application/http/tasks/mod.rs`
+16a. `it_should_list_a_fetch_chapters_task_with_video_and_playlist_names` — task view payload has `video_title` and `playlist_name`.
+
+`web/src/lib/tasks.test.ts` (Vitest)
+16b. `describes chapter fetches` — "Fetching chapters of Intro in Chan", placeholder when unresolved; family `downloads`, kind `download`.
 
 ### 2. Infrastructure tests
 
