@@ -10,8 +10,8 @@
 - [x] 2.2 `it_should_record_no_chapters_for_a_downloaded_video_without_them` (download_video_task) — `Some(vec![])` is stored as checked-with-none.
 - [x] 2.3 `it_should_leave_chapters_unchecked_if_unreadable_on_download` (download_video_task) — `None` keeps chapters unchecked; video still Downloaded.
 - [x] 2.4 `it_should_schedule_the_chapters_fetch_of_a_downloaded_video` (sync_video_task) — Downloaded + unchecked chapters schedules `fetch_chapters`.
-- [ ] 2.5 `it_should_not_schedule_a_chapters_fetch_if_already_checked` (sync_video_task) — checked chapters schedule nothing.
-- [ ] 2.6 `it_should_not_schedule_a_chapters_fetch_for_a_pending_video` (sync_video_task) — a not-yet-downloaded video gets no chapters fetch.
+- [x] 2.5 `it_should_not_schedule_a_chapters_fetch_if_already_checked` (sync_video_task) — checked chapters schedule nothing.
+- [x] 2.6 A not-yet-downloaded video gets no chapters fetch — already covered by the existing `it_should_schedule_the_download_and_thumbnail_of_a_new_channel_video` (Pending video, chapters unchecked, only thumbnail + download scheduled); no duplicate test added.
 - [ ] 2.7 `it_should_record_the_fetched_chapters` (fetch_chapters_task) — fetched chapters are stored, nothing else changes.
 - [ ] 2.8 `it_should_record_no_chapters_if_the_video_has_none` (fetch_chapters_task) — `[]` stored as checked-with-none.
 - [ ] 2.9 `it_should_leave_chapters_unchecked_if_the_fetch_fails` (fetch_chapters_task) — fetch error: task succeeds, video unchanged.
