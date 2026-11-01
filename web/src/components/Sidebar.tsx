@@ -45,6 +45,7 @@ import { useRememberedFlag } from '@/hooks/useRememberedFlag'
 import { useSaveChannelSettings } from '@/hooks/useSaveChannelSettings'
 import { errorMessage } from '@/lib/errorMessage'
 import { cn } from '@/lib/utils'
+import { channelPath } from '@/lib/sourcePath'
 
 interface SidebarRowMenuProps {
   item: LibraryItem
@@ -459,7 +460,7 @@ export function Sidebar({
           foldedTotal={channels && unwatchedTotal(channels)}
           error={channelsError}
           activeId={activeChannelId}
-          hrefFor={(channel) => `/channels/${channel.id}`}
+          hrefFor={(channel) => channelPath(channel.id)}
           showAvatar
           onNavigate={onClose}
           onSync={refreshing(reconcileChannel)}

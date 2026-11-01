@@ -1,4 +1,5 @@
 use crate::domain::shared::ValidationError;
+use percent_encoding::percent_decode_str;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -35,6 +36,10 @@ impl ChannelHandle {
     /// carrying a handle (`youtube.com/@name`) into a `ChannelHandle`.
     /// Anything else (an unrecognized host, a legacy `/channel/UC...` URL, a
     /// handle-less URL, an empty value) is rejected.
+    ///
+    /// A percent-encoded handle (`@%D0%9D...`, as a browser copies a
+    /// non-Latin handle's URL) is decoded, so the same channel is always
+    /// stored under the same handle however it was entered.
     pub fn from_url_or_handle(value: impl Into<String>) -> Result<Self, ValidationError> {
         let value = value.into();
         let trimmed = value.trim();
@@ -48,7 +53,7 @@ impl ChannelHandle {
                     "Channel handle or URL must not be empty".to_string(),
                 ));
             }
-            return Self::new(trimmed);
+            return Self::new(decode(trimmed)?);
         };
 
         let (host, rest) = after_scheme.split_once('/').unwrap_or((after_scheme, ""));
@@ -63,13 +68,24 @@ impl ChannelHandle {
         let segment = path.trim_matches('/').split('/').next().unwrap_or("");
 
         if segment.starts_with('@') && segment.len() > 1 {
-            Self::new(segment)
+            Self::new(decode(segment)?)
         } else {
             Err(ValidationError(format!(
                 "YouTube URL is missing a channel handle (got \"{value}\")"
             )))
         }
     }
+}
+
+fn decode(value: &str) -> Result<String, ValidationError> {
+    percent_decode_str(value)
+        .decode_utf8()
+        .map(|decoded| decoded.into_owned())
+        .map_err(|_| {
+            ValidationError(format!(
+                "Channel handle is not valid percent-encoded UTF-8 (got \"{value}\")"
+            ))
+        })
 }
 
 impl fmt::Display for ChannelHandle {
@@ -244,6 +260,44 @@ mod tests {
             ChannelHandle::from_url_or_handle("https://www.youtube.com/@"),
             Err(error(
                 "YouTube URL is missing a channel handle (got \"https://www.youtube.com/@\")"
+            ))
+        );
+    }
+
+    #[test]
+    fn it_should_keep_a_non_latin_handle_as_entered() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("@НаучныйСон"),
+            Ok(ChannelHandle("@НаучныйСон".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_decode_a_percent_encoded_handle() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle(
+                "@%D0%9D%D0%B0%D1%83%D1%87%D0%BD%D1%8B%D0%B9%D0%A1%D0%BE%D0%BD"
+            ),
+            Ok(ChannelHandle("@НаучныйСон".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_decode_a_percent_encoded_handle_in_a_youtube_url() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle(
+                "https://www.youtube.com/@%D0%9D%D0%B0%D1%83%D1%87%D0%BD%D1%8B%D0%B9%D0%A1%D0%BE%D0%BD/videos"
+            ),
+            Ok(ChannelHandle("@НаучныйСон".to_string()))
+        );
+    }
+
+    #[test]
+    fn it_should_reject_a_handle_percent_encoding_invalid_utf8() {
+        assert_eq!(
+            ChannelHandle::from_url_or_handle("@%FF"),
+            Err(error(
+                "Channel handle is not valid percent-encoded UTF-8 (got \"@%FF\")"
             ))
         );
     }

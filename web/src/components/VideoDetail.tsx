@@ -10,6 +10,7 @@ import { VideoWatchedControl } from './VideoWatchedControl'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { storageLocation } from '@/lib/storageLocation'
+import { channelPath } from '@/lib/sourcePath'
 
 const STATUS_LABELS: Record<string, string> = {
   IN_PROGRESS: 'Downloading',
@@ -53,7 +54,7 @@ export function VideoDetail({
     <div className="rounded-lg border border-border p-4">
       <div className="flex items-start gap-2.5">
         {channel && (
-          <Link to={`/channels/${channel.id}`} className="shrink-0" aria-label={channel.name}>
+          <Link to={channelPath(channel.id)} className="shrink-0" aria-label={channel.name}>
             <Thumbnail
               src={channel.avatar_filename ? avatarMediaUrl(channel.avatar_filename) : null}
               className="mt-0.5 block size-8 rounded-full object-cover"
