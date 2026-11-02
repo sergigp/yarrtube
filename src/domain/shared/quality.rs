@@ -23,7 +23,11 @@ impl Quality {
 
     /// The tier's resolution cap, in pixels of height: none for `high`.
     pub fn height_cap(&self) -> Option<u32> {
-        None
+        match self {
+            Self::High => None,
+            Self::Mid => Some(720),
+            Self::Low => Some(480),
+        }
     }
 
     pub fn as_str(&self) -> &'static str {
