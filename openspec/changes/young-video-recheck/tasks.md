@@ -60,7 +60,7 @@
 - [x] 3.5 ytdlp: `it_should_report_the_downloaded_height` — the download prints and parses the height (test passes)
 - [x] 3.6 ytdlp: `it_should_report_the_chapters_publish_time` — `fetch_chapters` returns `ChaptersProbe` with the publish time (test passes)
 - [x] 3.7 ytdlp: `it_should_probe_the_height_for_a_quality` — the tier selector runs with `--skip-download`, and the height and publish time are parsed (test passes)
-- [ ] 3.8 ytdlp: `it_should_fail_a_quality_probe_on_a_clean_failure` — a non-zero exit returns `Err` (test passes)
+- [x] 3.8 ytdlp: `it_should_fail_a_quality_probe_on_a_clean_failure` — a non-zero exit returns `Err` (test passes)
 - [ ] 3.9 web `tasks.test.ts`: `upgrade_quality` is described as a quality check under downloads, with a placeholder when unresolved (`npm run test` passes)
 
 ## 4. Verification

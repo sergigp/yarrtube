@@ -1672,6 +1672,22 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn it_should_fail_a_quality_probe_on_a_clean_failure() {
+        let fake = test_support::FakeYtDlp::with_exit_code(1);
+
+        let result = probe_quality(&fake.path, "https://example.com/video", Quality::High);
+
+        assert_eq!(
+            result.map_err(|e| e.to_string()),
+            Err(
+                "yt-dlp failed to probe the quality of https://example.com/video: no reason given"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn it_should_fetch_the_chapters_without_downloading() {
         let fake = test_support::FakeYtDlp::with_stdout(
             "[{\"start_time\": 0.0, \"title\": \"Intro\", \"end_time\": 61.5}, {\"start_time\": 61.5, \"title\": \"Main\", \"end_time\": 600.9}]\nNA\nNA\n",
