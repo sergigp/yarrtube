@@ -355,9 +355,9 @@ impl Video {
         self.is_downloaded() && !self.chapters_settled
     }
 
-    /// Records the video's checked chapters. Touches only `chapters` and
-    /// `updated_at`, stored through `VideoRepository::update_chapters` when
-    /// recorded by a chapters fetch.
+    /// Test fixture: sets the chapters alone, without recording a check
+    /// (`record_chapters_check` is the production transition).
+    #[cfg(test)]
     pub fn with_chapters(self, chapters: Vec<VideoChapter>, now: DateTime<Utc>) -> Self {
         Self {
             chapters: Some(chapters),
@@ -377,8 +377,9 @@ impl Video {
             .map(|(_, language)| language.to_string())
     }
 
-    /// The video has no original-language captions: a terminal subtitle
-    /// state.
+    /// Test fixture: subtitles Unavailable without recording a check
+    /// (`record_subtitles_check` is the production transition).
+    #[cfg(test)]
     pub fn mark_subtitles_unavailable(self, now: DateTime<Utc>) -> Self {
         Self {
             subtitle_state: SubtitleState::Unavailable,

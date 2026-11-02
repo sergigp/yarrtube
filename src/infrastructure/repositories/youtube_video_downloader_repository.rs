@@ -1,4 +1,5 @@
 use crate::domain::shared::Quality;
+#[cfg(test)]
 use crate::domain::video::VideoChapter;
 use crate::domain::video_transcript::CaptionTrack;
 use crate::infrastructure::shared::ytdlp;
