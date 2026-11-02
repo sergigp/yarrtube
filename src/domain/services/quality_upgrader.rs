@@ -142,6 +142,9 @@ impl QualityUpgrader {
         let Some(filename) = video.filename.as_deref() else {
             return Ok(());
         };
+        if !self.is_still_downloaded_as(video)? {
+            return Ok(());
+        }
         self.video_file_repository
             .move_file(&downloaded.media_path, &output_dir.join(filename))?;
         let upgraded = video.clone().record_downloaded_quality(
@@ -153,6 +156,16 @@ impl QualityUpgrader {
         self.video_repository.update_quality(&upgraded)?;
         self.publish_downloaded(&upgraded, output_dir);
         Ok(())
+    }
+
+    /// Whether the stored video is still Downloaded as the same file the
+    /// upgrade started with: it may have been deleted, or reset for
+    /// redownload, while the upgrade downloaded.
+    fn is_still_downloaded_as(&self, video: &Video) -> anyhow::Result<bool> {
+        Ok(self
+            .video_repository
+            .find(&video.id)?
+            .is_some_and(|stored| stored.is_downloaded() && stored.filename == video.filename))
     }
 
     /// Records a quality check that found nothing better (`probed_height`)
