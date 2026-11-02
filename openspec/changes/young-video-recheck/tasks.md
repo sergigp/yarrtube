@@ -33,7 +33,7 @@
 - [x] 2.14 `it_should_leave_quality_unsettled_for_a_young_video_below_its_cap` — young + below cap stays unsettled (test passes)
 - [x] 2.15 `it_should_settle_quality_at_the_tier_cap` — reaching the mid/low cap settles (test passes)
 - [x] 2.16 `it_should_settle_quality_of_an_old_video` — an old download settles (test passes)
-- [ ] 2.17 `it_should_leave_empty_chapters_unsettled_for_a_young_video` — download-time chapters follow the policy (test passes)
+- [x] 2.17 `it_should_leave_empty_chapters_unsettled_for_a_young_video` — download-time chapters follow the policy (test passes)
 - [ ] 2.18 `it_should_replace_the_file_with_a_higher_quality_download` — in-place upgrade keeps subtitles, chapters and watch state, and publishes `VideoDownloaded` (upgrade_quality_task test passes)
 - [ ] 2.19 `it_should_record_the_check_if_nothing_better_is_available` — no download, check recorded (test passes)
 - [ ] 2.20 `it_should_settle_quality_once_the_video_is_old` — quality settles once the video is old (test passes)

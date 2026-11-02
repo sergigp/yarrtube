@@ -474,6 +474,11 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 chapters: Some(game_chapters()),
+                chapters_checks: LateDataChecks {
+                    last_checked_at: Some(fixed_timestamp()),
+                    failed_attempts: 0,
+                },
+                chapters_settled: true,
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
@@ -491,7 +496,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_record_no_chapters_for_a_downloaded_video_without_them() {
+    fn it_should_leave_empty_chapters_unsettled_for_a_young_video() {
         let db = TestDatabase::new();
         let video_repository = Arc::new(SqliteVideoRepository::new(db.database()));
         let output_dir = tempfile::tempdir().unwrap();
@@ -528,6 +533,10 @@ mod tests {
             video_repository.list().unwrap(),
             vec![Video {
                 chapters: Some(vec![]),
+                chapters_checks: LateDataChecks {
+                    last_checked_at: Some(fixed_timestamp()),
+                    failed_attempts: 0,
+                },
                 ..video
                     .clone()
                     .start_download(fixed_timestamp())
